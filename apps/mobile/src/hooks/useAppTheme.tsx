@@ -32,9 +32,9 @@ export const AppThemeProvider = ({ children }: AppThemeProviderProps) => {
       mode,
       setMode,
       resolvedMode,
-      theme
+      theme,
     }),
-    [mode, resolvedMode, theme]
+    [mode, resolvedMode, theme],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

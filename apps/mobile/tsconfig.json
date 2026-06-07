@@ -6,9 +6,5 @@
     "noUncheckedIndexedAccess": true,
     "noEmit": true
   },
-  "include": [
-    "./**/*.ts",
-    "./**/*.tsx",
-    "./**/*.json"
-  ]
+  "include": ["./**/*.ts", "./**/*.tsx", "./**/*.json"]
 }

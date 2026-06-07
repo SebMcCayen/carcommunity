@@ -3,7 +3,7 @@ import sv from './sv.json';
 
 const dictionaries = {
   en,
-  sv
+  sv,
 } as const;
 
 export type Locale = keyof typeof dictionaries;

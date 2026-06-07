@@ -21,8 +21,8 @@ export const KccCard = ({ title, body, footer }: KccCardProps) => {
           borderColor: theme.colors.borderDefault,
           borderRadius: theme.radius.lg,
           padding: theme.spacing[4],
-          gap: theme.spacing[3]
-        }
+          gap: theme.spacing[3],
+        },
       ]}
     >
       <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text>
@@ -34,14 +34,14 @@ export const KccCard = ({ title, body, footer }: KccCardProps) => {
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1
+    borderWidth: 1,
   },
   title: {
     fontSize: 18,
-    fontWeight: '600'
+    fontWeight: '600',
   },
   body: {
     fontSize: 14,
-    lineHeight: 20
-  }
+    lineHeight: 20,
+  },
 });

@@ -13,5 +13,6 @@ export const brandConfig = {
   shortName: extra.appDisplayName ?? 'Car Community',
   fullName: extra.appFullName ?? 'Car Community',
   githubUrl: extra.githubUrl ?? 'https://github.com/SebMcCayen/carcommunity',
-  githubReleasesUrl: extra.githubReleasesUrl ?? 'https://github.com/SebMcCayen/carcommunity/releases'
+  githubReleasesUrl:
+    extra.githubReleasesUrl ?? 'https://github.com/SebMcCayen/carcommunity/releases',
 } as const;

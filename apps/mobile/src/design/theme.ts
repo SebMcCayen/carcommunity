@@ -27,11 +27,11 @@ export const lightTheme: AppTheme = {
     borderDefault: palette.silverGrey,
     brandPrimary: palette.crownGold,
     statusSuccess: palette.successGreen,
-    statusError: palette.errorRed
+    statusError: palette.errorRed,
   },
   spacing,
   radius,
-  typography
+  typography,
 };
 
 export const darkTheme: AppTheme = {
@@ -44,9 +44,9 @@ export const darkTheme: AppTheme = {
     borderDefault: palette.mutedGrey,
     brandPrimary: palette.crownGold,
     statusSuccess: palette.successGreen,
-    statusError: palette.errorRed
+    statusError: palette.errorRed,
   },
   spacing,
   radius,
-  typography
+  typography,
 };

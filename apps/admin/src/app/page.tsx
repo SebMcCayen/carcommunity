@@ -27,10 +27,9 @@ export default function DashboardPage() {
       <div className={styles.authWarning} role="alert">
         <span aria-hidden="true">⚠</span>
         <span>
-          <strong>Authentication not configured.</strong> Microsoft Entra ID
-          integration and backend role validation are required before production
-          use. Admin access must be verified by the backend. Do not trust
-          client-side admin flags.
+          <strong>Authentication not configured.</strong> Microsoft Entra ID integration and backend
+          role validation are required before production use. Admin access must be verified by the
+          backend. Do not trust client-side admin flags.
         </span>
       </div>
 

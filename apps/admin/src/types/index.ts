@@ -22,11 +22,7 @@ export type ReportReason =
 
 export type PartnerStatus = 'pending' | 'active' | 'suspended';
 
-export type BillboardStatus =
-  | 'pending_review'
-  | 'active'
-  | 'paused'
-  | 'rejected';
+export type BillboardStatus = 'pending_review' | 'active' | 'paused' | 'rejected';
 
 export type AuditAction =
   | 'user.suspend'

@@ -7,12 +7,7 @@ interface StatCardProps {
   variant?: 'default' | 'warning' | 'error' | 'success';
 }
 
-export function StatCard({
-  label,
-  value,
-  note,
-  variant = 'default',
-}: StatCardProps) {
+export function StatCard({ label, value, note, variant = 'default' }: StatCardProps) {
   return (
     <div className={`${styles.card}${variant === 'default' ? '' : ` ${styles[variant]}`}`}>
       <span className={styles.label}>{label}</span>

@@ -18,16 +18,16 @@ export const KccButton = ({ label, onPress, variant = 'primary', rightSlot }: Kc
   const variantStyles = {
     primary: {
       backgroundColor: theme.colors.brandPrimary,
-      textColor: theme.colors.textPrimary
+      textColor: theme.colors.textPrimary,
     },
     secondary: {
       backgroundColor: theme.colors.surfaceBackground,
-      textColor: theme.colors.textPrimary
+      textColor: theme.colors.textPrimary,
     },
     destructive: {
       backgroundColor: theme.colors.statusError,
-      textColor: '#FFFFFF'
-    }
+      textColor: '#FFFFFF',
+    },
   }[variant];
 
   return (
@@ -42,8 +42,8 @@ export const KccButton = ({ label, onPress, variant = 'primary', rightSlot }: Kc
           borderRadius: theme.radius.md,
           minHeight: 48,
           paddingHorizontal: theme.spacing[4],
-          paddingVertical: theme.spacing[3]
-        }
+          paddingVertical: theme.spacing[3],
+        },
       ]}
     >
       <Text style={[styles.label, { color: variantStyles.textColor }]}>{label}</Text>
@@ -57,10 +57,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
   },
   label: {
     fontSize: 16,
-    fontWeight: '600'
-  }
+    fontWeight: '600',
+  },
 });

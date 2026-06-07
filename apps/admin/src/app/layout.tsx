@@ -14,11 +14,7 @@ export const metadata: Metadata = {
   description: `${brand.fullName} — Admin Portal`,
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: import('react').ReactNode;
-}) {
+export default function RootLayout({ children }: { children: import('react').ReactNode }) {
   return (
     <html lang="sv">
       <body>

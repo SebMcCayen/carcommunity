@@ -2,160 +2,160 @@ version: 2
 
 updates:
   # Root workspace / shared tooling
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:00"
-      timezone: "Europe/Stockholm"
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:00'
+      timezone: 'Europe/Stockholm'
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "security"
-      - "npm"
+      - 'dependencies'
+      - 'security'
+      - 'npm'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     groups:
       npm-minor-and-patch:
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
     ignore:
-      - dependency-name: "@types/node"
+      - dependency-name: '@types/node'
         update-types:
-          - "version-update:semver-major"
+          - 'version-update:semver-major'
 
   # Backend API workspace
-  - package-ecosystem: "npm"
-    directory: "/services/api"
+  - package-ecosystem: 'npm'
+    directory: '/services/api'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:15"
-      timezone: "Europe/Stockholm"
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:15'
+      timezone: 'Europe/Stockholm'
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "api"
-      - "npm"
+      - 'dependencies'
+      - 'api'
+      - 'npm'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     groups:
       npm-minor-and-patch:
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
     ignore:
-      - dependency-name: "@types/node"
+      - dependency-name: '@types/node'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "prisma"
+          - 'version-update:semver-major'
+      - dependency-name: 'prisma'
         versions:
-          - "7.x"
-      - dependency-name: "@prisma/client"
+          - '7.x'
+      - dependency-name: '@prisma/client'
         versions:
-          - "7.x"
-      - dependency-name: "@prisma/adapter-pg"
+          - '7.x'
+      - dependency-name: '@prisma/adapter-pg'
         versions:
-          - "7.x"
+          - '7.x'
 
   # Mobile app workspace
-  - package-ecosystem: "npm"
-    directory: "/apps/mobile"
+  - package-ecosystem: 'npm'
+    directory: '/apps/mobile'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:20"
-      timezone: "Europe/Stockholm"
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:20'
+      timezone: 'Europe/Stockholm'
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "mobile"
-      - "npm"
+      - 'dependencies'
+      - 'mobile'
+      - 'npm'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     groups:
       npm-minor-and-patch:
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
     ignore:
-      - dependency-name: "@types/node"
+      - dependency-name: '@types/node'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "expo"
+          - 'version-update:semver-major'
+      - dependency-name: 'expo'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "react"
+          - 'version-update:semver-major'
+      - dependency-name: 'react'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "react-native"
+          - 'version-update:semver-major'
+      - dependency-name: 'react-native'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "expo-constants"
+          - 'version-update:semver-major'
+      - dependency-name: 'expo-constants'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "expo-status-bar"
+          - 'version-update:semver-major'
+      - dependency-name: 'expo-status-bar'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "react-native-gesture-handler"
+          - 'version-update:semver-major'
+      - dependency-name: 'react-native-gesture-handler'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "react-native-safe-area-context"
+          - 'version-update:semver-major'
+      - dependency-name: 'react-native-safe-area-context'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "react-native-screens"
+          - 'version-update:semver-major'
+      - dependency-name: 'react-native-screens'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "eslint-config-expo"
+          - 'version-update:semver-major'
+      - dependency-name: 'eslint-config-expo'
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "jest-expo"
+          - 'version-update:semver-major'
+      - dependency-name: 'jest-expo'
         update-types:
-          - "version-update:semver-major"
+          - 'version-update:semver-major'
 
   # Admin web app workspace
-  - package-ecosystem: "npm"
-    directory: "/apps/admin"
+  - package-ecosystem: 'npm'
+    directory: '/apps/admin'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:25"
-      timezone: "Europe/Stockholm"
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:25'
+      timezone: 'Europe/Stockholm'
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "admin"
-      - "npm"
+      - 'dependencies'
+      - 'admin'
+      - 'npm'
     commit-message:
-      prefix: "deps"
-      include: "scope"
+      prefix: 'deps'
+      include: 'scope'
     groups:
       npm-minor-and-patch:
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
     ignore:
-      - dependency-name: "@types/node"
+      - dependency-name: '@types/node'
         update-types:
-          - "version-update:semver-major"
+          - 'version-update:semver-major'
 
   # GitHub Actions workflows
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:30"
-      timezone: "Europe/Stockholm"
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:30'
+      timezone: 'Europe/Stockholm'
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "github-actions"
+      - 'dependencies'
+      - 'github-actions'
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: 'ci'
+      include: 'scope'

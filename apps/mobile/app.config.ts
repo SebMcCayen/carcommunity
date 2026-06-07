@@ -9,7 +9,7 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
   experiments: {
-    typedRoutes: false
+    typedRoutes: false,
   },
   extra: {
     appDisplayName,
@@ -17,8 +17,8 @@ const config: ExpoConfig = {
     githubUrl: process.env.EXPO_PUBLIC_GITHUB_URL ?? 'https://github.com/SebMcCayen/carcommunity',
     githubReleasesUrl:
       process.env.EXPO_PUBLIC_GITHUB_RELEASES_URL ??
-      'https://github.com/SebMcCayen/carcommunity/releases'
-  }
+      'https://github.com/SebMcCayen/carcommunity/releases',
+  },
 };
 
 export default config;
