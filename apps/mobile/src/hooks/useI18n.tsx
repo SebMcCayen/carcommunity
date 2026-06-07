@@ -17,7 +17,7 @@ type I18nProviderProps = {
 export const I18nProvider = ({ children, locale = 'sv' }: I18nProviderProps) => {
   const value: I18nContextValue = {
     locale,
-    t: (key) => translate(locale, key)
+    t: (key) => translate(locale, key),
   };
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

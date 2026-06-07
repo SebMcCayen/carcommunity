@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "lint": "node -e \"console.log('No lint rules configured for @carcommunity/api yet.')\"",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test src/**/*.test.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
@@ -26,8 +26,10 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.0",
+    "eslint": "^9.0.0",
     "prisma": "6.19.3",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.0.0"
   }
 }

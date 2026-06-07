@@ -18,8 +18,8 @@ export const ScreenContainer = ({ children }: ScreenContainerProps) => {
           {
             gap: theme.spacing[4],
             padding: theme.spacing[4],
-            paddingBottom: theme.spacing[8]
-          }
+            paddingBottom: theme.spacing[8],
+          },
         ]}
       >
         {children}
@@ -30,7 +30,7 @@ export const ScreenContainer = ({ children }: ScreenContainerProps) => {
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1
+    flex: 1,
   },
-  content: {}
+  content: {},
 });

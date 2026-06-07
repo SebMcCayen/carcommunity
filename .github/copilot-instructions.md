@@ -1,6 +1,7 @@
 # GitHub Copilot Instructions for `carcommunity`
 
 ## Repository context
+
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
@@ -12,18 +13,21 @@
   - Apple login (iOS), Google login (Android)
 
 ## Language and naming rules
+
 - Write all code, comments, variable names, function names, commit messages, and technical documentation in English.
 - Keep MVP user-facing text in Swedish, always via i18n keys.
 - Do not hardcode `Kungsbacka Car Community` or `KCC` in components; use brand configuration and i18n.
 - Internal subscription entitlement naming must stay generic (for example: `member_monthly`, not brand-specific names).
 
 ## Security and secrets
+
 - Never commit secrets or sensitive data: tokens, credentials, private keys, signing keys, production data, `.env` files, Apple/Google/Azure credentials, DB connection strings.
 - Use `.env.example` placeholders only.
 - Never generate fake secrets or placeholder values that look real.
 - Never expose personal data in logs, analytics, GitHub Issues, partner statistics, or admin dashboards.
 
 ## Backend authority and access control
+
 - Backend is the source of truth for:
   - authentication
   - admin roles
@@ -37,6 +41,7 @@
 - Subscription access must always be verified by backend.
 
 ## Privacy, safety, and product rules
+
 - Free users may share their own live location, but only active members may view other users’ live locations.
 - Live location must be opt-in, time-limited, stoppable, and include “Hide me now”.
 - Do not store automatic location history.
@@ -48,6 +53,7 @@
 - Digital billboards must be clearly marked as marketing/sponsored placement.
 
 ## Engineering principles
+
 - MVP runs only in Azure Production; keep code conservative and production-safe.
 - Put risky functionality behind feature flags.
 - Prefer simple, secure, maintainable solutions over clever complexity.
@@ -62,12 +68,14 @@
 - Add tests for important business rules and security-sensitive logic.
 
 ## UI and accessibility
+
 - Follow KCC Crown UI design principles when building UI.
 - Use design tokens for colors, spacing, radius, typography, and themes.
 - Support light mode, dark mode, and system theme.
 - Accessibility is mandatory: readable contrast, large tap targets, labels, and never rely on color alone.
 
 ## Copilot implementation behavior
+
 - Ask for clarification only when a decision is truly blocking.
 - Keep implementations MVP-light unless task requirements explicitly ask for more.
 - Do not add deployment steps unless explicitly requested.

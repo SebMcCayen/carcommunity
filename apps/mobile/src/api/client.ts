@@ -17,5 +17,5 @@ export const apiClient = {
     }
 
     return response.json() as Promise<{ status: string }>;
-  }
+  },
 };

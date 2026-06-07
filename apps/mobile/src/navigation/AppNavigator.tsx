@@ -2,7 +2,7 @@ import {
   DarkTheme as NavigationDarkTheme,
   DefaultTheme as NavigationLightTheme,
   NavigationContainer,
-  Theme as NavigationTheme
+  Theme as NavigationTheme,
 } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -28,9 +28,17 @@ const MainTabs = () => {
     <Tab.Navigator>
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: t('navigation.home') }} />
       <Tab.Screen name="Map" component={MapScreen} options={{ title: t('navigation.map') }} />
-      <Tab.Screen name="Events" component={EventsScreen} options={{ title: t('navigation.events') }} />
+      <Tab.Screen
+        name="Events"
+        component={EventsScreen}
+        options={{ title: t('navigation.events') }}
+      />
       <Tab.Screen name="Chat" component={ChatScreen} options={{ title: t('navigation.chat') }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: t('navigation.profile') }} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: t('navigation.profile') }}
+      />
     </Tab.Navigator>
   );
 };
@@ -48,16 +56,24 @@ export const AppNavigator = () => {
       card: theme.colors.surfaceBackground,
       text: theme.colors.textPrimary,
       border: theme.colors.borderDefault,
-      notification: theme.colors.statusError
-    }
+      notification: theme.colors.statusError,
+    },
   };
 
   return (
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator>
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('navigation.settings') }} />
-        <Stack.Screen name="About" component={AboutAppScreen} options={{ title: t('navigation.about') }} />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: t('navigation.settings') }}
+        />
+        <Stack.Screen
+          name="About"
+          component={AboutAppScreen}
+          options={{ title: t('navigation.about') }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

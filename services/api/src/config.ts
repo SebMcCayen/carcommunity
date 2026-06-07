@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const API_NAME = '@carcommunity/api';
 export const API_VERSION = '0.1.0';
-export const LOCAL_DATABASE_URL = 'postgresql://placeholder@localhost:5432/carcommunity_api?schema=public';
+export const LOCAL_DATABASE_URL =
+  'postgresql://placeholder@localhost:5432/carcommunity_api?schema=public';
 
 const envSchema = z
   .object({

@@ -45,9 +45,7 @@ export function PlaceholderPage({
         <span className={styles.todoIcon} aria-hidden="true">
           ⚠
         </span>
-        <p className={styles.todoText}>
-          {t(todoNoteKey ?? 'placeholder.defaultTodoNote')}
-        </p>
+        <p className={styles.todoText}>{t(todoNoteKey ?? 'placeholder.defaultTodoNote')}</p>
       </div>
     </div>
   );

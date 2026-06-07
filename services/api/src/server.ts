@@ -42,7 +42,7 @@ export async function createServer(config: AppConfig = loadConfig()): Promise<Fa
     void reply.status(appError.statusCode).send(payload);
   });
 
-  app.setNotFoundHandler((_request, reply) => {
+  app.setNotFoundHandler((_request, _reply) => {
     throw new AppError(404, 'not_found', 'Route not found.');
   });
 

@@ -8,10 +8,15 @@
     "services/api"
   ],
   "scripts": {
-    "lint": "node -e \"console.log('No lint tasks configured yet.')\"",
-    "test": "node -e \"console.log('No tests configured yet.')\"",
-    "typecheck": "node -e \"console.log('No typecheck tasks configured yet.')\"",
-    "build": "node -e \"console.log('No build tasks configured yet.')\""
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
   },
   "overrides": {
     "xcode@3.0.1": {
