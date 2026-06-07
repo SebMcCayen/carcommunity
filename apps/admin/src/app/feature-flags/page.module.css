@@ -80,7 +80,7 @@
 
 .badgeEnabled {
   background-color: rgba(50, 200, 100, 0.12);
-  color: #4caf70;
+  color: var(--color-success);
   border: 1px solid rgba(50, 200, 100, 0.3);
 }
 
