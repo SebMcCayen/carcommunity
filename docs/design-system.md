@@ -328,7 +328,7 @@ Rules:
 - button states must include default, pressed, disabled, and loading
 
 Example Swedish labels:
-- `Dela liveposition`
+- `Dela min position`
 - `Stoppa delning`
 - `Dölj mig`
 - `Öppna karta`
@@ -397,7 +397,7 @@ Rules:
 
 Example Swedish text:
 - Title: `Stoppa delning?`
-- Body: `Din liveposition blir inte längre synlig för andra.`
+- Body: `Din position i realtid blir inte längre synlig för andra.`
 - Confirm: `Ja, stoppa`
 - Cancel: `Avbryt`
 
@@ -469,7 +469,7 @@ Rules:
 - avoid clutter near map and location controls
 
 Example Swedish text:
-- `Du delar din liveposition`
+- `Du delar din position i realtid`
 - `Din position är dold`
 - `Synlig för communityn`
 - `Stoppa delning`
@@ -495,7 +495,7 @@ Rules:
 Example Swedish text:
 - `Körläge aktivt`
 - `Fokusera på vägen`
-- `Stoppa liveposition`
+- `Stoppa delning`
 
 ## Event UI
 
@@ -646,7 +646,7 @@ Rules:
 - keep Swedish copy short, direct, and community-oriented
 
 Examples:
-- `Dela liveposition`
+- `Dela min position`
 - `Nästa träff`
 - `Följ system`
 - `Sponsrad placering`
