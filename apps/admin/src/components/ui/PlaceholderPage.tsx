@@ -5,14 +5,14 @@ interface PlaceholderPageProps {
   title: string;
   description?: string;
   behaviors?: string[];
-  todoNote?: string;
+  todoNoteKey?: string;
 }
 
 export function PlaceholderPage({
   title,
   description,
   behaviors,
-  todoNote,
+  todoNoteKey,
 }: PlaceholderPageProps) {
   const t = (key: string) => translate('sv', key);
 
@@ -46,8 +46,7 @@ export function PlaceholderPage({
           ⚠
         </span>
         <p className={styles.todoText}>
-          {todoNote ??
-            t('placeholder.defaultTodoNote')}
+          {t(todoNoteKey ?? 'placeholder.defaultTodoNote')}
         </p>
       </div>
     </div>

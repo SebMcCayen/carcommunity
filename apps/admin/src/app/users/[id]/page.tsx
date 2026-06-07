@@ -20,7 +20,7 @@ export default function UserDetailPage({ params }: UserDetailPageProps) {
         'Never display exact live location or location history',
         'Never display partner tracking data or analytics per individual user',
       ]}
-      todoNote="TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
+      todoNoteKey="placeholder.userDetailTodoNote"
     />
   );
 }

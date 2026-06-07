@@ -14,7 +14,7 @@ export default function SettingsPage() {
         'Configure platform-level thresholds (e.g. live session time limits)',
         'Configure admin notification preferences',
       ]}
-      todoNote="TODO: Feature flags and settings must be backend-managed. This page is display-only until Microsoft Entra ID auth and backend RBAC are implemented. Never toggle feature flags via client-side state alone."
+      todoNoteKey="placeholder.settingsTodoNote"
     />
   );
 }
