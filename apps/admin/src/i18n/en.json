@@ -1,0 +1,8 @@
+{
+  "placeholder": {
+    "plannedFunctionality": "Planned functionality",
+    "defaultTodoNote": "Placeholder page. Real data and actions require backend API integration and Microsoft Entra ID authentication.",
+    "settingsTodoNote": "TODO: Feature flags and settings must be backend-managed. This page is display-only until Microsoft Entra ID auth and backend RBAC are implemented. Never toggle feature flags via client-side state alone.",
+    "userDetailTodoNote": "TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
+  }
+}

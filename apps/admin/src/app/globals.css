@@ -1,0 +1,129 @@
+/* ============================================================
+ * KCC Crown UI — Admin Portal Design Tokens
+ * Mirror values are exported as TypeScript in src/design/tokens.ts.
+ * ============================================================ */
+
+:root {
+  /* --- Color palette --- */
+  --color-gold: #eab54b;
+  --color-charcoal: #3f3e3b;
+  --color-ink: #040211;
+  --color-ivory: #f8f6ef;
+  --color-sand: #f0ebdc;
+  --color-grey-mid: #6d6c6d;
+  --color-grey-border: #b4b1ad;
+
+  /* --- Functional colors --- */
+  --color-error: #d9534f;
+  --color-success: #3a7d44;
+  --color-warning: #f0a500;
+
+  /* --- Spacing scale (4px base) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* --- Border radius --- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* --- Typography --- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+
+  /* --- Semantic tokens — Light theme (default) --- */
+  --bg-page: var(--color-ivory);
+  --bg-surface: #ffffff;
+  --bg-surface-hover: var(--color-sand);
+  --bg-sidebar: var(--color-charcoal);
+  --text-primary: var(--color-charcoal);
+  --text-secondary: var(--color-grey-mid);
+  --text-on-sidebar: var(--color-ivory);
+  --text-on-sidebar-muted: var(--color-grey-border);
+  --border-color: var(--color-grey-border);
+  --accent: var(--color-gold);
+
+  /* --- Layout --- */
+  --sidebar-width: 240px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #0d0c14;
+    --bg-surface: #1a1918;
+    --bg-surface-hover: #252320;
+    --bg-sidebar: #16141a;
+    --text-primary: var(--color-ivory);
+    --text-secondary: var(--color-grey-border);
+    --border-color: #3a3835;
+  }
+}
+
+/* ============================================================
+ * Reset
+ * ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+  font-size: 16px;
+}
+
+body {
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--lh-normal);
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+}

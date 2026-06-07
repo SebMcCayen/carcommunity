@@ -1,0 +1,8 @@
+{
+  "placeholder": {
+    "plannedFunctionality": "Planerad funktionalitet",
+    "defaultTodoNote": "Platshållarsida. Riktig data och åtgärder kräver backend-API-integration och autentisering med Microsoft Entra ID.",
+    "settingsTodoNote": "TODO: Funktionsflaggor och inställningar måste hanteras i backend. Den här sidan är endast visning tills Microsoft Entra ID-autentisering och backend-RBAC är implementerade. Växla aldrig funktionsflaggor enbart via klientstatus.",
+    "userDetailTodoNote": "TODO: Ersätt ruttparametern med riktig användaruppslagning från backend-API:et. Backend måste verifiera administratörsroll innan användardata skickas. Exponera aldrig mer persondata än nödvändigt."
+  }
+}
