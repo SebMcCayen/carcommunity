@@ -13,6 +13,13 @@ The experience should:
 - reinforce community identity through subtle, consistent brand signals
 - stay brand-ready so the same system can support other communities later
 
+Start screen priority order:
+1. Share/stop live location
+2. Community status
+3. Next event
+4. Map
+5. Member value
+
 ## Brand-ready design principles
 
 - Build for configurable branding, not one fixed name.
