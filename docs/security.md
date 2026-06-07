@@ -116,7 +116,7 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Backend validates all claims.
 - App never awards points directly.
 - Enforce geofence validation.
-- Require low speed/stationary condition for claims: the minimum baseline before claim acceptance is `KRONJAKT_MIN_SPEED_KMH` for at least `KRONJAKT_MIN_STATIONARY_SECONDS`; backend configuration must enforce at least this baseline and may apply stricter limits.
+- Require low speed/stationary condition for claims: speed must be less than or equal to `KRONJAKT_MIN_SPEED_KMH` for at least `KRONJAKT_MIN_STATIONARY_SECONDS` before claim acceptance; backend configuration may apply stricter limits.
 - Require active live session for claim validity.
 - Use short-lived location buffer for validation.
 - Detect impossible jumps.
@@ -130,7 +130,7 @@ This document defines baseline security requirements for CarCommunity. It is a t
 
 - Partner statistics are opt-in only.
 - Share aggregated data only.
-- Enforce minimum threshold of at least `PARTNER_STATS_MIN_UNIQUE_USERS` unique users before sharing, applied per partner report slice (time window + metric + geographic segment); privacy risk assessment may increase this threshold, but it must never be set below `PARTNER_STATS_MIN_UNIQUE_USERS`.
+- Enforce minimum threshold of `PARTNER_STATS_MIN_UNIQUE_USERS` unique users before sharing, applied per partner report slice (time window + metric + geographic segment); privacy risk assessment may increase this threshold.
 - Do not share personal data with companies.
 - Do not share exact location, routes, drive history, or individual timestamps.
 
