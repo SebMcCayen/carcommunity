@@ -39,7 +39,7 @@ Local setup and runtime instructions will be expanded as implementation code is 
 
 Minimum prerequisites:
 
-- Node.js `>=22` (LTS line for this repository)
+- Node.js `>=24` (LTS line for this repository)
 - npm (current stable release)
 
 Current root workspace checks:
