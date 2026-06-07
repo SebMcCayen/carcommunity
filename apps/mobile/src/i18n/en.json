@@ -1,0 +1,73 @@
+{
+  "navigation": {
+    "home": "Home",
+    "map": "Map",
+    "events": "Events",
+    "chat": "Chat",
+    "profile": "Profile",
+    "settings": "Settings",
+    "about": "About app"
+  },
+  "home": {
+    "title": "Home",
+    "liveLocationButton": "Share my location",
+    "communityStatusTitle": "Community status",
+    "communityStatusBody": "Community status will appear here soon.",
+    "nextEventTitle": "Next event",
+    "nextEventBody": "Upcoming event details will appear here soon.",
+    "memberValueTitle": "Member value",
+    "memberValueBody": "Member value highlights will appear here soon."
+  },
+  "settings": {
+    "title": "Settings",
+    "themeTitle": "Theme",
+    "themeSystem": "Follow system",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "privacy": "Privacy",
+    "notifications": "Notifications",
+    "deleteAccount": "Delete account",
+    "reportBug": "Report a bug",
+    "about": "About app",
+    "github": "GitHub / Open Source"
+  },
+  "about": {
+    "title": "About app",
+    "appName": "App name",
+    "version": "Version",
+    "buildNumber": "Build number",
+    "githubReleases": "GitHub Releases"
+  },
+  "liveLocation": {
+    "start": "Share my location",
+    "stop": "Stop sharing",
+    "hideNow": "Hide me now"
+  },
+  "privacy": {
+    "label": "Privacy"
+  },
+  "subscription": {
+    "teaserTitle": "Membership",
+    "teaserBody": "Unlock more community features soon."
+  },
+  "profile": {
+    "title": "Profile",
+    "openSettings": "Open settings",
+    "openAbout": "Open about app"
+  },
+  "map": {
+    "title": "Map",
+    "placeholder": "Map view coming soon."
+  },
+  "events": {
+    "title": "Events",
+    "placeholder": "Event list coming soon."
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Event chat coming soon."
+  },
+  "common": {
+    "placeholder": "Coming soon"
+  }
+}

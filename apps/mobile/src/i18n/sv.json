@@ -1,0 +1,73 @@
+{
+  "navigation": {
+    "home": "Hem",
+    "map": "Karta",
+    "events": "Träffar",
+    "chat": "Chat",
+    "profile": "Profil",
+    "settings": "Inställningar",
+    "about": "Om appen"
+  },
+  "home": {
+    "title": "Hem",
+    "liveLocationButton": "Dela min position",
+    "communityStatusTitle": "Community-status",
+    "communityStatusBody": "Läget i communityn visas här snart.",
+    "nextEventTitle": "Nästa träff",
+    "nextEventBody": "Kommande träffsinformation visas här snart.",
+    "memberValueTitle": "Medlemsvärde",
+    "memberValueBody": "Fördelar för medlemmar visas här snart."
+  },
+  "settings": {
+    "title": "Inställningar",
+    "themeTitle": "Tema",
+    "themeSystem": "Följ system",
+    "themeLight": "Ljust",
+    "themeDark": "Mörkt",
+    "privacy": "Integritet",
+    "notifications": "Notiser",
+    "deleteAccount": "Ta bort konto",
+    "reportBug": "Rapportera en bugg",
+    "about": "Om appen",
+    "github": "GitHub / Open Source"
+  },
+  "about": {
+    "title": "Om appen",
+    "appName": "Appnamn",
+    "version": "Version",
+    "buildNumber": "Buildnummer",
+    "githubReleases": "GitHub Releases"
+  },
+  "liveLocation": {
+    "start": "Dela min position",
+    "stop": "Stoppa delning",
+    "hideNow": "Dölj mig nu"
+  },
+  "privacy": {
+    "label": "Integritet"
+  },
+  "subscription": {
+    "teaserTitle": "Medlemskap",
+    "teaserBody": "Lås upp fler funktioner i communityn snart."
+  },
+  "profile": {
+    "title": "Profil",
+    "openSettings": "Öppna inställningar",
+    "openAbout": "Öppna om appen"
+  },
+  "map": {
+    "title": "Karta",
+    "placeholder": "Kartvyn kommer snart."
+  },
+  "events": {
+    "title": "Träffar",
+    "placeholder": "Träfflistan kommer snart."
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Eventchat kommer snart."
+  },
+  "common": {
+    "placeholder": "Kommer snart"
+  }
+}
