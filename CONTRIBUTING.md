@@ -37,6 +37,8 @@ npm test
 npm run build
 ```
 
+Current note: these root scripts are placeholder checks and currently only print that no lint/typecheck/test/build tasks are configured yet.
+
 ## Issue labels (quick guide)
 
 Use clear labels to speed up triage, for example:

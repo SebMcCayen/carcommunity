@@ -5,8 +5,8 @@
 If you discover a security vulnerability, report it privately to the maintainers.
 
 - **Do not open public GitHub Issues** for security vulnerabilities.
-- Use private disclosure through repository maintainers.
-- Security contact: **security contact to be added**.
+- Use the repository's **Report a vulnerability** flow (GitHub Security Advisories) for private disclosure.
+- If private advisory reporting is unavailable, use: **security contact to be added**.
 
 When reporting:
 
