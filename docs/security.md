@@ -83,7 +83,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 - Live location sharing is opt-in.
 - Sharing must be manually started by user action.
 - Sharing must be time-limited.
-- Store/display latest location only with short TTL (maximum 15 minutes).
+- Store/display latest location only with short TTL: treat location as stale for display after 15 minutes and purge latest-location records/caches after 15 minutes.
 - “Hide me now” must remove latest location immediately.
 - No automatic location history collection.
 - Free users may share their own live location.
@@ -108,7 +108,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 - Backend validates all claims.
 - App never awards points directly.
 - Enforce geofence validation.
-- Require low speed/stationary condition for claims (for example, speed must remain at or below 10 km/h for at least 30 seconds before claim acceptance).
+- Require low speed/stationary condition for claims: speed must remain at or below 10 km/h for at least 30 seconds before claim acceptance (backend may enforce stricter thresholds, never weaker).
 - Require active live session for claim validity.
 - Use short-lived location buffer for validation.
 - Detect impossible jumps.
@@ -122,7 +122,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 
 - Partner statistics are opt-in only.
 - Share aggregated data only.
-- Enforce minimum threshold of at least 10 unique users before sharing (configurable upward by privacy risk assessment; never below 10).
+- Enforce minimum threshold of at least 10 unique users before sharing, applied per partner report slice (time window + metric + geographic segment) and configurable upward by privacy risk assessment (never below 10).
 - Do not share personal data with companies.
 - Do not share exact location, routes, drive history, or individual timestamps.
 
