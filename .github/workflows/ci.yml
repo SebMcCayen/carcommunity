@@ -31,6 +31,9 @@ jobs:
             npm install
           fi
 
+      - name: API prisma generate
+        run: npm --workspace services/api run prisma:generate
+
       - name: Root lint
         run: npm run lint
 
@@ -45,9 +48,6 @@ jobs:
 
       - name: API lint
         run: npm --workspace services/api run lint
-
-      - name: API prisma generate
-        run: npm --workspace services/api run prisma:generate
 
       - name: API typecheck
         run: npm --workspace services/api run typecheck
