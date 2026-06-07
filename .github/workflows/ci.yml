@@ -69,3 +69,15 @@ jobs:
 
       - name: Mobile build
         run: npm --workspace apps/mobile run build
+
+      - name: Admin lint
+        run: npm --workspace apps/admin run lint
+
+      - name: Admin typecheck
+        run: npm --workspace apps/admin run typecheck
+
+      - name: Admin test
+        run: npm --workspace apps/admin test
+
+      - name: Admin build
+        run: npm --workspace apps/admin run build

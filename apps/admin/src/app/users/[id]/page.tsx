@@ -1,11 +1,11 @@
 import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
 
 interface UserDetailPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export default function UserDetailPage({ params }: UserDetailPageProps) {
-  const { id } = params;
+export default async function UserDetailPage({ params }: UserDetailPageProps) {
+  const { id } = await params;
   return (
     <PlaceholderPage
       title={`User — ${id}`}
