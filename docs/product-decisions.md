@@ -173,7 +173,7 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 ## Language and i18n
 - User-facing språk i MVP är svenska.
-- Engelska ska förberedas genom i18n-struktur.
+- Engelska ska förberedas genom i18n-struktur i MVP, men fullständig engelsk översättning är inte ett MVP-krav.
 
 ## Design system: KCC Crown UI
 - Appen använder **KCC Crown UI** baserat på logotyp, krona, guld, charcoal, ink black och warm ivory.
