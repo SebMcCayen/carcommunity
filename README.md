@@ -37,6 +37,11 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 Local setup and runtime instructions will be expanded as implementation code is added.
 
+Minimum prerequisites:
+
+- Node.js `>=22` (LTS line for this repository)
+- npm (current stable release)
+
 Current root workspace checks:
 
 ```bash
