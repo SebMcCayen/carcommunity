@@ -1,0 +1,76 @@
+.page {
+  max-width: 900px;
+}
+
+.header {
+  margin-bottom: var(--space-8);
+}
+
+.title {
+  font-size: var(--text-3xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.description {
+  font-size: var(--text-md);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+}
+
+.section {
+  margin-bottom: var(--space-8);
+}
+
+.sectionTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--space-4);
+  color: var(--text-primary);
+}
+
+.behaviorList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.behaviorItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.bullet {
+  color: var(--accent);
+  flex-shrink: 0;
+  font-weight: var(--fw-bold);
+}
+
+.todoBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background-color: rgba(240, 165, 0, 0.08);
+  border: 1px solid rgba(240, 165, 0, 0.25);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-8);
+}
+
+.todoIcon {
+  font-size: var(--text-lg);
+  color: var(--color-warning);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.todoText {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+}
