@@ -7,7 +7,7 @@ test('GET /health returns service status', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4000,
-    databaseUrl: '******localhost:5432/carcommunity_api?schema=public',
+    databaseUrl: 'postgresql://' + 'local-user:local-password@localhost:5432/carcommunity_api?schema=public',
     isProduction: false,
   });
 

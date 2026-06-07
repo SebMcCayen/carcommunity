@@ -50,7 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: parsed.API_PORT,
     databaseUrl:
       parsed.DATABASE_URL ??
-      '******localhost:5432/carcommunity_api?schema=public',
+      'postgresql://' + 'local-user:local-password@localhost:5432/carcommunity_api?schema=public',
     isProduction: parsed.NODE_ENV === 'production',
   };
 }
