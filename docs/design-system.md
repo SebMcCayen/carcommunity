@@ -80,7 +80,7 @@ Core palette:
 
 | Token purpose | Color | Hex |
 | --- | --- | --- |
-| Brand gold | Crown Gold | `#EAB54B` |
+| Brand Gold | Crown Gold | `#EAB54B` |
 | Primary dark neutral | Dark Charcoal | `#3F3E3B` |
 | Deep background / ink | Ink Black | `#040211` |
 | Primary light neutral | Warm Ivory | `#F8F6EF` |
@@ -436,6 +436,26 @@ Rules:
 - official KCC badges may include crown usage
 - achievement or membership badges should keep a premium but restrained tone
 - do not confuse badges with urgent status messaging
+
+## Avatars
+
+Reusable component:
+- `KccAvatar`
+
+Rules:
+- use avatars for member identity, not official KCC authority
+- official organization identities should use a clearly distinct branded treatment
+- provide fallback initials and accessible labels when images are missing
+
+## List items
+
+Reusable component:
+- `KccListItem`
+
+Rules:
+- use list items for structured rows such as events, locations, partners, and settings
+- keep tap targets large and metadata easy to scan
+- support leading visuals, primary text, secondary text, and trailing status or navigation affordances without crowding
 
 ## Live location UI
 
