@@ -141,7 +141,7 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 ## Partner insights and aggregated statistics
 - Partnerstatistik är opt-in, aggregerad och privacy-safe.
 - Företag får aldrig persondata, live location, rutter, körhistorik eller individuell spårning.
-- Passeringsstatistik kräver explicit opt-in och minsta aggregeringströskel (t.ex. minst 10 unika användare).
+- Passeringsstatistik kräver explicit opt-in och minsta aggregeringströskel på minst 10 unika användare.
 
 ## Digital sponsored billboards
 - Digitala sponsrade billboards är tillåtna som företags-addon.
@@ -190,7 +190,7 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 ## Compliance decisions
 - Endast Production-miljö i Azure används för MVP.
-- Ingen DPIA görs nu.
+- Ingen DPIA görs i MVP.
 - Integritets- och säkerhetskrav upprätthålls ändå genom minimidata, tydliga kontroller och sanerad felrapportering.
 
 ## Production-only environment
@@ -206,4 +206,3 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 - Ingen årsplan i subscription i MVP.
 - Ingen supporter-roll i MVP.
 - Ingen toppfarts-/speedranking i MVP.
-
