@@ -1,4 +1,5 @@
 import { publicEnv } from '../config/env';
+import type { FeatureFlagResponse } from '@carcommunity/shared/feature-flags';
 
 const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
 
@@ -17,5 +18,15 @@ export const apiClient = {
     }
 
     return response.json() as Promise<{ status: string }>;
+  },
+
+  async featureFlags(): Promise<FeatureFlagResponse> {
+    const response = await fetch(buildUrl('/v1/feature-flags'));
+
+    if (!response.ok) {
+      throw new Error(`Feature flags request failed with status ${response.status}`);
+    }
+
+    return response.json() as Promise<FeatureFlagResponse>;
   },
 };
