@@ -23,7 +23,7 @@ export const AboutAppScreen = () => {
       <KccButton
         label={t('about.githubReleases')}
         onPress={() => {
-          void Linking.openURL(brandConfig.githubReleasesUrl);
+          Linking.openURL(brandConfig.githubReleasesUrl).catch(() => undefined);
         }}
         variant="secondary"
       />

@@ -11,7 +11,7 @@ export const ScreenContainer = ({ children }: ScreenContainerProps) => {
   const { theme } = useAppTheme();
 
   return (
-    <ScrollView style={[styles.screen, { backgroundColor: theme.colors.pageBackground }]}> 
+    <ScrollView style={[styles.screen, { backgroundColor: theme.colors.pageBackground }]}>
       <View
         style={[
           styles.content,

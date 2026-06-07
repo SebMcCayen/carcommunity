@@ -46,7 +46,7 @@ export const SettingsScreen = () => {
         label={t('settings.github')}
         variant="secondary"
         onPress={() => {
-          void Linking.openURL(brandConfig.githubUrl);
+          Linking.openURL(brandConfig.githubUrl).catch(() => undefined);
         }}
       />
     </ScreenContainer>

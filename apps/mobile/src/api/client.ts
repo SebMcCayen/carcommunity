@@ -1,6 +1,12 @@
 import { publicEnv } from '../config/env';
 
-const buildUrl = (path: string) => `${publicEnv.apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
+
+if (!base) {
+  throw new Error('EXPO_PUBLIC_API_BASE_URL is not set. Set it in your .env file.');
+}
+
+const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
 export const apiClient = {
   async health() {
