@@ -52,6 +52,15 @@ updates:
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
+      - dependency-name: "prisma"
+        versions:
+          - "7.x"
+      - dependency-name: "@prisma/client"
+        versions:
+          - "7.x"
+      - dependency-name: "@prisma/adapter-pg"
+        versions:
+          - "7.x"
 
   # Mobile app workspace
   - package-ecosystem: "npm"
@@ -76,6 +85,36 @@ updates:
           - "patch"
     ignore:
       - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "expo"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "react"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "react-native"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "expo-constants"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "expo-status-bar"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "react-native-gesture-handler"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "react-native-safe-area-context"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "react-native-screens"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "eslint-config-expo"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "jest-expo"
         update-types:
           - "version-update:semver-major"
 
