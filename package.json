@@ -1,0 +1,19 @@
+{
+  "name": "carcommunity",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/mobile",
+    "apps/admin",
+    "services/api"
+  ],
+  "scripts": {
+    "lint": "node -e \"console.log('No lint tasks configured yet.')\"",
+    "test": "node -e \"console.log('No tests configured yet.')\"",
+    "typecheck": "node -e \"console.log('No typecheck tasks configured yet.')\"",
+    "build": "node -e \"console.log('No build tasks configured yet.')\""
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
