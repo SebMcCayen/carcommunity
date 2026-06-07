@@ -7,7 +7,7 @@
 /** Format a date to a readable admin-friendly string (Swedish locale). */
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('sv-SE', {
+  return d.toLocaleString('sv-SE', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -19,5 +19,7 @@ export function formatDate(date: Date | string): string {
 /** Truncate a string to a max length with ellipsis. */
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
-  return `${str.slice(0, maxLength)}…`;
+  if (maxLength <= 0) return '';
+  if (maxLength === 1) return '…';
+  return `${str.slice(0, maxLength - 1)}…`;
 }

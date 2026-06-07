@@ -1,0 +1,6 @@
+{
+  "placeholder": {
+    "plannedFunctionality": "Planerad funktionalitet",
+    "defaultTodoNote": "Platshållarsida. Riktig data och åtgärder kräver backend-API-integration och autentisering med Microsoft Entra ID."
+  }
+}

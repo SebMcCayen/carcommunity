@@ -1,4 +1,5 @@
 import styles from './PlaceholderPage.module.css';
+import { translate } from '@/i18n';
 
 interface PlaceholderPageProps {
   title: string;
@@ -13,6 +14,8 @@ export function PlaceholderPage({
   behaviors,
   todoNote,
 }: PlaceholderPageProps) {
+  const t = (key: string) => translate('sv', key);
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -23,7 +26,7 @@ export function PlaceholderPage({
       {behaviors && behaviors.length > 0 && (
         <section className={styles.section} aria-labelledby="planned-heading">
           <h2 id="planned-heading" className={styles.sectionTitle}>
-            Planned functionality
+            {t('placeholder.plannedFunctionality')}
           </h2>
           <ul className={styles.behaviorList}>
             {behaviors.map((b) => (
@@ -44,7 +47,7 @@ export function PlaceholderPage({
         </span>
         <p className={styles.todoText}>
           {todoNote ??
-            'Placeholder page. Real data and actions require backend API integration and Microsoft Entra ID authentication.'}
+            t('placeholder.defaultTodoNote')}
         </p>
       </div>
     </div>
