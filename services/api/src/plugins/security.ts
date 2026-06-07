@@ -25,6 +25,7 @@ export async function registerSecurity(app: FastifyInstance, config: AppConfig):
         return;
       }
 
+      app.log.debug({ origin }, 'Rejected CORS origin.');
       callback(null, false);
     },
   });

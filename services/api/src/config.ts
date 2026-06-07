@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const API_NAME = '@carcommunity/api';
 export const API_VERSION = '0.1.0';
+export const LOCAL_DATABASE_URL = 'postgresql://placeholder@localhost:5432/carcommunity_api?schema=public';
 
 const envSchema = z
   .object({
@@ -48,9 +49,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     nodeEnv: parsed.NODE_ENV,
     port: parsed.API_PORT,
-    databaseUrl:
-      parsed.DATABASE_URL ??
-      'postgresql://' + 'local-user:local-password@localhost:5432/carcommunity_api?schema=public',
+    databaseUrl: parsed.DATABASE_URL ?? LOCAL_DATABASE_URL,
     isProduction: parsed.NODE_ENV === 'production',
   };
 }

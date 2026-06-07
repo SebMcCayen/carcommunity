@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
 test('GET /health returns service status', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4000,
-    databaseUrl: 'postgresql://' + 'local-user:local-password@localhost:5432/carcommunity_api?schema=public',
+    databaseUrl: LOCAL_DATABASE_URL,
     isProduction: false,
   });
 
