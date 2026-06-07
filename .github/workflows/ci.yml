@@ -34,6 +34,9 @@ jobs:
       - name: API prisma generate
         run: npm --workspace services/api run prisma:generate
 
+      - name: Build shared package
+        run: npm --workspace @carcommunity/shared run build
+
       - name: Root lint
         run: npm run lint
 
