@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import type { FastifyInstance } from 'fastify';
 
 import type { AppConfig } from '../config.js';
@@ -10,9 +11,8 @@ declare module 'fastify' {
 }
 
 export async function registerPrisma(app: FastifyInstance, config: AppConfig): Promise<void> {
-  const prisma = new PrismaClient({
-    datasourceUrl: config.databaseUrl,
-  });
+  const adapter = new PrismaPg({ connectionString: config.databaseUrl });
+  const prisma = new PrismaClient({ adapter });
 
   app.decorate('prisma', prisma);
 
