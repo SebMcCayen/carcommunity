@@ -46,6 +46,9 @@ jobs:
       - name: API lint
         run: npm --workspace services/api run lint
 
+      - name: API prisma generate
+        run: npm --workspace services/api run prisma:generate
+
       - name: API typecheck
         run: npm --workspace services/api run typecheck
 
