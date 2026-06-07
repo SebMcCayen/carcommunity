@@ -14,15 +14,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
-      - run: npm install
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Root lint
+        run: npm run lint
+
+      - name: Root typecheck
+        run: npm run typecheck
+
+      - name: Root test
+        run: npm test
+
+      - name: Root build
+        run: npm run build
+
+      - name: API lint
+        run: npm --workspace services/api run lint
+
+      - name: API typecheck
+        run: npm --workspace services/api run typecheck
+
+      - name: API test
+        run: npm --workspace services/api test
+
+      - name: API build
+        run: npm --workspace services/api run build
