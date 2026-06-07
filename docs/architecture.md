@@ -47,6 +47,7 @@ Planned structure:
 
 - Built with **React Native / Expo**.
 - Uses Mapbox as the selected mapping provider for MVP mobile map flows.
+- Selection rationale: current product decisions prioritize one cross-platform map stack for MVP delivery speed, consistent behavior, and required map SDK capability in one implementation path; licensing/pricing fit must remain part of ongoing release governance and post-MVP re-evaluation.
 - Calls backend APIs for all trusted operations and data requiring secrets/caching.
 - Handles Apple/Google purchase flows client-side, then submits receipts/tokens to backend verification.
 - Receives feature flags and remote config to safely gate MVP features.
@@ -166,6 +167,7 @@ Client login (Apple/Google)
 - Kronpoäng calculation and balance are backend-owned.
 - Kronjakt logic and progression are backend-owned and flag-gated.
 - Client receives computed state; it does not author rewards or score truth.
+- Naming note: "Kronpoäng" and "Kronjakt" are intentional product terms and should remain unchanged.
 
 ## Partner and billboard architecture
 
@@ -221,12 +223,14 @@ Flags/config are backend-controlled and consumed by clients for safe rollout and
 ## Production-only Azure hosting model
 
 - MVP runs in **production-only Azure** (no separate dev/staging Azure environments).
+- Local development and testing run outside Azure production (developer-local environments plus CI validation on branches/PRs) before production rollout.
 - Risk mitigation relies on:
   - CI/CD quality gates,
   - branch protection,
   - feature flags/kill switches,
   - automated backups,
-  - safe, backward-compatible migrations.
+  - safe, backward-compatible migrations,
+  - production-safe rollout controls (smoke checks, phased enablement, and rapid rollback paths).
 
 ## Performance-first architecture
 
