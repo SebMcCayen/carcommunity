@@ -14,7 +14,7 @@ export function StatCard({
   variant = 'default',
 }: StatCardProps) {
   return (
-    <div className={`${styles.card} ${styles[variant]}`}>
+    <div className={`${styles.card}${variant === 'default' ? '' : ` ${styles[variant]}`}`}>
       <span className={styles.label}>{label}</span>
       <span className={styles.value}>{value}</span>
       {note && <span className={styles.note}>{note}</span>}
