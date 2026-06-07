@@ -22,7 +22,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 ## Secret management
 
 - No secrets in repo.
-- Use GitHub Secrets and Azure secrets for CI/CD and runtime.
+- Use GitHub Secrets and Azure Key Vault-backed secrets for CI/CD and runtime.
 - Commit `.env.example` only.
 - Ignore real `.env` files in Git.
 - Never commit signing keys, Apple keys, Google credentials, Azure credentials, GitHub tokens, database connection strings, production data, or private certificates.
@@ -83,7 +83,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 - Live location sharing is opt-in.
 - Sharing must be manually started by user action.
 - Sharing must be time-limited.
-- Store/display latest location only with short TTL.
+- Store/display latest location only with short TTL (maximum 15 minutes).
 - “Hide me now” must remove latest location immediately.
 - No automatic location history collection.
 - Free users may share their own live location.
@@ -108,13 +108,13 @@ This document defines baseline security requirements for carcommunity. It is a t
 - Backend validates all claims.
 - App never awards points directly.
 - Enforce geofence validation.
-- Require low speed/stationary condition where defined.
+- Require low speed/stationary condition for claims (for example, speed must remain at or below 10 km/h for at least 30 seconds before claim acceptance).
 - Require active live session for claim validity.
 - Use short-lived location buffer for validation.
 - Detect impossible jumps.
-- Use Android mock-location detection where possible.
-- Use Play Integrity where possible.
-- Use Apple App Attest where possible.
+- Use Android mock-location detection on Android builds that support these signals; if unavailable, increase fraud risk score and require stronger backend checks.
+- Use Play Integrity on supported Android builds; if unavailable, apply stricter risk scoring and backend-side claim throttling.
+- Use Apple App Attest on supported iOS builds; if unavailable, apply stricter risk scoring and backend-side claim throttling.
 - Enforce cooldowns and max limits.
 - Maintain risk score and queue suspicious activity for admin review.
 
@@ -122,7 +122,7 @@ This document defines baseline security requirements for carcommunity. It is a t
 
 - Partner statistics are opt-in only.
 - Share aggregated data only.
-- Enforce minimum threshold (for example, at least 10 unique users) before sharing.
+- Enforce minimum threshold of at least 10 unique users before sharing (configurable upward by privacy risk assessment; never below 10).
 - Do not share personal data with companies.
 - Do not share exact location, routes, drive history, or individual timestamps.
 
