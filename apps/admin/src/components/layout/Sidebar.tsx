@@ -44,7 +44,10 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'System',
-    items: [{ label: 'Settings', href: '/settings', icon: '◎' }],
+    items: [
+      { label: 'Feature Flags', href: '/feature-flags', icon: '⚑' },
+      { label: 'Settings', href: '/settings', icon: '◎' },
+    ],
   },
 ];
 
