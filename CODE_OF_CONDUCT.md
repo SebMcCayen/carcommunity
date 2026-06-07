@@ -25,7 +25,10 @@ Unacceptable behavior:
 
 ## Reporting inappropriate behavior
 
-If you experience or witness inappropriate behavior, report it to project maintainers/admins through repository communication channels.
+If you experience or witness inappropriate behavior, report it privately to project maintainers/admins.
+
+- Do not file public issues for Code of Conduct incidents.
+- Conduct contact: **conduct contact to be added**.
 
 ## Enforcement
 
