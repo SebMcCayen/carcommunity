@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
@@ -57,3 +57,15 @@ jobs:
 
       - name: API build
         run: npm --workspace services/api run build
+
+      - name: Mobile lint
+        run: npm --workspace apps/mobile run lint
+
+      - name: Mobile typecheck
+        run: npm --workspace apps/mobile run typecheck
+
+      - name: Mobile test
+        run: npm --workspace apps/mobile test
+
+      - name: Mobile build
+        run: npm --workspace apps/mobile run build
