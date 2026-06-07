@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { AppConfig } from '../config.js';
 
-const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const LOCALHOST_ORIGIN_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 export async function registerSecurity(app: FastifyInstance, config: AppConfig): Promise<void> {
   await app.register(helmet, {

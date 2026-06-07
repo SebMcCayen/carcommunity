@@ -12,19 +12,21 @@ test('GET /health returns service status', async () => {
     isProduction: false,
   });
 
-  const response = await app.inject({
-    method: 'GET',
-    url: '/health',
-  });
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+    });
 
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.json(), {
-    ok: true,
-    data: {
-      service: '@carcommunity/api',
-      status: 'ok',
-    },
-  });
-
-  await app.close();
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      ok: true,
+      data: {
+        service: '@carcommunity/api',
+        status: 'ok',
+      },
+    });
+  } finally {
+    await app.close();
+  }
 });
