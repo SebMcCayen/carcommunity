@@ -8,13 +8,13 @@ const config: ExpoConfig = {
   version: '0.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
   experiments: {
     typedRoutes: false
   },
   extra: {
     appDisplayName,
     appFullName: process.env.EXPO_PUBLIC_BRAND_FULL_NAME ?? 'Kungsbacka Car Community',
+    githubUrl: process.env.EXPO_PUBLIC_GITHUB_URL ?? 'https://github.com/SebMcCayen/carcommunity',
     githubReleasesUrl:
       process.env.EXPO_PUBLIC_GITHUB_RELEASES_URL ??
       'https://github.com/SebMcCayen/carcommunity/releases'

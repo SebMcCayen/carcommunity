@@ -8,20 +8,20 @@ const dictionaries = {
 
 export type Locale = keyof typeof dictionaries;
 
-type TranslationNode = string | Record<string, TranslationNode>;
+type TranslationDictionary = Record<string, unknown>;
 
-const getNestedValue = (obj: TranslationNode, path: string): string | undefined => {
-  if (typeof obj === 'string') {
-    return obj;
-  }
+const getNestedValue = (dictionary: TranslationDictionary, path: string): string | undefined => {
+  let current: unknown = dictionary;
 
-  return path.split('.').reduce<TranslationNode | undefined>((current, key) => {
-    if (!current || typeof current === 'string') {
+  for (const key of path.split('.')) {
+    if (!current || typeof current !== 'object' || !(key in (current as TranslationDictionary))) {
       return undefined;
     }
 
-    return current[key];
-  }, obj) as string | undefined;
+    current = (current as TranslationDictionary)[key];
+  }
+
+  return typeof current === 'string' ? current : undefined;
 };
 
 export const translate = (locale: Locale, key: string): string => {
