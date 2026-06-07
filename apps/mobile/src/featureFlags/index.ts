@@ -25,14 +25,21 @@ export type { FeatureFlagKey, FeatureFlags };
 export async function loadFeatureFlags(apiBaseUrl: string): Promise<FeatureFlags> {
   try {
     const url = `${apiBaseUrl.replace(/\/$/, '')}/v1/feature-flags`;
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3_000);
 
-    if (!response.ok) {
-      return DEFAULT_FEATURE_FLAGS;
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+
+      if (!response.ok) {
+        return DEFAULT_FEATURE_FLAGS;
+      }
+
+      const body = (await response.json()) as FeatureFlagResponse;
+      return body.data.flags;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const body = (await response.json()) as FeatureFlagResponse;
-    return body.data.flags;
   } catch {
     // Network error or parse failure — fall back to defaults.
     return DEFAULT_FEATURE_FLAGS;
