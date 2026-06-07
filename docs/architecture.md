@@ -46,7 +46,7 @@ Planned structure:
 ## Mobile app architecture
 
 - Built with **React Native / Expo**.
-- Uses Mapbox for mapping in app flows.
+- Uses Mapbox as the selected mapping provider for MVP mobile map flows.
 - Calls backend APIs for all trusted operations and data requiring secrets/caching.
 - Handles Apple/Google purchase flows client-side, then submits receipts/tokens to backend verification.
 - Receives feature flags and remote config to safely gate MVP features.
