@@ -39,6 +39,7 @@ CREATE TABLE "user_identities" (
     "provider_subject" VARCHAR(255) NOT NULL,
     "provider_email" VARCHAR(320),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "user_identities_pkey" PRIMARY KEY ("id")
 );
@@ -110,4 +111,3 @@ ALTER TABLE "organization_members" ADD CONSTRAINT "organization_members_user_id_
 
 -- AddForeignKey
 ALTER TABLE "feature_flags" ADD CONSTRAINT "feature_flags_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
