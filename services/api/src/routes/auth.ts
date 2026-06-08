@@ -13,10 +13,13 @@ const mobileLoginRequestSchema = z
 
 const logoutRequestSchema = z.object({}).strict();
 
-const notImplementedResponse = (message: string): AuthResponse => ({
+const notImplementedResponse = (
+  message: string,
+  code: Extract<AuthResponse, { ok: false }>['error']['code'] = 'provider_verification_not_implemented',
+): AuthResponse => ({
   ok: false,
   error: {
-    code: 'provider_verification_not_implemented',
+    code,
     message,
   },
 });
@@ -43,12 +46,12 @@ export async function registerAuthRoutes(app: FastifyInstance, config: AppConfig
     // TODO: Revoke active session/refresh tokens in backend session store.
     return reply
       .status(501)
-      .send(notImplementedResponse('Logout is not implemented until backend session management exists.'));
+      .send(notImplementedResponse('Logout is not implemented until backend session management exists.', 'not_implemented'));
   });
 
   app.get(AUTH_ROUTE_PATHS.me, async (_request, reply) => {
     return reply
       .status(501)
-      .send(notImplementedResponse('Current user endpoint is not implemented until backend sessions exist.'));
+      .send(notImplementedResponse('Current user endpoint is not implemented until backend sessions exist.', 'not_implemented'));
   });
 }

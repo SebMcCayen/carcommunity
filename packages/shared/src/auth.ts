@@ -15,7 +15,8 @@ export const AUTH_ROUTE_PATHS = {
 
 export type AuthErrorCode =
   | 'validation_error'
-  | 'unsupported_provider'
+  | 'internal_error'
+  | 'not_found'
   | 'provider_verification_not_implemented'
   | 'unauthenticated'
   | 'not_implemented';
@@ -55,5 +56,6 @@ export type AuthResponse =
       error: {
         code: AuthErrorCode;
         message: string;
-      };
+      details?: unknown;
     };
+  };
