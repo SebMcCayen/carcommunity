@@ -24,6 +24,8 @@
     "themeSystem": "Follow system",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "authPlannedTitle": "Login (planned)",
+    "authPlannedBody": "Apple login for iOS and Google login for Android will be connected through the backend in a later step.",
     "privacy": "Privacy",
     "notifications": "Notifications",
     "deleteAccount": "Delete account",

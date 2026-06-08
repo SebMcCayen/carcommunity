@@ -4,6 +4,7 @@ import { type AppConfig, loadConfig } from './config.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
 import { registerPrisma } from './plugins/prisma.js';
 import { registerSecurity } from './plugins/security.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerVersionRoutes } from './routes/version.js';
@@ -50,6 +51,7 @@ export async function createServer(config: AppConfig = loadConfig()): Promise<Fa
   await registerPrisma(app, config);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
+  await registerAuthRoutes(app, config);
   await registerFeatureFlagRoutes(app);
 
   return app;

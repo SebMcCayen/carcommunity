@@ -24,6 +24,8 @@
     "themeSystem": "Följ system",
     "themeLight": "Ljust",
     "themeDark": "Mörkt",
+    "authPlannedTitle": "Inloggning (planerad)",
+    "authPlannedBody": "Apple-inloggning för iOS och Google-inloggning för Android kopplas in via backend i ett kommande steg.",
     "privacy": "Integritet",
     "notifications": "Notiser",
     "deleteAccount": "Ta bort konto",

@@ -4,6 +4,8 @@
  * TODO: Add API client and shared helpers as backend integration is implemented.
  */
 
+export { ADMIN_AUTH_PLACEHOLDER_NOTE } from './auth';
+
 /** Format a date to a readable admin-friendly string (Swedish locale). */
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;

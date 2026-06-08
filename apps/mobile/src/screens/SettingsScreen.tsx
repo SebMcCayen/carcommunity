@@ -36,6 +36,10 @@ export const SettingsScreen = () => {
           </>
         }
       />
+      <KccCard
+        title={t('settings.authPlannedTitle')}
+        body={t('settings.authPlannedBody')}
+      />
 
       <KccButton label={t('settings.privacy')} variant="secondary" />
       <KccButton label={t('settings.notifications')} variant="secondary" />
