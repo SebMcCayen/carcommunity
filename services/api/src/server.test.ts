@@ -5,7 +5,7 @@ import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
-test('shared default feature flags include the MVP baseline keys', () => {
+test('shared default feature flags match the MVP baseline contract', () => {
   const expectedKeys = [
     'chat',
     'crownHunt',
