@@ -30,6 +30,7 @@ model User {
   identities   UserIdentity[]
   memberships  OrganizationMember[]
 
+  @@index([deletedAt])
   @@map("users")
 }
 
@@ -44,6 +45,7 @@ model UserIdentity {
 
   @@unique([provider, providerSubject])
   @@index([userId])
+  @@index([providerEmail])
   @@map("user_identities")
 }
 
@@ -58,7 +60,6 @@ model OrganizationMember {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
-  @@index([organizationId, userId])
   @@index([organizationId])
   @@index([userId])
   @@map("organization_members")
