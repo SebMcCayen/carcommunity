@@ -17,7 +17,7 @@ test('shared default feature flags match the MVP baseline contract', () => {
     'socialSharing',
   ] as const;
 
-  assert.deepEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort(), [...expectedKeys].slice().sort());
+  assert.deepEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort(), [...expectedKeys].sort());
 
   for (const key of expectedKeys) {
     assert.equal(DEFAULT_FEATURE_FLAGS[key], true);
