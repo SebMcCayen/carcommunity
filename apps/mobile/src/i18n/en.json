@@ -26,8 +26,6 @@
     "themeDark": "Dark",
     "authPlannedTitle": "Login (planned)",
     "authPlannedBody": "Apple login for iOS and Google login for Android will be connected through the backend in a later step.",
-    "authApplePlanned": "Apple login coming soon",
-    "authGooglePlanned": "Google login coming soon",
     "privacy": "Privacy",
     "notifications": "Notifications",
     "deleteAccount": "Delete account",
