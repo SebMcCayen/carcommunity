@@ -41,6 +41,7 @@ model UserIdentity {
   providerSubject String           @map("provider_subject") @db.VarChar(255)
   providerEmail   String?          @map("provider_email") @db.VarChar(320)
   createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerSubject])
