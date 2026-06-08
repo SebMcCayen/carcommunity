@@ -6,7 +6,7 @@ import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
 test('shared default feature flags include the MVP baseline keys', () => {
-  assert.deepEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort(), [
+  const expectedKeys = [
     'chat',
     'crownHunt',
     'digitalBillboards',
@@ -15,18 +15,13 @@ test('shared default feature flags include the MVP baseline keys', () => {
     'partnerStats',
     'pushNotifications',
     'socialSharing',
-  ]);
+  ] as const;
 
-  assert.deepEqual(DEFAULT_FEATURE_FLAGS, {
-    liveLocation: true,
-    chat: true,
-    crownHunt: true,
-    partnerStats: true,
-    pushNotifications: true,
-    socialSharing: true,
-    externalDataSources: true,
-    digitalBillboards: true,
-  });
+  assert.deepEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort(), [...expectedKeys]);
+
+  for (const key of expectedKeys) {
+    assert.equal(DEFAULT_FEATURE_FLAGS[key], true);
+  }
 });
 
 test('GET /health returns service status', async () => {
