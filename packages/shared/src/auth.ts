@@ -56,6 +56,6 @@ export type AuthResponse =
       error: {
         code: AuthErrorCode;
         message: string;
-      details?: unknown;
+      details?: Record<string, unknown>;
     };
   };
