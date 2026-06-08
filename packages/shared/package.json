@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "default": "./dist/auth.js"
+    },
     "./feature-flags": {
       "types": "./dist/feature-flags.d.ts",
       "default": "./dist/feature-flags.js"
