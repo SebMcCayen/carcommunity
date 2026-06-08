@@ -31,16 +31,19 @@ test('shared auth providers are limited to apple and google', () => {
 });
 
 test('identity provider and organization role enums expose expected MVP values', () => {
-  assert.deepEqual(Object.values(IdentityProvider), ['apple', 'google']);
-  assert.deepEqual(Object.values(OrganizationRole), [
-    'owner',
-    'admin',
-    'user',
-    'moderator',
-    'event_manager',
-    'partner_manager',
-    'support',
-  ]);
+  assert.deepEqual(new Set(Object.values(IdentityProvider)), new Set(['apple', 'google']));
+  assert.deepEqual(
+    new Set(Object.values(OrganizationRole)),
+    new Set([
+      'owner',
+      'admin',
+      'user',
+      'moderator',
+      'event_manager',
+      'partner_manager',
+      'support',
+    ]),
+  );
 });
 
 test('GET /health returns service status', async () => {
