@@ -5,6 +5,25 @@ import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
+test('shared default feature flags match the MVP baseline contract', () => {
+  const expectedKeys = [
+    'chat',
+    'crownHunt',
+    'digitalBillboards',
+    'externalDataSources',
+    'liveLocation',
+    'partnerStats',
+    'pushNotifications',
+    'socialSharing',
+  ] as const;
+
+  assert.deepEqual(Object.keys(DEFAULT_FEATURE_FLAGS).sort(), [...expectedKeys].sort());
+
+  for (const key of expectedKeys) {
+    assert.equal(DEFAULT_FEATURE_FLAGS[key], true);
+  }
+});
+
 test('GET /health returns service status', async () => {
   const app = await createServer({
     nodeEnv: 'test',
