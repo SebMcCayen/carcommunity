@@ -16,6 +16,7 @@ CREATE TABLE "organizations" (
     "brand_config" JSONB,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
+    "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
 );
@@ -72,6 +73,9 @@ CREATE TABLE "feature_flags" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "organizations_slug_key" ON "organizations"("slug");
+
+-- CreateIndex
+CREATE INDEX "organizations_deleted_at_idx" ON "organizations"("deleted_at");
 
 -- CreateIndex
 CREATE INDEX "users_deleted_at_idx" ON "users"("deleted_at");
