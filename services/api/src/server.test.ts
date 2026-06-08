@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { IdentityProvider, OrganizationRole } from '@prisma/client';
 import { AUTH_PROVIDERS } from '@carcommunity/shared/auth';
 import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import { LOCAL_DATABASE_URL } from './config.js';
@@ -27,6 +28,19 @@ test('shared default feature flags match the MVP baseline contract', () => {
 
 test('shared auth providers are limited to apple and google', () => {
   assert.deepEqual(AUTH_PROVIDERS, ['apple', 'google']);
+});
+
+test('identity provider and organization role enums expose expected MVP values', () => {
+  assert.deepEqual(Object.values(IdentityProvider), ['apple', 'google']);
+  assert.deepEqual(Object.values(OrganizationRole), [
+    'owner',
+    'admin',
+    'user',
+    'moderator',
+    'event_manager',
+    'partner_manager',
+    'support',
+  ]);
 });
 
 test('GET /health returns service status', async () => {
