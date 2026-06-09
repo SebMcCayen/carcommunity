@@ -73,7 +73,7 @@ test('GET /health returns service status', async () => {
   }
 });
 
-test('POST /v1/auth/mobile-login rejects unsupported providers', async () => {
+test('POST /v1/auth/login rejects unsupported providers', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4002,
@@ -84,7 +84,7 @@ test('POST /v1/auth/mobile-login rejects unsupported providers', async () => {
   try {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/auth/mobile-login',
+      url: '/v1/auth/login',
       payload: {
         provider: 'facebook',
         identityToken: 'placeholder-token',
@@ -106,7 +106,7 @@ test('POST /v1/auth/mobile-login rejects unsupported providers', async () => {
   }
 });
 
-test('POST /v1/auth/mobile-login does not accept placeholder login as real auth in production', async () => {
+test('POST /v1/auth/login does not accept placeholder login as real auth in production', async () => {
   const app = await createServer({
     nodeEnv: 'production',
     port: 4003,
@@ -117,7 +117,7 @@ test('POST /v1/auth/mobile-login does not accept placeholder login as real auth 
   try {
     const response = await app.inject({
       method: 'POST',
-      url: '/v1/auth/mobile-login',
+      url: '/v1/auth/login',
       payload: {
         provider: 'apple',
         identityToken: 'placeholder-token',
@@ -130,6 +130,33 @@ test('POST /v1/auth/mobile-login does not accept placeholder login as real auth 
       error: {
         code: 'provider_verification_not_implemented',
         message: 'Mobile provider verification is not implemented. Login is disabled in production.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/auth/me returns 501 not_implemented before sessions exist', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4004,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+    });
+
+    assert.equal(response.statusCode, 501);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Current user endpoint is not implemented until backend sessions exist.',
       },
     });
   } finally {

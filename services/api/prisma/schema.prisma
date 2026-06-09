@@ -31,6 +31,7 @@ model User {
   deletedAt    DateTime?            @map("deleted_at")
   identities   UserIdentity[]
   memberships  OrganizationMember[]
+  sessions     Session[]
 
   @@index([deletedAt])
   @@map("users")
@@ -82,6 +83,18 @@ model FeatureFlag {
   @@unique([organizationId, key])
   @@index([organizationId])
   @@map("feature_flags")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 enum IdentityProvider {
