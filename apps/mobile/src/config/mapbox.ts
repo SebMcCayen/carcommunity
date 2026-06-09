@@ -30,7 +30,7 @@ export function getMapboxAccessToken(): string {
     // Warn in development only. Never log the token value.
     if (__DEV__) {
       console.warn(
-        '[KCC Maps] EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set. ' +
+        '[Maps] EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set. ' +
           'The map will not render correctly. ' +
           'Add the token to your .env file and rebuild the app.',
       );
