@@ -1,9 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { IdentityProvider, OrganizationRole } from '@prisma/client';
+import {
+  IdentityProvider,
+  ModerationActionType,
+  OrganizationRole,
+  SubscriptionEntitlement,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import { AUTH_PROVIDERS } from '@carcommunity/shared/auth';
 import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
+import {
+  MODERATION_ACTION_TYPES,
+  SUBSCRIPTION_ENTITLEMENTS,
+  USER_ROLES,
+  USER_STATUSES,
+  hasBackendAccess,
+} from '@carcommunity/shared/users';
 import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
@@ -43,6 +57,40 @@ test('identity provider and organization role enums expose expected MVP values',
       'partner_manager',
       'support',
     ]),
+  );
+});
+
+test('user foundation enums stay aligned between Prisma and shared contracts', () => {
+  assert.deepEqual(new Set(Object.values(UserRole)), new Set(USER_ROLES));
+  assert.deepEqual(new Set(Object.values(UserStatus)), new Set(USER_STATUSES));
+  assert.deepEqual(new Set(Object.values(SubscriptionEntitlement)), new Set(SUBSCRIPTION_ENTITLEMENTS));
+  assert.deepEqual(new Set(Object.values(ModerationActionType)), new Set(MODERATION_ACTION_TYPES));
+});
+
+test('suspension status always blocks backend access even with entitlement', () => {
+  assert.equal(
+    hasBackendAccess({
+      role: 'user',
+      status: 'temporarily_suspended',
+      subscriptionEntitlement: 'member_monthly',
+    }),
+    false,
+  );
+  assert.equal(
+    hasBackendAccess({
+      role: 'user',
+      status: 'permanently_suspended',
+      subscriptionEntitlement: 'member_monthly',
+    }),
+    false,
+  );
+  assert.equal(
+    hasBackendAccess({
+      role: 'admin',
+      status: 'active',
+      subscriptionEntitlement: 'none',
+    }),
+    true,
   );
 });
 
@@ -191,6 +239,60 @@ test('GET /v1/feature-flags returns all flags with metadata', async () => {
 
     // All default flags must be present with their expected values.
     assert.deepEqual(body.data.flags, DEFAULT_FEATURE_FLAGS);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/users/me returns 501 not_implemented before sessions exist', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4005,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+    });
+
+    assert.equal(response.statusCode, 501);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'User profile endpoint is not implemented until backend sessions exist.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/users returns 501 not_implemented before admin auth exists', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4006,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/users',
+    });
+
+    assert.equal(response.statusCode, 501);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Admin users endpoint is not implemented until backend admin authorization exists.',
+      },
+    });
   } finally {
     await app.close();
   }

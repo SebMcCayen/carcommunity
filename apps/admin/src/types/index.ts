@@ -1,3 +1,9 @@
+import type {
+  SubscriptionEntitlement,
+  UserRole,
+  UserStatus,
+} from '@carcommunity/shared/users';
+
 /**
  * Shared admin portal type definitions.
  *
@@ -7,9 +13,8 @@
  * TODO: Replace with generated types from the backend API schema once available.
  */
 
-export type UserStatus = 'active' | 'suspended' | 'deleted';
-
-export type SubscriptionStatus = 'member_monthly' | 'free' | 'none';
+export type { UserRole, UserStatus, SubscriptionEntitlement };
+export type ModerationStatus = Extract<UserStatus, 'warned' | 'temporarily_suspended' | 'permanently_suspended'>;
 
 export type ReportStatus = 'open' | 'under_review' | 'resolved' | 'dismissed';
 
@@ -45,5 +50,5 @@ export interface AdminUser {
   id: string;
   email: string;
   displayName: string;
-  role: 'super_admin' | 'moderator' | 'support';
+  role: Extract<UserRole, 'admin' | 'owner'>;
 }
