@@ -37,6 +37,8 @@ model User {
   identities              UserIdentity[]
   memberships             OrganizationMember[]
   sessions                Session[]
+  liveLocationSessions    LiveLocationSession[]
+  liveLocationPositions   LiveLocationLatestPosition[]
   moderationActionsTarget ModerationAction[]       @relation("ModerationTargetUser")
   moderationActionsActor  ModerationAction[]       @relation("ModerationActorUser")
   auditLogsActor          AuditLog[]               @relation("AuditActorUser")
@@ -107,6 +109,43 @@ model Session {
   @@map("sessions")
 }
 
+model LiveLocationSession {
+  id            String                    @id @default(uuid()) @db.Uuid
+  userId        String                    @map("user_id") @db.Uuid
+  status        LiveLocationSessionStatus @default(active)
+  startedAt     DateTime                  @map("started_at")
+  expiresAt     DateTime                  @map("expires_at")
+  stoppedAt     DateTime?                 @map("stopped_at")
+  createdAt     DateTime                  @default(now()) @map("created_at")
+  updatedAt     DateTime                  @updatedAt @map("updated_at")
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  latestPosition LiveLocationLatestPosition?
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([expiresAt])
+  @@map("live_location_sessions")
+}
+
+model LiveLocationLatestPosition {
+  id                  String              @id @default(uuid()) @db.Uuid
+  sessionId           String              @unique @map("session_id") @db.Uuid
+  userId              String              @map("user_id") @db.Uuid
+  latitude            Float               @db.DoublePrecision
+  longitude           Float               @db.DoublePrecision
+  accuracyMeters      Float?              @map("accuracy_meters") @db.DoublePrecision
+  headingDegrees      Float?              @map("heading_degrees") @db.DoublePrecision
+  speedMetersPerSecond Float?             @map("speed_meters_per_second") @db.DoublePrecision
+  recordedAt          DateTime            @map("recorded_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  session             LiveLocationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([recordedAt])
+  @@map("live_location_latest_positions")
+}
+
 model ModerationAction {
   id           String               @id @default(uuid()) @db.Uuid
   targetUserId String               @map("target_user_id") @db.Uuid
@@ -166,6 +205,12 @@ enum UserStatus {
 enum SubscriptionEntitlement {
   none
   member_monthly
+}
+
+enum LiveLocationSessionStatus {
+  active
+  stopped
+  expired
 }
 
 enum ModerationActionType {

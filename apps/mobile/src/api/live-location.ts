@@ -1,0 +1,108 @@
+import {
+  DEFAULT_LIVE_LOCATION_PAGE_SIZE,
+  LIVE_LOCATION_ROUTE_PATHS,
+  buildLiveLocationPositionPath,
+  buildLiveLocationStopPath,
+  type HideMeNowResponse,
+  type LiveLocationPositionUpdateResponse,
+  type LiveLocationStartRequest,
+  type LiveLocationStartResponse,
+  type LiveLocationStopRequest,
+  type LiveLocationStopResponse,
+  type LiveLocationUpdateRequest,
+  type PublicLiveLocationMarkerResponse,
+} from '@carcommunity/shared/live-location';
+
+import { publicEnv } from '../config/env';
+
+const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
+
+if (!base) {
+  throw new Error('EXPO_PUBLIC_API_BASE_URL is not set. Set it in your .env file.');
+}
+
+const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
+
+async function requestJson<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), init);
+
+  if (!response.ok) {
+    throw new Error(`Live location request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+/**
+ * TODO: Keep session start behind an explicit user opt-in flow.
+ * TODO: Confirm the app is in the foreground before starting updates.
+ * TODO: Add background mode handling only during an active session.
+ * TODO: Add Android foreground notification when background updates are introduced.
+ * TODO: Add iOS background location handling only during an active session.
+ * TODO: Add safe-driving UI that avoids encouraging interaction while driving.
+ * TODO: Throttle updates to roughly 25-50 meters or 5-10 seconds once device location is wired in.
+ */
+export async function startLiveLocationSession(
+  body: LiveLocationStartRequest,
+): Promise<LiveLocationStartResponse> {
+  return requestJson<LiveLocationStartResponse>(LIVE_LOCATION_ROUTE_PATHS.sessions, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateLiveLocationPosition(
+  sessionId: string,
+  body: LiveLocationUpdateRequest,
+): Promise<LiveLocationPositionUpdateResponse> {
+  return requestJson<LiveLocationPositionUpdateResponse>(buildLiveLocationPositionPath(sessionId), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function stopLiveLocationSession(
+  sessionId: string,
+  body: LiveLocationStopRequest = { reason: 'user_stop' },
+): Promise<LiveLocationStopResponse> {
+  return requestJson<LiveLocationStopResponse>(buildLiveLocationStopPath(sessionId), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function hideMeNow(): Promise<HideMeNowResponse> {
+  return requestJson<HideMeNowResponse>(LIVE_LOCATION_ROUTE_PATHS.hideMeNow, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function loadLiveLocationMarkers(
+  page = 1,
+  pageSize = DEFAULT_LIVE_LOCATION_PAGE_SIZE,
+): Promise<PublicLiveLocationMarkerResponse> {
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+
+  return requestJson<PublicLiveLocationMarkerResponse>(
+    `${LIVE_LOCATION_ROUTE_PATHS.markers}?${searchParams.toString()}`,
+    {
+      method: 'GET',
+    },
+  );
+}
