@@ -7,6 +7,7 @@ import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerLiveLocationRoutes } from './routes/live-location.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
 
@@ -54,6 +55,7 @@ export async function createServer(config: AppConfig = loadConfig()): Promise<Fa
   await registerVersionRoutes(app);
   await registerAuthRoutes(app, config);
   await registerFeatureFlagRoutes(app);
+  await registerLiveLocationRoutes(app);
   await registerUserRoutes(app);
 
   return app;

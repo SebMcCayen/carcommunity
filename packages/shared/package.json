@@ -12,6 +12,10 @@
       "types": "./dist/feature-flags.d.ts",
       "default": "./dist/feature-flags.js"
     },
+    "./live-location": {
+      "types": "./dist/live-location.d.ts",
+      "default": "./dist/live-location.js"
+    },
     "./users": {
       "types": "./dist/users.d.ts",
       "default": "./dist/users.js"
