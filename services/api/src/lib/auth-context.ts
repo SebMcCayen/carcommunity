@@ -129,9 +129,16 @@ export async function requireAdminHook(request: FastifyRequest, _reply: FastifyR
   if (!request.auth) {
     throw new AppError(401, 'unauthenticated', 'Authentication required.');
   }
+  if (isSuspendedStatus(request.auth.status)) {
+    throw new AppError(403, 'suspended', 'Your account has been suspended.');
+  }
+  if (request.auth.status === 'deleted') {
+    throw new AppError(403, 'forbidden', 'Your account has been deleted.');
+  }
   if (!canAccessAdminFeatures({ role: request.auth.role, status: request.auth.status })) {
     throw new AppError(403, 'forbidden', 'Admin access required.');
   }
+}
 }
 
 /**
