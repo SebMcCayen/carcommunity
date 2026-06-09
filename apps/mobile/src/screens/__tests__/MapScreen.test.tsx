@@ -49,7 +49,7 @@ describe('MapScreen', () => {
 
     // The mock renders a View with testID 'mapbox-mapview'.
     const mapView = renderer!.root.findAll(
-      (node: ReactTestInstance) => node.props['testID'] === 'mapbox-mapview',
+      (node) => node.props['testID'] === 'mapbox-mapview',
     );
     expect(mapView.length).toBeGreaterThan(0);
   });
@@ -63,7 +63,7 @@ describe('MapScreen', () => {
 
     // The mock renders PointAnnotation as a View with testID 'mapbox-point-annotation'.
     const annotations = renderer!.root.findAll(
-      (node: ReactTestInstance) => node.props['testID'] === 'mapbox-point-annotation',
+      (node) => node.props['testID'] === 'mapbox-point-annotation',
     );
     // There should be at least one placeholder marker rendered.
     expect(annotations.length).toBeGreaterThan(0);
