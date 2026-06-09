@@ -10,19 +10,12 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
 import { AppThemeProvider } from '../../hooks/useAppTheme';
-import { MapScreen } from '../MapScreen';
-
-// Derive the ReactTestInstance type from the local react-test-renderer declaration.
-type ReactTestInstance = Parameters<
-  ReturnType<typeof TestRenderer.create>['root']['findAll']
->[0] extends (node: infer N) => boolean
-  ? N
-  : never;
 
 // Prevent console.warn noise from missing Mapbox token during tests.
-beforeAll(() => {
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
+jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { MapScreen } = require('../MapScreen') as typeof import('../MapScreen');
 
 afterAll(() => {
   jest.restoreAllMocks();
