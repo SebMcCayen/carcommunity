@@ -7,7 +7,7 @@
  * Security rules:
  *  - Do NOT log the token value.
  *  - Do NOT hardcode real tokens in source code.
- *  - Set the token in .env (EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.eyJ…) for local dev.
+ *  - Set the token in .env (EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.<your_token_here>) for local dev.
  *  - For EAS builds, set it via EAS Secrets or the build environment.
  *
  * TODO: For production builds, supply EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN via EAS Secrets
