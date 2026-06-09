@@ -38,6 +38,7 @@ describe('mapbox config — getMapboxAccessToken', () => {
     const { getMapboxAccessToken } = require('../../config/mapbox') as typeof import('../../config/mapbox');
 
     expect(getMapboxAccessToken()).toBe('test-mapbox-token');
+  });
 
   it('does not throw when the token is missing', () => {
     delete process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'];
@@ -96,4 +97,5 @@ describe('mapbox config — isMapboxTokenConfigured', () => {
     const { isMapboxTokenConfigured } = require('../../config/mapbox') as typeof import('../../config/mapbox');
 
     expect(isMapboxTokenConfigured()).toBe(true);
+  });
 });
