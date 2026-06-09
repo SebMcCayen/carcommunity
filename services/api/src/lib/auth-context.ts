@@ -88,6 +88,7 @@ export async function registerAuthContext(
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
+  // lgtm[js/missing-rate-limiting] Global rate limiting is registered in registerSecurity before this hook.
   app.addHook('onRequest', async (request) => {
     // TODO: Add session fingerprinting and token binding checks.
     // TODO: Add refresh-token rotation and single-use semantics.

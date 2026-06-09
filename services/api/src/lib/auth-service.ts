@@ -216,11 +216,11 @@ export function createAuthService(prisma: PrismaClient): AuthService {
 export function parseBearerToken(authorizationHeader: string | undefined): string | null {
   if (!authorizationHeader) return null;
 
-  const match = /^Bearer\s+(.+)$/i.exec(authorizationHeader.trim());
-  if (!match) {
+  const trimmed = authorizationHeader.trim();
+  if (trimmed.length < 8 || !trimmed.toLowerCase().startsWith('bearer ')) {
     return null;
   }
 
-  const token = match[1]?.trim();
+  const token = trimmed.slice('bearer '.length).trim();
   return token ? token : null;
 }
