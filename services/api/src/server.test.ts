@@ -20,6 +20,104 @@ import {
 } from '@carcommunity/shared/users';
 import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
+import type {
+  AuthService,
+  AuthenticatedSession,
+  CreatedSession,
+  ProviderIdentityLoginInput,
+} from './lib/auth-service.js';
+
+function createFakeAuthService(): AuthService {
+  const usersByProviderSubject = new Map<string, { userId: string }>();
+  const userProfiles = new Map<
+    string,
+    {
+      userId: string;
+      displayName: string | null;
+      role: 'user' | 'admin' | 'owner';
+      status: 'active' | 'warned' | 'temporarily_suspended' | 'permanently_suspended' | 'deleted';
+      subscriptionEntitlement: 'none' | 'member_monthly';
+      identities: Array<{ provider: 'apple' | 'google'; providerSubject: string }>;
+      lastActiveAt: string | null;
+    }
+  >();
+  const sessions = new Map<string, AuthenticatedSession>();
+  let userCounter = 0;
+  let sessionCounter = 0;
+
+  return {
+    async findOrCreateUserByProviderIdentity(input: ProviderIdentityLoginInput) {
+      const key = `${input.provider}:${input.providerSubject}`;
+      let existing = usersByProviderSubject.get(key);
+
+      if (!existing) {
+        userCounter += 1;
+        const userId = `user-${userCounter}`;
+        existing = { userId };
+        usersByProviderSubject.set(key, existing);
+        userProfiles.set(userId, {
+          userId,
+          displayName: null,
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'member_monthly',
+          identities: [{ provider: input.provider, providerSubject: input.providerSubject }],
+          lastActiveAt: null,
+        });
+      }
+
+      const profile = userProfiles.get(existing.userId)!;
+      return {
+        userId: profile.userId,
+        displayName: profile.displayName,
+        identities: profile.identities,
+        roles: [profile.role],
+      };
+    },
+
+    async createSession(userId: string): Promise<CreatedSession> {
+      sessionCounter += 1;
+      const token = `dev-token-${sessionCounter}`;
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+      const profile = userProfiles.get(userId)!;
+      const sessionId = `session-${sessionCounter}`;
+      sessions.set(token, {
+        sessionId,
+        userId,
+        role: profile.role,
+        status: profile.status,
+        subscriptionEntitlement: profile.subscriptionEntitlement,
+        displayName: profile.displayName,
+        lastActiveAt: new Date(),
+        expiresAt,
+        user: {
+          userId: profile.userId,
+          displayName: profile.displayName,
+          identities: profile.identities,
+          roles: [profile.role],
+        },
+      });
+
+      return {
+        sessionId,
+        expiresAt,
+        token: {
+          _devOnly: true,
+          accessToken: token,
+          expiresIn: 3600,
+        },
+      };
+    },
+
+    async lookupSession(rawToken: string) {
+      return sessions.get(rawToken) ?? null;
+    },
+
+    async revokeSession(rawToken: string) {
+      return sessions.delete(rawToken);
+    },
+  };
+}
 
 test('shared default feature flags match the MVP baseline contract', () => {
   const expectedKeys = [
@@ -185,7 +283,7 @@ test('POST /v1/auth/login does not accept placeholder login as real auth in prod
   }
 });
 
-test('GET /v1/auth/me returns 501 not_implemented before sessions exist', async () => {
+test('GET /v1/auth/me returns unauthenticated when no valid session exists', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4004,
@@ -199,14 +297,187 @@ test('GET /v1/auth/me returns 501 not_implemented before sessions exist', async 
       url: '/v1/auth/me',
     });
 
-    assert.equal(response.statusCode, 501);
+    assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json(), {
       ok: false,
       error: {
-        code: 'not_implemented',
-        message: 'Current user endpoint is not implemented until backend sessions exist.',
+        code: 'unauthenticated',
+        message: 'No valid authenticated session.',
       },
     });
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login creates or finds user by provider + providerSubject', async () => {
+  const authService = createFakeAuthService();
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4043,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { authService },
+  );
+
+  try {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'placeholder-token',
+        providerSubject: 'stable-subject-1',
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'placeholder-token',
+        providerSubject: 'stable-subject-1',
+      },
+    });
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+
+    const firstBody = first.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
+    const secondBody = second.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
+
+    assert.equal(firstBody.data.user.userId, secondBody.data.user.userId);
+    assert.notEqual(firstBody.data.token.accessToken, secondBody.data.token.accessToken);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login does not use email as identity key', async () => {
+  const authService = createFakeAuthService();
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4044,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { authService },
+  );
+
+  try {
+    const apple = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'placeholder-token',
+        providerSubject: 'same-email-subject-a',
+      },
+    });
+    const google = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'google',
+        identityToken: 'placeholder-token',
+        providerSubject: 'same-email-subject-b',
+      },
+    });
+
+    const appleBody = apple.json<{ ok: true; data: { user: { userId: string } } }>();
+    const googleBody = google.json<{ ok: true; data: { user: { userId: string } } }>();
+
+    assert.notEqual(appleBody.data.user.userId, googleBody.data.user.userId);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/auth/me returns user for a valid session token', async () => {
+  const authService = createFakeAuthService();
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4045,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { authService },
+  );
+
+  try {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'placeholder-token',
+        providerSubject: 'subject-auth-me',
+      },
+    });
+    const token = login.json<{ ok: true; data: { token: { accessToken: string } } }>().data.token.accessToken;
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/auth/me',
+      headers: {
+        authorization: 'Bearer ' + token,
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json<{ ok: true; data: { user: { userId: string } } }>();
+    assert.equal(body.ok, true);
+    assert.equal(typeof body.data.user.userId, 'string');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/logout revokes current session and stays idempotent', async () => {
+  const authService = createFakeAuthService();
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4046,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { authService },
+  );
+
+  try {
+    const login = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'placeholder-token',
+        providerSubject: 'subject-logout',
+      },
+    });
+    const token = login.json<{ ok: true; data: { token: { accessToken: string } } }>().data.token.accessToken;
+
+    const firstLogout = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      payload: {},
+      headers: { authorization: 'Bearer ' + token },
+    });
+    const secondLogout = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      payload: {},
+      headers: { authorization: 'Bearer ' + token },
+    });
+
+    assert.equal(firstLogout.statusCode, 200);
+    assert.equal(secondLogout.statusCode, 200);
+    assert.deepEqual(firstLogout.json(), { ok: true, data: { revoked: true } });
+    assert.deepEqual(secondLogout.json(), { ok: true, data: { revoked: false } });
   } finally {
     await app.close();
   }
@@ -314,7 +585,7 @@ const devUserAuth = (overrides: {
     ...overrides,
   });
 
-test('GET /v1/users/me with dev auth returns 501 not_implemented before sessions exist', async () => {
+test('GET /v1/users/me returns current profile summary for authenticated user', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4040,
@@ -329,12 +600,74 @@ test('GET /v1/users/me with dev auth returns 501 not_implemented before sessions
       headers: { 'x-dev-user': devUserAuth({}) },
     });
 
-    assert.equal(response.statusCode, 501);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      ok: true,
+      data: {
+        user: {
+          id: 'dev-user-id',
+          displayName: null,
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'member_monthly',
+          lastActiveAt: null,
+        },
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/users/me blocks suspended users safely', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4047,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+      headers: { 'x-dev-user': devUserAuth({ status: 'temporarily_suspended' }) },
+    });
+
+    assert.equal(response.statusCode, 403);
     assert.deepEqual(response.json(), {
       ok: false,
       error: {
-        code: 'not_implemented',
-        message: 'User profile endpoint is not implemented until backend sessions exist.',
+        code: 'suspended',
+        message: 'Your account has been suspended.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/users/me blocks deleted users safely', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4048,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+      headers: { 'x-dev-user': devUserAuth({ status: 'deleted' }) },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'forbidden',
+        message: 'Your account has been deleted.',
       },
     });
   } finally {

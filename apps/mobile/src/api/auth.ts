@@ -1,4 +1,4 @@
-import { AUTH_ROUTE_PATHS, type LoginRequest, type AuthResponse } from '@carcommunity/shared/auth';
+import { AUTH_ROUTE_PATHS, type LoginRequest, type AuthResponse, type LogoutResponse } from '@carcommunity/shared/auth';
 
 import { publicEnv } from '../config/env';
 
@@ -50,8 +50,16 @@ export async function loginWithGooglePlaceholder(identityToken: string): Promise
   });
 }
 
-export async function logoutPlaceholder(): Promise<AuthResponse> {
-  return postAuth(AUTH_ROUTE_PATHS.logout, {});
+export async function logoutPlaceholder(): Promise<LogoutResponse> {
+  const response = await fetch(buildUrl(AUTH_ROUTE_PATHS.logout), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  return (await response.json()) as LogoutResponse;
 }
 
 export async function getCurrentUserPlaceholder(): Promise<AuthResponse> {

@@ -10,6 +10,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import type { AppConfig } from '../config.js';
+import { parseBearerToken, type AuthService } from './auth-service.js';
 import { AppError } from './errors.js';
 import {
   SUBSCRIPTION_ENTITLEMENTS,
@@ -20,6 +21,7 @@ import {
   isSuspendedStatus,
 } from '@carcommunity/shared/users';
 import type { SubscriptionEntitlement, UserRole, UserStatus } from '@carcommunity/shared/users';
+import type { AuthenticatedUserSummary } from '@carcommunity/shared/auth';
 
 export interface AuthContext {
   /** Stable user identifier from the backend database. Never use email as primary identifier. */
@@ -27,8 +29,11 @@ export interface AuthContext {
   role: UserRole;
   status: UserStatus;
   subscriptionEntitlement: SubscriptionEntitlement;
+  user: AuthenticatedUserSummary;
   /** Backend session identifier. */
   sessionId: string;
+  sessionExpiresAt: string;
+  lastActiveAt: string | null;
 }
 
 declare module 'fastify' {
@@ -50,8 +55,9 @@ const devAuthContextSchema = z.object({
   subscriptionEntitlement: z.enum(SUBSCRIPTION_ENTITLEMENTS),
   sessionId: z.string().min(1),
 });
+type DevAuthContext = z.infer<typeof devAuthContextSchema>;
 
-function parseDevAuthContext(value: string): AuthContext | null {
+function parseDevAuthContext(value: string): DevAuthContext | null {
   try {
     const result = devAuthContextSchema.safeParse(JSON.parse(value) as unknown);
     return result.success ? result.data : null;
@@ -68,38 +74,75 @@ function parseDevAuthContext(value: string): AuthContext | null {
  * AuthContext can be used to inject a fake auth context for local testing.
  * This header is silently ignored in production.
  *
- * Production safety: until real JWT verification is implemented, `request.auth`
- * will always be null in production. All routes protected by `requireAuthHook`,
- * `requireAdminHook`, or `requireMemberHook` will therefore return 401 —
- * locking down protected endpoints rather than accidentally opening them.
+ * Production safety: login remains disabled in production until provider token
+ * verification is implemented. This hook still performs backend session lookup
+ * for any provided bearer token.
  *
  * Rate limiting is applied globally by the `@fastify/rate-limit` plugin
  * registered in `registerSecurity` before this hook runs.
  */
-export async function registerAuthContext(app: FastifyInstance, config: AppConfig): Promise<void> {
+export async function registerAuthContext(
+  app: FastifyInstance,
+  config: AppConfig,
+  authService: AuthService,
+): Promise<void> {
   app.decorateRequest('auth', null);
 
+  // lgtm[js/missing-rate-limiting] Global rate limiting is registered in registerSecurity before this hook.
   app.addHook('onRequest', async (request) => {
-    // TODO: Parse Authorization: ****** from request headers.
+    // TODO: Add session fingerprinting and token binding checks.
+    // TODO: Add refresh-token rotation and single-use semantics.
+    // TODO: Add session idle timeout and max-session lifetime policy.
+    // TODO: Add device/session metadata validation and anomaly detection.
     // TODO: Verify Apple identity token (JWT signed by Apple).
     //   Validate issuer (https://appleid.apple.com) and audience (bundle ID).
     // TODO: Verify Google identity token.
     //   Validate issuer (accounts.google.com) and audience (OAuth client ID).
-    // TODO: Look up session from the backend database by session ID.
-    // TODO: Check token expiration and reject expired tokens.
-    // TODO: Implement refresh token handling.
-    // TODO: Validate role from database — never trust client-side role claims.
+    // TODO: Validate nonce and anti-replay safeguards during login/provider verification.
 
+    const authorizationHeader = request.headers.authorization;
+    const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
+
+    if (token) {
+      const session = await authService.lookupSession(token);
+      if (session) {
+        request.auth = {
+          userId: session.userId,
+          role: session.role,
+          status: session.status,
+          subscriptionEntitlement: session.subscriptionEntitlement,
+          user: session.user,
+          sessionId: session.sessionId,
+          sessionExpiresAt: session.expiresAt.toISOString(),
+          lastActiveAt: session.lastActiveAt ? session.lastActiveAt.toISOString() : null,
+        };
+        return;
+      }
+    }
+
+    // TODO: Remove development header auth once all local/dev tooling uses real login.
     if (!config.isProduction) {
       // Development-only: accept the x-dev-user header to inject a fake auth context.
       // NEVER honour this header in production — the guard above ensures it is skipped.
       const devHeader = request.headers[DEV_AUTH_HEADER];
       if (typeof devHeader === 'string') {
-        request.auth = parseDevAuthContext(devHeader);
+        const parsed = parseDevAuthContext(devHeader);
+        request.auth = parsed
+          ? {
+              ...parsed,
+              user: {
+                userId: parsed.userId,
+                displayName: null,
+                identities: [],
+                roles: [parsed.role],
+              },
+              sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+              lastActiveAt: null,
+            }
+          : null;
       }
     }
-    // In production, request.auth remains null until real token verification is
-    // implemented. Protected routes will respond with 401 for all requests.
+    // Protected routes continue to require a valid backend session.
   });
 }
 
@@ -118,6 +161,12 @@ export async function optionalAuthHook(_request: FastifyRequest, _reply: Fastify
 export async function requireAuthHook(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   if (!request.auth) {
     throw new AppError(401, 'unauthenticated', 'Authentication required.');
+  }
+  if (request.auth.status === 'deleted') {
+    throw new AppError(403, 'forbidden', 'Your account has been deleted.');
+  }
+  if (isSuspendedStatus(request.auth.status)) {
+    throw new AppError(403, 'suspended', 'Your account has been suspended.');
   }
 }
 

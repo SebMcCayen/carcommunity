@@ -47,7 +47,14 @@ export interface AuditLogSummary {
 export interface CurrentUserResponse {
   ok: true;
   data: {
-    user: UserSummary;
+    user: {
+      id: string;
+      displayName: string | null;
+      role: UserRole;
+      status: UserStatus;
+      subscriptionEntitlement: SubscriptionEntitlement;
+      lastActiveAt: string | null;
+    };
   };
 }
 
