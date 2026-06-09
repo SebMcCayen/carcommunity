@@ -8,8 +8,8 @@
  * Build requirements:
  *   This screen requires a custom Expo development build or EAS build.
  *   @rnmapbox/maps uses native modules that are NOT available in Expo Go.
- *   Run `npx expo prebuild` or `eas build` after setting MAPBOX_ACCESS_TOKEN.
- *   See https://rnmapbox.github.io/docs/setup/installation
+ *   Set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN (runtime) and MAPBOX_ACCESS_TOKEN (plugin),
+ *   then run `npx expo prebuild` or `eas build` to apply native changes.
  *
  * TODO: Center map on the user's real position after explicit foreground
  *       location permission has been granted (future step).
