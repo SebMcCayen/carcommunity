@@ -22,8 +22,8 @@ function Camera() {
   return null;
 }
 
-function PointAnnotation({ children, ...props }) {
-  return React.createElement(View, { testID: 'mapbox-point-annotation', ...props }, children);
+function PointAnnotation({ children, style }) {
+  return React.createElement(View, { testID: 'mapbox-point-annotation', style }, children);
 }
 
 const setAccessToken = jest.fn();
