@@ -3,7 +3,7 @@
  *
  * Renders a basic Mapbox map centred on Kungsbacka, Sweden, with fake placeholder
  * markers for the current user and a nearby community member. No real location
- * data is used; all marker data is local and clearly labelled as fake.
+ * data is used; all marker data is local placeholders annotated with @fake in code.
  *
  * Build requirements:
  *   This screen requires a custom Expo development build or EAS build.
