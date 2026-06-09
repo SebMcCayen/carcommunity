@@ -21,10 +21,14 @@ describe('mapbox config — getMapboxAccessToken', () => {
   it('returns empty string when EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is not set', () => {
     delete process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'];
 
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getMapboxAccessToken } = require('../../config/mapbox') as typeof import('../../config/mapbox');
 
     expect(getMapboxAccessToken()).toBe('');
+
+    warnSpy.mockRestore();
   });
 
   it('returns the token when EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is set', () => {
