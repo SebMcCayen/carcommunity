@@ -53,7 +53,7 @@ describe('mapbox config — getMapboxAccessToken', () => {
   });
 
   it('does not log the token value when it is present', () => {
-    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'pk.test.secret-token';
+    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'test-mapbox-token-redacted';
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -61,7 +61,7 @@ describe('mapbox config — getMapboxAccessToken', () => {
 
     getMapboxAccessToken();
     const warnCalls = warnSpy.mock.calls.map((args) => args.join(' '));
-    const tokenLogged = warnCalls.some((msg) => msg.includes('pk.test.secret-token'));
+    const tokenLogged = warnCalls.some((msg) => msg.includes('test-mapbox-token-redacted'));
     expect(tokenLogged).toBe(false);
 
     warnSpy.mockRestore();
