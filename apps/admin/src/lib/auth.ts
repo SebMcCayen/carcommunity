@@ -5,7 +5,7 @@
  * TODO: Enforce admin access in backend before production rollout.
  * TODO: Never trust client-side admin flags for authorization.
  * TODO: Gate every admin route/page behind a server-side role assertion that
- *   calls the backend /v1/auth/me endpoint and checks the returned roles array.
+ *   calls the backend /v1/auth/me endpoint and checks the returned role.
  * TODO: Do NOT cache or persist role information in the browser beyond the
  *   active authenticated session.
  */
