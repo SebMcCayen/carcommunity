@@ -149,10 +149,14 @@ export async function requireMemberHook(request: FastifyRequest, _reply: Fastify
   if (!request.auth) {
     throw new AppError(401, 'unauthenticated', 'Authentication required.');
   }
+  if (request.auth.status === 'deleted') {
+    throw new AppError(403, 'forbidden', 'Your account has been deleted.');
+  }
   if (isSuspendedStatus(request.auth.status)) {
     throw new AppError(403, 'suspended', 'Your account has been suspended.');
   }
   if (!canAccessMemberFeatures(request.auth)) {
     throw new AppError(403, 'forbidden', 'Member subscription required.');
   }
+}
 }
