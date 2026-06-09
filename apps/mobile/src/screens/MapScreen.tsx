@@ -95,9 +95,8 @@ export const MapScreen = () => {
       <MapboxGL.MapView
         style={styles.map}
         styleURL={MapboxGL.StyleURL.Street}
-        logoEnabled={false}
-        attributionEnabled={false}
         compassEnabled
+      >
       >
         <MapboxGL.Camera
           zoomLevel={DEFAULT_ZOOM_LEVEL}
