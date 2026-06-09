@@ -88,10 +88,32 @@ function toCoordinate(position: LiveLocationLatestPosition): LiveLocationCoordin
   return {
     latitude: position.latitude,
     longitude: position.longitude,
-    accuracyMeters: position.accuracyMeters ?? undefined,
-    headingDegrees: position.headingDegrees ?? undefined,
-    speedMetersPerSecond: position.speedMetersPerSecond ?? undefined,
+    accuracyMeters: optionalNumber(position.accuracyMeters),
+    headingDegrees: optionalNumber(position.headingDegrees),
+    speedMetersPerSecond: optionalNumber(position.speedMetersPerSecond),
     recordedAt: position.recordedAt.toISOString(),
+  };
+}
+
+function optionalNumber(value: number | null): number | undefined {
+  return value ?? undefined;
+}
+
+function toPositionWriteData(coordinate: LiveLocationCoordinate): {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | undefined;
+  headingDegrees: number | undefined;
+  speedMetersPerSecond: number | undefined;
+  recordedAt: Date;
+} {
+  return {
+    latitude: coordinate.latitude,
+    longitude: coordinate.longitude,
+    accuracyMeters: coordinate.accuracyMeters,
+    headingDegrees: coordinate.headingDegrees,
+    speedMetersPerSecond: coordinate.speedMetersPerSecond,
+    recordedAt: new Date(coordinate.recordedAt),
   };
 }
 
@@ -219,6 +241,8 @@ export class LiveLocationService {
       throw new AppError(403, 'forbidden', 'Live location session is not active.');
     }
 
+    const positionData = toPositionWriteData(params.coordinate);
+
     const position = await this.prisma.liveLocationLatestPosition.upsert({
       where: {
         sessionId: session.id,
@@ -226,21 +250,9 @@ export class LiveLocationService {
       create: {
         sessionId: session.id,
         userId: session.userId,
-        latitude: params.coordinate.latitude,
-        longitude: params.coordinate.longitude,
-        accuracyMeters: params.coordinate.accuracyMeters,
-        headingDegrees: params.coordinate.headingDegrees,
-        speedMetersPerSecond: params.coordinate.speedMetersPerSecond,
-        recordedAt: new Date(params.coordinate.recordedAt),
+        ...positionData,
       },
-      update: {
-        latitude: params.coordinate.latitude,
-        longitude: params.coordinate.longitude,
-        accuracyMeters: params.coordinate.accuracyMeters,
-        headingDegrees: params.coordinate.headingDegrees,
-        speedMetersPerSecond: params.coordinate.speedMetersPerSecond,
-        recordedAt: new Date(params.coordinate.recordedAt),
-      },
+      update: positionData,
     });
 
     return {
@@ -421,9 +433,9 @@ export class LiveLocationService {
         coordinate: {
           latitude: position.latitude,
           longitude: position.longitude,
-          accuracyMeters: position.accuracyMeters ?? undefined,
-          headingDegrees: position.headingDegrees ?? undefined,
-          speedMetersPerSecond: position.speedMetersPerSecond ?? undefined,
+          accuracyMeters: optionalNumber(position.accuracyMeters),
+          headingDegrees: optionalNumber(position.headingDegrees),
+          speedMetersPerSecond: optionalNumber(position.speedMetersPerSecond),
           recordedAt: position.recordedAt.toISOString(),
         },
       })),

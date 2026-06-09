@@ -202,7 +202,8 @@ export async function registerLiveLocationRoutes(
 
       assertLiveLocationFeatureEnabled();
 
-      // TODO: Enforce blocking visibility filtering once blocking relationships are available.
+      // TODO: Enforce blocking visibility filtering once user blocking relationships are persisted.
+      //   Expected behavior: if A blocks B or B blocks A, neither user should receive the other's marker.
       const query = liveLocationListQuerySchema.parse(request.query);
       const result = await liveLocationService.getVisibleMarkers({
         viewer: {
