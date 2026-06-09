@@ -139,7 +139,6 @@ export async function requireAdminHook(request: FastifyRequest, _reply: FastifyR
     throw new AppError(403, 'forbidden', 'Admin access required.');
   }
 }
-}
 
 /**
  * Fastify preHandler hook: requires an active member_monthly subscription.
@@ -158,5 +157,4 @@ export async function requireMemberHook(request: FastifyRequest, _reply: Fastify
   if (!canAccessMemberFeatures(request.auth)) {
     throw new AppError(403, 'forbidden', 'Member subscription required.');
   }
-}
 }
