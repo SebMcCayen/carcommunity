@@ -90,11 +90,10 @@ describe('mapbox config — isMapboxTokenConfigured', () => {
   });
 
   it('returns true when EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is set', () => {
-    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'pk.test.example-token';
+    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'test-mapbox-token';
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { isMapboxTokenConfigured } = require('../../config/mapbox') as typeof import('../../config/mapbox');
 
     expect(isMapboxTokenConfigured()).toBe(true);
-  });
 });
