@@ -80,7 +80,7 @@ const MarkerDot = ({ color }: MarkerDotProps) => (
       styles.markerDot,
       { backgroundColor: color, borderRadius: MARKER_SIZE / 2, width: MARKER_SIZE, height: MARKER_SIZE },
     ]}
-    accessibilityRole="image"
+    accessible={false}
   />
 );
 
