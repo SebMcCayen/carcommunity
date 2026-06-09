@@ -1,7 +1,7 @@
 /**
  * Tests for the Mapbox access token config helper.
  *
- * Uses jest.isolateModules to control the value of EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN
+ * Uses jest.resetModules to control the value of EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN
  * at module load time, which is where the module-level MAPBOX_TOKEN constant
  * is evaluated.
  */
