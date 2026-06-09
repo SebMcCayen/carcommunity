@@ -71,6 +71,60 @@ export function isSuspendedStatus(status: UserStatus): boolean {
   return SUSPENDED_USER_STATUS_SET.has(status);
 }
 
+export function isAdminRole(role: UserRole): boolean {
+  return role === 'admin';
+}
+
+export function isOwnerRole(role: UserRole): boolean {
+  return role === 'owner';
+}
+
+export function hasMemberEntitlement(subscriptionEntitlement: SubscriptionEntitlement): boolean {
+  return subscriptionEntitlement === 'member_monthly';
+}
+
+/**
+ * Returns true if the user can access member-only features.
+ * Requires an active member_monthly subscription and a non-suspended, non-deleted status.
+ * Suspension always overrides subscription entitlement.
+ */
+export function canAccessMemberFeatures(input: {
+  role: UserRole;
+  status: UserStatus;
+  subscriptionEntitlement: SubscriptionEntitlement;
+}): boolean {
+  if (isSuspendedStatus(input.status) || input.status === 'deleted') {
+    return false;
+  }
+  return hasMemberEntitlement(input.subscriptionEntitlement);
+}
+
+/**
+ * Returns true if the user can access admin features.
+ * Requires admin or owner role and a non-suspended, non-deleted status.
+ * Admin and owner roles do not require a member subscription for admin access.
+ */
+export function canAccessAdminFeatures(input: { role: UserRole; status: UserStatus }): boolean {
+  if (isSuspendedStatus(input.status) || input.status === 'deleted') {
+    return false;
+  }
+  return ADMIN_BYPASS_ROLE_SET.has(input.role);
+}
+
+/**
+ * Returns true if the user can start or maintain a live location sharing session.
+ * All non-suspended, non-deleted users may share their own location regardless of subscription.
+ *
+ * TODO: Add blocking check once the blocking graph is available — a blocked user may
+ *   not be permitted to share their location with specific users.
+ */
+export function canShareOwnLiveLocation(input: { status: UserStatus }): boolean {
+  if (isSuspendedStatus(input.status) || input.status === 'deleted') {
+    return false;
+  }
+  return true;
+}
+
 export function hasBackendAccess(input: {
   role: UserRole;
   status: UserStatus;

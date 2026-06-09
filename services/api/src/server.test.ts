@@ -244,7 +244,7 @@ test('GET /v1/feature-flags returns all flags with metadata', async () => {
   }
 });
 
-test('GET /v1/users/me returns 501 not_implemented before sessions exist', async () => {
+test('GET /v1/users/me returns 401 unauthenticated when no auth is provided', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4005,
@@ -256,6 +256,77 @@ test('GET /v1/users/me returns 501 not_implemented before sessions exist', async
     const response = await app.inject({
       method: 'GET',
       url: '/v1/users/me',
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'unauthenticated',
+        message: 'Authentication required.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/users returns 401 unauthenticated when no auth is provided', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4006,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/users',
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'unauthenticated',
+        message: 'Authentication required.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+const devUserAuth = (overrides: {
+  userId?: string;
+  role?: string;
+  status?: string;
+  subscriptionEntitlement?: string;
+  sessionId?: string;
+}) =>
+  JSON.stringify({
+    userId: 'dev-user-id',
+    role: 'user',
+    status: 'active',
+    subscriptionEntitlement: 'member_monthly',
+    sessionId: 'dev-session-id',
+    ...overrides,
+  });
+
+test('GET /v1/users/me with dev auth returns 501 not_implemented before sessions exist', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4040,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+      headers: { 'x-dev-user': devUserAuth({}) },
     });
 
     assert.equal(response.statusCode, 501);
@@ -271,10 +342,10 @@ test('GET /v1/users/me returns 501 not_implemented before sessions exist', async
   }
 });
 
-test('GET /v1/admin/users returns 501 not_implemented before admin auth exists', async () => {
+test('GET /v1/admin/users with admin dev auth returns 501 not_implemented before admin backend exists', async () => {
   const app = await createServer({
     nodeEnv: 'test',
-    port: 4006,
+    port: 4041,
     databaseUrl: LOCAL_DATABASE_URL,
     isProduction: false,
   });
@@ -283,6 +354,7 @@ test('GET /v1/admin/users returns 501 not_implemented before admin auth exists',
     const response = await app.inject({
       method: 'GET',
       url: '/v1/admin/users',
+      headers: { 'x-dev-user': devUserAuth({ role: 'admin', subscriptionEntitlement: 'none' }) },
     });
 
     assert.equal(response.statusCode, 501);
@@ -291,6 +363,34 @@ test('GET /v1/admin/users returns 501 not_implemented before admin auth exists',
       error: {
         code: 'not_implemented',
         message: 'Admin users endpoint is not implemented until backend admin authorization exists.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/users with non-admin dev auth returns 403 forbidden', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4042,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/users',
+      headers: { 'x-dev-user': devUserAuth({ role: 'user' }) },
+    });
+
+    assert.equal(response.statusCode, 403);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'forbidden',
+        message: 'Admin access required.',
       },
     });
   } finally {

@@ -1,6 +1,13 @@
 import { ZodError } from 'zod';
 
-export type ErrorCode = 'internal_error' | 'not_found' | 'validation_error';
+export type ErrorCode =
+  | 'internal_error'
+  | 'not_found'
+  | 'validation_error'
+  | 'unauthenticated'
+  | 'forbidden'
+  | 'suspended'
+  | 'feature_disabled';
 
 export class AppError extends Error {
   public readonly statusCode: number;
