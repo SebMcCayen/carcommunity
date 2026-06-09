@@ -1,4 +1,4 @@
-import { AUTH_ROUTE_PATHS, type AuthRequest, type AuthResponse } from '@carcommunity/shared/auth';
+import { AUTH_ROUTE_PATHS, type LoginRequest, type AuthResponse } from '@carcommunity/shared/auth';
 
 import { publicEnv } from '../config/env';
 
@@ -10,7 +10,7 @@ if (!base) {
 
 const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
-async function postAuth(path: string, body: AuthRequest | Record<string, never>): Promise<AuthResponse> {
+async function postAuth(path: string, body: LoginRequest | Record<string, never>): Promise<AuthResponse> {
   const response = await fetch(buildUrl(path), {
     method: 'POST',
     headers: {
@@ -22,17 +22,31 @@ async function postAuth(path: string, body: AuthRequest | Record<string, never>)
   return (await response.json()) as AuthResponse;
 }
 
+/**
+ * Placeholder Apple login — sends the identity token to the backend for (future) verification.
+ * TODO: Replace with real expo-apple-authentication integration.
+ * TODO: Store the resulting session token securely using expo-secure-store (not AsyncStorage).
+ * @devOnly NOT PRODUCTION-READY. Apple identity token is not verified server-side yet.
+ */
 export async function loginWithApplePlaceholder(identityToken: string): Promise<AuthResponse> {
-  return postAuth(AUTH_ROUTE_PATHS.mobileLogin, {
+  return postAuth(AUTH_ROUTE_PATHS.login, {
     provider: 'apple',
     identityToken,
+    platform: 'ios',
   });
 }
 
+/**
+ * Placeholder Google login — sends the identity token to the backend for (future) verification.
+ * TODO: Replace with real @react-native-google-signin/google-signin integration.
+ * TODO: Store the resulting session token securely using expo-secure-store (not AsyncStorage).
+ * @devOnly NOT PRODUCTION-READY. Google identity token is not verified server-side yet.
+ */
 export async function loginWithGooglePlaceholder(identityToken: string): Promise<AuthResponse> {
-  return postAuth(AUTH_ROUTE_PATHS.mobileLogin, {
+  return postAuth(AUTH_ROUTE_PATHS.login, {
     provider: 'google',
     identityToken,
+    platform: 'android',
   });
 }
 
@@ -41,6 +55,7 @@ export async function logoutPlaceholder(): Promise<AuthResponse> {
 }
 
 export async function getCurrentUserPlaceholder(): Promise<AuthResponse> {
+  // TODO: Attach Authorization header with stored session token once token storage is implemented.
   const response = await fetch(buildUrl(AUTH_ROUTE_PATHS.me), {
     method: 'GET',
   });
