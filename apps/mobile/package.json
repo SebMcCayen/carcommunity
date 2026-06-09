@@ -18,6 +18,7 @@
     "@react-navigation/bottom-tabs": "^7.17.0",
     "@react-navigation/native": "^7.1.19",
     "@react-navigation/native-stack": "^7.17.0",
+    "@rnmapbox/maps": "^10.3.1",
     "expo": "~56.0.9",
     "expo-constants": "~18.0.8",
     "expo-status-bar": "~56.0.4",
@@ -38,6 +39,9 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "testEnvironment": "<rootDir>/jest-env.js"
+    "testEnvironment": "<rootDir>/jest-env.js",
+    "moduleNameMapper": {
+      "^@rnmapbox/maps$": "<rootDir>/__mocks__/@rnmapbox/maps.js"
+    }
   }
 }
