@@ -1,42 +1,23 @@
-import type { FastifyInstance } from 'fastify';
-import type { AdminUsersResponse, CurrentUserResponse } from '@carcommunity/shared/users';
-
-const PLACEHOLDER_USER = {
-  id: '00000000-0000-4000-8000-000000000001',
-  displayName: 'Community Member',
-  email: null,
-  role: 'user',
-  status: 'active',
-  subscriptionEntitlement: 'none',
-  lastActiveAt: null,
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-} as const;
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 export async function registerUserRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/v1/users/me', async (): Promise<CurrentUserResponse> => {
-    return {
-      ok: true,
-      data: {
-        user: PLACEHOLDER_USER,
+  app.get('/v1/users/me', async (_request, reply: FastifyReply): Promise<void> => {
+    await reply.code(501).send({
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'User profile endpoint is not implemented until backend sessions exist.',
       },
-    };
+    });
   });
 
-  app.get('/v1/admin/users', async (): Promise<AdminUsersResponse> => {
-    // TODO: Enforce backend-verified admin role before returning any admin data.
-    // TODO: Never trust client-side admin flags for authorization.
-    return {
-      ok: true,
-      data: {
-        users: [PLACEHOLDER_USER],
+  app.get('/v1/admin/users', async (_request, reply: FastifyReply): Promise<void> => {
+    await reply.code(501).send({
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Admin users endpoint is not implemented until backend admin authorization exists.',
       },
-      meta: {
-        page: 1,
-        pageSize: 1,
-        total: 1,
-        hasNext: false,
-      },
-    };
+    });
   });
 }

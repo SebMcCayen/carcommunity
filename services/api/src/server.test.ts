@@ -244,7 +244,7 @@ test('GET /v1/feature-flags returns all flags with metadata', async () => {
   }
 });
 
-test('GET /v1/users/me returns typed placeholder summary', async () => {
+test('GET /v1/users/me returns 501 not_implemented before sessions exist', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4005,
@@ -258,31 +258,20 @@ test('GET /v1/users/me returns typed placeholder summary', async () => {
       url: '/v1/users/me',
     });
 
-    assert.equal(response.statusCode, 200);
-    const body = response.json<{
-      ok: boolean;
-      data: {
-        user: {
-          id: string;
-          role: string;
-          status: string;
-          subscriptionEntitlement: string;
-          lastActiveAt: string | null;
-        };
-      };
-    }>();
-
-    assert.equal(body.ok, true);
-    assert.equal(body.data.user.role, 'user');
-    assert.equal(body.data.user.status, 'active');
-    assert.equal(body.data.user.subscriptionEntitlement, 'none');
-    assert.equal(body.data.user.lastActiveAt, null);
+    assert.equal(response.statusCode, 501);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'User profile endpoint is not implemented until backend sessions exist.',
+      },
+    });
   } finally {
     await app.close();
   }
 });
 
-test('GET /v1/admin/users returns safe typed placeholder list', async () => {
+test('GET /v1/admin/users returns 501 not_implemented before admin auth exists', async () => {
   const app = await createServer({
     nodeEnv: 'test',
     port: 4006,
@@ -296,19 +285,14 @@ test('GET /v1/admin/users returns safe typed placeholder list', async () => {
       url: '/v1/admin/users',
     });
 
-    assert.equal(response.statusCode, 200);
-    const body = response.json<{
-      ok: boolean;
-      data: { users: Array<{ id: string; email: string | null; role: string; status: string }> };
-      meta: { page: number; pageSize: number; total: number; hasNext: boolean };
-    }>();
-
-    assert.equal(body.ok, true);
-    assert.equal(body.data.users.length, 1);
-    assert.equal(body.data.users[0]?.email, null);
-    assert.equal(body.data.users[0]?.role, 'user');
-    assert.equal(body.data.users[0]?.status, 'active');
-    assert.deepEqual(body.meta, { page: 1, pageSize: 1, total: 1, hasNext: false });
+    assert.equal(response.statusCode, 501);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Admin users endpoint is not implemented until backend admin authorization exists.',
+      },
+    });
   } finally {
     await app.close();
   }
