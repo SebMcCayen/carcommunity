@@ -45,12 +45,9 @@ export interface UseLiveLocationSessionResult {
 
 const FALLBACK_ERROR_KEY = 'liveLocation.error';
 
-function extractErrorMessage(_err: unknown): string {
-  // Do not expose raw backend error messages to users — they may be technical
-  // or in an unexpected language. Return an i18n key so the UI can translate it.
-  // Do not log the error — it could contain location data or auth tokens.
-  return FALLBACK_ERROR_KEY;
-}
+// Do not expose raw backend error messages to users — they may be technical
+// or in an unexpected language. Do not log errors — they could contain location
+// data or auth tokens. TODO: add error-specific i18n keys if needed in future.
 
 /**
  * Lightweight hook managing live location session state.
@@ -93,8 +90,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       const response = await startLiveLocationSession({ duration: selectedDuration });
       setSessionId(response.data.session.id);
       setStatus('sharing');
-    } catch (err) {
-      setError(extractErrorMessage(err));
+    } catch {
+      setError(FALLBACK_ERROR_KEY);
       setStatus('error');
     } finally {
       setIsLoading(false);
@@ -110,8 +107,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       await stopLiveLocationSession(sessionId, { reason: 'user_stop' });
       setSessionId(null);
       setStatus('not_sharing');
-    } catch (err) {
-      setError(extractErrorMessage(err));
+    } catch {
+      setError(FALLBACK_ERROR_KEY);
       setStatus('error');
     } finally {
       setIsLoading(false);
@@ -126,8 +123,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       await hideMeNowApi();
       setSessionId(null);
       setStatus('not_sharing');
-    } catch (err) {
-      setError(extractErrorMessage(err));
+    } catch {
+      setError(FALLBACK_ERROR_KEY);
       setStatus('error');
     } finally {
       setIsLoading(false);

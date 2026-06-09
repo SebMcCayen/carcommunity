@@ -250,7 +250,7 @@ export const LiveLocationScreen = () => {
         <Text style={[styles.privacyBody, { color: theme.colors.textSecondary }]}>
           {t('liveLocation.whoCanSeeBody')}
         </Text>
-        <View style={[styles.privacyList, { gap: theme.spacing[2] }]}>
+        <View style={{ gap: theme.spacing[2] }}>
           {PRIVACY_KEYS.map((key) => (
             <Text key={key} style={[styles.privacyItem, { color: theme.colors.textSecondary }]}>
               {'• '}
@@ -323,7 +323,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  privacyList: {},
   privacyItem: {
     fontSize: 13,
     lineHeight: 19,
