@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { type AppConfig, loadConfig } from './config.js';
+import { createAuthService, type AuthService } from './lib/auth-service.js';
 import { registerAuthContext } from './lib/auth-context.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
 import { registerPrisma } from './plugins/prisma.js';
@@ -12,7 +13,14 @@ import { registerLiveLocationRoutes } from './routes/live-location.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
 
-export async function createServer(config: AppConfig = loadConfig()): Promise<FastifyInstance> {
+export interface ServerDependencies {
+  authService?: AuthService;
+}
+
+export async function createServer(
+  config: AppConfig = loadConfig(),
+  dependencies: ServerDependencies = {},
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: config.nodeEnv === 'test' ? false : { level: config.isProduction ? 'info' : 'debug' },
   });
@@ -52,10 +60,11 @@ export async function createServer(config: AppConfig = loadConfig()): Promise<Fa
 
   await registerSecurity(app, config);
   await registerPrisma(app, config);
-  await registerAuthContext(app, config);
+  const authService = dependencies.authService ?? createAuthService(app.prisma);
+  await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
-  await registerAuthRoutes(app, config);
+  await registerAuthRoutes(app, config, authService);
   await registerFeatureFlagRoutes(app);
   await registerLiveLocationRoutes(app);
   await registerUserRoutes(app);

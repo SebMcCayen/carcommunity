@@ -19,7 +19,9 @@ export type AuthErrorCode =
   | 'not_found'
   | 'provider_verification_not_implemented'
   | 'unauthenticated'
-  | 'not_implemented';
+  | 'not_implemented'
+  | 'forbidden'
+  | 'suspended';
 
 /** Roles defined and enforced by the backend. Never trust client-side role claims. */
 export type Role = 'user' | 'admin' | 'owner';
@@ -85,6 +87,23 @@ export type AuthResponse =
       data: {
         user: AuthenticatedUserSummary;
         session: AuthSession;
+        token?: TokenResponsePlaceholder;
+      };
+    }
+  | {
+      ok: false;
+      error: {
+        code: AuthErrorCode;
+        message: string;
+        details?: Record<string, unknown>;
+      };
+    };
+
+export type LogoutResponse =
+  | {
+      ok: true;
+      data: {
+        revoked: boolean;
       };
     }
   | {

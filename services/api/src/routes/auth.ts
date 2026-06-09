@@ -1,14 +1,19 @@
-import { AUTH_PROVIDERS, AUTH_ROUTE_PATHS, type AuthResponse } from '@carcommunity/shared/auth';
+import {
+  AUTH_PROVIDERS,
+  AUTH_ROUTE_PATHS,
+  type AuthResponse,
+  type LogoutResponse,
+} from '@carcommunity/shared/auth';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import type { AppConfig } from '../config.js';
+import { parseBearerToken, type AuthService } from '../lib/auth-service.js';
 
 const loginRequestSchema = z
   .object({
     provider: z.enum(AUTH_PROVIDERS),
     identityToken: z.string().min(1),
-    // Optional fields — the backend will verify these server-side once token verification is implemented.
     providerSubject: z.string().min(1).optional(),
     platform: z.string().min(1).optional(),
     appVersion: z.string().min(1).optional(),
@@ -29,41 +34,94 @@ const notImplementedResponse = (
   },
 });
 
-export async function registerAuthRoutes(app: FastifyInstance, config: AppConfig): Promise<void> {
+export async function registerAuthRoutes(
+  app: FastifyInstance,
+  config: AppConfig,
+  authService: AuthService,
+): Promise<void> {
   app.post(AUTH_ROUTE_PATHS.login, async (request, reply) => {
-    loginRequestSchema.parse(request.body);
+    const payload = loginRequestSchema.parse(request.body);
 
     // TODO: Verify Apple identity token (JWT signed by Apple) and extract stable providerSubject.
-    //   Validate issuer (https://appleid.apple.com) and audience (bundle ID).
-    //   Validate nonce if provided during sign-in flow.
     // TODO: Verify Google identity token and extract stable providerSubject.
-    //   Validate issuer (accounts.google.com) and audience (OAuth client ID).
-    // TODO: Look up UserIdentity by (provider, providerSubject); create User + UserIdentity on first login.
-    // TODO: Implement account linking when the same user authenticates with multiple providers.
-    // TODO: Issue a signed backend session/JWT only after provider verification succeeds.
-    // TODO: Implement refresh token rotation and revocation strategy.
-    const message = config.isProduction
-      ? 'Mobile provider verification is not implemented. Login is disabled in production.'
-      : 'Mobile provider verification is not implemented yet.';
+    // TODO: Validate identity-token issuer claim against provider allow-list.
+    // TODO: Validate identity-token audience against configured app client IDs.
+    // TODO: Validate nonce against a server-side login challenge to prevent replay.
+    // TODO: Implement account linking when one user signs in with multiple providers.
+    // TODO: Replace placeholder token with signed production JWT/session credentials.
 
-    return reply.status(501).send(notImplementedResponse(message));
+    if (config.isProduction) {
+      return reply.status(501).send(
+        notImplementedResponse('Mobile provider verification is not implemented. Login is disabled in production.'),
+      );
+    }
+
+    if (!payload.providerSubject) {
+      return reply.status(400).send({
+        ok: false,
+        error: {
+          code: 'validation_error',
+          message:
+            'providerSubject is required for development placeholder login until server-side provider verification is implemented.',
+        },
+      } satisfies AuthResponse);
+    }
+
+    const user = await authService.findOrCreateUserByProviderIdentity({
+      provider: payload.provider,
+      providerSubject: payload.providerSubject,
+    });
+    const session = await authService.createSession(user.userId);
+
+    return reply.status(200).send({
+      ok: true,
+      data: {
+        user,
+        session: {
+          sessionId: session.sessionId,
+          expiresAt: session.expiresAt.toISOString(),
+        },
+        // Development-only placeholder token. Do not use in production.
+        token: session.token,
+      },
+    } satisfies AuthResponse);
   });
 
   app.post(AUTH_ROUTE_PATHS.logout, async (request, reply) => {
     logoutRequestSchema.parse(request.body ?? {});
 
-    // TODO: Revoke active session/refresh tokens in backend session store.
-    return reply
-      .status(501)
-      .send(notImplementedResponse('Logout is not implemented until backend session management exists.', 'not_implemented'));
+    const authorizationHeader = request.headers.authorization;
+    const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
+    const revoked = token ? await authService.revokeSession(token) : false;
+
+    return reply.status(200).send({
+      ok: true,
+      data: {
+        revoked,
+      },
+    } satisfies LogoutResponse);
   });
 
-  app.get(AUTH_ROUTE_PATHS.me, async (_request, reply) => {
-    // TODO: Validate bearer token / session cookie from the Authorization header.
-    // TODO: Look up authenticated user from the backend session store.
-    // TODO: Return AuthenticatedUserSummary with userId, identities, and roles.
-    return reply
-      .status(501)
-      .send(notImplementedResponse('Current user endpoint is not implemented until backend sessions exist.', 'not_implemented'));
+  app.get(AUTH_ROUTE_PATHS.me, async (request, reply) => {
+    if (!request.auth) {
+      return reply.status(200).send({
+        ok: false,
+        error: {
+          code: 'unauthenticated',
+          message: 'No valid authenticated session.',
+        },
+      } satisfies AuthResponse);
+    }
+
+    return reply.status(200).send({
+      ok: true,
+      data: {
+        user: request.auth.user,
+        session: {
+          sessionId: request.auth.sessionId,
+          expiresAt: request.auth.sessionExpiresAt,
+        },
+      },
+    } satisfies AuthResponse);
   });
 }
