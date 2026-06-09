@@ -5,8 +5,8 @@
  * the hook in a test component without requiring additional testing libraries.
  */
 
-import React, { act } from 'react';
-import TestRenderer from 'react-test-renderer';
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
 
 import type { UseLiveLocationSessionResult } from '../useLiveLocationSession';
 import { useLiveLocationSession } from '../useLiveLocationSession';
