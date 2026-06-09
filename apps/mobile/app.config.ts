@@ -11,6 +11,22 @@ const config: ExpoConfig = {
   experiments: {
     typedRoutes: false,
   },
+  // TODO: @rnmapbox/maps is a native module and requires a custom Expo development
+  //       build or an EAS build. It does NOT work in Expo Go.
+  //       Before building:
+  //         1. Set MAPBOX_ACCESS_TOKEN (build secret) in your .env or EAS Secrets.
+  //         2. Run `npx expo prebuild` or `eas build` to apply this plugin.
+  //       See https://rnmapbox.github.io/docs/setup/installation
+  plugins: [
+    [
+      '@rnmapbox/maps',
+      {
+        // MAPBOX_ACCESS_TOKEN is used by the plugin to configure iOS/Android native build scripts.
+        // Do not use EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN here (that is the runtime token).
+        RNMapboxMapsDownloadToken: process.env.MAPBOX_ACCESS_TOKEN ?? '',
+      },
+    ],
+  ],
   extra: {
     appDisplayName,
     appFullName: process.env.EXPO_PUBLIC_BRAND_FULL_NAME ?? 'Kungsbacka Car Community',
