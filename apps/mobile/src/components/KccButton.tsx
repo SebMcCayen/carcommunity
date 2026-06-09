@@ -10,9 +10,16 @@ type KccButtonProps = {
   onPress?: () => void;
   variant?: ButtonVariant;
   rightSlot?: ReactNode;
+  disabled?: boolean;
 };
 
-export const KccButton = ({ label, onPress, variant = 'primary', rightSlot }: KccButtonProps) => {
+export const KccButton = ({
+  label,
+  onPress,
+  variant = 'primary',
+  rightSlot,
+  disabled = false,
+}: KccButtonProps) => {
   const { theme } = useAppTheme();
 
   const variantStyles = {
@@ -33,7 +40,8 @@ export const KccButton = ({ label, onPress, variant = 'primary', rightSlot }: Kc
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      accessibilityState={{ disabled }}
+      onPress={disabled ? undefined : onPress}
       style={[
         styles.button,
         {
@@ -43,6 +51,7 @@ export const KccButton = ({ label, onPress, variant = 'primary', rightSlot }: Kc
           minHeight: 48,
           paddingHorizontal: theme.spacing[4],
           paddingVertical: theme.spacing[3],
+          opacity: disabled ? 0.5 : 1,
         },
       ]}
     >

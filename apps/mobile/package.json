@@ -37,6 +37,7 @@
     "typescript": "~6.0.3"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testEnvironment": "<rootDir>/jest-env.js"
   }
 }

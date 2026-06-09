@@ -41,9 +41,26 @@
     "githubReleases": "GitHub Releases"
   },
   "liveLocation": {
+    "screenTitle": "Live-position",
+    "statusNotSharing": "Delar inte position",
+    "statusStarting": "Startar...",
+    "statusSharing": "Delar position",
+    "statusStopping": "Stoppar...",
+    "statusError": "Något gick fel",
+    "durationLabel": "Välj delningstid",
+    "duration1h": "1 timme",
+    "duration2h": "2 timmar",
+    "duration4h": "4 timmar",
     "start": "Dela min position",
     "stop": "Stoppa delning",
-    "hideNow": "Dölj mig nu"
+    "hideNow": "Dölj mig nu",
+    "whoCanSeeTitle": "Vem kan se mig?",
+    "whoCanSeeBody": "Enbart Community-medlemmar med aktivt abonnemang kan se din position medan du delar.",
+    "privacyOptional": "Delning är frivillig och sker alltid på eget initiativ.",
+    "privacyTimeLimited": "Din position delas bara under den tid du väljer.",
+    "privacyStopAnytime": "Du kan sluta dela när som helst via \"Stoppa delning\" eller \"Dölj mig nu\".",
+    "privacyNoHistory": "Ingen rutt eller historik sparas publikt.",
+    "privacySafeDriving": "Interagera inte med appen under körning."
   },
   "privacy": {
     "label": "Integritet"
