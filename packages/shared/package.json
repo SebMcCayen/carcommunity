@@ -11,6 +11,10 @@
     "./feature-flags": {
       "types": "./dist/feature-flags.d.ts",
       "default": "./dist/feature-flags.js"
+    },
+    "./users": {
+      "types": "./dist/users.d.ts",
+      "default": "./dist/users.js"
     }
   },
   "scripts": {

@@ -1,9 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { IdentityProvider, OrganizationRole } from '@prisma/client';
+import {
+  IdentityProvider,
+  ModerationActionType,
+  OrganizationRole,
+  SubscriptionEntitlement,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import { AUTH_PROVIDERS } from '@carcommunity/shared/auth';
 import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
+import {
+  MODERATION_ACTION_TYPES,
+  SUBSCRIPTION_ENTITLEMENTS,
+  USER_ROLES,
+  USER_STATUSES,
+  hasBackendAccess,
+} from '@carcommunity/shared/users';
 import { LOCAL_DATABASE_URL } from './config.js';
 import { createServer } from './server.js';
 
@@ -43,6 +57,40 @@ test('identity provider and organization role enums expose expected MVP values',
       'partner_manager',
       'support',
     ]),
+  );
+});
+
+test('user foundation enums stay aligned between Prisma and shared contracts', () => {
+  assert.deepEqual(new Set(Object.values(UserRole)), new Set(USER_ROLES));
+  assert.deepEqual(new Set(Object.values(UserStatus)), new Set(USER_STATUSES));
+  assert.deepEqual(new Set(Object.values(SubscriptionEntitlement)), new Set(SUBSCRIPTION_ENTITLEMENTS));
+  assert.deepEqual(new Set(Object.values(ModerationActionType)), new Set(MODERATION_ACTION_TYPES));
+});
+
+test('suspension status always blocks backend access even with entitlement', () => {
+  assert.equal(
+    hasBackendAccess({
+      role: 'user',
+      status: 'temporarily_suspended',
+      subscriptionEntitlement: 'member_monthly',
+    }),
+    false,
+  );
+  assert.equal(
+    hasBackendAccess({
+      role: 'user',
+      status: 'permanently_suspended',
+      subscriptionEntitlement: 'member_monthly',
+    }),
+    false,
+  );
+  assert.equal(
+    hasBackendAccess({
+      role: 'admin',
+      status: 'active',
+      subscriptionEntitlement: 'none',
+    }),
+    true,
   );
 });
 
@@ -191,6 +239,76 @@ test('GET /v1/feature-flags returns all flags with metadata', async () => {
 
     // All default flags must be present with their expected values.
     assert.deepEqual(body.data.flags, DEFAULT_FEATURE_FLAGS);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/users/me returns typed placeholder summary', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4005,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json<{
+      ok: boolean;
+      data: {
+        user: {
+          id: string;
+          role: string;
+          status: string;
+          subscriptionEntitlement: string;
+          lastActiveAt: string | null;
+        };
+      };
+    }>();
+
+    assert.equal(body.ok, true);
+    assert.equal(body.data.user.role, 'user');
+    assert.equal(body.data.user.status, 'active');
+    assert.equal(body.data.user.subscriptionEntitlement, 'none');
+    assert.equal(body.data.user.lastActiveAt, null);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/users returns safe typed placeholder list', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4006,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/users',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json<{
+      ok: boolean;
+      data: { users: Array<{ id: string; email: string | null; role: string; status: string }> };
+      meta: { page: number; pageSize: number; total: number; hasNext: boolean };
+    }>();
+
+    assert.equal(body.ok, true);
+    assert.equal(body.data.users.length, 1);
+    assert.equal(body.data.users[0]?.email, null);
+    assert.equal(body.data.users[0]?.role, 'user');
+    assert.equal(body.data.users[0]?.status, 'active');
+    assert.deepEqual(body.meta, { page: 1, pageSize: 1, total: 1, hasNext: false });
   } finally {
     await app.close();
   }
