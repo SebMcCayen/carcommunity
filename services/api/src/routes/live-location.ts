@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   DEFAULT_FEATURE_FLAGS,
 } from '@carcommunity/shared/feature-flags';
@@ -11,14 +10,10 @@ import {
   MAX_LIVE_LOCATION_PAGE_SIZE,
   buildLiveLocationPositionPath,
   buildLiveLocationStopPath,
-  calculateLiveLocationExpiresAt,
   type AdminLiveLocationSummaryResponse,
-  type HideMeNowResponse,
-  type LiveLocationOwnSessionResponse,
-  type LiveLocationSessionSummary,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
 const liveLocationSessionParamsSchema = z
@@ -69,65 +64,39 @@ const PLACEHOLDER_META = {
   ttlCleanupPrepared: true,
 } as const;
 
-function createSessionSummary(input: {
-  id?: string;
-  duration: (typeof LIVE_LOCATION_DURATIONS)[number];
-  status: LiveLocationSessionSummary['status'];
-  startedAt: string;
-  stoppedAt?: string | null;
-}): LiveLocationSessionSummary {
-  return {
-    id: input.id ?? randomUUID(),
-    status: input.status,
-    duration: input.duration,
-    startedAt: input.startedAt,
-    expiresAt: calculateLiveLocationExpiresAt(input.startedAt, input.duration),
-    stoppedAt: input.stoppedAt ?? null,
-  };
-}
-
-function createOwnSessionResponse(input: {
-  session: LiveLocationSessionSummary;
-  latestPosition: LiveLocationOwnSessionResponse['data']['latestPosition'];
-  latestPositionRemoved: boolean;
-}): LiveLocationOwnSessionResponse {
-  return {
-    ok: true,
-    data: {
-      session: input.session,
-      latestPosition: input.latestPosition,
-      latestPositionRemoved: input.latestPositionRemoved,
+function sendMutatingRouteNotImplemented(reply: FastifyReply, message: string) {
+  return reply.status(501).send({
+    ok: false,
+    error: {
+      code: 'not_implemented',
+      message,
     },
-    meta: PLACEHOLDER_META,
-  };
+  });
 }
 
 export async function registerLiveLocationRoutes(app: FastifyInstance): Promise<void> {
-  app.post(LIVE_LOCATION_ROUTE_PATHS.sessions, async (request): Promise<LiveLocationOwnSessionResponse> => {
+  app.post(LIVE_LOCATION_ROUTE_PATHS.sessions, async (request, reply) => {
     const body = liveLocationStartRequestSchema.parse(request.body);
-    const startedAt = new Date().toISOString();
+    void body;
 
     // TODO: Require authenticated user context from the backend session/token.
     // TODO: Evaluate backend feature flag `liveLocation` before allowing session start.
     // TODO: Enforce suspension checks before allowing a user to share live location.
     // TODO: Persist LiveLocationSession in PostgreSQL and reuse an existing active session safely.
     // TODO: Prepare TTL cleanup workers that purge stale latest-position records at or before LIVE_LOCATION_TTL_MINUTES_MAX.
-    return createOwnSessionResponse({
-      session: createSessionSummary({
-        duration: body.duration,
-        status: 'active',
-        startedAt,
-      }),
-      latestPosition: null,
-      latestPositionRemoved: false,
-    });
+    return sendMutatingRouteNotImplemented(
+      reply,
+      'Live location session start is not implemented until backend auth and ownership checks exist.',
+    );
   });
 
   app.post(
     buildLiveLocationPositionPath(':sessionId'),
-    async (request): Promise<LiveLocationOwnSessionResponse> => {
+    async (request, reply) => {
       const params = liveLocationSessionParamsSchema.parse(request.params);
       const body = liveLocationUpdateRequestSchema.parse(request.body);
+      void params;
+      void body;
 
       // TODO: Require authenticated user context and ensure the session belongs to the caller.
       // TODO: Evaluate backend feature flag `liveLocation` before accepting updates.
@@ -135,61 +104,40 @@ export async function registerLiveLocationRoutes(app: FastifyInstance): Promise<
       // TODO: Enforce foreground-only/manual opt-in rules before enabling any background tracking.
       // TODO: Upsert the latest backend position only; never store route history or passive tracking data.
       // TODO: Apply TTL cleanup using LIVE_LOCATION_TTL_MINUTES_MAX for stale latest-position records.
-      return createOwnSessionResponse({
-        session: createSessionSummary({
-          id: params.sessionId,
-          duration: '1h',
-          status: 'active',
-          startedAt: body.coordinate.recordedAt,
-        }),
-        latestPosition: body.coordinate,
-        latestPositionRemoved: false,
-      });
+      return sendMutatingRouteNotImplemented(
+        reply,
+        'Live location position updates are not implemented until backend auth and ownership checks exist.',
+      );
     },
   );
 
   app.post(
     buildLiveLocationStopPath(':sessionId'),
-    async (request): Promise<LiveLocationOwnSessionResponse> => {
+    async (request, reply) => {
       const params = liveLocationSessionParamsSchema.parse(request.params);
       liveLocationStopRequestSchema.parse(request.body ?? {});
-      const stoppedAt = new Date().toISOString();
+      void params;
 
       // TODO: Require authenticated user context and ensure the session belongs to the caller.
       // TODO: Evaluate backend feature flag `liveLocation` before serving mutable session actions.
       // TODO: Persist stopped status and remove the latest backend position when stop/hide semantics require it.
       // TODO: Enforce audit logging for future admin-triggered stop actions.
-      return createOwnSessionResponse({
-        session: createSessionSummary({
-          id: params.sessionId,
-          duration: '1h',
-          status: 'stopped',
-          startedAt: stoppedAt,
-          stoppedAt,
-        }),
-        latestPosition: null,
-        latestPositionRemoved: true,
-      });
+      return sendMutatingRouteNotImplemented(
+        reply,
+        'Live location session stop is not implemented until backend auth and ownership checks exist.',
+      );
     },
   );
 
-  app.post(LIVE_LOCATION_ROUTE_PATHS.hideMeNow, async (): Promise<HideMeNowResponse> => {
-    const stoppedAt = new Date().toISOString();
-
+  app.post(LIVE_LOCATION_ROUTE_PATHS.hideMeNow, async (_request, reply) => {
     // TODO: Require authenticated user context and resolve the caller's active live location session.
     // TODO: Evaluate backend feature flag `liveLocation` before serving hide-now.
     // TODO: Remove the latest backend position immediately and mark the active session as stopped.
     // TODO: Apply TTL cleanup so stale caches/derived views never keep hidden location data.
-    return createOwnSessionResponse({
-      session: createSessionSummary({
-        duration: '1h',
-        status: 'stopped',
-        startedAt: stoppedAt,
-        stoppedAt,
-      }),
-      latestPosition: null,
-      latestPositionRemoved: true,
-    });
+    return sendMutatingRouteNotImplemented(
+      reply,
+      'Live location hide-me-now is not implemented until backend auth and ownership checks exist.',
+    );
   });
 
   app.get(LIVE_LOCATION_ROUTE_PATHS.markers, async (request): Promise<PublicLiveLocationMarkerResponse> => {

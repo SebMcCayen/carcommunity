@@ -24,7 +24,7 @@ export default function LiveLocationPage() {
       <div className={styles.authWarning} role="alert">
         <span aria-hidden="true">⚠</span>
         <span>
-          <strong>Operations-only placeholder.</strong> TODO: Admin live location is for moderation
+          <strong>Operations-only placeholder.</strong> Admin live location is for moderation
           and operations only. Backend-verified admin or owner authorization, audit logging, and
           feature flag checks are required before production use.
         </span>

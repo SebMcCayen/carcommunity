@@ -11,8 +11,6 @@ import {
   calculateLiveLocationExpiresAt,
   canViewOtherUsersLiveLocation,
   type AdminLiveLocationSummaryResponse,
-  type HideMeNowResponse,
-  type LiveLocationStartResponse,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
 
@@ -87,17 +85,14 @@ test('POST /v1/live-location/sessions returns a safe placeholder session respons
       },
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 501);
 
-    const body = response.json<LiveLocationStartResponse>();
-    assert.equal(body.ok, true);
-    assert.equal(body.data.session.status, 'active');
-    assert.equal(body.data.session.duration, '2h');
-    assert.equal(body.data.latestPosition, null);
-    assert.equal(body.data.latestPositionRemoved, false);
-    assert.equal(body.meta.source, 'placeholder');
-    assert.equal(body.meta.productionReady, false);
-    assert.equal(body.meta.ttlCleanupPrepared, true);
+    const body = response.json<{
+      ok: boolean;
+      error: { code: string; message: string };
+    }>();
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'not_implemented');
   } finally {
     await app.close();
   }
@@ -164,14 +159,14 @@ test('POST /v1/live-location/hide-me-now returns a placeholder hide response sha
       url: LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 501);
 
-    const body = response.json<HideMeNowResponse>();
-    assert.equal(body.ok, true);
-    assert.equal(body.data.session.status, 'stopped');
-    assert.equal(body.data.latestPosition, null);
-    assert.equal(body.data.latestPositionRemoved, true);
-    assert.equal(body.meta.ttlCleanupPrepared, true);
+    const body = response.json<{
+      ok: boolean;
+      error: { code: string; message: string };
+    }>();
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'not_implemented');
   } finally {
     await app.close();
   }
@@ -195,17 +190,14 @@ test('POST /v1/live-location/sessions/:sessionId/position accepts a valid coordi
       },
     });
 
-    assert.equal(response.statusCode, 200);
+    assert.equal(response.statusCode, 501);
 
-    const body = response.json<LiveLocationStartResponse>();
-    assert.equal(body.data.session.id, sessionId);
-    assert.equal(body.data.session.status, 'active');
-    assert.deepEqual(body.data.latestPosition, {
-      latitude: 57.4875,
-      longitude: 12.0762,
-      accuracyMeters: 8,
-      recordedAt: '2026-06-09T10:15:00.000Z',
-    });
+    const body = response.json<{
+      ok: boolean;
+      error: { code: string; message: string };
+    }>();
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'not_implemented');
   } finally {
     await app.close();
   }
