@@ -97,7 +97,6 @@ export const MapScreen = () => {
         styleURL={MapboxGL.StyleURL.Street}
         compassEnabled
       >
-      >
         <MapboxGL.Camera
           zoomLevel={DEFAULT_ZOOM_LEVEL}
           centerCoordinate={KUNGSBACKA_CENTER}
