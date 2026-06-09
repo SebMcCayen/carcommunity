@@ -32,13 +32,12 @@ describe('mapbox config — getMapboxAccessToken', () => {
   });
 
   it('returns the token when EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is set', () => {
-    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'pk.test.example-token';
+    process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'] = 'test-mapbox-token';
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getMapboxAccessToken } = require('../../config/mapbox') as typeof import('../../config/mapbox');
 
-    expect(getMapboxAccessToken()).toBe('pk.test.example-token');
-  });
+    expect(getMapboxAccessToken()).toBe('test-mapbox-token');
 
   it('does not throw when the token is missing', () => {
     delete process.env['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN'];
