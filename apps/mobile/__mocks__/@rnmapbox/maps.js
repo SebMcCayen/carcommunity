@@ -14,8 +14,8 @@
 const React = require('react');
 const { View } = require('react-native');
 
-function MapView({ children, ...props }) {
-  return React.createElement(View, { testID: 'mapbox-mapview', ...props }, children);
+function MapView({ children, style }) {
+  return React.createElement(View, { testID: 'mapbox-mapview', style }, children);
 }
 
 function Camera() {
