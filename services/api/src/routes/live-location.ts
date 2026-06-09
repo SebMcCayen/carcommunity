@@ -1,22 +1,29 @@
-import {
-  DEFAULT_FEATURE_FLAGS,
-} from '@carcommunity/shared/feature-flags';
+import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import {
   DEFAULT_LIVE_LOCATION_PAGE_SIZE,
   LIVE_LOCATION_DURATIONS,
   LIVE_LOCATION_ROUTE_PATHS,
   LIVE_LOCATION_STOP_REASONS,
-  LIVE_LOCATION_TTL_MINUTES_MAX,
   MAX_LIVE_LOCATION_PAGE_SIZE,
   buildLiveLocationPositionPath,
   buildLiveLocationStopPath,
   type AdminLiveLocationSummaryResponse,
+  type HideMeNowResponse,
+  type LiveLocationPositionUpdateResponse,
+  type LiveLocationStartResponse,
+  type LiveLocationStopResponse,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import { canShareOwnLiveLocation } from '@carcommunity/shared/users';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { requireAdminHook } from '../lib/auth-context.js';
+import { requireAdminHook, requireAuthHook } from '../lib/auth-context.js';
+import { AppError } from '../lib/errors.js';
+import {
+  LIVE_LOCATION_DATABASE_META,
+  LiveLocationService,
+} from '../lib/live-location-service.js';
 
 const liveLocationSessionParamsSchema = z
   .object({
@@ -60,142 +67,183 @@ const liveLocationListQuerySchema = z
   })
   .strict();
 
-const PLACEHOLDER_META = {
-  source: 'placeholder',
-  productionReady: false,
-  ttlCleanupPrepared: true,
-} as const;
-
-function sendMutatingRouteNotImplemented(reply: FastifyReply, message: string) {
-  return reply.status(501).send({
-    ok: false,
-    error: {
-      code: 'not_implemented',
-      message,
-    },
-  });
+function assertLiveLocationFeatureEnabled(): void {
+  // TODO: Replace static fallback with database-backed feature flag evaluation for liveLocation.
+  if (!DEFAULT_FEATURE_FLAGS.liveLocation) {
+    throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
+  }
 }
 
-export async function registerLiveLocationRoutes(app: FastifyInstance): Promise<void> {
-  app.post(LIVE_LOCATION_ROUTE_PATHS.sessions, async (request, reply) => {
-    const body = liveLocationStartRequestSchema.parse(request.body);
-    void body;
+export interface RegisterLiveLocationRoutesDependencies {
+  liveLocationService?: LiveLocationService;
+}
 
-    // TODO: Require authenticated user context from the backend session/token.
-    // TODO: Evaluate backend feature flag `liveLocation` before allowing session start.
-    // TODO: Enforce suspension checks before allowing a user to share live location.
-    // TODO: Persist LiveLocationSession in PostgreSQL and reuse an existing active session safely.
-    // TODO: Prepare TTL cleanup workers that purge stale latest-position records at or before LIVE_LOCATION_TTL_MINUTES_MAX.
-    return sendMutatingRouteNotImplemented(
-      reply,
-      'Live location session start is not implemented until backend auth and ownership checks exist.',
-    );
-  });
+export async function registerLiveLocationRoutes(
+  app: FastifyInstance,
+  dependencies: RegisterLiveLocationRoutesDependencies = {},
+): Promise<void> {
+  const liveLocationService = dependencies.liveLocationService ?? new LiveLocationService(app.prisma);
+
+  app.post(
+    LIVE_LOCATION_ROUTE_PATHS.sessions,
+    { preHandler: requireAuthHook },
+    async (request): Promise<LiveLocationStartResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+
+      assertLiveLocationFeatureEnabled();
+
+      if (!canShareOwnLiveLocation({ status: auth.status })) {
+        throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
+      }
+
+      const body = liveLocationStartRequestSchema.parse(request.body);
+      const result = await liveLocationService.startSession({
+        userId: auth.userId,
+        duration: body.duration,
+      });
+
+      return {
+        ok: true,
+        data: result,
+        meta: LIVE_LOCATION_DATABASE_META,
+      };
+    },
+  );
 
   app.post(
     buildLiveLocationPositionPath(':sessionId'),
-    async (request, reply) => {
+    { preHandler: requireAuthHook },
+    async (request): Promise<LiveLocationPositionUpdateResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+
+      assertLiveLocationFeatureEnabled();
+
       const params = liveLocationSessionParamsSchema.parse(request.params);
       const body = liveLocationUpdateRequestSchema.parse(request.body);
-      void params;
-      void body;
 
-      // TODO: Require authenticated user context and ensure the session belongs to the caller.
-      // TODO: Evaluate backend feature flag `liveLocation` before accepting updates.
-      // TODO: Enforce blocking checks before fan-out and future visibility reads.
-      // TODO: Enforce foreground-only/manual opt-in rules before enabling any background tracking.
-      // TODO: Upsert the latest backend position only; never store route history or passive tracking data.
-      // TODO: Apply TTL cleanup using LIVE_LOCATION_TTL_MINUTES_MAX for stale latest-position records.
-      return sendMutatingRouteNotImplemented(
-        reply,
-        'Live location position updates are not implemented until backend auth and ownership checks exist.',
-      );
+      const result = await liveLocationService.updateLatestPosition({
+        sessionId: params.sessionId,
+        userId: auth.userId,
+        coordinate: body.coordinate,
+      });
+
+      return {
+        ok: true,
+        data: result,
+        meta: LIVE_LOCATION_DATABASE_META,
+      };
     },
   );
 
   app.post(
     buildLiveLocationStopPath(':sessionId'),
-    async (request, reply) => {
+    { preHandler: requireAuthHook },
+    async (request): Promise<LiveLocationStopResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+
+      assertLiveLocationFeatureEnabled();
+
       const params = liveLocationSessionParamsSchema.parse(request.params);
       liveLocationStopRequestSchema.parse(request.body ?? {});
-      void params;
 
-      // TODO: Require authenticated user context and ensure the session belongs to the caller.
-      // TODO: Evaluate backend feature flag `liveLocation` before serving mutable session actions.
-      // TODO: Persist stopped status and remove the latest backend position when stop/hide semantics require it.
-      // TODO: Enforce audit logging for future admin-triggered stop actions.
-      return sendMutatingRouteNotImplemented(
-        reply,
-        'Live location session stop is not implemented until backend auth and ownership checks exist.',
-      );
+      const result = await liveLocationService.stopSession({
+        sessionId: params.sessionId,
+        userId: auth.userId,
+      });
+
+      return {
+        ok: true,
+        data: result,
+        meta: LIVE_LOCATION_DATABASE_META,
+      };
     },
   );
 
-  app.post(LIVE_LOCATION_ROUTE_PATHS.hideMeNow, async (_request, reply) => {
-    // TODO: Require authenticated user context and resolve the caller's active live location session.
-    // TODO: Evaluate backend feature flag `liveLocation` before serving hide-now.
-    // TODO: Remove the latest backend position immediately and mark the active session as stopped.
-    // TODO: Apply TTL cleanup so stale caches/derived views never keep hidden location data.
-    return sendMutatingRouteNotImplemented(
-      reply,
-      'Live location hide-me-now is not implemented until backend auth and ownership checks exist.',
-    );
-  });
+  app.post(
+    LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
+    { preHandler: requireAuthHook },
+    async (request): Promise<HideMeNowResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
 
-  app.get(LIVE_LOCATION_ROUTE_PATHS.markers, async (request): Promise<PublicLiveLocationMarkerResponse> => {
-    const query = liveLocationListQuerySchema.parse(request.query);
+      assertLiveLocationFeatureEnabled();
 
-    // TODO: Require authenticated user context before exposing any cross-user live location data.
-    // TODO: Enforce backend visibility rules: member_monthly required, admin/owner bypass, suspension override.
-    //   Add requireMemberHook (or a combined entitlement+admin bypass hook) as a preHandler here once
-    //   real auth sessions exist. Until then the route intentionally returns an empty safe default.
-    // TODO: Enforce blocking once the blocking graph is available.
-    // TODO: Evaluate backend feature flag `liveLocation` before returning any marker data.
-    // Safe default: return no exact coordinates until auth, entitlement, and blocking checks are implemented.
-    return {
-      ok: true,
-      data: {
-        markers: [],
-        generatedAt: new Date().toISOString(),
-      },
-      meta: {
-        ...PLACEHOLDER_META,
+      const result = await liveLocationService.hideMeNow({
+        userId: auth.userId,
+      });
+
+      return {
+        ok: true,
+        data: result,
+        meta: LIVE_LOCATION_DATABASE_META,
+      };
+    },
+  );
+
+  app.get(
+    LIVE_LOCATION_ROUTE_PATHS.markers,
+    { preHandler: requireAuthHook },
+    async (request): Promise<PublicLiveLocationMarkerResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+
+      assertLiveLocationFeatureEnabled();
+
+      // TODO: Enforce blocking visibility filtering once blocking relationships are available.
+      const query = liveLocationListQuerySchema.parse(request.query);
+      const result = await liveLocationService.getVisibleMarkers({
+        viewer: {
+          userId: auth.userId,
+          role: auth.role,
+          status: auth.status,
+          subscriptionEntitlement: auth.subscriptionEntitlement,
+        },
         page: query.page,
         pageSize: query.pageSize,
-        total: 0,
-        hasNext: false,
-      },
-    };
-  });
+      });
+
+      return {
+        ok: true,
+        data: {
+          markers: result.markers,
+          generatedAt: result.generatedAt,
+        },
+        meta: {
+          ...LIVE_LOCATION_DATABASE_META,
+          page: query.page,
+          pageSize: query.pageSize,
+          total: result.total,
+          hasNext: result.hasNext,
+        },
+      };
+    },
+  );
 
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
     { preHandler: requireAdminHook },
-    async (request): Promise<AdminLiveLocationSummaryResponse> => {
-      const query = liveLocationListQuerySchema.parse(request.query);
+    async (): Promise<AdminLiveLocationSummaryResponse> => {
+      assertLiveLocationFeatureEnabled();
 
-      // TODO: Require backend-verified admin/owner authorization for all admin live location views.
-      // TODO: Evaluate backend feature flag `liveLocation` before exposing operational controls.
-      // TODO: Add audit logging for future admin support actions such as hide/stop.
-      // TODO: Keep this view moderation/operations-only and never expose exact coordinates or route history.
+      const summary = await liveLocationService.getAdminSummary();
+
       return {
         ok: true,
-        data: {
-          activeSessionCount: 0,
-          expiredSessionCount: 0,
-          operationalStatus: 'placeholder_safe_default',
-          featureFlagKey: 'liveLocation',
-          featureFlagEnabled: DEFAULT_FEATURE_FLAGS.liveLocation,
-          latestPositionTtlMinutesMax: LIVE_LOCATION_TTL_MINUTES_MAX,
-          sessions: [],
-        },
-        meta: {
-          ...PLACEHOLDER_META,
-          page: query.page,
-          pageSize: query.pageSize,
-          total: 0,
-          hasNext: false,
-        },
+        data: summary,
+        meta: LIVE_LOCATION_DATABASE_META,
       };
     },
   );

@@ -9,20 +9,139 @@ import {
   LIVE_LOCATION_TTL_MINUTES_MAX,
   buildLiveLocationPositionPath,
   calculateLiveLocationExpiresAt,
-  canViewOtherUsersLiveLocation,
   type AdminLiveLocationSummaryResponse,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
 
 import { LOCAL_DATABASE_URL } from './config.js';
+import { AppError } from './lib/errors.js';
+import type {
+  AdminLiveLocationSummaryResult,
+  HideMeNowResult,
+  LiveLocationService,
+  StartSessionResult,
+  StopSessionResult,
+  UpdatePositionResult,
+  VisibleMarkersResult,
+} from './lib/live-location-service.js';
 import { createServer } from './server.js';
 
-async function createTestApp(port: number) {
-  return createServer({
-    nodeEnv: 'test',
-    port,
-    databaseUrl: LOCAL_DATABASE_URL,
-    isProduction: false,
+class FakeLiveLocationService implements Pick<LiveLocationService,
+  'startSession' | 'updateLatestPosition' | 'stopSession' | 'hideMeNow' | 'getVisibleMarkers' | 'getAdminSummary'> {
+  public startResult: StartSessionResult = {
+    session: {
+      id: 'session-1',
+      status: 'active',
+      duration: '2h',
+      startedAt: '2026-06-09T10:00:00.000Z',
+      expiresAt: '2026-06-09T12:00:00.000Z',
+      stoppedAt: null,
+    },
+    latestPosition: null,
+    latestPositionRemoved: false,
+  };
+
+  public updateResult: UpdatePositionResult = {
+    ...this.startResult,
+    latestPosition: {
+      latitude: 57.7,
+      longitude: 12,
+      recordedAt: '2026-06-09T10:05:00.000Z',
+    },
+  };
+
+  public stopResult: StopSessionResult = {
+    ...this.startResult,
+    session: {
+      ...this.startResult.session,
+      status: 'stopped',
+      stoppedAt: '2026-06-09T10:10:00.000Z',
+    },
+    latestPositionRemoved: true,
+  };
+
+  public hideResult: HideMeNowResult = {
+    stoppedSessionCount: 1,
+    removedLatestPositionCount: 1,
+  };
+
+  public markersResult: VisibleMarkersResult = {
+    markers: [
+      {
+        userId: 'member-2',
+        sessionId: 'session-2',
+        status: 'active',
+        coordinate: {
+          latitude: 57.7,
+          longitude: 12.1,
+          recordedAt: '2026-06-09T10:11:00.000Z',
+        },
+      },
+    ],
+    total: 1,
+    hasNext: false,
+    generatedAt: '2026-06-09T10:12:00.000Z',
+  };
+
+  public adminSummaryResult: AdminLiveLocationSummaryResult = {
+    activeSessionCount: 1,
+    expiredSessionCount: 2,
+    latestPositionUpdatedAt: '2026-06-09T10:12:00.000Z',
+  };
+
+  public failMarkersWith: AppError | null = null;
+
+  async startSession(): Promise<StartSessionResult> {
+    return this.startResult;
+  }
+
+  async updateLatestPosition(): Promise<UpdatePositionResult> {
+    return this.updateResult;
+  }
+
+  async stopSession(): Promise<StopSessionResult> {
+    return this.stopResult;
+  }
+
+  async hideMeNow(): Promise<HideMeNowResult> {
+    return this.hideResult;
+  }
+
+  async getVisibleMarkers(): Promise<VisibleMarkersResult> {
+    if (this.failMarkersWith) {
+      throw this.failMarkersWith;
+    }
+    return this.markersResult;
+  }
+
+  async getAdminSummary(): Promise<AdminLiveLocationSummaryResult> {
+    return this.adminSummaryResult;
+  }
+}
+
+async function createTestApp(port: number, liveLocationService?: FakeLiveLocationService) {
+  return createServer(
+    {
+      nodeEnv: 'test',
+      port,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    {
+      liveLocationService: liveLocationService as unknown as LiveLocationService,
+    },
+  );
+}
+
+function createDevAuthHeader(input: {
+  userId: string;
+  role: 'user' | 'admin' | 'owner';
+  status: 'active' | 'warned' | 'temporarily_suspended' | 'permanently_suspended' | 'deleted';
+  subscriptionEntitlement: 'none' | 'member_monthly';
+}) {
+  return JSON.stringify({
+    ...input,
+    sessionId: 'dev-session-id',
   });
 }
 
@@ -38,222 +157,301 @@ test('live location expiry helper returns the expected ISO expiry', () => {
   assert.equal(calculateLiveLocationExpiresAt('2026-06-09T10:00:00.000Z', '4h'), '2026-06-09T14:00:00.000Z');
 });
 
-test('live location visibility helper requires member entitlement unless admin bypass applies', () => {
-  assert.equal(
-    canViewOtherUsersLiveLocation({
-      role: 'user',
-      status: 'active',
-      subscriptionEntitlement: 'none',
-    }),
-    false,
-  );
-  assert.equal(
-    canViewOtherUsersLiveLocation({
-      role: 'user',
-      status: 'active',
-      subscriptionEntitlement: 'member_monthly',
-    }),
-    true,
-  );
-  assert.equal(
-    canViewOtherUsersLiveLocation({
-      role: 'admin',
-      status: 'active',
-      subscriptionEntitlement: 'none',
-    }),
-    true,
-  );
-  assert.equal(
-    canViewOtherUsersLiveLocation({
-      role: 'owner',
-      status: 'permanently_suspended',
-      subscriptionEntitlement: 'member_monthly',
-    }),
-    false,
-  );
-});
-
-test('POST /v1/live-location/sessions returns a safe placeholder session response', async () => {
-  const app = await createTestApp(4010);
+test('POST /v1/live-location/sessions requires auth', async () => {
+  const app = await createTestApp(4110, new FakeLiveLocationService());
 
   try {
     const response = await app.inject({
       method: 'POST',
       url: LIVE_LOCATION_ROUTE_PATHS.sessions,
-      payload: {
-        duration: '2h',
-      },
+      payload: { duration: '2h' },
     });
 
-    assert.equal(response.statusCode, 501);
-
-    const body = response.json<{
-      ok: boolean;
-      error: { code: string; message: string };
-    }>();
-    assert.equal(body.ok, false);
-    assert.equal(body.error.code, 'not_implemented');
+    assert.equal(response.statusCode, 401);
   } finally {
     await app.close();
   }
 });
 
 test('POST /v1/live-location/sessions rejects unsupported durations', async () => {
-  const app = await createTestApp(4011);
+  const app = await createTestApp(4111, new FakeLiveLocationService());
 
   try {
     const response = await app.inject({
       method: 'POST',
       url: LIVE_LOCATION_ROUTE_PATHS.sessions,
-      payload: {
-        duration: '24h',
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
       },
+      payload: { duration: '24h' },
     });
 
     assert.equal(response.statusCode, 400);
-    const body = response.json<{
-      ok: boolean;
-      error: { code: string; message: string; details?: { issues?: Array<{ path: string }> } };
-    }>();
-
-    assert.equal(body.ok, false);
-    assert.equal(body.error.code, 'validation_error');
-    assert.equal(body.error.message, 'Request validation failed.');
-    assert.equal(body.error.details?.issues?.[0]?.path, 'duration');
   } finally {
     await app.close();
   }
 });
 
-test('GET /v1/live-location/markers returns an empty privacy-safe placeholder response', async () => {
-  const app = await createTestApp(4012);
-
-  try {
-    const response = await app.inject({
-      method: 'GET',
-      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=2&pageSize=5`,
-    });
-
-    assert.equal(response.statusCode, 200);
-
-    const body = response.json<PublicLiveLocationMarkerResponse>();
-    assert.equal(body.ok, true);
-    assert.deepEqual(body.data.markers, []);
-    assert.equal(typeof body.data.generatedAt, 'string');
-    assert.equal(body.meta.page, 2);
-    assert.equal(body.meta.pageSize, 5);
-    assert.equal(body.meta.total, 0);
-    assert.equal(body.meta.hasNext, false);
-    assert.equal(body.meta.source, 'placeholder');
-  } finally {
-    await app.close();
-  }
-});
-
-test('POST /v1/live-location/hide-me-now returns a placeholder hide response shape', async () => {
-  const app = await createTestApp(4013);
+test('POST /v1/live-location/sessions returns persisted session payload', async () => {
+  const app = await createTestApp(4112, new FakeLiveLocationService());
 
   try {
     const response = await app.inject({
       method: 'POST',
-      url: LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
+      url: LIVE_LOCATION_ROUTE_PATHS.sessions,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+      payload: { duration: '2h' },
     });
 
-    assert.equal(response.statusCode, 501);
-
-    const body = response.json<{
-      ok: boolean;
-      error: { code: string; message: string };
-    }>();
-    assert.equal(body.ok, false);
-    assert.equal(body.error.code, 'not_implemented');
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.data.session.status, 'active');
+    assert.equal(body.meta.source, 'database');
   } finally {
     await app.close();
   }
 });
 
-test('POST /v1/live-location/sessions/:sessionId/position accepts a valid coordinate payload', async () => {
-  const app = await createTestApp(4014);
+test('POST /v1/live-location/sessions/:sessionId/position validates coordinates and returns latest-only payload', async () => {
+  const app = await createTestApp(4113, new FakeLiveLocationService());
   const sessionId = 'cb8f7c4f-e930-4e01-ae85-61d2d93248cb';
 
   try {
     const response = await app.inject({
       method: 'POST',
       url: buildLiveLocationPositionPath(sessionId),
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
       payload: {
         coordinate: {
           latitude: 57.4875,
           longitude: 12.0762,
-          accuracyMeters: 8,
           recordedAt: '2026-06-09T10:15:00.000Z',
         },
       },
     });
 
-    assert.equal(response.statusCode, 501);
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.data.latestPosition.latitude, 57.7);
 
-    const body = response.json<{
-      ok: boolean;
-      error: { code: string; message: string };
-    }>();
-    assert.equal(body.ok, false);
-    assert.equal(body.error.code, 'not_implemented');
-  } finally {
-    await app.close();
-  }
-});
-
-test('GET /v1/admin/live-location returns 401 unauthenticated when no auth is provided', async () => {
-  const app = await createTestApp(4016);
-
-  try {
-    const response = await app.inject({
-      method: 'GET',
-      url: `${LIVE_LOCATION_ROUTE_PATHS.adminSummary}?page=1&pageSize=10`,
+    const invalid = await app.inject({
+      method: 'POST',
+      url: buildLiveLocationPositionPath(sessionId),
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+      payload: {
+        coordinate: {
+          latitude: 200,
+          longitude: 12.0762,
+          recordedAt: '2026-06-09T10:15:00.000Z',
+        },
+      },
     });
 
-    assert.equal(response.statusCode, 401);
-    const body = response.json<{ ok: boolean; error: { code: string } }>();
-    assert.equal(body.ok, false);
-    assert.equal(body.error.code, 'unauthenticated');
+    assert.equal(invalid.statusCode, 400);
   } finally {
     await app.close();
   }
 });
 
-test('GET /v1/admin/live-location returns a privacy-safe admin summary placeholder', async () => {
-  const app = await createTestApp(4015);
-
-  const adminDevAuth = JSON.stringify({
-    userId: 'dev-admin-user',
-    role: 'admin',
-    status: 'active',
-    subscriptionEntitlement: 'none',
-    sessionId: 'dev-session-id',
-  });
+test('POST /v1/live-location/sessions/:sessionId/stop returns stopped session payload', async () => {
+  const app = await createTestApp(4114, new FakeLiveLocationService());
 
   try {
     const response = await app.inject({
-      method: 'GET',
-      url: `${LIVE_LOCATION_ROUTE_PATHS.adminSummary}?page=1&pageSize=10`,
-      headers: { 'x-dev-user': adminDevAuth },
+      method: 'POST',
+      url: '/v1/live-location/sessions/cb8f7c4f-e930-4e01-ae85-61d2d93248cb/stop',
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+      payload: { reason: 'user_stop' },
     });
 
     assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.data.session.status, 'stopped');
+    assert.equal(body.data.latestPositionRemoved, true);
+  } finally {
+    await app.close();
+  }
+});
 
-    const body = response.json<AdminLiveLocationSummaryResponse>();
-    assert.equal(body.ok, true);
-    assert.equal(body.data.activeSessionCount, 0);
-    assert.equal(body.data.expiredSessionCount, 0);
-    assert.equal(body.data.operationalStatus, 'placeholder_safe_default');
-    assert.equal(body.data.featureFlagKey, 'liveLocation');
-    assert.equal(body.data.featureFlagEnabled, true);
-    assert.equal(body.data.latestPositionTtlMinutesMax, LIVE_LOCATION_TTL_MINUTES_MAX);
-    assert.deepEqual(body.data.sessions, []);
-    assert.equal(body.meta.page, 1);
-    assert.equal(body.meta.pageSize, 10);
-    assert.equal(body.meta.total, 0);
-    assert.equal(body.meta.hasNext, false);
+test('POST /v1/live-location/hide-me-now returns stop/delete summary', async () => {
+  const app = await createTestApp(4115, new FakeLiveLocationService());
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+      payload: {},
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.data.stoppedSessionCount, 1);
+    assert.equal(body.data.removedLatestPositionCount, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/live-location/markers denies free users but allows member users', async () => {
+  const deniedService = new FakeLiveLocationService();
+  deniedService.failMarkersWith = new AppError(403, 'forbidden', 'Member subscription required.');
+  const deniedApp = await createTestApp(4116, deniedService);
+
+  try {
+    const deniedResponse = await deniedApp.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'free-user',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(deniedResponse.statusCode, 403);
+
+    const allowedService = new FakeLiveLocationService();
+    const allowedApp = await createTestApp(4117, allowedService);
+
+    try {
+      const allowedResponse = await allowedApp.inject({
+        method: 'GET',
+        url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+        headers: {
+          'x-dev-user': createDevAuthHeader({
+            userId: 'member-user',
+            role: 'user',
+            status: 'active',
+            subscriptionEntitlement: 'member_monthly',
+          }),
+        },
+      });
+
+      assert.equal(allowedResponse.statusCode, 200);
+      const body = allowedResponse.json<PublicLiveLocationMarkerResponse>();
+      assert.equal(body.data.markers.length, 1);
+      assert.equal(body.data.markers[0]?.userId, 'member-2');
+    } finally {
+      await allowedApp.close();
+    }
+  } finally {
+    await deniedApp.close();
+  }
+});
+
+test('suspended user cannot access live location routes', async () => {
+  const app = await createTestApp(4118, new FakeLiveLocationService());
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'suspended-user',
+          role: 'user',
+          status: 'temporarily_suspended',
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 403);
+    const body = response.json<{ ok: boolean; error: { code: string } }>();
+    assert.equal(body.error.code, 'suspended');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/live-location requires admin and returns operational-only summary', async () => {
+  const app = await createTestApp(4119, new FakeLiveLocationService());
+
+  try {
+    const unauthenticated = await app.inject({
+      method: 'GET',
+      url: LIVE_LOCATION_ROUTE_PATHS.adminSummary,
+    });
+    assert.equal(unauthenticated.statusCode, 401);
+
+    const forbidden = await app.inject({
+      method: 'GET',
+      url: LIVE_LOCATION_ROUTE_PATHS.adminSummary,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'user-1',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+    });
+    assert.equal(forbidden.statusCode, 403);
+
+    const admin = await app.inject({
+      method: 'GET',
+      url: LIVE_LOCATION_ROUTE_PATHS.adminSummary,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'admin-1',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(admin.statusCode, 200);
+    const body = admin.json<AdminLiveLocationSummaryResponse>();
+    assert.equal(body.data.activeSessionCount, 1);
+    assert.equal(body.data.expiredSessionCount, 2);
+    assert.equal(body.data.latestPositionUpdatedAt, '2026-06-09T10:12:00.000Z');
+    assert.deepEqual(Object.keys(body.data).sort(), ['activeSessionCount', 'expiredSessionCount', 'latestPositionUpdatedAt']);
   } finally {
     await app.close();
   }
