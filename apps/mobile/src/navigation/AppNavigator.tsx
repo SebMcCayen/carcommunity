@@ -13,6 +13,7 @@ import { AboutAppScreen } from '../screens/AboutAppScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { LiveLocationScreen } from '../screens/LiveLocationScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -73,6 +74,11 @@ export const AppNavigator = () => {
           name="About"
           component={AboutAppScreen}
           options={{ title: t('navigation.about') }}
+        />
+        <Stack.Screen
+          name="LiveLocation"
+          component={LiveLocationScreen}
+          options={{ title: t('liveLocation.screenTitle') }}
         />
       </Stack.Navigator>
     </NavigationContainer>

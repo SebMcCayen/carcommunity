@@ -41,9 +41,27 @@
     "githubReleases": "GitHub Releases"
   },
   "liveLocation": {
+    "screenTitle": "Live location",
+    "statusNotSharing": "Not sharing location",
+    "statusStarting": "Starting...",
+    "statusSharing": "Sharing location",
+    "statusStopping": "Stopping...",
+    "statusError": "Something went wrong",
+    "error": "Something went wrong. Please try again.",
+    "durationLabel": "Select sharing duration",
+    "duration1h": "1 hour",
+    "duration2h": "2 hours",
+    "duration4h": "4 hours",
     "start": "Share my location",
     "stop": "Stop sharing",
-    "hideNow": "Hide me now"
+    "hideNow": "Hide me now",
+    "whoCanSeeTitle": "Who can see me?",
+    "whoCanSeeBody": "Only Community members with an active subscription can see your location while you are sharing.",
+    "privacyOptional": "Sharing is optional and always initiated by you.",
+    "privacyTimeLimited": "Your location is shared only for the time you select.",
+    "privacyStopAnytime": "You can stop sharing at any time using \"Stop sharing\" or \"Hide me now\".",
+    "privacyNoHistory": "No route or position history is stored publicly.",
+    "privacySafeDriving": "Do not interact with the app while driving."
   },
   "privacy": {
     "label": "Privacy"

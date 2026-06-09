@@ -4,7 +4,8 @@
     "strict": true,
     "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["jest"]
   },
   "include": ["./**/*.ts", "./**/*.tsx", "./**/*.json"]
 }

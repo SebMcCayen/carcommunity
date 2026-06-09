@@ -15,15 +15,19 @@ import {
 
 import { publicEnv } from '../config/env';
 
+// TODO: Set EXPO_PUBLIC_API_BASE_URL in your .env file before making live location requests.
 const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
-
-if (!base) {
-  throw new Error('EXPO_PUBLIC_API_BASE_URL is not set. Set it in your .env file.');
-}
 
 const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
 async function requestJson<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
+  if (!base) {
+    // TODO: Configure EXPO_PUBLIC_API_BASE_URL before enabling live location requests.
+    throw new Error(
+      'API base URL is not configured. Set EXPO_PUBLIC_API_BASE_URL in your .env file.',
+    );
+  }
+
   const response = await fetch(buildUrl(path), init);
 
   if (!response.ok) {
