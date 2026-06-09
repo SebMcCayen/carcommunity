@@ -1,7 +1,7 @@
 declare module 'react-test-renderer' {
   import type { ReactElement } from 'react';
 
-  export function act<T>(callback: () => T): T;
+  export function act<T>(callback: () => T | Promise<T>): T | Promise<T>;
 
   interface Renderer {
     unmount(): void;
