@@ -37,8 +37,7 @@ export function liveLocationMarkerToViewModel(
 }
 
 /**
- * Converts an array of {@link PublicLiveLocationMarker} objects to view models,
- * skipping any marker that is missing required coordinate fields.
+ * Converts an array of {@link PublicLiveLocationMarker} objects to view models.
  */
 export function liveLocationMarkersToViewModels(
   markers: PublicLiveLocationMarker[],
