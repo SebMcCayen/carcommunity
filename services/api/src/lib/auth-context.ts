@@ -64,7 +64,7 @@ function parseDevAuthContext(value: string): AuthContext | null {
  * Registers the auth context decoration on FastifyRequest and an onRequest hook
  * that populates `request.auth` from a verified session.
  *
- * In non-production environments, a `X-Dev-User` header containing a JSON
+ * In non-production environments, a `x-dev-user` header containing a JSON
  * AuthContext can be used to inject a fake auth context for local testing.
  * This header is silently ignored in production.
  *
@@ -91,7 +91,7 @@ export async function registerAuthContext(app: FastifyInstance, config: AppConfi
     // TODO: Validate role from database — never trust client-side role claims.
 
     if (!config.isProduction) {
-      // Development-only: accept the X-Dev-User header to inject a fake auth context.
+      // Development-only: accept the x-dev-user header to inject a fake auth context.
       // NEVER honour this header in production — the guard above ensures it is skipped.
       const devHeader = request.headers[DEV_AUTH_HEADER];
       if (typeof devHeader === 'string') {
