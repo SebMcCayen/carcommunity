@@ -43,14 +43,13 @@ export interface UseLiveLocationSessionResult {
   hideMeNow: () => Promise<void>;
 }
 
-const FALLBACK_ERROR = 'Något gick fel. Försök igen.';
+const FALLBACK_ERROR_KEY = 'liveLocation.error';
 
-function extractErrorMessage(err: unknown): string {
-  // Do not log the full error — it could contain location data or auth tokens.
-  if (err instanceof Error) {
-    return err.message || FALLBACK_ERROR;
-  }
-  return FALLBACK_ERROR;
+function extractErrorMessage(_err: unknown): string {
+  // Do not expose raw backend error messages to users — they may be technical
+  // or in an unexpected language. Return an i18n key so the UI can translate it.
+  // Do not log the error — it could contain location data or auth tokens.
+  return FALLBACK_ERROR_KEY;
 }
 
 /**

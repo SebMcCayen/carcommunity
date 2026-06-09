@@ -168,7 +168,7 @@ export const LiveLocationScreen = () => {
           ]}
           accessibilityRole="alert"
         >
-          <Text style={[styles.errorText, { color: theme.colors.statusError }]}>{error}</Text>
+          <Text style={[styles.errorText, { color: theme.colors.statusError }]}>{t(error)}</Text>
         </View>
       )}
 

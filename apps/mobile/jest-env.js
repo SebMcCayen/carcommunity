@@ -27,7 +27,7 @@ class MobileTestEnvironment extends ReactNativeEnv {
     // Some globals (e.g. expo's lazy `fetch` getter) throw when read outside test
     // code scope, so we guard each property access with try/catch.
     if (this.moduleMocker && typeof this.moduleMocker.clearMocksOnScope !== 'function') {
-      this.moduleMocker.clearMocksOnScope = function (scope) {
+      this.moduleMocker.clearMocksOnScope = (scope) => {
         for (const key of Object.keys(scope)) {
           let value;
           try {

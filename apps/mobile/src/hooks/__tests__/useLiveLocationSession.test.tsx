@@ -187,7 +187,7 @@ describe('useLiveLocationSession — startSession', () => {
     });
 
     expect(result.current.status).toBe('error');
-    expect(result.current.error).toBe('Network error');
+    expect(result.current.error).toBe('liveLocation.error');
   });
 });
 
@@ -305,6 +305,6 @@ describe('useLiveLocationSession — hideMeNow', () => {
     });
 
     expect(result.current.status).toBe('error');
-    expect(result.current.error).toBe('Server unavailable');
+    expect(result.current.error).toBe('liveLocation.error');
   });
 });

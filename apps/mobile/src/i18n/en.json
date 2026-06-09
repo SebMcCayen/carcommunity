@@ -47,6 +47,7 @@
     "statusSharing": "Sharing location",
     "statusStopping": "Stopping...",
     "statusError": "Something went wrong",
+    "error": "Something went wrong. Please try again.",
     "durationLabel": "Select sharing duration",
     "duration1h": "1 hour",
     "duration2h": "2 hours",

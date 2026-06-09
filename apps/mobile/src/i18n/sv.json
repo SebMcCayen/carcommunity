@@ -47,6 +47,7 @@
     "statusSharing": "Delar position",
     "statusStopping": "Stoppar...",
     "statusError": "Något gick fel",
+    "error": "Något gick fel. Försök igen.",
     "durationLabel": "Välj delningstid",
     "duration1h": "1 timme",
     "duration2h": "2 timmar",
