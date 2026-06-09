@@ -16,6 +16,8 @@ import {
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
+import { requireAdminHook } from '../lib/auth-context.js';
+
 const liveLocationSessionParamsSchema = z
   .object({
     sessionId: z.string().uuid(),
@@ -145,6 +147,8 @@ export async function registerLiveLocationRoutes(app: FastifyInstance): Promise<
 
     // TODO: Require authenticated user context before exposing any cross-user live location data.
     // TODO: Enforce backend visibility rules: member_monthly required, admin/owner bypass, suspension override.
+    //   Add requireMemberHook (or a combined entitlement+admin bypass hook) as a preHandler here once
+    //   real auth sessions exist. Until then the route intentionally returns an empty safe default.
     // TODO: Enforce blocking once the blocking graph is available.
     // TODO: Evaluate backend feature flag `liveLocation` before returning any marker data.
     // Safe default: return no exact coordinates until auth, entitlement, and blocking checks are implemented.
@@ -166,6 +170,7 @@ export async function registerLiveLocationRoutes(app: FastifyInstance): Promise<
 
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
+    { preHandler: requireAdminHook },
     async (request): Promise<AdminLiveLocationSummaryResponse> => {
       const query = liveLocationListQuerySchema.parse(request.query);
 

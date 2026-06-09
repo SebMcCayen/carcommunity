@@ -203,13 +203,40 @@ test('POST /v1/live-location/sessions/:sessionId/position accepts a valid coordi
   }
 });
 
-test('GET /v1/admin/live-location returns a privacy-safe admin summary placeholder', async () => {
-  const app = await createTestApp(4015);
+test('GET /v1/admin/live-location returns 401 unauthenticated when no auth is provided', async () => {
+  const app = await createTestApp(4016);
 
   try {
     const response = await app.inject({
       method: 'GET',
       url: `${LIVE_LOCATION_ROUTE_PATHS.adminSummary}?page=1&pageSize=10`,
+    });
+
+    assert.equal(response.statusCode, 401);
+    const body = response.json<{ ok: boolean; error: { code: string } }>();
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'unauthenticated');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/live-location returns a privacy-safe admin summary placeholder', async () => {
+  const app = await createTestApp(4015);
+
+  const adminDevAuth = JSON.stringify({
+    userId: 'dev-admin-user',
+    role: 'admin',
+    status: 'active',
+    subscriptionEntitlement: 'none',
+    sessionId: 'dev-session-id',
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.adminSummary}?page=1&pageSize=10`,
+      headers: { 'x-dev-user': adminDevAuth },
     });
 
     assert.equal(response.statusCode, 200);
