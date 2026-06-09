@@ -43,7 +43,10 @@ const DEFAULT_ZOOM_LEVEL = 12;
 // TODO: Move MapboxGL.setAccessToken to a global app initialisation step once
 //       one exists (e.g. App.tsx setup effect). Calling it at module load time
 //       is an acceptable starting point for MVP.
-MapboxGL.setAccessToken(getMapboxAccessToken());
+const mapboxToken = getMapboxAccessToken();
+if (mapboxToken) {
+  MapboxGL.setAccessToken(mapboxToken);
+}
 
 // ---------------------------------------------------------------------------
 // FAKE PLACEHOLDER DATA — remove before wiring in real live location markers.
