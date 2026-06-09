@@ -1,5 +1,5 @@
 /**
- * Placeholder auth context for backend request authorisation.
+ * Placeholder auth context for backend request authorization.
  *
  * @remarks NOT PRODUCTION READY — this is a development-only placeholder.
  *   Real auth must verify tokens server-side and look up sessions from the database.
@@ -67,6 +67,14 @@ function parseDevAuthContext(value: string): AuthContext | null {
  * In non-production environments, a `X-Dev-User` header containing a JSON
  * AuthContext can be used to inject a fake auth context for local testing.
  * This header is silently ignored in production.
+ *
+ * Production safety: until real JWT verification is implemented, `request.auth`
+ * will always be null in production. All routes protected by `requireAuthHook`,
+ * `requireAdminHook`, or `requireMemberHook` will therefore return 401 —
+ * locking down protected endpoints rather than accidentally opening them.
+ *
+ * Rate limiting is applied globally by the `@fastify/rate-limit` plugin
+ * registered in `registerSecurity` before this hook runs.
  */
 export async function registerAuthContext(app: FastifyInstance, config: AppConfig): Promise<void> {
   app.decorateRequest('auth', null);
@@ -84,12 +92,14 @@ export async function registerAuthContext(app: FastifyInstance, config: AppConfi
 
     if (!config.isProduction) {
       // Development-only: accept the X-Dev-User header to inject a fake auth context.
-      // NEVER honour this header in production.
+      // NEVER honour this header in production — the guard above ensures it is skipped.
       const devHeader = request.headers[DEV_AUTH_HEADER];
       if (typeof devHeader === 'string') {
         request.auth = parseDevAuthContext(devHeader);
       }
     }
+    // In production, request.auth remains null until real token verification is
+    // implemented. Protected routes will respond with 401 for all requests.
   });
 }
 
