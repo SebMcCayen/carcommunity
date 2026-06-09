@@ -87,9 +87,18 @@ export interface LiveLocationOwnSessionResponse {
 export type LiveLocationStartResponse = LiveLocationOwnSessionResponse;
 export type LiveLocationPositionUpdateResponse = LiveLocationOwnSessionResponse;
 export type LiveLocationStopResponse = LiveLocationOwnSessionResponse;
-export type HideMeNowResponse = LiveLocationOwnSessionResponse;
+
+export interface HideMeNowResponse {
+  ok: true;
+  data: {
+    stoppedSessionCount: number;
+    removedLatestPositionCount: number;
+  };
+  meta: LiveLocationResponseMeta;
+}
 
 export interface PublicLiveLocationMarker {
+  userId: string;
   sessionId: string;
   coordinate: LiveLocationCoordinate;
   status: Extract<LiveLocationSessionStatus, 'active'>;
@@ -117,13 +126,9 @@ export interface AdminLiveLocationSummaryResponse {
   data: {
     activeSessionCount: number;
     expiredSessionCount: number;
-    operationalStatus: 'placeholder_safe_default';
-    featureFlagKey: 'liveLocation';
-    featureFlagEnabled: boolean;
-    latestPositionTtlMinutesMax: number;
-    sessions: AdminLiveLocationSessionSummary[];
+    latestPositionUpdatedAt: string | null;
   };
-  meta: LiveLocationPaginationMeta;
+  meta: LiveLocationResponseMeta;
 }
 
 export function buildLiveLocationPositionPath(sessionId: string): string {
