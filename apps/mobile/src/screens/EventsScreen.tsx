@@ -13,7 +13,7 @@ import type { EventTeaser, EventRsvpStatus } from '@carcommunity/shared/events';
  */
 function EventTeaserCard({ event }: { event: EventTeaser }) {
   const { theme } = useAppTheme();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <View
@@ -35,7 +35,7 @@ function EventTeaserCard({ event }: { event: EventTeaser }) {
       )}
       <Text style={[styles.teaserTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
       <Text style={[styles.teaserMeta, { color: theme.colors.textSecondary }]}>
-        {new Date(event.startsAt).toLocaleDateString(undefined, {
+        {new Date(event.startsAt).toLocaleDateString(locale, {
           weekday: 'long',
           day: 'numeric',
           month: 'long',
