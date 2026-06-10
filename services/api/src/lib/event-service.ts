@@ -13,6 +13,7 @@ import { AppError } from './errors.js';
 export interface GetEventTeasersResult {
   events: EventTeaser[];
   total: number;
+  nextCursor: string | null;
 }
 
 export interface GetEventDetailResult {
@@ -71,8 +72,9 @@ function toAdminEventSummary(
 export class EventService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  public async getEventTeasers(params: { now?: Date } = {}): Promise<GetEventTeasersResult> {
+  public async getEventTeasers(params: { now?: Date; cursor?: string; take?: number } = {}): Promise<GetEventTeasersResult> {
     const now = params.now ?? new Date();
+    const take = params.take ?? 20;
 
     const where: Prisma.EventWhereInput = {
       status: 'published',
@@ -86,6 +88,8 @@ export class EventService {
       this.prisma.event.findMany({
         where,
         orderBy: { startsAt: 'asc' },
+        take: take + 1,
+        ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
         select: {
           id: true,
           title: true,
@@ -98,9 +102,14 @@ export class EventService {
       }),
     ]);
 
+    const hasNextPage = events.length > take;
+    const page = hasNextPage ? events.slice(0, take) : events;
+    const nextCursor = hasNextPage ? (page[page.length - 1]?.id ?? null) : null;
+
     return {
-      events: events.map(toEventTeaser),
+      events: page.map(toEventTeaser),
       total,
+      nextCursor,
     };
   }
 

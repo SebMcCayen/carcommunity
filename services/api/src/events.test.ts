@@ -42,6 +42,7 @@ class FakeEventService
       },
     ],
     total: 1,
+    nextCursor: null,
   };
 
   public detailResult: GetEventDetailResult = {
@@ -90,7 +91,7 @@ class FakeEventService
   public failDetailWith: AppError | null = null;
   public failRsvpWith: AppError | null = null;
 
-  async getEventTeasers(): Promise<GetEventTeasersResult> {
+  async getEventTeasers(_params?: Parameters<EventService['getEventTeasers']>[0]): Promise<GetEventTeasersResult> {
     return this.teasersResult;
   }
 
@@ -172,6 +173,7 @@ test('GET /v1/events/teasers returns teasers for free authenticated user', async
     assert.equal(body.data.events.length, 1);
     assert.equal(body.data.events[0]?.id, 'event-1');
     assert.equal(body.meta.total, 1);
+    assert.equal(body.meta.nextCursor, null);
   } finally {
     await app.close();
   }
@@ -227,6 +229,50 @@ test('GET /v1/events/teasers blocks suspended user', async () => {
 
     // requireAuthHook blocks suspended users with 403
     assert.equal(response.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/events/teasers supports cursor and take pagination', async () => {
+  const service = new FakeEventService();
+  service.teasersResult = {
+    events: [
+      {
+        id: 'event-2',
+        title: 'Nästa träff',
+        startsAt: '2027-08-01T16:00:00.000Z',
+        endsAt: null,
+        approximateArea: 'Göteborg',
+        isOfficial: false,
+        status: 'published',
+      },
+    ],
+    total: 5,
+    nextCursor: 'event-3',
+  };
+  const app = await createTestApp(4222, service);
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${EVENT_ROUTE_PATHS.teasers}?cursor=cb8f7c4f-e930-4e01-ae85-61d2d93248cb&take=1`,
+      headers: {
+        'x-dev-user': devAuth({
+          userId: 'free-user',
+          role: 'user',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json<EventTeasersResponse>();
+    assert.equal(body.ok, true);
+    assert.equal(body.meta.total, 5);
+    assert.equal(body.meta.nextCursor, 'event-3');
+    assert.equal(body.data.events.length, 1);
   } finally {
     await app.close();
   }

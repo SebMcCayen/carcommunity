@@ -19,6 +19,13 @@ import { requireAdminHook, requireAuthHook, requireMemberHook } from '../lib/aut
 import { AppError } from '../lib/errors.js';
 import { EventService } from '../lib/event-service.js';
 
+const eventTeasersQuerySchema = z
+  .object({
+    cursor: z.string().uuid().optional(),
+    take: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+
 const eventIdParamsSchema = z
   .object({
     eventId: z.string().uuid(),
@@ -56,12 +63,13 @@ export async function registerEventRoutes(
         throw new AppError(403, 'forbidden', 'Access denied.');
       }
 
-      const result = await eventService.getEventTeasers();
+      const query = eventTeasersQuerySchema.parse(request.query);
+      const result = await eventService.getEventTeasers({ cursor: query.cursor, take: query.take });
 
       return {
         ok: true,
         data: { events: result.events },
-        meta: { total: result.total },
+        meta: { total: result.total, nextCursor: result.nextCursor },
       };
     },
   );

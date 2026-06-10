@@ -124,6 +124,7 @@ export interface EventTeasersResponse {
   };
   meta: {
     total: number;
+    nextCursor: string | null;
   };
 }
 

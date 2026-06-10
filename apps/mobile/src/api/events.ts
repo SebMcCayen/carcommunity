@@ -38,10 +38,18 @@ async function requestJson<TResponse>(path: string, init?: RequestInit): Promise
  * Available to all authenticated users regardless of subscription.
  * Does not expose exact location or address.
  */
-export async function loadEventTeasers(): Promise<EventTeasersResponse> {
-  return requestJson<EventTeasersResponse>(EVENT_ROUTE_PATHS.teasers, {
-    method: 'GET',
-  });
+export async function loadEventTeasers(params?: {
+  cursor?: string;
+  take?: number;
+}): Promise<EventTeasersResponse> {
+  const query = new URLSearchParams();
+  if (params?.cursor) query.set('cursor', params.cursor);
+  if (params?.take !== undefined) query.set('take', String(params.take));
+  const qs = query.toString();
+  return requestJson<EventTeasersResponse>(
+    qs ? `${EVENT_ROUTE_PATHS.teasers}?${qs}` : EVENT_ROUTE_PATHS.teasers,
+    { method: 'GET' },
+  );
 }
 
 /**
