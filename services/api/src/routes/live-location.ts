@@ -155,10 +155,7 @@ export async function registerLiveLocationRoutes(
     buildLiveLocationStopPath(':sessionId'),
     { preHandler: requireAuthenticatedHook },
     async (request): Promise<LiveLocationStopResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
+      const auth = request.auth!;
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       liveLocationStopRequestSchema.parse(request.body ?? {});
@@ -180,10 +177,7 @@ export async function registerLiveLocationRoutes(
     LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
     { preHandler: requireAuthenticatedHook },
     async (request): Promise<HideMeNowResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
+      const auth = request.auth!;
 
       const result = await liveLocationService.hideMeNow({
         userId: auth.userId,
@@ -247,10 +241,7 @@ export async function registerLiveLocationRoutes(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
     { preHandler: requireAuthenticatedHook },
     async (request): Promise<AdminLiveLocationSummaryResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
+      const auth = request.auth!;
 
       if (!canAccessLiveLocationAdminSummary(auth)) {
         throw new AppError(403, 'forbidden', 'Admin access required.');
