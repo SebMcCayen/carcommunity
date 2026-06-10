@@ -99,11 +99,11 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationEnabled();
-
       if (!canShareOwnLiveLocation(auth)) {
         throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
       }
+
+      assertLiveLocationEnabled();
 
       const body = liveLocationStartRequestSchema.parse(request.body);
       const result = await liveLocationService.startSession({
@@ -128,11 +128,11 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationEnabled();
-
       if (!canShareOwnLiveLocation(auth)) {
         throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
       }
+
+      assertLiveLocationEnabled();
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       const body = liveLocationUpdateRequestSchema.parse(request.body);
@@ -200,11 +200,11 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationEnabled();
-
       if (!canViewOtherLiveLocations(auth)) {
         throw new AppError(403, 'forbidden', 'Member subscription required.');
       }
+
+      assertLiveLocationEnabled();
 
       // TODO: Enforce blocking visibility filtering once user blocking relationships are persisted.
       //   Expected behavior: if A blocks B or B blocks A, neither user should receive the other's marker.
