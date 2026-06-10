@@ -35,7 +35,7 @@ function EventTeaserCard({ event }: { event: EventTeaser }) {
       )}
       <Text style={[styles.teaserTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
       <Text style={[styles.teaserMeta, { color: theme.colors.textSecondary }]}>
-        {new Date(event.startsAt).toLocaleDateString('sv-SE', {
+        {new Date(event.startsAt).toLocaleDateString(undefined, {
           weekday: 'long',
           day: 'numeric',
           month: 'long',
