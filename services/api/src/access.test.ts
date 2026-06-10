@@ -160,7 +160,7 @@ test('warned user can still share own live location', () => {
 });
 
 // ---------------------------------------------------------------------------
-// canViewOtherUsersLiveLocation — required test cases from spec
+// canViewOtherLiveLocations — required test cases from spec
 // ---------------------------------------------------------------------------
 
 test('normal member can view other live locations', () => {
