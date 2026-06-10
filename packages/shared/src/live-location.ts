@@ -3,7 +3,7 @@ import type {
   UserRole,
   UserStatus,
 } from './users.js';
-import { isSuspendedStatus } from './users.js';
+import { canViewOtherLiveLocations } from './users.js';
 
 export const LIVE_LOCATION_SESSION_STATUSES = ['active', 'stopped', 'expired'] as const;
 export type LiveLocationSessionStatus = (typeof LIVE_LOCATION_SESSION_STATUSES)[number];
@@ -157,13 +157,5 @@ export function canViewOtherUsersLiveLocation(input: {
   status: UserStatus;
   subscriptionEntitlement: SubscriptionEntitlement;
 }): boolean {
-  if (isSuspendedStatus(input.status) || input.status === 'deleted') {
-    return false;
-  }
-
-  if (input.role === 'admin' || input.role === 'owner') {
-    return true;
-  }
-
-  return input.subscriptionEntitlement === 'member_monthly';
+  return canViewOtherLiveLocations(input);
 }

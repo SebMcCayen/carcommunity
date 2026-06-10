@@ -38,6 +38,12 @@ const PRIVACY_KEYS = [
   'liveLocation.privacySafeDriving',
 ] as const;
 
+const ACCESS_KEYS = [
+  'liveLocation.shareOwnFree',
+  'liveLocation.viewOthersMemberOnly',
+  'liveLocation.accessLimitedByModeration',
+] as const;
+
 type DurationChipProps = {
   label: string;
   selected: boolean;
@@ -250,6 +256,14 @@ export const LiveLocationScreen = () => {
         <Text style={[styles.privacyBody, { color: theme.colors.textSecondary }]}>
           {t('liveLocation.whoCanSeeBody')}
         </Text>
+        <View style={{ gap: theme.spacing[2] }}>
+          {ACCESS_KEYS.map((key) => (
+            <Text key={key} style={[styles.privacyItem, { color: theme.colors.textSecondary }]}>
+              {'• '}
+              {t(key)}
+            </Text>
+          ))}
+        </View>
         <View style={{ gap: theme.spacing[2] }}>
           {PRIVACY_KEYS.map((key) => (
             <Text key={key} style={[styles.privacyItem, { color: theme.colors.textSecondary }]}>

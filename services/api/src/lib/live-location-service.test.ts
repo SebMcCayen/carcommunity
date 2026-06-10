@@ -512,6 +512,29 @@ test('free user cannot view other live location markers', async () => {
   );
 });
 
+test('admin without member entitlement cannot view other live location markers', async () => {
+  const fakePrisma = createFakePrisma({ users: { 'admin-1': { status: 'active', deletedAt: null } } });
+  const service = new LiveLocationService(fakePrisma as unknown as PrismaClient);
+
+  await assert.rejects(
+    () =>
+      service.getVisibleMarkers({
+        viewer: {
+          userId: 'admin-1',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        },
+        page: 1,
+        pageSize: 20,
+      }),
+    (error: unknown) => {
+      const typed = error as { message?: string };
+      return typed.message === 'Member subscription required.';
+    },
+  );
+});
+
 test('member user can view live location markers and admin summary excludes exact tracking data', async () => {
   const fakePrisma = createFakePrisma({
     sessions: [

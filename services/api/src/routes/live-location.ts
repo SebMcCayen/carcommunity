@@ -14,11 +14,15 @@ import {
   type LiveLocationStopResponse,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
-import { canShareOwnLiveLocation } from '@carcommunity/shared/users';
+import {
+  canAccessLiveLocationAdminSummary,
+  canShareOwnLiveLocation,
+  canViewOtherLiveLocations,
+} from '@carcommunity/shared/users';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { requireAdminHook, requireAuthHook } from '../lib/auth-context.js';
+import { requireAuthHook, requireAuthenticatedHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import {
   LIVE_LOCATION_DATABASE_META,
@@ -67,15 +71,9 @@ const liveLocationListQuerySchema = z
   })
   .strict();
 
-function assertLiveLocationFeatureEnabled(): void {
-  // TODO: Replace static fallback with database-backed feature flag evaluation for liveLocation.
-  if (!DEFAULT_FEATURE_FLAGS.liveLocation) {
-    throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
-  }
-}
-
 export interface RegisterLiveLocationRoutesDependencies {
   liveLocationService?: LiveLocationService;
+  liveLocationFeatureEnabled?: boolean;
 }
 
 export async function registerLiveLocationRoutes(
@@ -83,21 +81,26 @@ export async function registerLiveLocationRoutes(
   dependencies: RegisterLiveLocationRoutesDependencies = {},
 ): Promise<void> {
   const liveLocationService = dependencies.liveLocationService ?? new LiveLocationService(app.prisma);
+  const liveLocationFeatureEnabled = dependencies.liveLocationFeatureEnabled ?? DEFAULT_FEATURE_FLAGS.liveLocation;
+
+  function assertLiveLocationEnabled(): void {
+    // TODO: Replace this injected/static fallback with admin-managed database-backed flag evaluation.
+    if (!liveLocationFeatureEnabled) {
+      throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
+    }
+  }
 
   app.post(
     LIVE_LOCATION_ROUTE_PATHS.sessions,
     { preHandler: requireAuthHook },
     async (request): Promise<LiveLocationStartResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      const auth = request.auth!;
+
+      if (!canShareOwnLiveLocation(auth)) {
+        throw new AppError(403, 'forbidden', 'Your account status prevents live location sharing.');
       }
 
-      assertLiveLocationFeatureEnabled();
-
-      if (!canShareOwnLiveLocation({ status: auth.status })) {
-        throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
-      }
+      assertLiveLocationEnabled();
 
       const body = liveLocationStartRequestSchema.parse(request.body);
       const result = await liveLocationService.startSession({
@@ -117,12 +120,13 @@ export async function registerLiveLocationRoutes(
     buildLiveLocationPositionPath(':sessionId'),
     { preHandler: requireAuthHook },
     async (request): Promise<LiveLocationPositionUpdateResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      const auth = request.auth!;
+
+      if (!canShareOwnLiveLocation(auth)) {
+        throw new AppError(403, 'forbidden', 'Your account status prevents live location sharing.');
       }
 
-      assertLiveLocationFeatureEnabled();
+      assertLiveLocationEnabled();
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       const body = liveLocationUpdateRequestSchema.parse(request.body);
@@ -143,14 +147,9 @@ export async function registerLiveLocationRoutes(
 
   app.post(
     buildLiveLocationStopPath(':sessionId'),
-    { preHandler: requireAuthHook },
+    { preHandler: requireAuthenticatedHook },
     async (request): Promise<LiveLocationStopResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
-
-      assertLiveLocationFeatureEnabled();
+      const auth = request.auth!;
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       liveLocationStopRequestSchema.parse(request.body ?? {});
@@ -170,14 +169,9 @@ export async function registerLiveLocationRoutes(
 
   app.post(
     LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
-    { preHandler: requireAuthHook },
+    { preHandler: requireAuthenticatedHook },
     async (request): Promise<HideMeNowResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
-
-      assertLiveLocationFeatureEnabled();
+      const auth = request.auth!;
 
       const result = await liveLocationService.hideMeNow({
         userId: auth.userId,
@@ -195,12 +189,13 @@ export async function registerLiveLocationRoutes(
     LIVE_LOCATION_ROUTE_PATHS.markers,
     { preHandler: requireAuthHook },
     async (request): Promise<PublicLiveLocationMarkerResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      const auth = request.auth!;
+
+      if (!canViewOtherLiveLocations(auth)) {
+        throw new AppError(403, 'forbidden', 'Member subscription required.');
       }
 
-      assertLiveLocationFeatureEnabled();
+      assertLiveLocationEnabled();
 
       // TODO: Enforce blocking visibility filtering once user blocking relationships are persisted.
       //   Expected behavior: if A blocks B or B blocks A, neither user should receive the other's marker.
@@ -235,9 +230,13 @@ export async function registerLiveLocationRoutes(
 
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
-    { preHandler: requireAdminHook },
-    async (): Promise<AdminLiveLocationSummaryResponse> => {
-      assertLiveLocationFeatureEnabled();
+    { preHandler: requireAuthHook },
+    async (request): Promise<AdminLiveLocationSummaryResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessLiveLocationAdminSummary(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
 
       const summary = await liveLocationService.getAdminSummary();
 
