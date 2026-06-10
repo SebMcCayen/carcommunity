@@ -81,7 +81,18 @@
   },
   "events": {
     "title": "Events",
-    "placeholder": "Event list coming soon."
+    "placeholder": "Event list coming soon.",
+    "screenSubtitle": "Upcoming events and community gatherings.",
+    "officialBadge": "Official event",
+    "noUpcomingTitle": "No upcoming events",
+    "noUpcomingBody": "Stay tuned — event information will appear here soon.",
+    "memberRequiredTitle": "Event details require membership.",
+    "memberRequiredBody": "As a member you can see exact location, more information and RSVP.",
+    "memberDetailPlaceholder": "Exact location and details",
+    "navigationPlaceholder": "Navigation will open in Apple Maps or Google Maps in a later version.",
+    "rsvpGoing": "Going",
+    "rsvpMaybe": "Maybe",
+    "rsvpNotGoing": "Can't go"
   },
   "chat": {
     "title": "Chat",
