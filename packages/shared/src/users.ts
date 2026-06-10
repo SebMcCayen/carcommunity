@@ -34,6 +34,8 @@ export interface UserSummary {
   updatedAt: string;
 }
 
+export type SafeAccessUserSummary = Pick<UserSummary, 'role' | 'status' | 'subscriptionEntitlement'>;
+
 export interface AuditLogSummary {
   id: string;
   actorUserId: string | null;
@@ -125,11 +127,21 @@ export function canAccessAdminFeatures(input: { role: UserRole; status: UserStat
  * TODO: Add blocking check once the blocking graph is available — a blocked user may
  *   not be permitted to share their location with specific users.
  */
-export function canShareOwnLiveLocation(input: { status: UserStatus }): boolean {
+export function canShareOwnLiveLocation(
+  input: Pick<UserSummary, 'status'> | SafeAccessUserSummary,
+): boolean {
   if (isSuspendedStatus(input.status) || input.status === 'deleted') {
     return false;
   }
   return true;
+}
+
+export function canViewOtherLiveLocations(input: SafeAccessUserSummary): boolean {
+  return canAccessMemberFeatures(input);
+}
+
+export function canAccessLiveLocationAdminSummary(input: SafeAccessUserSummary): boolean {
+  return canAccessAdminFeatures(input);
 }
 
 export function hasBackendAccess(input: {

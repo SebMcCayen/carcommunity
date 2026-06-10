@@ -119,7 +119,11 @@ class FakeLiveLocationService implements Pick<LiveLocationService,
   }
 }
 
-async function createTestApp(port: number, liveLocationService?: FakeLiveLocationService) {
+async function createTestApp(
+  port: number,
+  liveLocationService?: FakeLiveLocationService,
+  options?: { liveLocationFeatureEnabled?: boolean },
+) {
   return createServer(
     {
       nodeEnv: 'test',
@@ -129,6 +133,7 @@ async function createTestApp(port: number, liveLocationService?: FakeLiveLocatio
     },
     {
       liveLocationService: liveLocationService as unknown as LiveLocationService,
+      liveLocationFeatureEnabled: options?.liveLocationFeatureEnabled,
     },
   );
 }
@@ -220,6 +225,32 @@ test('POST /v1/live-location/sessions returns persisted session payload', async 
     assert.equal(body.ok, true);
     assert.equal(body.data.session.status, 'active');
     assert.equal(body.meta.source, 'database');
+  } finally {
+    await app.close();
+  }
+});
+
+test('suspended user cannot start sharing live location', async () => {
+  const app = await createTestApp(4120, new FakeLiveLocationService());
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.sessions,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'suspended-user',
+          role: 'user',
+          status: 'temporarily_suspended',
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+      payload: { duration: '2h' },
+    });
+
+    assert.equal(response.statusCode, 403);
+    const body = response.json<{ ok: false; error: { code: string } }>();
+    assert.equal(body.error.code, 'suspended');
   } finally {
     await app.close();
   }
@@ -334,6 +365,32 @@ test('POST /v1/live-location/hide-me-now returns stop/delete summary', async () 
   }
 });
 
+test('POST /v1/live-location/hide-me-now remains available for authenticated suspended users', async () => {
+  const app = await createTestApp(4121, new FakeLiveLocationService());
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'suspended-user',
+          role: 'user',
+          status: 'temporarily_suspended',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+      payload: {},
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.data.stoppedSessionCount, 1);
+  } finally {
+    await app.close();
+  }
+});
+
 test('GET /v1/live-location/markers denies free users but allows member users', async () => {
   const deniedService = new FakeLiveLocationService();
   deniedService.failMarkersWith = new AppError(403, 'forbidden', 'Member subscription required.');
@@ -384,6 +441,32 @@ test('GET /v1/live-location/markers denies free users but allows member users', 
   }
 });
 
+test('GET /v1/live-location/markers does not grant admin marker access without member entitlement', async () => {
+  const app = await createTestApp(4122, new FakeLiveLocationService());
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'admin-user',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 403);
+    const body = response.json<{ ok: false; error: { code: string; message: string } }>();
+    assert.equal(body.error.code, 'forbidden');
+    assert.equal(body.error.message, 'Member subscription required.');
+  } finally {
+    await app.close();
+  }
+});
+
 test('suspended user cannot access live location routes', async () => {
   const app = await createTestApp(4118, new FakeLiveLocationService());
 
@@ -404,6 +487,102 @@ test('suspended user cannot access live location routes', async () => {
     assert.equal(response.statusCode, 403);
     const body = response.json<{ ok: boolean; error: { code: string } }>();
     assert.equal(body.error.code, 'suspended');
+  } finally {
+    await app.close();
+  }
+});
+
+test('deleted user cannot use sharing or marker routes', async () => {
+  const app = await createTestApp(4123, new FakeLiveLocationService());
+
+  try {
+    const startResponse = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.sessions,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'deleted-user',
+          role: 'user',
+          status: 'deleted',
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+      payload: { duration: '2h' },
+    });
+    assert.equal(startResponse.statusCode, 403);
+
+    const markersResponse = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'deleted-user',
+          role: 'user',
+          status: 'deleted',
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+    });
+    assert.equal(markersResponse.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('disabled liveLocation flag blocks start/update/markers but not hide-me-now', async () => {
+  const app = await createTestApp(4124, new FakeLiveLocationService(), {
+    liveLocationFeatureEnabled: false,
+  });
+  const sessionId = 'cb8f7c4f-e930-4e01-ae85-61d2d93248cb';
+  const headers = {
+    'x-dev-user': createDevAuthHeader({
+      userId: 'member-user',
+      role: 'user',
+      status: 'active',
+      subscriptionEntitlement: 'member_monthly',
+    }),
+  };
+
+  try {
+    const startResponse = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.sessions,
+      headers,
+      payload: { duration: '2h' },
+    });
+    assert.equal(startResponse.statusCode, 403);
+    assert.equal(startResponse.json<{ ok: false; error: { code: string } }>().error.code, 'feature_disabled');
+
+    const updateResponse = await app.inject({
+      method: 'POST',
+      url: buildLiveLocationPositionPath(sessionId),
+      headers,
+      payload: {
+        coordinate: {
+          latitude: 57.4875,
+          longitude: 12.0762,
+          recordedAt: '2026-06-09T10:15:00.000Z',
+        },
+      },
+    });
+    assert.equal(updateResponse.statusCode, 403);
+    assert.equal(updateResponse.json<{ ok: false; error: { code: string } }>().error.code, 'feature_disabled');
+
+    const markersResponse = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=5`,
+      headers,
+    });
+    assert.equal(markersResponse.statusCode, 403);
+    assert.equal(markersResponse.json<{ ok: false; error: { code: string } }>().error.code, 'feature_disabled');
+
+    const hideResponse = await app.inject({
+      method: 'POST',
+      url: LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
+      headers,
+      payload: {},
+    });
+    assert.equal(hideResponse.statusCode, 200);
   } finally {
     await app.close();
   }
@@ -452,6 +631,20 @@ test('GET /v1/admin/live-location requires admin and returns operational-only su
     assert.equal(body.data.expiredSessionCount, 2);
     assert.equal(body.data.latestPositionUpdatedAt, '2026-06-09T10:12:00.000Z');
     assert.deepEqual(Object.keys(body.data).sort(), ['activeSessionCount', 'expiredSessionCount', 'latestPositionUpdatedAt']);
+
+    const owner = await app.inject({
+      method: 'GET',
+      url: LIVE_LOCATION_ROUTE_PATHS.adminSummary,
+      headers: {
+        'x-dev-user': createDevAuthHeader({
+          userId: 'owner-1',
+          role: 'owner',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+    assert.equal(owner.statusCode, 200);
   } finally {
     await app.close();
   }

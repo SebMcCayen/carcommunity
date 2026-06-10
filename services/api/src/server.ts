@@ -17,6 +17,7 @@ import { registerVersionRoutes } from './routes/version.js';
 export interface ServerDependencies {
   authService?: AuthService;
   liveLocationService?: LiveLocationService;
+  liveLocationFeatureEnabled?: boolean;
 }
 
 export async function createServer(
@@ -68,7 +69,10 @@ export async function createServer(
   await registerVersionRoutes(app);
   await registerAuthRoutes(app, config, authService);
   await registerFeatureFlagRoutes(app);
-  await registerLiveLocationRoutes(app, { liveLocationService: dependencies.liveLocationService });
+  await registerLiveLocationRoutes(app, {
+    liveLocationService: dependencies.liveLocationService,
+    liveLocationFeatureEnabled: dependencies.liveLocationFeatureEnabled,
+  });
   await registerUserRoutes(app);
 
   return app;

@@ -171,6 +171,17 @@ export async function requireAuthHook(request: FastifyRequest, _reply: FastifyRe
 }
 
 /**
+ * Fastify preHandler hook: requires an authenticated backend session only.
+ * This is used for safety/privacy actions that must remain available even if
+ * feature access has been lost.
+ */
+export async function requireAuthenticatedHook(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
+  if (!request.auth) {
+    throw new AppError(401, 'unauthenticated', 'Authentication required.');
+  }
+}
+
+/**
  * Fastify preHandler hook: requires admin or owner role.
  * Throws 401 if unauthenticated, 403 if authenticated but not admin or owner.
  */

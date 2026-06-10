@@ -6,14 +6,19 @@ import type {
 } from '@prisma/client';
 import {
   LIVE_LOCATION_DURATIONS,
-  canViewOtherUsersLiveLocation,
   getLiveLocationDurationMs,
   type LiveLocationCoordinate,
   type LiveLocationDuration,
   type LiveLocationSessionSummary,
   type PublicLiveLocationMarker,
 } from '@carcommunity/shared/live-location';
-import { isSuspendedStatus, type SubscriptionEntitlement, type UserRole, type UserStatus } from '@carcommunity/shared/users';
+import {
+  canViewOtherLiveLocations,
+  isSuspendedStatus,
+  type SubscriptionEntitlement,
+  type UserRole,
+  type UserStatus,
+} from '@carcommunity/shared/users';
 
 import { AppError } from './errors.js';
 
@@ -376,7 +381,7 @@ export class LiveLocationService {
       throw new AppError(403, 'suspended', 'Your account has been suspended.');
     }
 
-    if (!canViewOtherUsersLiveLocation(params.viewer)) {
+    if (!canViewOtherLiveLocations(params.viewer)) {
       throw new AppError(403, 'forbidden', 'Member subscription required.');
     }
 

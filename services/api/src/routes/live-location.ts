@@ -14,11 +14,15 @@ import {
   type LiveLocationStopResponse,
   type PublicLiveLocationMarkerResponse,
 } from '@carcommunity/shared/live-location';
-import { canShareOwnLiveLocation } from '@carcommunity/shared/users';
+import {
+  canAccessLiveLocationAdminSummary,
+  canShareOwnLiveLocation,
+  canViewOtherLiveLocations,
+} from '@carcommunity/shared/users';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { requireAdminHook, requireAuthHook } from '../lib/auth-context.js';
+import { requireAdminHook, requireAuthHook, requireAuthenticatedHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import {
   LIVE_LOCATION_DATABASE_META,
@@ -67,15 +71,9 @@ const liveLocationListQuerySchema = z
   })
   .strict();
 
-function assertLiveLocationFeatureEnabled(): void {
-  // TODO: Replace static fallback with database-backed feature flag evaluation for liveLocation.
-  if (!DEFAULT_FEATURE_FLAGS.liveLocation) {
-    throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
-  }
-}
-
 export interface RegisterLiveLocationRoutesDependencies {
   liveLocationService?: LiveLocationService;
+  liveLocationFeatureEnabled?: boolean;
 }
 
 export async function registerLiveLocationRoutes(
@@ -83,6 +81,14 @@ export async function registerLiveLocationRoutes(
   dependencies: RegisterLiveLocationRoutesDependencies = {},
 ): Promise<void> {
   const liveLocationService = dependencies.liveLocationService ?? new LiveLocationService(app.prisma);
+  const liveLocationFeatureEnabled = dependencies.liveLocationFeatureEnabled ?? DEFAULT_FEATURE_FLAGS.liveLocation;
+
+  function assertLiveLocationEnabled(): void {
+    // TODO: Replace this static fallback with admin-managed/database-backed flag evaluation.
+    if (!liveLocationFeatureEnabled) {
+      throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
+    }
+  }
 
   app.post(
     LIVE_LOCATION_ROUTE_PATHS.sessions,
@@ -93,9 +99,9 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationFeatureEnabled();
+      assertLiveLocationEnabled();
 
-      if (!canShareOwnLiveLocation({ status: auth.status })) {
+      if (!canShareOwnLiveLocation(auth)) {
         throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
       }
 
@@ -122,7 +128,11 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationFeatureEnabled();
+      assertLiveLocationEnabled();
+
+      if (!canShareOwnLiveLocation(auth)) {
+        throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
+      }
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       const body = liveLocationUpdateRequestSchema.parse(request.body);
@@ -143,14 +153,12 @@ export async function registerLiveLocationRoutes(
 
   app.post(
     buildLiveLocationStopPath(':sessionId'),
-    { preHandler: requireAuthHook },
+    { preHandler: requireAuthenticatedHook },
     async (request): Promise<LiveLocationStopResponse> => {
       const auth = request.auth;
       if (!auth) {
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
-
-      assertLiveLocationFeatureEnabled();
 
       const params = liveLocationSessionParamsSchema.parse(request.params);
       liveLocationStopRequestSchema.parse(request.body ?? {});
@@ -170,14 +178,12 @@ export async function registerLiveLocationRoutes(
 
   app.post(
     LIVE_LOCATION_ROUTE_PATHS.hideMeNow,
-    { preHandler: requireAuthHook },
+    { preHandler: requireAuthenticatedHook },
     async (request): Promise<HideMeNowResponse> => {
       const auth = request.auth;
       if (!auth) {
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
-
-      assertLiveLocationFeatureEnabled();
 
       const result = await liveLocationService.hideMeNow({
         userId: auth.userId,
@@ -200,7 +206,11 @@ export async function registerLiveLocationRoutes(
         throw new AppError(401, 'unauthenticated', 'Authentication required.');
       }
 
-      assertLiveLocationFeatureEnabled();
+      assertLiveLocationEnabled();
+
+      if (!canViewOtherLiveLocations(auth)) {
+        throw new AppError(403, 'forbidden', 'Member subscription required.');
+      }
 
       // TODO: Enforce blocking visibility filtering once user blocking relationships are persisted.
       //   Expected behavior: if A blocks B or B blocks A, neither user should receive the other's marker.
@@ -236,8 +246,15 @@ export async function registerLiveLocationRoutes(
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
     { preHandler: requireAdminHook },
-    async (): Promise<AdminLiveLocationSummaryResponse> => {
-      assertLiveLocationFeatureEnabled();
+    async (request): Promise<AdminLiveLocationSummaryResponse> => {
+      const auth = request.auth;
+      if (!auth) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+
+      if (!canAccessLiveLocationAdminSummary(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
 
       const summary = await liveLocationService.getAdminSummary();
 

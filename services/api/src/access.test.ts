@@ -2,15 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  canAccessLiveLocationAdminSummary,
   canAccessAdminFeatures,
   canAccessMemberFeatures,
   canShareOwnLiveLocation,
+  canViewOtherLiveLocations,
   hasMemberEntitlement,
   isAdminRole,
   isOwnerRole,
   isSuspendedStatus,
 } from '@carcommunity/shared/users';
-import { canViewOtherUsersLiveLocation } from '@carcommunity/shared/live-location';
 
 // ---------------------------------------------------------------------------
 // isAdminRole
@@ -104,6 +105,11 @@ test('deleted user cannot access app features', () => {
     false,
     'deleted user must not be able to share own live location',
   );
+  assert.equal(
+    canViewOtherLiveLocations({ role: 'user', status: 'deleted', subscriptionEntitlement: 'member_monthly' }),
+    false,
+    'deleted user with member_monthly subscription must be denied live location markers',
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -159,35 +165,50 @@ test('warned user can still share own live location', () => {
 
 test('normal member can view other live locations', () => {
   assert.equal(
-    canViewOtherUsersLiveLocation({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
+    canViewOtherLiveLocations({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
     true,
   );
 });
 
 test('free user cannot view other live locations', () => {
   assert.equal(
-    canViewOtherUsersLiveLocation({ role: 'user', status: 'active', subscriptionEntitlement: 'none' }),
+    canViewOtherLiveLocations({ role: 'user', status: 'active', subscriptionEntitlement: 'none' }),
     false,
   );
 });
 
-test('admin can view other live locations without subscription', () => {
+test('admin cannot view member marker APIs without member entitlement', () => {
   assert.equal(
-    canViewOtherUsersLiveLocation({ role: 'admin', status: 'active', subscriptionEntitlement: 'none' }),
-    true,
+    canViewOtherLiveLocations({ role: 'admin', status: 'active', subscriptionEntitlement: 'none' }),
+    false,
   );
 });
 
-test('owner can view other live locations without subscription', () => {
+test('owner cannot view member marker APIs without member entitlement', () => {
   assert.equal(
-    canViewOtherUsersLiveLocation({ role: 'owner', status: 'active', subscriptionEntitlement: 'none' }),
-    true,
+    canViewOtherLiveLocations({ role: 'owner', status: 'active', subscriptionEntitlement: 'none' }),
+    false,
   );
 });
 
 test('suspended member cannot view other live locations', () => {
   assert.equal(
-    canViewOtherUsersLiveLocation({ role: 'user', status: 'temporarily_suspended', subscriptionEntitlement: 'member_monthly' }),
+    canViewOtherLiveLocations({ role: 'user', status: 'temporarily_suspended', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+});
+
+test('admin and owner can access live location admin summary', () => {
+  assert.equal(
+    canAccessLiveLocationAdminSummary({ role: 'admin', status: 'active', subscriptionEntitlement: 'none' }),
+    true,
+  );
+  assert.equal(
+    canAccessLiveLocationAdminSummary({ role: 'owner', status: 'active', subscriptionEntitlement: 'none' }),
+    true,
+  );
+  assert.equal(
+    canAccessLiveLocationAdminSummary({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
     false,
   );
 });

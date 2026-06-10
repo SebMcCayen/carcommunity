@@ -16,8 +16,8 @@ import {
   canAccessAdminFeatures,
   canAccessMemberFeatures,
   canShareOwnLiveLocation,
+  canViewOtherLiveLocations,
 } from '@carcommunity/shared/users';
-import { canViewOtherUsersLiveLocation } from '@carcommunity/shared/live-location';
 
 import type { MobileSessionUser } from './types';
 
@@ -45,7 +45,7 @@ export function currentUserCanAccessAdminFeatures(user: MobileSessionUser | null
  */
 export function currentUserCanViewOtherLiveLocations(user: MobileSessionUser | null): boolean {
   if (!user) return false;
-  return canViewOtherUsersLiveLocation(user);
+  return canViewOtherLiveLocations(user);
 }
 
 /**
