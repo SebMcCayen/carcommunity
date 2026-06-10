@@ -123,10 +123,7 @@ export async function registerLiveLocationRoutes(
     buildLiveLocationPositionPath(':sessionId'),
     { preHandler: requireAuthHook },
     async (request): Promise<LiveLocationPositionUpdateResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
+      const auth = request.auth!;
 
       if (!canShareOwnLiveLocation(auth)) {
         throw new AppError(403, 'forbidden', 'Your account status prevents live location sharing.');
