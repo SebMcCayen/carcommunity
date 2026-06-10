@@ -132,7 +132,9 @@ export const EventsScreen = () => {
       <KccCard title={t('events.title')} body={t('events.screenSubtitle')} />
 
       {placeholderTeasers.length === 0 && (
-        <KccCard title={t('events.noUpcomingTitle')} body={t('events.noUpcomingBody')} />
+        <View testID="events-no-upcoming">
+          <KccCard title={t('events.noUpcomingTitle')} body={t('events.noUpcomingBody')} />
+        </View>
       )}
 
       {placeholderTeasers.map((event) => (
