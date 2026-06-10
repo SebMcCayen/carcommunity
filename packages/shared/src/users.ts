@@ -34,6 +34,10 @@ export interface UserSummary {
   updatedAt: string;
 }
 
+/**
+ * Minimum non-sensitive user data required for backend and shared access checks.
+ * Use this instead of full user records when only role/status/entitlement are needed.
+ */
 export type SafeAccessUserSummary = Pick<UserSummary, 'role' | 'status' | 'subscriptionEntitlement'>;
 
 export interface AuditLogSummary {

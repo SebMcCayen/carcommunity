@@ -100,7 +100,7 @@ export async function registerLiveLocationRoutes(
       }
 
       if (!canShareOwnLiveLocation(auth)) {
-        throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
+        throw new AppError(403, 'forbidden', 'Your account status prevents live location sharing.');
       }
 
       assertLiveLocationEnabled();
@@ -129,7 +129,7 @@ export async function registerLiveLocationRoutes(
       }
 
       if (!canShareOwnLiveLocation(auth)) {
-        throw new AppError(403, 'forbidden', 'You cannot share live location right now.');
+        throw new AppError(403, 'forbidden', 'Your account status prevents live location sharing.');
       }
 
       assertLiveLocationEnabled();
