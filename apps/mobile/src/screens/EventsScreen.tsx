@@ -57,7 +57,7 @@ function MemberUpgradeBanner() {
   const { t } = useI18n();
 
   return (
-    <View
+    <View testID="events-member-upgrade-banner"
       style={[
         styles.upgradeBanner,
         {
