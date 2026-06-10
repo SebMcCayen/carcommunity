@@ -22,7 +22,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { requireAdminHook, requireAuthHook, requireAuthenticatedHook } from '../lib/auth-context.js';
+import { requireAuthHook, requireAuthenticatedHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import {
   LIVE_LOCATION_DATABASE_META,
@@ -84,7 +84,7 @@ export async function registerLiveLocationRoutes(
   const liveLocationFeatureEnabled = dependencies.liveLocationFeatureEnabled ?? DEFAULT_FEATURE_FLAGS.liveLocation;
 
   function assertLiveLocationEnabled(): void {
-    // TODO: Replace this static fallback with admin-managed/database-backed flag evaluation.
+    // TODO: Replace this injected/static fallback with admin-managed database-backed flag evaluation.
     if (!liveLocationFeatureEnabled) {
       throw new AppError(403, 'feature_disabled', 'Live location feature is disabled.');
     }
@@ -245,7 +245,7 @@ export async function registerLiveLocationRoutes(
 
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
-    { preHandler: requireAdminHook },
+    { preHandler: requireAuthenticatedHook },
     async (request): Promise<AdminLiveLocationSummaryResponse> => {
       const auth = request.auth;
       if (!auth) {
