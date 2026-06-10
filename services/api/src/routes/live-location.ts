@@ -189,10 +189,7 @@ export async function registerLiveLocationRoutes(
     LIVE_LOCATION_ROUTE_PATHS.markers,
     { preHandler: requireAuthHook },
     async (request): Promise<PublicLiveLocationMarkerResponse> => {
-      const auth = request.auth;
-      if (!auth) {
-        throw new AppError(401, 'unauthenticated', 'Authentication required.');
-      }
+      const auth = request.auth!;
 
       if (!canViewOtherLiveLocations(auth)) {
         throw new AppError(403, 'forbidden', 'Member subscription required.');
