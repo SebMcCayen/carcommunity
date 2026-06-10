@@ -38,6 +38,13 @@ const eventRsvpBodySchema = z
   })
   .strict();
 
+const adminEventsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+
 export interface RegisterEventRoutesDependencies {
   eventService?: EventService;
 }
@@ -152,12 +159,13 @@ export async function registerEventRoutes(
         throw new AppError(403, 'forbidden', 'Admin access required.');
       }
 
-      const result = await eventService.getAdminEvents();
+      const query = adminEventsQuerySchema.parse(request.query);
+      const result = await eventService.getAdminEvents({ page: query.page, pageSize: query.pageSize });
 
       return {
         ok: true,
         data: { events: result.events },
-        meta: { total: result.total },
+        meta: { total: result.total, page: result.page, pageSize: result.pageSize },
       };
     },
   );

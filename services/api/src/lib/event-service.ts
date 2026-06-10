@@ -30,6 +30,8 @@ export interface UpsertRsvpResult {
 export interface GetAdminEventsResult {
   events: AdminEventSummary[];
   total: number;
+  page: number;
+  pageSize: number;
 }
 
 function toEventTeaser(event: Pick<Event, 'id' | 'title' | 'startsAt' | 'endsAt' | 'approximateArea' | 'isOfficial' | 'status'>): EventTeaser {
@@ -54,7 +56,7 @@ function toRsvpSummary(rsvps: Pick<EventRsvp, 'status'>[]): EventRsvpSummary {
 
 function toAdminEventSummary(
   event: Pick<Event, 'id' | 'title' | 'status' | 'isOfficial' | 'startsAt' | 'endsAt' | 'cancelledAt' | 'createdAt'>,
-  rsvps: Pick<EventRsvp, 'status'>[],
+  rsvpCounts: EventRsvpSummary,
 ): AdminEventSummary {
   return {
     id: event.id,
@@ -63,7 +65,7 @@ function toAdminEventSummary(
     isOfficial: event.isOfficial,
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt ? event.endsAt.toISOString() : null,
-    rsvpCounts: toRsvpSummary(rsvps),
+    rsvpCounts,
     cancelledAt: event.cancelledAt ? event.cancelledAt.toISOString() : null,
     createdAt: event.createdAt.toISOString(),
   };
@@ -196,27 +198,57 @@ export class EventService {
     };
   }
 
-  public async getAdminEvents(): Promise<GetAdminEventsResult> {
-    const events = await this.prisma.event.findMany({
-      orderBy: { startsAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        isOfficial: true,
-        startsAt: true,
-        endsAt: true,
-        cancelledAt: true,
-        createdAt: true,
-        rsvps: {
-          select: { status: true },
+  public async getAdminEvents(params: { page?: number; pageSize?: number } = {}): Promise<GetAdminEventsResult> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
+    const skip = (page - 1) * pageSize;
+
+    const [total, events] = await this.prisma.$transaction([
+      this.prisma.event.count(),
+      this.prisma.event.findMany({
+        orderBy: { startsAt: 'desc' },
+        skip,
+        take: pageSize,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          isOfficial: true,
+          startsAt: true,
+          endsAt: true,
+          cancelledAt: true,
+          createdAt: true,
         },
-      },
-    });
+      }),
+    ]);
+
+    const eventIds = events.map((e) => e.id);
+
+    const rsvpGroups =
+      eventIds.length > 0
+        ? await this.prisma.eventRsvp.groupBy({
+            by: ['eventId', 'status'],
+            _count: { status: true },
+            where: { eventId: { in: eventIds } },
+          })
+        : [];
+
+    const rsvpCountsByEventId = new Map<string, EventRsvpSummary>();
+    for (const group of rsvpGroups) {
+      if (!rsvpCountsByEventId.has(group.eventId)) {
+        rsvpCountsByEventId.set(group.eventId, { going: 0, maybe: 0, not_going: 0 });
+      }
+      const summary = rsvpCountsByEventId.get(group.eventId)!;
+      summary[group.status as EventRsvpStatus] = group._count.status;
+    }
 
     return {
-      events: events.map((e) => toAdminEventSummary(e, e.rsvps)),
-      total: events.length,
+      events: events.map((e) =>
+        toAdminEventSummary(e, rsvpCountsByEventId.get(e.id) ?? { going: 0, maybe: 0, not_going: 0 }),
+      ),
+      total,
+      page,
+      pageSize,
     };
   }
 }

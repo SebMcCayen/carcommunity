@@ -149,6 +149,8 @@ export interface AdminEventsResponse {
   };
   meta: {
     total: number;
+    page: number;
+    pageSize: number;
   };
 }
 

@@ -86,6 +86,8 @@ class FakeEventService
       },
     ],
     total: 1,
+    page: 1,
+    pageSize: 20,
   };
 
   public failDetailWith: AppError | null = null;
@@ -105,7 +107,7 @@ class FakeEventService
     return this.rsvpResult;
   }
 
-  async getAdminEvents(): Promise<GetAdminEventsResult> {
+  async getAdminEvents(_params?: { page?: number; pageSize?: number }): Promise<GetAdminEventsResult> {
     return this.adminResult;
   }
 }
@@ -655,6 +657,8 @@ test('GET /v1/admin/events allows admin and returns event summary', async () => 
     assert.equal(body.data.events[0]?.id, 'event-1');
     assert.equal(body.data.events[0]?.status, 'published');
     assert.equal(body.meta.total, 1);
+    assert.equal(body.meta.page, 1);
+    assert.equal(body.meta.pageSize, 20);
   } finally {
     await app.close();
   }
@@ -678,6 +682,57 @@ test('GET /v1/admin/events allows owner', async () => {
     });
 
     assert.equal(response.statusCode, 200);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/events accepts page and pageSize query params', async () => {
+  const service = new FakeEventService();
+  service.adminResult = { ...service.adminResult, page: 2, pageSize: 5 };
+  const app = await createTestApp(4222, service);
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${EVENT_ROUTE_PATHS.adminEvents}?page=2&pageSize=5`,
+      headers: {
+        'x-dev-user': devAuth({
+          userId: 'admin-user',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json<AdminEventsResponse>();
+    assert.equal(body.meta.page, 2);
+    assert.equal(body.meta.pageSize, 5);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/events rejects invalid pageSize above max', async () => {
+  const app = await createTestApp(4223, new FakeEventService());
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${EVENT_ROUTE_PATHS.adminEvents}?pageSize=200`,
+      headers: {
+        'x-dev-user': devAuth({
+          userId: 'admin-user',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
   } finally {
     await app.close();
   }
