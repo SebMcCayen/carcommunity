@@ -239,7 +239,7 @@ export async function registerLiveLocationRoutes(
 
   app.get(
     LIVE_LOCATION_ROUTE_PATHS.adminSummary,
-    { preHandler: requireAuthenticatedHook },
+    { preHandler: requireAuthHook },
     async (request): Promise<AdminLiveLocationSummaryResponse> => {
       const auth = request.auth!;
 
