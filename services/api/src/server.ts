@@ -5,9 +5,11 @@ import { createAuthService, type AuthService } from './lib/auth-service.js';
 import { registerAuthContext } from './lib/auth-context.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
 import type { LiveLocationService } from './lib/live-location-service.js';
+import type { EventService } from './lib/event-service.js';
 import { registerPrisma } from './plugins/prisma.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerEventRoutes } from './routes/events.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerLiveLocationRoutes } from './routes/live-location.js';
@@ -18,6 +20,7 @@ export interface ServerDependencies {
   authService?: AuthService;
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
+  eventService?: EventService;
 }
 
 export async function createServer(
@@ -72,6 +75,9 @@ export async function createServer(
   await registerLiveLocationRoutes(app, {
     liveLocationService: dependencies.liveLocationService,
     liveLocationFeatureEnabled: dependencies.liveLocationFeatureEnabled,
+  });
+  await registerEventRoutes(app, {
+    eventService: dependencies.eventService,
   });
   await registerUserRoutes(app);
 

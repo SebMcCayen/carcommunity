@@ -84,7 +84,18 @@
   },
   "events": {
     "title": "Träffar",
-    "placeholder": "Träfflistan kommer snart."
+    "placeholder": "Träfflistan kommer snart.",
+    "screenSubtitle": "Kommande KCC-träffar och community-evenemang.",
+    "officialBadge": "Officiell KCC-träff",
+    "noUpcomingTitle": "Inga kommande träffar",
+    "noUpcomingBody": "Håll utkik – träffinformation dyker upp här snart.",
+    "memberRequiredTitle": "Eventdetaljer kräver KCC Medlem.",
+    "memberRequiredBody": "Som medlem kan du se exakt plats, mer information och RSVP.",
+    "memberDetailPlaceholder": "Exakt plats och detaljer",
+    "navigationPlaceholder": "Navigering öppnas i Apple Maps eller Google Maps i en senare version.",
+    "rsvpGoing": "Kommer",
+    "rsvpMaybe": "Kanske",
+    "rsvpNotGoing": "Kan inte"
   },
   "chat": {
     "title": "Chat",

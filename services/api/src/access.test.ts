@@ -12,6 +12,12 @@ import {
   isOwnerRole,
   isSuspendedStatus,
 } from '@carcommunity/shared/users';
+import {
+  canViewEventTeaser,
+  canViewEventDetails,
+  canRsvpToEvent,
+  canAccessEventAdmin,
+} from '@carcommunity/shared/events';
 
 // ---------------------------------------------------------------------------
 // isAdminRole
@@ -211,4 +217,122 @@ test('admin and owner can access live location admin summary', () => {
     canAccessLiveLocationAdminSummary({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
     false,
   );
+});
+
+// ---------------------------------------------------------------------------
+// canViewEventTeaser
+// ---------------------------------------------------------------------------
+
+test('active free user can view event teasers', () => {
+  assert.equal(canViewEventTeaser({ role: 'user', status: 'active' }), true);
+});
+
+test('warned user can view event teasers', () => {
+  assert.equal(canViewEventTeaser({ role: 'user', status: 'warned' }), true);
+});
+
+test('suspended user cannot view event teasers', () => {
+  assert.equal(canViewEventTeaser({ role: 'user', status: 'temporarily_suspended' }), false);
+  assert.equal(canViewEventTeaser({ role: 'user', status: 'permanently_suspended' }), false);
+});
+
+test('deleted user cannot view event teasers', () => {
+  assert.equal(canViewEventTeaser({ role: 'user', status: 'deleted' }), false);
+});
+
+// ---------------------------------------------------------------------------
+// canViewEventDetails
+// ---------------------------------------------------------------------------
+
+test('active member can view event details', () => {
+  assert.equal(
+    canViewEventDetails({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
+    true,
+  );
+});
+
+test('active free user cannot view event details', () => {
+  assert.equal(
+    canViewEventDetails({ role: 'user', status: 'active', subscriptionEntitlement: 'none' }),
+    false,
+  );
+});
+
+test('suspended member cannot view event details', () => {
+  assert.equal(
+    canViewEventDetails({ role: 'user', status: 'temporarily_suspended', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+  assert.equal(
+    canViewEventDetails({ role: 'user', status: 'permanently_suspended', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+});
+
+test('deleted user cannot view event details', () => {
+  assert.equal(
+    canViewEventDetails({ role: 'user', status: 'deleted', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// canRsvpToEvent
+// ---------------------------------------------------------------------------
+
+test('active member can RSVP to event', () => {
+  assert.equal(
+    canRsvpToEvent({ role: 'user', status: 'active', subscriptionEntitlement: 'member_monthly' }),
+    true,
+  );
+});
+
+test('active free user cannot RSVP to event', () => {
+  assert.equal(
+    canRsvpToEvent({ role: 'user', status: 'active', subscriptionEntitlement: 'none' }),
+    false,
+  );
+});
+
+test('suspended member cannot RSVP to event', () => {
+  assert.equal(
+    canRsvpToEvent({ role: 'user', status: 'temporarily_suspended', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+});
+
+test('deleted user cannot RSVP to event', () => {
+  assert.equal(
+    canRsvpToEvent({ role: 'user', status: 'deleted', subscriptionEntitlement: 'member_monthly' }),
+    false,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// canAccessEventAdmin
+// ---------------------------------------------------------------------------
+
+test('admin can access event admin', () => {
+  assert.equal(canAccessEventAdmin({ role: 'admin', status: 'active' }), true);
+});
+
+test('owner can access event admin', () => {
+  assert.equal(canAccessEventAdmin({ role: 'owner', status: 'active' }), true);
+});
+
+test('regular user cannot access event admin', () => {
+  assert.equal(canAccessEventAdmin({ role: 'user', status: 'active' }), false);
+});
+
+test('member cannot access event admin without admin role', () => {
+  assert.equal(canAccessEventAdmin({ role: 'user', status: 'active' }), false);
+});
+
+test('suspended admin cannot access event admin', () => {
+  assert.equal(canAccessEventAdmin({ role: 'admin', status: 'temporarily_suspended' }), false);
+  assert.equal(canAccessEventAdmin({ role: 'admin', status: 'permanently_suspended' }), false);
+});
+
+test('deleted admin cannot access event admin', () => {
+  assert.equal(canAccessEventAdmin({ role: 'admin', status: 'deleted' }), false);
 });
