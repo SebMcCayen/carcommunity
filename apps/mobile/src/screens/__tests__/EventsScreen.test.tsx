@@ -52,13 +52,9 @@ describe('EventsScreen', () => {
       renderer = renderEventsScreen();
     });
 
-    const texts = renderer!.root.findAll(
-      (node) => typeof node.props['children'] === 'string',
+    const placeholders = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'events-no-upcoming',
     );
-
-    const noUpcomingText = texts.some((node) =>
-      String(node.props['children']).includes('Inga kommande träffar'),
-    );
-    expect(noUpcomingText).toBe(true);
+    expect(placeholders.length).toBeGreaterThan(0);
   });
 });
