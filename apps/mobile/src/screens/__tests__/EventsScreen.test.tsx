@@ -39,14 +39,10 @@ describe('EventsScreen', () => {
       renderer = renderEventsScreen();
     });
 
-    const texts = renderer!.root.findAll(
-      (node) => typeof node.props['children'] === 'string',
+    const banners = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'events-member-upgrade-banner',
     );
-
-    const memberRequiredText = texts.some((node) =>
-      String(node.props['children']).includes('Eventdetaljer kräver'),
-    );
-    expect(memberRequiredText).toBe(true);
+    expect(banners.length).toBeGreaterThan(0);
   });
 
   it('shows the no upcoming events placeholder', () => {
