@@ -244,7 +244,7 @@ export class ModerationService {
         entityType: input.entityType,
         entityId: input.entityId ?? null,
         reason: input.reason ?? null,
-        metadata: input.metadata === null ? Prisma.DbNull : input.metadata,
+        metadata: input.metadata ?? Prisma.DbNull,
       },
     });
   }
