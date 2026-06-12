@@ -16,6 +16,7 @@ import { createServer } from './server.js';
 // ---------------------------------------------------------------------------
 
 const TARGET_USER_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const ONE_DAY_MS = 86_400_000;
 
 function makeActionSummary(actionType: ModerationActionSummary['actionType']): ModerationActionSummary {
   return {
@@ -90,7 +91,7 @@ function devAuthHeader(overrides?: {
 const validWarnBody = { reason: 'Violated community guidelines' };
 const validSuspendTempBody = {
   reason: 'Repeated offences',
-  expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+  expiresAt: new Date(Date.now() + ONE_DAY_MS).toISOString(),
 };
 const validSuspendPermBody = { reason: 'Severe policy violation' };
 const validRestoreBody = { reason: 'Appeal accepted' };
