@@ -22,7 +22,7 @@ export interface ServerDependencies {
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
-  subscriptionService?: import('./lib/subscription-service.js').SubscriptionService;
+  subscriptionService?: Pick<import('./lib/subscription-service.js').SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
 }
 
 export async function createServer(
