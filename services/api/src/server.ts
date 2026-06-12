@@ -6,6 +6,7 @@ import { registerAuthContext } from './lib/auth-context.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
 import type { LiveLocationService } from './lib/live-location-service.js';
 import type { EventService } from './lib/event-service.js';
+import type { ModerationService } from './lib/moderation-service.js';
 import { registerPrisma } from './plugins/prisma.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -24,6 +25,7 @@ export interface ServerDependencies {
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
   subscriptionService?: Pick<import('./lib/subscription-service.js').SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
+  moderationService?: ModerationService;
 }
 
 export async function createServer(
@@ -86,7 +88,9 @@ export async function createServer(
   await registerSubscriptionRoutes(app, {
     subscriptionService: dependencies.subscriptionService,
   });
-  await registerModerationRoutes(app);
+  await registerModerationRoutes(app, {
+    moderationService: dependencies.moderationService,
+  });
 
   return app;
 }
