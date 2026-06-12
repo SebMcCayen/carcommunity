@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   isOwnerRole,
   type ModerationActionSummary,
@@ -244,7 +244,7 @@ export class ModerationService {
         entityType: input.entityType,
         entityId: input.entityId ?? null,
         reason: input.reason ?? null,
-        metadata: input.metadata ?? undefined,
+        metadata: input.metadata === null ? Prisma.DbNull : input.metadata,
       },
     });
   }
