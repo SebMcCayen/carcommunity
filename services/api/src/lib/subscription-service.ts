@@ -4,7 +4,7 @@
  * Security requirements:
  * - Never return raw purchase tokens in any response.
  * - Never store raw purchase tokens — only hashed values are permitted.
- * - Suspension and deleted status always override subscription entitlement.
+ * - Suspension and deleted status always override feature access decisions, even if an active subscription exists.
  * - Backend enforces all access decisions independently of client state.
  */
 
