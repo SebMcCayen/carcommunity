@@ -148,8 +148,8 @@ export class ModerationService {
       throw new AppError(400, 'validation_error', 'expiresAt must be a valid future datetime.');
     }
 
-    const [action] = await this.prisma.$transaction([
-      this.prisma.moderationAction.create({
+    const action = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.moderationAction.create({
         data: {
           targetUserId: input.targetUserId,
           actorUserId: input.actor.userId,
@@ -157,19 +157,25 @@ export class ModerationService {
           reason: input.reason,
           expiresAt,
         },
-      }),
-      this.prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: input.targetUserId },
         data: { status: 'temporarily_suspended' },
-      }),
-    ]);
+      });
 
-    await this.writeAuditLog({
-      actorUserId: input.actor.userId,
-      action: 'moderation.suspend_temporary',
-      entityType: 'user',
-      entityId: input.targetUserId,
-      reason: input.reason,
+      await tx.auditLog.create({
+        data: {
+          actorUserId: input.actor.userId,
+          action: 'moderation.suspend_temporary',
+          entityType: 'user',
+          entityId: input.targetUserId,
+          reason: input.reason,
+          metadata: null,
+        },
+      });
+
+      return created;
     });
 
     return toModerationActionSummary(action);
