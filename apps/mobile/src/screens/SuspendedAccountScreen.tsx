@@ -29,20 +29,24 @@ export const SuspendedAccountScreen = () => {
         body={t('accountStatus.suspendedBody')}
       />
 
-      {/* Support — always available to suspended users */}
-      <KccButton label={t('accountStatus.supportLink')} variant="primary" />
+      {/* Support — TODO: wire up (disabled placeholder for now) */}
+      <KccButton label={t('accountStatus.supportLink')} variant="primary" disabled />
 
       {/* Appeal placeholder — real flow not implemented yet */}
-      <KccButton label={t('accountStatus.appealPlaceholder')} variant="secondary" />
+      <KccButton label={t('accountStatus.appealPlaceholder')} variant="secondary" disabled />
 
       {/* Subscription management placeholder — real flow not implemented yet */}
-      <KccButton label={t('accountStatus.subscriptionManagementPlaceholder')} variant="secondary" />
+      <KccButton
+        label={t('accountStatus.subscriptionManagementPlaceholder')}
+        variant="secondary"
+        disabled
+      />
 
       {/* Account deletion placeholder — real flow not implemented yet */}
-      <KccButton label={t('accountStatus.accountDeletionPlaceholder')} variant="destructive" />
+      <KccButton label={t('accountStatus.accountDeletionPlaceholder')} variant="destructive" disabled />
 
-      {/* Policy and terms — always available */}
-      <KccButton label={t('accountStatus.policyLink')} variant="secondary" />
+      {/* Policy and terms — TODO: wire up (disabled placeholder for now) */}
+      <KccButton label={t('accountStatus.policyLink')} variant="secondary" disabled />
     </ScreenContainer>
   );
 };
