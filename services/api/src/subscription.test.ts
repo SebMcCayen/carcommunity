@@ -197,11 +197,11 @@ test('GET /v1/subscription/me returns 401 when not authenticated', async () => {
 function createStubSubscriptionService(
   subscriptionResult: Awaited<ReturnType<SubscriptionService['getSubscriptionForUser']>>,
   adminResult: Awaited<ReturnType<SubscriptionService['getAdminSubscriptionForUser']>> | null = null,
-): SubscriptionService {
+): Pick<SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'> {
   return {
     getSubscriptionForUser: async () => subscriptionResult,
     getAdminSubscriptionForUser: async () => adminResult,
-  } as unknown as SubscriptionService;
+  };
 }
 
 const devHeader = (overrides: {
