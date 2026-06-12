@@ -188,27 +188,33 @@ export class ModerationService {
   async suspendPermanent(input: SuspendPermanentInput): Promise<ModerationActionSummary> {
     await resolveTarget(this.prisma, input.actor, input.targetUserId);
 
-    const [action] = await this.prisma.$transaction([
-      this.prisma.moderationAction.create({
+    const action = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.moderationAction.create({
         data: {
           targetUserId: input.targetUserId,
           actorUserId: input.actor.userId,
           actionType: 'permanent_suspension',
           reason: input.reason,
         },
-      }),
-      this.prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: input.targetUserId },
         data: { status: 'permanently_suspended' },
-      }),
-    ]);
+      });
 
-    await this.writeAuditLog({
-      actorUserId: input.actor.userId,
-      action: 'moderation.suspend_permanent',
-      entityType: 'user',
-      entityId: input.targetUserId,
-      reason: input.reason,
+      await tx.auditLog.create({
+        data: {
+          actorUserId: input.actor.userId,
+          action: 'moderation.suspend_permanent',
+          entityType: 'user',
+          entityId: input.targetUserId,
+          reason: input.reason,
+          metadata: null,
+        },
+      });
+
+      return created;
     });
 
     return toModerationActionSummary(action);
