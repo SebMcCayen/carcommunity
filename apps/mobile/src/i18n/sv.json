@@ -109,5 +109,14 @@
   },
   "common": {
     "placeholder": "Kommer snart"
+  },
+  "accountStatus": {
+    "suspendedTitle": "Kontot är begränsat",
+    "suspendedBody": "Ditt konto har begränsad åtkomst. Kontakta support för mer information.",
+    "supportLink": "Kontakta support",
+    "appealPlaceholder": "Överklaga beslut (kommer snart)",
+    "subscriptionManagementPlaceholder": "Hantera prenumeration (kommande)",
+    "accountDeletionPlaceholder": "Ta bort konto (kommande)",
+    "policyLink": "Regler och villkor"
   }
 }

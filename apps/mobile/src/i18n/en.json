@@ -106,5 +106,14 @@
   },
   "common": {
     "placeholder": "Coming soon"
+  },
+  "accountStatus": {
+    "suspendedTitle": "Account limited",
+    "suspendedBody": "Your account has limited access. Contact support for more information.",
+    "supportLink": "Contact support",
+    "appealPlaceholder": "Appeal decision (coming soon)",
+    "subscriptionManagementPlaceholder": "Manage subscription (coming soon)",
+    "accountDeletionPlaceholder": "Delete account (coming soon)",
+    "policyLink": "Rules and terms"
   }
 }
