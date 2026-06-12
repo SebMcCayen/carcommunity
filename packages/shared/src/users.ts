@@ -50,6 +50,49 @@ export interface AuditLogSummary {
   createdAt: string;
 }
 
+export interface ModerationRequest {
+  reason: string;
+  /** Required for temporary_suspension actions only. ISO 8601 datetime string. */
+  expiresAt?: string;
+}
+
+export interface ModerationActionSummary {
+  id: string;
+  targetUserId: string;
+  actorUserId: string | null;
+  actionType: ModerationActionType;
+  reason: string;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
+export interface ModerationResponse {
+  ok: true;
+  data: {
+    action: ModerationActionSummary;
+  };
+}
+
+/** Admin-facing moderation summary for a user. Does not expose sensitive session data. */
+export interface AdminUserModerationSummary {
+  userId: string;
+  status: UserStatus;
+  recentActions: ModerationActionSummary[];
+}
+
+export interface AuditLogListResponse {
+  ok: true;
+  data: {
+    entries: AuditLogSummary[];
+  };
+  meta: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNext: boolean;
+  };
+}
+
 export interface CurrentUserResponse {
   ok: true;
   data: {

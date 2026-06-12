@@ -13,6 +13,7 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerLiveLocationRoutes } from './routes/live-location.js';
+import { registerModerationRoutes } from './routes/moderation.js';
 import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
@@ -85,6 +86,7 @@ export async function createServer(
   await registerSubscriptionRoutes(app, {
     subscriptionService: dependencies.subscriptionService,
   });
+  await registerModerationRoutes(app);
 
   return app;
 }
