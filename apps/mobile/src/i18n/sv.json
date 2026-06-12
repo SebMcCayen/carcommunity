@@ -71,7 +71,13 @@
   },
   "subscription": {
     "teaserTitle": "Medlemskap",
-    "teaserBody": "Lås upp fler funktioner i communityn snart."
+    "teaserBody": "Lås upp fler funktioner i communityn snart.",
+    "memberMonthlyTitle": "Månadsmedlemskap",
+    "memberRequiredBody": "Medlemskap krävs för att se andra livepositioner, eventdetaljer och RSVP.",
+    "purchaseHandledExternally": "Köp hanteras via App Store eller Google Play i en senare version.",
+    "accessLimitedBySuspension": "Din åtkomst kan begränsas vid avstängning eller regelbrott.",
+    "currentEntitlementMember": "Du har ett aktivt medlemskap.",
+    "currentEntitlementFree": "Inget aktivt medlemskap."
   },
   "profile": {
     "title": "Profil",

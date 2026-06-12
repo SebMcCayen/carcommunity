@@ -68,7 +68,13 @@
   },
   "subscription": {
     "teaserTitle": "Membership",
-    "teaserBody": "Unlock more community features soon."
+    "teaserBody": "Unlock more community features soon.",
+    "memberMonthlyTitle": "Monthly Membership",
+    "memberRequiredBody": "Membership is required to view other live locations, event details and RSVP.",
+    "purchaseHandledExternally": "Purchases are handled via the App Store or Google Play in a later version.",
+    "accessLimitedBySuspension": "Your access may be restricted in the event of suspension or violations.",
+    "currentEntitlementMember": "You have an active membership.",
+    "currentEntitlementFree": "No active membership."
   },
   "profile": {
     "title": "Profile",

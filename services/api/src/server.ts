@@ -13,6 +13,7 @@ import { registerEventRoutes } from './routes/events.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerLiveLocationRoutes } from './routes/live-location.js';
+import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
 
@@ -21,6 +22,7 @@ export interface ServerDependencies {
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
+  subscriptionService?: Pick<import('./lib/subscription-service.js').SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
 }
 
 export async function createServer(
@@ -80,6 +82,9 @@ export async function createServer(
     eventService: dependencies.eventService,
   });
   await registerUserRoutes(app);
+  await registerSubscriptionRoutes(app, {
+    subscriptionService: dependencies.subscriptionService,
+  });
 
   return app;
 }

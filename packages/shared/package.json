@@ -23,6 +23,10 @@
     "./events": {
       "types": "./dist/events.d.ts",
       "default": "./dist/events.js"
+    },
+    "./subscription": {
+      "types": "./dist/subscription.d.ts",
+      "default": "./dist/subscription.js"
     }
   },
   "scripts": {

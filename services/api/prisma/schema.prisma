@@ -43,6 +43,7 @@ model User {
   moderationActionsActor  ModerationAction[]       @relation("ModerationActorUser")
   auditLogsActor          AuditLog[]               @relation("AuditActorUser")
   eventRsvps              EventRsvp[]
+  subscriptionRecords     SubscriptionRecord[]
 
   @@index([deletedAt])
   @@index([status])
@@ -289,4 +290,45 @@ enum EventRsvpStatus {
   going
   maybe
   not_going
+}
+
+enum SubscriptionPlatform {
+  apple
+  google
+  manual
+}
+
+enum SubscriptionRecordStatus {
+  inactive
+  active
+  grace_period
+  expired
+  revoked
+  cancelled
+}
+
+model SubscriptionRecord {
+  id                            String                   @id @default(uuid()) @db.Uuid
+  userId                        String                   @map("user_id") @db.Uuid
+  platform                      SubscriptionPlatform
+  status                        SubscriptionRecordStatus @default(inactive)
+  entitlement                   SubscriptionEntitlement  @default(none)
+  externalProductId             String?                  @map("external_product_id") @db.VarChar(255)
+  externalOriginalTransactionId String?                  @map("external_original_transaction_id") @db.VarChar(255)
+  /// Hashed purchase token only — never store raw tokens.
+  externalPurchaseTokenHash     String?                  @map("external_purchase_token_hash") @db.VarChar(128)
+  startsAt                      DateTime?                @map("starts_at")
+  expiresAt                     DateTime?                @map("expires_at")
+  revokedAt                     DateTime?                @map("revoked_at")
+  createdAt                     DateTime                 @default(now()) @map("created_at")
+  updatedAt                     DateTime                 @updatedAt @map("updated_at")
+  metadata                      Json?
+  user                          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([status])
+  @@index([entitlement])
+  @@index([expiresAt])
+  @@map("subscription_records")
 }
