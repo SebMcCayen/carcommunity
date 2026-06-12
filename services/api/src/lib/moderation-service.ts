@@ -227,31 +227,36 @@ export class ModerationService {
   async restoreAccess(input: RestoreAccessInput): Promise<ModerationActionSummary> {
     await resolveTarget(this.prisma, input.actor, input.targetUserId);
 
-    const [action] = await this.prisma.$transaction([
-      this.prisma.moderationAction.create({
+    const action = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.moderationAction.create({
         data: {
           targetUserId: input.targetUserId,
           actorUserId: input.actor.userId,
           actionType: 'restore_access',
           reason: input.reason,
         },
-      }),
-      this.prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: input.targetUserId },
         data: { status: 'active' },
-      }),
-    ]);
+      });
 
-    await this.writeAuditLog({
-      actorUserId: input.actor.userId,
-      action: 'moderation.restore_access',
-      entityType: 'user',
-      entityId: input.targetUserId,
-      reason: input.reason,
+      await tx.auditLog.create({
+        data: {
+          actorUserId: input.actor.userId,
+          action: 'moderation.restore_access',
+          entityType: 'user',
+          entityId: input.targetUserId,
+          reason: input.reason,
+          metadata: null,
+        },
+      });
+
+      return created;
     });
 
     return toModerationActionSummary(action);
-  }
 
   /** Writes a single audit log entry. */
   async writeAuditLog(input: WriteAuditLogInput): Promise<void> {
