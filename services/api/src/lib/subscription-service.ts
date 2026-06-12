@@ -35,14 +35,9 @@ export interface AdminSubscriptionForUserResult {
 }
 
 function mapRecordStatus(
-  prismaStatus: string,
+  prismaStatus: import('@prisma/client').SubscriptionRecordStatus,
 ): import('@carcommunity/shared/subscription').SubscriptionStatus {
-  // Map Prisma SubscriptionRecordStatus values to shared SubscriptionStatus.
-  const valid = ['inactive', 'active', 'grace_period', 'expired', 'revoked', 'cancelled'] as const;
-  if ((valid as readonly string[]).includes(prismaStatus)) {
-    return prismaStatus as (typeof valid)[number];
-  }
-  return 'inactive';
+  return prismaStatus as unknown as import('@carcommunity/shared/subscription').SubscriptionStatus;
 }
 
 function mapRecordPlatform(
