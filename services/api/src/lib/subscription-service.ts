@@ -46,13 +46,9 @@ function mapRecordStatus(
 }
 
 function mapRecordPlatform(
-  prismaPlatform: string,
+  prismaPlatform: import('@prisma/client').SubscriptionPlatform,
 ): import('@carcommunity/shared/subscription').SubscriptionPlatform {
-  const valid = ['apple', 'google', 'manual'] as const;
-  if ((valid as readonly string[]).includes(prismaPlatform)) {
-    return prismaPlatform as (typeof valid)[number];
-  }
-  return 'manual';
+  return prismaPlatform as unknown as import('@carcommunity/shared/subscription').SubscriptionPlatform;
 }
 
 export class SubscriptionService {
