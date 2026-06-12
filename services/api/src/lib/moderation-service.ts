@@ -126,7 +126,7 @@ export class ModerationService {
           entityType: 'user',
           entityId: input.targetUserId,
           reason: input.reason,
-          metadata: null,
+          metadata: Prisma.DbNull,
         },
       });
 
@@ -171,7 +171,7 @@ export class ModerationService {
           entityType: 'user',
           entityId: input.targetUserId,
           reason: input.reason,
-          metadata: null,
+          metadata: Prisma.DbNull,
         },
       });
 
@@ -210,7 +210,7 @@ export class ModerationService {
           entityType: 'user',
           entityId: input.targetUserId,
           reason: input.reason,
-          metadata: null,
+          metadata: Prisma.DbNull,
         },
       });
 
@@ -249,7 +249,7 @@ export class ModerationService {
           entityType: 'user',
           entityId: input.targetUserId,
           reason: input.reason,
-          metadata: null,
+          metadata: Prisma.DbNull,
         },
       });
 
@@ -257,6 +257,7 @@ export class ModerationService {
     });
 
     return toModerationActionSummary(action);
+  }
 
   /** Writes a single audit log entry. */
   async writeAuditLog(input: WriteAuditLogInput): Promise<void> {

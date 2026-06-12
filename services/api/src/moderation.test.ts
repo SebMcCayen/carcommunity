@@ -108,13 +108,15 @@ function createInMemoryPrisma(
         return { ...entry };
       },
     },
-    $transaction: async (input: unknown) => {
-      if (typeof input === 'function') {
-        return (input as (tx: typeof prisma) => Promise<unknown>)(prisma);
+    $transaction: async (opsOrCallback: unknown) => {
+      if (typeof opsOrCallback === 'function') {
+        return (opsOrCallback as (tx: unknown) => Promise<unknown>)(prisma);
       }
-      const ops = input as unknown[];
+      const ops = opsOrCallback as unknown[];
       const results = [];
-      for (const op of ops) results.push(await (op as Promise<unknown>));
+      for (const op of ops) {
+        results.push(await (op as Promise<unknown>));
+      }
       return results;
     },
   };
