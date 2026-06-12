@@ -45,7 +45,7 @@ export interface WriteAuditLogInput {
   entityType: string;
   entityId?: string | null;
   reason?: string | null;
-  metadata?: Prisma.InputJsonValue | null;
+  metadata?: Prisma.InputJsonValue;
 }
 
 function toModerationActionSummary(row: {

@@ -42,12 +42,7 @@ interface StoredAuditLog {
 
 function createInMemoryPrisma(
   initialUsers: StoredUser[],
-): {
-  prisma: ConstructorParameters<typeof ModerationService>[0];
-  users: Map<string, StoredUser>;
-  moderationActions: StoredModerationAction[];
-  auditLogs: StoredAuditLog[];
-} {
+) {
   const users = new Map<string, StoredUser>(initialUsers.map((u) => [u.id, u]));
   const moderationActions: StoredModerationAction[] = [];
   const auditLogs: StoredAuditLog[] = [];
