@@ -23,7 +23,7 @@ const adminUserIdParamsSchema = z
   .strict();
 
 export interface RegisterSubscriptionRoutesDependencies {
-  subscriptionService?: SubscriptionService;
+  subscriptionService?: Pick<SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
 }
 
 export async function registerSubscriptionRoutes(
