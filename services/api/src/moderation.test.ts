@@ -43,7 +43,7 @@ interface StoredAuditLog {
 function createInMemoryPrisma(
   initialUsers: StoredUser[],
 ): {
-  prisma: Parameters<ConstructorParameters<typeof ModerationService>[0]['$transaction'] extends never ? never : typeof ModerationService>[0];
+  prisma: ConstructorParameters<typeof ModerationService>[0];
   users: Map<string, StoredUser>;
   moderationActions: StoredModerationAction[];
   auditLogs: StoredAuditLog[];
@@ -122,7 +122,7 @@ function createInMemoryPrisma(
     },
   };
 
-  return { prisma: prisma as unknown as Parameters<typeof ModerationService>[0], users, moderationActions, auditLogs };
+  return { prisma: prisma as unknown as ConstructorParameters<typeof ModerationService>[0], users, moderationActions, auditLogs };
 }
 
 const adminActor: ModerationActor = { userId: 'actor-admin', role: 'admin' };

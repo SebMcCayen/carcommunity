@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   isOwnerRole,
   type ModerationActionSummary,
@@ -45,7 +45,7 @@ export interface WriteAuditLogInput {
   entityType: string;
   entityId?: string | null;
   reason?: string | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: Prisma.InputJsonValue | null;
 }
 
 function toModerationActionSummary(row: {
@@ -244,7 +244,7 @@ export class ModerationService {
         entityType: input.entityType,
         entityId: input.entityId ?? null,
         reason: input.reason ?? null,
-        metadata: input.metadata ?? null,
+        metadata: input.metadata ?? undefined,
       },
     });
   }
