@@ -244,7 +244,7 @@ export class ModerationService {
         entityType: input.entityType,
         entityId: input.entityId ?? null,
         reason: input.reason ?? null,
-        metadata: (input.metadata as object | null | undefined) ?? null,
+        metadata: input.metadata ?? null,
       },
     });
   }

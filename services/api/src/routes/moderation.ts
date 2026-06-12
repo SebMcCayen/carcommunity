@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import { requireAdminHook } from '../lib/auth-context.js';
-import { AppError } from '../lib/errors.js';
 import { ModerationService } from '../lib/moderation-service.js';
 import type { AuditLogListResponse, AuditLogSummary, ModerationResponse } from '@carcommunity/shared/users';
 
@@ -180,10 +179,6 @@ export async function registerModerationRoutes(
         }),
         app.prisma.auditLog.count(),
       ]);
-
-      if (!entries || !Array.isArray(entries)) {
-        throw new AppError(500, 'internal_error', 'Failed to retrieve audit log.');
-      }
 
       const safeEntries: AuditLogSummary[] = entries.map((entry) => ({
         id: entry.id,
