@@ -16,28 +16,30 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Metadata keys that must never be stored. */
-const BLOCKED_METADATA_KEYS = new Set([
-  'token',
-  'accessToken',
-  'access_token',
-  'refreshToken',
-  'refresh_token',
-  'idToken',
-  'id_token',
-  'identityToken',
-  'identity_token',
-  'authorization',
-  'authorization_header',
-  'cookie',
-  'password',
-  'secret',
-  'apiKey',
-  'api_key',
-  'privateKey',
-  'private_key',
-  'sessionToken',
-  'session_token',
-]);
+const BLOCKED_METADATA_KEYS = new Set(
+  [
+    'token',
+    'accessToken',
+    'access_token',
+    'refreshToken',
+    'refresh_token',
+    'idToken',
+    'id_token',
+    'identityToken',
+    'identity_token',
+    'authorization',
+    'authorization_header',
+    'cookie',
+    'password',
+    'secret',
+    'apiKey',
+    'api_key',
+    'privateKey',
+    'private_key',
+    'sessionToken',
+    'session_token',
+  ].map((key) => key.toLowerCase()),
+);
 
 /** Coordinate keys that must never be stored in metadata. */
 const BLOCKED_COORDINATE_KEYS = new Set([
