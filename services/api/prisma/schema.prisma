@@ -237,6 +237,64 @@ enum OrganizationRole {
   support
 }
 
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+enum DiagnosticsSeverity {
+  info
+  warning
+  error
+  critical
+}
+
+enum DiagnosticsPlatform {
+  ios
+  android
+  web
+  unknown
+}
+
+enum DiagnosticsFeatureArea {
+  auth
+  live_location
+  events
+  subscription
+  admin
+  map
+  network
+  unknown
+}
+
+/// Stores sanitized crash/error reports from the app.
+/// No raw tokens, credentials, exact coordinates, routes, or personal messages.
+model DiagnosticsReport {
+  id          String                 @id @default(uuid()) @db.Uuid
+  /// Optional — associated with the authenticated user who submitted the report.
+  userId      String?                @map("user_id") @db.Uuid
+  severity    DiagnosticsSeverity
+  platform    DiagnosticsPlatform
+  featureArea DiagnosticsFeatureArea @map("feature_area")
+  appVersion  String?                @map("app_version") @db.VarChar(50)
+  buildNumber String?                @map("build_number") @db.VarChar(50)
+  osVersion   String?                @map("os_version") @db.VarChar(100)
+  errorCode   String?                @map("error_code") @db.VarChar(100)
+  /// Human-readable, privacy-safe message. Max 2000 chars enforced at route layer.
+  safeMessage String                 @map("safe_message") @db.VarChar(2000)
+  /// Optional deduplication fingerprint for future grouping.
+  fingerprint String?                @db.VarChar(128)
+  /// Sanitized structured metadata. No tokens, credentials, or exact coordinates.
+  metadata    Json?
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  @@index([severity])
+  @@index([platform])
+  @@index([featureArea])
+  @@index([createdAt])
+  @@index([fingerprint])
+  @@map("diagnostics_reports")
+}
+
 model Event {
   id              String      @id @default(uuid()) @db.Uuid
   title           String      @db.VarChar(200)

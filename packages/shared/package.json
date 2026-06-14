@@ -27,6 +27,10 @@
     "./subscription": {
       "types": "./dist/subscription.d.ts",
       "default": "./dist/subscription.js"
+    },
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.ts",
+      "default": "./dist/diagnostics.js"
     }
   },
   "scripts": {
