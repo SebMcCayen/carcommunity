@@ -77,7 +77,7 @@ export function sanitizeMetadata(
     if (count >= MAX_METADATA_KEY_COUNT) break;
 
     const lowerKey = key.toLowerCase();
-    if (BLOCKED_METADATA_KEYS.has(key) || BLOCKED_COORDINATE_KEYS.has(lowerKey)) {
+    if (BLOCKED_METADATA_KEYS.has(lowerKey) || BLOCKED_COORDINATE_KEYS.has(lowerKey)) {
       continue;
     }
 
