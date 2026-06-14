@@ -7,8 +7,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY services/api/package.json ./services/api/
-COPY apps/admin/package.json ./apps/admin/
-COPY apps/mobile/package.json ./apps/mobile/
 
 RUN npm ci -w @carcommunity/shared -w @carcommunity/api
 
@@ -32,8 +30,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY services/api/package.json ./services/api/
-COPY apps/admin/package.json ./apps/admin/
-COPY apps/mobile/package.json ./apps/mobile/
 
 RUN npm ci --omit=dev --workspace @carcommunity/shared --workspace @carcommunity/api
 
