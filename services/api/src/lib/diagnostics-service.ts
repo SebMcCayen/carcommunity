@@ -81,13 +81,15 @@ export function sanitizeMetadata(
       continue;
     }
 
-    // Block any key that looks like an auth token or credential via substring check.
+    // Block any key that looks like an auth token, credential, or stack trace via substring check.
     if (
       lowerKey.includes('token') ||
       lowerKey.includes('secret') ||
       lowerKey.includes('password') ||
       lowerKey.includes('credential') ||
-      lowerKey.includes('auth')
+      lowerKey.includes('auth') ||
+      lowerKey.includes('stack') ||
+      lowerKey.includes('trace')
     ) {
       continue;
     }
