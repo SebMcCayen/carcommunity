@@ -30,7 +30,7 @@ The mobile app is a React Native/Expo app distributed through the platform app s
 |-----|----------|---------|
 | API | `GET /healthz` | Liveness — confirms the process is alive |
 | API | `GET /readyz` | Readiness — ready for future dependency checks |
-| Admin | `GET /healthz` | Liveness — suitable for container readiness probes |
+| Admin | `GET /healthz` | Liveness — suitable for container liveness probes |
 
 ## Security
 
