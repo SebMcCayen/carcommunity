@@ -9,6 +9,9 @@ import {
   DIAGNOSTICS_PLATFORMS,
   DIAGNOSTICS_FEATURE_AREAS,
 } from '../lib/diagnostics-service.js';
+import {
+  DIAGNOSTICS_ROUTE_PATHS,
+} from '@carcommunity/shared/diagnostics';
 import type {
   AdminDiagnosticsListResponse,
   DiagnosticsReportResponse,
@@ -66,7 +69,7 @@ export async function registerDiagnosticsRoutes(
    * - Raw headers are not stored.
    */
   app.post(
-    '/v1/diagnostics/report',
+    DIAGNOSTICS_ROUTE_PATHS.report,
     { preHandler: optionalAuthHook },
     async (request, reply): Promise<void> => {
       try {
