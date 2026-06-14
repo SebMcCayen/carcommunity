@@ -22,9 +22,7 @@ build
 **/.next
 
 # Expo / React Native (mobile app is not containerised)
-# package.json is re-included so npm can resolve the workspace during npm ci.
 apps/mobile
-!apps/mobile/package.json
 .expo
 **/.expo
 
