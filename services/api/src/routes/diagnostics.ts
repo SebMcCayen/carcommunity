@@ -152,11 +152,17 @@ export async function registerDiagnosticsRoutes(
         } satisfies AdminDiagnosticsListResponse);
       } catch (err) {
         const appError = fromUnknownError(err);
+
+        if (appError.statusCode >= 500) {
+          request.log.error(err);
+        }
+
         await reply.code(appError.statusCode).send({
           ok: false,
           error: {
             code: appError.code,
             message: appError.message,
+            ...(appError.details && appError.statusCode < 500 ? { details: appError.details } : {}),
           },
         });
       }
