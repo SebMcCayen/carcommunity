@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY services/api/package.json ./services/api/
 
-RUN npm ci -w @carcommunity/shared -w @carcommunity/api
+RUN npm ci --workspace @carcommunity/shared --workspace @carcommunity/api
 
 # Copy source needed for build.
 COPY packages/shared ./packages/shared
