@@ -44,6 +44,7 @@ model User {
   auditLogsActor          AuditLog[]               @relation("AuditActorUser")
   eventRsvps              EventRsvp[]
   subscriptionRecords     SubscriptionRecord[]
+  diagnosticsReports      DiagnosticsReport[]
 
   @@index([deletedAt])
   @@index([status])
@@ -278,6 +279,7 @@ model DiagnosticsReport {
   appVersion  String?                @map("app_version") @db.VarChar(50)
   buildNumber String?                @map("build_number") @db.VarChar(50)
   osVersion   String?                @map("os_version") @db.VarChar(100)
+  severity    DiagnosticsSeverity    @default(info)
   errorCode   String?                @map("error_code") @db.VarChar(100)
   /// Human-readable, privacy-safe message. Max 2000 chars enforced at route layer.
   safeMessage String                 @map("safe_message") @db.VarChar(2000)

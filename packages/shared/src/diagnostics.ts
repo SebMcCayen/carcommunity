@@ -31,6 +31,7 @@ export type DiagnosticsFeatureArea = (typeof DIAGNOSTICS_FEATURE_AREAS)[number];
 /**
  * All fields are optional except safeMessage, severity, platform, and featureArea.
  * The backend sanitizes and validates before storage.
+ */
 export interface DiagnosticsReportRequest {
   severity: DiagnosticsSeverity;
   platform: DiagnosticsPlatform;
