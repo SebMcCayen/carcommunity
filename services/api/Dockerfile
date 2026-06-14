@@ -10,7 +10,7 @@ COPY services/api/package.json ./services/api/
 COPY apps/admin/package.json ./apps/admin/
 COPY apps/mobile/package.json ./apps/mobile/
 
-RUN npm ci
+RUN npm ci -w @carcommunity/shared -w @carcommunity/api
 
 # Copy source needed for build.
 COPY packages/shared ./packages/shared
