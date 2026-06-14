@@ -29,11 +29,8 @@ export const DIAGNOSTICS_FEATURE_AREAS = [
 export type DiagnosticsFeatureArea = (typeof DIAGNOSTICS_FEATURE_AREAS)[number];
 
 /**
- * Payload sent by the mobile app or web client to POST /v1/diagnostics/report.
- *
- * All fields are optional except safeMessage and severity.
+ * All fields are optional except safeMessage, severity, platform, and featureArea.
  * The backend sanitizes and validates before storage.
- */
 export interface DiagnosticsReportRequest {
   severity: DiagnosticsSeverity;
   platform: DiagnosticsPlatform;
