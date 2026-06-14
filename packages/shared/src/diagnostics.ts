@@ -63,7 +63,7 @@ export interface DiagnosticsReportResponse {
   ok: true;
   data: {
     id: string;
-    /** Optional deduplcation fingerprint for future grouping. */
+    /** Optional deduplication fingerprint for future grouping. */
     fingerprint: string | null;
   };
 }
