@@ -35,7 +35,7 @@ COPY services/api/package.json ./services/api/
 COPY apps/admin/package.json ./apps/admin/
 COPY apps/mobile/package.json ./apps/mobile/
 
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --workspace @carcommunity/shared --workspace @carcommunity/api
 
 # Copy Prisma-generated client from builder (prisma CLI is a devDependency and
 # is not reinstalled; the generated output must be carried over explicitly).
