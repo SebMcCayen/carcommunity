@@ -7,10 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/admin/package.json ./apps/admin/
-COPY services/api/package.json ./services/api/
-COPY apps/mobile/package.json ./apps/mobile/
 
-RUN npm ci
+RUN npm ci --workspace @carcommunity/shared --workspace @carcommunity/admin
 
 # Copy source needed for build.
 COPY packages/shared ./packages/shared
