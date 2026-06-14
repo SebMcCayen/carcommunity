@@ -130,7 +130,7 @@ export async function registerDiagnosticsRoutes(
    * TODO: Add privacy review before exposing metadata to admin users.
    */
   app.get(
-    '/v1/admin/diagnostics',
+    DIAGNOSTICS_ROUTE_PATHS.adminList,
     { preHandler: requireAdminHook },
     async (request, reply): Promise<void> => {
       try {
