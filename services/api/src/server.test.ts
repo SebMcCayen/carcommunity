@@ -730,3 +730,51 @@ test('GET /v1/admin/users with non-admin dev auth returns 403 forbidden', async 
     await app.close();
   }
 });
+
+test('GET /healthz returns alive status', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4050,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/healthz',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      ok: true,
+      data: { status: 'alive' },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /readyz returns ready status with empty checks', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4051,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/readyz',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      ok: true,
+      data: { status: 'ready', checks: {} },
+    });
+  } finally {
+    await app.close();
+  }
+});

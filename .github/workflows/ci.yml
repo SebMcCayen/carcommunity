@@ -84,3 +84,18 @@ jobs:
 
       - name: Admin build
         run: npm --workspace apps/admin run build
+
+  container-build:
+    name: Container build check
+    runs-on: ubuntu-latest
+    needs: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API container (validation only — no push)
+        run: docker build -f services/api/Dockerfile -t carcommunity-api:build-check .
+
+      - name: Build admin container (validation only — no push)
+        run: docker build -f apps/admin/Dockerfile -t carcommunity-admin:build-check .

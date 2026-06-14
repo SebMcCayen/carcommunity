@@ -1,0 +1,43 @@
+# Version control
+.git
+.github
+
+# Environment files — keep .env.example for documentation, block real env files.
+.env
+.env.*
+!.env.example
+
+# Node dependencies (installed fresh inside the container)
+node_modules
+**/node_modules
+
+# Compiled output
+dist
+**/dist
+build
+**/build
+
+# Next.js build output
+.next
+**/.next
+
+# Expo / React Native (mobile app is not containerised)
+apps/mobile
+.expo
+**/.expo
+
+# Test coverage
+coverage
+**/coverage
+
+# Logs
+*.log
+**/*.log
+logs
+
+# Local caches and editor artefacts
+.npm
+.cache
+.turbo
+.DS_Store
+*.swp
