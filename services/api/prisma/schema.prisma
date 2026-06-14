@@ -272,7 +272,7 @@ model DiagnosticsReport {
   id          String                 @id @default(uuid()) @db.Uuid
   /// Optional — associated with the authenticated user who submitted the report.
   userId      String?                @map("user_id") @db.Uuid
-  severity    DiagnosticsSeverity
+  user        User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
   platform    DiagnosticsPlatform
   featureArea DiagnosticsFeatureArea @map("feature_area")
   appVersion  String?                @map("app_version") @db.VarChar(50)
