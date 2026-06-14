@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   DIAGNOSTICS_FEATURE_AREAS,
   DIAGNOSTICS_PLATFORMS,
@@ -204,7 +204,7 @@ export class DiagnosticsService {
         errorCode: input.errorCode ?? null,
         safeMessage: input.safeMessage,
         fingerprint,
-        metadata: sanitizedMetadata ?? undefined,
+        metadata: sanitizedMetadata != null ? (sanitizedMetadata as Prisma.InputJsonValue) : undefined,
       },
       select: { id: true, fingerprint: true },
     });

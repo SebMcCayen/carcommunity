@@ -32,7 +32,7 @@ const diagnosticsReportBodySchema = z
     buildNumber: z.string().max(MAX_BUILD_NUMBER_LENGTH).optional(),
     osVersion: z.string().max(MAX_OS_VERSION_LENGTH).optional(),
     errorCode: z.string().max(MAX_ERROR_CODE_LENGTH).optional(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

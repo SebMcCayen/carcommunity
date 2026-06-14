@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { sanitizeMetadata, generateFingerprint, DiagnosticsService } from './lib/diagnostics-service.js';
+import { sanitizeMetadata, generateFingerprint, DiagnosticsService, type CreateDiagnosticsReportInput, type ListDiagnosticsReportsInput } from './lib/diagnostics-service.js';
 import { createServer } from './server.js';
 import { LOCAL_DATABASE_URL } from './config.js';
 
@@ -182,14 +182,14 @@ function createFakeDiagnosticsService(): DiagnosticsService {
   let counter = 0;
 
   return {
-    async createReport(input) {
+    async createReport(input: CreateDiagnosticsReportInput) {
       counter += 1;
       const id = `diag-${counter}`;
       const fingerprint = `fp-${counter}`;
       reports.push({ id, userId: input.userId ?? null, fingerprint, safeMessage: input.safeMessage, metadata: null });
       return { id, fingerprint };
     },
-    async listReports({ page, pageSize }) {
+    async listReports({ page, pageSize }: ListDiagnosticsReportsInput) {
       const start = (page - 1) * pageSize;
       const slice = reports.slice(start, start + pageSize);
       return {
