@@ -19,6 +19,12 @@ import {
   hasBackendAccess,
 } from '@carcommunity/shared/users';
 import { LOCAL_DATABASE_URL } from './config.js';
+import { AppError } from './lib/errors.js';
+import type {
+  AuthProviderVerifier,
+  VerifyIdentityTokenInput,
+  VerifiedIdentityToken,
+} from './lib/auth-provider-verifier.js';
 import { createServer } from './server.js';
 import type {
   AuthService,
@@ -115,6 +121,36 @@ function createFakeAuthService(): AuthService {
 
     async revokeSession(rawToken: string) {
       return sessions.delete(rawToken);
+    },
+  };
+}
+
+function createStrictAuthConfig() {
+  return {
+    authVerificationMode: 'strict' as const,
+    authProviders: {
+      apple: {
+        allowedAudiences: ['com.example.apple'],
+        bundleId: 'com.example.apple',
+        serviceId: null,
+        issuers: ['https://appleid.apple.com'],
+        jwksUrl: 'https://example.test/apple/keys',
+      },
+      google: {
+        allowedClientIds: ['replace-with-google-client-id'],
+        issuers: ['https://accounts.google.com', 'accounts.google.com'],
+        jwksUrl: 'https://example.test/google/keys',
+      },
+    },
+  };
+}
+
+function createFakeAuthProviderVerifier(
+  implementation: (input: VerifyIdentityTokenInput) => Promise<VerifiedIdentityToken> | VerifiedIdentityToken,
+): AuthProviderVerifier {
+  return {
+    async verifyIdentityToken(input) {
+      return implementation(input);
     },
   };
 }
@@ -283,6 +319,34 @@ test('POST /v1/auth/login does not accept placeholder login as real auth in prod
   }
 });
 
+test('POST /v1/auth/login in strict mode rejects missing identityToken', async () => {
+  const app = await createServer({
+    nodeEnv: 'test',
+    port: 4007,
+    databaseUrl: LOCAL_DATABASE_URL,
+    isProduction: false,
+    ...createStrictAuthConfig(),
+  });
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    const body = response.json<{ ok: false; error: { code: string; message: string } }>();
+    assert.equal(body.ok, false);
+    assert.equal(body.error.code, 'validation_error');
+    assert.equal(body.error.message, 'Request validation failed.');
+  } finally {
+    await app.close();
+  }
+});
+
 test('GET /v1/auth/me returns unauthenticated when no valid session exists', async () => {
   const app = await createServer({
     nodeEnv: 'test',
@@ -348,8 +412,180 @@ test('POST /v1/auth/login creates or finds user by provider + providerSubject', 
     const firstBody = first.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
     const secondBody = second.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
 
+    assert.equal(firstBody.data.token._devOnly, true);
     assert.equal(firstBody.data.user.userId, secondBody.data.user.userId);
     assert.notEqual(firstBody.data.token.accessToken, secondBody.data.token.accessToken);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login in strict mode does not trust client-provided providerSubject', async () => {
+  let capturedProviderInput: ProviderIdentityLoginInput | null = null;
+
+  const authService: AuthService = {
+    async findOrCreateUserByProviderIdentity(input) {
+      capturedProviderInput = input;
+      return {
+        userId: 'user-strict-1',
+        displayName: null,
+        identities: [{ provider: input.provider, providerSubject: input.providerSubject }],
+        roles: ['user'],
+      };
+    },
+    async createSession() {
+      return {
+        sessionId: 'session-strict-1',
+        expiresAt: new Date(Date.now() + 60_000),
+        token: {
+          _devOnly: true,
+          accessToken: 'dev-token-strict-1',
+          expiresIn: 60,
+        },
+      };
+    },
+    async lookupSession() {
+      return null;
+    },
+    async revokeSession() {
+      return false;
+    },
+  };
+
+  const authProviderVerifier = createFakeAuthProviderVerifier(() => ({
+    provider: 'apple',
+    providerSubject: 'verified-subject-1',
+    issuer: 'https://appleid.apple.com',
+    audience: 'com.example.apple',
+    expiresAt: new Date(Date.now() + 60_000),
+    email: 'driver@example.com',
+    nonce: null,
+  }));
+
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4049,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+      ...createStrictAuthConfig(),
+    },
+    { authService, authProviderVerifier },
+  );
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'signed-token',
+        providerSubject: 'client-subject-should-be-ignored',
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(capturedProviderInput?.providerSubject, 'verified-subject-1');
+    assert.equal(capturedProviderInput?.providerEmail, 'driver@example.com');
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login in strict mode rejects provider mismatch safely', async () => {
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4052,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+      ...createStrictAuthConfig(),
+    },
+    {
+      authService: createFakeAuthService(),
+      authProviderVerifier: createFakeAuthProviderVerifier(() => ({
+        provider: 'google',
+        providerSubject: 'verified-google-subject',
+        issuer: 'https://accounts.google.com',
+        audience: 'replace-with-google-client-id',
+        expiresAt: new Date(Date.now() + 60_000),
+        email: null,
+        nonce: null,
+      })),
+    },
+  );
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'signed-token',
+      },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'invalid_identity_provider',
+        message: 'Identity token provider does not match the requested provider.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login in strict mode uses verified provider subject as identity key', async () => {
+  const authService = createFakeAuthService();
+  const authProviderVerifier = createFakeAuthProviderVerifier((input) => ({
+    provider: 'apple',
+    providerSubject: input.identityToken === 'token-a' ? 'verified-subject-shared' : 'verified-subject-shared',
+    issuer: 'https://appleid.apple.com',
+    audience: 'com.example.apple',
+    expiresAt: new Date(Date.now() + 60_000),
+    email: 'same@example.com',
+    nonce: null,
+  }));
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4053,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+      ...createStrictAuthConfig(),
+    },
+    { authService, authProviderVerifier },
+  );
+
+  try {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'token-a',
+        providerSubject: 'client-subject-a',
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: 'token-b',
+        providerSubject: 'client-subject-b',
+      },
+    });
+
+    const firstBody = first.json<{ ok: true; data: { user: { userId: string } } }>();
+    const secondBody = second.json<{ ok: true; data: { user: { userId: string } } }>();
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    assert.equal(firstBody.data.user.userId, secondBody.data.user.userId);
   } finally {
     await app.close();
   }
@@ -391,6 +627,97 @@ test('POST /v1/auth/login does not use email as identity key', async () => {
     const googleBody = google.json<{ ok: true; data: { user: { userId: string } } }>();
 
     assert.notEqual(appleBody.data.user.userId, googleBody.data.user.userId);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login in strict mode does not use email as identity key', async () => {
+  const authService = createFakeAuthService();
+  const authProviderVerifier = createFakeAuthProviderVerifier((input) => ({
+    provider: input.provider,
+    providerSubject: input.identityToken === 'google-token-a' ? 'google-subject-a' : 'google-subject-b',
+    issuer: 'https://accounts.google.com',
+    audience: 'replace-with-google-client-id',
+    expiresAt: new Date(Date.now() + 60_000),
+    email: 'shared@example.com',
+    nonce: null,
+  }));
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4054,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+      ...createStrictAuthConfig(),
+    },
+    { authService, authProviderVerifier },
+  );
+
+  try {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'google',
+        identityToken: 'google-token-a',
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'google',
+        identityToken: 'google-token-b',
+      },
+    });
+
+    const firstBody = first.json<{ ok: true; data: { user: { userId: string } } }>();
+    const secondBody = second.json<{ ok: true; data: { user: { userId: string } } }>();
+
+    assert.notEqual(firstBody.data.user.userId, secondBody.data.user.userId);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /v1/auth/login in strict mode does not expose identity tokens in errors', async () => {
+  const secretToken = 'super-secret-identity-token-value';
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4055,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+      ...createStrictAuthConfig(),
+    },
+    {
+      authService: createFakeAuthService(),
+      authProviderVerifier: createFakeAuthProviderVerifier(() => {
+        throw new AppError(401, 'invalid_identity_token', 'Invalid identity token.');
+      }),
+    },
+  );
+
+  try {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        provider: 'apple',
+        identityToken: secretToken,
+      },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.body.includes(secretToken), false);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'invalid_identity_token',
+        message: 'Invalid identity token.',
+      },
+    });
   } finally {
     await app.close();
   }

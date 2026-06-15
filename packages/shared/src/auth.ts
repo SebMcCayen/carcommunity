@@ -18,6 +18,9 @@ export type AuthErrorCode =
   | 'internal_error'
   | 'not_found'
   | 'provider_verification_not_implemented'
+  | 'invalid_identity_token'
+  | 'invalid_identity_provider'
+  | 'invalid_identity_audience'
   | 'unauthenticated'
   | 'not_implemented'
   | 'forbidden'
@@ -33,8 +36,10 @@ export type Role = 'user' | 'admin' | 'owner';
 export interface LoginRequest {
   provider: AuthProvider;
   identityToken: string;
-  /** Stable subject identifier extracted client-side from the identity token. */
+  /** Development-only fallback for placeholder auth mode. Ignored in strict verification mode. */
   providerSubject?: string;
+  /** Optional login nonce from native provider sign-in flows. */
+  nonce?: string;
   /** Client platform (ios | android). */
   platform?: string;
   /** App version string (e.g. "1.0.0"). */
