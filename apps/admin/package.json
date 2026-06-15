@@ -20,7 +20,7 @@
     "@eslint/eslintrc": "^3.3.5",
     "@next/eslint-plugin-next": "^15.3.3",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "eslint": "^9.0.0",
