@@ -128,7 +128,7 @@ const envSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            'At least one Apple audience placeholder is required in strict mode. Use AUTH_APPLE_ALLOWED_AUDIENCES, AUTH_APPLE_BUNDLE_ID, or AUTH_APPLE_SERVICE_ID.',
+            'At least one Apple audience is required in strict mode. Use AUTH_APPLE_ALLOWED_AUDIENCES, AUTH_APPLE_BUNDLE_ID, or AUTH_APPLE_SERVICE_ID.',
           path: ['AUTH_APPLE_ALLOWED_AUDIENCES'],
         });
       }
@@ -136,7 +136,7 @@ const envSchema = z
       if (authProviders.google.allowedClientIds.length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'At least one Google allowed client ID placeholder is required in strict mode.',
+          message: 'At least one Google allowed client ID is required in strict mode.',
           path: ['AUTH_GOOGLE_ALLOWED_CLIENT_IDS'],
         });
       }

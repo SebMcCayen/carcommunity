@@ -45,66 +45,77 @@ export async function registerAuthRoutes(
 ): Promise<void> {
   const authVerification = resolveAuthVerificationConfig(config);
 
-  app.post(AUTH_ROUTE_PATHS.login, async (request, reply) => {
-    const payload = loginRequestSchema.parse(request.body);
+  app.post(
+    AUTH_ROUTE_PATHS.login,
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request, reply) => {
+      const payload = loginRequestSchema.parse(request.body);
 
-    if (config.isProduction && authVerification.mode !== 'strict') {
-      return reply.status(501).send(
-        notImplementedResponse('Mobile provider verification is not implemented. Login is disabled in production.'),
-      );
-    }
-
-    let providerSubject = payload.providerSubject;
-    let providerEmail: string | null | undefined;
-
-    if (authVerification.mode === 'strict') {
-      const verifiedIdentity = await authProviderVerifier.verifyIdentityToken({
-        provider: payload.provider,
-        identityToken: payload.identityToken,
-        nonce: payload.nonce,
-      });
-
-      if (verifiedIdentity.provider !== payload.provider) {
-        throw new AppError(401, 'invalid_identity_provider', 'Identity token provider does not match the requested provider.');
-      }
-
-      providerSubject = verifiedIdentity.providerSubject;
-      providerEmail = verifiedIdentity.email;
-    } else {
-      // TODO: Remove client-provided providerSubject fallback before enabling production mobile auth.
-      if (!providerSubject) {
-        throw new AppError(
-          400,
-          'validation_error',
-          'providerSubject is required for development placeholder login until strict provider verification is enabled.',
+      if (config.isProduction && authVerification.mode !== 'strict') {
+        return reply.status(501).send(
+          notImplementedResponse('Mobile provider verification is not implemented. Login is disabled in production.'),
         );
       }
-    }
 
-    if (!providerSubject) {
-      throw new AppError(401, 'invalid_identity_token', 'Invalid identity token.');
-    }
+      let providerSubject = payload.providerSubject;
+      let providerEmail: string | null | undefined;
 
-    const user = await authService.findOrCreateUserByProviderIdentity({
-      provider: payload.provider,
-      providerSubject,
-      providerEmail,
-    });
-    const session = await authService.createSession(user.userId);
+      if (authVerification.mode === 'strict') {
+        const verifiedIdentity = await authProviderVerifier.verifyIdentityToken({
+          provider: payload.provider,
+          identityToken: payload.identityToken,
+          nonce: payload.nonce,
+        });
 
-    return reply.status(200).send({
-      ok: true,
-      data: {
-        user,
-        session: {
-          sessionId: session.sessionId,
-          expiresAt: session.expiresAt.toISOString(),
+        if (verifiedIdentity.provider !== payload.provider) {
+          throw new AppError(401, 'invalid_identity_provider', 'Identity token provider does not match the requested provider.');
+        }
+
+        providerSubject = verifiedIdentity.providerSubject;
+        providerEmail = verifiedIdentity.email;
+      } else {
+        // TODO: Remove client-provided providerSubject fallback before enabling production mobile auth.
+        if (!providerSubject) {
+          throw new AppError(
+            400,
+            'validation_error',
+            'providerSubject is required for development placeholder login until strict provider verification is enabled.',
+          );
+        }
+      }
+
+      if (!providerSubject) {
+        throw new AppError(401, 'invalid_identity_token', 'Invalid identity token.');
+      }
+
+      const user = await authService.findOrCreateUserByProviderIdentity({
+        provider: payload.provider,
+        providerSubject,
+        providerEmail,
+      });
+      const session = await authService.createSession(user.userId);
+
+      return reply.status(200).send({
+        ok: true,
+        data: {
+          user,
+          session: {
+            sessionId: session.sessionId,
+            expiresAt: session.expiresAt.toISOString(),
+          },
+          // TODO: Replace the development-only session token with production credentials before release.
+          token: session.token,
         },
-        // TODO: Replace the development-only session token with production credentials before release.
-        token: session.token,
-      },
-    } satisfies AuthResponse);
-  });
+      } satisfies AuthResponse);
+    },
+  );
 
   app.post(AUTH_ROUTE_PATHS.logout, async (request, reply) => {
     logoutRequestSchema.parse(request.body ?? {});

@@ -543,9 +543,9 @@ test('POST /v1/auth/login in strict mode rejects provider mismatch safely', asyn
 
 test('POST /v1/auth/login in strict mode uses verified provider subject as identity key', async () => {
   const authService = createFakeAuthService();
-  const authProviderVerifier = createFakeAuthProviderVerifier((input) => ({
+  const authProviderVerifier = createFakeAuthProviderVerifier(() => ({
     provider: 'apple',
-    providerSubject: input.identityToken === 'token-a' ? 'verified-subject-shared' : 'verified-subject-shared',
+    providerSubject: 'verified-subject-shared',
     issuer: 'https://appleid.apple.com',
     audience: 'com.example.apple',
     expiresAt: new Date(Date.now() + 60_000),

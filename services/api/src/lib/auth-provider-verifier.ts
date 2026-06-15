@@ -198,7 +198,8 @@ function parseCacheControlMaxAge(headerValue: string | null): number | null {
   }
 
   const match = headerValue.match(/max-age=(\d+)/i);
-  return match ? Number.parseInt(match[1] ?? '', 10) : null;
+  const maxAge = match?.[1];
+  return maxAge ? Number.parseInt(maxAge, 10) : null;
 }
 
 async function verifyJwtSignature(
