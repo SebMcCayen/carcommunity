@@ -70,9 +70,7 @@ function invalidIdentityAudienceError(): AppError {
 }
 
 function decodeBase64UrlSegment(segment: string): string {
-  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
-  const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
-  return Buffer.from(normalized + padding, 'base64').toString('utf8');
+  return Buffer.from(segment, 'base64url').toString('utf8');
 }
 
 function parseJwt(identityToken: string): ParsedJwt {
@@ -96,7 +94,7 @@ function parseJwt(identityToken: string): ParsedJwt {
 
     return {
       signingInput: `${encodedHeader}.${encodedPayload}`,
-      signature: Buffer.from(encodedSignature.replace(/-/g, '+').replace(/_/g, '/'), 'base64url'),
+      signature: Buffer.from(encodedSignature, 'base64url'),
       header,
       claims,
     };
@@ -257,11 +255,11 @@ export function createAuthProviderVerifier(options: CreateAuthProviderVerifierOp
   const now = options.now ?? (() => Date.now());
   const jsonWebKeySetCache = new Map<string, CachedJsonWebKeySet>();
 
-  const getJsonWebKeys = async (providerConfig: ProviderConfig): Promise<SigningJsonWebKey[]> => {
+  const getJsonWebKeys = async (providerConfig: ProviderConfig, forceRefresh = false): Promise<SigningJsonWebKey[]> => {
     const currentTime = now();
     const cached = jsonWebKeySetCache.get(providerConfig.jwksUrl);
 
-    if (cached && cached.expiresAt > currentTime) {
+    if (!forceRefresh && cached && cached.expiresAt > currentTime) {
       return cached.keys;
     }
 
@@ -294,7 +292,7 @@ export function createAuthProviderVerifier(options: CreateAuthProviderVerifierOp
     }
 
     const maxAgeSeconds = parseCacheControlMaxAge(response.headers.get('cache-control'));
-    const expiresAt = currentTime + (maxAgeSeconds ? maxAgeSeconds * 1000 : DEFAULT_JWKS_CACHE_TTL_MS);
+    const expiresAt = currentTime + (maxAgeSeconds !== null ? maxAgeSeconds * 1000 : DEFAULT_JWKS_CACHE_TTL_MS);
     jsonWebKeySetCache.set(providerConfig.jwksUrl, { expiresAt, keys: payload.keys });
 
     return payload.keys;
@@ -309,7 +307,13 @@ export function createAuthProviderVerifier(options: CreateAuthProviderVerifierOp
       validateProviderIssuer(input.provider, providerConfig, issuer);
 
       const keys = await getJsonWebKeys(providerConfig);
-      await verifyJwtSignature(parsedToken.signingInput, parsedToken.signature, parsedToken.header, keys);
+      const kid = typeof parsedToken.header.kid === 'string' ? parsedToken.header.kid : null;
+
+      // If the kid is not in the cached key set, re-fetch once in case signing keys were rotated.
+      const keysToVerify =
+        kid && !keys.some((k) => k.kid === kid) ? await getJsonWebKeys(providerConfig, true) : keys;
+
+      await verifyJwtSignature(parsedToken.signingInput, parsedToken.signature, parsedToken.header, keysToVerify);
 
       const providerSubject = getRequiredStringClaim(parsedToken.claims, 'sub');
       const audience = validateAudience(input.provider, providerConfig, parsedToken.claims.aud);
