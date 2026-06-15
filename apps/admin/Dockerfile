@@ -10,6 +10,9 @@ COPY apps/admin/package.json ./apps/admin/
 
 RUN npm ci --workspace @carcommunity/shared --workspace @carcommunity/admin
 
+# Copy root TypeScript base config (extended by workspace tsconfigs).
+COPY tsconfig.base.json ./
+
 # Copy source needed for build.
 COPY packages/shared ./packages/shared
 COPY apps/admin ./apps/admin

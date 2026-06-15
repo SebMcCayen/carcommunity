@@ -10,6 +10,9 @@ COPY services/api/package.json ./services/api/
 
 RUN npm ci --workspace @carcommunity/shared --workspace @carcommunity/api
 
+# Copy root TypeScript base config (extended by workspace tsconfigs).
+COPY tsconfig.base.json ./
+
 # Copy source needed for build.
 COPY packages/shared ./packages/shared
 COPY services/api ./services/api
