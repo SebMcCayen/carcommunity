@@ -9,11 +9,15 @@
  * jest-runtime@30 calls `moduleMocker.clearMocksOnScope()`, a method that was
  * added in jest-mock@30 and is absent in jest-mock@29.
  *
- * This shim adds the missing method so tests can run without upgrading or
- * ejecting jest-expo.
+ * This shim overrides the method (whether native or missing) to guard every
+ * property access with try/catch. Expo's lazy `fetch` global is a getter that
+ * calls require() internally; jest-runtime@30 forbids require() between tests,
+ * so accessing it outside test scope throws a ReferenceError. The try/catch
+ * ensures we skip those properties safely.
  *
  * TODO: Remove this file once jest-expo ships with jest@30-compatible internals
- *       (i.e. jest-watch-typeahead@3+) so the shim is no longer needed.
+ *       (i.e. jest-watch-typeahead@3+) and Expo's lazy globals are safe to read
+ *       between tests.
  */
 
 const ReactNativeEnv = require('@react-native/jest-preset/jest/react-native-env.js');
@@ -22,18 +26,19 @@ class MobileTestEnvironment extends ReactNativeEnv {
   constructor(options, context) {
     super(options, context);
 
-    // jest-mock@30 added clearMocksOnScope(scope) which jest-runtime@30 calls in
-    // resetModules() (constructor) and teardown(). jest-mock@29 doesn't have it.
-    // Some globals (e.g. expo's lazy `fetch` getter) throw when read outside test
-    // code scope, so we guard each property access with try/catch.
-    if (this.moduleMocker && typeof this.moduleMocker.clearMocksOnScope !== 'function') {
+    // Override clearMocksOnScope unconditionally so the try/catch guard is
+    // always active. jest-mock@30's native implementation lacks this guard,
+    // causing Expo's lazy `fetch` getter (which calls require() on first access)
+    // to throw a ReferenceError when invoked between tests by jest-runtime@30.
+    if (this.moduleMocker) {
       this.moduleMocker.clearMocksOnScope = (scope) => {
         for (const key of Object.keys(scope)) {
           let value;
           try {
             value = scope[key];
           } catch {
-            // Skip properties whose getters throw outside test execution scope.
+            // Skip properties whose getters throw outside test execution scope
+            // (e.g. Expo's lazy `fetch` polyfill).
             continue;
           }
           if (
