@@ -1,4 +1,9 @@
-import { AUTH_ROUTE_PATHS, type LoginRequest, type AuthResponse, type LogoutResponse } from '@carcommunity/shared/auth';
+import {
+  AUTH_ROUTE_PATHS,
+  type LoginRequest,
+  type AuthResponse,
+  type LogoutResponse,
+} from '@carcommunity/shared/auth';
 
 import { publicEnv } from '../config/env';
 
@@ -10,11 +15,22 @@ if (!base) {
 
 const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
 
-async function postAuth(path: string, body: LoginRequest | Record<string, never>): Promise<AuthResponse> {
+/** Build Authorization header map. Never log the token value itself. */
+function bearerHeaders(sessionToken?: string): Record<string, string> {
+  if (!sessionToken) return {};
+  return { Authorization: 'Bearer ' + sessionToken };
+}
+
+async function postAuth(
+  path: string,
+  body: LoginRequest | Record<string, never>,
+  sessionToken?: string,
+): Promise<AuthResponse> {
   const response = await fetch(buildUrl(path), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...bearerHeaders(sessionToken),
     },
     body: JSON.stringify(body),
   });
@@ -25,7 +41,6 @@ async function postAuth(path: string, body: LoginRequest | Record<string, never>
 /**
  * Placeholder Apple login — sends the identity token to the backend for (future) verification.
  * TODO: Replace with real expo-apple-authentication integration.
- * TODO: Store the resulting session token securely using expo-secure-store (not AsyncStorage).
  * @devOnly NOT PRODUCTION-READY. Apple identity token is not verified server-side yet.
  */
 export async function loginWithApplePlaceholder(identityToken: string): Promise<AuthResponse> {
@@ -39,7 +54,6 @@ export async function loginWithApplePlaceholder(identityToken: string): Promise<
 /**
  * Placeholder Google login — sends the identity token to the backend for (future) verification.
  * TODO: Replace with real @react-native-google-signin/google-signin integration.
- * TODO: Store the resulting session token securely using expo-secure-store (not AsyncStorage).
  * @devOnly NOT PRODUCTION-READY. Google identity token is not verified server-side yet.
  */
 export async function loginWithGooglePlaceholder(identityToken: string): Promise<AuthResponse> {
@@ -50,11 +64,13 @@ export async function loginWithGooglePlaceholder(identityToken: string): Promise
   });
 }
 
-export async function logoutPlaceholder(): Promise<LogoutResponse> {
+/** Call POST /v1/auth/logout to revoke the current session on the backend. */
+export async function logoutPlaceholder(sessionToken?: string): Promise<LogoutResponse> {
   const response = await fetch(buildUrl(AUTH_ROUTE_PATHS.logout), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...bearerHeaders(sessionToken),
     },
     body: JSON.stringify({}),
   });
@@ -62,11 +78,46 @@ export async function logoutPlaceholder(): Promise<LogoutResponse> {
   return (await response.json()) as LogoutResponse;
 }
 
-export async function getCurrentUserPlaceholder(): Promise<AuthResponse> {
-  // TODO: Attach Authorization header with stored session token once token storage is implemented.
+/** Call GET /v1/auth/me to verify the current session and fetch the user summary. */
+export async function getCurrentUser(sessionToken?: string): Promise<AuthResponse> {
   const response = await fetch(buildUrl(AUTH_ROUTE_PATHS.me), {
     method: 'GET',
+    headers: {
+      ...bearerHeaders(sessionToken),
+    },
   });
 
   return (await response.json()) as AuthResponse;
 }
+
+/**
+ * User profile shape returned by GET /v1/users/me.
+ * TODO: Move to @carcommunity/shared once the contract is finalised.
+ */
+export interface UsersMeResponse {
+  ok: boolean;
+  data?: {
+    userId: string;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  };
+  error?: { code: string; message: string };
+}
+
+/**
+ * Call GET /v1/users/me to retrieve the current user's profile.
+ * TODO: Backend endpoint and response shape are not yet finalised.
+ */
+export async function getUsersMe(sessionToken?: string): Promise<UsersMeResponse> {
+  const response = await fetch(buildUrl('/v1/users/me'), {
+    method: 'GET',
+    headers: {
+      ...bearerHeaders(sessionToken),
+    },
+  });
+
+  return (await response.json()) as UsersMeResponse;
+}
+
+/** @deprecated Use getCurrentUser instead. */
+export const getCurrentUserPlaceholder = getCurrentUser;

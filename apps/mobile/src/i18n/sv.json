@@ -110,6 +110,22 @@
   "common": {
     "placeholder": "Kommer snart"
   },
+  "auth": {
+    "loginTitle": "Logga in",
+    "loginSubtitle": "Logga in för att använda appen.",
+    "iosHint": "På iPhone använder du Apple-login.",
+    "androidHint": "På Android använder du Google-login.",
+    "appleLoginButton": "Logga in med Apple",
+    "googleLoginButton": "Logga in med Google",
+    "platformUnsupported": "Inloggning stöds inte på den här plattformen.",
+    "privacyNote": "Din e-post används inte som primärt konto-ID.",
+    "deleteAccountNote": "Du kan radera ditt konto via vår hemsida enligt våra villkor.",
+    "loading": "Laddar...",
+    "errorGeneric": "Inloggningen misslyckades. Försök igen.",
+    "loggedInAs": "Inloggad",
+    "signOut": "Logga ut",
+    "devLoginLabel": "[DEV] Platshållar-inloggning (ej produktion)"
+  },
   "accountStatus": {
     "suspendedTitle": "Kontot är begränsat",
     "suspendedBody": "Ditt konto har begränsad åtkomst. Kontakta support för mer information.",

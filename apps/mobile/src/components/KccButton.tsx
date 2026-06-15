@@ -11,6 +11,7 @@ type KccButtonProps = {
   variant?: ButtonVariant;
   rightSlot?: ReactNode;
   disabled?: boolean;
+  testID?: string;
 };
 
 export const KccButton = ({
@@ -19,6 +20,7 @@ export const KccButton = ({
   variant = 'primary',
   rightSlot,
   disabled = false,
+  testID,
 }: KccButtonProps) => {
   const { theme } = useAppTheme();
 
@@ -39,6 +41,7 @@ export const KccButton = ({
 
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}

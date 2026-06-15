@@ -107,6 +107,22 @@
   "common": {
     "placeholder": "Coming soon"
   },
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginSubtitle": "Sign in to use the app.",
+    "iosHint": "On iPhone you use Apple login.",
+    "androidHint": "On Android you use Google login.",
+    "appleLoginButton": "Sign in with Apple",
+    "googleLoginButton": "Sign in with Google",
+    "platformUnsupported": "Sign-in is not supported on this platform.",
+    "privacyNote": "Your email is not used as your primary account ID.",
+    "deleteAccountNote": "You can delete your account via our website according to our terms.",
+    "loading": "Loading...",
+    "errorGeneric": "Sign-in failed. Please try again.",
+    "loggedInAs": "Signed in",
+    "signOut": "Sign out",
+    "devLoginLabel": "[DEV] Placeholder login (not production)"
+  },
   "accountStatus": {
     "suspendedTitle": "Account limited",
     "suspendedBody": "Your account has limited access. Contact support for more information.",
