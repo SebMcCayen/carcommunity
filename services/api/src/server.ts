@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 
-import { type AppConfig, loadConfig } from './config.js';
+import { type AppConfig, loadConfig, resolveAuthVerificationConfig } from './config.js';
+import { createAuthProviderVerifier, type AuthProviderVerifier } from './lib/auth-provider-verifier.js';
 import { createAuthService, type AuthService } from './lib/auth-service.js';
 import { registerAuthContext } from './lib/auth-context.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
@@ -22,6 +23,7 @@ import { registerVersionRoutes } from './routes/version.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
+  authProviderVerifier?: AuthProviderVerifier;
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
@@ -74,10 +76,15 @@ export async function createServer(
   await registerSecurity(app, config);
   await registerPrisma(app, config);
   const authService = dependencies.authService ?? createAuthService(app.prisma);
+  const authProviderVerifier =
+    dependencies.authProviderVerifier ??
+    createAuthProviderVerifier({
+      config: resolveAuthVerificationConfig(config).providers,
+    });
   await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
-  await registerAuthRoutes(app, config, authService);
+  await registerAuthRoutes(app, config, authService, authProviderVerifier);
   await registerFeatureFlagRoutes(app);
   await registerLiveLocationRoutes(app, {
     liveLocationService: dependencies.liveLocationService,

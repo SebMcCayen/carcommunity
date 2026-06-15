@@ -38,15 +38,27 @@ async function postAuth(
   return (await response.json()) as AuthResponse;
 }
 
+export interface PlaceholderProviderLoginOptions {
+  /** Development-only fallback for placeholder backend auth mode. */
+  providerSubject?: string;
+  /** Optional provider nonce to forward to backend verification. */
+  nonce?: string;
+}
+
 /**
  * Placeholder Apple login — sends the identity token to the backend for (future) verification.
  * TODO: Replace with real expo-apple-authentication integration.
  * @devOnly NOT PRODUCTION-READY. Apple identity token is not verified server-side yet.
  */
-export async function loginWithApplePlaceholder(identityToken: string): Promise<AuthResponse> {
+export async function loginWithApplePlaceholder(
+  identityToken: string,
+  options: PlaceholderProviderLoginOptions = {},
+): Promise<AuthResponse> {
   return postAuth(AUTH_ROUTE_PATHS.login, {
     provider: 'apple',
     identityToken,
+    providerSubject: options.providerSubject,
+    nonce: options.nonce,
     platform: 'ios',
   });
 }
@@ -56,10 +68,15 @@ export async function loginWithApplePlaceholder(identityToken: string): Promise<
  * TODO: Replace with real @react-native-google-signin/google-signin integration.
  * @devOnly NOT PRODUCTION-READY. Google identity token is not verified server-side yet.
  */
-export async function loginWithGooglePlaceholder(identityToken: string): Promise<AuthResponse> {
+export async function loginWithGooglePlaceholder(
+  identityToken: string,
+  options: PlaceholderProviderLoginOptions = {},
+): Promise<AuthResponse> {
   return postAuth(AUTH_ROUTE_PATHS.login, {
     provider: 'google',
     identityToken,
+    providerSubject: options.providerSubject,
+    nonce: options.nonce,
     platform: 'android',
   });
 }
