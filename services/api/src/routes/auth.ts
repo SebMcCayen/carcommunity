@@ -86,7 +86,7 @@ export async function registerAuthRoutes(
           throw new AppError(
             400,
             'validation_error',
-            'providerSubject is required for development placeholder login until strict provider verification is enabled.',
+            'providerSubject is required for development login until backend token verification is enabled.',
           );
         }
       }
