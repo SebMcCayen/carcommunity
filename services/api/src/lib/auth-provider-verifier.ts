@@ -8,7 +8,7 @@ import { AppError } from './errors.js';
 const DEFAULT_JWKS_CACHE_TTL_MS = 60 * 60 * 1000;
 
 interface JsonWebKeySetResponse {
-  keys?: JsonWebKey[];
+  keys?: SigningJsonWebKey[];
 }
 
 interface ParsedJwt {
@@ -45,10 +45,16 @@ interface CreateAuthProviderVerifierOptions {
 }
 
 type ProviderConfig = AuthProviderVerificationConfig[AuthProvider];
+type SigningJsonWebKey = JsonWebKey & {
+  kid?: string;
+  kty?: string;
+  use?: string;
+  alg?: string;
+};
 
 type CachedJsonWebKeySet = {
   expiresAt: number;
-  keys: JsonWebKey[];
+  keys: SigningJsonWebKey[];
 };
 
 function invalidIdentityTokenError(): AppError {
@@ -76,7 +82,13 @@ function parseJwt(identityToken: string): ParsedJwt {
     throw invalidIdentityTokenError();
   }
 
-  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const encodedHeader = parts[0];
+  const encodedPayload = parts[1];
+  const encodedSignature = parts[2];
+
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    throw invalidIdentityTokenError();
+  }
 
   try {
     const header = JSON.parse(decodeBase64UrlSegment(encodedHeader)) as Record<string, unknown>;
@@ -136,7 +148,9 @@ function getAudienceValue(audClaim: unknown): string[] {
 }
 
 function resolveConfiguredAudiences(provider: AuthProvider, config: ProviderConfig): string[] {
-  return provider === 'apple' ? config.allowedAudiences : config.allowedClientIds;
+  return provider === 'apple'
+    ? (config as AuthProviderVerificationConfig['apple']).allowedAudiences
+    : (config as AuthProviderVerificationConfig['google']).allowedClientIds;
 }
 
 function validateProviderIssuer(provider: AuthProvider, providerConfig: ProviderConfig, issuer: string): void {
@@ -187,7 +201,12 @@ function parseCacheControlMaxAge(headerValue: string | null): number | null {
   return match ? Number.parseInt(match[1] ?? '', 10) : null;
 }
 
-async function verifyJwtSignature(signingInput: string, signature: Uint8Array, header: Record<string, unknown>, keys: JsonWebKey[]): Promise<void> {
+async function verifyJwtSignature(
+  signingInput: string,
+  signature: Uint8Array,
+  header: Record<string, unknown>,
+  keys: SigningJsonWebKey[],
+): Promise<void> {
   const kid = header.kid;
   const alg = header.alg;
 
@@ -237,7 +256,7 @@ export function createAuthProviderVerifier(options: CreateAuthProviderVerifierOp
   const now = options.now ?? (() => Date.now());
   const jsonWebKeySetCache = new Map<string, CachedJsonWebKeySet>();
 
-  const getJsonWebKeys = async (providerConfig: ProviderConfig): Promise<JsonWebKey[]> => {
+  const getJsonWebKeys = async (providerConfig: ProviderConfig): Promise<SigningJsonWebKey[]> => {
     const currentTime = now();
     const cached = jsonWebKeySetCache.get(providerConfig.jwksUrl);
 

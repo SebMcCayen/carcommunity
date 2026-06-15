@@ -5,6 +5,12 @@ import test from 'node:test';
 import type { AuthProviderVerificationConfig } from '../config.js';
 import { createAuthProviderVerifier } from './auth-provider-verifier.js';
 
+type SigningJsonWebKey = JsonWebKey & {
+  kid?: string;
+  use?: string;
+  alg?: string;
+};
+
 function createVerifierConfig(): AuthProviderVerificationConfig {
   return {
     apple: {
@@ -37,7 +43,7 @@ async function createSignedIdentityToken(claims: Record<string, unknown>) {
     true,
     ['sign', 'verify'],
   );
-  const jwk = (await webcrypto.subtle.exportKey('jwk', keyPair.publicKey)) as JsonWebKey;
+  const jwk = (await webcrypto.subtle.exportKey('jwk', keyPair.publicKey)) as SigningJsonWebKey;
   jwk.kid = 'test-kid';
   jwk.use = 'sig';
   jwk.alg = 'RS256';

@@ -409,8 +409,8 @@ test('POST /v1/auth/login creates or finds user by provider + providerSubject', 
     assert.equal(first.statusCode, 200);
     assert.equal(second.statusCode, 200);
 
-    const firstBody = first.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
-    const secondBody = second.json<{ ok: true; data: { user: { userId: string }; token: { accessToken: string } } }>();
+    const firstBody = first.json<{ ok: true; data: { user: { userId: string }; token: { _devOnly: true; accessToken: string } } }>();
+    const secondBody = second.json<{ ok: true; data: { user: { userId: string }; token: { _devOnly: true; accessToken: string } } }>();
 
     assert.equal(firstBody.data.token._devOnly, true);
     assert.equal(firstBody.data.user.userId, secondBody.data.user.userId);
@@ -485,8 +485,11 @@ test('POST /v1/auth/login in strict mode does not trust client-provided provider
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(capturedProviderInput?.providerSubject, 'verified-subject-1');
-    assert.equal(capturedProviderInput?.providerEmail, 'driver@example.com');
+    assert.deepEqual(capturedProviderInput, {
+      provider: 'apple',
+      providerSubject: 'verified-subject-1',
+      providerEmail: 'driver@example.com',
+    });
   } finally {
     await app.close();
   }

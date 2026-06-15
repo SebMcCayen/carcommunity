@@ -81,6 +81,10 @@ export async function registerAuthRoutes(
       }
     }
 
+    if (!providerSubject) {
+      throw new AppError(401, 'invalid_identity_token', 'Invalid identity token.');
+    }
+
     const user = await authService.findOrCreateUserByProviderIdentity({
       provider: payload.provider,
       providerSubject,
