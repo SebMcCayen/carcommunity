@@ -24,7 +24,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
-import type { AuthenticatedUserSummary, AuthProvider as SharedAuthProvider } from '@carcommunity/shared/auth';
+import type { AuthenticatedUserSummary, AuthProvider as SharedAuthProvider, AuthResponse } from '@carcommunity/shared/auth';
 
 import {
   getCurrentUser,
@@ -131,7 +131,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // In native auth mode use production login functions (no providerSubject,
       // includes appVersion/buildNumber). Fall back to placeholder functions in
       // dev mode so the app works without a real custom native build.
-      let loginFn: (token: string) => ReturnType<typeof loginWithApple>;
+      type LoginFn = (token: string) => Promise<AuthResponse>;
+      let loginFn: LoginFn;
 
       if (publicEnv.authMode === 'native') {
         loginFn = provider === 'apple' ? loginWithApple : loginWithGoogle;

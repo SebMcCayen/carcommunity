@@ -19,6 +19,7 @@
  */
 
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 
 import { KccButton } from '../components/KccButton';
 import { publicEnv } from '../config/env';
@@ -44,8 +45,13 @@ export const LoginScreen = () => {
 
   const provider = getPlatformAuthProvider();
 
+  // Local error flag for native SDK failures (e.g. network errors from the provider).
+  // Displayed with the same Swedish error copy as backend login failures.
+  const [nativeSdkError, setNativeSdkError] = useState(false);
+
   const handleLogin = async () => {
     if (!provider) return;
+    setNativeSdkError(false);
 
     if (publicEnv.authMode === 'native') {
       // --- Native auth path ---
@@ -60,8 +66,9 @@ export const LoginScreen = () => {
           // User cancelled the sign-in sheet — no error shown in UI.
           return;
         }
-        // Other native SDK errors fall through to useAuth's error handling.
-        await login(provider, ''); // Trigger error state in useAuth
+        // Native SDK error (e.g. network failure, misconfiguration).
+        // Show the safe generic Swedish error without making a backend request.
+        setNativeSdkError(true);
       }
     } else {
       // --- DEV-only placeholder path ---
@@ -145,7 +152,7 @@ export const LoginScreen = () => {
           </View>
         )}
 
-        {error !== null && !isLoading && (
+        {(error !== null || nativeSdkError) && !isLoading && (
           <View
             testID="login-error"
             style={[

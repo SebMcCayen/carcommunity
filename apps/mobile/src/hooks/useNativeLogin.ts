@@ -67,7 +67,13 @@ export class NativeLoginCancelledError extends Error {
 async function signInWithApple(): Promise<NativeLoginResult> {
   const credential = await AppleAuthentication.signInAsync({
     requestedScopes: [
-      // FULL_NAME only — email is not used as primary identifier.
+      // Only FULL_NAME is requested. Email is intentionally excluded because:
+      //   1. The backend identifies users by providerSubject from the verified
+      //      identity token — email is not the primary identifier.
+      //   2. Minimising data collection reduces privacy risk and aligns with
+      //      the product rule that email must not be the primary account ID.
+      // If a display name is needed later, givenName/familyName from FULL_NAME
+      // can be used. Apple only provides fullName on the first sign-in.
       AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
     ],
     // TODO (nonce): requestedNonce: generatedNonce,

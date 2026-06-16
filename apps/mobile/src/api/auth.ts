@@ -46,12 +46,11 @@ async function postAuth(
  * Neither value is sensitive.
  */
 function getClientMeta(): { appVersion?: string; buildNumber?: string } {
-  const version = Constants.expoConfig?.version ?? undefined;
-  const ios = Constants.platform?.ios;
-  const android = Constants.platform?.android;
-  const buildNumber =
-    (ios?.buildNumber ?? android?.versionCode?.toString()) ?? undefined;
-  return { appVersion: version, buildNumber };
+  const appVersion = Constants.expoConfig?.version ?? undefined;
+  const iosBuildNumber = Constants.platform?.ios?.buildNumber ?? undefined;
+  const androidVersionCode = Constants.platform?.android?.versionCode;
+  const buildNumber = iosBuildNumber ?? androidVersionCode?.toString() ?? undefined;
+  return { appVersion, buildNumber };
 }
 
 /**
