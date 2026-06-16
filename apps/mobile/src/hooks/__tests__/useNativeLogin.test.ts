@@ -38,16 +38,20 @@ beforeEach(() => {
     state: null,
   });
 
-  // Default: Google returns a success result with an idToken.
+  // Default: Google returns a user info object with an idToken.
   mockGoogleSignIn.mockResolvedValue({
-    type: 'success',
-    data: {
-      user: { id: 'google-user-id', name: 'Test User', email: 'test@example.com', photo: null, familyName: null, givenName: null },
-      idToken: 'google-id-token-from-sdk',
-      serverAuthCode: null,
-      scopes: [],
+    user: {
+      id: 'google-user-id',
+      name: 'Test User',
+      email: 'test@example.com',
+      photo: null,
+      familyName: null,
+      givenName: null,
     },
-  });
+    idToken: 'google-id-token-from-sdk',
+    serverAuthCode: null,
+    scopes: [],
+  } as unknown as Awaited<ReturnType<typeof GoogleSignin.signIn>>);
 });
 
 describe('useNativeLogin — iOS (Apple)', () => {
@@ -172,8 +176,12 @@ describe('useNativeLogin — Android (Google)', () => {
     await expect(signIn()).rejects.toBeInstanceOf(NativeLoginCancelledError);
   });
 
-  it('throws NativeLoginCancelledError when Google Sign-In type is cancelled', async () => {
-    mockGoogleSignIn.mockResolvedValue({ type: 'cancelled' } as Awaited<ReturnType<typeof GoogleSignin.signIn>>);
+  it('throws NativeLoginCancelledError when Google Sign-In is already in progress', async () => {
+    const inProgressError = Object.assign(new Error('In progress'), {
+      code: statusCodes.IN_PROGRESS,
+    });
+    mockGoogleSignIn.mockRejectedValue(inProgressError);
+    (isErrorWithCode as unknown as jest.Mock).mockReturnValue(true);
 
     const { signIn } = useNativeLogin();
     await expect(signIn()).rejects.toBeInstanceOf(NativeLoginCancelledError);
@@ -181,14 +189,18 @@ describe('useNativeLogin — Android (Google)', () => {
 
   it('throws when Google Sign-In returns no idToken', async () => {
     mockGoogleSignIn.mockResolvedValue({
-      type: 'success',
-      data: {
-        user: { id: 'google-user-id', name: null, email: 'test@example.com', photo: null, familyName: null, givenName: null },
-        idToken: null,
-        serverAuthCode: null,
-        scopes: [],
+      user: {
+        id: 'google-user-id',
+        name: null,
+        email: 'test@example.com',
+        photo: null,
+        familyName: null,
+        givenName: null,
       },
-    });
+      idToken: null,
+      serverAuthCode: null,
+      scopes: [],
+    } as unknown as Awaited<ReturnType<typeof GoogleSignin.signIn>>);
 
     const { signIn } = useNativeLogin();
     await expect(signIn()).rejects.toThrow('ID token');

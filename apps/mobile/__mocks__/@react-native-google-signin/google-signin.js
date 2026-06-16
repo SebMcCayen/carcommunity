@@ -10,17 +10,17 @@
 const configure = jest.fn();
 
 const signIn = jest.fn(async () => ({
-  type: 'success',
-  data: {
-    user: {
-      id: 'mock-google-user-id',
-      name: 'Test User',
-      email: null,
-      photo: null,
-    },
-    idToken: 'mock-google-id-token',
-    serverAuthCode: null,
+  user: {
+    id: 'mock-google-user-id',
+    name: 'Test User',
+    email: 'test@example.com',
+    photo: null,
+    familyName: null,
+    givenName: null,
   },
+  scopes: [],
+  idToken: 'mock-google-id-token',
+  serverAuthCode: null,
 }));
 
 const signOut = jest.fn(async () => undefined);

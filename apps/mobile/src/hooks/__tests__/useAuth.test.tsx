@@ -15,6 +15,12 @@ import { AuthProvider, useAuth } from '../useAuth';
 import * as authApi from '../../api/auth';
 import * as tokenStorage from '../../storage/tokenStorage';
 
+jest.mock('../../config/env', () => ({
+  publicEnv: {
+    authMode: 'dev',
+  },
+}));
+
 // Mock the auth API client so no real HTTP calls are made.
 jest.mock('../../api/auth', () => ({
   getCurrentUser: jest.fn(),
@@ -32,7 +38,12 @@ jest.mock('../../storage/tokenStorage', () => ({
   clearSessionToken: jest.fn(),
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const envMock = require('../../config/env') as { publicEnv: { authMode: 'dev' | 'native' } };
+
 const mockGetCurrentUser = authApi.getCurrentUser as jest.MockedFunction<typeof authApi.getCurrentUser>;
+const mockLoginAppleNative = authApi.loginWithApple as jest.MockedFunction<typeof authApi.loginWithApple>;
+const mockLoginGoogleNative = authApi.loginWithGoogle as jest.MockedFunction<typeof authApi.loginWithGoogle>;
 const mockLoginApple = authApi.loginWithApplePlaceholder as jest.MockedFunction<typeof authApi.loginWithApplePlaceholder>;
 const mockLoginGoogle = authApi.loginWithGooglePlaceholder as jest.MockedFunction<typeof authApi.loginWithGooglePlaceholder>;
 const mockLogout = authApi.logoutPlaceholder as jest.MockedFunction<typeof authApi.logoutPlaceholder>;
@@ -71,6 +82,7 @@ function renderAuthHook() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  envMock.publicEnv.authMode = 'dev';
   // Default: no stored session
   mockLoadToken.mockResolvedValue(null);
   mockSaveToken.mockResolvedValue(undefined);
@@ -285,6 +297,54 @@ describe('useAuth — login action', () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.error).toBe('auth.errorGeneric');
+  });
+
+  it('uses native Apple login when authMode is native', async () => {
+    envMock.publicEnv.authMode = 'native';
+    mockLoginAppleNative.mockResolvedValue({
+      ok: true,
+      data: {
+        user: testUser,
+        session: { sessionId: 'session-native-apple', expiresAt: '2099-01-01T00:00:00Z' },
+      },
+    });
+
+    const { result } = renderAuthHook();
+
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+
+    await act(async () => {
+      await result.current.login('apple', 'native-identity-token');
+    });
+
+    expect(mockLoginAppleNative).toHaveBeenCalledWith('native-identity-token');
+    expect(mockLoginApple).not.toHaveBeenCalled();
+  });
+
+  it('uses native Google login when authMode is native', async () => {
+    envMock.publicEnv.authMode = 'native';
+    mockLoginGoogleNative.mockResolvedValue({
+      ok: true,
+      data: {
+        user: testUser,
+        session: { sessionId: 'session-native-google', expiresAt: '2099-01-01T00:00:00Z' },
+      },
+    });
+
+    const { result } = renderAuthHook();
+
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+
+    await act(async () => {
+      await result.current.login('google', 'native-identity-token');
+    });
+
+    expect(mockLoginGoogleNative).toHaveBeenCalledWith('native-identity-token');
+    expect(mockLoginGoogle).not.toHaveBeenCalled();
   });
 });
 

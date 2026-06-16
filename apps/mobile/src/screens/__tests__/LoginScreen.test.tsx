@@ -20,6 +20,7 @@ jest.mock('../../config/env', () => ({
     appEnv: 'test',
     googleIosClientId: '',
     googleAndroidClientId: '',
+    googleWebClientId: '',
   },
 }));
 

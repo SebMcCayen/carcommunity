@@ -19,8 +19,8 @@
  *   submitting to the App Store.
  * TODO (production – Google): Configure Google Play App Signing, add correct
  *   SHA-1/SHA-256 fingerprints to Google Cloud Console, and set
- *   EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID / EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID
- *   via EAS Secrets.
+ *   EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID / EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID /
+ *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID via EAS Secrets.
  * TODO (account linking): If the backend reports that a user already exists
  *   with a different identity provider, surface an account-linking flow
  *   rather than creating a duplicate account.
@@ -108,7 +108,7 @@ async function signInWithGoogle(): Promise<NativeLoginResult> {
   // Do NOT hardcode real client IDs here.
   GoogleSignin.configure({
     iosClientId: publicEnv.googleIosClientId || undefined,
-    webClientId: publicEnv.googleAndroidClientId || undefined,
+    webClientId: publicEnv.googleWebClientId || undefined,
   });
 
   let result;
@@ -126,8 +126,15 @@ async function signInWithGoogle(): Promise<NativeLoginResult> {
     throw error;
   }
 
-  if (result.type !== 'success' || !result.data?.idToken) {
-    if (result.type === 'cancelled') {
+  const googleResult =
+    result && typeof result === 'object' && 'type' in result
+      ? result.type === 'success'
+        ? result.data
+        : null
+      : result;
+
+  if (!googleResult?.idToken) {
+    if (result && typeof result === 'object' && 'type' in result && result.type === 'cancelled') {
       throw new NativeLoginCancelledError();
     }
     throw new Error('Google Sign-In did not return an ID token.');
@@ -135,7 +142,7 @@ async function signInWithGoogle(): Promise<NativeLoginResult> {
 
   // idToken is used only here — passed to the caller for backend verification.
   // It is NOT stored and must NOT be logged.
-  return { identityToken: result.data.idToken, provider: 'google' };
+  return { identityToken: googleResult.idToken, provider: 'google' };
 }
 
 /**

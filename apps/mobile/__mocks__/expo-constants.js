@@ -10,8 +10,6 @@ const Constants = {
     version: '0.1.0',
     name: 'KCC',
     slug: 'carcommunity-mobile',
-  },
-  platform: {
     ios: {
       buildNumber: '1',
     },

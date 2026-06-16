@@ -47,8 +47,8 @@ async function postAuth(
  */
 function getClientMeta(): { appVersion?: string; buildNumber?: string } {
   const appVersion = Constants.expoConfig?.version ?? undefined;
-  const iosBuildNumber = Constants.platform?.ios?.buildNumber ?? undefined;
-  const androidVersionCode = Constants.platform?.android?.versionCode;
+  const iosBuildNumber = Constants.expoConfig?.ios?.buildNumber ?? undefined;
+  const androidVersionCode = Constants.expoConfig?.android?.versionCode;
   const buildNumber = iosBuildNumber ?? androidVersionCode?.toString() ?? undefined;
   return { appVersion, buildNumber };
 }
