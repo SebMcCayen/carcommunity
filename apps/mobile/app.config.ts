@@ -26,6 +26,11 @@ const config: ExpoConfig = {
         RNMapboxMapsDownloadToken: process.env.MAPBOX_ACCESS_TOKEN ?? '',
       },
     ],
+    // expo-apple-authentication adds the Apple Sign-In entitlement to the iOS build.
+    // TODO (production): Verify the "Sign in with Apple" capability is enabled in your
+    //                    Apple Developer account and App Store Connect before submitting.
+    // TODO (production): Confirm bundle ID and entitlements match your Apple App ID configuration.
+    'expo-apple-authentication',
   ],
   extra: {
     appDisplayName,

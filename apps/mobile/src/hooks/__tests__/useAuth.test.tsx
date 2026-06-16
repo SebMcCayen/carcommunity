@@ -18,6 +18,8 @@ import * as tokenStorage from '../../storage/tokenStorage';
 // Mock the auth API client so no real HTTP calls are made.
 jest.mock('../../api/auth', () => ({
   getCurrentUser: jest.fn(),
+  loginWithApple: jest.fn(),
+  loginWithGoogle: jest.fn(),
   loginWithApplePlaceholder: jest.fn(),
   loginWithGooglePlaceholder: jest.fn(),
   logoutPlaceholder: jest.fn(),

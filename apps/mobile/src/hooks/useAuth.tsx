@@ -28,10 +28,13 @@ import type { AuthenticatedUserSummary, AuthProvider as SharedAuthProvider } fro
 
 import {
   getCurrentUser,
+  loginWithApple,
+  loginWithGoogle,
   loginWithApplePlaceholder,
   loginWithGooglePlaceholder,
   logoutPlaceholder,
 } from '../api/auth';
+import { publicEnv } from '../config/env';
 import { clearSessionToken, loadSessionToken, saveSessionToken } from '../storage/tokenStorage';
 
 export interface AuthContextValue {
@@ -125,8 +128,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
 
     try {
-      const loginFn =
-        provider === 'apple' ? loginWithApplePlaceholder : loginWithGooglePlaceholder;
+      // In native auth mode use production login functions (no providerSubject,
+      // includes appVersion/buildNumber). Fall back to placeholder functions in
+      // dev mode so the app works without a real custom native build.
+      let loginFn: (token: string) => ReturnType<typeof loginWithApple>;
+
+      if (publicEnv.authMode === 'native') {
+        loginFn = provider === 'apple' ? loginWithApple : loginWithGoogle;
+      } else {
+        loginFn = provider === 'apple' ? loginWithApplePlaceholder : loginWithGooglePlaceholder;
+      }
 
       const response = await loginFn(identityToken);
 
