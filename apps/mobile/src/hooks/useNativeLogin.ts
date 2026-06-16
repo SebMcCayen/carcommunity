@@ -70,7 +70,7 @@ async function signInWithApple(): Promise<NativeLoginResult> {
       // Only FULL_NAME is requested. Email is intentionally excluded because:
       //   1. The backend identifies users by providerSubject from the verified
       //      identity token — email is not the primary identifier.
-      //   2. Minimising data collection reduces privacy risk and aligns with
+      //   2. Minimizing data collection reduces privacy risk and aligns with
       //      the product rule that email must not be the primary account ID.
       // If a display name is needed later, givenName/familyName from FULL_NAME
       // can be used. Apple only provides fullName on the first sign-in.
