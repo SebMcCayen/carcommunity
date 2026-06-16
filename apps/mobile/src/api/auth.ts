@@ -5,6 +5,8 @@ import {
   type LogoutResponse,
 } from '@carcommunity/shared/auth';
 
+import Constants from 'expo-constants';
+
 import { publicEnv } from '../config/env';
 
 const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
@@ -38,6 +40,67 @@ async function postAuth(
   return (await response.json()) as AuthResponse;
 }
 
+/**
+ * Returns app version and build number from Expo Constants for inclusion in
+ * login requests. Helps the backend identify the client version.
+ * Neither value is sensitive.
+ */
+function getClientMeta(): { appVersion?: string; buildNumber?: string } {
+  const appVersion = Constants.expoConfig?.version ?? undefined;
+  const iosBuildNumber = Constants.expoConfig?.ios?.buildNumber ?? undefined;
+  const androidVersionCode = Constants.expoConfig?.android?.versionCode;
+  const buildNumber = iosBuildNumber ?? androidVersionCode?.toString() ?? undefined;
+  return { appVersion, buildNumber };
+}
+
+/**
+ * Native Apple login — sends the identity token obtained from
+ * expo-apple-authentication to the backend for verification.
+ *
+ * Does NOT include providerSubject; the backend derives identity
+ * exclusively from the verified identity token.
+ *
+ * TODO (production): Implement nonce generation and pass it to both
+ *   AppleAuthentication.signInAsync() and this request for replay protection.
+ * TODO (production): Account linking: if a user already exists with a different
+ *   provider, surface an account-linking flow rather than creating a duplicate.
+ */
+export async function loginWithApple(identityToken: string): Promise<AuthResponse> {
+  const { appVersion, buildNumber } = getClientMeta();
+  return postAuth(AUTH_ROUTE_PATHS.login, {
+    provider: 'apple',
+    identityToken,
+    platform: 'ios',
+    appVersion,
+    buildNumber,
+  });
+}
+
+/**
+ * Native Google login — sends the Google ID token obtained from
+ * @react-native-google-signin/google-signin to the backend for verification.
+ *
+ * Does NOT include providerSubject; the backend derives identity
+ * exclusively from the verified ID token.
+ *
+ * TODO (production): Validate audience (aud) claim on the backend against
+ *   the expected Google client ID for your app.
+ * TODO (production): Set up Google Play App Signing and configure correct
+ *   SHA-1 / SHA-256 fingerprints in Google Cloud Console.
+ * TODO (production): Account linking: surface a linking flow if a user
+ *   already exists with a different provider.
+ */
+export async function loginWithGoogle(identityToken: string): Promise<AuthResponse> {
+  const { appVersion, buildNumber } = getClientMeta();
+  return postAuth(AUTH_ROUTE_PATHS.login, {
+    provider: 'google',
+    identityToken,
+    platform: 'android',
+    appVersion,
+    buildNumber,
+  });
+}
+
 export interface PlaceholderProviderLoginOptions {
   /** Development-only fallback for placeholder backend auth mode. */
   providerSubject?: string;
@@ -46,9 +109,9 @@ export interface PlaceholderProviderLoginOptions {
 }
 
 /**
- * Placeholder Apple login — sends the identity token to the backend for (future) verification.
- * TODO: Replace with real expo-apple-authentication integration.
- * @devOnly NOT PRODUCTION-READY. Apple identity token is not verified server-side yet.
+ * @devOnly Placeholder Apple login — sends a dev identity token to the backend.
+ * NOT PRODUCTION-READY. Use loginWithApple for the real native flow.
+ * @deprecated Use loginWithApple for native production login.
  */
 export async function loginWithApplePlaceholder(
   identityToken: string,
@@ -64,9 +127,9 @@ export async function loginWithApplePlaceholder(
 }
 
 /**
- * Placeholder Google login — sends the identity token to the backend for (future) verification.
- * TODO: Replace with real @react-native-google-signin/google-signin integration.
- * @devOnly NOT PRODUCTION-READY. Google identity token is not verified server-side yet.
+ * @devOnly Placeholder Google login — sends a dev identity token to the backend.
+ * NOT PRODUCTION-READY. Use loginWithGoogle for the real native flow.
+ * @deprecated Use loginWithGoogle for native production login.
  */
 export async function loginWithGooglePlaceholder(
   identityToken: string,

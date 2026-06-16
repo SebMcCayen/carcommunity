@@ -15,11 +15,13 @@
   },
   "dependencies": {
     "@carcommunity/shared": "^0.1.0",
+    "@react-native-google-signin/google-signin": "~16.1.2",
     "@react-navigation/bottom-tabs": "^7.18.2",
     "@react-navigation/native": "^7.1.19",
     "@react-navigation/native-stack": "^7.17.5",
     "@rnmapbox/maps": "^10.3.1",
     "expo": "~56.0.11",
+    "expo-apple-authentication": "~56.0.4",
     "expo-constants": "~18.0.8",
     "expo-secure-store": "~56.0.0",
     "expo-status-bar": "~56.0.4",
@@ -42,7 +44,9 @@
     "preset": "jest-expo",
     "testEnvironment": "<rootDir>/jest-env.js",
     "moduleNameMapper": {
-      "^@rnmapbox/maps$": "<rootDir>/__mocks__/@rnmapbox/maps.js"
+      "^@rnmapbox/maps$": "<rootDir>/__mocks__/@rnmapbox/maps.js",
+      "^@react-native-google-signin/google-signin$": "<rootDir>/__mocks__/@react-native-google-signin/google-signin.js",
+      "^expo-apple-authentication$": "<rootDir>/__mocks__/expo-apple-authentication.js"
     }
   }
 }

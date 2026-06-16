@@ -24,14 +24,17 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
-import type { AuthenticatedUserSummary, AuthProvider as SharedAuthProvider } from '@carcommunity/shared/auth';
+import type { AuthenticatedUserSummary, AuthProvider as SharedAuthProvider, AuthResponse } from '@carcommunity/shared/auth';
 
 import {
   getCurrentUser,
+  loginWithApple,
+  loginWithGoogle,
   loginWithApplePlaceholder,
   loginWithGooglePlaceholder,
   logoutPlaceholder,
 } from '../api/auth';
+import { publicEnv } from '../config/env';
 import { clearSessionToken, loadSessionToken, saveSessionToken } from '../storage/tokenStorage';
 
 export interface AuthContextValue {
@@ -125,8 +128,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
 
     try {
-      const loginFn =
-        provider === 'apple' ? loginWithApplePlaceholder : loginWithGooglePlaceholder;
+      // In native auth mode use production login functions (no providerSubject,
+      // includes appVersion/buildNumber). Fall back to placeholder functions in
+      // dev mode so the app works without a real custom native build.
+      type LoginFn = (token: string) => Promise<AuthResponse>;
+      let loginFn: LoginFn;
+
+      if (publicEnv.authMode === 'native') {
+        loginFn = provider === 'apple' ? loginWithApple : loginWithGoogle;
+      } else {
+        loginFn = provider === 'apple' ? loginWithApplePlaceholder : loginWithGooglePlaceholder;
+      }
 
       const response = await loginFn(identityToken);
 

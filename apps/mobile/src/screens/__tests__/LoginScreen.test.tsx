@@ -1,8 +1,8 @@
 /**
  * Tests for LoginScreen.
  *
- * Mocks useAuth and Platform.OS so UI states can be tested
- * without a real backend or native Apple/Google SDKs.
+ * Mocks useAuth, useNativeLogin, publicEnv, and Platform.OS so UI states
+ * can be tested without a real backend or native Apple/Google SDKs.
  */
 
 import React from 'react';
@@ -11,6 +11,21 @@ import { Platform } from 'react-native';
 
 import { AppThemeProvider } from '../../hooks/useAppTheme';
 import { I18nProvider } from '../../hooks/useI18n';
+
+// Mock publicEnv so tests can flip authMode between 'dev' and 'native'.
+jest.mock('../../config/env', () => ({
+  publicEnv: {
+    authMode: 'dev',
+    apiBaseUrl: 'http://localhost:4000',
+    appEnv: 'test',
+    googleIosClientId: '',
+    googleAndroidClientId: '',
+    googleWebClientId: '',
+  },
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const envMock = require('../../config/env') as { publicEnv: { authMode: string } };
 
 // Mock useAuth so tests control auth state independently.
 const mockLogin = jest.fn();
@@ -37,6 +52,20 @@ jest.mock('../../hooks/useAuth', () => ({
   },
 }));
 
+// Mock useNativeLogin so tests control native sign-in results without real SDKs.
+const mockSignIn = jest.fn();
+jest.mock('../../hooks/useNativeLogin', () => ({
+  useNativeLogin: jest.fn(() => ({
+    signIn: mockSignIn,
+  })),
+  NativeLoginCancelledError: class NativeLoginCancelledError extends Error {
+    constructor() {
+      super('Sign-in cancelled by user');
+      this.name = 'NativeLoginCancelledError';
+    }
+  },
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { LoginScreen } = require('../LoginScreen') as typeof import('../LoginScreen');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -54,6 +83,7 @@ function renderLoginScreen() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  envMock.publicEnv.authMode = 'dev';
   (useAuth as jest.Mock).mockReturnValue({
     currentUser: null,
     isAuthenticated: false,
@@ -63,6 +93,8 @@ beforeEach(() => {
     logout: mockLogout,
     refreshCurrentUser: mockRefresh,
   });
+  // Default: signIn returns null (unsupported platform fallback)
+  mockSignIn.mockResolvedValue(null);
 });
 
 describe('LoginScreen — renders', () => {
@@ -242,9 +274,42 @@ describe('LoginScreen — error state', () => {
     );
     expect(errors.length).toBe(0);
   });
+
+  it('shows Swedish error text when login fails', () => {
+    Platform.OS = 'ios';
+    (useAuth as jest.Mock).mockReturnValue({
+      currentUser: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: 'auth.errorGeneric',
+      login: mockLogin,
+      logout: mockLogout,
+      refreshCurrentUser: mockRefresh,
+    });
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const errorBox = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-error',
+    );
+    expect(errorBox.length).toBeGreaterThan(0);
+
+    // Find all leaf text nodes inside the error box and collect string children.
+    const textNodes = errorBox[0]!.findAll(
+      (node) => Array.isArray(node.children) && node.children.some((c) => typeof c === 'string'),
+    );
+    const allText = textNodes.flatMap((n) =>
+      (n.children as unknown[]).filter((c) => typeof c === 'string'),
+    );
+    expect(allText.join('')).toContain('Inloggningen misslyckades');
+  });
 });
 
-describe('LoginScreen — login action', () => {
+describe('LoginScreen — login action (dev mode)', () => {
   it('calls login with apple provider when Apple button is pressed on iOS', async () => {
     Platform.OS = 'ios';
     mockLogin.mockResolvedValue(undefined);
@@ -287,5 +352,124 @@ describe('LoginScreen — login action', () => {
 
     expect(mockLogin).toHaveBeenCalledTimes(1);
     expect(mockLogin).toHaveBeenCalledWith('google', expect.any(String));
+  });
+
+  it('does not use signIn from useNativeLogin in dev mode', async () => {
+    Platform.OS = 'ios';
+    envMock.publicEnv.authMode = 'dev';
+    mockLogin.mockResolvedValue(undefined);
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const appleButton = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-apple-button',
+    )[0];
+
+    await act(async () => {
+      (appleButton!.props['onPress'] as () => void)();
+    });
+
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+});
+
+describe('LoginScreen — native mode login action', () => {
+  it('calls signIn from useNativeLogin and forwards identityToken to login on iOS', async () => {
+    Platform.OS = 'ios';
+    envMock.publicEnv.authMode = 'native';
+    mockSignIn.mockResolvedValue({ identityToken: 'apple-id-token', provider: 'apple' });
+    mockLogin.mockResolvedValue(undefined);
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const appleButton = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-apple-button',
+    )[0];
+
+    await act(async () => {
+      (appleButton!.props['onPress'] as () => void)();
+    });
+
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+    expect(mockLogin).toHaveBeenCalledWith('apple', 'apple-id-token');
+  });
+
+  it('calls signIn from useNativeLogin and forwards identityToken to login on Android', async () => {
+    Platform.OS = 'android';
+    envMock.publicEnv.authMode = 'native';
+    mockSignIn.mockResolvedValue({ identityToken: 'google-id-token', provider: 'google' });
+    mockLogin.mockResolvedValue(undefined);
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const googleButton = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-google-button',
+    )[0];
+
+    await act(async () => {
+      (googleButton!.props['onPress'] as () => void)();
+    });
+
+    expect(mockSignIn).toHaveBeenCalledTimes(1);
+    expect(mockLogin).toHaveBeenCalledWith('google', 'google-id-token');
+  });
+
+  it('does not call login when signIn returns null (unsupported platform)', async () => {
+    Platform.OS = 'ios';
+    envMock.publicEnv.authMode = 'native';
+    mockSignIn.mockResolvedValue(null);
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const appleButton = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-apple-button',
+    )[0];
+
+    await act(async () => {
+      (appleButton!.props['onPress'] as () => void)();
+    });
+
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it('does not call login when NativeLoginCancelledError is thrown', async () => {
+    Platform.OS = 'ios';
+    envMock.publicEnv.authMode = 'native';
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { NativeLoginCancelledError } = require('../../hooks/useNativeLogin') as typeof import('../../hooks/useNativeLogin');
+    mockSignIn.mockRejectedValue(new NativeLoginCancelledError());
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+
+    act(() => {
+      renderer = renderLoginScreen();
+    });
+
+    const appleButton = renderer!.root.findAll(
+      (node) => node.props['testID'] === 'login-apple-button',
+    )[0];
+
+    await act(async () => {
+      (appleButton!.props['onPress'] as () => void)();
+    });
+
+    // User cancelled — login must not be called and no error bubbles up.
+    expect(mockLogin).not.toHaveBeenCalled();
   });
 });
