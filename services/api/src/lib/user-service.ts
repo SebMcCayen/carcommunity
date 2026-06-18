@@ -72,14 +72,27 @@ export function createUserService(prisma: PrismaClient): UserService {
       if ('displayName' in input) {
         updateData.displayName = input.displayName;
       }
-      if (input.ageConfirmed === true) {
-        updateData.ageConfirmedAt = now;
-      }
-      if (input.termsAccepted === true) {
-        updateData.termsAcceptedAt = now;
-      }
-      if (input.privacyPolicyAccepted === true) {
-        updateData.privacyPolicyAcceptedAt = now;
+
+      // Only set confirmation timestamps when they are not already recorded,
+      // to preserve the original acceptance timestamp for auditing/compliance.
+      if (input.ageConfirmed === true || input.termsAccepted === true || input.privacyPolicyAccepted === true) {
+        const current = await prisma.user.findUnique({
+          where: { id: input.userId },
+          select: {
+            ageConfirmedAt: true,
+            termsAcceptedAt: true,
+            privacyPolicyAcceptedAt: true,
+          },
+        });
+        if (input.ageConfirmed === true && !current?.ageConfirmedAt) {
+          updateData.ageConfirmedAt = now;
+        }
+        if (input.termsAccepted === true && !current?.termsAcceptedAt) {
+          updateData.termsAcceptedAt = now;
+        }
+        if (input.privacyPolicyAccepted === true && !current?.privacyPolicyAcceptedAt) {
+          updateData.privacyPolicyAcceptedAt = now;
+        }
       }
 
       let updated = await prisma.user.update({
@@ -89,15 +102,23 @@ export function createUserService(prisma: PrismaClient): UserService {
       });
 
       // Auto-complete onboarding when all three required confirmations are set.
+      // Use the latest of the three timestamps to preserve the original acceptance dates.
       if (
         !updated.onboardingCompletedAt &&
         updated.ageConfirmedAt &&
         updated.termsAcceptedAt &&
         updated.privacyPolicyAcceptedAt
       ) {
+        const completedAt = new Date(
+          Math.max(
+            updated.ageConfirmedAt.getTime(),
+            updated.termsAcceptedAt.getTime(),
+            updated.privacyPolicyAcceptedAt.getTime(),
+          ),
+        );
         updated = await prisma.user.update({
           where: { id: input.userId },
-          data: { onboardingCompletedAt: now },
+          data: { onboardingCompletedAt: completedAt },
           select: USER_PROFILE_SELECT,
         });
       }

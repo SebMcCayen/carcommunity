@@ -6,6 +6,7 @@ import type {
   AppSettingsLinksResponse,
 } from '@carcommunity/shared/onboarding';
 import { ONBOARDING_ROUTE_PATHS, APP_SETTINGS_LINKS_PATH } from '@carcommunity/shared/onboarding';
+import type { CurrentUserResponse } from '@carcommunity/shared/users';
 
 import { publicEnv } from '../config/env';
 
@@ -20,12 +21,12 @@ function bearerHeaders(sessionToken: string): Record<string, string> {
 /**
  * GET /v1/users/me — fetch the current user's full profile including onboarding status.
  */
-export async function getUserProfile(sessionToken: string): Promise<UserProfileResponse> {
+export async function getUserProfile(sessionToken: string): Promise<CurrentUserResponse> {
   const response = await fetch(buildUrl(ONBOARDING_ROUTE_PATHS.me), {
     method: 'GET',
     headers: bearerHeaders(sessionToken),
   });
-  return (await response.json()) as UserProfileResponse;
+  return (await response.json()) as CurrentUserResponse;
 }
 
 /**

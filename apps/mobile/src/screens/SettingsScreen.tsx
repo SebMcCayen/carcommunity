@@ -13,8 +13,8 @@ import type { RootStackParamList } from '../navigation/types';
 
 type SettingsNavProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
-// Placeholder KCC website links — populated from app.config.ts extra values or brandConfig defaults.
-const KCC_LINKS = brandConfig.websiteLinks;
+// Brand website links — populated from app.config.ts extra values or brandConfig defaults.
+const BRAND_LINKS = brandConfig.websiteLinks;
 
 export const SettingsScreen = () => {
   const { t } = useI18n();
@@ -68,22 +68,22 @@ export const SettingsScreen = () => {
       <KccButton
         label={t('settings.support')}
         variant="secondary"
-        onPress={() => openUrl(KCC_LINKS.support)}
+        onPress={() => openUrl(BRAND_LINKS.support)}
       />
       <KccButton
         label={t('settings.terms')}
         variant="secondary"
-        onPress={() => openUrl(KCC_LINKS.terms)}
+        onPress={() => openUrl(BRAND_LINKS.terms)}
       />
       <KccButton
         label={t('settings.privacyPolicy')}
         variant="secondary"
-        onPress={() => openUrl(KCC_LINKS.privacyPolicy)}
+        onPress={() => openUrl(BRAND_LINKS.privacyPolicy)}
       />
       <KccButton
         label={t('settings.accountDeletion')}
         variant="secondary"
-        onPress={() => openUrl(KCC_LINKS.accountDeletion)}
+        onPress={() => openUrl(BRAND_LINKS.accountDeletion)}
       />
       <KccButton
         label={t('settings.reportBug')}

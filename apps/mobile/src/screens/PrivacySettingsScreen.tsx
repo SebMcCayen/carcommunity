@@ -117,7 +117,7 @@ export const PrivacySettingsScreen = () => {
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.body}>{t('privacySettings.loading')}</Text>
+        <Text style={styles.body}>{t('auth.loading')}</Text>
       </View>
     );
   }
