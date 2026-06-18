@@ -40,6 +40,13 @@ export interface UserSummary {
  */
 export type SafeAccessUserSummary = Pick<UserSummary, 'role' | 'status' | 'subscriptionEntitlement'>;
 
+export interface OnboardingStatus {
+  onboardingCompletedAt: string | null;
+  ageConfirmedAt: string | null;
+  termsAcceptedAt: string | null;
+  privacyPolicyAcceptedAt: string | null;
+}
+
 export interface AuditLogSummary {
   id: string;
   actorUserId: string | null;
@@ -103,6 +110,7 @@ export interface CurrentUserResponse {
       status: UserStatus;
       subscriptionEntitlement: SubscriptionEntitlement;
       lastActiveAt: string | null;
+      onboarding: OnboardingStatus;
     };
   };
 }

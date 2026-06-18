@@ -25,15 +25,20 @@ model Organization {
 
 model User {
   id                      String                   @id @default(uuid()) @db.Uuid
-  displayName             String?                  @map("display_name") @db.VarChar(120)
-  email                   String?                  @db.VarChar(320)
-  role                    UserRole                 @default(user)
-  status                  UserStatus               @default(active)
-  subscriptionEntitlement SubscriptionEntitlement  @default(none) @map("subscription_entitlement")
-  lastActiveAt            DateTime?                @map("last_active_at")
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
-  deletedAt               DateTime?                @map("deleted_at")
+  displayName                String?                  @map("display_name") @db.VarChar(120)
+  email                      String?                  @db.VarChar(320)
+  role                       UserRole                 @default(user)
+  status                     UserStatus               @default(active)
+  subscriptionEntitlement    SubscriptionEntitlement  @default(none) @map("subscription_entitlement")
+  onboardingCompletedAt      DateTime?                @map("onboarding_completed_at")
+  ageConfirmedAt             DateTime?                @map("age_confirmed_at")
+  termsAcceptedAt            DateTime?                @map("terms_accepted_at")
+  privacyPolicyAcceptedAt    DateTime?                @map("privacy_policy_accepted_at")
+  anonymousPartnerStatsOptIn Boolean                  @default(false) @map("anonymous_partner_stats_opt_in")
+  lastActiveAt               DateTime?                @map("last_active_at")
+  createdAt                  DateTime                 @default(now()) @map("created_at")
+  updatedAt                  DateTime                 @updatedAt @map("updated_at")
+  deletedAt                  DateTime?                @map("deleted_at")
   identities              UserIdentity[]
   memberships             OrganizationMember[]
   sessions                Session[]

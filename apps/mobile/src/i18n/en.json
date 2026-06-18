@@ -26,7 +26,14 @@
     "themeDark": "Dark",
     "authPlannedTitle": "Login (planned)",
     "authPlannedBody": "Apple login for iOS and Google login for Android will be connected through the backend in a later step.",
+    "profile": "Profile",
     "privacy": "Privacy",
+    "subscription": "Membership",
+    "support": "Support",
+    "terms": "Terms",
+    "privacyPolicy": "Privacy policy",
+    "accountDeletion": "Delete account",
+    "dataDeletion": "Delete my data",
     "notifications": "Notifications",
     "deleteAccount": "Delete account",
     "reportBug": "Report a bug",
@@ -63,8 +70,32 @@
     "privacyNoHistory": "No route or position history is stored publicly.",
     "privacySafeDriving": "Do not interact with the app while driving."
   },
-  "privacy": {
-    "label": "Privacy"
+  "onboarding": {
+    "title": "Welcome",
+    "subtitle": "Please confirm before continuing.",
+    "ageConfirm": "I confirm that I am 18 years of age or older.",
+    "termsAccept": "I accept the terms.",
+    "privacyAccept": "I have read the privacy policy.",
+    "displayNameLabel": "Display name, optional.",
+    "displayNamePlaceholder": "Your display name",
+    "partnerStatsOptIn": "I want to contribute anonymised partner statistics.",
+    "partnerStatsNote": "You can change this later under Privacy.",
+    "continueButton": "Continue",
+    "termsLink": "Read the terms",
+    "privacyLink": "Read the privacy policy",
+    "loading": "Saving...",
+    "error": "Something went wrong. Please try again."
+  },
+  "privacySettings": {
+    "title": "Privacy",
+    "partnerStatsTitle": "Partner statistics",
+    "partnerStatsBody": "Contribute anonymised statistics about your use of partner benefits. No personal data or location is collected.",
+    "partnerStatsOptIn": "Contribute anonymised partner statistics",
+    "partnerStatsNote": "Opt-in is voluntary. You can change your preference at any time.",
+    "saveButton": "Save",
+    "loading": "Saving...",
+    "error": "Something went wrong. Please try again.",
+    "saved": "Saved."
   },
   "subscription": {
     "teaserTitle": "Membership",

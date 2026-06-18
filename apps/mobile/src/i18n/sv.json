@@ -26,7 +26,14 @@
     "themeDark": "Mörkt",
     "authPlannedTitle": "Inloggning (planerad)",
     "authPlannedBody": "Apple-inloggning för iOS och Google-inloggning för Android kopplas in via backend i ett kommande steg.",
+    "profile": "Profil",
     "privacy": "Integritet",
+    "subscription": "Medlemskap",
+    "support": "Support",
+    "terms": "Villkor",
+    "privacyPolicy": "Integritetspolicy",
+    "accountDeletion": "Ta bort konto",
+    "dataDeletion": "Radera data",
     "notifications": "Notiser",
     "deleteAccount": "Ta bort konto",
     "reportBug": "Rapportera en bugg",
@@ -66,8 +73,32 @@
     "privacyNoHistory": "Ingen rutt eller historik sparas publikt.",
     "privacySafeDriving": "Interagera inte med appen under körning."
   },
-  "privacy": {
-    "label": "Integritet"
+  "onboarding": {
+    "title": "Välkommen",
+    "subtitle": "Bekräfta innan du fortsätter.",
+    "ageConfirm": "Bekräfta att du är 18 år eller äldre.",
+    "termsAccept": "Jag accepterar villkoren.",
+    "privacyAccept": "Jag har tagit del av integritetspolicyn.",
+    "displayNameLabel": "Visningsnamn, valfritt.",
+    "displayNamePlaceholder": "Ditt visningsnamn",
+    "partnerStatsOptIn": "Jag vill bidra med anonymiserad partnerstatistik.",
+    "partnerStatsNote": "Du kan ändra detta senare under Integritet.",
+    "continueButton": "Fortsätt",
+    "termsLink": "Läs villkoren",
+    "privacyLink": "Läs integritetspolicyn",
+    "loading": "Sparar...",
+    "error": "Något gick fel. Försök igen."
+  },
+  "privacySettings": {
+    "title": "Integritet",
+    "partnerStatsTitle": "Partnerstatistik",
+    "partnerStatsBody": "Bidra med anonymiserad statistik om din användning av partnerförmåner. Inga personuppgifter eller platser samlas in.",
+    "partnerStatsOptIn": "Bidra med anonymiserad partnerstatistik",
+    "partnerStatsNote": "Opt-in är frivillig. Du kan ändra dig när som helst.",
+    "saveButton": "Spara",
+    "loading": "Sparar...",
+    "error": "Något gick fel. Försök igen.",
+    "saved": "Sparat."
   },
   "subscription": {
     "teaserTitle": "Medlemskap",

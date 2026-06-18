@@ -32,6 +32,7 @@ import type {
   CreatedSession,
   ProviderIdentityLoginInput,
 } from './lib/auth-service.js';
+import type { UserService, UserProfileRecord } from './lib/user-service.js';
 
 function createFakeAuthService(): AuthService {
   const usersByProviderSubject = new Map<string, { userId: string }>();
@@ -94,6 +95,7 @@ function createFakeAuthService(): AuthService {
         status: profile.status,
         subscriptionEntitlement: profile.subscriptionEntitlement,
         displayName: profile.displayName,
+        onboardingCompletedAt: null,
         lastActiveAt: new Date(),
         expiresAt,
         user: {
@@ -915,13 +917,57 @@ const devUserAuth = (overrides: {
     ...overrides,
   });
 
+function createFakeUserService(
+  profile: Partial<UserProfileRecord> = {},
+): UserService {
+  const defaultProfile: UserProfileRecord = {
+    id: 'dev-user-id',
+    displayName: null,
+    role: 'user',
+    status: 'active',
+    subscriptionEntitlement: 'member_monthly',
+    onboardingCompletedAt: null,
+    ageConfirmedAt: null,
+    termsAcceptedAt: null,
+    privacyPolicyAcceptedAt: null,
+    anonymousPartnerStatsOptIn: false,
+    ...profile,
+  };
+  return {
+    async getUserProfile() {
+      return { ...defaultProfile };
+    },
+    async updateUserProfile(input) {
+      const now = new Date();
+      const updated = { ...defaultProfile };
+      if ('displayName' in input) updated.displayName = input.displayName ?? null;
+      if (input.ageConfirmed) updated.ageConfirmedAt = now;
+      if (input.termsAccepted) updated.termsAcceptedAt = now;
+      if (input.privacyPolicyAccepted) updated.privacyPolicyAcceptedAt = now;
+      if (!updated.onboardingCompletedAt && updated.ageConfirmedAt && updated.termsAcceptedAt && updated.privacyPolicyAcceptedAt) {
+        updated.onboardingCompletedAt = now;
+      }
+      return updated;
+    },
+    async getPrivacySettings() {
+      return { anonymousPartnerStatsOptIn: defaultProfile.anonymousPartnerStatsOptIn };
+    },
+    async updatePrivacySettings(_userId, anonymousPartnerStatsOptIn) {
+      return { anonymousPartnerStatsOptIn };
+    },
+  };
+}
+
 test('GET /v1/users/me returns current profile summary for authenticated user', async () => {
-  const app = await createServer({
-    nodeEnv: 'test',
-    port: 4040,
-    databaseUrl: LOCAL_DATABASE_URL,
-    isProduction: false,
-  });
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4040,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { userService: createFakeUserService() },
+  );
 
   try {
     const response = await app.inject({
@@ -941,6 +987,12 @@ test('GET /v1/users/me returns current profile summary for authenticated user', 
           status: 'active',
           subscriptionEntitlement: 'member_monthly',
           lastActiveAt: null,
+          onboarding: {
+            onboardingCompletedAt: null,
+            ageConfirmedAt: null,
+            termsAcceptedAt: null,
+            privacyPolicyAcceptedAt: null,
+          },
         },
       },
     });

@@ -20,6 +20,8 @@ import { registerModerationRoutes } from './routes/moderation.js';
 import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
+import { registerAppSettingsRoutes } from './routes/app-settings.js';
+import type { UserService } from './lib/user-service.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -30,6 +32,7 @@ export interface ServerDependencies {
   subscriptionService?: Pick<import('./lib/subscription-service.js').SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
   moderationService?: ModerationService;
   diagnosticsService?: import('./lib/diagnostics-service.js').DiagnosticsService;
+  userService?: UserService;
 }
 
 export async function createServer(
@@ -93,7 +96,7 @@ export async function createServer(
   await registerEventRoutes(app, {
     eventService: dependencies.eventService,
   });
-  await registerUserRoutes(app);
+  await registerUserRoutes(app, { userService: dependencies.userService });
   await registerSubscriptionRoutes(app, {
     subscriptionService: dependencies.subscriptionService,
   });
@@ -103,6 +106,7 @@ export async function createServer(
   await registerDiagnosticsRoutes(app, {
     diagnosticsService: dependencies.diagnosticsService,
   });
+  await registerAppSettingsRoutes(app);
 
   return app;
 }
