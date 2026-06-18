@@ -11,12 +11,19 @@
   "home": {
     "title": "Hem",
     "liveLocationButton": "Dela min position",
+    "liveLocationStopButton": "Stoppa delning",
+    "liveLocationStatusNotSharing": "Du delar inte din position just nu.",
+    "liveLocationDisclaimer": "Liveposition är alltid frivilligt och tidsbegränsat.",
+    "liveLocationSectionTitle": "Live-position",
+    "memberOnlyLiveView": "Aktivt medlemskap krävs för att se andra medlemmars livepositioner.",
     "communityStatusTitle": "Community-status",
     "communityStatusBody": "Läget i communityn visas här snart.",
     "nextEventTitle": "Nästa träff",
     "nextEventBody": "Kommande träffsinformation visas här snart.",
+    "eventDetailsMemberOnly": "Eventdetaljer kräver aktivt medlemskap.",
     "memberValueTitle": "Medlemsvärde",
-    "memberValueBody": "Fördelar för medlemmar visas här snart."
+    "memberValueBody": "Fördelar för medlemmar visas här snart.",
+    "settingsShortcut": "Inställningar och integritet"
   },
   "settings": {
     "title": "Inställningar",
