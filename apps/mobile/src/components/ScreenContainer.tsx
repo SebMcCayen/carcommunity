@@ -5,13 +5,17 @@ import { useAppTheme } from '../hooks/useAppTheme';
 
 type ScreenContainerProps = {
   children: ReactNode;
+  testID?: string;
 };
 
-export const ScreenContainer = ({ children }: ScreenContainerProps) => {
+export const ScreenContainer = ({ children, testID }: ScreenContainerProps) => {
   const { theme } = useAppTheme();
 
   return (
-    <ScrollView style={[styles.screen, { backgroundColor: theme.colors.pageBackground }]}>
+    <ScrollView
+      testID={testID}
+      style={[styles.screen, { backgroundColor: theme.colors.pageBackground }]}
+    >
       <View
         style={[
           styles.content,

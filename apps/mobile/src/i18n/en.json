@@ -11,12 +11,19 @@
   "home": {
     "title": "Home",
     "liveLocationButton": "Share my location",
+    "liveLocationStopButton": "Stop sharing",
+    "liveLocationStatusNotSharing": "You are not currently sharing your location.",
+    "liveLocationDisclaimer": "Live location is always voluntary and time-limited.",
+    "liveLocationSectionTitle": "Live location",
+    "memberOnlyLiveView": "An active membership is required to view other members' live locations.",
     "communityStatusTitle": "Community status",
     "communityStatusBody": "Community status will appear here soon.",
     "nextEventTitle": "Next event",
     "nextEventBody": "Upcoming event details will appear here soon.",
+    "eventDetailsMemberOnly": "Event details require an active membership.",
     "memberValueTitle": "Member value",
-    "memberValueBody": "Member value highlights will appear here soon."
+    "memberValueBody": "Member value highlights will appear here soon.",
+    "settingsShortcut": "Settings and privacy"
   },
   "settings": {
     "title": "Settings",
