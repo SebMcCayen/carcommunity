@@ -63,7 +63,7 @@
     "statusError": "Something went wrong",
     "statusPermissionDenied": "Location access denied",
     "error": "Something went wrong. Please try again.",
-    "permissionDenied": "Location access was denied. Enable location services for KCC in system settings to share your position.",
+    "permissionDenied": "Location access was denied. Enable location services for this app in system settings to share your position.",
     "durationLabel": "Select sharing duration",
     "duration1h": "1 hour",
     "duration2h": "2 hours",

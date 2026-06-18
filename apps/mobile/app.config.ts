@@ -37,11 +37,9 @@ const config: ExpoConfig = {
       'expo-location',
       {
         // iOS — shown in the system permission dialog (NSLocationWhenInUseUsageDescription).
-        locationWhenInUsePermission:
-          'KCC behöver din plats medan du aktivt delar din liveposition. Delning är frivillig och tidsbegränsad. Du kan stoppa delningen när som helst.',
+        locationWhenInUsePermission: `${appDisplayName} behöver din plats medan du aktivt delar din liveposition. Delning är frivillig och tidsbegränsad. Du kan stoppa delningen när som helst.`,
         // Android — shown in the system permission dialog (ACCESS_FINE_LOCATION).
-        locationAlwaysAndWhenInUsePermission:
-          'KCC behöver din plats medan du aktivt delar din liveposition.',
+        locationAlwaysAndWhenInUsePermission: `${appDisplayName} behöver din plats medan du aktivt delar din liveposition.`,
       },
     ],
   ],

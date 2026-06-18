@@ -109,7 +109,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
   const sessionIdRef = useRef<string | null>(null);
   const locationSubRef = useRef<{ remove: () => void } | null>(null);
 
-  // Remove GPS watcher and clear position state.
+  // Remove the GPS watcher subscription.
   const stopWatcher = useCallback(() => {
     locationSubRef.current?.remove();
     locationSubRef.current = null;
@@ -185,17 +185,20 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
             recordedAt: new Date(location.timestamp).toISOString(),
           };
 
-          setCurrentPosition({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
-          setLastUpdatedAt(new Date());
-
+          // Update position state only after the backend confirms receipt.
           // Fire-and-forget — position update failures do not interrupt the session.
-          updateLiveLocationPosition(sid, { coordinate }).catch(() => {
-            // Non-sensitive diagnostic — do not log coordinates.
-            console.warn('Live location: position update failed; session remains active.');
-          });
+          updateLiveLocationPosition(sid, { coordinate })
+            .then(() => {
+              setCurrentPosition({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              });
+              setLastUpdatedAt(new Date());
+            })
+            .catch(() => {
+              // Non-sensitive diagnostic — do not log coordinates.
+              console.warn('Live location: position update failed; session remains active.');
+            });
         },
       );
       locationSubRef.current = sub;

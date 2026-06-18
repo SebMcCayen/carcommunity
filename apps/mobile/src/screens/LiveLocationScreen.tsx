@@ -103,6 +103,7 @@ export const LiveLocationScreen = () => {
   const {
     status,
     selectedDuration,
+    sessionId,
     error,
     isLoading,
     lastUpdatedAt,
@@ -112,9 +113,15 @@ export const LiveLocationScreen = () => {
     hideMeNow,
   } = useLiveLocation();
 
-  const isSharing = status === 'sharing';
+  const hasActiveSession = sessionId !== null;
+  // Show sharing controls when actively sharing, or when an error occurred
+  // while a backend session is still open — prevents orphaning an active session.
+  const isSharing = status === 'sharing' || (status === 'error' && hasActiveSession);
+  // Show start/duration controls only when there is no lingering session.
   const isNotSharing =
-    status === 'not_sharing' || status === 'error' || status === 'permission_denied';
+    status === 'not_sharing' ||
+    status === 'permission_denied' ||
+    (status === 'error' && !hasActiveSession);
   const isBusy = status === 'starting' || status === 'stopping' || isLoading;
 
   const statusColor = getStatusColor(status, theme);

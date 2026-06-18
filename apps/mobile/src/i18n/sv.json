@@ -63,7 +63,7 @@
     "statusError": "Något gick fel",
     "statusPermissionDenied": "Platstillgång nekad",
     "error": "Något gick fel. Försök igen.",
-    "permissionDenied": "Platstillgång nekades. Aktivera platstjänster för KCC i systeminställningarna för att dela din position.",
+    "permissionDenied": "Platstillgång nekades. Aktivera platstjänster för appen i systeminställningarna för att dela din position.",
     "durationLabel": "Välj delningstid",
     "duration1h": "1 timme",
     "duration2h": "2 timmar",

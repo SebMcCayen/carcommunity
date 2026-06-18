@@ -52,7 +52,7 @@ export const HomeScreen = () => {
   const { theme } = useAppTheme();
   const navigation = useNavigation<HomeScreenNavProp>();
   const { currentUser } = useAuth();
-  const { status } = useLiveLocation();
+  const { status, sessionId } = useLiveLocation();
 
   // Access flags derived conservatively from session state.
   // AuthenticatedUserSummary does not yet carry status/subscriptionEntitlement fields;
@@ -63,7 +63,9 @@ export const HomeScreen = () => {
   const canShare = currentUser !== null;
   const canViewOthers = false; // requires member_monthly — default free-user experience
 
-  const isSharing = status === 'sharing' || status === 'starting';
+  // Include sessionId so that an error state with a still-open backend session
+  // keeps showing the "stop sharing" label rather than "share my location".
+  const isSharing = status === 'sharing' || status === 'starting' || (status === 'error' && sessionId !== null);
 
   const statusColor = getLiveStatusColor({
     status,
