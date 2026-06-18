@@ -8,7 +8,7 @@
  * Backend is the source of truth; this screen fetches on mount and PATCHes on save.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { getPrivacySettings, patchPrivacySettings } from '../api/profile';
@@ -28,24 +28,35 @@ export const PrivacySettingsScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const fetchSettings = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await withToken((token) => getPrivacySettings(token));
-      if (result?.ok) {
-        setPartnerStatsOptIn(result.data.anonymousPartnerStatsOptIn);
-      }
-    } catch {
-      setError(t('privacySettings.error'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t, withToken]);
-
   useEffect(() => {
-    void fetchSettings();
-  }, [fetchSettings]);
+    let isMounted = true;
+
+    const loadSettings = async () => {
+      try {
+        const result = await withToken((token) => getPrivacySettings(token));
+        if (!isMounted) {
+          return;
+        }
+        if (result?.ok) {
+          setPartnerStatsOptIn(result.data.anonymousPartnerStatsOptIn);
+        }
+      } catch {
+        if (isMounted) {
+          setError(t('privacySettings.error'));
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [t, withToken]);
 
   const handleSave = async () => {
     setIsSaving(true);
