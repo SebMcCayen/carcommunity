@@ -12,7 +12,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
-import { type LiveSharingStatus, useLiveLocationSession } from '../hooks/useLiveLocationSession';
+import { type LiveSharingStatus } from '../hooks/useLiveLocationSession';
+import { useLiveLocation } from '../context/LiveLocationContext';
 import type { RootStackParamList } from '../navigation/types';
 
 type HomeScreenNavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -39,6 +40,7 @@ function getLiveStatusColor({
     case 'stopping':
       return brandPrimary;
     case 'error':
+    case 'permission_denied':
       return statusError;
     default:
       return textSecondary;
@@ -50,7 +52,7 @@ export const HomeScreen = () => {
   const { theme } = useAppTheme();
   const navigation = useNavigation<HomeScreenNavProp>();
   const { currentUser } = useAuth();
-  const { status } = useLiveLocationSession();
+  const { status, sessionId } = useLiveLocation();
 
   // Access flags derived conservatively from session state.
   // AuthenticatedUserSummary does not yet carry status/subscriptionEntitlement fields;
@@ -61,7 +63,9 @@ export const HomeScreen = () => {
   const canShare = currentUser !== null;
   const canViewOthers = false; // requires member_monthly — default free-user experience
 
-  const isSharing = status === 'sharing' || status === 'starting';
+  // Include sessionId so that an error state with a still-open backend session
+  // keeps showing the "stop sharing" label rather than "share my location".
+  const isSharing = status === 'sharing' || status === 'starting' || (status === 'error' && sessionId !== null);
 
   const statusColor = getLiveStatusColor({
     status,
@@ -73,6 +77,7 @@ export const HomeScreen = () => {
 
   const statusLabel: Record<LiveSharingStatus, string> = {
     not_sharing: t('home.liveLocationStatusNotSharing'),
+    permission_denied: t('liveLocation.statusPermissionDenied'),
     starting: t('liveLocation.statusStarting'),
     sharing: t('liveLocation.statusSharing'),
     stopping: t('liveLocation.statusStopping'),
