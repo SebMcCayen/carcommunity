@@ -27,10 +27,10 @@ jest.mock('../../hooks/useAuth', () => ({
   useAuth: (...args: unknown[]) => mockUseAuth(...args),
 }));
 
-// Mock useLiveLocationSession — not_sharing by default.
-const mockUseLiveLocationSession = jest.fn();
-jest.mock('../../hooks/useLiveLocationSession', () => ({
-  useLiveLocationSession: (...args: unknown[]) => mockUseLiveLocationSession(...args),
+// Mock useLiveLocation from context — not_sharing by default.
+const mockUseLiveLocation = jest.fn();
+jest.mock('../../context/LiveLocationContext', () => ({
+  useLiveLocation: (...args: unknown[]) => mockUseLiveLocation(...args),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -74,12 +74,14 @@ beforeEach(() => {
     refreshCurrentUser: jest.fn(),
     withToken: jest.fn(),
   });
-  mockUseLiveLocationSession.mockReturnValue({
+  mockUseLiveLocation.mockReturnValue({
     status: 'not_sharing',
     selectedDuration: '1h',
     sessionId: null,
     error: null,
     isLoading: false,
+    currentPosition: null,
+    lastUpdatedAt: null,
     selectDuration: jest.fn(),
     startSession: jest.fn(),
     stopSession: jest.fn(),
@@ -132,12 +134,14 @@ describe('HomeScreen — live location primary action', () => {
   });
 
   it('shows "Stoppa delning" label when actively sharing', () => {
-    mockUseLiveLocationSession.mockReturnValue({
+    mockUseLiveLocation.mockReturnValue({
       status: 'sharing',
       selectedDuration: '1h',
       sessionId: 'session-abc',
       error: null,
       isLoading: false,
+      currentPosition: null,
+      lastUpdatedAt: null,
       selectDuration: jest.fn(),
       startSession: jest.fn(),
       stopSession: jest.fn(),

@@ -1,9 +1,10 @@
 /**
  * Map screen — Mapbox foundation.
  *
- * Renders a basic Mapbox map centred on Kungsbacka, Sweden, with fake placeholder
- * markers for the current user and a nearby community member. No real location
- * data is used; all marker data is local placeholders annotated with @fake in code.
+ * Renders a basic Mapbox map centred on Kungsbacka, Sweden.
+ * When live location sharing is active, the user's real foreground position
+ * is shown instead of the placeholder self marker. Fake member markers remain
+ * until real marker data is safely implemented.
  *
  * Build requirements:
  *   This screen requires a custom Expo development build or EAS build.
@@ -13,19 +14,11 @@
  *
  * TODO: Center map on the user's real position after explicit foreground
  *       location permission has been granted (future step).
- * TODO: Request foreground location permission before reading device GPS.
- * TODO: Request background location ONLY during an active live-sharing session.
- * TODO: Add Android foreground notification when background location is introduced.
- * TODO: Add iOS background location handling only during an active sharing session.
  * TODO: Only show other users' markers for member_monthly subscribers after backend
  *       authorisation. Free users must not see other users' positions.
  * TODO: Suspension must override subscription access — enforce on the backend.
- * TODO: Blocking must eventually filter marker visibility.
  * TODO: Do not show stale or expired positions (respect TTL from the API).
- * TODO: Do not expose route or position history.
  * TODO: Throttle position updates to ~25–50 m or 5–10 s in safe driving mode.
- * TODO: Enforce safe driving mode — suppress distracting map interactions while
- *       the device is in motion.
  * TODO: Do not log coordinate values unnecessarily.
  */
 
@@ -35,6 +28,7 @@ import { StyleSheet, View } from 'react-native';
 import { getMapboxAccessToken } from '../config/mapbox';
 import type { MapMarkerViewModel } from '../map/types';
 import { useAppTheme } from '../hooks/useAppTheme';
+import { useLiveLocation } from '../context/LiveLocationContext';
 
 // Kungsbacka, Sweden — [longitude, latitude] as required by Mapbox.
 const KUNGSBACKA_CENTER: [number, number] = [12.0742, 57.5086];
@@ -52,22 +46,12 @@ if (mapboxToken) {
 // FAKE PLACEHOLDER DATA — remove before wiring in real live location markers.
 // ---------------------------------------------------------------------------
 
-/** @fake Placeholder for the current user's position near Kungsbacka centre. */
-const FAKE_SELF_MARKER: MapMarkerViewModel = {
-  id: 'fake-self',
-  coordinate: { latitude: 57.5086, longitude: 12.0742 },
-  type: 'self',
-};
-
 /** @fake Placeholder for a nearby community member marker. */
 const FAKE_MEMBER_MARKER: MapMarkerViewModel = {
   id: 'fake-member-1',
   coordinate: { latitude: 57.515, longitude: 12.085 },
   type: 'member',
 };
-
-/** @fake All placeholder markers shown before real data is available. */
-const PLACEHOLDER_MARKERS: readonly MapMarkerViewModel[] = [FAKE_SELF_MARKER, FAKE_MEMBER_MARKER];
 
 // ---------------------------------------------------------------------------
 
@@ -89,6 +73,22 @@ const MarkerDot = ({ color }: MarkerDotProps) => (
 
 export const MapScreen = () => {
   const { theme } = useAppTheme();
+  const { status, currentPosition } = useLiveLocation();
+
+  // Show the user's real position only while actively sharing.
+  // Coordinates are not logged.
+  const isSharingActive = status === 'sharing';
+  const selfMarker: MapMarkerViewModel | null =
+    isSharingActive && currentPosition !== null
+      ? {
+          id: 'self',
+          coordinate: {
+            latitude: currentPosition.latitude,
+            longitude: currentPosition.longitude,
+          },
+          type: 'self',
+        }
+      : null;
 
   return (
     <View style={styles.container}>
@@ -103,24 +103,28 @@ export const MapScreen = () => {
           animationMode="none"
         />
 
-        {/* TODO: Replace placeholder markers with real live location markers once
-                  the mobile API client safely supports them and the user has granted
-                  location permission and started a sharing session. */}
-        {PLACEHOLDER_MARKERS.map((marker) => (
+        {/* Real self-position marker — shown only while foreground sharing is active. */}
+        {selfMarker !== null && (
           <MapboxGL.PointAnnotation
-            key={marker.id}
-            id={marker.id}
-            coordinate={[marker.coordinate.longitude, marker.coordinate.latitude]}
+            key={selfMarker.id}
+            id={selfMarker.id}
+            coordinate={[selfMarker.coordinate.longitude, selfMarker.coordinate.latitude]}
           >
-            <MarkerDot
-              color={
-                marker.type === 'self'
-                  ? theme.colors.brandPrimary
-                  : theme.colors.textSecondary
-              }
-            />
+            <MarkerDot color={theme.colors.brandPrimary} />
           </MapboxGL.PointAnnotation>
-        ))}
+        )}
+
+        {/* @fake Placeholder community member marker — replace with real data in a later step. */}
+        <MapboxGL.PointAnnotation
+          key={FAKE_MEMBER_MARKER.id}
+          id={FAKE_MEMBER_MARKER.id}
+          coordinate={[
+            FAKE_MEMBER_MARKER.coordinate.longitude,
+            FAKE_MEMBER_MARKER.coordinate.latitude,
+          ]}
+        >
+          <MarkerDot color={theme.colors.textSecondary} />
+        </MapboxGL.PointAnnotation>
       </MapboxGL.MapView>
     </View>
   );

@@ -31,6 +31,19 @@ const config: ExpoConfig = {
     //                    Apple Developer account and App Store Connect before submitting.
     // TODO (production): Confirm bundle ID and entitlements match your Apple App ID configuration.
     'expo-apple-authentication',
+    // expo-location provides foreground location access.
+    // Only foreground permission is requested; background mode is not enabled here.
+    [
+      'expo-location',
+      {
+        // iOS — shown in the system permission dialog (NSLocationWhenInUseUsageDescription).
+        locationWhenInUsePermission:
+          'KCC behöver din plats medan du aktivt delar din liveposition. Delning är frivillig och tidsbegränsad. Du kan stoppa delningen när som helst.',
+        // Android — shown in the system permission dialog (ACCESS_FINE_LOCATION).
+        locationAlwaysAndWhenInUsePermission:
+          'KCC behöver din plats medan du aktivt delar din liveposition.',
+      },
+    ],
   ],
   extra: {
     appDisplayName,

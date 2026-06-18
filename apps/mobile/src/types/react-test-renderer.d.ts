@@ -4,6 +4,12 @@ declare module 'react-test-renderer' {
   export function act(callback: () => void): void;
   export function act(callback: () => Promise<void>): Promise<void>;
 
+  interface ReactTestRendererJSON {
+    type: string;
+    props: Record<string, unknown>;
+    children: Array<ReactTestRendererJSON | string> | null;
+  }
+
   interface ReactTestInstance {
     props: Record<string, unknown>;
     children: ReactTestInstance[];
@@ -16,6 +22,7 @@ declare module 'react-test-renderer' {
   interface Renderer {
     unmount(): void;
     root: ReactTestInstance;
+    toJSON(): ReactTestRendererJSON | ReactTestRendererJSON[] | null;
   }
 
   interface TestRendererModule {

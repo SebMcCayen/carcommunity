@@ -23,6 +23,7 @@
     "expo": "~56.0.11",
     "expo-apple-authentication": "~56.0.4",
     "expo-constants": "~18.0.8",
+    "expo-location": "~56.0.0",
     "expo-secure-store": "~56.0.0",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.7",
@@ -46,7 +47,8 @@
     "moduleNameMapper": {
       "^@rnmapbox/maps$": "<rootDir>/__mocks__/@rnmapbox/maps.js",
       "^@react-native-google-signin/google-signin$": "<rootDir>/__mocks__/@react-native-google-signin/google-signin.js",
-      "^expo-apple-authentication$": "<rootDir>/__mocks__/expo-apple-authentication.js"
+      "^expo-apple-authentication$": "<rootDir>/__mocks__/expo-apple-authentication.js",
+      "^expo-location$": "<rootDir>/__mocks__/expo-location.js"
     }
   }
 }

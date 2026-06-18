@@ -4,15 +4,10 @@
  * This screen allows users to voluntarily share their position with other
  * Community members for a fixed duration. All sharing is explicit opt-in.
  *
- * TODO: Request foreground location permission before starting a session.
- * TODO: Request background location only during an active session.
- * TODO: Add Android foreground notification when background tracking is introduced.
- * TODO: Add iOS background location handling only during an active session.
- * TODO: Throttle position updates to ~25–50 m or 5–10 s once device GPS is wired in.
- * TODO: Send only the latest position — no route history is ever uploaded.
- * TODO: Add Mapbox map rendering to display nearby members in a later step.
- * TODO: Enforce safe driving mode — suppress distracting interactions when device is in motion.
- * TODO: Backend must enforce feature access. Client-side flag is UI-only; never trust it for security.
+ * Foreground location permission is requested only when the user taps to
+ * start sharing. Background location is not used in this step.
+ * No route history is stored or uploaded.
+ * Backend is the source of truth for all access control decisions.
  */
 
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -25,7 +20,8 @@ import {
 import type { AppTheme } from '../design/theme';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useI18n } from '../hooks/useI18n';
-import { type LiveSharingStatus, useLiveLocationSession } from '../hooks/useLiveLocationSession';
+import { type LiveSharingStatus } from '../hooks/useLiveLocationSession';
+import { useLiveLocation } from '../context/LiveLocationContext';
 import { KccButton } from '../components/KccButton';
 
 const STATUS_DOT_SIZE = 16;
@@ -89,10 +85,19 @@ function getStatusColor(status: LiveSharingStatus, theme: AppTheme): string {
     case 'stopping':
       return theme.colors.brandPrimary;
     case 'error':
+    case 'permission_denied':
       return theme.colors.statusError;
     default:
       return theme.colors.textSecondary;
   }
+}
+
+function formatLastUpdated(date: Date | null, label: string): string | null {
+  if (!date) return null;
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${label}: ${hours}:${minutes}:${seconds}`;
 }
 
 export const LiveLocationScreen = () => {
@@ -103,20 +108,23 @@ export const LiveLocationScreen = () => {
     selectedDuration,
     error,
     isLoading,
+    lastUpdatedAt,
     selectDuration,
     startSession,
     stopSession,
     hideMeNow,
-  } = useLiveLocationSession();
+  } = useLiveLocation();
 
   const isSharing = status === 'sharing';
-  const isNotSharing = status === 'not_sharing' || status === 'error';
+  const isNotSharing =
+    status === 'not_sharing' || status === 'error' || status === 'permission_denied';
   const isBusy = status === 'starting' || status === 'stopping' || isLoading;
 
   const statusColor = getStatusColor(status, theme);
 
   const statusLabel: Record<LiveSharingStatus, string> = {
     not_sharing: t('liveLocation.statusNotSharing'),
+    permission_denied: t('liveLocation.statusPermissionDenied'),
     starting: t('liveLocation.statusStarting'),
     sharing: t('liveLocation.statusSharing'),
     stopping: t('liveLocation.statusStopping'),
@@ -128,6 +136,8 @@ export const LiveLocationScreen = () => {
     '2h': t('liveLocation.duration2h'),
     '4h': t('liveLocation.duration4h'),
   };
+
+  const lastUpdatedText = formatLastUpdated(lastUpdatedAt, t('liveLocation.lastUpdated'));
 
   return (
     <ScrollView
@@ -151,17 +161,64 @@ export const LiveLocationScreen = () => {
         accessibilityRole="none"
       >
         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-        <Text
-          style={[styles.statusText, { color: statusColor }]}
-          accessibilityRole="text"
-          accessibilityLabel={statusLabel[status]}
-        >
-          {statusLabel[status]}
-        </Text>
+        <View style={styles.statusTextContainer}>
+          <Text
+            style={[styles.statusText, { color: statusColor }]}
+            accessibilityRole="text"
+            accessibilityLabel={statusLabel[status]}
+          >
+            {statusLabel[status]}
+          </Text>
+          {isSharing && lastUpdatedText !== null && (
+            <Text style={[styles.lastUpdatedText, { color: theme.colors.textSecondary }]}>
+              {lastUpdatedText}
+            </Text>
+          )}
+        </View>
       </View>
 
-      {/* Error message */}
-      {error !== null && (
+      {/* Safe driving warning — shown prominently while sharing */}
+      {isSharing && (
+        <View
+          style={[
+            styles.warningBanner,
+            {
+              backgroundColor: theme.colors.subtleBackground,
+              borderColor: theme.colors.borderDefault,
+              borderRadius: theme.radius.md,
+              padding: theme.spacing[4],
+            },
+          ]}
+          accessibilityRole="alert"
+        >
+          <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.safeDrivingWarning')}
+          </Text>
+        </View>
+      )}
+
+      {/* Permission denied explanation */}
+      {status === 'permission_denied' && (
+        <View
+          style={[
+            styles.errorBanner,
+            {
+              backgroundColor: theme.colors.surfaceBackground,
+              borderColor: theme.colors.statusError,
+              borderRadius: theme.radius.md,
+              padding: theme.spacing[4],
+            },
+          ]}
+          accessibilityRole="alert"
+        >
+          <Text style={[styles.errorText, { color: theme.colors.statusError }]}>
+            {t('liveLocation.permissionDenied')}
+          </Text>
+        </View>
+      )}
+
+      {/* General error message */}
+      {error !== null && status !== 'permission_denied' && (
         <View
           style={[
             styles.errorBanner,
@@ -294,10 +351,25 @@ const styles = StyleSheet.create({
     borderRadius: STATUS_DOT_SIZE / 2,
     flexShrink: 0,
   },
+  statusTextContainer: {
+    flexShrink: 1,
+    gap: 4,
+  },
   statusText: {
     fontSize: 22,
     fontWeight: '600',
-    flexShrink: 1,
+  },
+  lastUpdatedText: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+  warningBanner: {
+    borderWidth: 1,
+  },
+  warningText: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   errorBanner: {
     borderWidth: 1,
