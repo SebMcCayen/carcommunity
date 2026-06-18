@@ -116,17 +116,11 @@ export const HomeScreen = () => {
 
       {/* ── 2. Community status ──────────────────────────────────── */}
       <SectionHeader title={t('home.communityStatusTitle')} />
-      <HomeCard
-        title={t('home.communityStatusTitle')}
-        body={t('home.communityStatusBody')}
-      />
+      <HomeCard body={t('home.communityStatusBody')} />
 
       {/* ── 3. Next event ────────────────────────────────────────── */}
       <SectionHeader title={t('home.nextEventTitle')} />
-      <HomeCard
-        title={t('home.nextEventTitle')}
-        body={t('home.nextEventBody')}
-      />
+      <HomeCard body={t('home.nextEventBody')} />
       {!canViewOthers && (
         <LockedFeatureNotice
           testID="home-event-member-notice"

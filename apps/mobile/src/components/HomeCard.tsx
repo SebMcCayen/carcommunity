@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useAppTheme } from '../hooks/useAppTheme';
 
 type HomeCardProps = {
-  title: string;
+  title?: string;
   body: string;
   /** Optional leading badge or icon slot rendered above the title. */
   badge?: ReactNode;
@@ -39,7 +39,7 @@ export const HomeCard = ({ title, body, badge, footer, accent = false, testID }:
       ]}
     >
       {badge}
-      <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text>
+      {title ? <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{title}</Text> : null}
       <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{body}</Text>
       {footer}
     </View>
