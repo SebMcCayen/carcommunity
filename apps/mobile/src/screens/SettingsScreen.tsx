@@ -13,14 +13,8 @@ import type { RootStackParamList } from '../navigation/types';
 
 type SettingsNavProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
-// Placeholder KCC website links — replace with API-provided values when backend is ready.
-const KCC_LINKS = {
-  support: 'https://kungsbackacc.se/support',
-  terms: 'https://kungsbackacc.se/villkor',
-  privacyPolicy: 'https://kungsbackacc.se/integritetspolicy',
-  accountDeletion: 'https://kungsbackacc.se/konto/radera',
-  dataDeletion: 'https://kungsbackacc.se/konto/data',
-};
+// Placeholder KCC website links — populated from app.config.ts extra values or brandConfig defaults.
+const KCC_LINKS = brandConfig.websiteLinks;
 
 export const SettingsScreen = () => {
   const { t } = useI18n();

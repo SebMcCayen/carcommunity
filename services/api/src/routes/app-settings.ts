@@ -1,47 +1,21 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { AppSettingsLinksResponse } from '@carcommunity/shared/onboarding';
 
+import { brandLinks } from '../lib/brand-config.js';
+
 /**
- * Placeholder KCC website URLs.
- * TODO: Replace with real production URLs once the KCC website is live.
+ * App settings links built from brand configuration.
+ * Override defaults with environment variables (BRAND_*_URL) for multi-brand deployments.
  * Do NOT include secrets, internal admin URLs, or environment-specific values.
  */
 const APP_SETTINGS_LINKS = [
-  {
-    key: 'support',
-    label: 'Support',
-    url: 'https://kungsbackacc.se/support', // TODO: Replace with real KCC support URL
-  },
-  {
-    key: 'terms',
-    label: 'Terms',
-    url: 'https://kungsbackacc.se/villkor', // TODO: Replace with real KCC terms URL
-  },
-  {
-    key: 'privacy_policy',
-    label: 'Privacy policy',
-    url: 'https://kungsbackacc.se/integritetspolicy', // TODO: Replace with real KCC privacy policy URL
-  },
-  {
-    key: 'account_deletion_info',
-    label: 'Account deletion',
-    url: 'https://kungsbackacc.se/konto/radera', // TODO: Replace with real KCC account deletion URL
-  },
-  {
-    key: 'data_deletion_info',
-    label: 'Data deletion',
-    url: 'https://kungsbackacc.se/konto/data', // TODO: Replace with real KCC data deletion URL
-  },
-  {
-    key: 'github',
-    label: 'GitHub / Open Source',
-    url: 'https://github.com/SebMcCayen/carcommunity',
-  },
-  {
-    key: 'open_source_licenses',
-    label: 'Open source licenses',
-    url: 'https://github.com/SebMcCayen/carcommunity/blob/main/LICENSE',
-  },
+  { key: 'support', label: 'Support', url: brandLinks.support },
+  { key: 'terms', label: 'Terms', url: brandLinks.terms },
+  { key: 'privacy_policy', label: 'Privacy policy', url: brandLinks.privacyPolicy },
+  { key: 'account_deletion_info', label: 'Account deletion', url: brandLinks.accountDeletion },
+  { key: 'data_deletion_info', label: 'Data deletion', url: brandLinks.dataDeletion },
+  { key: 'github', label: 'GitHub / Open Source', url: brandLinks.github },
+  { key: 'open_source_licenses', label: 'Open source licenses', url: brandLinks.licenses },
 ] as const;
 
 export async function registerAppSettingsRoutes(app: FastifyInstance): Promise<void> {
