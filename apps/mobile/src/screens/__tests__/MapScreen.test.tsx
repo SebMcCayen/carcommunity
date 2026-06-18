@@ -11,10 +11,9 @@
 
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
+import type { ReactTestRendererJSON } from 'react-test-renderer';
 
 import { AppThemeProvider } from '../../hooks/useAppTheme';
-
-type JSONNode = { type: string; props: Record<string, unknown>; children: Array<JSONNode | string> | null };
 
 /**
  * Count nodes with a given testID in the toJSON() tree.
@@ -24,7 +23,7 @@ type JSONNode = { type: string; props: Record<string, unknown>; children: Array<
  * component wrapper AND the host View for each mock component, doubling the
  * count. toJSON() returns only the rendered host-component tree.
  */
-function countTestIds(node: JSONNode | JSONNode[] | null, id: string): number {
+function countTestIds(node: ReactTestRendererJSON | ReactTestRendererJSON[] | null, id: string): number {
   if (!node) return 0;
   if (Array.isArray(node)) return node.reduce((sum, n) => sum + countTestIds(n, id), 0);
   let count = node.props['testID'] === id ? 1 : 0;

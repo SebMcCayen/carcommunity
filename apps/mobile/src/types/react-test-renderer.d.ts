@@ -4,10 +4,10 @@ declare module 'react-test-renderer' {
   export function act(callback: () => void): void;
   export function act(callback: () => Promise<void>): Promise<void>;
 
-  interface ReactTestRendererJSON {
+  export interface ReactTestRendererJSON {
     type: string;
     props: Record<string, unknown>;
-    children: Array<ReactTestRendererJSON | string> | null;
+    children: (ReactTestRendererJSON | string)[] | null;
   }
 
   interface ReactTestInstance {

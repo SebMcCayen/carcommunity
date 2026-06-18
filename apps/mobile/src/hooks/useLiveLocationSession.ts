@@ -33,7 +33,7 @@ export type LiveSharingStatus =
   | 'error';
 
 /** Simplified coordinate exposed to UI/map — never log this value. */
-export interface LiveSharingPosition {
+export interface LiveLocationPosition {
   latitude: number;
   longitude: number;
 }
@@ -50,7 +50,7 @@ export interface UseLiveLocationSessionResult {
   /** True while an async action is in flight. */
   isLoading: boolean;
   /** Latest successfully sent position, or null. Never log this value. */
-  currentPosition: LiveSharingPosition | null;
+  currentPosition: LiveLocationPosition | null;
   /** Time of the last successful position update sent to the backend, or null. */
   lastUpdatedAt: Date | null;
   /** Update the duration selection. Only applies when not actively sharing. */
@@ -102,7 +102,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentPosition, setCurrentPosition] = useState<LiveSharingPosition | null>(null);
+  const [currentPosition, setCurrentPosition] = useState<LiveLocationPosition | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   // Refs avoid stale closure issues inside the location watcher callback.
@@ -193,7 +193,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
 
           // Fire-and-forget — position update failures do not interrupt the session.
           updateLiveLocationPosition(sid, { coordinate }).catch(() => {
-            // Position update failed silently; session remains active.
+            // Non-sensitive diagnostic — do not log coordinates.
+            console.warn('Live location: position update failed; session remains active.');
           });
         },
       );

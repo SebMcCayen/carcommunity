@@ -94,10 +94,7 @@ function getStatusColor(status: LiveSharingStatus, theme: AppTheme): string {
 
 function formatLastUpdated(date: Date | null, label: string): string | null {
   if (!date) return null;
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const seconds = date.getSeconds().toString().padStart(2, '0');
-  return `${label}: ${hours}:${minutes}:${seconds}`;
+  return `${label}: ${date.toLocaleTimeString()}`;
 }
 
 export const LiveLocationScreen = () => {
