@@ -53,11 +53,11 @@ export const HomeScreen = () => {
   const { status } = useLiveLocationSession();
 
   // Access flags derived conservatively from session state.
-  // AuthenticatedUserSummary does not yet carry role/status/subscription fields;
+  // AuthenticatedUserSummary does not yet carry status/subscriptionEntitlement fields;
   // those are only available once the full user profile is loaded.
   // Backend enforces the real access decisions — these flags are UX-only.
   // TODO: replace with currentUserCanShareOwnLiveLocation / currentUserCanViewOtherLiveLocations
-  //   once the session user shape carries role/status/subscriptionEntitlement.
+  //   once the session user shape carries status/subscriptionEntitlement.
   const canShare = currentUser !== null;
   const canViewOthers = false; // requires member_monthly — default free-user experience
 

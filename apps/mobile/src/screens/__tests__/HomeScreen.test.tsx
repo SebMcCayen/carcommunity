@@ -196,7 +196,7 @@ describe('HomeScreen — member-only live view notice (free user)', () => {
     expect(notices.length).toBeGreaterThan(0);
   });
 
-  it('does not show member-only live location notice for members', () => {
+  it('shows member-only live location notice for members (conservative default until subscription data is available)', () => {
     // NOTE: canViewOthers is currently always false until AuthenticatedUserSummary
     // carries subscription data. This test documents the current behaviour.
     mockUseAuth.mockReturnValue({

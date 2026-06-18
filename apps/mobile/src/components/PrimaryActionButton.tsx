@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
+import { palette } from '../design/tokens';
 import { useAppTheme } from '../hooks/useAppTheme';
 
 type PrimaryActionButtonProps = {
@@ -43,7 +44,7 @@ export const PrimaryActionButton = ({
         style={[
           styles.label,
           {
-            color: theme.colors.textPrimary,
+            color: palette.inkBlack,
             fontSize: theme.typography.size.titleMd,
             fontWeight: theme.typography.weight.semibold,
           },
