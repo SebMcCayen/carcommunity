@@ -63,6 +63,8 @@ export interface AuthenticatedUserSummary {
   roles: Role[];
   displayName?: string | null;
   avatarUrl?: string | null;
+  /** ISO 8601 timestamp when onboarding was completed, or null if not yet completed. */
+  onboardingCompletedAt?: string | null;
 }
 
 /** @deprecated Use AuthenticatedUserSummary instead. */

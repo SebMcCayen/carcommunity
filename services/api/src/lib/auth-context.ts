@@ -34,6 +34,8 @@ export interface AuthContext {
   sessionId: string;
   sessionExpiresAt: string;
   lastActiveAt: string | null;
+  /** ISO 8601 timestamp when onboarding was completed, or null if not yet done. */
+  onboardingCompletedAt: string | null;
 }
 
 declare module 'fastify' {
@@ -54,6 +56,7 @@ const devAuthContextSchema = z.object({
   status: z.enum(USER_STATUSES),
   subscriptionEntitlement: z.enum(SUBSCRIPTION_ENTITLEMENTS),
   sessionId: z.string().min(1),
+  onboardingCompletedAt: z.string().nullable().optional(),
 });
 type DevAuthContext = z.infer<typeof devAuthContextSchema>;
 
@@ -115,6 +118,7 @@ export async function registerAuthContext(
           sessionId: session.sessionId,
           sessionExpiresAt: session.expiresAt.toISOString(),
           lastActiveAt: session.lastActiveAt ? session.lastActiveAt.toISOString() : null,
+          onboardingCompletedAt: session.onboardingCompletedAt ? session.onboardingCompletedAt.toISOString() : null,
         };
         return;
       }
@@ -135,9 +139,11 @@ export async function registerAuthContext(
                 displayName: null,
                 identities: [],
                 roles: [parsed.role],
+                onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
               },
               sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
               lastActiveAt: null,
+              onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
             }
           : null;
       }

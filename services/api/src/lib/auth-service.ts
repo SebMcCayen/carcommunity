@@ -23,6 +23,7 @@ export interface AuthenticatedSession {
   lastActiveAt: Date | null;
   expiresAt: Date;
   user: AuthenticatedUserSummary;
+  onboardingCompletedAt: Date | null;
 }
 
 export interface CreatedSession {
@@ -47,12 +48,14 @@ function buildAuthenticatedUserSummary(input: {
   role: UserRole;
   displayName: string | null;
   identities: Array<{ provider: AuthProvider; providerSubject: string }>;
+  onboardingCompletedAt?: Date | null;
 }): AuthenticatedUserSummary {
   return {
     userId: input.id,
     displayName: input.displayName,
     identities: input.identities,
     roles: [input.role],
+    onboardingCompletedAt: input.onboardingCompletedAt ? input.onboardingCompletedAt.toISOString() : null,
   };
 }
 
@@ -112,6 +115,7 @@ export function createAuthService(prisma: PrismaClient): AuthService {
           provider: identity.provider,
           providerSubject: identity.providerSubject,
         })),
+        onboardingCompletedAt: user.onboardingCompletedAt,
       });
     },
 
@@ -184,6 +188,7 @@ export function createAuthService(prisma: PrismaClient): AuthService {
         displayName: session.user.displayName,
         lastActiveAt: now,
         expiresAt: session.expiresAt,
+        onboardingCompletedAt: session.user.onboardingCompletedAt,
         user: buildAuthenticatedUserSummary({
           id: session.user.id,
           displayName: session.user.displayName,
@@ -192,6 +197,7 @@ export function createAuthService(prisma: PrismaClient): AuthService {
             provider: identity.provider,
             providerSubject: identity.providerSubject,
           })),
+          onboardingCompletedAt: session.user.onboardingCompletedAt,
         }),
       } satisfies AuthenticatedSession;
     },

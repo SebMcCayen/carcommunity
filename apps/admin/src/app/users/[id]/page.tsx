@@ -14,6 +14,8 @@ export default async function UserDetailPage({ params }: UserDetailPageProps) {
         'Display user role, status, subscription entitlement, and last active timestamp',
         'Display moderation status summary from backend status and moderation actions',
         'Display minimal account timeline fields (createdAt, updatedAt)',
+        'Display onboarding completed status (onboardingCompletedAt) — boolean indicator only',
+        'Display anonymous partner statistics opt-in as a boolean (true/false) — read-only, do not allow admin to change this value',
         'Do not expose sensitive personal data in admin placeholders',
         'Send warning — POST /v1/admin/users/:userId/warn (backend ready, reason required)',
         'Temporary suspension — POST /v1/admin/users/:userId/suspend-temporary (backend ready, reason + expiresAt required)',

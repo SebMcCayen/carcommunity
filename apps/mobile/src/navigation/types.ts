@@ -1,9 +1,11 @@
 export type RootStackParamList = {
   Login: undefined;
+  Onboarding: undefined;
   MainTabs: undefined;
   Settings: undefined;
   About: undefined;
   LiveLocation: undefined;
+  PrivacySettings: undefined;
 };
 
 export type MainTabParamList = {

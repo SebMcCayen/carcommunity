@@ -55,6 +55,12 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   /** Re-fetch the current user from GET /v1/auth/me to sync with backend state. */
   refreshCurrentUser: () => Promise<void>;
+  /**
+   * Execute an authenticated API call with the current session token.
+   * The token is never exposed as a plain value — it is passed into fn as a closure argument.
+   * Returns null if no active session exists.
+   */
+  withToken: <T>(fn: (token: string) => Promise<T>) => Promise<T | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -203,6 +209,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, [clearAuthState]);
 
+  const withToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T | null> => {
+    const token = sessionTokenRef.current;
+    if (!token) return null;
+    return fn(token);
+  }, []);
+
   const value: AuthContextValue = {
     currentUser,
     isAuthenticated: currentUser !== null,
@@ -211,6 +223,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     login,
     logout,
     refreshCurrentUser,
+    withToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

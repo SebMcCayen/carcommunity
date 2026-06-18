@@ -18,6 +18,8 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { LiveLocationScreen } from '../screens/LiveLocationScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { MapScreen } from '../screens/MapScreen';
+import { OnboardingScreen } from '../screens/OnboardingScreen';
+import { PrivacySettingsScreen } from '../screens/PrivacySettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { MainTabParamList, RootStackParamList } from './types';
@@ -50,7 +52,9 @@ const MainTabs = () => {
 export const AppNavigator = () => {
   const { theme, resolvedMode } = useAppTheme();
   const { t } = useI18n();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, currentUser } = useAuth();
+
+  const onboardingCompleted = Boolean(currentUser?.onboardingCompletedAt);
 
   const navigationTheme: NavigationTheme = {
     ...(resolvedMode === 'dark' ? NavigationDarkTheme : NavigationLightTheme),
@@ -87,6 +91,12 @@ export const AppNavigator = () => {
             component={LoginScreen}
             options={{ headerShown: false }}
           />
+        ) : !onboardingCompleted ? (
+          <Stack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{ headerShown: false, gestureEnabled: false }}
+          />
         ) : (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
@@ -104,6 +114,11 @@ export const AppNavigator = () => {
               name="LiveLocation"
               component={LiveLocationScreen}
               options={{ title: t('liveLocation.screenTitle') }}
+            />
+            <Stack.Screen
+              name="PrivacySettings"
+              component={PrivacySettingsScreen}
+              options={{ title: t('settings.privacy') }}
             />
           </>
         )}

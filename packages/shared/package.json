@@ -31,6 +31,10 @@
     "./diagnostics": {
       "types": "./dist/diagnostics.d.ts",
       "default": "./dist/diagnostics.js"
+    },
+    "./onboarding": {
+      "types": "./dist/onboarding.d.ts",
+      "default": "./dist/onboarding.js"
     }
   },
   "scripts": {
