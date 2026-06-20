@@ -188,7 +188,9 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
     }
 
     // Initial fetch.
-    void poll();
+    if (AppState.currentState === 'active') {
+      void poll();
+    }
 
     // Scheduled polling interval — skips polls when app is backgrounded.
     const intervalId = setInterval(() => {

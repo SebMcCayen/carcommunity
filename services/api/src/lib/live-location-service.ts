@@ -31,7 +31,8 @@ export const LIVE_LOCATION_DATABASE_META = {
 
 /**
  * Service-level upper bound for marker query size.
- * Effective response size is min(route-level pageSize validation, this cap).
+ * Route validation currently caps pageSize at MAX_LIVE_LOCATION_PAGE_SIZE (50)
+ * in services/api/src/routes/live-location.ts, so effective size is min(50, this cap).
  */
 export const LIVE_LOCATION_MAX_MARKER_COUNT = 100;
 
