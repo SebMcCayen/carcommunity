@@ -139,6 +139,8 @@ export async function registerAuthContext(
                 displayName: null,
                 identities: [],
                 roles: [parsed.role],
+                status: parsed.status,
+                subscriptionEntitlement: parsed.subscriptionEntitlement,
                 onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
               },
               sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
