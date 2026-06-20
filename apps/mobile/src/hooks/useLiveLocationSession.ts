@@ -22,6 +22,7 @@ import {
   loadLiveLocationSession,
   saveLiveLocationSession,
 } from '../storage/liveLocationStorage';
+import { loadSessionToken } from '../storage/tokenStorage';
 
 import {
   BACKGROUND_LOCATION_TASK_NAME,
@@ -180,6 +181,24 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
   // Refs avoid stale closure issues inside the location watcher callback.
   const sessionIdRef = useRef<string | null>(null);
   const locationSubRef = useRef<{ remove: () => void } | null>(null);
+  const sessionTokenRef = useRef<string | null>(null);
+
+  const persistSessionBackgroundMode = useCallback(
+    async (
+      mode: BackgroundPermissionMode,
+      options?: { notificationTitle?: string; notificationBody?: string },
+    ) => {
+      const stored = await loadLiveLocationSession().catch(() => null);
+      if (!stored) return;
+      await saveLiveLocationSession({
+        ...stored,
+        backgroundPermissionMode: mode,
+        notificationTitle: options?.notificationTitle ?? stored.notificationTitle,
+        notificationBody: options?.notificationBody ?? stored.notificationBody,
+      }).catch(() => undefined);
+    },
+    [],
+  );
 
   // Remove the GPS watcher subscription.
   const stopWatcher = useCallback(() => {
@@ -212,7 +231,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
 
         // Update position state only after the backend confirms receipt.
         // Fire-and-forget — position update failures do not interrupt the session.
-        updateLiveLocationPosition(currentSid, { coordinate })
+        updateLiveLocationPosition(currentSid, { coordinate }, sessionTokenRef.current ?? undefined)
           .then(() => {
             setCurrentPosition({
               latitude: location.coords.latitude,
@@ -257,6 +276,10 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       setSessionId(stored.sessionId);
       setSessionExpiresAt(new Date(stored.expiresAt));
       setStatus('sharing');
+      setBackgroundPermissionMode(stored.backgroundPermissionMode ?? 'not_requested');
+      const auth = await loadSessionToken().catch(() => null);
+      if (!mounted) return;
+      sessionTokenRef.current = auth?.token ?? null;
 
       // Check whether background permission is currently granted and task is running.
       const bgPermission = await ExpoLocation.getBackgroundPermissionsAsync().catch(() => null);
@@ -264,13 +287,17 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
 
       if (bgPermission?.granted === true) {
         setBackgroundPermissionMode('granted');
+        void persistSessionBackgroundMode('granted');
         // Ensure the background task is running for this session.
         const taskRunning = await ExpoLocation.hasStartedLocationUpdatesAsync(
           BACKGROUND_LOCATION_TASK_NAME,
         ).catch(() => false);
         if (!mounted) return;
         if (!taskRunning) {
-          await startBackgroundLocationUpdates().catch(() => undefined);
+          await startBackgroundLocationUpdates(
+            stored.notificationTitle,
+            stored.notificationBody,
+          ).catch(() => undefined);
         }
       }
 
@@ -283,7 +310,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     return () => {
       mounted = false;
     };
-  }, [startForegroundWatcher]);
+  }, [persistSessionBackgroundMode, startForegroundWatcher]);
 
   // Clean up watcher and background task on unmount (e.g. logout).
   useEffect(() => {
@@ -322,7 +349,12 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     let newSessionId: string;
     let expiresAt: string;
     try {
-      const response = await startLiveLocationSession({ duration: selectedDuration });
+      const auth = await loadSessionToken().catch(() => null);
+      sessionTokenRef.current = auth?.token ?? null;
+      const response = await startLiveLocationSession(
+        { duration: selectedDuration },
+        sessionTokenRef.current ?? undefined,
+      );
       newSessionId = response.data.session.id;
       expiresAt = response.data.session.expiresAt;
       setSessionId(newSessionId);
@@ -343,6 +375,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       sessionId: newSessionId,
       expiresAt,
       apiBaseUrl: publicEnv.apiBaseUrl,
+      backgroundPermissionMode: 'not_requested',
     }).catch(() => undefined);
 
     // Step 4: start foreground GPS watcher.
@@ -366,26 +399,40 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       const { status: permStatus } = await ExpoLocation.requestBackgroundPermissionsAsync();
 
       if (permStatus === ExpoLocation.PermissionStatus.GRANTED) {
-        setBackgroundPermissionMode('granted');
         // Start background task only if a session is currently active.
         // Caller supplies i18n-translated strings for the Android notification.
         if (sessionIdRef.current) {
-          await startBackgroundLocationUpdates(notificationTitle, notificationBody).catch(
-            () => undefined,
-          );
+          const started = await startBackgroundLocationUpdates(
+            notificationTitle,
+            notificationBody,
+          ).catch(() => false);
+          if (started) {
+            setBackgroundPermissionMode('granted');
+            await persistSessionBackgroundMode('granted', {
+              notificationTitle,
+              notificationBody,
+            });
+          } else {
+            setBackgroundPermissionMode('foreground_only');
+            await persistSessionBackgroundMode('foreground_only');
+          }
+        } else {
+          setBackgroundPermissionMode('granted');
         }
       } else {
         // User declined — stay in foreground-only mode; do not pressure the user again.
         setBackgroundPermissionMode('foreground_only');
+        await persistSessionBackgroundMode('foreground_only');
       }
     },
-    [],
+    [persistSessionBackgroundMode],
   );
 
   /** Dismiss the background permission rationale; continue with foreground-only sharing. */
   const skipBackgroundPermission = useCallback(() => {
     setBackgroundPermissionMode('foreground_only');
-  }, []);
+    void persistSessionBackgroundMode('foreground_only');
+  }, [persistSessionBackgroundMode]);
 
   /** Stop the active session and all location updates. */
   const stopSession = useCallback(async () => {
@@ -403,7 +450,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     setError(null);
     const sid = sessionIdRef.current;
     try {
-      await stopLiveLocationSession(sid, { reason: 'user_stop' });
+      await stopLiveLocationSession(sid, { reason: 'user_stop' }, sessionTokenRef.current ?? undefined);
       sessionIdRef.current = null;
       setSessionId(null);
       setStatus('not_sharing');
@@ -429,7 +476,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     setIsLoading(true);
     setError(null);
     try {
-      await hideMeNowApi();
+      await hideMeNowApi(sessionTokenRef.current ?? undefined);
       sessionIdRef.current = null;
       setSessionId(null);
       setStatus('not_sharing');

@@ -31,9 +31,10 @@ import {
   isSessionExpired,
   loadLiveLocationSession,
 } from '../storage/liveLocationStorage';
+import { loadSessionToken } from '../storage/tokenStorage';
 
 /** Centralised task name — must match across defineTask, start, and stop calls. */
-export const BACKGROUND_LOCATION_TASK_NAME = 'kcc-background-location';
+export const BACKGROUND_LOCATION_TASK_NAME = 'carcommunity-background-location';
 
 // Throttle — same thresholds as the foreground watcher.
 const BACKGROUND_INTERVAL_MS = 5000; // 5 seconds
@@ -51,9 +52,9 @@ const BACKGROUND_DISTANCE_M = 25; // 25 metres
  * native build plugin. Those are build-time strings and cannot use runtime
  * i18n. Both sets should be kept in sync.
  */
-const DEFAULT_NOTIFICATION_TITLE = 'KCC liveposition är aktiv';
+const DEFAULT_NOTIFICATION_TITLE = 'Live location sharing is active';
 const DEFAULT_NOTIFICATION_BODY =
-  'Din position delas under den aktiva, tidsbegränsade sessionen.';
+  'Your location is being shared during the active time-limited session.';
 
 /**
  * Idempotent guard: only call defineTask once per JS runtime.
@@ -108,11 +109,21 @@ if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK_NAME)) {
       // Send latest position to backend.
       // On auth/not-found errors, stop locally. On transient failures, skip — no retry loop.
       try {
+        const auth = await loadSessionToken().catch(() => null);
+        if (!auth?.token) {
+          await clearLiveLocationSession().catch(() => undefined);
+          await stopBackgroundLocationUpdates().catch(() => undefined);
+          return;
+        }
+
         const base = session.apiBaseUrl.replace(/\/$/, '');
         const path = `/v1/live-location/sessions/${session.sessionId}/position`;
         const response = await fetch(`${base}${path}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + auth.token,
+          },
           body: JSON.stringify({ coordinate }),
         });
 
