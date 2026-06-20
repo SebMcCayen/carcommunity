@@ -164,6 +164,7 @@ export const EventsScreen = () => {
   }, [isLoadingMore, nextCursor, withToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void fetchTeasers();
   }, [fetchTeasers]);
 
@@ -303,4 +304,3 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
-

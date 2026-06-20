@@ -130,6 +130,7 @@ export const EventDetailScreen = () => {
   // When entitlement is lost, immediately clear protected member-only data.
   useEffect(() => {
     if (!isMember) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- security: clear protected data as soon as access is lost
       setDetail(null);
       setOptimisticRsvp(null);
       setError(null);
@@ -155,6 +156,7 @@ export const EventDetailScreen = () => {
   }, [eventId, isMember, t, withToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void fetchDetail();
   }, [fetchDetail]);
 
