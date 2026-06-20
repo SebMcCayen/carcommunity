@@ -203,6 +203,7 @@
     "blockedUsersEmpty": "You have not blocked anyone.",
     "unblock": "Unblock",
     "unblockConfirmTitle": "Unblock user?",
+    "unblockConfirmBody": "This user will be able to interact with you again.",
     "unblockConfirmAction": "Unblock",
     "unblockCancelAction": "Cancel",
     "unblockSuccess": "User has been unblocked.",

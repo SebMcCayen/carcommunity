@@ -8,6 +8,7 @@ import {
   type BlockedUsersListResponse,
   type UnblockUserResponse,
 } from '@carcommunity/shared/blocking';
+import { LIVE_LOCATION_ROUTE_PATHS } from '@carcommunity/shared/live-location';
 
 import { LOCAL_DATABASE_URL } from './config.js';
 import { AppError } from './lib/errors.js';
@@ -17,6 +18,11 @@ import type {
   ListBlockedUsersResult,
   UnblockUserResult,
 } from './lib/blocking-service.js';
+import type {
+  LiveLocationViewer,
+  LiveLocationService,
+  VisibleMarkersResult,
+} from './lib/live-location-service.js';
 import { createServer } from './server.js';
 
 // ---------------------------------------------------------------------------
@@ -71,11 +77,39 @@ class FakeBlockingService implements Pick<
   }
 }
 
+class FakeLiveLocationService implements Pick<LiveLocationService, 'getVisibleMarkers'> {
+  public lastGetVisibleMarkersParams: {
+    viewer: LiveLocationViewer;
+    page: number;
+    pageSize: number;
+    excludeUserIds?: string[];
+  } | null = null;
+
+  async getVisibleMarkers(params: {
+    viewer: LiveLocationViewer;
+    page: number;
+    pageSize: number;
+    excludeUserIds?: string[];
+  }): Promise<VisibleMarkersResult> {
+    this.lastGetVisibleMarkersParams = params;
+    return {
+      markers: [],
+      total: 0,
+      hasNext: false,
+      generatedAt: '2026-06-20T10:00:00.000Z',
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
-async function createTestApp(port: number, blockingService?: FakeBlockingService) {
+async function createTestApp(
+  port: number,
+  blockingService?: FakeBlockingService,
+  liveLocationService?: FakeLiveLocationService,
+) {
   return createServer(
     {
       nodeEnv: 'test',
@@ -85,6 +119,7 @@ async function createTestApp(port: number, blockingService?: FakeBlockingService
     },
     {
       blockingService: blockingService as unknown as BlockingService,
+      liveLocationService: liveLocationService as unknown as LiveLocationService,
     },
   );
 }
@@ -394,23 +429,28 @@ test('GET /v1/users/me/blocked-users rejects invalid pagination parameters', asy
 // ---------------------------------------------------------------------------
 
 test('blocked users are excluded from live location markers', async () => {
-  // The blocking service returns invisible IDs that are passed to the
-  // live location service. The live location service filters them at the
-  // DB query level. This test verifies the route wires them together correctly.
-  //
-  // We use a fake blocking service that returns 'hidden-member' as invisible,
-  // and a fake live location service that returns markers for both
-  // 'visible-member' and 'hidden-member'. The route must pass invisible IDs
-  // so the live location service can exclude 'hidden-member'.
-  //
-  // Because FakeLiveLocationService does not perform real DB filtering,
-  // this test validates the correct IDs are passed — not the actual DB exclusion.
-  // The DB-level filtering is validated by live-location-service unit tests
-  // and integration tests that connect to a real database.
-  //
-  // NOTE: This integration aspect is covered by the blocking-service unit
-  // tests and live-location-service unit tests separately.
-  assert.ok(true, 'marker blocking enforcement is tested at service and integration level');
+  const blockingService = new FakeBlockingService();
+  blockingService.invisibleIds = ['hidden-member'];
+  const liveLocationService = new FakeLiveLocationService();
+  const app = await createTestApp(4214, blockingService, liveLocationService);
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${LIVE_LOCATION_ROUTE_PATHS.markers}?page=1&pageSize=20`,
+      headers: {
+        'x-dev-user': devAuthHeader({
+          userId: BLOCKER_UUID,
+          subscriptionEntitlement: 'member_monthly',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(liveLocationService.lastGetVisibleMarkersParams?.excludeUserIds, ['hidden-member']);
+  } finally {
+    await app.close();
+  }
 });
 
 test('subscription entitlement does not override blocking', async () => {

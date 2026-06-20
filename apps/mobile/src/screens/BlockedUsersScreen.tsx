@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 
-import type { BlockedUserSummary } from '@carcommunity/shared/blocking';
+import { DEFAULT_BLOCKED_USERS_PAGE_SIZE, type BlockedUserSummary } from '@carcommunity/shared/blocking';
 
 import { listBlockedUsers, unblockUser } from '../api/blocking';
 import { KccButton } from '../components/KccButton';
@@ -25,8 +25,19 @@ export const BlockedUsersScreen = () => {
 
     try {
       await withToken(async (token) => {
-        const response = await listBlockedUsers(1, 20, token);
-        setBlockedUsers(response.data.blockedUsers);
+        const pageSize = DEFAULT_BLOCKED_USERS_PAGE_SIZE;
+        const allBlockedUsers: BlockedUserSummary[] = [];
+        let page = 1;
+        let hasNext = true;
+
+        while (hasNext) {
+          const response = await listBlockedUsers(page, pageSize, token);
+          allBlockedUsers.push(...response.data.blockedUsers);
+          hasNext = response.meta.hasNext;
+          page += 1;
+        }
+
+        setBlockedUsers(allBlockedUsers);
       });
     } catch {
       setError(t('blocking.errorGeneric'));
@@ -41,11 +52,12 @@ export const BlockedUsersScreen = () => {
 
   const handleUnblock = useCallback(
     (userId: string, displayName: string | null | undefined) => {
-      const name = displayName ?? t('blocking.blockedUsersTitle');
+      const name = displayName?.trim();
+      const message = name && name.length > 0 ? name : t('blocking.unblockConfirmBody');
 
       Alert.alert(
         t('blocking.unblockConfirmTitle'),
-        name,
+        message,
         [
           {
             text: t('blocking.unblockCancelAction'),

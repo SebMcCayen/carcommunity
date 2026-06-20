@@ -8,7 +8,7 @@ import { AppError, fromUnknownError } from './lib/errors.js';
 import type { LiveLocationService } from './lib/live-location-service.js';
 import type { EventService } from './lib/event-service.js';
 import type { ModerationService } from './lib/moderation-service.js';
-import { BlockingService } from './lib/blocking-service.js';
+import type { BlockingService } from './lib/blocking-service.js';
 import { registerPrisma } from './plugins/prisma.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';

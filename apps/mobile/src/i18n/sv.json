@@ -206,6 +206,7 @@
     "blockedUsersEmpty": "Du har inte blockerat någon.",
     "unblock": "Avblockera",
     "unblockConfirmTitle": "Avblockera användare?",
+    "unblockConfirmBody": "Den här användaren kan interagera med dig igen.",
     "unblockConfirmAction": "Avblockera",
     "unblockCancelAction": "Avbryt",
     "unblockSuccess": "Användaren har avblockerats.",
