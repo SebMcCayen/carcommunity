@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ReactElement, ReactNode } from 'react';
+import { RefreshControlProps, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useAppTheme } from '../hooks/useAppTheme';
 
@@ -7,7 +7,7 @@ type ScreenContainerProps = {
   children: ReactNode;
   testID?: string;
   /** Optional pull-to-refresh control passed to the underlying ScrollView. */
-  refreshControl?: React.ReactElement;
+  refreshControl?: ReactElement<RefreshControlProps>;
 };
 
 export const ScreenContainer = ({ children, testID, refreshControl }: ScreenContainerProps) => {
