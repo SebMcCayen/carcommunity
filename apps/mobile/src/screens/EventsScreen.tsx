@@ -1,22 +1,44 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { canAccessMemberFeatures } from '@carcommunity/shared/users';
+import type { EventTeaser } from '@carcommunity/shared/events';
 
+import { loadEventTeasers } from '../api/events';
 import { KccButton } from '../components/KccButton';
-import { KccCard } from '../components/KccCard';
+import { LockedFeatureNotice } from '../components/LockedFeatureNotice';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useAppTheme } from '../hooks/useAppTheme';
+import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
-import type { EventTeaser, EventRsvpStatus } from '@carcommunity/shared/events';
+import type { RootStackParamList } from '../navigation/types';
+
+type EventsScreenNavProp = NativeStackNavigationProp<RootStackParamList>;
 
 /**
  * EventTeaserCard shows safe public event info for all authenticated users.
  * Exact location details are never shown here — those require a member subscription.
  */
-function EventTeaserCard({ event }: { event: EventTeaser }) {
+function EventTeaserCard({
+  event,
+  isMember,
+  onPress,
+}: {
+  event: EventTeaser;
+  isMember: boolean;
+  onPress: () => void;
+}) {
   const { theme } = useAppTheme();
   const { t, locale } = useI18n();
 
+  const isCancelled = event.status === 'cancelled';
+
   return (
-    <View
+    <TouchableOpacity
+      testID={`event-teaser-card-${event.id}`}
+      accessibilityRole="button"
+      onPress={onPress}
       style={[
         styles.teaserCard,
         {
@@ -25,12 +47,21 @@ function EventTeaserCard({ event }: { event: EventTeaser }) {
           borderRadius: theme.radius.lg,
           padding: theme.spacing[4],
           gap: theme.spacing[2],
+          opacity: isCancelled ? 0.7 : 1,
         },
       ]}
     >
       {event.isOfficial && (
         <Text style={[styles.officialBadge, { color: theme.colors.brandPrimary }]}>
           {t('events.officialBadge')}
+        </Text>
+      )}
+      {isCancelled && (
+        <Text
+          testID={`event-cancelled-badge-${event.id}`}
+          style={[styles.cancelledBadge, { color: theme.colors.statusError }]}
+        >
+          {t('events.cancelledBadge')}
         </Text>
       )}
       <Text style={[styles.teaserTitle, { color: theme.colors.textPrimary }]}>{event.title}</Text>
@@ -45,109 +76,183 @@ function EventTeaserCard({ event }: { event: EventTeaser }) {
       <Text style={[styles.teaserMeta, { color: theme.colors.textSecondary }]}>
         {event.approximateArea}
       </Text>
-    </View>
+      {!isMember && (
+        <Text
+          testID={`event-lock-indicator-${event.id}`}
+          style={[styles.lockIndicator, { color: theme.colors.textSecondary }]}
+        >
+          {t('events.lockIndicator')}
+        </Text>
+      )}
+    </TouchableOpacity>
   );
 }
 
 /**
- * MemberUpgradeBanner is shown below teasers to prompt free users.
- */
-function MemberUpgradeBanner() {
-  const { theme } = useAppTheme();
-  const { t } = useI18n();
-
-  return (
-    <View testID="events-member-upgrade-banner"
-      style={[
-        styles.upgradeBanner,
-        {
-          backgroundColor: theme.colors.surfaceBackground,
-          borderColor: theme.colors.borderDefault,
-          borderRadius: theme.radius.lg,
-          padding: theme.spacing[4],
-          gap: theme.spacing[2],
-        },
-      ]}
-    >
-      <Text style={[styles.upgradeTitle, { color: theme.colors.textPrimary }]}>
-        {t('events.memberRequiredTitle')}
-      </Text>
-      <Text style={[styles.upgradeBody, { color: theme.colors.textSecondary }]}>
-        {t('events.memberRequiredBody')}
-      </Text>
-    </View>
-  );
-}
-
-/**
- * RsvpButtons shows the three RSVP states.
- * These are UI-only placeholders — actual RSVP submission requires a member subscription
- * and is enforced by the backend.
+ * EventsScreen — Upcoming event list.
  *
- * TODO: Wire up actual RSVP calls via submitEventRsvp() from api/events.ts once
- *   the member detail view is built out.
- */
-function RsvpButtons({ current }: { current?: EventRsvpStatus | null }) {
-  const { t } = useI18n();
-
-  const options: { status: EventRsvpStatus; labelKey: string }[] = [
-    { status: 'going', labelKey: 'events.rsvpGoing' },
-    { status: 'maybe', labelKey: 'events.rsvpMaybe' },
-    { status: 'not_going', labelKey: 'events.rsvpNotGoing' },
-  ];
-
-  return (
-    <View style={styles.rsvpRow}>
-      {options.map(({ status, labelKey }) => (
-        <KccButton
-          key={status}
-          label={t(labelKey)}
-          variant={current === status ? 'primary' : 'secondary'}
-          disabled
-        />
-      ))}
-    </View>
-  );
-}
-
-/**
- * EventsScreen — Events foundation.
- *
- * Free users see event teasers (approximate area, date) but not exact location.
- * Members with active subscription can see full details and RSVP.
- *
- * TODO: Load teasers from loadEventTeasers() once auth context is wired into the mobile app.
- * TODO: Show member detail view for users with member_monthly subscription.
- * TODO: Open Apple Maps on iOS and Google Maps on Android for navigation (future version).
+ * All authenticated users see event teasers (safe fields only — no exact location).
+ * Free users see a membership notice; members can tap a card to see full details.
  */
 export const EventsScreen = () => {
   const { t } = useI18n();
+  const { theme } = useAppTheme();
+  const navigation = useNavigation<EventsScreenNavProp>();
+  const { currentUser, withToken } = useAuth();
 
-  // TODO: Replace placeholder teasers with real data from loadEventTeasers().
-  const placeholderTeasers: EventTeaser[] = [];
-  const isMember = false; // TODO: derive from session access helpers
+  // Client-side entitlement check — UX only. Backend enforces the real decision.
+  const isMember =
+    currentUser !== null &&
+    canAccessMemberFeatures({
+      role: currentUser.roles[0] ?? 'user',
+      status: currentUser.status,
+      subscriptionEntitlement: currentUser.subscriptionEntitlement,
+    });
+
+  const [teasers, setTeasers] = useState<EventTeaser[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const fetchTeasers = useCallback(
+    async (opts: { refresh?: boolean } = {}) => {
+      if (opts.refresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      try {
+        const result = await withToken((token) =>
+          loadEventTeasers({ token }),
+        );
+        if (result) {
+          setTeasers(result.data.events);
+          setNextCursor(result.meta.nextCursor);
+        }
+      } catch {
+        setError(t('events.error'));
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [t, withToken],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const result = await withToken((token) =>
+        loadEventTeasers({ cursor: nextCursor, token }),
+      );
+      if (result) {
+        setTeasers((prev) => [...prev, ...result.data.events]);
+        setNextCursor(result.meta.nextCursor);
+      }
+    } catch {
+      // Ignore load-more errors — the user can pull-to-refresh
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, nextCursor, withToken]);
+
+  useEffect(() => {
+    void fetchTeasers();
+  }, [fetchTeasers]);
+
+  const handleCardPress = useCallback(
+    (event: EventTeaser) => {
+      navigation.navigate('EventDetail', { eventId: event.id, teaser: event });
+    },
+    [navigation],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
-    <ScreenContainer>
-      <KccCard title={t('events.title')} body={t('events.screenSubtitle')} />
-
-      {placeholderTeasers.length === 0 && (
-        <View testID="events-no-upcoming">
-          <KccCard title={t('events.noUpcomingTitle')} body={t('events.noUpcomingBody')} />
+    <ScreenContainer
+      testID="events-screen"
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={() => void fetchTeasers({ refresh: true })}
+          tintColor={theme.colors.brandPrimary}
+        />
+      }
+    >
+      {/* Loading state */}
+      {isLoading && (
+        <View testID="events-loading" style={styles.centeredRow}>
+          <ActivityIndicator color={theme.colors.brandPrimary} />
+          <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+            {t('events.loading')}
+          </Text>
         </View>
       )}
 
-      {placeholderTeasers.map((event) => (
-        <EventTeaserCard key={event.id} event={event} />
+      {/* Error state */}
+      {error !== null && !isLoading && (
+        <View testID="events-error" style={{ gap: theme.spacing[2] }}>
+          <Text style={[styles.meta, { color: theme.colors.statusError }]}>{error}</Text>
+          <KccButton
+            testID="events-retry"
+            label={t('events.retry')}
+            variant="secondary"
+            onPress={() => void fetchTeasers()}
+          />
+        </View>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && error === null && teasers.length === 0 && (
+        <View testID="events-no-upcoming">
+          <Text style={[styles.noUpcomingTitle, { color: theme.colors.textPrimary }]}>
+            {t('events.noUpcomingTitle')}
+          </Text>
+          <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+            {t('events.noUpcomingBody')}
+          </Text>
+        </View>
+      )}
+
+      {/* Event list */}
+      {teasers.map((event) => (
+        <EventTeaserCard
+          key={event.id}
+          event={event}
+          isMember={isMember}
+          onPress={() => handleCardPress(event)}
+        />
       ))}
 
-      {!isMember && <MemberUpgradeBanner />}
+      {/* Load more */}
+      {nextCursor !== null && !isLoadingMore && (
+        <KccButton
+          testID="events-load-more"
+          label={t('events.retry')}
+          variant="secondary"
+          onPress={() => void loadMore()}
+        />
+      )}
+      {isLoadingMore && (
+        <ActivityIndicator
+          testID="events-loading-more"
+          color={theme.colors.brandPrimary}
+        />
+      )}
 
-      {isMember && (
-        <KccCard
-          title={t('events.memberDetailPlaceholder')}
-          body={t('events.navigationPlaceholder')}
-          footer={<RsvpButtons current={null} />}
+      {/* Membership gate notice for free users */}
+      {!isMember && (
+        <LockedFeatureNotice
+          testID="events-member-upgrade-banner"
+          message={t('events.memberRequiredBody')}
         />
       )}
     </ScreenContainer>
@@ -164,6 +269,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  cancelledBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   teaserTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -172,21 +283,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  upgradeBanner: {
-    borderWidth: 1,
+  lockIndicator: {
+    fontSize: 11,
   },
-  upgradeTitle: {
+  meta: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  noUpcomingTitle: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 4,
   },
-  upgradeBody: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  rsvpRow: {
+  centeredRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 8,
   },
 });
 

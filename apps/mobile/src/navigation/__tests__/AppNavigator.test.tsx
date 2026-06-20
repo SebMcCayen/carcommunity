@@ -36,6 +36,8 @@ jest.mock('@react-navigation/native', () => ({
     fonts: {},
   },
   useNavigation: () => ({ navigate: jest.fn() }),
+  // useRoute is required by EventDetailScreen which is registered in the stack.
+  useRoute: () => ({ params: { eventId: 'test-event', teaser: { id: 'test-event', title: 'Test', startsAt: new Date().toISOString(), endsAt: null, approximateArea: 'Test', isOfficial: false, status: 'published' } } }),
 }));
 
 jest.mock('@react-navigation/native-stack', () => ({
@@ -119,6 +121,11 @@ jest.mock('../../screens/LiveLocationScreen', () => ({
 jest.mock('../../screens/PrivacySettingsScreen', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   PrivacySettingsScreen: () => require('react').createElement('View', { testID: 'stub-privacy-settings-screen' }),
+}));
+
+jest.mock('../../screens/EventDetailScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  EventDetailScreen: () => require('react').createElement('View', { testID: 'stub-event-detail-screen' }),
 }));
 
 // ── useAuth mock ──────────────────────────────────────────────────────────────
