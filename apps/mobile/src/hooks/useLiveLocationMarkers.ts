@@ -135,7 +135,7 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
 
         if (response === null) {
           // No auth token available — clear markers and stop polling this cycle.
-          setMarkers([]);
+          if (mountedRef.current) setMarkers([]);
           polling = false;
           return;
         }
@@ -157,7 +157,7 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
             type: 'member' as const,
           }));
 
-        setMarkers(freshMarkers);
+        if (mountedRef.current) setMarkers(freshMarkers);
         consecutiveFailures = 0;
         nextAllowedPollAt = 0;
       } catch (error) {
@@ -167,7 +167,7 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
           if (error.statusCode === 401 || error.statusCode === 403) {
             // Access lost or feature disabled — clear markers and stop polling
             // until the component remounts or the user's eligibility changes.
-            setMarkers([]);
+            if (mountedRef.current) setMarkers([]);
             polling = false;
             return;
           }
@@ -207,8 +207,10 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
       polling = false;
       clearInterval(intervalId);
       appStateSub.remove();
-      setMarkers([]);
-      setIsLoading(false);
+      if (mountedRef.current) {
+        setMarkers([]);
+        setIsLoading(false);
+      }
     };
   }, [isMemberEligible, withToken]);
 

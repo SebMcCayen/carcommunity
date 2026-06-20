@@ -69,6 +69,14 @@ export interface AdminLiveLocationSummaryResult {
   latestPositionUpdatedAt: string | null;
 }
 
+/**
+ * Returns the cutoff Date before which a latest position is considered stale.
+ * Positions recorded before this threshold are excluded from marker responses.
+ */
+function calculateStaleThreshold(now: Date): Date {
+  return new Date(now.getTime() - LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS);
+}
+
 function inferDuration(session: Pick<LiveLocationSession, 'startedAt' | 'expiresAt'>): LiveLocationDuration {
   const durationMs = session.expiresAt.getTime() - session.startedAt.getTime();
   let selectedDuration: LiveLocationDuration = '1h';
@@ -393,7 +401,7 @@ export class LiveLocationService {
     }
 
     const now = params.now ?? new Date();
-    const staleThreshold = new Date(now.getTime() - LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS);
+    const staleThreshold = calculateStaleThreshold(now);
     const take = Math.min(params.pageSize, LIVE_LOCATION_MAX_MARKER_COUNT);
     const skip = (params.page - 1) * take;
 
