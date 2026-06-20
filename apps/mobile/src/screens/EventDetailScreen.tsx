@@ -146,7 +146,8 @@ export const EventDetailScreen = () => {
         setDetail(result.data.event);
         setOptimisticRsvp(result.data.event.currentUserRsvp);
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to load event detail:', err instanceof Error ? err.message : String(err));
       setError(t('events.errorDetail'));
     } finally {
       setIsLoading(false);
@@ -170,7 +171,8 @@ export const EventDetailScreen = () => {
       try {
         await withToken((token) => updateEventRsvp(eventId, { status }, token));
         rsvpAccepted = true;
-      } catch {
+      } catch (err) {
+        console.error('RSVP update failed:', err instanceof Error ? err.message : String(err));
         setOptimisticRsvp(prevRsvp);
         setRsvpError(t('events.rsvpSubmitError'));
       } finally {
@@ -186,8 +188,9 @@ export const EventDetailScreen = () => {
             setDetail(fresh.data.event);
             setOptimisticRsvp(fresh.data.event.currentUserRsvp);
           }
-        } catch {
+        } catch (err) {
           // Ignore — RSVP was accepted; counts may be briefly stale.
+          console.error('Post-RSVP detail refresh failed:', err instanceof Error ? err.message : String(err));
         }
       }
     },
@@ -203,7 +206,8 @@ export const EventDetailScreen = () => {
         address: detail.address,
         locationName: detail.locationName,
       });
-    } catch {
+    } catch (err) {
+      console.error('Failed to open external navigation:', err instanceof Error ? err.message : String(err));
       Alert.alert(t('events.navigationError'));
     }
   }, [detail, t]);

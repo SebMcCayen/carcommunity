@@ -133,7 +133,8 @@ export const EventsScreen = () => {
           setTeasers(result.data.events);
           setNextCursor(result.meta.nextCursor);
         }
-      } catch {
+      } catch (err) {
+        console.error('Failed to load event teasers:', err instanceof Error ? err.message : String(err));
         setError(t('events.error'));
       } finally {
         setIsLoading(false);
@@ -154,8 +155,9 @@ export const EventsScreen = () => {
         setTeasers((prev) => [...prev, ...result.data.events]);
         setNextCursor(result.meta.nextCursor);
       }
-    } catch {
+    } catch (err) {
       // Ignore load-more errors — the user can pull-to-refresh
+      console.error('Failed to load more events:', err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoadingMore(false);
     }
