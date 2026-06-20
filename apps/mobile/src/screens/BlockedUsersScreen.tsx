@@ -47,7 +47,11 @@ export const BlockedUsersScreen = () => {
   }, [t, withToken]);
 
   useEffect(() => {
-    void fetchBlockedUsers();
+    const timer = setTimeout(() => {
+      void fetchBlockedUsers();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [fetchBlockedUsers]);
 
   const handleUnblock = useCallback(
