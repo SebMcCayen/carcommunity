@@ -52,9 +52,9 @@ const BACKGROUND_DISTANCE_M = 25; // 25 metres
  * native build plugin. Those are build-time strings and cannot use runtime
  * i18n. Both sets should be kept in sync.
  */
-const DEFAULT_NOTIFICATION_TITLE = 'Live location sharing is active';
+const DEFAULT_NOTIFICATION_TITLE = 'Liveposition är aktiv';
 const DEFAULT_NOTIFICATION_BODY =
-  'Your location is being shared during the active time-limited session.';
+  'Din position delas under den aktiva, tidsbegränsade sessionen.';
 
 /**
  * Idempotent guard: only call defineTask once per JS runtime.

@@ -56,7 +56,7 @@ const config: ExpoConfig = {
         // sharing is active. The notification clearly states that sharing is active
         // and is visible to the user for the duration of the session.
         foregroundService: {
-          notificationTitle: 'KCC liveposition är aktiv',
+          notificationTitle: `${appDisplayName} liveposition är aktiv`,
           notificationBody: 'Din position delas under den aktiva, tidsbegränsade sessionen.',
           notificationColor: '#1a1a1a',
         },
