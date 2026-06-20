@@ -6,6 +6,7 @@ import type {
 } from '@prisma/client';
 import {
   LIVE_LOCATION_DURATIONS,
+  LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS,
   getLiveLocationDurationMs,
   type LiveLocationCoordinate,
   type LiveLocationDuration,
@@ -27,6 +28,13 @@ export const LIVE_LOCATION_DATABASE_META = {
   productionReady: true,
   ttlCleanupPrepared: true,
 } as const;
+
+/**
+ * Service-level upper bound for marker query size.
+ * Route validation currently caps pageSize at MAX_LIVE_LOCATION_PAGE_SIZE (50)
+ * in services/api/src/routes/live-location.ts, so effective size is min(50, this cap).
+ */
+export const LIVE_LOCATION_MAX_MARKER_COUNT = 100;
 
 export interface LiveLocationViewer {
   userId: string;
@@ -60,6 +68,14 @@ export interface AdminLiveLocationSummaryResult {
   activeSessionCount: number;
   expiredSessionCount: number;
   latestPositionUpdatedAt: string | null;
+}
+
+/**
+ * Returns the cutoff Date before which a latest position is considered stale.
+ * Positions recorded before this threshold are excluded from marker responses.
+ */
+function calculateStaleThreshold(now: Date): Date {
+  return new Date(now.getTime() - LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS);
 }
 
 function inferDuration(session: Pick<LiveLocationSession, 'startedAt' | 'expiresAt'>): LiveLocationDuration {
@@ -386,13 +402,18 @@ export class LiveLocationService {
     }
 
     const now = params.now ?? new Date();
-    const skip = (params.page - 1) * params.pageSize;
+    const staleThreshold = calculateStaleThreshold(now);
+    const take = Math.min(params.pageSize, LIVE_LOCATION_MAX_MARKER_COUNT);
+    const skip = (params.page - 1) * take;
 
     await this.expireSessions(now);
 
     const where: Prisma.LiveLocationLatestPositionWhereInput = {
       userId: {
         not: params.viewer.userId,
+      },
+      recordedAt: {
+        gte: staleThreshold,
       },
       session: {
         status: 'active',
@@ -416,7 +437,7 @@ export class LiveLocationService {
           updatedAt: 'desc',
         },
         skip,
-        take: params.pageSize,
+        take,
         select: {
           userId: true,
           sessionId: true,
@@ -426,6 +447,16 @@ export class LiveLocationService {
           headingDegrees: true,
           speedMetersPerSecond: true,
           recordedAt: true,
+          session: {
+            select: {
+              expiresAt: true,
+            },
+          },
+          user: {
+            select: {
+              displayName: true,
+            },
+          },
         },
       }),
     ]);
@@ -435,6 +466,8 @@ export class LiveLocationService {
         userId: position.userId,
         sessionId: position.sessionId,
         status: 'active',
+        displayName: position.user.displayName,
+        expiresAt: position.session.expiresAt.toISOString(),
         coordinate: {
           latitude: position.latitude,
           longitude: position.longitude,

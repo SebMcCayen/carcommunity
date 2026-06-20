@@ -22,6 +22,21 @@ const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${p
 const buildAuthHeader = (token?: string): Record<string, string> =>
   token ? { authorization: 'Bearer ' + token } : {};
 
+/**
+ * Typed error thrown when an API request returns a non-2xx HTTP status.
+ * Use the `statusCode` to distinguish authentication (401), access (403),
+ * network, and server errors without relying on error message parsing.
+ */
+export class LiveLocationApiError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'LiveLocationApiError';
+  }
+}
+
 async function requestJson<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
   if (!base) {
     // TODO: Configure EXPO_PUBLIC_API_BASE_URL before enabling live location requests.
@@ -33,7 +48,7 @@ async function requestJson<TResponse>(path: string, init?: RequestInit): Promise
   const response = await fetch(buildUrl(path), init);
 
   if (!response.ok) {
-    throw new Error(`Live location request failed with status ${response.status}`);
+    throw new LiveLocationApiError(response.status, `Live location request failed with status ${response.status}`);
   }
 
   return (await response.json()) as TResponse;
@@ -106,6 +121,7 @@ export async function hideMeNow(token?: string): Promise<HideMeNowResponse> {
 export async function loadLiveLocationMarkers(
   page = 1,
   pageSize = DEFAULT_LIVE_LOCATION_PAGE_SIZE,
+  token?: string,
 ): Promise<PublicLiveLocationMarkerResponse> {
   const searchParams = new URLSearchParams({
     page: String(page),
@@ -116,6 +132,7 @@ export async function loadLiveLocationMarkers(
     `${LIVE_LOCATION_ROUTE_PATHS.markers}?${searchParams.toString()}`,
     {
       method: 'GET',
+      headers: buildAuthHeader(token),
     },
   );
 }

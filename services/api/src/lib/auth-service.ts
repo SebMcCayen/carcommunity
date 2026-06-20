@@ -46,6 +46,8 @@ function hashSessionToken(rawToken: string): string {
 function buildAuthenticatedUserSummary(input: {
   id: string;
   role: UserRole;
+  status: UserStatus;
+  subscriptionEntitlement: SubscriptionEntitlement;
   displayName: string | null;
   identities: Array<{ provider: AuthProvider; providerSubject: string }>;
   onboardingCompletedAt?: Date | null;
@@ -55,6 +57,8 @@ function buildAuthenticatedUserSummary(input: {
     displayName: input.displayName,
     identities: input.identities,
     roles: [input.role],
+    status: input.status,
+    subscriptionEntitlement: input.subscriptionEntitlement,
     onboardingCompletedAt: input.onboardingCompletedAt ? input.onboardingCompletedAt.toISOString() : null,
   };
 }
@@ -111,6 +115,8 @@ export function createAuthService(prisma: PrismaClient): AuthService {
         id: user.id,
         displayName: user.displayName,
         role: user.role,
+        status: user.status,
+        subscriptionEntitlement: user.subscriptionEntitlement,
         identities: user.identities.map((identity) => ({
           provider: identity.provider,
           providerSubject: identity.providerSubject,
@@ -193,6 +199,8 @@ export function createAuthService(prisma: PrismaClient): AuthService {
           id: session.user.id,
           displayName: session.user.displayName,
           role: session.user.role,
+          status: session.user.status,
+          subscriptionEntitlement: session.user.subscriptionEntitlement,
           identities: session.user.identities.map((identity) => ({
             provider: identity.provider,
             providerSubject: identity.providerSubject,

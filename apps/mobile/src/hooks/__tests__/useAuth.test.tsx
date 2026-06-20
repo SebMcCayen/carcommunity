@@ -55,6 +55,8 @@ const testUser: AuthenticatedUserSummary = {
   userId: 'user-001',
   identities: [{ provider: 'apple', providerSubject: 'apple-subject-001' }],
   roles: ['user'],
+  status: 'active',
+  subscriptionEntitlement: 'none',
   displayName: 'Test User',
   avatarUrl: null,
 };

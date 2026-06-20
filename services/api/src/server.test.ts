@@ -79,6 +79,8 @@ function createFakeAuthService(): AuthService {
         displayName: profile.displayName,
         identities: profile.identities,
         roles: [profile.role],
+        status: profile.status,
+        subscriptionEntitlement: profile.subscriptionEntitlement,
       };
     },
 
@@ -103,6 +105,8 @@ function createFakeAuthService(): AuthService {
           displayName: profile.displayName,
           identities: profile.identities,
           roles: [profile.role],
+          status: profile.status,
+          subscriptionEntitlement: profile.subscriptionEntitlement,
         },
       });
 
@@ -433,6 +437,8 @@ test('POST /v1/auth/login in strict mode does not trust client-provided provider
         displayName: null,
         identities: [{ provider: input.provider, providerSubject: input.providerSubject }],
         roles: ['user'],
+        status: 'active',
+        subscriptionEntitlement: 'member_monthly',
       };
     },
     async createSession() {
