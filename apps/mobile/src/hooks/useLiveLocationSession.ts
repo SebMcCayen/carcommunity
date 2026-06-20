@@ -14,6 +14,21 @@ import {
   updateLiveLocationPosition,
 } from '../api/live-location';
 
+import { publicEnv } from '../config/env';
+
+import {
+  clearLiveLocationSession,
+  isSessionExpired,
+  loadLiveLocationSession,
+  saveLiveLocationSession,
+} from '../storage/liveLocationStorage';
+
+import {
+  BACKGROUND_LOCATION_TASK_NAME,
+  startBackgroundLocationUpdates,
+  stopBackgroundLocationUpdates,
+} from '../session/backgroundLocationTask';
+
 /**
  * Status of the current live location sharing session.
  *
@@ -32,6 +47,15 @@ export type LiveSharingStatus =
   | 'stopping'
   | 'error';
 
+/**
+ * Background permission mode for the active session.
+ *
+ * - `not_requested`  — background permission has not been requested yet
+ * - `granted`        — background permission granted; task is or will be running
+ * - `foreground_only`— user declined background permission; sharing is foreground-only
+ */
+export type BackgroundPermissionMode = 'not_requested' | 'granted' | 'foreground_only';
+
 /** Simplified coordinate exposed to UI/map — never log this value. */
 export interface LiveLocationPosition {
   latitude: number;
@@ -45,6 +69,13 @@ export interface UseLiveLocationSessionResult {
   selectedDuration: LiveLocationDuration;
   /** ID of the active session returned by the backend, or null when not sharing. */
   sessionId: string | null;
+  /** When the active session expires, or null when not sharing. */
+  sessionExpiresAt: Date | null;
+  /**
+   * Background permission mode for the current session.
+   * Only meaningful while status === 'sharing'.
+   */
+  backgroundPermissionMode: BackgroundPermissionMode;
   /** Human-readable error message from the last failed action, or null. */
   error: string | null;
   /** True while an async action is in flight. */
@@ -64,6 +95,24 @@ export interface UseLiveLocationSessionResult {
    * "Hide me now" — must be fast and must not be blocked by loading state.
    */
   hideMeNow: () => Promise<void>;
+  /**
+   * Request background location permission after the user explicitly agrees.
+   *
+   * Must only be called after the user has read the background permission
+   * rationale and tapped the confirmation button.
+   * Must never be called at startup or during onboarding.
+   *
+   * If granted, background location updates start for the active session.
+   * If denied, the session continues in foreground-only mode.
+   */
+  requestBackgroundPermission: () => Promise<void>;
+  /**
+   * Dismiss the background permission rationale without requesting permission.
+   *
+   * The user has seen the rationale and chosen to continue with foreground-only
+   * sharing. Do not show the rationale again.
+   */
+  skipBackgroundPermission: () => void;
 }
 
 const FALLBACK_ERROR_KEY = 'liveLocation.error';
@@ -78,9 +127,9 @@ const POSITION_UPDATE_DISTANCE_M = 25; // 25 metres
 // data or auth tokens.
 
 /**
- * Hook managing foreground live location session state.
+ * Hook managing live location session state with foreground and optional background updates.
  *
- * Flow:
+ * Foreground flow:
  *  1. User selects duration.
  *  2. User calls startSession().
  *  3. App requests foreground location permission.
@@ -88,18 +137,36 @@ const POSITION_UPDATE_DISTANCE_M = 25; // 25 metres
  *  5. If granted → backend session started → GPS watcher started → status = 'sharing'.
  *  6. Watcher sends throttled position updates to backend (latest only, no history).
  *  7. User calls stopSession() or hideMeNow() → watcher removed → status = 'not_sharing'.
- *  8. On unmount → watcher removed.
+ *  8. On unmount → watcher and background task removed.
+ *
+ * Background flow (after explicit user opt-in):
+ *  1. User reads background permission rationale and calls requestBackgroundPermission().
+ *  2. App requests background location permission.
+ *  3. If denied → backgroundPermissionMode = 'foreground_only'; sharing continues foreground-only.
+ *  4. If granted → backgroundPermissionMode = 'granted'; background task started.
+ *  5. Background task fires when app is backgrounded, updating backend position.
+ *  6. Background task stops when session ends, is hidden, expires, or user logs out.
+ *
+ * Session restoration:
+ *  - On mount, the hook checks secure storage for a previously saved session reference.
+ *  - If a non-expired session reference is found, state is restored optimistically.
+ *  - Backend is the source of truth: the next position update attempt will verify validity.
+ *  - If the stored session has expired, it is cleared and the background task is stopped.
  *
  * Privacy:
  *  - Coordinates are never logged.
  *  - No route history is stored.
  *  - Backend is the source of truth for access control.
  *  - Client-side checks are UI only; never trust them for security.
+ *  - Background sharing is always visible and controllable by the user.
  */
 export function useLiveLocationSession(): UseLiveLocationSessionResult {
   const [status, setStatus] = useState<LiveSharingStatus>('not_sharing');
   const [selectedDuration, setSelectedDuration] = useState<LiveLocationDuration>('1h');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null);
+  const [backgroundPermissionMode, setBackgroundPermissionMode] =
+    useState<BackgroundPermissionMode>('not_requested');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<LiveLocationPosition | null>(null);
@@ -115,11 +182,112 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     locationSubRef.current = null;
   }, []);
 
-  // Clean up watcher on unmount or logout.
+  // Start the foreground GPS watcher for the given session ID.
+  // Coordinates are never logged.
+  const startForegroundWatcher = useCallback((sid: string) => {
+    ExpoLocation.watchPositionAsync(
+      {
+        accuracy: ExpoLocation.Accuracy.Balanced,
+        timeInterval: POSITION_UPDATE_INTERVAL_MS,
+        distanceInterval: POSITION_UPDATE_DISTANCE_M,
+      },
+      (location) => {
+        const currentSid = sessionIdRef.current;
+        if (!currentSid) return;
+
+        // Do not log coordinates.
+        const coordinate: LiveLocationCoordinate = {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          accuracyMeters: location.coords.accuracy ?? undefined,
+          headingDegrees: location.coords.heading ?? undefined,
+          speedMetersPerSecond: location.coords.speed ?? undefined,
+          recordedAt: new Date(location.timestamp).toISOString(),
+        };
+
+        // Update position state only after the backend confirms receipt.
+        // Fire-and-forget — position update failures do not interrupt the session.
+        updateLiveLocationPosition(currentSid, { coordinate })
+          .then(() => {
+            setCurrentPosition({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+            setLastUpdatedAt(new Date());
+          })
+          .catch(() => {
+            // Non-sensitive diagnostic — do not log coordinates.
+            console.warn('Live location: position update failed; session remains active.');
+          });
+      },
+    )
+      .then((sub) => {
+        locationSubRef.current = sub;
+      })
+      .catch(() => {
+        // Watcher failed to start; session is active on backend but foreground updates
+        // won't flow. User can still stop the session manually.
+      });
+  }, []);
+
+  // Session restoration: on mount, check whether a session was active before the app closed.
+  // Backend is the source of truth; we restore state optimistically and verify on next update.
+  useEffect(() => {
+    let mounted = true;
+
+    async function restoreSession() {
+      const stored = await loadLiveLocationSession().catch(() => null);
+      if (!mounted) return;
+      if (!stored) return;
+
+      if (isSessionExpired(stored)) {
+        // Stored session has expired — clear storage and stop any lingering background task.
+        await clearLiveLocationSession().catch(() => undefined);
+        await stopBackgroundLocationUpdates().catch(() => undefined);
+        return;
+      }
+
+      // Restore session state. The next position update attempt will verify with the backend.
+      sessionIdRef.current = stored.sessionId;
+      setSessionId(stored.sessionId);
+      setSessionExpiresAt(new Date(stored.expiresAt));
+      setStatus('sharing');
+
+      // Check whether background permission is currently granted and task is running.
+      const bgPermission = await ExpoLocation.getBackgroundPermissionsAsync().catch(() => null);
+      if (!mounted) return;
+
+      if (bgPermission?.granted === true) {
+        setBackgroundPermissionMode('granted');
+        // Ensure the background task is running for this session.
+        const taskRunning = await ExpoLocation.hasStartedLocationUpdatesAsync(
+          BACKGROUND_LOCATION_TASK_NAME,
+        ).catch(() => false);
+        if (!mounted) return;
+        if (!taskRunning) {
+          await startBackgroundLocationUpdates().catch(() => undefined);
+        }
+      }
+
+      // Restart the foreground watcher for UI position feedback.
+      startForegroundWatcher(stored.sessionId);
+    }
+
+    restoreSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, [startForegroundWatcher]);
+
+  // Clean up watcher and background task on unmount (e.g. logout).
   useEffect(() => {
     return () => {
       locationSubRef.current?.remove();
       locationSubRef.current = null;
+      // Stop background task on unmount — covers the logout case.
+      stopBackgroundLocationUpdates().catch(() => undefined);
+      clearLiveLocationSession().catch(() => undefined);
     };
   }, []);
 
@@ -147,10 +315,13 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     // Step 2: start backend session.
     setStatus('starting');
     let newSessionId: string;
+    let expiresAt: string;
     try {
       const response = await startLiveLocationSession({ duration: selectedDuration });
       newSessionId = response.data.session.id;
+      expiresAt = response.data.session.expiresAt;
       setSessionId(newSessionId);
+      setSessionExpiresAt(new Date(expiresAt));
       sessionIdRef.current = newSessionId;
       setStatus('sharing');
     } catch {
@@ -162,57 +333,60 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
 
     setIsLoading(false);
 
-    // Step 3: start foreground GPS watcher with throttle.
-    // Coordinates are never logged.
-    try {
-      const sub = await ExpoLocation.watchPositionAsync(
-        {
-          accuracy: ExpoLocation.Accuracy.Balanced,
-          timeInterval: POSITION_UPDATE_INTERVAL_MS,
-          distanceInterval: POSITION_UPDATE_DISTANCE_M,
-        },
-        (location) => {
-          const sid = sessionIdRef.current;
-          if (!sid) return;
+    // Step 3: persist session reference for background task use.
+    await saveLiveLocationSession({
+      sessionId: newSessionId,
+      expiresAt,
+      apiBaseUrl: publicEnv.apiBaseUrl,
+    }).catch(() => undefined);
 
-          // Do not log coordinates.
-          const coordinate: LiveLocationCoordinate = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            accuracyMeters: location.coords.accuracy ?? undefined,
-            headingDegrees: location.coords.heading ?? undefined,
-            speedMetersPerSecond: location.coords.speed ?? undefined,
-            recordedAt: new Date(location.timestamp).toISOString(),
-          };
+    // Step 4: start foreground GPS watcher.
+    startForegroundWatcher(newSessionId);
 
-          // Update position state only after the backend confirms receipt.
-          // Fire-and-forget — position update failures do not interrupt the session.
-          updateLiveLocationPosition(sid, { coordinate })
-            .then(() => {
-              setCurrentPosition({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-              });
-              setLastUpdatedAt(new Date());
-            })
-            .catch(() => {
-              // Non-sensitive diagnostic — do not log coordinates.
-              console.warn('Live location: position update failed; session remains active.');
-            });
-        },
-      );
-      locationSubRef.current = sub;
-    } catch {
-      // Watcher failed to start; session is active on backend but updates won't flow.
-      // Do not expose watcher error — user can still stop the session manually.
+    // Background task is NOT started here. The user must explicitly call
+    // requestBackgroundPermission() after reading the rationale.
+  }, [selectedDuration, startForegroundWatcher]);
+
+  /**
+   * Request background location permission after the user explicitly agrees.
+   *
+   * Calls requestBackgroundPermissionsAsync() only on explicit user action.
+   * Never called at startup or during onboarding.
+   *
+   * If granted: starts background location updates for the active session.
+   * If denied:  continues with foreground-only sharing without pressure to retry.
+   */
+  const requestBackgroundPermission = useCallback(async () => {
+    const { status: permStatus } = await ExpoLocation.requestBackgroundPermissionsAsync();
+
+    if (permStatus === ExpoLocation.PermissionStatus.GRANTED) {
+      setBackgroundPermissionMode('granted');
+      // Start background task only if a session is currently active.
+      if (sessionIdRef.current) {
+        await startBackgroundLocationUpdates().catch(() => undefined);
+      }
+    } else {
+      // User declined — stay in foreground-only mode; do not pressure the user again.
+      setBackgroundPermissionMode('foreground_only');
     }
-  }, [selectedDuration]);
+  }, []);
 
+  /** Dismiss the background permission rationale; continue with foreground-only sharing. */
+  const skipBackgroundPermission = useCallback(() => {
+    setBackgroundPermissionMode('foreground_only');
+  }, []);
+
+  /** Stop the active session and all location updates. */
   const stopSession = useCallback(async () => {
     if (!sessionIdRef.current) return;
+    // Stop local updates immediately — do not wait for the next scheduled update.
     stopWatcher();
+    await stopBackgroundLocationUpdates().catch(() => undefined);
+    await clearLiveLocationSession().catch(() => undefined);
     setCurrentPosition(null);
     setLastUpdatedAt(null);
+    setBackgroundPermissionMode('not_requested');
+    setSessionExpiresAt(null);
     setStatus('stopping');
     setIsLoading(true);
     setError(null);
@@ -230,10 +404,16 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     }
   }, [stopWatcher]);
 
+  /** Immediately remove position and stop all updates. Privacy action — never blocked. */
   const hideMeNow = useCallback(async () => {
+    // Stop local updates immediately — do not wait for the next scheduled update.
     stopWatcher();
+    await stopBackgroundLocationUpdates().catch(() => undefined);
+    await clearLiveLocationSession().catch(() => undefined);
     setCurrentPosition(null);
     setLastUpdatedAt(null);
+    setBackgroundPermissionMode('not_requested');
+    setSessionExpiresAt(null);
     setStatus('stopping');
     setIsLoading(true);
     setError(null);
@@ -254,6 +434,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     status,
     selectedDuration,
     sessionId,
+    sessionExpiresAt,
+    backgroundPermissionMode,
     error,
     isLoading,
     currentPosition,
@@ -262,5 +444,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     startSession,
     stopSession,
     hideMeNow,
+    requestBackgroundPermission,
+    skipBackgroundPermission,
   };
 }

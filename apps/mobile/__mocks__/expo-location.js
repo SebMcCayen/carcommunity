@@ -29,6 +29,20 @@ const requestForegroundPermissionsAsync = jest.fn().mockResolvedValue({
   canAskAgain: true,
 });
 
+const requestBackgroundPermissionsAsync = jest.fn().mockResolvedValue({
+  status: PermissionStatus.GRANTED,
+  granted: true,
+  expires: 'never',
+  canAskAgain: true,
+});
+
+const getBackgroundPermissionsAsync = jest.fn().mockResolvedValue({
+  status: PermissionStatus.DENIED,
+  granted: false,
+  expires: 'never',
+  canAskAgain: true,
+});
+
 const watchPositionAsync = jest.fn().mockResolvedValue({
   remove: jest.fn(),
 });
@@ -46,10 +60,19 @@ const getCurrentPositionAsync = jest.fn().mockResolvedValue({
   timestamp: Date.now(),
 });
 
+const startLocationUpdatesAsync = jest.fn().mockResolvedValue(undefined);
+const stopLocationUpdatesAsync = jest.fn().mockResolvedValue(undefined);
+const hasStartedLocationUpdatesAsync = jest.fn().mockResolvedValue(false);
+
 module.exports = {
   PermissionStatus,
   Accuracy,
   requestForegroundPermissionsAsync,
+  requestBackgroundPermissionsAsync,
+  getBackgroundPermissionsAsync,
   watchPositionAsync,
   getCurrentPositionAsync,
+  startLocationUpdatesAsync,
+  stopLocationUpdatesAsync,
+  hasStartedLocationUpdatesAsync,
 };

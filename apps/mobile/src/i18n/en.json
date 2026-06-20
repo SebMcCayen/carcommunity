@@ -79,7 +79,19 @@
     "privacyTimeLimited": "Your location is shared only for the time you select.",
     "privacyStopAnytime": "You can stop sharing at any time using \"Stop sharing\" or \"Hide me now\".",
     "privacyNoHistory": "No route or position history is stored publicly.",
-    "privacySafeDriving": "Do not interact with the app while driving."
+    "privacySafeDriving": "Do not interact with the app while driving.",
+    "backgroundPermissionTitle": "Allow background location",
+    "backgroundPermissionRationale": "KCC can update your live position when the app is in the background, but only during an active sharing session.",
+    "backgroundPermissionTimeLimited": "Sharing stops automatically when the time runs out.",
+    "backgroundPermissionControl": "You can choose Stop sharing or Hide me now at any time.",
+    "backgroundPermissionNoTracking": "KCC does not track your position when you are not actively sharing.",
+    "backgroundPermissionAllow": "Allow background location",
+    "backgroundPermissionSkip": "Continue without background location",
+    "backgroundSharingActive": "Background sharing active",
+    "foregroundOnlySharing": "Sharing only while app is open",
+    "sessionAutoExpires": "Session ends automatically",
+    "backgroundPermissionDenied": "Background location denied. Sharing pauses when the app is closed.",
+    "safeDrivingWarningShort": "Do not use the app while driving."
   },
   "onboarding": {
     "title": "Welcome",
