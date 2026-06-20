@@ -104,8 +104,13 @@ export interface UseLiveLocationSessionResult {
    *
    * If granted, background location updates start for the active session.
    * If denied, the session continues in foreground-only mode.
+   *
+   * @param notificationTitle - Android foreground service notification title.
+   *   Callers with i18n access (e.g. the screen) should supply a translated string.
+   * @param notificationBody  - Android foreground service notification body.
+   *   Callers with i18n access (e.g. the screen) should supply a translated string.
    */
-  requestBackgroundPermission: () => Promise<void>;
+  requestBackgroundPermission: (notificationTitle?: string, notificationBody?: string) => Promise<void>;
   /**
    * Dismiss the background permission rationale without requesting permission.
    *
@@ -356,20 +361,26 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
    * If granted: starts background location updates for the active session.
    * If denied:  continues with foreground-only sharing without pressure to retry.
    */
-  const requestBackgroundPermission = useCallback(async () => {
-    const { status: permStatus } = await ExpoLocation.requestBackgroundPermissionsAsync();
+  const requestBackgroundPermission = useCallback(
+    async (notificationTitle?: string, notificationBody?: string) => {
+      const { status: permStatus } = await ExpoLocation.requestBackgroundPermissionsAsync();
 
-    if (permStatus === ExpoLocation.PermissionStatus.GRANTED) {
-      setBackgroundPermissionMode('granted');
-      // Start background task only if a session is currently active.
-      if (sessionIdRef.current) {
-        await startBackgroundLocationUpdates().catch(() => undefined);
+      if (permStatus === ExpoLocation.PermissionStatus.GRANTED) {
+        setBackgroundPermissionMode('granted');
+        // Start background task only if a session is currently active.
+        // Caller supplies i18n-translated strings for the Android notification.
+        if (sessionIdRef.current) {
+          await startBackgroundLocationUpdates(notificationTitle, notificationBody).catch(
+            () => undefined,
+          );
+        }
+      } else {
+        // User declined — stay in foreground-only mode; do not pressure the user again.
+        setBackgroundPermissionMode('foreground_only');
       }
-    } else {
-      // User declined — stay in foreground-only mode; do not pressure the user again.
-      setBackgroundPermissionMode('foreground_only');
-    }
-  }, []);
+    },
+    [],
+  );
 
   /** Dismiss the background permission rationale; continue with foreground-only sharing. */
   const skipBackgroundPermission = useCallback(() => {

@@ -94,7 +94,8 @@
     "foregroundOnlySharing": "Endast delning när appen är öppen",
     "sessionAutoExpires": "Sessionen avslutas automatiskt",
     "backgroundPermissionDenied": "Bakgrundsposition nekad. Delning pausas när appen stängs.",
-    "safeDrivingWarningShort": "Använd inte appen medan du kör."
+    "backgroundNotificationTitle": "KCC liveposition är aktiv",
+    "backgroundNotificationBody": "Din position delas under den aktiva, tidsbegränsade sessionen."
   },
   "onboarding": {
     "title": "Välkommen",

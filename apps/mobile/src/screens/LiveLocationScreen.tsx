@@ -272,7 +272,12 @@ export const LiveLocationScreen = () => {
           </Text>
           <KccButton
             label={t('liveLocation.backgroundPermissionAllow')}
-            onPress={requestBackgroundPermission}
+            onPress={() =>
+              requestBackgroundPermission(
+                t('liveLocation.backgroundNotificationTitle'),
+                t('liveLocation.backgroundNotificationBody'),
+              )
+            }
             variant="secondary"
             disabled={isBusy}
           />

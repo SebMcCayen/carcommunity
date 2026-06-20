@@ -40,6 +40,22 @@ const BACKGROUND_INTERVAL_MS = 5000; // 5 seconds
 const BACKGROUND_DISTANCE_M = 25; // 25 metres
 
 /**
+ * Android foreground service notification strings.
+ *
+ * These defaults are used when the caller cannot supply i18n-translated
+ * strings (e.g. session restoration on mount). Callers that have i18n
+ * access (e.g. the hook's requestBackgroundPermission path) should supply
+ * translated strings via the options parameter.
+ *
+ * Note: app.config.ts also declares foregroundService strings for the
+ * native build plugin. Those are build-time strings and cannot use runtime
+ * i18n. Both sets should be kept in sync.
+ */
+const DEFAULT_NOTIFICATION_TITLE = 'KCC liveposition är aktiv';
+const DEFAULT_NOTIFICATION_BODY =
+  'Din position delas under den aktiva, tidsbegränsade sessionen.';
+
+/**
  * Idempotent guard: only call defineTask once per JS runtime.
  * Hot reloads in development may re-import modules; the guard prevents
  * re-registering an already-defined task.
@@ -119,9 +135,14 @@ if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK_NAME)) {
  * Idempotent: returns true without starting a duplicate task if updates are
  * already running.
  *
+ * @param notificationTitle - Android foreground service notification title (should be i18n-translated by caller).
+ * @param notificationBody  - Android foreground service notification body (should be i18n-translated by caller).
  * @returns true if background updates are now running, false on failure.
  */
-export async function startBackgroundLocationUpdates(): Promise<boolean> {
+export async function startBackgroundLocationUpdates(
+  notificationTitle = DEFAULT_NOTIFICATION_TITLE,
+  notificationBody = DEFAULT_NOTIFICATION_BODY,
+): Promise<boolean> {
   try {
     const alreadyRunning = await ExpoLocation.hasStartedLocationUpdatesAsync(
       BACKGROUND_LOCATION_TASK_NAME,
@@ -135,8 +156,8 @@ export async function startBackgroundLocationUpdates(): Promise<boolean> {
       // Android: keep the foreground service notification visible during sharing.
       // The notification clearly states that location sharing is active.
       foregroundService: {
-        notificationTitle: 'KCC liveposition är aktiv',
-        notificationBody: 'Din position delas under den aktiva, tidsbegränsade sessionen.',
+        notificationTitle,
+        notificationBody,
       },
       // iOS: show the background location indicator in the status bar.
       // TODO (physical device): Verify the blue location indicator is visible on iOS.

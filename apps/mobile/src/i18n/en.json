@@ -91,7 +91,8 @@
     "foregroundOnlySharing": "Sharing only while app is open",
     "sessionAutoExpires": "Session ends automatically",
     "backgroundPermissionDenied": "Background location denied. Sharing pauses when the app is closed.",
-    "safeDrivingWarningShort": "Do not use the app while driving."
+    "backgroundNotificationTitle": "KCC live location is active",
+    "backgroundNotificationBody": "Your location is shared during the active, time-limited session."
   },
   "onboarding": {
     "title": "Welcome",
