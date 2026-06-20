@@ -8,9 +8,11 @@ import { AppError, fromUnknownError } from './lib/errors.js';
 import type { LiveLocationService } from './lib/live-location-service.js';
 import type { EventService } from './lib/event-service.js';
 import type { ModerationService } from './lib/moderation-service.js';
+import type { BlockingService } from './lib/blocking-service.js';
 import { registerPrisma } from './plugins/prisma.js';
 import { registerSecurity } from './plugins/security.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerBlockingRoutes } from './routes/blocking.js';
 import { registerEventRoutes } from './routes/events.js';
 import { registerFeatureFlagRoutes } from './routes/feature-flags.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -33,6 +35,7 @@ export interface ServerDependencies {
   moderationService?: ModerationService;
   diagnosticsService?: import('./lib/diagnostics-service.js').DiagnosticsService;
   userService?: UserService;
+  blockingService?: BlockingService;
 }
 
 export async function createServer(
@@ -92,11 +95,13 @@ export async function createServer(
   await registerLiveLocationRoutes(app, {
     liveLocationService: dependencies.liveLocationService,
     liveLocationFeatureEnabled: dependencies.liveLocationFeatureEnabled,
+    blockingService: dependencies.blockingService,
   });
   await registerEventRoutes(app, {
     eventService: dependencies.eventService,
   });
   await registerUserRoutes(app, { userService: dependencies.userService });
+  await registerBlockingRoutes(app, { blockingService: dependencies.blockingService });
   await registerSubscriptionRoutes(app, {
     subscriptionService: dependencies.subscriptionService,
   });

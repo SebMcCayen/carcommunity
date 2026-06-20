@@ -45,7 +45,8 @@
     "deleteAccount": "Ta bort konto",
     "reportBug": "Rapportera en bugg",
     "about": "Om appen",
-    "github": "GitHub / Open Source"
+    "github": "GitHub / Open Source",
+    "blockedUsers": "Blockerade användare"
   },
   "about": {
     "title": "Om appen",
@@ -193,5 +194,22 @@
     "subscriptionManagementPlaceholder": "Hantera prenumeration (kommande)",
     "accountDeletionPlaceholder": "Ta bort konto (kommande)",
     "policyLink": "Regler och villkor"
+  },
+  "blocking": {
+    "blockUser": "Blockera användare",
+    "blockConfirmTitle": "Blockera användare?",
+    "blockConfirmBody": "Den här användaren kan inte längre se din liveposition eller interagera med dig. Du kan ändra detta senare under Inställningar.",
+    "blockConfirmAction": "Blockera",
+    "blockCancelAction": "Avbryt",
+    "blockSuccess": "Användaren har blockerats.",
+    "blockedUsersTitle": "Blockerade användare",
+    "blockedUsersEmpty": "Du har inte blockerat någon.",
+    "unblock": "Avblockera",
+    "unblockConfirmTitle": "Avblockera användare?",
+    "unblockConfirmBody": "Den här användaren kan interagera med dig igen.",
+    "unblockConfirmAction": "Avblockera",
+    "unblockCancelAction": "Avbryt",
+    "unblockSuccess": "Användaren har avblockerats.",
+    "errorGeneric": "Något gick fel. Försök igen."
   }
 }

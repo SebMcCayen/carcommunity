@@ -12,6 +12,7 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
 import { AboutAppScreen } from '../screens/AboutAppScreen';
+import { BlockedUsersScreen } from '../screens/BlockedUsersScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -119,6 +120,11 @@ export const AppNavigator = () => {
               name="PrivacySettings"
               component={PrivacySettingsScreen}
               options={{ title: t('settings.privacy') }}
+            />
+            <Stack.Screen
+              name="BlockedUsers"
+              component={BlockedUsersScreen}
+              options={{ title: t('blocking.blockedUsersTitle') }}
             />
           </>
         )}

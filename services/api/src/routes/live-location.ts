@@ -28,6 +28,7 @@ import {
   LIVE_LOCATION_DATABASE_META,
   LiveLocationService,
 } from '../lib/live-location-service.js';
+import { BlockingService } from '../lib/blocking-service.js';
 
 const liveLocationSessionParamsSchema = z
   .object({
@@ -74,6 +75,7 @@ const liveLocationListQuerySchema = z
 export interface RegisterLiveLocationRoutesDependencies {
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
+  blockingService?: BlockingService;
 }
 
 export async function registerLiveLocationRoutes(
@@ -82,6 +84,7 @@ export async function registerLiveLocationRoutes(
 ): Promise<void> {
   const liveLocationService = dependencies.liveLocationService ?? new LiveLocationService(app.prisma);
   const liveLocationFeatureEnabled = dependencies.liveLocationFeatureEnabled ?? DEFAULT_FEATURE_FLAGS.liveLocation;
+  const blockingService = dependencies.blockingService ?? new BlockingService(app.prisma);
 
   function assertLiveLocationEnabled(): void {
     // TODO: Replace this injected/static fallback with admin-managed database-backed flag evaluation.
@@ -197,9 +200,13 @@ export async function registerLiveLocationRoutes(
 
       assertLiveLocationEnabled();
 
-      // TODO: Enforce blocking visibility filtering once user blocking relationships are persisted.
-      //   Expected behavior: if A blocks B or B blocks A, neither user should receive the other's marker.
       const query = liveLocationListQuerySchema.parse(request.query);
+
+      // Fetch user IDs invisible to the viewer due to blocking.
+      // Both directions (viewer blocked them, or they blocked viewer) are excluded.
+      // This is enforced at the database query level — do not rely on the client to filter.
+      const excludeUserIds = await blockingService.getInvisibleUserIds(auth.userId);
+
       const result = await liveLocationService.getVisibleMarkers({
         viewer: {
           userId: auth.userId,
@@ -209,6 +216,7 @@ export async function registerLiveLocationRoutes(
         },
         page: query.page,
         pageSize: query.pageSize,
+        excludeUserIds,
       });
 
       return {

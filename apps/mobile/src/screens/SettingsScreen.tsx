@@ -61,6 +61,11 @@ export const SettingsScreen = () => {
         onPress={() => navigation.navigate('PrivacySettings')}
       />
       <KccButton
+        label={t('settings.blockedUsers')}
+        variant="secondary"
+        onPress={() => navigation.navigate('BlockedUsers')}
+      />
+      <KccButton
         label={t('settings.subscription')}
         variant="secondary"
         disabled

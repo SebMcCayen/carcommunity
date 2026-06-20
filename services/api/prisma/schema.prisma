@@ -50,6 +50,8 @@ model User {
   eventRsvps              EventRsvp[]
   subscriptionRecords     SubscriptionRecord[]
   diagnosticsReports      DiagnosticsReport[]
+  blocksInitiated         UserBlock[]              @relation("BlockerUser")
+  blocksReceived          UserBlock[]              @relation("BlockedUser")
 
   @@index([deletedAt])
   @@index([status])
@@ -370,6 +372,41 @@ enum SubscriptionRecordStatus {
   expired
   revoked
   cancelled
+}
+
+// ---------------------------------------------------------------------------
+// User Blocking
+// ---------------------------------------------------------------------------
+
+/**
+ * Records a blocking relationship created by one user against another.
+ *
+ * Safe-delete behaviour: on-delete Cascade for both sides — when a user is
+ * hard-deleted, all blocks they created or received are removed with them.
+ * This prevents orphaned block records and avoids leaking that a deleted user
+ * ever existed.
+ *
+ * Self-blocking is prevented at the service layer, not the database layer.
+ *
+ * TODO: Enforce the same blocking relationship for:
+ *   - event chat
+ *   - group driving interactions
+ *   - mentions
+ *   - private interactions if ever introduced
+ *   - partner/community interaction features where relevant
+ */
+model UserBlock {
+  id            String   @id @default(uuid()) @db.Uuid
+  blockerUserId String   @map("blocker_user_id") @db.Uuid
+  blockedUserId String   @map("blocked_user_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  blocker       User     @relation("BlockerUser", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked       User     @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockerUserId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
 }
 
 model SubscriptionRecord {
