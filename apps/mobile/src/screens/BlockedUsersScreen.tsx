@@ -19,40 +19,50 @@ export const BlockedUsersScreen = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchBlockedUsers = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const listAllBlockedUsers = useCallback(async () => {
+    const allBlockedUsers = await withToken(async (token) => {
+      const pageSize = DEFAULT_BLOCKED_USERS_PAGE_SIZE;
+      const loadedUsers: BlockedUserSummary[] = [];
+      let page = 1;
+      let hasNext = true;
 
-    try {
-      await withToken(async (token) => {
-        const pageSize = DEFAULT_BLOCKED_USERS_PAGE_SIZE;
-        const allBlockedUsers: BlockedUserSummary[] = [];
-        let page = 1;
-        let hasNext = true;
+      while (hasNext) {
+        const response = await listBlockedUsers(page, pageSize, token);
+        loadedUsers.push(...response.data.blockedUsers);
+        hasNext = response.meta.hasNext;
+        page += 1;
+      }
 
-        while (hasNext) {
-          const response = await listBlockedUsers(page, pageSize, token);
-          allBlockedUsers.push(...response.data.blockedUsers);
-          hasNext = response.meta.hasNext;
-          page += 1;
-        }
+      return loadedUsers;
+    });
 
-        setBlockedUsers(allBlockedUsers);
-      });
-    } catch {
-      setError(t('blocking.errorGeneric'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t, withToken]);
+    return allBlockedUsers ?? [];
+  }, [withToken]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void fetchBlockedUsers();
-    }, 0);
+    let cancelled = false;
 
-    return () => clearTimeout(timer);
-  }, [fetchBlockedUsers]);
+    void (async () => {
+      try {
+        const allBlockedUsers = await listAllBlockedUsers();
+        if (!cancelled) {
+          setBlockedUsers(allBlockedUsers);
+        }
+      } catch {
+        if (!cancelled) {
+          setError(t('blocking.errorGeneric'));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [listAllBlockedUsers, t]);
 
   const handleUnblock = useCallback(
     (userId: string, displayName: string | null | undefined) => {
