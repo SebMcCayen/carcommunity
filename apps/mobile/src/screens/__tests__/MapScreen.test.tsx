@@ -225,4 +225,24 @@ describe('MapScreen', () => {
     useLiveLocation.mockReturnValue({ status: 'not_sharing', currentPosition: null });
     useLiveLocationMarkers.mockReturnValue({ markers: [], isLoading: false, isMemberEligible: false });
   });
+
+  it('does not render eligible empty state while member markers are loading', () => {
+    const { useLiveLocationMarkers } = jest.requireMock('../../hooks/useLiveLocationMarkers') as {
+      useLiveLocationMarkers: jest.Mock;
+    };
+    useLiveLocationMarkers.mockReturnValue({
+      markers: [],
+      isLoading: true,
+      isMemberEligible: true,
+    });
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+    act(() => {
+      renderer = renderMapScreen();
+    });
+
+    expect(JSON.stringify(renderer!.toJSON())).not.toContain('map.noOtherMarkersTitle');
+
+    useLiveLocationMarkers.mockReturnValue({ markers: [], isLoading: false, isMemberEligible: false });
+  });
 });

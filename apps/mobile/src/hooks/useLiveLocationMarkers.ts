@@ -120,6 +120,7 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
 
     async function poll(): Promise<void> {
       if (!polling) return;
+      if (AppState.currentState !== 'active') return;
       if (isRequestInFlightRef.current) return;
       if (Date.now() < nextAllowedPollAt) return;
 
@@ -207,10 +208,6 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
       polling = false;
       clearInterval(intervalId);
       appStateSub.remove();
-      if (mountedRef.current) {
-        setMarkers([]);
-        setIsLoading(false);
-      }
     };
   }, [isMemberEligible, withToken]);
 

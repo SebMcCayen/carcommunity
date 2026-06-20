@@ -64,7 +64,11 @@ export const MapScreen = () => {
   const { status, currentPosition } = useLiveLocation();
   const { isAuthenticated } = useAuth();
   const { t } = useI18n();
-  const { markers: memberMarkers, isMemberEligible } = useLiveLocationMarkers();
+  const {
+    markers: memberMarkers,
+    isLoading: isMemberMarkersLoading,
+    isMemberEligible,
+  } = useLiveLocationMarkers();
 
   // Show the user's real position only while actively sharing.
   // Coordinates are not logged.
@@ -123,7 +127,7 @@ export const MapScreen = () => {
       )}
 
       {/* Empty state: shown when eligible but no markers are available. */}
-      {isMemberEligible && memberMarkers.length === 0 && (
+      {isMemberEligible && !isMemberMarkersLoading && memberMarkers.length === 0 && (
         <View style={styles.notice} accessibilityRole="text">
           <Text style={[styles.noticeTitle, { color: theme.colors.textPrimary }]}>
             {t('map.noOtherMarkersTitle')}

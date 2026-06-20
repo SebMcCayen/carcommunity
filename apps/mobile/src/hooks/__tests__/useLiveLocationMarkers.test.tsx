@@ -577,6 +577,7 @@ describe('useLiveLocationMarkers — AppState background', () => {
     await renderHook();
 
     const callsAfterMount = mockLoadMarkers.mock.calls.length;
+    expect(callsAfterMount).toBe(0);
 
     await act(async () => {
       jest.advanceTimersByTime(12_001);

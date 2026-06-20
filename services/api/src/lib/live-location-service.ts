@@ -30,8 +30,8 @@ export const LIVE_LOCATION_DATABASE_META = {
 } as const;
 
 /**
- * Maximum number of markers returned in a single markers response.
- * Keeps the response bounded and the query efficient for MVP scale.
+ * Service-level upper bound for marker query size.
+ * Effective response size is min(route-level pageSize validation, this cap).
  */
 export const LIVE_LOCATION_MAX_MARKER_COUNT = 100;
 
