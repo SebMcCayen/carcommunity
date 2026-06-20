@@ -6,6 +6,7 @@ import type {
 } from '@prisma/client';
 import {
   LIVE_LOCATION_DURATIONS,
+  LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS,
   getLiveLocationDurationMs,
   type LiveLocationCoordinate,
   type LiveLocationDuration,
@@ -27,6 +28,12 @@ export const LIVE_LOCATION_DATABASE_META = {
   productionReady: true,
   ttlCleanupPrepared: true,
 } as const;
+
+/**
+ * Maximum number of markers returned in a single markers response.
+ * Keeps the response bounded and the query efficient for MVP scale.
+ */
+export const LIVE_LOCATION_MAX_MARKER_COUNT = 100;
 
 export interface LiveLocationViewer {
   userId: string;
@@ -386,13 +393,18 @@ export class LiveLocationService {
     }
 
     const now = params.now ?? new Date();
-    const skip = (params.page - 1) * params.pageSize;
+    const staleThreshold = new Date(now.getTime() - LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS);
+    const take = Math.min(params.pageSize, LIVE_LOCATION_MAX_MARKER_COUNT);
+    const skip = (params.page - 1) * take;
 
     await this.expireSessions(now);
 
     const where: Prisma.LiveLocationLatestPositionWhereInput = {
       userId: {
         not: params.viewer.userId,
+      },
+      recordedAt: {
+        gte: staleThreshold,
       },
       session: {
         status: 'active',
@@ -416,7 +428,7 @@ export class LiveLocationService {
           updatedAt: 'desc',
         },
         skip,
-        take: params.pageSize,
+        take,
         select: {
           userId: true,
           sessionId: true,
@@ -426,6 +438,16 @@ export class LiveLocationService {
           headingDegrees: true,
           speedMetersPerSecond: true,
           recordedAt: true,
+          session: {
+            select: {
+              expiresAt: true,
+            },
+          },
+          user: {
+            select: {
+              displayName: true,
+            },
+          },
         },
       }),
     ]);
@@ -435,6 +457,8 @@ export class LiveLocationService {
         userId: position.userId,
         sessionId: position.sessionId,
         status: 'active',
+        displayName: position.user.displayName,
+        expiresAt: position.session.expiresAt.toISOString(),
         coordinate: {
           latitude: position.latitude,
           longitude: position.longitude,

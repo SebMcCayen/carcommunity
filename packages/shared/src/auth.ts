@@ -3,6 +3,9 @@
  * Backend remains the source of truth for all auth and access decisions.
  */
 
+import type { UserStatus, SubscriptionEntitlement } from './users.js';
+export type { UserRole, UserStatus, SubscriptionEntitlement } from './users.js';
+
 export const AUTH_PROVIDERS = ['apple', 'google'] as const;
 
 export type AuthProvider = (typeof AUTH_PROVIDERS)[number];
@@ -61,6 +64,16 @@ export interface AuthenticatedUserSummary {
   userId: string;
   identities: AuthIdentity[];
   roles: Role[];
+  /**
+   * User account status. Backend is the source of truth — suspended/deleted users
+   * must not access protected features regardless of other fields.
+   */
+  status: UserStatus;
+  /**
+   * Active subscription entitlement. Backend is the source of truth.
+   * Client may use this for UX gating only — never for security enforcement.
+   */
+  subscriptionEntitlement: SubscriptionEntitlement;
   displayName?: string | null;
   avatarUrl?: string | null;
   /** ISO 8601 timestamp when onboarding was completed, or null if not yet completed. */

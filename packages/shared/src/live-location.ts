@@ -25,6 +25,13 @@ export const DEFAULT_LIVE_LOCATION_PAGE_SIZE = 20;
 export const MAX_LIVE_LOCATION_PAGE_SIZE = 50;
 export const LIVE_LOCATION_TTL_MINUTES_MAX = 15;
 
+/**
+ * Positions older than this threshold (in milliseconds) are considered stale and must not
+ * be returned by the backend or rendered by the client.
+ * Default: 60 seconds.
+ */
+export const LIVE_LOCATION_MARKER_STALE_THRESHOLD_MS = 60_000;
+
 export const LIVE_LOCATION_DURATION_MS: Record<LiveLocationDuration, number> = {
   '1h': 60 * 60 * 1000,
   '2h': 2 * 60 * 60 * 1000,
@@ -102,6 +109,10 @@ export interface PublicLiveLocationMarker {
   sessionId: string;
   coordinate: LiveLocationCoordinate;
   status: Extract<LiveLocationSessionStatus, 'active'>;
+  /** Display name of the sharing user, if available. Never expose sensitive profile data. */
+  displayName?: string | null;
+  /** ISO 8601 session expiry time. Clients may use this for preemptive marker removal. */
+  expiresAt?: string;
 }
 
 export interface PublicLiveLocationMarkerResponse {

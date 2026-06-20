@@ -33,6 +33,7 @@ interface PositionRecord {
 interface UserRecord {
   status: 'active' | 'warned' | 'temporarily_suspended' | 'permanently_suspended' | 'deleted';
   deletedAt: Date | null;
+  displayName?: string | null;
 }
 
 function createFakePrisma(initial?: {
@@ -177,6 +178,9 @@ function createFakePrisma(initial?: {
           if (where.userId?.not && position.userId === where.userId.not) {
             return false;
           }
+          if (where.recordedAt?.gte && position.recordedAt < where.recordedAt.gte) {
+            return false;
+          }
           const session = sessions.find((candidate) => candidate.id === position.sessionId);
           if (!session) {
             return false;
@@ -200,6 +204,9 @@ function createFakePrisma(initial?: {
             if (where.userId?.not && position.userId === where.userId.not) {
               return false;
             }
+            if (where.recordedAt?.gte && position.recordedAt < where.recordedAt.gte) {
+              return false;
+            }
             const session = sessions.find((candidate) => candidate.id === position.sessionId);
             if (!session) {
               return false;
@@ -218,7 +225,15 @@ function createFakePrisma(initial?: {
           })
           .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-        return filtered.slice(skip, skip + take);
+        return filtered.slice(skip, skip + take).map((position) => {
+          const session = sessions.find((candidate) => candidate.id === position.sessionId);
+          const user = users.get(position.userId);
+          return {
+            ...position,
+            session: session ? { expiresAt: session.expiresAt } : undefined,
+            user: user ? { displayName: user.displayName ?? null } : undefined,
+          };
+        });
       },
       findFirst: async () => {
         const sorted = [...positions].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
@@ -448,8 +463,8 @@ test('expired sessions are excluded from visible markers', async () => {
         accuracyMeters: null,
         headingDegrees: null,
         speedMetersPerSecond: null,
-        recordedAt: new Date('2026-06-09T11:05:00.000Z'),
-        updatedAt: new Date('2026-06-09T11:05:00.000Z'),
+        recordedAt: new Date('2026-06-09T11:29:45.000Z'),
+        updatedAt: new Date('2026-06-09T11:29:45.000Z'),
       },
       {
         id: 'position-2',
@@ -559,8 +574,8 @@ test('member user can view live location markers and admin summary excludes exac
         accuracyMeters: null,
         headingDegrees: null,
         speedMetersPerSecond: null,
-        recordedAt: new Date('2026-06-09T11:05:00.000Z'),
-        updatedAt: new Date('2026-06-09T11:05:00.000Z'),
+        recordedAt: new Date('2026-06-09T11:29:45.000Z'),
+        updatedAt: new Date('2026-06-09T11:29:45.000Z'),
       },
     ],
     users: {
@@ -589,7 +604,7 @@ test('member user can view live location markers and admin summary excludes exac
 
   assert.deepEqual(Object.keys(summary).sort(), ['activeSessionCount', 'expiredSessionCount', 'latestPositionUpdatedAt']);
   assert.equal(summary.activeSessionCount, 1);
-  assert.equal(summary.latestPositionUpdatedAt, '2026-06-09T11:05:00.000Z');
+  assert.equal(summary.latestPositionUpdatedAt, '2026-06-09T11:29:45.000Z');
 });
 
 test('suspended user cannot access live location markers', async () => {
@@ -613,4 +628,204 @@ test('suspended user cannot access live location markers', async () => {
       return typed.message === 'Your account has been suspended.';
     },
   );
+});
+
+test('stale positions older than the threshold are excluded from visible markers', async () => {
+  const now = new Date('2026-06-09T11:30:00.000Z');
+  const staleRecordedAt = new Date(now.getTime() - 120_000); // 2 minutes ago — beyond 60s threshold
+  const freshRecordedAt = new Date(now.getTime() - 20_000);  // 20 seconds ago — within threshold
+
+  const fakePrisma = createFakePrisma({
+    sessions: [
+      {
+        id: 'session-fresh',
+        userId: 'user-2',
+        status: 'active',
+        startedAt: new Date('2026-06-09T10:00:00.000Z'),
+        expiresAt: new Date('2026-06-09T14:00:00.000Z'),
+        stoppedAt: null,
+        createdAt: new Date('2026-06-09T10:00:00.000Z'),
+        updatedAt: now,
+      },
+      {
+        id: 'session-stale',
+        userId: 'user-3',
+        status: 'active',
+        startedAt: new Date('2026-06-09T10:00:00.000Z'),
+        expiresAt: new Date('2026-06-09T14:00:00.000Z'),
+        stoppedAt: null,
+        createdAt: new Date('2026-06-09T10:00:00.000Z'),
+        updatedAt: staleRecordedAt,
+      },
+    ],
+    positions: [
+      {
+        id: 'position-fresh',
+        sessionId: 'session-fresh',
+        userId: 'user-2',
+        latitude: 57.7,
+        longitude: 12.0,
+        accuracyMeters: null,
+        headingDegrees: null,
+        speedMetersPerSecond: null,
+        recordedAt: freshRecordedAt,
+        updatedAt: freshRecordedAt,
+      },
+      {
+        id: 'position-stale',
+        sessionId: 'session-stale',
+        userId: 'user-3',
+        latitude: 57.8,
+        longitude: 12.1,
+        accuracyMeters: null,
+        headingDegrees: null,
+        speedMetersPerSecond: null,
+        recordedAt: staleRecordedAt,
+        updatedAt: staleRecordedAt,
+      },
+    ],
+    users: {
+      'user-1': { status: 'active', deletedAt: null },
+      'user-2': { status: 'active', deletedAt: null },
+      'user-3': { status: 'active', deletedAt: null },
+    },
+  });
+
+  const service = new LiveLocationService(fakePrisma as unknown as PrismaClient);
+
+  const result = await service.getVisibleMarkers({
+    viewer: {
+      userId: 'user-1',
+      role: 'user',
+      status: 'active',
+      subscriptionEntitlement: 'member_monthly',
+    },
+    page: 1,
+    pageSize: 20,
+    now,
+  });
+
+  assert.equal(result.markers.length, 1);
+  assert.equal(result.markers[0]?.sessionId, 'session-fresh');
+});
+
+test('visible markers include expiresAt and displayName from session and user', async () => {
+  const now = new Date('2026-06-09T11:30:00.000Z');
+  const freshRecordedAt = new Date(now.getTime() - 15_000);
+
+  const fakePrisma = createFakePrisma({
+    sessions: [
+      {
+        id: 'session-active',
+        userId: 'user-2',
+        status: 'active',
+        startedAt: new Date('2026-06-09T10:00:00.000Z'),
+        expiresAt: new Date('2026-06-09T14:00:00.000Z'),
+        stoppedAt: null,
+        createdAt: new Date('2026-06-09T10:00:00.000Z'),
+        updatedAt: freshRecordedAt,
+      },
+    ],
+    positions: [
+      {
+        id: 'position-1',
+        sessionId: 'session-active',
+        userId: 'user-2',
+        latitude: 57.7,
+        longitude: 12.0,
+        accuracyMeters: null,
+        headingDegrees: null,
+        speedMetersPerSecond: null,
+        recordedAt: freshRecordedAt,
+        updatedAt: freshRecordedAt,
+      },
+    ],
+    users: {
+      'user-1': { status: 'active', deletedAt: null },
+      'user-2': { status: 'active', deletedAt: null, displayName: 'Seb' },
+    },
+  });
+
+  const service = new LiveLocationService(fakePrisma as unknown as PrismaClient);
+
+  const result = await service.getVisibleMarkers({
+    viewer: {
+      userId: 'user-1',
+      role: 'user',
+      status: 'active',
+      subscriptionEntitlement: 'member_monthly',
+    },
+    page: 1,
+    pageSize: 20,
+    now,
+  });
+
+  assert.equal(result.markers.length, 1);
+  assert.equal(result.markers[0]?.displayName, 'Seb');
+  assert.equal(result.markers[0]?.expiresAt, '2026-06-09T14:00:00.000Z');
+});
+
+test('visible markers exclude sensitive fields (email, subscription, session tokens)', async () => {
+  const now = new Date('2026-06-09T11:30:00.000Z');
+  const freshRecordedAt = new Date(now.getTime() - 10_000);
+
+  const fakePrisma = createFakePrisma({
+    sessions: [
+      {
+        id: 'session-active',
+        userId: 'user-2',
+        status: 'active',
+        startedAt: new Date('2026-06-09T10:00:00.000Z'),
+        expiresAt: new Date('2026-06-09T14:00:00.000Z'),
+        stoppedAt: null,
+        createdAt: new Date('2026-06-09T10:00:00.000Z'),
+        updatedAt: freshRecordedAt,
+      },
+    ],
+    positions: [
+      {
+        id: 'position-1',
+        sessionId: 'session-active',
+        userId: 'user-2',
+        latitude: 57.7,
+        longitude: 12.0,
+        accuracyMeters: null,
+        headingDegrees: null,
+        speedMetersPerSecond: null,
+        recordedAt: freshRecordedAt,
+        updatedAt: freshRecordedAt,
+      },
+    ],
+    users: {
+      'user-1': { status: 'active', deletedAt: null },
+      'user-2': { status: 'active', deletedAt: null },
+    },
+  });
+
+  const service = new LiveLocationService(fakePrisma as unknown as PrismaClient);
+
+  const result = await service.getVisibleMarkers({
+    viewer: {
+      userId: 'user-1',
+      role: 'user',
+      status: 'active',
+      subscriptionEntitlement: 'member_monthly',
+    },
+    page: 1,
+    pageSize: 20,
+    now,
+  });
+
+  assert.equal(result.markers.length, 1);
+  const marker = result.markers[0]!;
+  // Must not include sensitive fields
+  assert.ok(!('email' in marker), 'marker must not include email');
+  assert.ok(!('subscriptionEntitlement' in marker), 'marker must not include subscriptionEntitlement');
+  assert.ok(!('tokenHash' in marker), 'marker must not include session token');
+  assert.ok(!('identities' in marker), 'marker must not include identity provider data');
+  // Allowed safe fields
+  assert.ok('userId' in marker);
+  assert.ok('sessionId' in marker);
+  assert.ok('coordinate' in marker);
+  assert.ok('status' in marker);
 });

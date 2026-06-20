@@ -7,6 +7,11 @@
  *
  * LiveLocationContext is mocked so the screen can render without a real
  * location session.
+ *
+ * useLiveLocationMarkers is mocked so the screen can render without a real
+ * backend connection, auth context, or AppState dependency.
+ *
+ * useAuth is mocked to control authentication state.
  */
 
 import React from 'react';
@@ -43,6 +48,38 @@ jest.mock('../../context/LiveLocationContext', () => ({
   useLiveLocation: jest.fn().mockReturnValue({
     status: 'not_sharing',
     currentPosition: null,
+  }),
+}));
+
+// Mock useLiveLocationMarkers so MapScreen does not require a real backend
+// connection, auth context, or AppState subscription.
+jest.mock('../../hooks/useLiveLocationMarkers', () => ({
+  useLiveLocationMarkers: jest.fn().mockReturnValue({
+    markers: [],
+    isLoading: false,
+    isMemberEligible: false,
+  }),
+}));
+
+// Mock useAuth so MapScreen does not require a real AuthProvider.
+jest.mock('../../hooks/useAuth', () => ({
+  useAuth: jest.fn().mockReturnValue({
+    currentUser: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+    login: jest.fn(),
+    logout: jest.fn(),
+    refreshCurrentUser: jest.fn(),
+    withToken: jest.fn(),
+  }),
+  getPlatformAuthProvider: jest.fn().mockReturnValue(null),
+}));
+
+// Mock useI18n so MapScreen does not require a real I18nProvider.
+jest.mock('../../hooks/useI18n', () => ({
+  useI18n: jest.fn().mockReturnValue({
+    t: (key: string) => key,
   }),
 }));
 
@@ -86,19 +123,16 @@ describe('MapScreen', () => {
     expect(mapView.length).toBeGreaterThan(0);
   });
 
-  it('renders placeholder marker annotations', () => {
+  it('renders no member markers when the markers array is empty', () => {
     let renderer: ReturnType<typeof TestRenderer.create> | null = null;
 
     act(() => {
       renderer = renderMapScreen();
     });
 
-    // The mock renders PointAnnotation as a View with testID 'mapbox-point-annotation'.
-    const annotations = renderer!.root.findAll(
-      (node) => node.props['testID'] === 'mapbox-point-annotation',
-    );
-    // The @fake member marker should always render.
-    expect(annotations.length).toBeGreaterThan(0);
+    // No markers returned by hook → no member PointAnnotation elements.
+    const count = countTestIds(renderer!.toJSON(), 'mapbox-point-annotation');
+    expect(count).toBe(0);
   });
 
   it('does not render self marker when not sharing', () => {
@@ -108,11 +142,8 @@ describe('MapScreen', () => {
       renderer = renderMapScreen();
     });
 
-    // Only the fake member marker should be present — no self annotation when not sharing.
-    // Use toJSON() (host-component tree) to get an accurate count; root.findAll traverses
-    // the full fiber tree and returns duplicates for composite+host pairs in mock components.
     const count = countTestIds(renderer!.toJSON(), 'mapbox-point-annotation');
-    expect(count).toBe(1);
+    expect(count).toBe(0);
   });
 
   it('renders self marker when sharing with a valid position', () => {
@@ -129,11 +160,69 @@ describe('MapScreen', () => {
       renderer = renderMapScreen();
     });
 
-    // Both the self marker and the fake member marker should render.
+    // Only the self marker — no member markers from the hook.
+    const count = countTestIds(renderer!.toJSON(), 'mapbox-point-annotation');
+    expect(count).toBe(1);
+
+    // Restore defaults.
+    useLiveLocation.mockReturnValue({ status: 'not_sharing', currentPosition: null });
+  });
+
+  it('renders member markers returned by useLiveLocationMarkers when eligible', () => {
+    const { useLiveLocationMarkers } = jest.requireMock('../../hooks/useLiveLocationMarkers') as {
+      useLiveLocationMarkers: jest.Mock;
+    };
+    useLiveLocationMarkers.mockReturnValue({
+      markers: [
+        { id: 'session-1', coordinate: { latitude: 57.51, longitude: 12.08 }, type: 'member' },
+        { id: 'session-2', coordinate: { latitude: 57.52, longitude: 12.09 }, type: 'member' },
+      ],
+      isLoading: false,
+      isMemberEligible: true,
+    });
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+    act(() => {
+      renderer = renderMapScreen();
+    });
+
     const count = countTestIds(renderer!.toJSON(), 'mapbox-point-annotation');
     expect(count).toBe(2);
 
-    // Restore default mock for subsequent tests.
+    // Restore defaults.
+    useLiveLocationMarkers.mockReturnValue({ markers: [], isLoading: false, isMemberEligible: false });
+  });
+
+  it('renders both self and member markers simultaneously', () => {
+    const { useLiveLocation } = jest.requireMock('../../context/LiveLocationContext') as {
+      useLiveLocation: jest.Mock;
+    };
+    const { useLiveLocationMarkers } = jest.requireMock('../../hooks/useLiveLocationMarkers') as {
+      useLiveLocationMarkers: jest.Mock;
+    };
+
+    useLiveLocation.mockReturnValue({
+      status: 'sharing',
+      currentPosition: { latitude: 57.5086, longitude: 12.0742 },
+    });
+    useLiveLocationMarkers.mockReturnValue({
+      markers: [
+        { id: 'session-1', coordinate: { latitude: 57.51, longitude: 12.08 }, type: 'member' },
+      ],
+      isLoading: false,
+      isMemberEligible: true,
+    });
+
+    let renderer: ReturnType<typeof TestRenderer.create> | null = null;
+    act(() => {
+      renderer = renderMapScreen();
+    });
+
+    // Self + 1 member marker.
+    const count = countTestIds(renderer!.toJSON(), 'mapbox-point-annotation');
+    expect(count).toBe(2);
+
     useLiveLocation.mockReturnValue({ status: 'not_sharing', currentPosition: null });
+    useLiveLocationMarkers.mockReturnValue({ markers: [], isLoading: false, isMemberEligible: false });
   });
 });
