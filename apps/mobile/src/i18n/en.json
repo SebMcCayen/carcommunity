@@ -165,6 +165,7 @@
     "error": "Could not load events. Please try again.",
     "errorDetail": "Could not load event details.",
     "retry": "Try again",
+    "loadMore": "Load more",
     "cancelledBadge": "Cancelled",
     "cancelledNotice": "This event has been cancelled.",
     "lockIndicator": "Requires KCC Membership.",

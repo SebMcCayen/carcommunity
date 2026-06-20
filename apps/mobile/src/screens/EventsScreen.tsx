@@ -236,7 +236,7 @@ export const EventsScreen = () => {
       {nextCursor !== null && !isLoadingMore && (
         <KccButton
           testID="events-load-more"
-          label={t('events.retry')}
+          label={t('events.loadMore')}
           variant="secondary"
           onPress={() => void loadMore()}
         />

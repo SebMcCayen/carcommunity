@@ -168,6 +168,7 @@
     "error": "Kunde inte hämta träffar. Försök igen.",
     "errorDetail": "Kunde inte hämta eventdetaljer.",
     "retry": "Försök igen",
+    "loadMore": "Ladda fler",
     "cancelledBadge": "Inställt",
     "cancelledNotice": "Eventet är inställt.",
     "lockIndicator": "Kräver KCC Medlem.",
