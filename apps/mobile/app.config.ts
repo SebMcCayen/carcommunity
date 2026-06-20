@@ -31,15 +31,38 @@ const config: ExpoConfig = {
     //                    Apple Developer account and App Store Connect before submitting.
     // TODO (production): Confirm bundle ID and entitlements match your Apple App ID configuration.
     'expo-apple-authentication',
-    // expo-location provides foreground location access.
-    // Only foreground permission is requested; background mode is not enabled here.
+    // expo-location provides foreground and background location access.
+    // Background location is only active during an explicit, user-initiated sharing session.
+    // It is never used passively or outside an active session.
+    //
+    // NOTE: Background location requires a custom development build or EAS build.
+    //       It does NOT work in Expo Go. Run `npx expo prebuild` or `eas build` first.
+    //
+    // TODO (physical device): Validate background location on a real iOS and Android device.
+    // TODO (App Store): Review Apple's privacy nutrition label requirements for
+    //   NSLocationAlwaysAndWhenInUseUsageDescription before App Store submission.
     [
       'expo-location',
       {
         // iOS — shown in the system permission dialog (NSLocationWhenInUseUsageDescription).
+        // Build-time config strings cannot use runtime i18n keys.
         locationWhenInUsePermission: `${appDisplayName} behöver din plats medan du aktivt delar din liveposition. Delning är frivillig och tidsbegränsad. Du kan stoppa delningen när som helst.`,
-        // Android — shown in the system permission dialog (ACCESS_FINE_LOCATION).
-        locationAlwaysAndWhenInUsePermission: `${appDisplayName} behöver din plats medan du aktivt delar din liveposition.`,
+        // iOS — shown if background permission is later requested (NSLocationAlwaysAndWhenInUseUsageDescription).
+        // Only requested after explicit user opt-in, never at startup.
+        // Build-time config strings cannot use runtime i18n keys.
+        locationAlwaysAndWhenInUsePermission: `${appDisplayName} kan uppdatera din liveposition när appen är i bakgrunden, men endast under en aktiv, tidsbegränsad delningssession. ${appDisplayName} spårar inte din position utanför aktiva sessioner.`,
+        // iOS — enable UIBackgroundModes: location so the app can receive location
+        // updates while backgrounded during an active sharing session.
+        isBackgroundLocationEnabled: true,
+        // Android — foreground service notification displayed while background location
+        // sharing is active. The notification clearly states that sharing is active
+        // and is visible to the user for the duration of the session.
+        // Build-time config strings cannot use runtime i18n keys.
+        foregroundService: {
+          notificationTitle: `${appDisplayName} liveposition är aktiv`,
+          notificationBody: 'Din position delas under den aktiva, tidsbegränsade sessionen.',
+          notificationColor: '#1a1a1a',
+        },
       },
     ],
   ],

@@ -19,6 +19,8 @@ import { publicEnv } from '../config/env';
 const base = publicEnv.apiBaseUrl.replace(/\/$/, '');
 
 const buildUrl = (path: string) => `${base}${path.startsWith('/') ? path : `/${path}`}`;
+const buildAuthHeader = (token?: string): Record<string, string> =>
+  token ? { authorization: 'Bearer ' + token } : {};
 
 async function requestJson<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
   if (!base) {
@@ -48,11 +50,13 @@ async function requestJson<TResponse>(path: string, init?: RequestInit): Promise
  */
 export async function startLiveLocationSession(
   body: LiveLocationStartRequest,
+  token?: string,
 ): Promise<LiveLocationStartResponse> {
   return requestJson<LiveLocationStartResponse>(LIVE_LOCATION_ROUTE_PATHS.sessions, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...buildAuthHeader(token),
     },
     body: JSON.stringify(body),
   });
@@ -61,11 +65,13 @@ export async function startLiveLocationSession(
 export async function updateLiveLocationPosition(
   sessionId: string,
   body: LiveLocationUpdateRequest,
+  token?: string,
 ): Promise<LiveLocationPositionUpdateResponse> {
   return requestJson<LiveLocationPositionUpdateResponse>(buildLiveLocationPositionPath(sessionId), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...buildAuthHeader(token),
     },
     body: JSON.stringify(body),
   });
@@ -74,21 +80,24 @@ export async function updateLiveLocationPosition(
 export async function stopLiveLocationSession(
   sessionId: string,
   body: LiveLocationStopRequest = { reason: 'user_stop' },
+  token?: string,
 ): Promise<LiveLocationStopResponse> {
   return requestJson<LiveLocationStopResponse>(buildLiveLocationStopPath(sessionId), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...buildAuthHeader(token),
     },
     body: JSON.stringify(body),
   });
 }
 
-export async function hideMeNow(): Promise<HideMeNowResponse> {
+export async function hideMeNow(token?: string): Promise<HideMeNowResponse> {
   return requestJson<HideMeNowResponse>(LIVE_LOCATION_ROUTE_PATHS.hideMeNow, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...buildAuthHeader(token),
     },
     body: JSON.stringify({}),
   });

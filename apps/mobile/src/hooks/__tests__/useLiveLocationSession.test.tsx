@@ -249,7 +249,7 @@ describe('useLiveLocationSession — startSession', () => {
     });
 
     expect(mockStart).toHaveBeenCalledTimes(1);
-    expect(mockStart).toHaveBeenCalledWith({ duration: '1h' });
+    expect(mockStart).toHaveBeenCalledWith({ duration: '1h' }, undefined);
     expect(result.current.status).toBe('sharing');
     expect(result.current.sessionId).toBe('session-abc');
   });
@@ -385,7 +385,7 @@ describe('useLiveLocationSession — stopSession', () => {
     });
 
     expect(mockStop).toHaveBeenCalledTimes(1);
-    expect(mockStop).toHaveBeenCalledWith('session-abc', { reason: 'user_stop' });
+    expect(mockStop).toHaveBeenCalledWith('session-abc', { reason: 'user_stop' }, undefined);
     expect(result.current.status).toBe('not_sharing');
     expect(result.current.sessionId).toBeNull();
   });

@@ -82,7 +82,20 @@
     "privacyTimeLimited": "Din position delas bara under den tid du väljer.",
     "privacyStopAnytime": "Du kan sluta dela när som helst via \"Stoppa delning\" eller \"Dölj mig nu\".",
     "privacyNoHistory": "Ingen rutt eller historik sparas publikt.",
-    "privacySafeDriving": "Interagera inte med appen under körning."
+    "privacySafeDriving": "Interagera inte med appen under körning.",
+    "backgroundPermissionTitle": "Tillåt plats i bakgrunden",
+    "backgroundPermissionRationale": "KCC kan uppdatera din liveposition när appen är i bakgrunden, men endast under en aktiv delningssession.",
+    "backgroundPermissionTimeLimited": "Delningen stoppas automatiskt när tiden går ut.",
+    "backgroundPermissionControl": "Du kan när som helst välja Stoppa delning eller Dölj mig nu.",
+    "backgroundPermissionNoTracking": "KCC spårar inte din position när du inte aktivt delar.",
+    "backgroundPermissionAllow": "Tillåt bakgrundsposition",
+    "backgroundPermissionSkip": "Fortsätt utan bakgrundsposition",
+    "backgroundSharingActive": "Delning i bakgrunden aktiv",
+    "foregroundOnlySharing": "Endast delning när appen är öppen",
+    "sessionAutoExpires": "Sessionen avslutas automatiskt",
+    "backgroundPermissionDenied": "Bakgrundsposition nekad. Delning pausas när appen stängs.",
+    "backgroundNotificationTitle": "KCC liveposition är aktiv",
+    "backgroundNotificationBody": "Din position delas under den aktiva, tidsbegränsade sessionen."
   },
   "onboarding": {
     "title": "Välkommen",

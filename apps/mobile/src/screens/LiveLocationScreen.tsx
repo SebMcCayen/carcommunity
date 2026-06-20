@@ -5,7 +5,8 @@
  * Community members for a fixed duration. All sharing is explicit opt-in.
  *
  * Foreground location permission is requested only when the user taps to
- * start sharing. Background location is not used in this step.
+ * start sharing. Background location permission is requested only after
+ * the user reads the rationale and explicitly agrees — never at startup.
  * No route history is stored or uploaded.
  * Backend is the source of truth for all access control decisions.
  */
@@ -20,7 +21,7 @@ import {
 import type { AppTheme } from '../design/theme';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useI18n } from '../hooks/useI18n';
-import { type LiveSharingStatus } from '../hooks/useLiveLocationSession';
+import { type BackgroundPermissionMode, type LiveSharingStatus } from '../hooks/useLiveLocationSession';
 import { useLiveLocation } from '../context/LiveLocationContext';
 import { KccButton } from '../components/KccButton';
 
@@ -92,6 +93,17 @@ function getStatusColor(status: LiveSharingStatus, theme: AppTheme): string {
   }
 }
 
+function getBgModeLabel(mode: BackgroundPermissionMode, t: (key: string) => string): string {
+  switch (mode) {
+    case 'granted':
+      return t('liveLocation.backgroundSharingActive');
+    case 'foreground_only':
+      return t('liveLocation.foregroundOnlySharing');
+    default:
+      return '';
+  }
+}
+
 function formatLastUpdated(date: Date | null, label: string): string | null {
   if (!date) return null;
   return `${label}: ${date.toLocaleTimeString()}`;
@@ -104,6 +116,8 @@ export const LiveLocationScreen = () => {
     status,
     selectedDuration,
     sessionId,
+    sessionExpiresAt,
+    backgroundPermissionMode,
     error,
     isLoading,
     lastUpdatedAt,
@@ -111,6 +125,8 @@ export const LiveLocationScreen = () => {
     startSession,
     stopSession,
     hideMeNow,
+    requestBackgroundPermission,
+    skipBackgroundPermission,
   } = useLiveLocation();
 
   const hasActiveSession = sessionId !== null;
@@ -123,6 +139,10 @@ export const LiveLocationScreen = () => {
     status === 'permission_denied' ||
     (status === 'error' && !hasActiveSession);
   const isBusy = status === 'starting' || status === 'stopping' || isLoading;
+
+  // Show the background permission rationale card when sharing is active
+  // and the user hasn't yet been asked or declined.
+  const showBackgroundRationale = isSharing && backgroundPermissionMode === 'not_requested';
 
   const statusColor = getStatusColor(status, theme);
 
@@ -142,6 +162,12 @@ export const LiveLocationScreen = () => {
   };
 
   const lastUpdatedText = formatLastUpdated(lastUpdatedAt, t('liveLocation.lastUpdated'));
+
+  const backgroundModeLabel = getBgModeLabel(backgroundPermissionMode, t);
+
+  const sessionExpiresText = sessionExpiresAt
+    ? `${t('liveLocation.sessionAutoExpires')}: ${sessionExpiresAt.toLocaleTimeString()}`
+    : null;
 
   return (
     <ScrollView
@@ -173,9 +199,22 @@ export const LiveLocationScreen = () => {
           >
             {statusLabel[status]}
           </Text>
+          {isSharing && backgroundPermissionMode !== 'not_requested' && (
+            <Text
+              style={[styles.bgModeText, { color: theme.colors.textSecondary }]}
+              accessibilityRole="text"
+            >
+              {backgroundModeLabel}
+            </Text>
+          )}
           {isSharing && lastUpdatedText !== null && (
             <Text style={[styles.lastUpdatedText, { color: theme.colors.textSecondary }]}>
               {lastUpdatedText}
+            </Text>
+          )}
+          {isSharing && sessionExpiresText !== null && (
+            <Text style={[styles.lastUpdatedText, { color: theme.colors.textSecondary }]}>
+              {sessionExpiresText}
             </Text>
           )}
         </View>
@@ -197,6 +236,76 @@ export const LiveLocationScreen = () => {
         >
           <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
             {t('liveLocation.safeDrivingWarning')}
+          </Text>
+        </View>
+      )}
+
+      {/* Background permission rationale — only shown once, after session starts */}
+      {showBackgroundRationale && (
+        <View
+          style={[
+            styles.rationaleCard,
+            {
+              backgroundColor: theme.colors.surfaceBackground,
+              borderColor: theme.colors.borderDefault,
+              borderRadius: theme.radius.lg,
+              padding: theme.spacing[4],
+              gap: theme.spacing[3],
+            },
+          ]}
+          accessibilityRole="none"
+        >
+          <Text style={[styles.sectionLabel, { color: theme.colors.textPrimary }]}>
+            {t('liveLocation.backgroundPermissionTitle')}
+          </Text>
+          <Text style={[styles.rationaleBody, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.backgroundPermissionRationale')}
+          </Text>
+          <Text style={[styles.rationaleBody, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.backgroundPermissionTimeLimited')}
+          </Text>
+          <Text style={[styles.rationaleBody, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.backgroundPermissionControl')}
+          </Text>
+          <Text style={[styles.rationaleBody, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.backgroundPermissionNoTracking')}
+          </Text>
+          <KccButton
+            label={t('liveLocation.backgroundPermissionAllow')}
+            onPress={() =>
+              requestBackgroundPermission(
+                t('liveLocation.backgroundNotificationTitle'),
+                t('liveLocation.backgroundNotificationBody'),
+              )
+            }
+            variant="secondary"
+            disabled={isBusy}
+          />
+          <KccButton
+            label={t('liveLocation.backgroundPermissionSkip')}
+            onPress={skipBackgroundPermission}
+            variant="secondary"
+            disabled={isBusy}
+          />
+        </View>
+      )}
+
+      {/* Background permission denied explanation */}
+      {isSharing && backgroundPermissionMode === 'foreground_only' && (
+        <View
+          style={[
+            styles.infoBanner,
+            {
+              backgroundColor: theme.colors.surfaceBackground,
+              borderColor: theme.colors.borderDefault,
+              borderRadius: theme.radius.md,
+              padding: theme.spacing[4],
+            },
+          ]}
+          accessibilityRole="none"
+        >
+          <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
+            {t('liveLocation.backgroundPermissionDenied')}
           </Text>
         </View>
       )}
@@ -401,6 +510,24 @@ const styles = StyleSheet.create({
   },
   activeActions: {
     flexDirection: 'column',
+  },
+  rationaleCard: {
+    borderWidth: 1,
+  },
+  rationaleBody: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  infoBanner: {
+    borderWidth: 1,
+  },
+  infoText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  bgModeText: {
+    fontSize: 13,
+    fontWeight: '400',
   },
   privacyCard: {
     borderWidth: 1,
