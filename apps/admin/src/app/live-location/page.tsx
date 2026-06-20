@@ -69,6 +69,21 @@ export default function LiveLocationPage() {
       </section>
 
       <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Blocking relationships</h2>
+        {/*
+          TODO: Individual block relationships are privacy-sensitive and must never
+          be exposed in admin lists or used for surveillance. Only aggregate
+          operational counts (e.g. total active block relationships) may be surfaced
+          here if genuinely useful for operational monitoring. Removing individual
+          user blocks via the admin panel is not permitted in this step.
+        */}
+        <p style={{ fontSize: 14, color: '#666' }}>
+          Block relationship counts are not shown in this placeholder.
+          Individual blocking decisions are user-private and must not be exposed to admin views.
+        </p>
+      </section>
+
+      <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Prepared admin behaviours</h2>
         <ul className={styles.behaviorList}>
           <li>Show active live location session count without exposing exact positions</li>

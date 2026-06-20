@@ -10,7 +10,8 @@ export type ErrorCode =
   | 'unauthenticated'
   | 'forbidden'
   | 'suspended'
-  | 'feature_disabled';
+  | 'feature_disabled'
+  | 'self_block';
 
 export class AppError extends Error {
   public readonly statusCode: number;

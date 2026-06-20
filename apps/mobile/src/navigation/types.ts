@@ -6,6 +6,7 @@ export type RootStackParamList = {
   About: undefined;
   LiveLocation: undefined;
   PrivacySettings: undefined;
+  BlockedUsers: undefined;
 };
 
 export type MainTabParamList = {

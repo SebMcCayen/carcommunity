@@ -35,6 +35,10 @@
     "./onboarding": {
       "types": "./dist/onboarding.d.ts",
       "default": "./dist/onboarding.js"
+    },
+    "./blocking": {
+      "types": "./dist/blocking.d.ts",
+      "default": "./dist/blocking.js"
     }
   },
   "scripts": {

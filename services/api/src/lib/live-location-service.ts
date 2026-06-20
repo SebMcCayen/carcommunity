@@ -388,6 +388,13 @@ export class LiveLocationService {
     page: number;
     pageSize: number;
     now?: Date;
+    /**
+     * User IDs to exclude from marker results.
+     * Should include all users invisible to the viewer due to blocking
+     * (both users blocked by the viewer and users who blocked the viewer).
+     * Filtering is applied at the database query level.
+     */
+    excludeUserIds?: string[];
   }): Promise<VisibleMarkersResult> {
     if (params.viewer.status === 'deleted') {
       throw new AppError(403, 'forbidden', 'Your account has been deleted.');
@@ -411,6 +418,9 @@ export class LiveLocationService {
     const where: Prisma.LiveLocationLatestPositionWhereInput = {
       userId: {
         not: params.viewer.userId,
+        ...(params.excludeUserIds && params.excludeUserIds.length > 0
+          ? { notIn: params.excludeUserIds }
+          : {}),
       },
       recordedAt: {
         gte: staleThreshold,

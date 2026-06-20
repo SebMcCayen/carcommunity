@@ -45,7 +45,8 @@
     "deleteAccount": "Delete account",
     "reportBug": "Report a bug",
     "about": "About app",
-    "github": "GitHub / Open Source"
+    "github": "GitHub / Open Source",
+    "blockedUsers": "Blocked users"
   },
   "about": {
     "title": "About app",
@@ -190,5 +191,21 @@
     "subscriptionManagementPlaceholder": "Manage subscription (coming soon)",
     "accountDeletionPlaceholder": "Delete account (coming soon)",
     "policyLink": "Rules and terms"
+  },
+  "blocking": {
+    "blockUser": "Block user",
+    "blockConfirmTitle": "Block user?",
+    "blockConfirmBody": "This user will no longer be able to see your live location or interact with you. You can change this later under Settings.",
+    "blockConfirmAction": "Block",
+    "blockCancelAction": "Cancel",
+    "blockSuccess": "User has been blocked.",
+    "blockedUsersTitle": "Blocked users",
+    "blockedUsersEmpty": "You have not blocked anyone.",
+    "unblock": "Unblock",
+    "unblockConfirmTitle": "Unblock user?",
+    "unblockConfirmAction": "Unblock",
+    "unblockCancelAction": "Cancel",
+    "unblockSuccess": "User has been unblocked.",
+    "errorGeneric": "Something went wrong. Please try again."
   }
 }
