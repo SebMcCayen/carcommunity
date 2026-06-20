@@ -317,6 +317,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     return () => {
       locationSubRef.current?.remove();
       locationSubRef.current = null;
+      sessionTokenRef.current = null;
       // Stop background task on unmount — covers the logout case.
       stopBackgroundLocationUpdates().catch(() => undefined);
       clearLiveLocationSession().catch(() => undefined);
@@ -452,6 +453,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     try {
       await stopLiveLocationSession(sid, { reason: 'user_stop' }, sessionTokenRef.current ?? undefined);
       sessionIdRef.current = null;
+      sessionTokenRef.current = null;
       setSessionId(null);
       setStatus('not_sharing');
     } catch {
@@ -478,6 +480,7 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     try {
       await hideMeNowApi(sessionTokenRef.current ?? undefined);
       sessionIdRef.current = null;
+      sessionTokenRef.current = null;
       setSessionId(null);
       setStatus('not_sharing');
     } catch {

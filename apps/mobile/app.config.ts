@@ -45,9 +45,11 @@ const config: ExpoConfig = {
       'expo-location',
       {
         // iOS — shown in the system permission dialog (NSLocationWhenInUseUsageDescription).
+        // Build-time config strings cannot use runtime i18n keys.
         locationWhenInUsePermission: `${appDisplayName} behöver din plats medan du aktivt delar din liveposition. Delning är frivillig och tidsbegränsad. Du kan stoppa delningen när som helst.`,
         // iOS — shown if background permission is later requested (NSLocationAlwaysAndWhenInUseUsageDescription).
         // Only requested after explicit user opt-in, never at startup.
+        // Build-time config strings cannot use runtime i18n keys.
         locationAlwaysAndWhenInUsePermission: `${appDisplayName} kan uppdatera din liveposition när appen är i bakgrunden, men endast under en aktiv, tidsbegränsad delningssession. ${appDisplayName} spårar inte din position utanför aktiva sessioner.`,
         // iOS — enable UIBackgroundModes: location so the app can receive location
         // updates while backgrounded during an active sharing session.
@@ -55,6 +57,7 @@ const config: ExpoConfig = {
         // Android — foreground service notification displayed while background location
         // sharing is active. The notification clearly states that sharing is active
         // and is visible to the user for the duration of the session.
+        // Build-time config strings cannot use runtime i18n keys.
         foregroundService: {
           notificationTitle: `${appDisplayName} liveposition är aktiv`,
           notificationBody: 'Din position delas under den aktiva, tidsbegränsade sessionen.',

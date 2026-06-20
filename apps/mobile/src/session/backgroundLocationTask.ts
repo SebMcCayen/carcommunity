@@ -48,6 +48,9 @@ const BACKGROUND_DISTANCE_M = 25; // 25 metres
  * access (e.g. the hook's requestBackgroundPermission path) should supply
  * translated strings via the options parameter.
  *
+ * The app persists localized strings per session and should normally use those.
+ * These Swedish defaults are a legacy fallback for old/partial session records.
+ *
  * Note: app.config.ts also declares foregroundService strings for the
  * native build plugin. Those are build-time strings and cannot use runtime
  * i18n. Both sets should be kept in sync.

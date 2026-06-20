@@ -13,7 +13,6 @@
 import * as SecureStore from 'expo-secure-store';
 
 const LIVE_LOCATION_SESSION_KEY = 'carcommunity_live_location_bg_session';
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 
 export interface StoredLiveLocationSession {
   /** Active session ID returned by the backend. */
@@ -74,7 +73,10 @@ function isValidStoredSession(value: unknown): value is StoredLiveLocationSessio
   const candidate = value as Partial<StoredLiveLocationSession>;
   if (typeof candidate.sessionId !== 'string' || candidate.sessionId.trim().length === 0) return false;
   if (typeof candidate.apiBaseUrl !== 'string' || candidate.apiBaseUrl.trim().length === 0) return false;
-  if (typeof candidate.expiresAt !== 'string' || !ISO_DATE_PATTERN.test(candidate.expiresAt)) {
+  if (
+    typeof candidate.expiresAt !== 'string' ||
+    Number.isNaN(Date.parse(candidate.expiresAt))
+  ) {
     return false;
   }
   if (
