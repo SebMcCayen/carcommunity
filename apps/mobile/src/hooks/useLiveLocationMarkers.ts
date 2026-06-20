@@ -106,7 +106,6 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
 
   useEffect(() => {
     if (!isMemberEligible) {
-      setMarkers([]);
       return;
     }
 
@@ -213,5 +212,9 @@ export function useLiveLocationMarkers(): UseLiveLocationMarkersResult {
     };
   }, [isMemberEligible, withToken]);
 
-  return { markers, isLoading, isMemberEligible };
+  return {
+    markers: isMemberEligible ? markers : [],
+    isLoading,
+    isMemberEligible,
+  };
 }
