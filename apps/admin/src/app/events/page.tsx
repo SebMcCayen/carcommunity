@@ -115,11 +115,11 @@ export default function EventsPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Event</h1>
+        <h1 className={styles.title}>{t('events.title')}</h1>
         <div className={styles.headerActions}>
           <Link href="/events/new" className={styles.buttonPrimary}>
             <span aria-hidden="true">+</span>
-            Skapa event
+            {t('events.createEvent')}
           </Link>
         </div>
       </div>
@@ -183,13 +183,13 @@ export default function EventsPage() {
             <table className={styles.table} aria-label="Eventlista">
               <thead>
                 <tr>
-                  <th scope="col">Titel</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Starttid</th>
-                  <th scope="col">Område</th>
-                  <th scope="col">RSVP</th>
-                  <th scope="col">Uppdaterad</th>
-                  <th scope="col">Åtgärder</th>
+                  <th scope="col">{t('events.columns.title')}</th>
+                  <th scope="col">{t('events.columns.status')}</th>
+                  <th scope="col">{t('events.columns.startsAt')}</th>
+                  <th scope="col">{t('events.columns.area')}</th>
+                  <th scope="col">{t('events.columns.rsvp')}</th>
+                  <th scope="col">{t('events.columns.updated')}</th>
+                  <th scope="col">{t('events.columns.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,9 +198,9 @@ export default function EventsPage() {
                     <td>
                       <div className={styles.eventTitle}>{event.title}</div>
                       {event.isOfficial && (
-                        <div className={styles.officialBadge} aria-label="Officiellt KCC-event">
-                          ♛ Officiellt
-                        </div>
+                        <div className={styles.officialBadge} aria-label={t('events.columns.official')}>
+                            {t('events.table.officialBadge')}
+                          </div>
                       )}
                     </td>
                     <td>
@@ -217,15 +217,15 @@ export default function EventsPage() {
                       <div className={styles.rsvpCounts} aria-label="RSVP-sammanfattning">
                         <div className={styles.rsvpItem}>
                           <span className={styles.rsvpValue}>{event.rsvpCounts.going}</span>
-                          <span className={styles.rsvpLabel}>Kommer</span>
+                          <span className={styles.rsvpLabel}>{t('events.rsvp.going')}</span>
                         </div>
                         <div className={styles.rsvpItem}>
                           <span className={styles.rsvpValue}>{event.rsvpCounts.maybe}</span>
-                          <span className={styles.rsvpLabel}>Kanske</span>
+                          <span className={styles.rsvpLabel}>{t('events.rsvp.maybe')}</span>
                         </div>
                         <div className={styles.rsvpItem}>
                           <span className={styles.rsvpValue}>{event.rsvpCounts.not_going}</span>
-                          <span className={styles.rsvpLabel}>Kan inte</span>
+                          <span className={styles.rsvpLabel}>{t('events.rsvp.notGoing')}</span>
                         </div>
                       </div>
                     </td>
@@ -238,7 +238,7 @@ export default function EventsPage() {
                           href={`/events/${event.id}`}
                           className={`${styles.actionButton} ${styles.actionButtonPrimary}`}
                         >
-                          Redigera
+                          {t('events.actions.edit')}
                         </Link>
                         {event.status === 'draft' && (
                           <button
@@ -249,7 +249,7 @@ export default function EventsPage() {
                               setPublishTarget(event);
                             }}
                           >
-                            Publicera
+                            {t('events.actions.publish')}
                           </button>
                         )}
                         {(event.status === 'draft' || event.status === 'published') && (
@@ -261,7 +261,7 @@ export default function EventsPage() {
                               setCancelTarget(event);
                             }}
                           >
-                            Ställ in
+                            {t('events.actions.cancel')}
                           </button>
                         )}
                       </div>

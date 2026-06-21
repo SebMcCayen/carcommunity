@@ -34,10 +34,10 @@ export default function NewEventPage() {
       <div className={styles.header}>
         <div>
           <Link href="/events" className={styles.backLink}>
-            ← Tillbaka till eventlistan
+            ← {t('events.backToList')}
           </Link>
-          <h1 className={styles.title}>Skapa event</h1>
-          <p className={styles.subtitle}>Eventet sparas som utkast. Publicera det manuellt när det är klart.</p>
+          <h1 className={styles.title}>{t('events.createEvent')}</h1>
+          <p className={styles.subtitle}>{t('events.form.createSubtitle')}</p>
         </div>
       </div>
 

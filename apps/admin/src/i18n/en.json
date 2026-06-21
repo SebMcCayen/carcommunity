@@ -87,7 +87,8 @@
         "coordinatesBothOrNone": "Latitude and longitude must both be provided or both omitted.",
         "latitudeInvalid": "Latitude must be between -90 and 90.",
         "longitudeInvalid": "Longitude must be between -180 and 180."
-      }
+      },
+      "createSubtitle": "The event is saved as a draft. Publish it manually when ready."
     },
     "empty": "No events found.",
     "loading": "Loading events...",
@@ -96,6 +97,20 @@
     "backToList": "Back to event list",
     "loadError": "Could not load event. Please try again.",
     "createError": "Could not create event. Please try again.",
-    "updateError": "Could not save event. Please try again."
+    "updateError": "Could not save event. Please try again.",
+    "table": {
+      "officialBadge": "♛ Official"
+    },
+    "meta": {
+      "createdBy": "Created by",
+      "createdAt": "Created",
+      "updatedAt": "Updated"
+    },
+    "rsvpSection": "RSVP",
+    "noEdit": "Cancelled and completed events cannot be edited.",
+    "cancelledNotice": {
+      "intro": "The event was cancelled",
+      "details": "It is preserved in the system and visible to administrators."
+    }
   }
 }

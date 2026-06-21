@@ -115,8 +115,8 @@ export default function EventDetailPage() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <Link href="/events" className={styles.backLink}>← Tillbaka till eventlistan</Link>
-        <div className={styles.loadingState} aria-live="polite" aria-busy="true">Laddar event...</div>
+        <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
+        <div className={styles.loadingState} aria-live="polite" aria-busy="true">{t('events.loading')}</div>
       </div>
     );
   }
@@ -124,9 +124,9 @@ export default function EventDetailPage() {
   if (error || !event) {
     return (
       <div className={styles.page}>
-        <Link href="/events" className={styles.backLink}>← Tillbaka till eventlistan</Link>
+        <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
         <div className={styles.errorState} role="alert">
-          {error ?? 'Eventet hittades inte.'}
+          {error ?? t('events.notFound')}
         </div>
       </div>
     );
@@ -138,7 +138,7 @@ export default function EventDetailPage() {
 
   return (
     <div className={styles.page}>
-      <Link href="/events" className={styles.backLink}>← Tillbaka till eventlistan</Link>
+      <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
 
       <div className={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
@@ -162,7 +162,7 @@ export default function EventDetailPage() {
               }}
               onClick={() => { setPublishError(null); setShowPublish(true); }}
             >
-              Publicera event
+              {t('events.publish.button')}
             </button>
           )}
           {canCancel && (
@@ -180,7 +180,7 @@ export default function EventDetailPage() {
               }}
               onClick={() => { setCancelError(null); setShowCancel(true); }}
             >
-              Ställ in event
+              {t('events.cancelEvent.title')}
             </button>
           )}
         </div>
@@ -188,47 +188,46 @@ export default function EventDetailPage() {
 
       {event.status === 'cancelled' && (
         <div className={styles.cancelledNotice} role="note">
-          Eventet ställdes in{event.cancelledAt ? ` ${formatDate(event.cancelledAt)}` : ''}.
-          Det är bevarat i systemet och synligt för administratörer.
+          {t('events.cancelledNotice.intro')}{event.cancelledAt ? ` ${formatDate(event.cancelledAt)}` : ''}. {t('events.cancelledNotice.details')}
         </div>
       )}
 
       <div className={styles.metaSection} aria-label="Eventinformation">
         <div className={styles.metaRow}>
           <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>Skapad av</span>
+            <span className={styles.metaLabel}>{t('events.meta.createdBy')}</span>
             <span className={styles.metaValue}>{event.createdByUserId ?? '—'}</span>
           </div>
           <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>Skapad</span>
+            <span className={styles.metaLabel}>{t('events.meta.createdAt')}</span>
             <span className={styles.metaValue}>{formatDate(event.createdAt)}</span>
           </div>
           <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>Uppdaterad</span>
+            <span className={styles.metaLabel}>{t('events.meta.updatedAt')}</span>
             <span className={styles.metaValue}>{formatDate(event.updatedAt)}</span>
           </div>
         </div>
       </div>
 
-      <h2 className={styles.sectionTitle}>RSVP</h2>
+      <h2 className={styles.sectionTitle}>{t('events.rsvpSection')}</h2>
       <div className={styles.rsvpGrid} aria-label="RSVP-sammanfattning">
         <div className={styles.rsvpCard}>
           <div className={styles.rsvpCount}>{event.rsvpCounts.going}</div>
-          <div className={styles.rsvpLabel}>Kommer</div>
+          <div className={styles.rsvpLabel}>{t('events.rsvp.going')}</div>
         </div>
         <div className={styles.rsvpCard}>
           <div className={styles.rsvpCount}>{event.rsvpCounts.maybe}</div>
-          <div className={styles.rsvpLabel}>Kanske</div>
+          <div className={styles.rsvpLabel}>{t('events.rsvp.maybe')}</div>
         </div>
         <div className={styles.rsvpCard}>
           <div className={styles.rsvpCount}>{event.rsvpCounts.not_going}</div>
-          <div className={styles.rsvpLabel}>Kan inte</div>
+          <div className={styles.rsvpLabel}>{t('events.rsvp.notGoing')}</div>
         </div>
       </div>
 
       {canEdit ? (
         <>
-          <h2 className={styles.sectionTitle}>Redigera event</h2>
+          <h2 className={styles.sectionTitle}>{t('events.editEvent')}</h2>
           <EventForm
             initialData={event}
             onSubmit={handleUpdate}
@@ -239,7 +238,7 @@ export default function EventDetailPage() {
         </>
       ) : (
         <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-6)' }}>
-          Inställda och genomförda event kan inte redigeras.
+          {t('events.noEdit')}
         </p>
       )}
 

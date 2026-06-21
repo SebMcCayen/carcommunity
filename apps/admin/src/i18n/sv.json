@@ -87,7 +87,8 @@
         "coordinatesBothOrNone": "Latitud och longitud måste anges båda eller ingen.",
         "latitudeInvalid": "Latitud måste vara mellan -90 och 90.",
         "longitudeInvalid": "Longitud måste vara mellan -180 och 180."
-      }
+      },
+      "createSubtitle": "Eventet sparas som utkast. Publicera det manuellt när det är klart."
     },
     "empty": "Inga event hittades.",
     "loading": "Laddar event...",
@@ -96,6 +97,20 @@
     "backToList": "Tillbaka till eventlistan",
     "loadError": "Kunde inte ladda eventet. Försök igen.",
     "createError": "Kunde inte skapa eventet. Försök igen.",
-    "updateError": "Kunde inte spara eventet. Försök igen."
+    "updateError": "Kunde inte spara eventet. Försök igen.",
+    "table": {
+      "officialBadge": "♛ Officiellt"
+    },
+    "meta": {
+      "createdBy": "Skapad av",
+      "createdAt": "Skapad",
+      "updatedAt": "Uppdaterad"
+    },
+    "rsvpSection": "RSVP",
+    "noEdit": "Inställda och genomförda event kan inte redigeras.",
+    "cancelledNotice": {
+      "intro": "Eventet ställdes in",
+      "details": "Det är bevarat i systemet och synligt för administratörer."
+    }
   }
 }

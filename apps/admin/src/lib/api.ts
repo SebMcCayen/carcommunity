@@ -41,7 +41,7 @@ export class ApiError extends Error {
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
-  /** ****** for real auth (Entra ID — replaces dev header in production). */
+  /** Authentication token for real auth (Entra ID 2014 replaces dev header in production). */
   token?: string;
 }
 
