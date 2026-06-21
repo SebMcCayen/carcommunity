@@ -338,7 +338,7 @@ await test('POST event chat message — oversized message is rejected', async ()
 
 await test('POST event chat message — HTML payload is treated as literal text not rejected by route', async () => {
   // HTML characters pass through Zod string validation — the service stores them as plain text.
-  // The route must NOT reject; HTML rendering must be prevented on the client.
+  // The route must NOT reject with an error; HTML rendering is the client's responsibility.
   const svc = new FakeEventChatService();
   const app = await createTestApp(svc);
   const res = await app.inject({
@@ -347,12 +347,9 @@ await test('POST event chat message — HTML payload is treated as literal text 
     headers: { 'x-dev-user': memberHeader() },
     payload: { message: '<script>alert(1)</script>' },
   });
-  assert.equal(res.statusCode, 201 < res.statusCode ? 400 : 200, 'must be 200 (stored as plain text) not a server error');
-  // The stored message text is returned as-is; no HTML entities are injected by the API
-  const body = res.json<{ ok: boolean; data: { message: { message: string } } }>();
-  if (body.ok) {
-    assert.ok(!body.data.message.message.includes('<script'), 'stored text should be unchanged plain text without server-side injection');
-  }
+  assert.equal(res.statusCode, 200, 'route must accept HTML payload (stored as plain text, not executed)');
+  const body = res.json<{ ok: boolean }>();
+  assert.equal(body.ok, true, 'response must indicate success');
 });
 
 await test('POST event chat message — eligible member succeeds', async () => {

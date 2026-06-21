@@ -181,7 +181,7 @@ export function useEventChat({
       isMounted.current = false;
       clearPolling();
     };
-  }, [eventId, isEligible]); // Re-run if event or eligibility changes
+  }, [eventId, isEligible, fetchMessages, startPolling, clearPolling, clearChatData]); // All callbacks are stable useCallback refs
 
   // Stop polling when app enters background; resume on foreground.
   useEffect(() => {
@@ -215,7 +215,7 @@ export function useEventChat({
         if (!isMounted.current) return;
         if (result) {
           setMessages((prev) => [...prev, result.data.message]);
-          setScreenState(prev => prev === 'sending' ? 'loaded' : prev);
+          setScreenState('loaded');
           setError(null);
         }
       } catch (err) {
