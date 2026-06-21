@@ -114,13 +114,8 @@ export function useEventChat({
   /** Fetch the latest messages. Prevents overlapping requests. */
   const fetchMessages = useCallback(async () => {
     if (pollInFlight.current) return;
-    if (!isEligible) {
-      if (isMounted.current) {
-        setScreenState('access_lost');
-        clearChatData();
-      }
-      return;
-    }
+    // access_lost is derived from isEligible at render time; skip fetch silently.
+    if (!isEligible) return;
 
     pollInFlight.current = true;
     try {
@@ -166,17 +161,22 @@ export function useEventChat({
     }, POLL_INTERVAL_MS);
   }, [clearPolling, fetchMessages, isEligible]);
 
+  // Derive access_lost at render time rather than setting state inside an effect
+  // (avoids react-hooks/set-state-in-effect: synchronous setState in effects
+  // triggers cascading renders).
+  const effectiveScreenState: ChatScreenState = !isEligible ? 'access_lost' : screenState;
+
   // Initial load + start polling when screen becomes visible and user is eligible.
   useEffect(() => {
     isMounted.current = true;
 
     if (!isEligible) {
-      setScreenState('access_lost');
       clearChatData();
       clearPolling();
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void fetchMessages();
     startPolling();
 
@@ -277,7 +277,7 @@ export function useEventChat({
 
   return {
     messages,
-    screenState,
+    screenState: effectiveScreenState,
     error,
     nextCursor,
     isSending,
