@@ -179,7 +179,31 @@
   },
   "chat": {
     "title": "Chat",
-    "placeholder": "Eventchat kommer snart."
+    "placeholder": "Eventchat kommer snart.",
+    "eventChatTitle": "Eventchatt",
+    "empty": "Inga meddelanden ännu.",
+    "inputPlaceholder": "Skriv ett meddelande",
+    "sendButton": "Skicka",
+    "reportMessage": "Rapportera meddelande",
+    "reportReasonPrompt": "Välj anledning",
+    "reportReason": {
+      "harassment": "Trakasserier",
+      "hate_or_abuse": "Hat eller kränkningar",
+      "spam": "Spam",
+      "unsafe_driving": "Osäker körning",
+      "privacy": "Integritetsintrång",
+      "other": "Övrigt"
+    },
+    "removedMessage": "Meddelandet har tagits bort.",
+    "memberRequired": "KCC Medlem krävs för eventchatten.",
+    "rsvpRequired": "Du behöver svara Kommer eller Kanske för att delta i chatten.",
+    "accessLost": "Du har inte längre tillgång till chatten.",
+    "errorLoading": "Kunde inte ladda chatten. Försök igen.",
+    "errorSending": "Kunde inte skicka meddelandet. Försök igen.",
+    "unknownAuthor": "Okänd",
+    "safeDrivingWarning": "Använd inte chatten medan du kör.",
+    "drivingDisabled": "Chatten är avstängd medan du kör.",
+    "drivingStopFirst": "Stanna säkert innan du använder chatten."
   },
   "common": {
     "placeholder": "Kommer snart"

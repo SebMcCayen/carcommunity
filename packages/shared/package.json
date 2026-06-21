@@ -39,6 +39,10 @@
     "./blocking": {
       "types": "./dist/blocking.d.ts",
       "default": "./dist/blocking.js"
+    },
+    "./event-chat": {
+      "types": "./dist/event-chat.d.ts",
+      "default": "./dist/event-chat.js"
     }
   },
   "scripts": {

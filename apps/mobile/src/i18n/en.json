@@ -176,7 +176,31 @@
   },
   "chat": {
     "title": "Chat",
-    "placeholder": "Event chat coming soon."
+    "placeholder": "Event chat coming soon.",
+    "eventChatTitle": "Event Chat",
+    "empty": "No messages yet.",
+    "inputPlaceholder": "Write a message",
+    "sendButton": "Send",
+    "reportMessage": "Report message",
+    "reportReasonPrompt": "Choose a reason",
+    "reportReason": {
+      "harassment": "Harassment",
+      "hate_or_abuse": "Hate or abuse",
+      "spam": "Spam",
+      "unsafe_driving": "Unsafe driving",
+      "privacy": "Privacy violation",
+      "other": "Other"
+    },
+    "removedMessage": "This message has been removed.",
+    "memberRequired": "KCC membership required for event chat.",
+    "rsvpRequired": "You need to respond Going or Maybe to join the chat.",
+    "accessLost": "You no longer have access to this chat.",
+    "errorLoading": "Could not load chat. Please try again.",
+    "errorSending": "Could not send message. Please try again.",
+    "unknownAuthor": "Unknown",
+    "safeDrivingWarning": "Do not use chat while driving.",
+    "drivingDisabled": "Chat is disabled while driving.",
+    "drivingStopFirst": "Stop safely before using chat."
   },
   "common": {
     "placeholder": "Coming soon"

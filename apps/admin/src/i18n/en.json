@@ -115,5 +115,25 @@
       "intro": "The event was cancelled",
       "details": "It is preserved in the system and visible to administrators."
     }
+  },
+  "eventChat": {
+    "title": "Event Chat",
+    "moderationTitle": "Event Chat – Moderation",
+    "reportedMessages": "Reported messages",
+    "underReview": "Under review",
+    "removeMessage": "Remove message",
+    "reasonRequired": "Reason required",
+    "dismissReport": "Dismiss report",
+    "visible": "Visible",
+    "removed": "Removed",
+    "columns": {
+      "event": "Event",
+      "author": "Author",
+      "excerpt": "Excerpt",
+      "date": "Date",
+      "reports": "Reports",
+      "status": "Status",
+      "actions": "Actions"
+    }
   }
 }
