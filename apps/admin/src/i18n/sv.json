@@ -4,5 +4,82 @@
     "defaultTodoNote": "Platshållarsida. Riktig data och åtgärder kräver backend-API-integration och autentisering med Microsoft Entra ID.",
     "settingsTodoNote": "TODO: Funktionsflaggor och inställningar måste hanteras i backend. Den här sidan är endast visning tills Microsoft Entra ID-autentisering och backend-RBAC är implementerade. Växla aldrig funktionsflaggor enbart via klientstatus.",
     "userDetailTodoNote": "TODO: Ersätt ruttparametern med riktig användaruppslagning från backend-API:et. Backend måste verifiera administratörsroll innan användardata skickas. Exponera aldrig mer persondata än nödvändigt."
+  },
+  "events": {
+    "title": "Event",
+    "createEvent": "Skapa event",
+    "editEvent": "Redigera event",
+    "status": {
+      "draft": "Utkast",
+      "published": "Publicerat",
+      "cancelled": "Inställt",
+      "completed": "Genomfört"
+    },
+    "filter": {
+      "all": "Alla event",
+      "upcoming": "Kommande",
+      "past": "Tidigare event",
+      "official": "Officiella KCC-event"
+    },
+    "columns": {
+      "title": "Titel",
+      "status": "Status",
+      "startsAt": "Starttid",
+      "area": "Område",
+      "official": "Officiellt",
+      "rsvp": "RSVP",
+      "updated": "Uppdaterad",
+      "actions": "Åtgärder"
+    },
+    "rsvp": {
+      "going": "Kommer",
+      "maybe": "Kanske",
+      "notGoing": "Kan inte"
+    },
+    "actions": {
+      "edit": "Redigera",
+      "publish": "Publicera",
+      "cancel": "Ställ in",
+      "view": "Visa"
+    },
+    "publish": {
+      "title": "Publicera event",
+      "description": "När eventet publiceras blir teaserinformationen synlig för användare och fullständig information tillgänglig för behöriga medlemmar.",
+      "confirm": "Är du säker på att du vill publicera eventet?",
+      "button": "Publicera event",
+      "cancel": "Avbryt"
+    },
+    "cancelEvent": {
+      "title": "Ställ in event",
+      "reasonLabel": "Ange varför eventet ställs in.",
+      "reasonPlaceholder": "Ange anledning...",
+      "notice": "Eventet raderas inte och ändringen loggas.",
+      "button": "Bekräfta inställning",
+      "cancel": "Avbryt"
+    },
+    "form": {
+      "titleLabel": "Titel",
+      "summaryLabel": "Kort sammanfattning",
+      "descriptionLabel": "Beskrivning",
+      "startsAtLabel": "Starttid",
+      "endsAtLabel": "Sluttid (valfritt)",
+      "approximateAreaLabel": "Ungefärligt område",
+      "locationNameLabel": "Platsnamn",
+      "addressLabel": "Adress (valfritt)",
+      "latitudeLabel": "Latitud (valfritt)",
+      "longitudeLabel": "Longitud (valfritt)",
+      "isOfficialLabel": "Officiellt KCC-event",
+      "locationNotice": "Platsnamn, adress och koordinater är synliga enbart för behöriga medlemmar, inte i offentlig teaserinformation.",
+      "unsavedChanges": "Du har osparade ändringar. Vill du lämna sidan?",
+      "save": "Spara",
+      "saving": "Sparar...",
+      "create": "Skapa utkast",
+      "creating": "Skapar..."
+    },
+    "empty": "Inga event hittades.",
+    "loading": "Laddar event...",
+    "error": "Kunde inte ladda event. Försök igen.",
+    "notFound": "Eventet hittades inte.",
+    "backToList": "Tillbaka till eventlistan"
   }
 }
