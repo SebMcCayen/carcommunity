@@ -21,6 +21,7 @@ declare module 'react-test-renderer' {
 
   interface Renderer {
     unmount(): void;
+    update(element: ReactElement): void;
     root: ReactTestInstance;
     toJSON(): ReactTestRendererJSON | ReactTestRendererJSON[] | null;
   }

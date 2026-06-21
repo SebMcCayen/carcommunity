@@ -1,3 +1,5 @@
+import type { EventTeaser } from '@carcommunity/shared/events';
+
 export type RootStackParamList = {
   Login: undefined;
   Onboarding: undefined;
@@ -7,6 +9,7 @@ export type RootStackParamList = {
   LiveLocation: undefined;
   PrivacySettings: undefined;
   BlockedUsers: undefined;
+  EventDetail: { eventId: string; teaser: EventTeaser };
 };
 
 export type MainTabParamList = {

@@ -14,6 +14,7 @@ import { useI18n } from '../hooks/useI18n';
 import { AboutAppScreen } from '../screens/AboutAppScreen';
 import { BlockedUsersScreen } from '../screens/BlockedUsersScreen';
 import { ChatScreen } from '../screens/ChatScreen';
+import { EventDetailScreen } from '../screens/EventDetailScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LiveLocationScreen } from '../screens/LiveLocationScreen';
@@ -125,6 +126,11 @@ export const AppNavigator = () => {
               name="BlockedUsers"
               component={BlockedUsersScreen}
               options={{ title: t('blocking.blockedUsersTitle') }}
+            />
+            <Stack.Screen
+              name="EventDetail"
+              component={EventDetailScreen}
+              options={{ title: t('events.title') }}
             />
           </>
         )}
