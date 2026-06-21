@@ -17,9 +17,11 @@
     },
     "filter": {
       "all": "All events",
+      "allStatuses": "All statuses",
+      "allTypes": "All types",
       "upcoming": "Upcoming",
       "past": "Past events",
-      "official": "Official KCC events"
+      "official": "Official events"
     },
     "columns": {
       "title": "Title",
@@ -92,6 +94,7 @@
     },
     "empty": "No events found.",
     "loading": "Loading events...",
+    "retry": "Retry",
     "error": "Could not load events. Please try again.",
     "notFound": "Event not found.",
     "backToList": "Back to event list",

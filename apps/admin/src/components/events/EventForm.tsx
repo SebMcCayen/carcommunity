@@ -10,6 +10,23 @@ const t = (key: string) => translate('sv', key);
 /** Length of 'YYYY-MM-DDTHH:mm' — the format required by HTML datetime-local inputs. */
 const DATETIME_LOCAL_LENGTH = 16;
 
+function toLocalDateTimeValue(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  ).slice(0, DATETIME_LOCAL_LENGTH);
+}
+
 interface EventFormData {
   title: string;
   summary: string;
@@ -54,8 +71,8 @@ function toFormData(event?: AdminEventDetail): EventFormData {
     title: event.title,
     summary: event.summary ?? '',
     description: event.description ?? '',
-    startsAt: event.startsAt ? event.startsAt.slice(0, DATETIME_LOCAL_LENGTH) : '',
-    endsAt: event.endsAt ? event.endsAt.slice(0, DATETIME_LOCAL_LENGTH) : '',
+    startsAt: toLocalDateTimeValue(event.startsAt),
+    endsAt: toLocalDateTimeValue(event.endsAt),
     approximateArea: event.approximateArea,
     locationName: event.locationName ?? '',
     address: event.address ?? '',
@@ -78,10 +95,6 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
   const isDirtyRef = useRef(false);
 
   useEffect(() => {
-    isDirtyRef.current = true;
-  }, [form]);
-
-  useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current) {
         e.preventDefault();
@@ -93,7 +106,13 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
   }, []);
 
   function handleChange(field: keyof EventFormData, value: string | boolean) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      if (prev[field] === value) {
+        return prev;
+      }
+      isDirtyRef.current = true;
+      return { ...prev, [field]: value };
+    });
     setClientErrors((prev) => ({ ...prev, [field]: undefined }));
   }
 

@@ -18,7 +18,6 @@ import {
 import { LOCAL_DATABASE_URL } from './config.js';
 import { AppError } from './lib/errors.js';
 import type {
-  CreateEventInput,
   EventService,
   GetAdminEventsParams,
   GetAdminEventsResult,
@@ -35,9 +34,9 @@ import { createServer } from './server.js';
 
 const FAKE_ADMIN_EVENT_DETAIL: AdminEventDetail = {
   id: 'event-1',
-  title: 'Träff i Kungsbacka',
-  summary: 'En härlig träff',
-  description: 'Kom och häng med oss.',
+  title: 'Meetup in Kungsbacka',
+  summary: 'A great meetup',
+  description: 'Come hang out with us.',
   status: 'published',
   startsAt: '2027-07-01T16:00:00.000Z',
   endsAt: '2027-07-01T20:00:00.000Z',
@@ -72,7 +71,7 @@ class FakeEventService
     events: [
       {
         id: 'event-1',
-        title: 'Träff i Kungsbacka',
+        title: 'Meetup in Kungsbacka',
         startsAt: '2027-07-01T16:00:00.000Z',
         endsAt: '2027-07-01T20:00:00.000Z',
         approximateArea: 'Kungsbacka centrum',
@@ -87,9 +86,9 @@ class FakeEventService
   public detailResult: GetEventDetailResult = {
     event: {
       id: 'event-1',
-      title: 'Träff i Kungsbacka',
-      summary: 'En härlig träff',
-      description: 'Kom och häng med oss.',
+      title: 'Meetup in Kungsbacka',
+      summary: 'A great meetup',
+      description: 'Come hang out with us.',
       startsAt: '2027-07-01T16:00:00.000Z',
       endsAt: '2027-07-01T20:00:00.000Z',
       locationName: 'Kungsbacka Torg',
@@ -114,7 +113,7 @@ class FakeEventService
     events: [
       {
         id: 'event-1',
-        title: 'Träff i Kungsbacka',
+        title: 'Meetup in Kungsbacka',
         status: 'published',
         isOfficial: true,
         startsAt: '2027-07-01T16:00:00.000Z',
@@ -1378,7 +1377,7 @@ test('POST /v1/admin/events/:eventId/cancel requires authentication', async () =
     const response = await app.inject({
       method: 'POST',
       url: buildAdminEventCancelPath('cb8f7c4f-e930-4e01-ae85-61d2d93248cb'),
-      payload: { reason: 'Dåligt väder' },
+      payload: { reason: 'Bad weather' },
     });
     assert.equal(response.statusCode, 401);
   } finally {
@@ -1401,7 +1400,7 @@ test('POST /v1/admin/events/:eventId/cancel blocks non-admin users', async () =>
           subscriptionEntitlement: 'member_monthly',
         }),
       },
-      payload: { reason: 'Dåligt väder' },
+      payload: { reason: 'Bad weather' },
     });
     assert.equal(response.statusCode, 403);
   } finally {
@@ -1471,7 +1470,7 @@ test('POST /v1/admin/events/:eventId/cancel cancels a published event', async ()
           subscriptionEntitlement: 'none',
         }),
       },
-      payload: { reason: 'Dåligt väder' },
+      payload: { reason: 'Bad weather' },
     });
 
     assert.equal(response.statusCode, 200);
@@ -1665,6 +1664,52 @@ test('GET /v1/admin/events rejects invalid status filter value', async () => {
     const response = await app.inject({
       method: 'GET',
       url: `${EVENT_ROUTE_PATHS.adminEvents}?status=invalid_status`,
+      headers: {
+        'x-dev-user': devAuth({
+          userId: 'admin-user',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/events rejects invalid upcoming filter value', async () => {
+  const app = await createTestApp(4263, new FakeEventService());
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${EVENT_ROUTE_PATHS.adminEvents}?upcoming=tru`,
+      headers: {
+        'x-dev-user': devAuth({
+          userId: 'admin-user',
+          role: 'admin',
+          status: 'active',
+          subscriptionEntitlement: 'none',
+        }),
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /v1/admin/events rejects invalid isOfficial filter value', async () => {
+  const app = await createTestApp(4264, new FakeEventService());
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: `${EVENT_ROUTE_PATHS.adminEvents}?isOfficial=0`,
       headers: {
         'x-dev-user': devAuth({
           userId: 'admin-user',

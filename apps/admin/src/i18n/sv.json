@@ -17,9 +17,11 @@
     },
     "filter": {
       "all": "Alla event",
+      "allStatuses": "Alla statusar",
+      "allTypes": "Alla typer",
       "upcoming": "Kommande",
       "past": "Tidigare event",
-      "official": "Officiella KCC-event"
+      "official": "Officiella event"
     },
     "columns": {
       "title": "Titel",
@@ -92,6 +94,7 @@
     },
     "empty": "Inga event hittades.",
     "loading": "Laddar event...",
+    "retry": "Försök igen",
     "error": "Kunde inte ladda event. Försök igen.",
     "notFound": "Eventet hittades inte.",
     "backToList": "Tillbaka till eventlistan",

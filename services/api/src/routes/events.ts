@@ -48,16 +48,8 @@ const adminEventsQuerySchema = z
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(100).optional(),
     status: z.enum(EVENT_STATUSES).optional(),
-    upcoming: z
-      .string()
-      .transform((v) => v === 'true')
-      .pipe(z.boolean())
-      .optional(),
-    isOfficial: z
-      .string()
-      .transform((v) => v === 'true')
-      .pipe(z.boolean())
-      .optional(),
+    upcoming: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+    isOfficial: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   })
   .strict();
 

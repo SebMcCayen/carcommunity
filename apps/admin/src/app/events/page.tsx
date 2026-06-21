@@ -131,11 +131,11 @@ export default function EventsPage() {
           onChange={(e) => { setFilterStatus(e.target.value as FilterStatus); setPage(1); }}
           aria-label="Filtrera på status"
         >
-          <option value="all">Alla statusar</option>
-          <option value="draft">Utkast</option>
-          <option value="published">Publicerat</option>
-          <option value="cancelled">Inställt</option>
-          <option value="completed">Genomfört</option>
+          <option value="all">{t('events.filter.allStatuses')}</option>
+          <option value="draft">{t('events.status.draft')}</option>
+          <option value="published">{t('events.status.published')}</option>
+          <option value="cancelled">{t('events.status.cancelled')}</option>
+          <option value="completed">{t('events.status.completed')}</option>
         </select>
 
         <select
@@ -144,9 +144,9 @@ export default function EventsPage() {
           onChange={(e) => { setFilterUpcoming(e.target.value as FilterUpcoming); setPage(1); }}
           aria-label="Filtrera kommande/tidigare"
         >
-          <option value="all">Alla event</option>
-          <option value="upcoming">Kommande</option>
-          <option value="past">Tidigare event</option>
+          <option value="all">{t('events.filter.all')}</option>
+          <option value="upcoming">{t('events.filter.upcoming')}</option>
+          <option value="past">{t('events.filter.past')}</option>
         </select>
 
         <select
@@ -155,8 +155,8 @@ export default function EventsPage() {
           onChange={(e) => { setFilterOfficial(e.target.value as 'all' | 'official'); setPage(1); }}
           aria-label="Filtrera officiella event"
         >
-          <option value="all">Alla typer</option>
-          <option value="official">Officiella KCC-event</option>
+          <option value="all">{t('events.filter.allTypes')}</option>
+          <option value="official">{t('events.filter.official')}</option>
         </select>
       </div>
 
@@ -164,18 +164,18 @@ export default function EventsPage() {
         <div className={styles.errorState} role="alert">
           {error}
           <button className={styles.retryButton} onClick={() => void fetchEvents()}>
-            Försök igen
+            {t('events.retry')}
           </button>
         </div>
       )}
 
       {loading ? (
         <div className={styles.loadingState} aria-live="polite" aria-busy="true">
-          Laddar event...
+          {t('events.loading')}
         </div>
       ) : events.length === 0 ? (
         <div className={styles.emptyState} aria-live="polite">
-          Inga event hittades.
+          {t('events.empty')}
         </div>
       ) : (
         <section className={styles.section}>
