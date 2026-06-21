@@ -47,7 +47,8 @@
       "description": "När eventet publiceras blir teaserinformationen synlig för användare och fullständig information tillgänglig för behöriga medlemmar.",
       "confirm": "Är du säker på att du vill publicera eventet?",
       "button": "Publicera event",
-      "cancel": "Avbryt"
+      "cancel": "Avbryt",
+      "error": "Publicering misslyckades."
     },
     "cancelEvent": {
       "title": "Ställ in event",
@@ -56,7 +57,8 @@
       "notice": "Eventet raderas inte och ändringen loggas.",
       "button": "Bekräfta inställning",
       "cancel": "Avbryt",
-      "reasonRequired": "Anledning krävs."
+      "reasonRequired": "Anledning krävs.",
+      "error": "Inställning misslyckades."
     },
     "form": {
       "titleLabel": "Titel",
@@ -91,6 +93,9 @@
     "loading": "Laddar event...",
     "error": "Kunde inte ladda event. Försök igen.",
     "notFound": "Eventet hittades inte.",
-    "backToList": "Tillbaka till eventlistan"
+    "backToList": "Tillbaka till eventlistan",
+    "loadError": "Kunde inte ladda eventet. Försök igen.",
+    "createError": "Kunde inte skapa eventet. Försök igen.",
+    "updateError": "Kunde inte spara eventet. Försök igen."
   }
 }

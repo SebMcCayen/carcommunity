@@ -47,7 +47,8 @@
       "description": "When the event is published, teaser information will be visible to users and full information accessible to authorized members.",
       "confirm": "Are you sure you want to publish this event?",
       "button": "Publish event",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "error": "Publishing failed."
     },
     "cancelEvent": {
       "title": "Cancel event",
@@ -56,7 +57,8 @@
       "notice": "The event will not be deleted and the change will be logged.",
       "button": "Confirm cancellation",
       "cancel": "Cancel",
-      "reasonRequired": "Reason is required."
+      "reasonRequired": "Reason is required.",
+      "error": "Cancellation failed."
     },
     "form": {
       "titleLabel": "Title",
@@ -91,6 +93,9 @@
     "loading": "Loading events...",
     "error": "Could not load events. Please try again.",
     "notFound": "Event not found.",
-    "backToList": "Back to event list"
+    "backToList": "Back to event list",
+    "loadError": "Could not load event. Please try again.",
+    "createError": "Could not create event. Please try again.",
+    "updateError": "Could not save event. Please try again."
   }
 }

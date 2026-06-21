@@ -7,6 +7,9 @@ import styles from './EventForm.module.css';
 
 const t = (key: string) => translate('sv', key);
 
+/** Length of 'YYYY-MM-DDTHH:mm' — the format required by HTML datetime-local inputs. */
+const DATETIME_LOCAL_LENGTH = 16;
+
 interface EventFormData {
   title: string;
   summary: string;
@@ -51,8 +54,8 @@ function toFormData(event?: AdminEventDetail): EventFormData {
     title: event.title,
     summary: event.summary ?? '',
     description: event.description ?? '',
-    startsAt: event.startsAt ? event.startsAt.slice(0, 16) : '',
-    endsAt: event.endsAt ? event.endsAt.slice(0, 16) : '',
+    startsAt: event.startsAt ? event.startsAt.slice(0, DATETIME_LOCAL_LENGTH) : '',
+    endsAt: event.endsAt ? event.endsAt.slice(0, DATETIME_LOCAL_LENGTH) : '',
     approximateArea: event.approximateArea,
     locationName: event.locationName ?? '',
     address: event.address ?? '',

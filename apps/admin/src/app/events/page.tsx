@@ -13,8 +13,11 @@ import {
 import { EventStatusBadge } from '@/components/events/EventStatusBadge';
 import { CancelDialog } from '@/components/events/EventDialogs';
 import { PublishDialog } from '@/components/events/EventDialogs';
+import { translate } from '@/i18n';
 import { formatDate } from '@/lib';
 import styles from './page.module.css';
+
+const t = (key: string) => translate('sv', key);
 
 type FilterStatus = EventStatus | 'all';
 type FilterUpcoming = 'all' | 'upcoming' | 'past';
@@ -61,7 +64,7 @@ export default function EventsPage() {
       setTotal(result.meta.total);
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.message ?? 'Kunde inte ladda event. Försök igen.');
+      setError(apiErr.message ?? t('events.error'));
     } finally {
       setLoading(false);
     }
@@ -82,7 +85,7 @@ export default function EventsPage() {
       void fetchEvents();
     } catch (err) {
       const apiErr = err as ApiError;
-      setPublishError(apiErr.message ?? 'Publicering misslyckades.');
+      setPublishError(apiErr.message ?? t('events.publish.error'));
     } finally {
       setPublishLoading(false);
       publishingRef.current = false;
@@ -100,7 +103,7 @@ export default function EventsPage() {
       void fetchEvents();
     } catch (err) {
       const apiErr = err as ApiError;
-      setCancelError(apiErr.message ?? 'Inställning misslyckades.');
+      setCancelError(apiErr.message ?? t('events.cancelEvent.error'));
     } finally {
       setCancelLoading(false);
       cancellingRef.current = false;

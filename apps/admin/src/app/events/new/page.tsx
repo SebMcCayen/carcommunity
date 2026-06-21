@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { EventForm } from '@/components/events/EventForm';
 import { createAdminEvent, type ApiError, type CreateEventRequest, type UpdateEventRequest } from '@/features/events';
+import { translate } from '@/i18n';
 import styles from './page.module.css';
+
+const t = (key: string) => translate('sv', key);
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -20,7 +23,7 @@ export default function NewEventPage() {
       router.push(`/events/${result.data.event.id}`);
     } catch (err) {
       const apiErr = err as ApiError;
-      setSubmitError(apiErr.message ?? 'Kunde inte skapa eventet. Försök igen.');
+      setSubmitError(apiErr.message ?? t('events.createError'));
     } finally {
       setIsSubmitting(false);
     }

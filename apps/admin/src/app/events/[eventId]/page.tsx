@@ -15,8 +15,11 @@ import {
   type ApiError,
   type UpdateEventRequest,
 } from '@/features/events';
+import { translate } from '@/i18n';
 import { formatDate } from '@/lib';
 import styles from '../new/page.module.css';
+
+const t = (key: string) => translate('sv', key);
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -48,7 +51,7 @@ export default function EventDetailPage() {
       setEvent(result.data.event);
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.message ?? 'Kunde inte ladda eventet. Försök igen.');
+      setError(apiErr.message ?? t('events.loadError'));
     } finally {
       setLoading(false);
     }
@@ -67,7 +70,7 @@ export default function EventDetailPage() {
       setEvent(result.data.event);
     } catch (err) {
       const apiErr = err as ApiError;
-      setUpdateError(apiErr.message ?? 'Kunde inte spara eventet. Försök igen.');
+      setUpdateError(apiErr.message ?? t('events.updateError'));
     } finally {
       setIsUpdating(false);
     }
@@ -84,7 +87,7 @@ export default function EventDetailPage() {
       setShowPublish(false);
     } catch (err) {
       const apiErr = err as ApiError;
-      setPublishError(apiErr.message ?? 'Publicering misslyckades.');
+      setPublishError(apiErr.message ?? t('events.publish.error'));
     } finally {
       setPublishLoading(false);
       publishingRef.current = false;
@@ -102,7 +105,7 @@ export default function EventDetailPage() {
       setShowCancel(false);
     } catch (err) {
       const apiErr = err as ApiError;
-      setCancelError(apiErr.message ?? 'Inställning misslyckades.');
+      setCancelError(apiErr.message ?? t('events.cancelEvent.error'));
     } finally {
       setCancelLoading(false);
       cancellingRef.current = false;
