@@ -98,40 +98,40 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
     const errors: Partial<Record<keyof EventFormData, string>> = {};
 
     if (!form.title.trim()) {
-      errors.title = 'Titel krävs.';
+      errors.title = t('events.form.validation.titleRequired');
     } else if (form.title.length > 200) {
-      errors.title = 'Titel får inte vara längre än 200 tecken.';
+      errors.title = t('events.form.validation.titleTooLong');
     }
 
     if (!form.startsAt) {
-      errors.startsAt = 'Starttid krävs.';
+      errors.startsAt = t('events.form.validation.startsAtRequired');
     }
 
     if (!form.approximateArea.trim()) {
-      errors.approximateArea = 'Område krävs.';
+      errors.approximateArea = t('events.form.validation.approximateAreaRequired');
     }
 
     if (form.endsAt && form.startsAt && new Date(form.endsAt) <= new Date(form.startsAt)) {
-      errors.endsAt = 'Sluttid måste vara efter starttid.';
+      errors.endsAt = t('events.form.validation.endsAtAfterStartsAt');
     }
 
     const hasLat = form.latitude.trim() !== '';
     const hasLon = form.longitude.trim() !== '';
     if (hasLat !== hasLon) {
-      errors.latitude = 'Latitud och longitud måste anges båda eller ingen.';
+      errors.latitude = t('events.form.validation.coordinatesBothOrNone');
     }
 
     if (hasLat) {
       const lat = Number(form.latitude);
       if (isNaN(lat) || lat < -90 || lat > 90) {
-        errors.latitude = 'Latitud måste vara mellan -90 och 90.';
+        errors.latitude = t('events.form.validation.latitudeInvalid');
       }
     }
 
     if (hasLon) {
       const lon = Number(form.longitude);
       if (isNaN(lon) || lon < -180 || lon > 180) {
-        errors.longitude = 'Longitud måste vara mellan -180 och 180.';
+        errors.longitude = t('events.form.validation.longitudeInvalid');
       }
     }
 

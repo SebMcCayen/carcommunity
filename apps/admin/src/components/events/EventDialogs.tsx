@@ -97,7 +97,7 @@ export function CancelDialog({ event, onConfirm, onClose, isSubmitting, error }:
 
   async function handleConfirm() {
     if (!reason.trim()) {
-      setReasonError('Anledning krävs.');
+      setReasonError(t('events.cancelEvent.reasonRequired'));
       return;
     }
     setReasonError(null);

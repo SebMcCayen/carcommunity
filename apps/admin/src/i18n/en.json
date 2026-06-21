@@ -55,7 +55,8 @@
       "reasonPlaceholder": "Enter reason...",
       "notice": "The event will not be deleted and the change will be logged.",
       "button": "Confirm cancellation",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "reasonRequired": "Reason is required."
     },
     "form": {
       "titleLabel": "Title",
@@ -74,7 +75,17 @@
       "save": "Save",
       "saving": "Saving...",
       "create": "Create draft",
-      "creating": "Creating..."
+      "creating": "Creating...",
+      "validation": {
+        "titleRequired": "Title is required.",
+        "titleTooLong": "Title must not exceed 200 characters.",
+        "startsAtRequired": "Start time is required.",
+        "approximateAreaRequired": "Area is required.",
+        "endsAtAfterStartsAt": "End time must be after start time.",
+        "coordinatesBothOrNone": "Latitude and longitude must both be provided or both omitted.",
+        "latitudeInvalid": "Latitude must be between -90 and 90.",
+        "longitudeInvalid": "Longitude must be between -180 and 180."
+      }
     },
     "empty": "No events found.",
     "loading": "Loading events...",

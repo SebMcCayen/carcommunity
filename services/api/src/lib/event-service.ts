@@ -41,7 +41,7 @@ export interface GetAdminEventsParams {
   pageSize?: number;
   /** Filter by event status. */
   status?: EventStatus;
-  /** When true, only return events whose startsAt is in the future. */
+  /** When true, only return events whose startsAt is in the future. When false, only return events whose startsAt is in the past. */
   upcoming?: boolean;
   /** Filter to official events only. */
   isOfficial?: boolean;

@@ -55,7 +55,8 @@
       "reasonPlaceholder": "Ange anledning...",
       "notice": "Eventet raderas inte och ändringen loggas.",
       "button": "Bekräfta inställning",
-      "cancel": "Avbryt"
+      "cancel": "Avbryt",
+      "reasonRequired": "Anledning krävs."
     },
     "form": {
       "titleLabel": "Titel",
@@ -74,7 +75,17 @@
       "save": "Spara",
       "saving": "Sparar...",
       "create": "Skapa utkast",
-      "creating": "Skapar..."
+      "creating": "Skapar...",
+      "validation": {
+        "titleRequired": "Titel krävs.",
+        "titleTooLong": "Titel får inte vara längre än 200 tecken.",
+        "startsAtRequired": "Starttid krävs.",
+        "approximateAreaRequired": "Område krävs.",
+        "endsAtAfterStartsAt": "Sluttid måste vara efter starttid.",
+        "coordinatesBothOrNone": "Latitud och longitud måste anges båda eller ingen.",
+        "latitudeInvalid": "Latitud måste vara mellan -90 och 90.",
+        "longitudeInvalid": "Longitud måste vara mellan -180 och 180."
+      }
     },
     "empty": "Inga event hittades.",
     "loading": "Laddar event...",
