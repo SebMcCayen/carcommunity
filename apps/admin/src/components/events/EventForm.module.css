@@ -1,0 +1,143 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 720px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.required {
+  color: var(--color-error);
+  margin-left: var(--space-1);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--accent);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.checkboxRow input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.checkboxLabel {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.sectionDivider {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: var(--space-2) 0;
+}
+
+.locationNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(234, 181, 75, 0.08);
+  border: 1px solid rgba(234, 181, 75, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+}
+
+.coordinateRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.formActions {
+  display: flex;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-color);
+}
+
+.buttonPrimary {
+  padding: var(--space-2) var(--space-5);
+  background-color: var(--accent);
+  color: var(--color-ink);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.buttonPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonSecondary {
+  padding: var(--space-2) var(--space-5);
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.buttonSecondary:hover {
+  background-color: var(--bg-surface-hover);
+}
+
+.errorBanner {
+  padding: var(--space-3) var(--space-4);
+  background-color: rgba(200, 50, 50, 0.08);
+  border: 1px solid rgba(200, 50, 50, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+}
+
+.fieldError {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}

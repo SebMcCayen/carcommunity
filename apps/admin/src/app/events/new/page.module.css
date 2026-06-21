@@ -1,0 +1,123 @@
+.page {
+  max-width: 800px;
+}
+
+.header {
+  margin-bottom: var(--space-6);
+}
+
+.backLink {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: var(--space-3);
+}
+
+.backLink:hover {
+  color: var(--text-primary);
+}
+
+.title {
+  font-size: var(--text-3xl);
+  font-weight: var(--fw-bold);
+  margin-bottom: var(--space-2);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.metaSection {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.metaRow {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.metaLabel {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metaValue {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.rsvpGrid {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.rsvpCard {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  min-width: 100px;
+  text-align: center;
+}
+
+.rsvpCount {
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+}
+
+.rsvpLabel {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+}
+
+.cancelledNotice {
+  padding: var(--space-4) var(--space-5);
+  background-color: rgba(200, 50, 50, 0.08);
+  border: 1px solid rgba(200, 50, 50, 0.3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  margin-bottom: var(--space-5);
+}
+
+.loadingState {
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.errorState {
+  padding: var(--space-5);
+  background-color: rgba(200, 50, 50, 0.08);
+  border: 1px solid rgba(200, 50, 50, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}

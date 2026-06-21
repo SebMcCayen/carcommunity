@@ -4,5 +4,116 @@
     "defaultTodoNote": "Placeholder page. Real data and actions require backend API integration and Microsoft Entra ID authentication.",
     "settingsTodoNote": "TODO: Feature flags and settings must be backend-managed. This page is display-only until Microsoft Entra ID auth and backend RBAC are implemented. Never toggle feature flags via client-side state alone.",
     "userDetailTodoNote": "TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
+  },
+  "events": {
+    "title": "Events",
+    "createEvent": "Create event",
+    "editEvent": "Edit event",
+    "status": {
+      "draft": "Draft",
+      "published": "Published",
+      "cancelled": "Cancelled",
+      "completed": "Completed"
+    },
+    "filter": {
+      "all": "All events",
+      "allStatuses": "All statuses",
+      "allTypes": "All types",
+      "upcoming": "Upcoming",
+      "past": "Past events",
+      "official": "Official events"
+    },
+    "columns": {
+      "title": "Title",
+      "status": "Status",
+      "startsAt": "Start time",
+      "area": "Area",
+      "official": "Official",
+      "rsvp": "RSVP",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "rsvp": {
+      "going": "Going",
+      "maybe": "Maybe",
+      "notGoing": "Not going"
+    },
+    "actions": {
+      "edit": "Edit",
+      "publish": "Publish",
+      "cancel": "Cancel",
+      "view": "View"
+    },
+    "publish": {
+      "title": "Publish event",
+      "description": "When the event is published, teaser information will be visible to users and full information accessible to authorized members.",
+      "confirm": "Are you sure you want to publish this event?",
+      "button": "Publish event",
+      "cancel": "Cancel",
+      "error": "Publishing failed."
+    },
+    "cancelEvent": {
+      "title": "Cancel event",
+      "reasonLabel": "Provide a reason for cancelling the event.",
+      "reasonPlaceholder": "Enter reason...",
+      "notice": "The event will not be deleted and the change will be logged.",
+      "button": "Confirm cancellation",
+      "cancel": "Cancel",
+      "reasonRequired": "Reason is required.",
+      "error": "Cancellation failed."
+    },
+    "form": {
+      "titleLabel": "Title",
+      "summaryLabel": "Short summary",
+      "descriptionLabel": "Description",
+      "startsAtLabel": "Start time",
+      "endsAtLabel": "End time (optional)",
+      "approximateAreaLabel": "Approximate area",
+      "locationNameLabel": "Location name",
+      "addressLabel": "Address (optional)",
+      "latitudeLabel": "Latitude (optional)",
+      "longitudeLabel": "Longitude (optional)",
+      "isOfficialLabel": "Official KCC event",
+      "locationNotice": "Location name, address and coordinates are visible only to authorized members, not in public teaser information.",
+      "unsavedChanges": "You have unsaved changes. Leave the page?",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create draft",
+      "creating": "Creating...",
+      "validation": {
+        "titleRequired": "Title is required.",
+        "titleTooLong": "Title must not exceed 200 characters.",
+        "startsAtRequired": "Start time is required.",
+        "approximateAreaRequired": "Area is required.",
+        "endsAtAfterStartsAt": "End time must be after start time.",
+        "coordinatesBothOrNone": "Latitude and longitude must both be provided or both omitted.",
+        "latitudeInvalid": "Latitude must be between -90 and 90.",
+        "longitudeInvalid": "Longitude must be between -180 and 180."
+      },
+      "createSubtitle": "The event is saved as a draft. Publish it manually when ready."
+    },
+    "empty": "No events found.",
+    "loading": "Loading events...",
+    "retry": "Retry",
+    "error": "Could not load events. Please try again.",
+    "notFound": "Event not found.",
+    "backToList": "Back to event list",
+    "loadError": "Could not load event. Please try again.",
+    "createError": "Could not create event. Please try again.",
+    "updateError": "Could not save event. Please try again.",
+    "table": {
+      "officialBadge": "♛ Official"
+    },
+    "meta": {
+      "createdBy": "Created by",
+      "createdAt": "Created",
+      "updatedAt": "Updated"
+    },
+    "rsvpSection": "RSVP",
+    "noEdit": "Cancelled and completed events cannot be edited.",
+    "cancelledNotice": {
+      "intro": "The event was cancelled",
+      "details": "It is preserved in the system and visible to administrators."
+    }
   }
 }

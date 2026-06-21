@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'forbidden'
   | 'suspended'
   | 'feature_disabled'
+  | 'conflict'
   | 'self_block';
 
 export class AppError extends Error {
