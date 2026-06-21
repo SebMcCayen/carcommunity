@@ -37,6 +37,7 @@ const navGroups: NavGroup[] = [
     title: 'Moderation',
     items: [
       { label: 'Reports', href: '/reports', icon: '◬' },
+      { label: 'Event Chat', href: '/event-chat', icon: '◫' },
       { label: 'Live Location', href: '/live-location', icon: '◉' },
       { label: 'Support', href: '/support', icon: '◐' },
       { label: 'Audit Log', href: '/audit-log', icon: '≡' },

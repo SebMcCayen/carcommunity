@@ -115,5 +115,25 @@
       "intro": "Eventet ställdes in",
       "details": "Det är bevarat i systemet och synligt för administratörer."
     }
+  },
+  "eventChat": {
+    "title": "Eventchatt",
+    "moderationTitle": "Eventchatt – moderering",
+    "reportedMessages": "Rapporterade meddelanden",
+    "underReview": "Under granskning",
+    "removeMessage": "Ta bort meddelande",
+    "reasonRequired": "Orsak krävs",
+    "dismissReport": "Avvisa rapport",
+    "visible": "Synligt",
+    "removed": "Borttaget",
+    "columns": {
+      "event": "Händelse",
+      "author": "Avsändare",
+      "excerpt": "Utdrag",
+      "date": "Datum",
+      "reports": "Rapporter",
+      "status": "Status",
+      "actions": "Åtgärder"
+    }
   }
 }

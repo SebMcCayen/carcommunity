@@ -14,6 +14,7 @@ import { useI18n } from '../hooks/useI18n';
 import { AboutAppScreen } from '../screens/AboutAppScreen';
 import { BlockedUsersScreen } from '../screens/BlockedUsersScreen';
 import { ChatScreen } from '../screens/ChatScreen';
+import { EventChatScreen } from '../screens/EventChatScreen';
 import { EventDetailScreen } from '../screens/EventDetailScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -131,6 +132,11 @@ export const AppNavigator = () => {
               name="EventDetail"
               component={EventDetailScreen}
               options={{ title: t('events.title') }}
+            />
+            <Stack.Screen
+              name="EventChat"
+              component={EventChatScreen}
+              options={{ title: t('chat.eventChatTitle') }}
             />
           </>
         )}

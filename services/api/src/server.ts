@@ -23,6 +23,8 @@ import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVersionRoutes } from './routes/version.js';
 import { registerAppSettingsRoutes } from './routes/app-settings.js';
+import { registerEventChatRoutes } from './routes/event-chat.js';
+import type { EventChatService } from './lib/event-chat-service.js';
 import type { UserService } from './lib/user-service.js';
 
 export interface ServerDependencies {
@@ -31,6 +33,7 @@ export interface ServerDependencies {
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
+  eventChatService?: EventChatService;
   subscriptionService?: Pick<import('./lib/subscription-service.js').SubscriptionService, 'getSubscriptionForUser' | 'getAdminSubscriptionForUser'>;
   moderationService?: ModerationService;
   diagnosticsService?: import('./lib/diagnostics-service.js').DiagnosticsService;
@@ -112,6 +115,9 @@ export async function createServer(
     diagnosticsService: dependencies.diagnosticsService,
   });
   await registerAppSettingsRoutes(app);
+  await registerEventChatRoutes(app, {
+    eventChatService: dependencies.eventChatService,
+  });
 
   return app;
 }

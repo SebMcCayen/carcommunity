@@ -128,6 +128,16 @@ jest.mock('../../screens/EventDetailScreen', () => ({
   EventDetailScreen: () => require('react').createElement('View', { testID: 'stub-event-detail-screen' }),
 }));
 
+jest.mock('../../screens/EventChatScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  EventChatScreen: () => require('react').createElement('View', { testID: 'stub-event-chat-screen' }),
+}));
+
+jest.mock('../../screens/BlockedUsersScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BlockedUsersScreen: () => require('react').createElement('View', { testID: 'stub-blocked-users-screen' }),
+}));
+
 // ── useAuth mock ──────────────────────────────────────────────────────────────
 const mockUseAuth = jest.fn();
 

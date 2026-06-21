@@ -361,6 +361,23 @@ export const EventDetailScreen = () => {
                   />
                 </View>
               )}
+
+              {/* Event chat entry — only shown for eligible RSVP members; UX only */}
+              {!isCancelled &&
+                (optimisticRsvp === 'going' || optimisticRsvp === 'maybe') && (
+                  <KccButton
+                    testID="event-chat-entry-button"
+                    label={t('chat.eventChatTitle')}
+                    variant="secondary"
+                    onPress={() =>
+                      navigation.navigate('EventChat', {
+                        eventId,
+                        eventTitle: teaser.title,
+                        eventRsvpStatus: optimisticRsvp,
+                      })
+                    }
+                  />
+                )}
             </>
           )}
         </>

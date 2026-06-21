@@ -1,4 +1,4 @@
-import type { EventTeaser } from '@carcommunity/shared/events';
+import type { EventTeaser, EventRsvpStatus } from '@carcommunity/shared/events';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -10,6 +10,7 @@ export type RootStackParamList = {
   PrivacySettings: undefined;
   BlockedUsers: undefined;
   EventDetail: { eventId: string; teaser: EventTeaser };
+  EventChat: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
 };
 
 export type MainTabParamList = {
