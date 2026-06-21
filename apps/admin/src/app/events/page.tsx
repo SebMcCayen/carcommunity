@@ -6,7 +6,6 @@ import {
   cancelAdminEvent,
   loadAdminEvents,
   publishAdminEvent,
-  type AdminEventDetail,
   type AdminEventSummary,
   type ApiError,
   type EventStatus,
@@ -34,12 +33,12 @@ export default function EventsPage() {
   const [filterOfficial, setFilterOfficial] = useState<'all' | 'official'>('all');
 
   // Publish dialog state
-  const [publishTarget, setPublishTarget] = useState<AdminEventDetail | null>(null);
+  const [publishTarget, setPublishTarget] = useState<AdminEventSummary | null>(null);
   const [publishLoading, setPublishLoading] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
   // Cancel dialog state
-  const [cancelTarget, setCancelTarget] = useState<AdminEventDetail | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<AdminEventSummary | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
@@ -244,7 +243,7 @@ export default function EventsPage() {
                             className={`${styles.actionButton} ${styles.actionButtonPrimary}`}
                             onClick={() => {
                               setPublishError(null);
-                              setPublishTarget(event as unknown as AdminEventDetail);
+                              setPublishTarget(event);
                             }}
                           >
                             Publicera
@@ -256,7 +255,7 @@ export default function EventsPage() {
                             className={`${styles.actionButton} ${styles.actionButtonDanger}`}
                             onClick={() => {
                               setCancelError(null);
-                              setCancelTarget(event as unknown as AdminEventDetail);
+                              setCancelTarget(event);
                             }}
                           >
                             Ställ in

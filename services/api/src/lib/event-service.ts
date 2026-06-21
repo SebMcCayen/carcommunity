@@ -479,8 +479,6 @@ export class EventService {
       throw new AppError(400, 'validation_error', 'endsAt must be after startsAt.');
     }
 
-    const hasLat = 'latitude' in params.data ? params.data.latitude != null : existing.status !== 'draft';
-    const hasLon = 'longitude' in params.data ? params.data.longitude != null : existing.status !== 'draft';
     const newLat = 'latitude' in params.data ? params.data.latitude : undefined;
     const newLon = 'longitude' in params.data ? params.data.longitude : undefined;
 
@@ -491,8 +489,6 @@ export class EventService {
         throw new AppError(400, 'validation_error', 'latitude and longitude must both be provided or both omitted.');
       }
     }
-
-    void hasLat; void hasLon;
 
     const changedFields: string[] = [];
     if (params.data.title !== undefined) changedFields.push('title');

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { AdminEventDetail } from '@/features/events';
+import type { AdminEventSummary } from '@/features/events';
 import { translate } from '@/i18n';
 import { formatDate } from '@/lib';
 import styles from './EventDialogs.module.css';
@@ -13,7 +13,7 @@ const t = (key: string) => translate('sv', key);
 // ---------------------------------------------------------------------------
 
 interface PublishDialogProps {
-  event: AdminEventDetail;
+  event: Pick<AdminEventSummary, 'id' | 'title' | 'startsAt' | 'approximateArea'>;
   onConfirm: () => Promise<void>;
   onClose: () => void;
   isSubmitting: boolean;
@@ -79,7 +79,7 @@ export function PublishDialog({ event, onConfirm, onClose, isSubmitting, error }
 // ---------------------------------------------------------------------------
 
 interface CancelDialogProps {
-  event: AdminEventDetail;
+  event: Pick<AdminEventSummary, 'id' | 'title' | 'startsAt' | 'approximateArea'>;
   onConfirm: (reason: string) => Promise<void>;
   onClose: () => void;
   isSubmitting: boolean;
@@ -95,13 +95,13 @@ export function CancelDialog({ event, onConfirm, onClose, isSubmitting, error }:
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!reason.trim()) {
       setReasonError('Anledning krävs.');
       return;
     }
     setReasonError(null);
-    void onConfirm(reason.trim());
+    await onConfirm(reason.trim());
   }
 
   return (
