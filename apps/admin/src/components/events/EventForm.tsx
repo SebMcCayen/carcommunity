@@ -95,6 +95,12 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
   const isDirtyRef = useRef(false);
 
   useEffect(() => {
+    setForm(toFormData(initialData));
+    setClientErrors({});
+    isDirtyRef.current = false;
+  }, [initialData]);
+
+  useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current) {
         e.preventDefault();
