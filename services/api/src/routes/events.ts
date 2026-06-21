@@ -1,12 +1,17 @@
 import {
   EVENT_ROUTE_PATHS,
   EVENT_RSVP_STATUSES,
+  EVENT_STATUSES,
+  buildAdminEventCancelPath,
+  buildAdminEventPath,
+  buildAdminEventPublishPath,
   buildEventDetailPath,
   buildEventRsvpPath,
   canAccessEventAdmin,
   canRsvpToEvent,
   canViewEventDetails,
   canViewEventTeaser,
+  type AdminEventResponse,
   type AdminEventsResponse,
   type EventDetailResponse,
   type EventRsvpResponse,
@@ -42,6 +47,55 @@ const adminEventsQuerySchema = z
   .object({
     page: z.coerce.number().int().min(1).optional(),
     pageSize: z.coerce.number().int().min(1).max(100).optional(),
+    status: z.enum(EVENT_STATUSES).optional(),
+    upcoming: z
+      .string()
+      .transform((v) => v === 'true')
+      .pipe(z.boolean())
+      .optional(),
+    isOfficial: z
+      .string()
+      .transform((v) => v === 'true')
+      .pipe(z.boolean())
+      .optional(),
+  })
+  .strict();
+
+const createEventBodySchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    summary: z.string().max(2000).nullable().optional(),
+    description: z.string().max(10000).nullable().optional(),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime().nullable().optional(),
+    approximateArea: z.string().min(1).max(200),
+    locationName: z.string().max(200).nullable().optional(),
+    address: z.string().max(400).nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
+    isOfficial: z.boolean().optional(),
+  })
+  .strict();
+
+const updateEventBodySchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    summary: z.string().max(2000).nullable().optional(),
+    description: z.string().max(10000).nullable().optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().nullable().optional(),
+    approximateArea: z.string().min(1).max(200).optional(),
+    locationName: z.string().max(200).nullable().optional(),
+    address: z.string().max(400).nullable().optional(),
+    latitude: z.number().min(-90).max(90).nullable().optional(),
+    longitude: z.number().min(-180).max(180).nullable().optional(),
+    isOfficial: z.boolean().optional(),
+  })
+  .strict();
+
+const cancelEventBodySchema = z
+  .object({
+    reason: z.string().min(1).max(2000),
   })
   .strict();
 
@@ -144,10 +198,7 @@ export async function registerEventRoutes(
   /**
    * GET /v1/admin/events
    * Requires admin or owner role.
-   * Returns operational admin summary only.
-   *
-   * TODO: Dangerous admin actions (create, edit, cancel) require reason and audit logging.
-   *   Do not add destructive actions here until audit logging is wired in.
+   * Returns operational admin summary with optional filters and pagination.
    */
   app.get(
     EVENT_ROUTE_PATHS.adminEvents,
@@ -160,13 +211,145 @@ export async function registerEventRoutes(
       }
 
       const query = adminEventsQuerySchema.parse(request.query);
-      const result = await eventService.getAdminEvents({ page: query.page, pageSize: query.pageSize });
+      const result = await eventService.getAdminEvents({
+        page: query.page,
+        pageSize: query.pageSize,
+        status: query.status,
+        upcoming: query.upcoming,
+        isOfficial: query.isOfficial,
+      });
 
       return {
         ok: true,
         data: { events: result.events },
         meta: { total: result.total, page: result.page, pageSize: result.pageSize },
       };
+    },
+  );
+
+  /**
+   * GET /v1/admin/events/:eventId
+   * Requires admin or owner role.
+   * Returns full event detail including exact location.
+   */
+  app.get(
+    buildAdminEventPath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = eventIdParamsSchema.parse(request.params);
+      const result = await eventService.getAdminEvent(params.eventId);
+
+      return { ok: true, data: { event: result.event } };
+    },
+  );
+
+  /**
+   * POST /v1/admin/events
+   * Requires admin or owner role.
+   * Creates a new event as draft. Status and creator cannot be overridden.
+   */
+  app.post(
+    EVENT_ROUTE_PATHS.adminEvents,
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const body = createEventBodySchema.parse(request.body);
+      const result = await eventService.createEvent({
+        actorUserId: auth.userId,
+        data: body,
+      });
+
+      return { ok: true, data: { event: result.event } };
+    },
+  );
+
+  /**
+   * PATCH /v1/admin/events/:eventId
+   * Requires admin or owner role.
+   * Updates draft or published events. Status changes are not permitted here.
+   */
+  app.patch(
+    buildAdminEventPath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = eventIdParamsSchema.parse(request.params);
+      const body = updateEventBodySchema.parse(request.body);
+      const result = await eventService.updateEvent({
+        actorUserId: auth.userId,
+        eventId: params.eventId,
+        data: body,
+      });
+
+      return { ok: true, data: { event: result.event } };
+    },
+  );
+
+  /**
+   * POST /v1/admin/events/:eventId/publish
+   * Requires admin or owner role.
+   * Publishes a valid draft event after checking required fields and future start time.
+   */
+  app.post(
+    buildAdminEventPublishPath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = eventIdParamsSchema.parse(request.params);
+      const result = await eventService.publishEvent({
+        actorUserId: auth.userId,
+        eventId: params.eventId,
+      });
+
+      return { ok: true, data: { event: result.event } };
+    },
+  );
+
+  /**
+   * POST /v1/admin/events/:eventId/cancel
+   * Requires admin or owner role.
+   * Cancels a published or draft event. Requires a reason. Does not hard-delete.
+   */
+  app.post(
+    buildAdminEventCancelPath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = eventIdParamsSchema.parse(request.params);
+      const body = cancelEventBodySchema.parse(request.body);
+      const result = await eventService.cancelEvent({
+        actorUserId: auth.userId,
+        eventId: params.eventId,
+        reason: body.reason,
+      });
+
+      return { ok: true, data: { event: result.event } };
     },
   );
 }

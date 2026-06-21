@@ -28,6 +28,18 @@ export function buildEventRsvpPath(eventId: string): string {
   return `/v1/events/${eventId}/rsvp`;
 }
 
+export function buildAdminEventPath(eventId: string): string {
+  return `/v1/admin/events/${eventId}`;
+}
+
+export function buildAdminEventPublishPath(eventId: string): string {
+  return `/v1/admin/events/${eventId}/publish`;
+}
+
+export function buildAdminEventCancelPath(eventId: string): string {
+  return `/v1/admin/events/${eventId}/cancel`;
+}
+
 // ---------------------------------------------------------------------------
 // Shared contracts
 // ---------------------------------------------------------------------------
@@ -97,9 +109,36 @@ export interface AdminEventSummary {
   isOfficial: boolean;
   startsAt: string;
   endsAt: string | null;
+  approximateArea: string;
   rsvpCounts: EventRsvpSummary;
   cancelledAt: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Full admin event detail — all fields including exact location.
+ * Only returned to admin/owner roles.
+ */
+export interface AdminEventDetail {
+  id: string;
+  title: string;
+  summary: string | null;
+  description: string | null;
+  status: EventStatus;
+  startsAt: string;
+  endsAt: string | null;
+  approximateArea: string;
+  locationName: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  isOfficial: boolean;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
+  rsvpCounts: EventRsvpSummary;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +191,49 @@ export interface AdminEventsResponse {
     page: number;
     pageSize: number;
   };
+}
+
+export interface AdminEventResponse {
+  ok: true;
+  data: {
+    event: AdminEventDetail;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Admin create / update / publish / cancel contracts
+// ---------------------------------------------------------------------------
+
+export interface CreateEventRequest {
+  title: string;
+  summary?: string | null;
+  description?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  approximateArea: string;
+  locationName?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isOfficial?: boolean;
+}
+
+export interface UpdateEventRequest {
+  title?: string;
+  summary?: string | null;
+  description?: string | null;
+  startsAt?: string;
+  endsAt?: string | null;
+  approximateArea?: string;
+  locationName?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  isOfficial?: boolean;
+}
+
+export interface CancelEventRequest {
+  reason: string;
 }
 
 // ---------------------------------------------------------------------------
