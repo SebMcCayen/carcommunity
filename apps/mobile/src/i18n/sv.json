@@ -195,7 +195,7 @@
       "other": "Övrigt"
     },
     "removedMessage": "Meddelandet har tagits bort.",
-    "memberRequired": "KCC Medlem krävs för eventchatten.",
+    "memberRequired": "Aktivt medlemskap krävs för eventchatten.",
     "rsvpRequired": "Du behöver svara Kommer eller Kanske för att delta i chatten.",
     "accessLost": "Du har inte längre tillgång till chatten.",
     "errorLoading": "Kunde inte ladda chatten. Försök igen.",

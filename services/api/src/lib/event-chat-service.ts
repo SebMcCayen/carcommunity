@@ -17,7 +17,7 @@
  * - Removal evidence is never hard-deleted.
  */
 
-import type { EventChatMessage as PrismaMessage, EventChatMessageReport as PrismaReport, PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import {
   CHAT_MESSAGE_MAX_LENGTH,
   CHAT_REPORT_DETAILS_MAX_LENGTH,
@@ -289,21 +289,26 @@ export class EventChatService {
 
     const invisibleIds = await this.getInvisibleUserIds(input.viewerUser.userId);
 
+    let cursorCreatedAt: Date | undefined;
+    if (input.before) {
+      const cursor = await this.prisma.eventChatMessage.findUnique({
+        where: { id: input.before },
+        select: { createdAt: true, eventId: true },
+      });
+      if (!cursor || cursor.eventId !== input.eventId) {
+        throw new AppError(400, 'validation_error', 'Invalid pagination cursor.');
+      }
+      cursorCreatedAt = cursor.createdAt;
+    }
+
     const rows = await this.prisma.eventChatMessage.findMany({
       where: {
         eventId: input.eventId,
         authorUserId: invisibleIds.size > 0 ? { notIn: Array.from(invisibleIds) } : undefined,
-        ...(input.before
+        ...(input.before && cursorCreatedAt
           ? {
               id: { not: input.before },
-              createdAt: {
-                lt: (
-                  await this.prisma.eventChatMessage.findUnique({
-                    where: { id: input.before },
-                    select: { createdAt: true },
-                  })
-                )?.createdAt,
-              },
+              createdAt: { lt: cursorCreatedAt },
             }
           : {}),
       },
@@ -577,8 +582,12 @@ export class EventChatService {
         where: { id: input.messageId },
         data: {
           removedAt: message.removedAt ?? now,
-          removedByUserId: input.adminUser.userId,
-          removalReason: input.reason.trim(),
+          ...(message.removedAt === null
+            ? {
+                removedByUserId: input.adminUser.userId,
+                removalReason: input.reason.trim(),
+              }
+            : {}),
         },
         select: {
           id: true,

@@ -273,7 +273,7 @@ await test('GET event chat messages — does not expose email or subscription in
   assert.ok(!raw.includes('"sessionId"'), 'sessionId must not appear in chat response');
 });
 
-await test('GET event chat messages — service 404 for cancelled event is forwarded', async () => {
+await test('GET event chat messages — service 403 for cancelled event is forwarded', async () => {
   const svc = new FakeEventChatService();
   svc.error = new AppError(403, 'forbidden', 'Event chat is not available for this event.');
   const app = await createTestApp(svc);

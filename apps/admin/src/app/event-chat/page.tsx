@@ -25,7 +25,6 @@ import {
   removeAdminChatMessage,
   type AdminEventChatMessageSummary,
   type AdminEventChatReportSummary,
-  type ApiError,
 } from '@/features/event-chat';
 
 type Tab = 'messages' | 'reports';

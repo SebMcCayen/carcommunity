@@ -17,7 +17,7 @@
  *   - Token is never logged.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,7 @@ import {
   View,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { canAccessMemberFeatures } from '@carcommunity/shared/users';
 
@@ -138,8 +139,13 @@ export const EventChatScreen = () => {
   const { t } = useI18n();
   const { theme } = useAppTheme();
   const route = useRoute<EventChatRouteProp>();
-  const { eventId, eventRsvpStatus } = route.params;
+  const navigation = useNavigation();
+  const { eventId, eventTitle, eventRsvpStatus } = route.params;
   const { currentUser, withToken } = useAuth();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: eventTitle });
+  }, [navigation, eventTitle]);
 
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList<EventChatMessage>>(null);
@@ -171,11 +177,15 @@ export const EventChatScreen = () => {
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text) return;
-    setInputText('');
-    await sendMessage(text);
-    // Scroll to bottom after sending
-    flatListRef.current?.scrollToEnd({ animated: true });
-  }, [inputText, sendMessage]);
+    const success = await sendMessage(text);
+    if (success) {
+      setInputText('');
+      // Scroll to newest message (offset 0 for inverted list)
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    } else {
+      Alert.alert('', t('chat.errorSending'));
+    }
+  }, [inputText, sendMessage, t]);
 
   const handleReport = useCallback(
     (messageId: string) => {
@@ -297,7 +307,8 @@ export const EventChatScreen = () => {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={[...messages].reverse()}
+          inverted
           testID="event-chat-message-list"
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.listContent, { padding: theme.spacing[2] }]}

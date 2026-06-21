@@ -61,7 +61,8 @@ export interface UseEventChatResult {
   isSending: boolean;
   /** True if the safe-driving placeholder considers the user to be driving. */
   isDriving: boolean;
-  sendMessage: (text: string) => Promise<void>;
+  /** Returns true on success, false on failure. */
+  sendMessage: (text: string) => Promise<boolean>;
   reportMessage: (messageId: string, request: ReportChatMessageRequest) => Promise<void>;
   loadOlderMessages: () => Promise<void>;
 }
@@ -131,6 +132,7 @@ export function useEventChat({
 
       if (!result) {
         setScreenState('access_lost');
+        clearPolling();
         clearChatData();
         return;
       }
@@ -144,15 +146,16 @@ export function useEventChat({
       const status = err instanceof EventChatApiError ? err.status : 0;
       if (status === 403 || status === 401) {
         setScreenState('access_lost');
+        clearPolling();
         clearChatData();
       } else {
-        setError('Kunde inte ladda chatten. Försök igen.');
+        setError(null);
         setScreenState('error');
       }
     } finally {
       pollInFlight.current = false;
     }
-  }, [eventId, isEligible, withToken, clearChatData]);
+  }, [eventId, isEligible, withToken, clearChatData, clearPolling]);
 
   /** Start conservative polling. Stops when unmounted or access is lost. */
   const startPolling = useCallback(() => {
@@ -200,11 +203,11 @@ export function useEventChat({
     return () => subscription.remove();
   }, [clearPolling, fetchMessages, isEligible, startPolling]);
 
-  /** Send a new plain-text message. */
+  /** Send a new plain-text message. Returns true on success, false on failure. */
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string): Promise<boolean> => {
       const trimmed = text.trim();
-      if (!trimmed || isSending) return;
+      if (!trimmed || isSending) return false;
 
       setIsSending(true);
       setScreenState('sending');
@@ -212,27 +215,30 @@ export function useEventChat({
         const result = await withToken((token) =>
           postEventChatMessage({ eventId, message: trimmed, token }),
         );
-        if (!isMounted.current) return;
+        if (!isMounted.current) return false;
         if (result) {
           setMessages((prev) => [...prev, result.data.message]);
           setScreenState('loaded');
           setError(null);
+          return true;
         }
+        return false;
       } catch (err) {
-        if (!isMounted.current) return;
+        if (!isMounted.current) return false;
         const status = err instanceof EventChatApiError ? err.status : 0;
         if (status === 403 || status === 401) {
           setScreenState('access_lost');
+          clearPolling();
           clearChatData();
         } else {
-          setError('Kunde inte skicka meddelandet. Försök igen.');
           setScreenState('loaded');
         }
+        return false;
       } finally {
         if (isMounted.current) setIsSending(false);
       }
     },
-    [eventId, isSending, withToken, clearChatData],
+    [eventId, isSending, withToken, clearChatData, clearPolling],
   );
 
   /** Report a message. Returns silently regardless of prior reports. */

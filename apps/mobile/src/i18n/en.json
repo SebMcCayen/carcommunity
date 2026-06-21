@@ -192,7 +192,7 @@
       "other": "Other"
     },
     "removedMessage": "This message has been removed.",
-    "memberRequired": "KCC membership required for event chat.",
+    "memberRequired": "Active membership required for event chat.",
     "rsvpRequired": "You need to respond Going or Maybe to join the chat.",
     "accessLost": "You no longer have access to this chat.",
     "errorLoading": "Could not load chat. Please try again.",

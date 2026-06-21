@@ -10,8 +10,6 @@
  */
 
 import {
-  EVENT_CHAT_ROUTE_PATHS,
-  buildAdminEventChatRemovePath,
   buildEventChatMessageReportPath,
   buildEventChatMessagesPath,
   type CreateEventChatMessageResponse,

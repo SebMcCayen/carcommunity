@@ -178,7 +178,7 @@ export interface AdminEventChatMessageSummary {
   removalReason: string | null;
   /** Aggregate report count for this message. Does not identify individual reporters. */
   reportCount: number;
-  /** Highest-priority report status for this message, or null if no reports. */
+  /** Most recently created report status for this message, or null if no reports. */
   reportStatus: ChatMessageReportStatus | null;
 }
 
