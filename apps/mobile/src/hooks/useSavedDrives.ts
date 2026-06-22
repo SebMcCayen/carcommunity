@@ -73,6 +73,7 @@ export function useSavedDrives(): UseSavedDrivesResult {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void loadPage(1, true);
   }, [loadPage]);
 
@@ -139,6 +140,7 @@ export function useSavedDriveDetail(driveId: string): UseSavedDriveDetailResult 
   }, [driveId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void load();
   }, [load]);
 
