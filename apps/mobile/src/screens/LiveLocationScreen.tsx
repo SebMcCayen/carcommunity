@@ -24,6 +24,9 @@ import { useI18n } from '../hooks/useI18n';
 import { type BackgroundPermissionMode, type LiveSharingStatus } from '../hooks/useLiveLocationSession';
 import { useLiveLocation } from '../context/LiveLocationContext';
 import { KccButton } from '../components/KccButton';
+import { SaveDrivePromptModal } from '../components/SaveDrivePromptModal';
+import { saveDrive, discardDrive } from '../api/saved-drives';
+import { loadSessionToken } from '../storage/tokenStorage';
 
 const STATUS_DOT_SIZE = 16;
 
@@ -121,6 +124,8 @@ export const LiveLocationScreen = () => {
     error,
     isLoading,
     lastUpdatedAt,
+    stoppedSessionId,
+    dismissSavePrompt,
     selectDuration,
     startSession,
     stopSession,
@@ -169,7 +174,27 @@ export const LiveLocationScreen = () => {
     ? `${t('liveLocation.sessionAutoExpires')}: ${sessionExpiresAt.toLocaleTimeString()}`
     : null;
 
+  /**
+   * Handle save drive from the post-drive prompt.
+   * Requires explicit user action — never called automatically.
+   * "Dölj mig nu" never reaches this path.
+   */
+  const handleSaveDrive = async (sid: string) => {
+    const auth = await loadSessionToken().catch(() => null);
+    await saveDrive(sid, auth?.token ?? undefined);
+  };
+
+  /**
+   * Handle discard drive from the post-drive prompt.
+   * Deletes any temporary route data. Does not save a drive.
+   */
+  const handleDiscardDrive = async (sid: string) => {
+    const auth = await loadSessionToken().catch(() => null);
+    await discardDrive(sid, auth?.token ?? undefined);
+  };
+
   return (
+    <>
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.colors.pageBackground }}
       contentContainerStyle={[
@@ -444,6 +469,14 @@ export const LiveLocationScreen = () => {
         </View>
       </View>
     </ScrollView>
+    <SaveDrivePromptModal
+      visible={stoppedSessionId !== null}
+      sessionId={stoppedSessionId}
+      onSave={handleSaveDrive}
+      onDiscard={handleDiscardDrive}
+      onDismiss={dismissSavePrompt}
+    />
+    </>
   );
 };
 

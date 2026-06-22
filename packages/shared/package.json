@@ -47,6 +47,10 @@
     "./group-drive": {
       "types": "./dist/group-drive.d.ts",
       "default": "./dist/group-drive.js"
+    },
+    "./saved-drives": {
+      "types": "./dist/saved-drives.d.ts",
+      "default": "./dist/saved-drives.js"
     }
   },
   "scripts": {
