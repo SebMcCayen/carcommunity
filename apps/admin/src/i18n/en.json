@@ -135,5 +135,13 @@
       "status": "Status",
       "actions": "Actions"
     }
+  },
+  "groupDrive": {
+    "adminSection": "Group Drive",
+    "adminTotalActive": "Active",
+    "adminJoined": "Joined",
+    "adminOnTheWay": "On the way",
+    "adminArrived": "Arrived",
+    "adminNoData": "No active group drive for this event."
   }
 }

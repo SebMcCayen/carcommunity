@@ -135,5 +135,13 @@
       "status": "Status",
       "actions": "Åtgärder"
     }
+  },
+  "groupDrive": {
+    "adminSection": "Gruppkörning",
+    "adminTotalActive": "Aktiva",
+    "adminJoined": "Anslutna",
+    "adminOnTheWay": "På väg",
+    "adminArrived": "Framme",
+    "adminNoData": "Ingen aktiv gruppkörning för detta event."
   }
 }

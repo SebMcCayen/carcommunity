@@ -43,6 +43,10 @@
     "./event-chat": {
       "types": "./dist/event-chat.d.ts",
       "default": "./dist/event-chat.js"
+    },
+    "./group-drive": {
+      "types": "./dist/group-drive.d.ts",
+      "default": "./dist/group-drive.js"
     }
   },
   "scripts": {

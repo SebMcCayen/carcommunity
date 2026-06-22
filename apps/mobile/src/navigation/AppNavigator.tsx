@@ -16,6 +16,7 @@ import { BlockedUsersScreen } from '../screens/BlockedUsersScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { EventChatScreen } from '../screens/EventChatScreen';
 import { EventDetailScreen } from '../screens/EventDetailScreen';
+import { GroupDriveScreen } from '../screens/GroupDriveScreen';
 import { EventsScreen } from '../screens/EventsScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LiveLocationScreen } from '../screens/LiveLocationScreen';
@@ -137,6 +138,11 @@ export const AppNavigator = () => {
               name="EventChat"
               component={EventChatScreen}
               options={{ title: t('chat.eventChatTitle') }}
+            />
+            <Stack.Screen
+              name="GroupDrive"
+              component={GroupDriveScreen}
+              options={{ title: t('groupDrive.screenTitle') }}
             />
           </>
         )}

@@ -15,6 +15,10 @@ import {
   type ApiError,
   type UpdateEventRequest,
 } from '@/features/events';
+import {
+  loadAdminGroupDriveSummary,
+  type AdminGroupDriveSummary,
+} from '@/features/group-drive';
 import { translate } from '@/i18n';
 import { formatDate } from '@/lib';
 import styles from '../new/page.module.css';
@@ -30,6 +34,8 @@ export default function EventDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  const [groupDriveSummary, setGroupDriveSummary] = useState<AdminGroupDriveSummary | null>(null);
 
   const [showPublish, setShowPublish] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
@@ -60,6 +66,14 @@ export default function EventDetailPage() {
   useEffect(() => {
     void fetchEvent();
   }, [fetchEvent]);
+
+  // Load group drive aggregate counts separately — best-effort, non-blocking.
+  useEffect(() => {
+    if (!eventId) return;
+    void loadAdminGroupDriveSummary(eventId).then(setGroupDriveSummary).catch(() => {
+      // Non-critical: group drive summary may be unavailable for some events.
+    });
+  }, [eventId]);
 
   async function handleUpdate(data: UpdateEventRequest) {
     if (!eventId || !event) return;
@@ -224,6 +238,33 @@ export default function EventDetailPage() {
           <div className={styles.rsvpLabel}>{t('events.rsvp.notGoing')}</div>
         </div>
       </div>
+
+      {/* ── Group drive aggregate status — aggregate counts only, no positions ── */}
+      <h2 className={styles.sectionTitle}>{t('groupDrive.adminSection')}</h2>
+      {groupDriveSummary !== null ? (
+        <div className={styles.rsvpGrid} aria-label="Gruppkörningsstatus">
+          <div className={styles.rsvpCard}>
+            <div className={styles.rsvpCount}>{groupDriveSummary.totalActive}</div>
+            <div className={styles.rsvpLabel}>{t('groupDrive.adminTotalActive')}</div>
+          </div>
+          <div className={styles.rsvpCard}>
+            <div className={styles.rsvpCount}>{groupDriveSummary.joinedCount}</div>
+            <div className={styles.rsvpLabel}>{t('groupDrive.adminJoined')}</div>
+          </div>
+          <div className={styles.rsvpCard}>
+            <div className={styles.rsvpCount}>{groupDriveSummary.onTheWayCount}</div>
+            <div className={styles.rsvpLabel}>{t('groupDrive.adminOnTheWay')}</div>
+          </div>
+          <div className={styles.rsvpCard}>
+            <div className={styles.rsvpCount}>{groupDriveSummary.arrivedCount}</div>
+            <div className={styles.rsvpLabel}>{t('groupDrive.adminArrived')}</div>
+          </div>
+        </div>
+      ) : (
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+          {t('groupDrive.adminNoData')}
+        </p>
+      )}
 
       {canEdit ? (
         <>
