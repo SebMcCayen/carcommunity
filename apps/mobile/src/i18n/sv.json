@@ -305,7 +305,7 @@
     "promptNotPublic": "Körhistorik är inte publik.",
     "saveAction": "Spara körning",
     "discardAction": "Kasta körning",
-    "noKörningSaved": "Ingen körning sparades.",
+    "noDriveSaved": "Ingen körning sparades.",
     "saveSuccess": "Körningen har sparats.",
     "closeButton": "Stäng",
     "memberRequired": "Aktivt medlemskap krävs för att spara körningar."

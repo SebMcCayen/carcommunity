@@ -61,7 +61,6 @@ export function useSavedDrives(): UseSavedDrivesResult {
       const auth = await loadSessionToken().catch(() => null);
       const res = await listSavedDrives(pageNum, 20, auth?.token ?? undefined);
       if (!mountedRef.current) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
       setDrives((prev) => (replace ? res.data.drives : [...prev, ...res.data.drives]));
       setPage(pageNum);
       setHasNext(res.meta.hasNext);
@@ -130,7 +129,6 @@ export function useSavedDriveDetail(driveId: string): UseSavedDriveDetailResult 
       const auth = await loadSessionToken().catch(() => null);
       const res = await getSavedDriveApi(driveId, auth?.token ?? undefined);
       if (!mountedRef.current) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
       setDrive(res.data.drive);
     } catch {
       if (!mountedRef.current) return;

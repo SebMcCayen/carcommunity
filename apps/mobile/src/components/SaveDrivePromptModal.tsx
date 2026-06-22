@@ -178,7 +178,7 @@ export const SaveDrivePromptModal = ({
           {result === 'discarded' && (
             <>
               <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-                {t('savedDrives.noKörningSaved')}
+                {t('savedDrives.noDriveSaved')}
               </Text>
               <Pressable
                 style={[

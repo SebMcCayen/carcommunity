@@ -302,7 +302,7 @@
     "promptNotPublic": "Drive history is not public.",
     "saveAction": "Save drive",
     "discardAction": "Discard drive",
-    "noKörningSaved": "No drive was saved.",
+    "noDriveSaved": "No drive was saved.",
     "saveSuccess": "Drive saved.",
     "closeButton": "Close",
     "memberRequired": "An active membership is required to save drives."
