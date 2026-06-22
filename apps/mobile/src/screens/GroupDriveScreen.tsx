@@ -77,7 +77,7 @@ function StatusControls({ currentStatus, isPending, isDriving, onSelect }: Statu
   return (
     <View style={[styles.statusRow, { gap: theme.spacing[2] }]}>
       {isDriving && (
-        <Text style={[styles.safeDrivingText, { color: theme.colors.statusWarning ?? theme.colors.textSecondary }]}>
+        <Text style={[styles.safeDrivingText, { color: theme.colors.statusWarning }]}>
           {t('groupDrive.safeDrivingStopFirst')}
         </Text>
       )}

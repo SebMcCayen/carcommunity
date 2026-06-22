@@ -11,6 +11,7 @@ export type AppTheme = {
     brandPrimary: string;
     statusSuccess: string;
     statusError: string;
+    statusWarning: string;
   };
   spacing: typeof spacing;
   radius: typeof radius;
@@ -28,6 +29,7 @@ export const lightTheme: AppTheme = {
     brandPrimary: palette.crownGold,
     statusSuccess: palette.successGreen,
     statusError: palette.errorRed,
+    statusWarning: palette.warningAmber,
   },
   spacing,
   radius,
@@ -45,6 +47,7 @@ export const darkTheme: AppTheme = {
     brandPrimary: palette.crownGold,
     statusSuccess: palette.successGreen,
     statusError: palette.errorRed,
+    statusWarning: palette.warningAmber,
   },
   spacing,
   radius,

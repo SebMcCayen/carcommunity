@@ -8,6 +8,7 @@ export const palette = {
   silverGrey: '#B4B1AD',
   successGreen: '#1E8E3E',
   errorRed: '#C5221F',
+  warningAmber: '#E6A817',
 } as const;
 
 export const spacing = {
