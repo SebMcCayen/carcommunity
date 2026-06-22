@@ -100,7 +100,7 @@ export const SaveDrivePromptModal = ({
               gap: theme.spacing[4],
             },
           ]}
-          accessibilityRole="dialog"
+          accessibilityRole="none"
           accessibilityLabel={t('savedDrives.promptTitle')}
         >
           <Text
@@ -143,7 +143,7 @@ export const SaveDrivePromptModal = ({
                     accessibilityLabel={t('savedDrives.saveAction')}
                     accessibilityState={{ disabled: isBusy }}
                   >
-                    <Text style={[styles.buttonText, { color: theme.colors.textInverse }]}>
+                    <Text style={[styles.buttonText, { color: theme.colors.textPrimary }]}>
                       {t('savedDrives.saveAction')}
                     </Text>
                   </Pressable>
