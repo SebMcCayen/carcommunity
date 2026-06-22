@@ -57,6 +57,7 @@ model User {
   chatMessageReports      EventChatMessageReport[] @relation("ChatReportReporter")
   chatReportsReviewed     EventChatMessageReport[] @relation("ChatReportReviewedBy")
   groupDriveParticipations EventGroupDriveParticipant[]
+  savedDrives             SavedDrive[]
 
   @@index([deletedAt])
   @@index([status])
@@ -569,4 +570,63 @@ model EventChatMessageReport {
   @@index([reporterUserId])
   @@index([status])
   @@map("event_chat_message_reports")
+}
+
+// ---------------------------------------------------------------------------
+// Saved Drives
+// ---------------------------------------------------------------------------
+
+/**
+ * A saved drive record created by explicit user action after a live location
+ * session has stopped or expired.
+ *
+ * Privacy rules:
+ *  - Belongs only to the authenticated user; no cross-user access.
+ *  - No top-speed field — never stored or returned.
+ *  - No speed rankings.
+ *  - approximateStartArea and approximateEndArea are optional labels only;
+ *    never exact addresses or GPS coordinates.
+ *  - routeOverview is a minimized JSON path for members only.
+ *    Raw temporary route points are never stored here.
+ *  - sourceLiveLocationSessionId is opaque; never exposed as a way to
+ *    reconstruct the original live session or its exact route.
+ *
+ * Summary-only MVP:
+ *  distanceMeters, averageSpeedMetersPerSecond, and routeOverview are null
+ *  until the TemporaryDrivePoint architecture is implemented.
+ *  TODO: Populate these fields once TemporaryDrivePoint collection is safe.
+ *
+ * Cleanup:
+ *  Hard deletion removes the drive and its associated routeOverview JSON.
+ *  No soft-delete; drive removal is always final and privacy-preserving.
+ */
+model SavedDrive {
+  id                         String    @id @default(uuid()) @db.Uuid
+  userId                     String    @map("user_id") @db.Uuid
+  /// Opaque reference to the source session; optional (session may have been deleted).
+  sourceLiveLocationSessionId String?  @map("source_live_location_session_id") @db.Uuid
+  startedAt                  DateTime  @map("started_at")
+  endedAt                    DateTime  @map("ended_at")
+  durationSeconds            Int       @map("duration_seconds")
+  /// Null in summary-only mode. Populated when route buffer is implemented.
+  distanceMeters             Float?    @map("distance_meters") @db.DoublePrecision
+  /// Null in summary-only mode. Populated when route buffer is implemented.
+  averageSpeedMetersPerSecond Float?   @map("average_speed_meters_per_second") @db.DoublePrecision
+  /// Approximate area label only. Never an exact address or coordinate.
+  approximateStartArea       String?   @map("approximate_start_area") @db.VarChar(200)
+  /// Approximate area label only. Never an exact address or coordinate.
+  approximateEndArea         String?   @map("approximate_end_area") @db.VarChar(200)
+  /// Minimized route overview points for eligible members; null otherwise.
+  /// Stored as JSON array of {latitude, longitude} only — no speed/heading/telemetry.
+  /// Maximum array size enforced at service layer.
+  /// TODO: Populate once TemporaryDrivePoint collection is implemented.
+  routeOverview              Json?     @map("route_overview")
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+  user                       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceLiveLocationSessionId])
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([createdAt])
+  @@map("saved_drives")
 }

@@ -27,6 +27,7 @@ import { registerEventChatRoutes } from './routes/event-chat.js';
 import { registerGroupDriveRoutes } from './routes/group-drive.js';
 import type { EventChatService } from './lib/event-chat-service.js';
 import type { UserService } from './lib/user-service.js';
+import { registerSavedDrivesRoutes } from './routes/saved-drives.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -41,6 +42,7 @@ export interface ServerDependencies {
   diagnosticsService?: import('./lib/diagnostics-service.js').DiagnosticsService;
   userService?: UserService;
   blockingService?: BlockingService;
+  savedDriveService?: import('./lib/saved-drive-service.js').SavedDriveService;
 }
 
 export async function createServer(
@@ -123,6 +125,9 @@ export async function createServer(
   await registerGroupDriveRoutes(app, {
     groupDriveService: dependencies.groupDriveService,
     blockingService: dependencies.blockingService,
+  });
+  await registerSavedDrivesRoutes(app, {
+    savedDriveService: dependencies.savedDriveService,
   });
 
   return app;

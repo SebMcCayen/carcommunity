@@ -12,6 +12,8 @@ export type RootStackParamList = {
   EventDetail: { eventId: string; teaser: EventTeaser };
   EventChat: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
   GroupDrive: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
+  SavedDrives: undefined;
+  SavedDriveDetail: { driveId: string };
 };
 
 export type MainTabParamList = {

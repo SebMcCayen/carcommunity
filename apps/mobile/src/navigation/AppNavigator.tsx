@@ -26,6 +26,8 @@ import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { PrivacySettingsScreen } from '../screens/PrivacySettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { SavedDrivesScreen } from '../screens/SavedDrivesScreen';
+import { SavedDriveDetailScreen } from '../screens/SavedDriveDetailScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -143,6 +145,16 @@ export const AppNavigator = () => {
               name="GroupDrive"
               component={GroupDriveScreen}
               options={{ title: t('groupDrive.screenTitle') }}
+            />
+            <Stack.Screen
+              name="SavedDrives"
+              component={SavedDrivesScreen}
+              options={{ title: t('savedDrives.screenTitle') }}
+            />
+            <Stack.Screen
+              name="SavedDriveDetail"
+              component={SavedDriveDetailScreen}
+              options={{ title: t('savedDrives.detailTitle') }}
             />
           </>
         )}

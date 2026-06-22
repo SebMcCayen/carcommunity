@@ -85,6 +85,15 @@ export interface UseLiveLocationSessionResult {
   currentPosition: LiveLocationPosition | null;
   /** Time of the last successful position update sent to the backend, or null. */
   lastUpdatedAt: Date | null;
+  /**
+   * The ID of the session that was most recently stopped.
+   * Set after a successful stopSession call; cleared once the save prompt is dismissed.
+   * Used by the save prompt to offer save/discard after stop.
+   * Never set after hideMeNow — hide prioritises privacy and skips the save prompt.
+   */
+  stoppedSessionId: string | null;
+  /** Dismiss the save prompt (e.g. after user saves, discards, or closes the modal). */
+  dismissSavePrompt: () => void;
   /** Update the duration selection. Only applies when not actively sharing. */
   selectDuration: (duration: LiveLocationDuration) => void;
   /** Request foreground permission and start a new live location session. */
@@ -94,6 +103,7 @@ export interface UseLiveLocationSessionResult {
   /**
    * Immediately remove position from all members and stop all active sessions.
    * "Hide me now" — must be fast and must not be blocked by loading state.
+   * Privacy action: never shows a save prompt.
    */
   hideMeNow: () => Promise<void>;
   /**
@@ -177,6 +187,13 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
   const [isLoading, setIsLoading] = useState(false);
   const [currentPosition, setCurrentPosition] = useState<LiveLocationPosition | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  /**
+   * The ID of the most recently stopped session.
+   * Set after stopSession succeeds so the LiveLocationScreen can show the
+   * save/discard prompt. Never set by hideMeNow — that privacy action skips
+   * the prompt entirely.
+   */
+  const [stoppedSessionId, setStoppedSessionId] = useState<string | null>(null);
 
   // Refs avoid stale closure issues inside the location watcher callback.
   const sessionIdRef = useRef<string | null>(null);
@@ -456,6 +473,9 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
       sessionTokenRef.current = null;
       setSessionId(null);
       setStatus('not_sharing');
+      // Expose the stopped session ID so the screen can offer the save/discard prompt.
+      // Never set this from hideMeNow — that privacy action always discards silently.
+      setStoppedSessionId(sid);
     } catch {
       setError(FALLBACK_ERROR_KEY);
       setStatus('error');
@@ -491,6 +511,11 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     }
   }, [stopWatcher]);
 
+  /** Dismiss the save prompt once the user has saved, discarded, or closed the modal. */
+  const dismissSavePrompt = useCallback(() => {
+    setStoppedSessionId(null);
+  }, []);
+
   return {
     status,
     selectedDuration,
@@ -501,6 +526,8 @@ export function useLiveLocationSession(): UseLiveLocationSessionResult {
     isLoading,
     currentPosition,
     lastUpdatedAt,
+    stoppedSessionId,
+    dismissSavePrompt,
     selectDuration,
     startSession,
     stopSession,

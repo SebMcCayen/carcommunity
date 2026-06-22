@@ -24,6 +24,7 @@ import type {
   UpdatePositionResult,
   VisibleMarkersResult,
 } from './lib/live-location-service.js';
+import type { BlockingService } from './lib/blocking-service.js';
 import { createServer } from './server.js';
 
 class FakeLiveLocationService implements Pick<LiveLocationService,
@@ -119,10 +120,18 @@ class FakeLiveLocationService implements Pick<LiveLocationService,
   }
 }
 
+class FakeBlockingService implements Pick<BlockingService, 'getInvisibleUserIds'> {
+  public invisibleUserIds: string[] = [];
+
+  async getInvisibleUserIds(_viewerId: string): Promise<string[]> {
+    return this.invisibleUserIds;
+  }
+}
+
 async function createTestApp(
   port: number,
   liveLocationService?: FakeLiveLocationService,
-  options?: { liveLocationFeatureEnabled?: boolean },
+  options?: { liveLocationFeatureEnabled?: boolean; blockingService?: FakeBlockingService },
 ) {
   return createServer(
     {
@@ -134,6 +143,7 @@ async function createTestApp(
     {
       liveLocationService: liveLocationService as unknown as LiveLocationService,
       liveLocationFeatureEnabled: options?.liveLocationFeatureEnabled,
+      blockingService: options?.blockingService as unknown as BlockingService,
     },
   );
 }
@@ -413,7 +423,7 @@ test('GET /v1/live-location/markers denies free users but allows member users', 
     assert.equal(deniedResponse.statusCode, 403);
 
     const allowedService = new FakeLiveLocationService();
-    const allowedApp = await createTestApp(4117, allowedService);
+    const allowedApp = await createTestApp(4117, allowedService, { blockingService: new FakeBlockingService() });
 
     try {
       const allowedResponse = await allowedApp.inject({

@@ -138,6 +138,21 @@ jest.mock('../../screens/BlockedUsersScreen', () => ({
   BlockedUsersScreen: () => require('react').createElement('View', { testID: 'stub-blocked-users-screen' }),
 }));
 
+jest.mock('../../screens/GroupDriveScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  GroupDriveScreen: () => require('react').createElement('View', { testID: 'stub-group-drive-screen' }),
+}));
+
+jest.mock('../../screens/SavedDrivesScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  SavedDrivesScreen: () => require('react').createElement('View', { testID: 'stub-saved-drives-screen' }),
+}));
+
+jest.mock('../../screens/SavedDriveDetailScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  SavedDriveDetailScreen: () => require('react').createElement('View', { testID: 'stub-saved-drive-detail-screen' }),
+}));
+
 // ── useAuth mock ──────────────────────────────────────────────────────────────
 const mockUseAuth = jest.fn();
 
