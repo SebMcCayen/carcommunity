@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useI18n } from '../hooks/useI18n';
@@ -55,7 +55,7 @@ export const SaveDrivePromptModal = ({
       await onSave(sessionId);
       setResult('saved');
     } catch {
-      // Error handling is done by the parent via the onSave callback
+      Alert.alert('', t('savedDrives.saveError'));
     } finally {
       setIsBusy(false);
     }
@@ -68,7 +68,7 @@ export const SaveDrivePromptModal = ({
       await onDiscard(sessionId);
       setResult('discarded');
     } catch {
-      // Error handling is done by the parent via the onDiscard callback
+      Alert.alert('', t('savedDrives.discardError'));
     } finally {
       setIsBusy(false);
     }

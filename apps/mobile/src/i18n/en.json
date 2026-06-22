@@ -302,6 +302,8 @@
     "promptNotPublic": "Drive history is not public.",
     "saveAction": "Save drive",
     "discardAction": "Discard drive",
+    "saveError": "Could not save the drive. Please try again.",
+    "discardError": "Could not discard the drive. Please try again.",
     "noDriveSaved": "No drive was saved.",
     "saveSuccess": "Drive saved.",
     "closeButton": "Close",

@@ -305,6 +305,8 @@
     "promptNotPublic": "Körhistorik är inte publik.",
     "saveAction": "Spara körning",
     "discardAction": "Kasta körning",
+    "saveError": "Körningen kunde inte sparas. Försök igen.",
+    "discardError": "Körningen kunde inte kastas. Försök igen.",
     "noDriveSaved": "Ingen körning sparades.",
     "saveSuccess": "Körningen har sparats.",
     "closeButton": "Stäng",

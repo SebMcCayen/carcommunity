@@ -14,7 +14,7 @@
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE "saved_drives" (
-  "id"                              UUID         NOT NULL DEFAULT gen_random_uuid(),
+  "id"                              UUID         NOT NULL,
   "user_id"                         UUID         NOT NULL,
   "source_live_location_session_id" UUID,
   "started_at"                      TIMESTAMPTZ  NOT NULL,

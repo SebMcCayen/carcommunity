@@ -29,6 +29,7 @@ import {
   type SaveDriveResponse,
   type SavedDriveDetailResponse,
 } from '@carcommunity/shared/saved-drives';
+import { buildLiveLocationStopPath } from '@carcommunity/shared/live-location';
 
 import { LOCAL_DATABASE_URL } from './config.js';
 import { AppError } from './lib/errors.js';
@@ -37,6 +38,7 @@ import type {
   ListSavedDrivesResult,
   SavedDriveService,
 } from './lib/saved-drive-service.js';
+import type { LiveLocationService } from './lib/live-location-service.js';
 import type { SavedDriveDetail, SavedDriveListItem } from '@carcommunity/shared/saved-drives';
 import { createServer } from './server.js';
 
@@ -151,6 +153,38 @@ class FakeSavedDriveService
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal live-location service stub.
+ * Only implements stopSession, which is all that the stop-route test requires.
+ */
+class FakeLiveLocationService {
+  async stopSession(_params: { sessionId: string; userId: string }): Promise<{
+    session: {
+      id: string;
+      status: string;
+      duration: number;
+      startedAt: string;
+      expiresAt: string;
+      stoppedAt: string | null;
+    };
+    latestPosition: null;
+    latestPositionRemoved: boolean;
+  }> {
+    return {
+      session: {
+        id: SESSION_UUID,
+        status: 'stopped',
+        duration: 30,
+        startedAt: '2026-06-22T08:00:00.000Z',
+        expiresAt: '2026-06-22T08:30:00.000Z',
+        stoppedAt: '2026-06-22T08:01:00.000Z',
+      },
+      latestPosition: null,
+      latestPositionRemoved: false,
+    };
+  }
+}
+
 function createDevAuthHeader(input: {
   userId: string;
   role: 'user' | 'admin' | 'owner';
@@ -174,7 +208,10 @@ const FREE_AUTH = createDevAuthHeader({
   subscriptionEntitlement: 'none',
 });
 
-async function createTestApp(service?: FakeSavedDriveService) {
+async function createTestApp(
+  service?: FakeSavedDriveService,
+  liveLocationService?: FakeLiveLocationService,
+) {
   return createServer(
     {
       nodeEnv: 'test',
@@ -184,6 +221,7 @@ async function createTestApp(service?: FakeSavedDriveService) {
     },
     {
       savedDriveService: service as unknown as SavedDriveService,
+      liveLocationService: liveLocationService as unknown as LiveLocationService,
     },
   );
 }
@@ -194,12 +232,20 @@ async function createTestApp(service?: FakeSavedDriveService) {
 
 test('POST stop endpoint does not auto-save a drive', async () => {
   const svc = new FakeSavedDriveService();
-  const app = await createTestApp(svc);
+  const liveLocSvc = new FakeLiveLocationService();
+  const app = await createTestApp(svc, liveLocSvc);
 
   // The stop route is a live-location route — calling it must NOT trigger saveDrive.
   // We verify by checking saveCalls remains empty after a stop.
   // (Stop route itself uses liveLocationService, not savedDriveService.)
-  assert.deepEqual(svc.saveCalls, [], 'No drive should be saved on stop');
+  const res = await app.inject({
+    method: 'POST',
+    url: buildLiveLocationStopPath(SESSION_UUID),
+    headers: { 'x-dev-user': MEMBER_AUTH },
+  });
+
+  assert.equal(res.statusCode, 200, 'Stop endpoint should succeed');
+  assert.deepEqual(svc.saveCalls, [], 'Stop must not trigger saveDrive');
   await app.close();
 });
 

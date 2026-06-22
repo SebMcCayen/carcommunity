@@ -65,9 +65,13 @@ export interface PostDriveSummary {
   approximateEndArea: string | null;
 }
 
+/**
+ * Request body for saving a drive.
+ * The session identifier is provided as a URL path parameter (:sessionId),
+ * not in the request body. This interface represents the (empty) JSON body.
+ */
 export interface SaveDriveRequest {
-  /** Source live location session identifier. Must be owned by the authenticated user. */
-  sessionId: string;
+  // sessionId is a URL path parameter — the body is intentionally empty.
 }
 
 export interface SaveDriveResponse {

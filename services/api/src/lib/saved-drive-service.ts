@@ -9,9 +9,10 @@
  *  - Duplicate saves for the same session are prevented.
  *  - Suspended and deleted users cannot access saved-drive features.
  *  - member_monthly is required for:
- *      • saving multiple drives (free users are limited to 0 saved drives)
+ *      • saving multiple drives (free users cannot save drives)
  *      • route overview in detail responses
- *  - Free users receive a post-drive summary but no persistent drive library.
+ *  - Free users can still access drives saved during a previous membership period
+ *    (list, get, delete). routeOverview is always withheld for non-members.
  *  - No top-speed field is ever stored or returned.
  *  - Raw temporary route points are never returned.
  *  - Backend is the source of truth for ownership and entitlement.
@@ -81,10 +82,18 @@ function toListItem(drive: SavedDrive): SavedDriveListItem {
 }
 
 function toDetail(drive: SavedDrive, isMember: boolean): SavedDriveDetail {
+  let routeOverview: { latitude: number; longitude: number }[] | null = null;
+  if (isMember && Array.isArray(drive.routeOverview)) {
+    // Explicitly pick only {latitude, longitude} to guard against future fields
+    // (e.g. speed/telemetry) leaking from the DB into responses.
+    routeOverview = (drive.routeOverview as { latitude: number; longitude: number }[]).map(
+      ({ latitude, longitude }) => ({ latitude, longitude }),
+    );
+  }
   return {
     ...toListItem(drive),
     // Route overview is member-only. Raw points are never exposed.
-    routeOverview: isMember && drive.routeOverview ? (drive.routeOverview as { latitude: number; longitude: number }[]) : null,
+    routeOverview,
   };
 }
 
@@ -205,7 +214,7 @@ export class SavedDriveService {
         averageSpeedMetersPerSecond: null,
         approximateStartArea: null,
         approximateEndArea: null,
-        routeOverview: Prisma.JsonNull,
+        routeOverview: Prisma.DbNull,
       },
     });
 

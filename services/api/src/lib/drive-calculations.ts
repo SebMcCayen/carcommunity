@@ -90,12 +90,15 @@ export function totalDistanceMetres(points: readonly TimedPoint[]): number {
 
     const deltaMs = curr.timestampMs - prev.timestampMs;
 
+    // Skip segments with non-positive time delta (out-of-order or duplicate timestamps).
+    if (deltaMs <= 0) {
+      continue;
+    }
+
     // Skip clearly invalid jumps (teleports or GPS glitches).
-    if (deltaMs > 0) {
-      const impliedSpeed = distanceM / (deltaMs / 1000);
-      if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) {
-        continue;
-      }
+    const impliedSpeed = distanceM / (deltaMs / 1000);
+    if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) {
+      continue;
     }
 
     total += distanceM;
