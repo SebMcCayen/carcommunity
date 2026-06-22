@@ -11,6 +11,7 @@ export type RootStackParamList = {
   BlockedUsers: undefined;
   EventDetail: { eventId: string; teaser: EventTeaser };
   EventChat: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
+  GroupDrive: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
 };
 
 export type MainTabParamList = {

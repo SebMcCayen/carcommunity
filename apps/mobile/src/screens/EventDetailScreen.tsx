@@ -378,6 +378,23 @@ export const EventDetailScreen = () => {
                     }
                   />
                 )}
+
+              {/* Group drive entry — shown for eligible RSVP members on published upcoming/active events; UX only */}
+              {!isCancelled &&
+                (optimisticRsvp === 'going' || optimisticRsvp === 'maybe') && (
+                  <KccButton
+                    testID="event-group-drive-entry-button"
+                    label={t('groupDrive.screenTitle')}
+                    variant="secondary"
+                    onPress={() =>
+                      navigation.navigate('GroupDrive', {
+                        eventId,
+                        eventTitle: teaser.title,
+                        eventRsvpStatus: optimisticRsvp,
+                      })
+                    }
+                  />
+                )}
             </>
           )}
         </>
