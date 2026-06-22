@@ -152,7 +152,7 @@ export const GroupDriveScreen = () => {
     () =>
       currentUser !== null &&
       canAccessMemberFeatures({
-        role: currentUser.roles[0] ?? 'user',
+        role: currentUser.roles?.[0] ?? 'user',
         status: currentUser.status,
         subscriptionEntitlement: currentUser.subscriptionEntitlement,
       }),
