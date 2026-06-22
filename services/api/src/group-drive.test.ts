@@ -123,7 +123,7 @@ class FakeGroupDriveService
     return this.updateStatusResult;
   }
 
-  async getGroupDriveSummary(params: Parameters<GroupDriveService['getGroupDriveSummary']>[0]): Promise<GroupDriveSummaryResult> {
+  async getGroupDriveSummary(_params: Parameters<GroupDriveService['getGroupDriveSummary']>[0]): Promise<GroupDriveSummaryResult> {
     if (this.failSummaryWith) throw this.failSummaryWith;
     return this.summaryResult;
   }

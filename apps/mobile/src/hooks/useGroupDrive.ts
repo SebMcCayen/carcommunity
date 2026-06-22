@@ -110,7 +110,6 @@ export function useGroupDrive({ eventId, isEligible }: UseGroupDriveOptions): Us
   useEffect(() => {
     if (!isEligible) {
       if (mountedRef.current) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- security: clear protected data as soon as access is lost
         setScreenState('access_lost');
         setSummary(INITIAL_SUMMARY_STATE);
         setError(null);
@@ -160,8 +159,8 @@ export function useGroupDrive({ eventId, isEligible }: UseGroupDriveOptions): Us
   // Load on mount and when eligibility changes
   useEffect(() => {
     if (isEligible) {
-      setScreenState('loading');
       // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
+      setScreenState('loading');
       void refresh();
     }
   }, [isEligible, refresh]);

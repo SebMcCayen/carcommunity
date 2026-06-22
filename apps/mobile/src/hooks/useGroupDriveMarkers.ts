@@ -89,7 +89,6 @@ export function useGroupDriveMarkers({
   useEffect(() => {
     if (!isEligible) {
       if (mountedRef.current) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- security: clear marker data as soon as access is lost
         setMarkers([]);
       }
     }
