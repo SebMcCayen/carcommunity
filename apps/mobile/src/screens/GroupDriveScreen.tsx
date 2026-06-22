@@ -144,7 +144,7 @@ export const GroupDriveScreen = () => {
   const route = useRoute<GroupDriveRouteProp>();
   const { eventId, eventTitle, eventRsvpStatus } = route.params;
 
-  const { currentUser, withToken } = useAuth();
+  const { currentUser } = useAuth();
   const isDriving = useSafeDrivingPlaceholder();
 
   // Client-side eligibility check — UX only. Backend enforces the real decision.
@@ -165,8 +165,6 @@ export const GroupDriveScreen = () => {
   const {
     screenState,
     currentStatus,
-    currentUserHasActiveLiveLocation,
-    totalActive,
     joinedCount,
     onTheWayCount,
     arrivedCount,

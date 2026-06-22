@@ -74,6 +74,13 @@ export interface GroupDriveMarkersResult {
   generatedAt: string;
 }
 
+export interface AdminGroupDriveSummaryResult {
+  totalActive: number;
+  joinedCount: number;
+  onTheWayCount: number;
+  arrivedCount: number;
+}
+
 function optionalNumber(value: number | null): number | undefined {
   return value ?? undefined;
 }
@@ -390,13 +397,18 @@ export class GroupDriveService {
       throw new AppError(403, 'forbidden', 'Event is not eligible for group driving.');
     }
 
-    // Fetch all active participants, excluding blocked users
+    // Fetch all active participants, excluding blocked users and ineligible users
     // Use a single query to avoid N+1
     const activeParticipants = await this.prisma.eventGroupDriveParticipant.findMany({
       where: {
         eventId,
         status: { not: 'left' },
         userId: excludeUserIds.length > 0 ? { notIn: excludeUserIds } : undefined,
+        user: {
+          status: { in: ['active', 'warned'] },
+          deletedAt: null,
+          subscriptionEntitlement: 'member_monthly',
+        },
       },
       select: {
         id: true,
@@ -524,6 +536,7 @@ export class GroupDriveService {
           user: {
             status: { in: ['active', 'warned'] },
             deletedAt: null,
+            subscriptionEntitlement: 'member_monthly',
           },
         },
         // Only participants in this event's group drive with non-left status
@@ -581,6 +594,47 @@ export class GroupDriveService {
       .filter((m): m is GroupDriveMarker => m !== null);
 
     return { markers, generatedAt };
+  }
+
+  /**
+   * Get aggregate group drive counts for an event — admin use only.
+   *
+   * Returns only counts; never includes individual participant details,
+   * positions, blocking relationships, or display names.
+   * Counts only eligible participants (active/warned, not deleted, member_monthly).
+   */
+  public async getAdminGroupDriveSummary(params: {
+    eventId: string;
+  }): Promise<AdminGroupDriveSummaryResult> {
+    const { eventId } = params;
+
+    const counts = await this.prisma.eventGroupDriveParticipant.groupBy({
+      by: ['status'],
+      where: {
+        eventId,
+        status: { not: 'left' },
+        user: {
+          status: { in: ['active', 'warned'] },
+          deletedAt: null,
+          subscriptionEntitlement: 'member_monthly',
+        },
+      },
+      _count: { status: true },
+    });
+
+    let joinedCount = 0;
+    let onTheWayCount = 0;
+    let arrivedCount = 0;
+
+    for (const row of counts) {
+      if (row.status === 'joined') joinedCount = row._count.status;
+      else if (row.status === 'on_the_way') onTheWayCount = row._count.status;
+      else if (row.status === 'arrived') arrivedCount = row._count.status;
+    }
+
+    const totalActive = joinedCount + onTheWayCount + arrivedCount;
+
+    return { totalActive, joinedCount, onTheWayCount, arrivedCount };
   }
 
   // ---------------------------------------------------------------------------

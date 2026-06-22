@@ -1,10 +1,12 @@
 import {
   GROUP_DRIVE_UPDATABLE_STATUSES,
+  buildAdminGroupDriveSummaryPath,
   buildGroupDriveJoinPath,
   buildGroupDriveLeavePath,
   buildGroupDriveMarkersPath,
   buildGroupDriveSummaryPath,
   buildGroupDriveStatusPath,
+  type AdminGroupDriveSummaryResponse,
   type GroupDriveMarkersResponse,
   type GroupDriveSummaryResponse,
   type JoinGroupDriveResponse,
@@ -14,8 +16,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { requireMemberHook } from '../lib/auth-context.js';
-import { AppError } from '../lib/errors.js';
+import { requireAdminHook, requireMemberHook } from '../lib/auth-context.js';
 import { BlockingService } from '../lib/blocking-service.js';
 import { GroupDriveService } from '../lib/group-drive-service.js';
 
@@ -79,7 +80,7 @@ export async function registerGroupDriveRoutes(
    * POST /v1/events/:eventId/group-drive/leave
    *
    * Leave an event group drive.
-   * Requires authenticated user. Idempotent.
+   * Requires authenticated active member. Idempotent.
    * Does NOT stop the user's live location session.
    */
   app.post(
@@ -202,6 +203,30 @@ export async function registerGroupDriveRoutes(
           subscriptionEntitlement: auth.subscriptionEntitlement,
         },
         excludeUserIds,
+      });
+
+      return {
+        ok: true,
+        data: result,
+      };
+    },
+  );
+
+  /**
+   * GET /v1/admin/events/:eventId/group-drive/summary
+   *
+   * Admin-only endpoint: aggregate group drive counts for an event.
+   * Returns counts only — no individual participant details or positions.
+   * Requires admin role.
+   */
+  app.get(
+    buildAdminGroupDriveSummaryPath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminGroupDriveSummaryResponse> => {
+      const params = eventIdParamsSchema.parse(request.params);
+
+      const result = await groupDriveService.getAdminGroupDriveSummary({
+        eventId: params.eventId,
       });
 
       return {

@@ -18,8 +18,8 @@
  */
 
 import {
-  buildGroupDriveSummaryPath,
-  type GroupDriveSummaryResponse,
+  buildAdminGroupDriveSummaryPath,
+  type AdminGroupDriveSummaryResponse,
 } from '@carcommunity/shared/group-drive';
 
 import { ApiError, apiRequest } from '../../lib/api';
@@ -49,16 +49,16 @@ export interface AdminGroupDriveSummary {
  * Load aggregate group drive stats for an event.
  * Returns null if no active group drive exists for the event.
  *
- * Uses the same GET /v1/events/:eventId/group-drive endpoint as the mobile app;
- * the backend restricts admin access via role checks.
+ * Uses the admin-only GET /v1/admin/events/:eventId/group-drive/summary endpoint
+ * which returns aggregate counts only and is protected by admin role checks.
  */
 export async function loadAdminGroupDriveSummary(
   eventId: string,
   token?: string,
 ): Promise<AdminGroupDriveSummary | null> {
   try {
-    const result = await apiRequest<GroupDriveSummaryResponse>(
-      buildGroupDriveSummaryPath(eventId),
+    const result = await apiRequest<AdminGroupDriveSummaryResponse>(
+      buildAdminGroupDriveSummaryPath(eventId),
       { token },
     );
     return {

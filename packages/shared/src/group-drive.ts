@@ -37,6 +37,10 @@ export function buildGroupDriveSummaryPath(eventId: string): string {
   return `/v1/events/${eventId}/group-drive`;
 }
 
+export function buildAdminGroupDriveSummaryPath(eventId: string): string {
+  return `/v1/admin/events/${eventId}/group-drive/summary`;
+}
+
 export function buildGroupDriveMarkersPath(eventId: string): string {
   return `/v1/events/${eventId}/group-drive/markers`;
 }
@@ -142,6 +146,20 @@ export interface GroupDriveMarkersResponse {
   data: {
     markers: GroupDriveMarker[];
     generatedAt: string;
+  };
+}
+
+/**
+ * Admin-only aggregate counts for a group drive.
+ * Never includes individual participant details or positions.
+ */
+export interface AdminGroupDriveSummaryResponse {
+  ok: true;
+  data: {
+    totalActive: number;
+    joinedCount: number;
+    onTheWayCount: number;
+    arrivedCount: number;
   };
 }
 
