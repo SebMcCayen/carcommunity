@@ -78,8 +78,8 @@ export function totalDistanceMetres(points: readonly TimedPoint[]): number {
   let total = 0;
 
   for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
+    const prev = points[i - 1] as TimedPoint;
+    const curr = points[i] as TimedPoint;
 
     const distanceM = haversineDistanceMetres(
       prev.latitude,

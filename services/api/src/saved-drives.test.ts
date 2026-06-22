@@ -37,15 +37,22 @@ import type {
   ListSavedDrivesResult,
   SavedDriveService,
 } from './lib/saved-drive-service.js';
-import type { SavedDriveDetail } from '@carcommunity/shared/saved-drives';
+import type { SavedDriveDetail, SavedDriveListItem } from '@carcommunity/shared/saved-drives';
 import { createServer } from './server.js';
+
+// ---------------------------------------------------------------------------
+// Test UUIDs — all routes validate UUID format
+// ---------------------------------------------------------------------------
+
+const SESSION_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-000000000001';
+const DRIVE_UUID   = 'a1b2c3d4-e5f6-4a7b-8c9d-000000000002';
 
 // ---------------------------------------------------------------------------
 // Fake service
 // ---------------------------------------------------------------------------
 
 const SAMPLE_DRIVE: SavedDriveDetail = {
-  id: 'drive-1',
+  id: DRIVE_UUID,
   startedAt: '2026-06-22T08:00:00.000Z',
   endedAt: '2026-06-22T08:30:00.000Z',
   durationSeconds: 1800,
@@ -54,6 +61,19 @@ const SAMPLE_DRIVE: SavedDriveDetail = {
   approximateStartArea: null,
   approximateEndArea: null,
   routeOverview: null,
+  createdAt: '2026-06-22T08:31:00.000Z',
+};
+
+/** List item — never contains routeOverview. */
+const SAMPLE_LIST_ITEM: SavedDriveListItem = {
+  id: DRIVE_UUID,
+  startedAt: '2026-06-22T08:00:00.000Z',
+  endedAt: '2026-06-22T08:30:00.000Z',
+  durationSeconds: 1800,
+  distanceMeters: null,
+  averageSpeedMetersPerSecond: null,
+  approximateStartArea: null,
+  approximateEndArea: null,
   createdAt: '2026-06-22T08:31:00.000Z',
 };
 
@@ -86,7 +106,7 @@ class FakeSavedDriveService
   public savedDrive: SavedDriveDetail = SAMPLE_DRIVE;
 
   public listResult: ListSavedDrivesResult = {
-    drives: [SAMPLE_DRIVE],
+    drives: [SAMPLE_LIST_ITEM],
     total: 1,
     hasNext: false,
   };
@@ -189,7 +209,7 @@ test('GET post-drive-summary returns summary without persisting a drive', async 
 
   const res = await app.inject({
     method: 'GET',
-    url: SAVED_DRIVES_ROUTE_PATHS.postDriveSummary('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.postDriveSummary(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -212,7 +232,7 @@ test('GET post-drive-summary returns 401 when unauthenticated', async () => {
 
   const res = await app.inject({
     method: 'GET',
-    url: SAVED_DRIVES_ROUTE_PATHS.postDriveSummary('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.postDriveSummary(SESSION_UUID),
   });
 
   assert.equal(res.statusCode, 401);
@@ -230,7 +250,7 @@ test('POST save-drive requires explicit authenticated action', async () => {
   // No auth → 401
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
   });
   assert.equal(res.statusCode, 401);
   assert.deepEqual(svc.saveCalls, [], 'Drive must not be saved without auth');
@@ -243,7 +263,7 @@ test('POST save-drive creates a drive for authenticated member', async () => {
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -266,7 +286,7 @@ test('POST save-drive returns 403 for free user (member required)', async () => 
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
     headers: { 'x-dev-user': FREE_AUTH },
   });
 
@@ -281,7 +301,7 @@ test('POST save-drive returns 404 when session not found', async () => {
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('00000000-0000-0000-0000-000000000001'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -296,13 +316,13 @@ test('POST save-drive handles duplicate save idempotently', async () => {
   // First save
   const res1 = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
   // Second save — fake service returns same drive (idempotent)
   const res2 = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.saveDrive(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -324,7 +344,7 @@ test('POST discard-drive creates no saved drive', async () => {
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive(SESSION_UUID),
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -333,7 +353,7 @@ test('POST discard-drive creates no saved drive', async () => {
   assert.equal(body.ok, true);
   assert.equal(body.data.discarded, true);
   assert.deepEqual(svc.saveCalls, [], 'Discard must never save a drive');
-  assert.ok(svc.discardCalls.includes('session-abc'), 'discardDrive should be called');
+  assert.ok(svc.discardCalls.includes(SESSION_UUID), 'discardDrive should be called');
   await app.close();
 });
 
@@ -343,7 +363,7 @@ test('POST discard-drive requires authentication', async () => {
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive(SESSION_UUID),
   });
 
   assert.equal(res.statusCode, 401);
@@ -358,7 +378,7 @@ test('POST discard-drive returns 403 when other user tries to discard', async ()
 
   const res = await app.inject({
     method: 'POST',
-    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive('session-abc'),
+    url: SAVED_DRIVES_ROUTE_PATHS.discardDrive(SESSION_UUID),
     headers: { 'x-dev-user': FREE_AUTH },
   });
 
@@ -442,7 +462,7 @@ test('GET saved-drives/:driveId returns 401 when unauthenticated', async () => {
 
   const res = await app.inject({
     method: 'GET',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
   });
 
   assert.equal(res.statusCode, 401);
@@ -455,7 +475,7 @@ test('GET saved-drives/:driveId returns drive for owner', async () => {
 
   const res = await app.inject({
     method: 'GET',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -473,7 +493,7 @@ test('GET saved-drives/:driveId returns 403 for non-owner', async () => {
 
   const res = await app.inject({
     method: 'GET',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
     headers: { 'x-dev-user': FREE_AUTH },
   });
 
@@ -491,7 +511,7 @@ test('DELETE saved-drives/:driveId requires authentication', async () => {
 
   const res = await app.inject({
     method: 'DELETE',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
   });
 
   assert.equal(res.statusCode, 401);
@@ -504,7 +524,7 @@ test('DELETE saved-drives/:driveId returns success for owner', async () => {
 
   const res = await app.inject({
     method: 'DELETE',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 
@@ -522,7 +542,7 @@ test('DELETE saved-drives/:driveId returns 403 for non-owner', async () => {
 
   const res = await app.inject({
     method: 'DELETE',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
     headers: { 'x-dev-user': FREE_AUTH },
   });
 
@@ -537,14 +557,14 @@ test('DELETE saved-drives/:driveId returns 403 for non-owner', async () => {
 test('saved-drives API response never contains topSpeed field', async () => {
   const svc = new FakeSavedDriveService();
   // Inject a drive with a hypothetical topSpeed field to simulate a bad service
-  (svc.savedDrive as Record<string, unknown>)['topSpeed'] = 120;
+  (svc.savedDrive as unknown as Record<string, unknown>)['topSpeed'] = 120;
   const app = await createTestApp(svc);
 
   // Detail endpoint — check the contract type doesn't include topSpeed
   // (TypeScript compile-time check; here we verify the route-level shape)
   const res = await app.inject({
     method: 'GET',
-    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/00000000-0000-0000-0000-000000000001`,
+    url: `${SAVED_DRIVES_ROUTE_PATHS.list}/${DRIVE_UUID}`,
     headers: { 'x-dev-user': MEMBER_AUTH },
   });
 

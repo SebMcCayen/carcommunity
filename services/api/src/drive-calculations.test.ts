@@ -85,9 +85,10 @@ test('totalDistanceMetres: returns 0 for single point', () => {
 });
 
 test('totalDistanceMetres: two-point route returns positive distance', () => {
+  // Use a realistic travel time: ~30 minutes for ~25 km between Gothenburg and Kungsbacka
   const pts: TimedPoint[] = [
     { latitude: 57.706, longitude: 11.967, timestampMs: 0 },
-    { latitude: 57.506, longitude: 12.076, timestampMs: 60_000 },
+    { latitude: 57.506, longitude: 12.076, timestampMs: 1_800_000 }, // 30 minutes
   ];
   const dist = totalDistanceMetres(pts);
   assert.ok(dist > 0, 'Should return positive distance');

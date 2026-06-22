@@ -407,7 +407,9 @@ test('listDrives: returns only the user\'s own drives', async () => {
 
   const result = await svc.listDrives({ actor: memberActor('user-1'), page: 1, pageSize: 20 });
   assert.equal(result.drives.length, 1);
-  assert.equal(result.drives[0].id, 'd-1');
+  const firstDrive = result.drives[0];
+  assert.ok(firstDrive !== undefined, 'Expected at least one drive');
+  assert.equal(firstDrive.id, 'd-1');
 });
 
 test('listDrives: list items never contain routeOverview', async () => {
@@ -431,7 +433,9 @@ test('listDrives: list items never contain routeOverview', async () => {
 
   const result = await svc.listDrives({ actor: memberActor('user-1'), page: 1, pageSize: 20 });
   assert.equal(result.drives.length, 1);
-  assert.ok(!('routeOverview' in result.drives[0]), 'List items must not expose routeOverview');
+  const driveItem = result.drives[0];
+  assert.ok(driveItem !== undefined, 'Expected at least one drive item');
+  assert.ok(!('routeOverview' in driveItem), 'List items must not expose routeOverview');
 });
 
 // ---------------------------------------------------------------------------

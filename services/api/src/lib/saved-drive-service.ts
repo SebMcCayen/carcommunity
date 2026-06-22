@@ -23,6 +23,7 @@
  */
 
 import type { PrismaClient, SavedDrive } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type {
   PostDriveSummary,
   SavedDriveDetail,
@@ -204,7 +205,7 @@ export class SavedDriveService {
         averageSpeedMetersPerSecond: null,
         approximateStartArea: null,
         approximateEndArea: null,
-        routeOverview: null,
+        routeOverview: Prisma.JsonNull,
       },
     });
 

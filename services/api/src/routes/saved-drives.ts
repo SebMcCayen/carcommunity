@@ -32,6 +32,7 @@ import {
   type PaginatedSavedDrivesResponse,
   type PostDriveSummaryResponse,
   type SaveDriveResponse,
+  type SavedDriveDetail,
   type SavedDriveDetailResponse,
 } from '@carcommunity/shared/saved-drives';
 
@@ -53,6 +54,27 @@ const listQuerySchema = z
       .default(DEFAULT_SAVED_DRIVES_PAGE_SIZE),
   })
   .strict();
+
+/**
+ * Picks only the fields defined in SavedDriveDetail to ensure no extra fields
+ * (such as a hypothetical topSpeed) can leak from the service layer into the
+ * HTTP response. Defense-in-depth: TypeScript types guard at compile time,
+ * this pick guards at runtime.
+ */
+function toSafeDriveDetail(drive: SavedDriveDetail): SavedDriveDetail {
+  return {
+    id: drive.id,
+    startedAt: drive.startedAt,
+    endedAt: drive.endedAt,
+    durationSeconds: drive.durationSeconds,
+    distanceMeters: drive.distanceMeters,
+    averageSpeedMetersPerSecond: drive.averageSpeedMetersPerSecond,
+    approximateStartArea: drive.approximateStartArea,
+    approximateEndArea: drive.approximateEndArea,
+    routeOverview: drive.routeOverview,
+    createdAt: drive.createdAt,
+  };
+}
 
 export interface RegisterSavedDrivesRoutesDependencies {
   savedDriveService?: SavedDriveService;
@@ -112,7 +134,7 @@ export async function registerSavedDrivesRoutes(
 
       return {
         ok: true,
-        data: { drive },
+        data: { drive: toSafeDriveDetail(drive) },
       };
     },
   );
@@ -194,7 +216,7 @@ export async function registerSavedDrivesRoutes(
 
       return {
         ok: true,
-        data: { drive },
+        data: { drive: toSafeDriveDetail(drive) },
       };
     },
   );
