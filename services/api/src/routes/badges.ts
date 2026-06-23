@@ -58,7 +58,7 @@ export async function registerBadgeRoutes(
   app: FastifyInstance,
   dependencies: RegisterBadgeRoutesDependencies = {},
 ): Promise<void> {
-  const badgeService = dependencies.badgeService ?? new BadgeService(app.prisma);
+  const badgeService = dependencies.badgeService ?? new BadgeService(app.prisma, null);
 
   /**
    * GET /v1/users/me/badges

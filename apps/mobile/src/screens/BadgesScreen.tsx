@@ -17,7 +17,6 @@
  *  - Safe driving: no animations that could distract while driving.
  */
 
-import { useEffect } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -163,11 +162,6 @@ export const BadgesScreen = () => {
 
   // Find the name of the newly awarded badge for the notice.
   const newBadge = newBadgeKey ? badges.find((b) => b.key === newBadgeKey) : null;
-
-  // Accessibility: announce when a new badge is detected.
-  useEffect(() => {
-    // No-op — announcement is handled by accessibilityRole="alert" on the notice.
-  }, [newBadgeKey]);
 
   return (
     <ScreenContainer>

@@ -425,6 +425,9 @@ export class BadgeService {
   // Public: admin badge aggregate summary
   // -------------------------------------------------------------------------
 
+  /** Number of days considered "recent" for admin badge summary counts. */
+  private static readonly RECENT_BADGE_WINDOW_DAYS = 30;
+
   /**
    * Returns aggregate badge counts for admin use.
    * Never exposes a leaderboard or individual user data.
@@ -433,7 +436,9 @@ export class BadgeService {
   public async getAdminBadgeSummary(): Promise<
     Array<{ key: BadgeKey; name: string; totalCount: number; recentCount: number }>
   > {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000);
+    const thirtyDaysAgo = new Date(
+      Date.now() - BadgeService.RECENT_BADGE_WINDOW_DAYS * 24 * 60 * 60 * 1_000,
+    );
 
     const [totalGroups, recentGroups] = await this.prisma.$transaction([
       this.prisma.userBadge.groupBy({

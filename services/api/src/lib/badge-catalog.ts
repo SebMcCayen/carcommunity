@@ -25,14 +25,14 @@ export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
   first_event: {
     key: 'first_event',
     name: 'Första träffen',
-    description: 'Deltog i sitt första KCC-event.',
+    description: 'Deltog i sitt första community-event.',
     iconIdentifier: 'badge_first_event',
     isAutomatic: true,
   },
   five_events: {
     key: 'five_events',
     name: '5 träffar',
-    description: 'Deltog i fem KCC-event.',
+    description: 'Deltog i fem community-event.',
     iconIdentifier: 'badge_five_events',
     isAutomatic: true,
   },
@@ -46,7 +46,7 @@ export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
   early_member: {
     key: 'early_member',
     name: 'Tidig medlem',
-    description: 'Var med tidigt i KCC-communityn.',
+    description: 'Var med tidigt i communityn.',
     iconIdentifier: 'badge_early_member',
     isAutomatic: true,
   },
