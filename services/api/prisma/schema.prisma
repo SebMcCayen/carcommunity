@@ -58,6 +58,7 @@ model User {
   chatReportsReviewed     EventChatMessageReport[] @relation("ChatReportReviewedBy")
   groupDriveParticipations EventGroupDriveParticipant[]
   savedDrives             SavedDrive[]
+  vehicles                Vehicle[]
 
   @@index([deletedAt])
   @@index([status])
@@ -629,4 +630,59 @@ model SavedDrive {
   @@index([userId, startedAt(sort: Desc)])
   @@index([createdAt])
   @@map("saved_drives")
+}
+
+// ---------------------------------------------------------------------------
+// Garage
+// ---------------------------------------------------------------------------
+
+/**
+ * Powertrain options for a vehicle profile.
+ * Stored as a DB enum to constrain values at the database level.
+ */
+enum VehiclePowertrain {
+  petrol
+  diesel
+  hybrid
+  plug_in_hybrid
+  electric
+  other
+}
+
+/**
+ * A private vehicle profile belonging to one user.
+ *
+ * Privacy rules:
+ *  - No registration number, VIN, or insurance data — must never be added here.
+ *  - No vehicle location data.
+ *  - Vehicle profiles are private in the MVP; no public visibility flag yet.
+ *  - Hard deletion is final and privacy-preserving.
+ *
+ * Access rules:
+ *  - Only the owning user may read or modify their vehicles.
+ *  - Backend enforces ownership and member_monthly entitlement.
+ *  - Admin must not receive individual vehicle details (aggregate counts only).
+ *
+ * Future preparation:
+ *  - TODO: Add optional public visibility flag when public profiles are introduced.
+ *  - TODO: Add image/attachment relation once moderated upload is designed.
+ *  - TODO: Add event participation junction once vehicle selection is supported.
+ */
+model Vehicle {
+  id                String            @id @default(uuid()) @db.Uuid
+  userId            String            @map("user_id") @db.Uuid
+  make              String            @db.VarChar(80)
+  model             String            @db.VarChar(80)
+  modelYear         Int               @map("model_year")
+  powertrain        VehiclePowertrain
+  engineDescription String?           @map("engine_description") @db.VarChar(120)
+  description       String?           @db.VarChar(500)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("vehicles")
 }
