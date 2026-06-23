@@ -157,7 +157,7 @@
     "columns": {
       "badge": "Utmärkelse",
       "totalAwards": "Totalt tilldelade",
-      "recentAwards": "Senaste 7 dagarna",
+      "recentAwards": "Senaste 30 dagarna",
       "lastAwardedAt": "Senast tilldelad"
     },
     "award": {

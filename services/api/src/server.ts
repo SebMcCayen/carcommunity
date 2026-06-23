@@ -100,7 +100,7 @@ export async function createServer(
       config: resolveAuthVerificationConfig(config).providers,
     });
   const badgeService =
-    dependencies.badgeService ?? new BadgeService(app.prisma, config.earlyMemberCutoffDate ?? null);
+    dependencies.badgeService ?? new BadgeService(app.prisma, config.earlyMemberCutoffDate);
   await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);

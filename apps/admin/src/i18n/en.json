@@ -157,7 +157,7 @@
     "columns": {
       "badge": "Badge",
       "totalAwards": "Total awards",
-      "recentAwards": "Last 7 days",
+      "recentAwards": "Last 30 days",
       "lastAwardedAt": "Last awarded"
     },
     "award": {
