@@ -291,14 +291,14 @@ export class GarageService {
     totalVehicleCount: number;
     usersWithVehicleCount: number;
   }> {
-    const [totalVehicleCount, usersWithVehicleCount] = await this.prisma.$transaction([
+    const [totalVehicleCount, distinctUserGroups] = await this.prisma.$transaction([
       this.prisma.vehicle.count(),
-      this.prisma.vehicle.count({ distinct: ['userId'] }),
+      this.prisma.vehicle.groupBy({ by: ['userId'] }),
     ]);
 
     return {
       totalVehicleCount,
-      usersWithVehicleCount,
+      usersWithVehicleCount: distinctUserGroups.length,
     };
   }
 

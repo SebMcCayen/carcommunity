@@ -47,18 +47,14 @@ function buildFakePrisma(options: { vehicles?: FakeVehicleRecord[] } = {}): Reco
   let idCounter = 1;
 
   const vehicleDelegate = {
-    async count({
-      where,
-      distinct,
-    }: {
-      where?: { userId?: string };
-      distinct?: Array<'userId'>;
-    } = {}) {
-      const filtered = vehicles.filter((v) => !where?.userId || v.userId === where.userId);
-      if (distinct?.includes('userId')) {
-        return new Set(filtered.map((v) => v.userId)).size;
+    async count({ where }: { where?: { userId?: string } } = {}) {
+      return vehicles.filter((v) => !where?.userId || v.userId === where.userId).length;
+    },
+    async groupBy({ by }: { by: Array<'userId'> }) {
+      if (by.includes('userId')) {
+        return [...new Set(vehicles.map((v) => v.userId))].map((userId) => ({ userId }));
       }
-      return filtered.length;
+      return [];
     },
     async findMany({
       where,
