@@ -32,6 +32,7 @@ export interface UseGarageDetailResult {
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  deleteVehicle: () => Promise<boolean>;
 }
 
 export interface UseGarageFormResult {
@@ -130,6 +131,12 @@ export function useGarageDetail(vehicleId: string): UseGarageDetailResult {
   }, []);
 
   const load = useCallback(async () => {
+    if (!vehicleId) {
+      setVehicle(null);
+      setError(null);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -150,7 +157,28 @@ export function useGarageDetail(vehicleId: string): UseGarageDetailResult {
     void load();
   }, [load]);
 
-  return { vehicle, isLoading, error, refresh: load };
+  const deleteVehicle = useCallback(async (): Promise<boolean> => {
+    if (!vehicleId) {
+      return false;
+    }
+
+    setError(null);
+    try {
+      const auth = await loadSessionToken().catch(() => null);
+      await deleteVehicleApi(vehicleId, auth?.token ?? undefined);
+      if (mountedRef.current) {
+        setVehicle(null);
+      }
+      return true;
+    } catch {
+      if (mountedRef.current) {
+        setError('garage.deleteError');
+      }
+      return false;
+    }
+  }, [vehicleId]);
+
+  return { vehicle, isLoading, error, refresh: load, deleteVehicle };
 }
 
 /**

@@ -12,6 +12,7 @@
  * TODO: Add garage-created badge trigger once the badge system is implemented.
  */
 
+import { useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -76,7 +77,10 @@ const VehicleCard = ({ vehicle, powertrainLabel, onPress, onDelete, deleteLabel 
       ) : null}
       <View style={styles.cardActions}>
         <Pressable
-          onPress={onDelete}
+          onPress={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
           accessibilityRole="button"
           hitSlop={8}
           style={{ padding: theme.spacing[1] }}
@@ -103,6 +107,13 @@ export const GarageScreen = () => {
     : false;
 
   const { vehicles, isLoading, error, hasNext, loadMore, refresh, deleteVehicle } = useGarageList();
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      void refresh();
+    });
+    return unsubscribe;
+  }, [navigation, refresh]);
 
   const handleDelete = (vehicleId: string, label: string) => {
     Alert.alert(

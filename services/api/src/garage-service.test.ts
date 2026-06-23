@@ -46,76 +46,85 @@ function buildFakePrisma(options: { vehicles?: FakeVehicleRecord[] } = {}): Reco
   const vehicles: FakeVehicleRecord[] = options.vehicles ?? [];
   let idCounter = 1;
 
-  return {
-    vehicle: {
-      async count({ where }: { where?: { userId?: string } } = {}) {
-        return vehicles.filter((v) => !where?.userId || v.userId === where.userId).length;
-      },
-      async findMany({
-        where,
-        skip = 0,
-        take = 20,
-      }: {
-        where?: { userId?: string };
-        skip?: number;
-        take?: number;
-        orderBy?: unknown;
-      }) {
-        return vehicles
-          .filter((v) => !where?.userId || v.userId === where.userId)
-          .slice(skip, skip + take);
-      },
-      async findUnique({ where }: { where: { id?: string } }) {
-        return vehicles.find((v) => v.id === where.id) ?? null;
-      },
-      async create({ data }: { data: Partial<FakeVehicleRecord> }) {
-        const id = `vehicle-${idCounter++}`;
-        const now = new Date();
-        const v: FakeVehicleRecord = {
-          id,
-          userId: data.userId!,
-          make: data.make!,
-          model: data.model!,
-          modelYear: data.modelYear!,
-          powertrain: data.powertrain!,
-          engineDescription: data.engineDescription ?? null,
-          description: data.description ?? null,
-          createdAt: now,
-          updatedAt: now,
-        };
-        vehicles.push(v);
-        return v;
-      },
-      async update({ where, data }: { where: { id: string }; data: Partial<FakeVehicleRecord> }) {
-        const idx = vehicles.findIndex((v) => v.id === where.id);
-        if (idx < 0) throw new Error('Vehicle not found in fake DB');
-        const existing = vehicles[idx] as FakeVehicleRecord;
-        vehicles[idx] = { ...existing, ...data, updatedAt: new Date() } as FakeVehicleRecord;
-        return vehicles[idx] as FakeVehicleRecord;
-      },
-      async delete({ where }: { where: { id: string } }) {
-        const idx = vehicles.findIndex((v) => v.id === where.id);
-        if (idx >= 0) vehicles.splice(idx, 1);
-      },
-      async groupBy({ by }: { by: string[]; _count?: unknown }) {
-        const groups = new Map<string, number>();
-        for (const v of vehicles) {
-          const key = by.map((b) => (v as unknown as Record<string, unknown>)[b]).join('|');
-          groups.set(key, (groups.get(key) ?? 0) + 1);
-        }
-        return Array.from(groups.entries()).map(([key, _count]) => ({
-          userId: key,
-          _count: { userId: _count },
-        }));
-      },
+  const vehicleDelegate = {
+    async count({
+      where,
+      distinct,
+    }: {
+      where?: { userId?: string };
+      distinct?: Array<'userId'>;
+    } = {}) {
+      const filtered = vehicles.filter((v) => !where?.userId || v.userId === where.userId);
+      if (distinct?.includes('userId')) {
+        return new Set(filtered.map((v) => v.userId)).size;
+      }
+      return filtered.length;
     },
+    async findMany({
+      where,
+      skip = 0,
+      take = 20,
+    }: {
+      where?: { userId?: string };
+      skip?: number;
+      take?: number;
+      orderBy?: unknown;
+    }) {
+      return vehicles
+        .filter((v) => !where?.userId || v.userId === where.userId)
+        .slice(skip, skip + take);
+    },
+    async findUnique({ where }: { where: { id?: string } }) {
+      return vehicles.find((v) => v.id === where.id) ?? null;
+    },
+    async findFirst({ where }: { where?: { id?: string; userId?: string } } = {}) {
+      return vehicles.find((v) =>
+        (where?.id === undefined || v.id === where.id)
+        && (where?.userId === undefined || v.userId === where.userId),
+      ) ?? null;
+    },
+    async create({ data }: { data: Partial<FakeVehicleRecord> }) {
+      const id = `vehicle-${idCounter++}`;
+      const now = new Date();
+      const v: FakeVehicleRecord = {
+        id,
+        userId: data.userId!,
+        make: data.make!,
+        model: data.model!,
+        modelYear: data.modelYear!,
+        powertrain: data.powertrain!,
+        engineDescription: data.engineDescription ?? null,
+        description: data.description ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      vehicles.push(v);
+      return v;
+    },
+    async update({ where, data }: { where: { id: string }; data: Partial<FakeVehicleRecord> }) {
+      const idx = vehicles.findIndex((v) => v.id === where.id);
+      if (idx < 0) throw new Error('Vehicle not found in fake DB');
+      const existing = vehicles[idx] as FakeVehicleRecord;
+      vehicles[idx] = { ...existing, ...data, updatedAt: new Date() } as FakeVehicleRecord;
+      return vehicles[idx] as FakeVehicleRecord;
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const idx = vehicles.findIndex((v) => v.id === where.id);
+      if (idx >= 0) vehicles.splice(idx, 1);
+    },
+  };
+
+  const fakePrisma = {
+    vehicle: vehicleDelegate,
     async $transaction(
       arg: ((tx: unknown) => Promise<unknown>) | Array<Promise<unknown>>,
     ) {
-      if (typeof arg === 'function') return arg({});
+      if (typeof arg === 'function') return arg({ vehicle: vehicleDelegate });
       return Promise.all(arg);
     },
   };
+
+  return fakePrisma;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,11 +365,17 @@ test('vehicle response does not include registration number, VIN, location, or o
 // ---------------------------------------------------------------------------
 
 test('admin stats return aggregate counts only, no private vehicle details', async () => {
-  const prisma = buildFakePrisma({ vehicles: [sampleVehicle('user-1'), sampleVehicle('user-2')] });
+  const prisma = buildFakePrisma({
+    vehicles: [
+      sampleVehicle('user-1'),
+      { ...sampleVehicle('user-1'), id: 'vehicle-uuid-2' },
+      { ...sampleVehicle('user-2'), id: 'vehicle-uuid-3' },
+    ],
+  });
   const service = new GarageService(prisma as never);
 
   const stats = await service.getAdminStats();
-  assert.equal(stats.totalVehicleCount, 2);
+  assert.equal(stats.totalVehicleCount, 3);
   assert.equal(stats.usersWithVehicleCount, 2);
 
   // Stats shape must not include any vehicle detail fields

@@ -20,6 +20,7 @@
  *  - TODO: Add optional public visibility toggle when public profiles are introduced.
  */
 
+import { Prisma } from '@prisma/client';
 import type { PrismaClient, Vehicle } from '@prisma/client';
 
 import type { VehicleDetail, VehicleSummary } from '@carcommunity/shared/garage';
@@ -59,7 +60,12 @@ function assertEligibleForGarage(actor: GarageActor): void {
   }
 }
 
-function toSummary(v: Vehicle): VehicleSummary {
+type VehicleSummaryRecord = Pick<
+  Vehicle,
+  'id' | 'make' | 'model' | 'modelYear' | 'powertrain' | 'engineDescription' | 'createdAt' | 'updatedAt'
+>;
+
+function toSummary(v: VehicleSummaryRecord): VehicleSummary {
   return {
     id: v.id,
     make: v.make,
@@ -101,6 +107,16 @@ export class GarageService {
       this.prisma.vehicle.count({ where }),
       this.prisma.vehicle.findMany({
         where,
+        select: {
+          id: true,
+          make: true,
+          model: true,
+          modelYear: true,
+          powertrain: true,
+          engineDescription: true,
+          createdAt: true,
+          updatedAt: true,
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take,
@@ -125,11 +141,14 @@ export class GarageService {
   }): Promise<VehicleDetail> {
     assertEligibleForGarage(params.actor);
 
-    const vehicle = await this.prisma.vehicle.findUnique({
-      where: { id: params.vehicleId },
+    const vehicle = await this.prisma.vehicle.findFirst({
+      where: {
+        id: params.vehicleId,
+        userId: params.actor.userId,
+      },
     });
 
-    if (!vehicle || vehicle.userId !== params.actor.userId) {
+    if (!vehicle) {
       throw new AppError(404, 'not_found', 'Vehicle not found.');
     }
 
@@ -152,31 +171,49 @@ export class GarageService {
   }): Promise<VehicleDetail> {
     assertEligibleForGarage(params.actor);
 
-    const existingCount = await this.prisma.vehicle.count({
-      where: { userId: params.actor.userId },
-    });
+    const maxCreateRetries = 3;
+    for (let attempt = 0; attempt < maxCreateRetries; attempt += 1) {
+      try {
+        const vehicle = await this.prisma.$transaction(
+          async (tx) => {
+            const existingCount = await tx.vehicle.count({
+              where: { userId: params.actor.userId },
+            });
 
-    if (existingCount >= MAX_VEHICLES_PER_USER) {
-      throw new AppError(
-        409,
-        'conflict',
-        `Vehicle limit reached. A maximum of ${MAX_VEHICLES_PER_USER} vehicles is allowed per user.`,
-      );
+            if (existingCount >= MAX_VEHICLES_PER_USER) {
+              throw new AppError(
+                409,
+                'conflict',
+                `Vehicle limit reached. A maximum of ${MAX_VEHICLES_PER_USER} vehicles is allowed per user.`,
+              );
+            }
+
+            return tx.vehicle.create({
+              data: {
+                userId: params.actor.userId,
+                make: params.make,
+                model: params.model,
+                modelYear: params.modelYear,
+                powertrain: params.powertrain,
+                engineDescription: params.engineDescription ?? null,
+                description: params.description ?? null,
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+
+        return toDetail(vehicle);
+      } catch (error) {
+        const isSerializationFailure =
+          error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+        if (!isSerializationFailure || attempt === maxCreateRetries - 1) {
+          throw error;
+        }
+      }
     }
 
-    const vehicle = await this.prisma.vehicle.create({
-      data: {
-        userId: params.actor.userId,
-        make: params.make,
-        model: params.model,
-        modelYear: params.modelYear,
-        powertrain: params.powertrain,
-        engineDescription: params.engineDescription ?? null,
-        description: params.description ?? null,
-      },
-    });
-
-    return toDetail(vehicle);
+    throw new AppError(500, 'internal_error', 'Internal server error.');
   }
 
   /**
@@ -254,17 +291,14 @@ export class GarageService {
     totalVehicleCount: number;
     usersWithVehicleCount: number;
   }> {
-    const [totalVehicleCount, usersWithVehicles] = await this.prisma.$transaction([
+    const [totalVehicleCount, usersWithVehicleCount] = await this.prisma.$transaction([
       this.prisma.vehicle.count(),
-      this.prisma.vehicle.groupBy({
-        by: ['userId'],
-        _count: { userId: true },
-      }),
+      this.prisma.vehicle.count({ distinct: ['userId'] }),
     ]);
 
     return {
       totalVehicleCount,
-      usersWithVehicleCount: usersWithVehicles.length,
+      usersWithVehicleCount,
     };
   }
 

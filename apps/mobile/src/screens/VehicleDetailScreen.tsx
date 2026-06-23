@@ -33,7 +33,7 @@ export const VehicleDetailScreen = ({ route, navigation }: Props) => {
   const { vehicleId } = route.params;
   const { theme } = useAppTheme();
   const { t } = useI18n();
-  const { vehicle, isLoading, error, refresh } = useGarageDetail(vehicleId);
+  const { vehicle, isLoading, error, refresh, deleteVehicle } = useGarageDetail(vehicleId);
 
   const handleDelete = () => {
     Alert.alert(
@@ -45,8 +45,14 @@ export const VehicleDetailScreen = ({ route, navigation }: Props) => {
           text: t('garage.deleteConfirmButton'),
           style: 'destructive',
           onPress: () => {
-            // Navigate back first; the list screen will refresh on focus.
-            navigation.goBack();
+            void (async () => {
+              const wasDeleted = await deleteVehicle();
+              if (wasDeleted) {
+                navigation.goBack();
+              } else {
+                Alert.alert(t('garage.deleteVehicle'), t('garage.deleteError'));
+              }
+            })();
           },
         },
       ],

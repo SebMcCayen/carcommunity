@@ -346,7 +346,7 @@
     "validationMakeRequired": "Märke är obligatoriskt.",
     "validationModelRequired": "Modell är obligatoriskt.",
     "validationModelYearRequired": "Årsmodell är obligatoriskt.",
-    "validationModelYearInvalid": "Ange ett giltigt årsmodell (t.ex. 2010).",
+    "validationModelYearInvalid": "Ange en giltig årsmodell (t.ex. 2010).",
     "validationPowertrainRequired": "Välj drivlina.",
     "retryButton": "Försök igen"
   }
