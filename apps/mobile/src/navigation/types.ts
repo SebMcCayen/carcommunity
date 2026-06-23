@@ -14,6 +14,8 @@ export type RootStackParamList = {
   GroupDrive: { eventId: string; eventTitle: string; eventRsvpStatus: EventRsvpStatus | null };
   SavedDrives: undefined;
   SavedDriveDetail: { driveId: string };
+  VehicleDetail: { vehicleId: string };
+  VehicleForm: { vehicleId?: string };
 };
 
 export type MainTabParamList = {
@@ -21,5 +23,6 @@ export type MainTabParamList = {
   Map: undefined;
   Events: undefined;
   Chat: undefined;
+  Garage: undefined;
   Profile: undefined;
 };

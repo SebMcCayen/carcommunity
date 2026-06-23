@@ -153,6 +153,21 @@ jest.mock('../../screens/SavedDriveDetailScreen', () => ({
   SavedDriveDetailScreen: () => require('react').createElement('View', { testID: 'stub-saved-drive-detail-screen' }),
 }));
 
+jest.mock('../../screens/GarageScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  GarageScreen: () => require('react').createElement('View', { testID: 'stub-garage-screen' }),
+}));
+
+jest.mock('../../screens/VehicleDetailScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  VehicleDetailScreen: () => require('react').createElement('View', { testID: 'stub-vehicle-detail-screen' }),
+}));
+
+jest.mock('../../screens/VehicleFormScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  VehicleFormScreen: () => require('react').createElement('View', { testID: 'stub-vehicle-form-screen' }),
+}));
+
 // ── useAuth mock ──────────────────────────────────────────────────────────────
 const mockUseAuth = jest.fn();
 

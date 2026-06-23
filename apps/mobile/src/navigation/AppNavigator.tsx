@@ -18,6 +18,7 @@ import { EventChatScreen } from '../screens/EventChatScreen';
 import { EventDetailScreen } from '../screens/EventDetailScreen';
 import { GroupDriveScreen } from '../screens/GroupDriveScreen';
 import { EventsScreen } from '../screens/EventsScreen';
+import { GarageScreen } from '../screens/GarageScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LiveLocationScreen } from '../screens/LiveLocationScreen';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -28,6 +29,8 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SavedDrivesScreen } from '../screens/SavedDrivesScreen';
 import { SavedDriveDetailScreen } from '../screens/SavedDriveDetailScreen';
+import { VehicleDetailScreen } from '../screens/VehicleDetailScreen';
+import { VehicleFormScreen } from '../screens/VehicleFormScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -46,6 +49,11 @@ const MainTabs = () => {
         options={{ title: t('navigation.events') }}
       />
       <Tab.Screen name="Chat" component={ChatScreen} options={{ title: t('navigation.chat') }} />
+      <Tab.Screen
+        name="Garage"
+        component={GarageScreen}
+        options={{ title: t('garage.screenTitle') }}
+      />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
@@ -155,6 +163,18 @@ export const AppNavigator = () => {
               name="SavedDriveDetail"
               component={SavedDriveDetailScreen}
               options={{ title: t('savedDrives.detailTitle') }}
+            />
+            <Stack.Screen
+              name="VehicleDetail"
+              component={VehicleDetailScreen}
+              options={{ title: t('garage.detailTitle') }}
+            />
+            <Stack.Screen
+              name="VehicleForm"
+              component={VehicleFormScreen}
+              options={({ route }) =>
+                ({ title: route.params?.vehicleId ? t('garage.formTitleEdit') : t('garage.formTitleCreate') })
+              }
             />
           </>
         )}
