@@ -79,7 +79,7 @@ export const VehicleFormScreen = ({ route, navigation }: Props) => {
   // Populate form when editing an existing vehicle
   useEffect(() => {
     if (vehicle && isEditing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- initialises form fields from vehicle prop when entering edit mode
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initializes form fields from vehicle prop when entering edit mode
       setMake(vehicle.make);
       setModel(vehicle.model);
       setModelYearStr(String(vehicle.modelYear));
