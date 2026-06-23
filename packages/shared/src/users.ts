@@ -199,6 +199,19 @@ export function canAccessLiveLocationAdminSummary(input: SafeAccessUserSummary):
   return canAccessAdminFeatures(input);
 }
 
+/**
+ * Returns true if the user can access garage features (Mitt garage).
+ * Requires an active member_monthly subscription and a non-suspended, non-deleted status.
+ * Suspension always overrides subscription entitlement.
+ */
+export function canAccessGarage(input: {
+  role: UserRole;
+  status: UserStatus;
+  subscriptionEntitlement: SubscriptionEntitlement;
+}): boolean {
+  return canAccessMemberFeatures(input);
+}
+
 export function hasBackendAccess(input: {
   role: UserRole;
   status: UserStatus;

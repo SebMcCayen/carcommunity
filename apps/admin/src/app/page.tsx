@@ -11,6 +11,9 @@ const mockStats = {
   openReports: 7,
   pendingPartners: 3,
   pendingBillboards: 5,
+  // Garage aggregate stats — no private vehicle details, no registration data.
+  totalVehicleProfiles: 0,
+  usersWithVehicles: 0,
 };
 
 export default function DashboardPage() {
@@ -69,6 +72,19 @@ export default function DashboardPage() {
             value={mockStats.pendingBillboards}
             note="Awaiting content review"
             variant={mockStats.pendingBillboards > 0 ? 'warning' : 'default'}
+          />
+          {/* Garage aggregate stats — no private vehicle details, no registration data. */}
+          {/* TODO: Connect to real API once admin auth and backend integration are in place. */}
+          {/* TODO: Add moderation aggregate if public vehicle profiles are introduced later. */}
+          <StatCard
+            label="Vehicle Profiles"
+            value={mockStats.totalVehicleProfiles.toLocaleString('sv-SE')}
+            note="Total private vehicle profiles"
+          />
+          <StatCard
+            label="Users with Vehicles"
+            value={mockStats.usersWithVehicles.toLocaleString('sv-SE')}
+            note="Users with at least one vehicle"
           />
         </div>
       </section>

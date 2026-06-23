@@ -51,6 +51,10 @@
     "./saved-drives": {
       "types": "./dist/saved-drives.d.ts",
       "default": "./dist/saved-drives.js"
+    },
+    "./garage": {
+      "types": "./dist/garage.d.ts",
+      "default": "./dist/garage.js"
     }
   },
   "scripts": {
