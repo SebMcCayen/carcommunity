@@ -143,5 +143,37 @@
     "adminOnTheWay": "On the way",
     "adminArrived": "Arrived",
     "adminNoData": "No active group drive for this event."
+  },
+  "badges": {
+    "pageTitle": "Awards",
+    "summary": {
+      "title": "Badge Summary",
+      "loading": "Loading summary...",
+      "error": "Could not load summary.",
+      "retry": "Try again",
+      "empty": "No awards have been given yet.",
+      "tableLabel": "Badge statistics"
+    },
+    "columns": {
+      "badge": "Badge",
+      "totalAwards": "Total awards",
+      "recentAwards": "Last 7 days",
+      "lastAwardedAt": "Last awarded"
+    },
+    "award": {
+      "title": "Award \"Helpful Member\"",
+      "description": "Manually award the Helpful Member badge. A reason is required and the action is audited.",
+      "userIdLabel": "User ID",
+      "userIdPlaceholder": "Paste user ID",
+      "userIdHint": "Enter the internal user ID (UUID) for the user.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Describe why the user is receiving the award",
+      "reasonHint": "The reason is saved in the audit log.",
+      "submit": "Award badge",
+      "submitting": "Awarding...",
+      "success": "Badge awarded on",
+      "alreadyAwarded": "This user has already received this award.",
+      "error": "Could not award the badge. Please try again."
+    }
   }
 }

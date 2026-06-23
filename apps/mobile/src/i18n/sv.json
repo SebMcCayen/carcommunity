@@ -137,6 +137,7 @@
   },
   "profile": {
     "title": "Profil",
+    "badges": "Utmärkelser",
     "openSettings": "Öppna inställningar",
     "openAbout": "Öppna om appen"
   },
@@ -349,5 +350,24 @@
     "validationModelYearInvalid": "Ange en giltig årsmodell (t.ex. 2010).",
     "validationPowertrainRequired": "Välj drivlina.",
     "retryButton": "Försök igen"
+  },
+  "badges": {
+    "screenTitle": "Utmärkelser",
+    "loading": "Laddar utmärkelser...",
+    "error": "Kunde inte hämta utmärkelser. Försök igen.",
+    "retry": "Försök igen",
+    "empty": "Du har inga utmärkelser ännu.",
+    "emptyHint": "Fortsätt bidra positivt i communityn.",
+    "awardedOn": "Tilldelad",
+    "noticeTitle": "Ny utmärkelse",
+    "noticeBodyPrefix": "Du har fått utmärkelsen",
+    "noticeDismiss": "OK",
+    "badgeNames": {
+      "first_event": "Första träffen",
+      "five_events": "5 träffar",
+      "helpful_member": "Hjälpsam medlem",
+      "early_member": "Tidig medlem",
+      "garage_created": "Garageprofil skapad"
+    }
   }
 }

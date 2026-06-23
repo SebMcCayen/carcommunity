@@ -646,6 +646,68 @@ export class EventService {
     const rsvpCounts = await getRsvpCountsForEvent(this.prisma, params.eventId);
     return { event: toAdminEventDetail(cancelled, rsvpCounts) };
   }
+
+  /**
+   * Marks a published event as completed.
+   * Only published events can be completed.
+   * Returns the list of user IDs who RSVPed 'going' so badge evaluation can be
+   * triggered by the caller after the database update.
+   *
+   * Badge evaluation integration:
+   *  - After this method returns, the caller must trigger BadgeService.evaluateEventBadges()
+   *    for each userId in goingUserIds.
+   *  - TODO: Replace RSVP-proxy attendance with verified check-in records once
+   *    an event attendance/check-in system is implemented.
+   */
+  public async completeEvent(params: {
+    actorUserId: string;
+    eventId: string;
+  }): Promise<{ event: AdminEventDetail; goingUserIds: string[] }> {
+    const existing = await this.prisma.event.findUnique({
+      where: { id: params.eventId },
+      select: { id: true, status: true, title: true },
+    });
+
+    if (!existing) {
+      throw new AppError(404, 'not_found', 'Event not found.');
+    }
+
+    if (existing.status !== 'published') {
+      throw new AppError(409, 'conflict', 'Only published events can be marked as completed.');
+    }
+
+    const completed = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.event.update({
+        where: { id: params.eventId },
+        data: { status: 'completed' },
+        select: ADMIN_EVENT_SELECT,
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: params.actorUserId,
+          action: 'event.complete',
+          entityType: 'event',
+          entityId: params.eventId,
+          reason: null,
+          metadata: { title: existing.title },
+        },
+      });
+
+      return result;
+    });
+
+    // Collect user IDs with 'going' RSVP for badge evaluation by the caller.
+    // This is bounded by the number of attendees of a single event.
+    const goingRsvps = await this.prisma.eventRsvp.findMany({
+      where: { eventId: params.eventId, status: 'going' },
+      select: { userId: true },
+    });
+    const goingUserIds = goingRsvps.map((r) => r.userId);
+
+    const rsvpCounts = await getRsvpCountsForEvent(this.prisma, params.eventId);
+    return { event: toAdminEventDetail(completed, rsvpCounts), goingUserIds };
+  }
 }
 
 /**

@@ -40,6 +40,10 @@ export function buildAdminEventCancelPath(eventId: string): string {
   return `/v1/admin/events/${eventId}/cancel`;
 }
 
+export function buildAdminEventCompletePath(eventId: string): string {
+  return `/v1/admin/events/${eventId}/complete`;
+}
+
 // ---------------------------------------------------------------------------
 // Shared contracts
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ export type RootStackParamList = {
   SavedDriveDetail: { driveId: string };
   VehicleDetail: { vehicleId: string };
   VehicleForm: { vehicleId?: string };
+  Badges: undefined;
 };
 
 export type MainTabParamList = {

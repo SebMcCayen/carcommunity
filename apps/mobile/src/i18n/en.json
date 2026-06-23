@@ -134,6 +134,7 @@
   },
   "profile": {
     "title": "Profile",
+    "badges": "Awards",
     "openSettings": "Open settings",
     "openAbout": "Open about app"
   },
@@ -346,5 +347,24 @@
     "validationModelYearInvalid": "Enter a valid model year (e.g. 2010).",
     "validationPowertrainRequired": "Please select a powertrain.",
     "retryButton": "Try again"
+  },
+  "badges": {
+    "screenTitle": "Awards",
+    "loading": "Loading awards...",
+    "error": "Could not load awards. Please try again.",
+    "retry": "Try again",
+    "empty": "You have no awards yet.",
+    "emptyHint": "Keep contributing positively to the community.",
+    "awardedOn": "Awarded",
+    "noticeTitle": "New Award",
+    "noticeBodyPrefix": "You have received the award",
+    "noticeDismiss": "OK",
+    "badgeNames": {
+      "first_event": "First meet",
+      "five_events": "5 meets",
+      "helpful_member": "Helpful member",
+      "early_member": "Early member",
+      "garage_created": "Garage profile created"
+    }
   }
 }

@@ -3,6 +3,7 @@ import {
   EVENT_RSVP_STATUSES,
   EVENT_STATUSES,
   buildAdminEventCancelPath,
+  buildAdminEventCompletePath,
   buildAdminEventPath,
   buildAdminEventPublishPath,
   buildEventDetailPath,
@@ -23,6 +24,7 @@ import { z } from 'zod';
 import { requireAdminHook, requireAuthHook, requireMemberHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import { EventService } from '../lib/event-service.js';
+import type { BadgeService } from '../lib/badge-service.js';
 
 const eventTeasersQuerySchema = z
   .object({
@@ -93,6 +95,7 @@ const cancelEventBodySchema = z
 
 export interface RegisterEventRoutesDependencies {
   eventService?: EventService;
+  badgeService?: BadgeService;
 }
 
 export async function registerEventRoutes(
@@ -100,6 +103,7 @@ export async function registerEventRoutes(
   dependencies: RegisterEventRoutesDependencies = {},
 ): Promise<void> {
   const eventService = dependencies.eventService ?? new EventService(app.prisma);
+  const badgeService = dependencies.badgeService;
 
   /**
    * GET /v1/events/teasers
@@ -340,6 +344,42 @@ export async function registerEventRoutes(
         eventId: params.eventId,
         reason: body.reason,
       });
+
+      return { ok: true, data: { event: result.event } };
+    },
+  );
+
+  /**
+   * POST /v1/admin/events/:eventId/complete
+   * Requires admin or owner role.
+   * Marks a published event as completed.
+   * Triggers event badge evaluation (first_event, five_events) for attendees
+   * with a 'going' RSVP as a conservative attendance proxy.
+   */
+  app.post(
+    buildAdminEventCompletePath(':eventId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<AdminEventResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessEventAdmin(auth)) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = eventIdParamsSchema.parse(request.params);
+      const result = await eventService.completeEvent({
+        actorUserId: auth.userId,
+        eventId: params.eventId,
+      });
+
+      // Trigger event badge evaluation for attendees. Fire-and-forget to avoid
+      // slowing the response. Failures are non-critical — badges can be awarded later.
+      // TODO: Replace with a background job queue when one is available.
+      if (badgeService && result.goingUserIds.length > 0) {
+        void Promise.allSettled(
+          result.goingUserIds.map((userId) => badgeService.evaluateEventBadges(userId)),
+        );
+      }
 
       return { ok: true, data: { event: result.event } };
     },

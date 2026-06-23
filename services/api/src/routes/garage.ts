@@ -41,6 +41,7 @@ import type { VehiclePowertrain } from '@prisma/client';
 
 import { requireMemberHook } from '../lib/auth-context.js';
 import { GarageService } from '../lib/garage-service.js';
+import type { BadgeService } from '../lib/badge-service.js';
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -116,6 +117,7 @@ function toSafeVehicleDetail(v: VehicleDetail): VehicleDetail {
 
 export interface RegisterGarageRoutesDependencies {
   garageService?: GarageService;
+  badgeService?: BadgeService;
 }
 
 export async function registerGarageRoutes(
@@ -123,6 +125,7 @@ export async function registerGarageRoutes(
   dependencies: RegisterGarageRoutesDependencies = {},
 ): Promise<void> {
   const garageService = dependencies.garageService ?? new GarageService(app.prisma);
+  const badgeService = dependencies.badgeService;
 
   // GET /v1/garage/vehicles
   app.get(
@@ -200,6 +203,12 @@ export async function registerGarageRoutes(
         engineDescription: body.engineDescription,
         description: body.description,
       });
+
+      // Trigger garage_created badge evaluation. Fire-and-forget — badge awards
+      // must not block the vehicle creation response.
+      if (badgeService) {
+        void badgeService.evaluateGarageCreated(auth.userId).catch(() => undefined);
+      }
 
       void reply.status(201);
       return { ok: true, data: { vehicle: toSafeVehicleDetail(vehicle) } };
