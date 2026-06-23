@@ -67,7 +67,7 @@ export const VehicleDetailScreen = ({ route, navigation }: Props) => {
         <Text style={[styles.errorText, { color: theme.colors.statusError }]}>
           {t('garage.errorDetail')}
         </Text>
-        <KccButton label={t('garage.cancelButton')} onPress={refresh} variant="secondary" />
+        <KccButton label={t('garage.retryButton')} onPress={refresh} variant="secondary" />
       </ScreenContainer>
     );
   }

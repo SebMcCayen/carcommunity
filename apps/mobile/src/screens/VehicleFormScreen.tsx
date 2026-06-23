@@ -39,6 +39,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'VehicleForm'>;
 
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_YEAR = 1886;
+// MAX_YEAR allows a small future margin. Calculated at module load time;
+// if the app stays open across a year boundary the cap may be one year behind
+// until the module is reloaded. This is an accepted minor limitation for MVP.
 const MAX_YEAR = CURRENT_YEAR + 2;
 
 interface FieldLabelProps {
@@ -278,7 +281,7 @@ export const VehicleFormScreen = ({ route, navigation }: Props) => {
 
         <View style={{ height: theme.spacing[4] }} />
         <KccButton
-          label={isEditing ? t('garage.saveVehicle') : t('garage.saveVehicle')}
+          label={isEditing ? t('garage.saveVehicle') : t('garage.addVehicle')}
           onPress={() => void handleSubmit()}
           disabled={isSubmitting}
           testID="submit-vehicle-button"

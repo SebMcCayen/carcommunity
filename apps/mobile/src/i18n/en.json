@@ -344,6 +344,7 @@
     "validationModelRequired": "Model is required.",
     "validationModelYearRequired": "Year is required.",
     "validationModelYearInvalid": "Enter a valid model year (e.g. 2010).",
-    "validationPowertrainRequired": "Please select a powertrain."
+    "validationPowertrainRequired": "Please select a powertrain.",
+    "retryButton": "Try again"
   }
 }
