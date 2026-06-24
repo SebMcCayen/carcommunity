@@ -88,6 +88,7 @@ export function useBadges(): UseBadgesResult {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void load();
   }, [load]);
 
