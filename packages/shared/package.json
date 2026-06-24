@@ -59,6 +59,10 @@
     "./badges": {
       "types": "./dist/badges.d.ts",
       "default": "./dist/badges.js"
+    },
+    "./points": {
+      "types": "./dist/points.d.ts",
+      "default": "./dist/points.js"
     }
   },
   "scripts": {
