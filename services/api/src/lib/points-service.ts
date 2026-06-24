@@ -18,7 +18,7 @@
  *  - Credit/debit functions are internal; not exposed as generic public endpoints.
  *
  * Balance architecture:
- *  - Balance is calculated as SUM(amount) from the ledger (MVPapproach).
+ *  - Balance is calculated as SUM(amount) from the ledger (MVP approach).
  *  - `balanceAfter` on each entry records the running balance for display and
  *    is set atomically within the same database transaction.
  *  - For debit/spend operations, a session-level PostgreSQL advisory lock per

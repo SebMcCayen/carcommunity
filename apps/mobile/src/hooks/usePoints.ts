@@ -113,6 +113,7 @@ export function usePoints(): UsePointsResult {
   }, [load, isLoading, hasMore, currentPage]);
 
   useEffect(() => {
+    // `load` is stable (useCallback with empty deps), so this effect runs once on mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void load(1, false);
   }, [load]);

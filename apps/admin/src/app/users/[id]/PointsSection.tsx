@@ -154,10 +154,8 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
       await fetchLedger();
     } catch (err) {
       const apiErr = err as ApiError;
-      if (apiErr.statusCode === 422) {
+      if (apiErr.statusCode === 400) {
         setAdjustError(t('points.adjust.insufficientBalance'));
-      } else if (apiErr.statusCode === 400) {
-        setAdjustError(t('points.adjust.invalidAmount'));
       } else {
         setAdjustError(apiErr.message ?? t('points.adjust.error'));
       }
