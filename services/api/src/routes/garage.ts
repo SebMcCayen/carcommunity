@@ -207,7 +207,12 @@ export async function registerGarageRoutes(
       // Trigger garage_created badge evaluation. Fire-and-forget — badge awards
       // must not block the vehicle creation response.
       if (badgeService) {
-        void badgeService.evaluateGarageCreated(auth.userId).catch(() => undefined);
+        void badgeService.evaluateGarageCreated(auth.userId).catch((error: unknown) => {
+          request.log.error(
+            { error, userId: auth.userId },
+            'Failed to evaluate garage_created badge after vehicle creation.',
+          );
+        });
       }
 
       void reply.status(201);

@@ -104,7 +104,7 @@ export async function createServer(
   await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
-  await registerAuthRoutes(app, config, authService, authProviderVerifier);
+  await registerAuthRoutes(app, config, authService, authProviderVerifier, badgeService);
   await registerFeatureFlagRoutes(app);
   await registerLiveLocationRoutes(app, {
     liveLocationService: dependencies.liveLocationService,

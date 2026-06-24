@@ -145,7 +145,6 @@ export default function BadgesPage() {
                   <th scope="col">{t('badges.columns.badge')}</th>
                   <th scope="col">{t('badges.columns.totalAwards')}</th>
                   <th scope="col">{t('badges.columns.recentAwards')}</th>
-                  <th scope="col">{t('badges.columns.lastAwardedAt')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,14 +160,11 @@ export default function BadgesPage() {
                     <td>
                       <span>{item.recentCount}</span>
                     </td>
-                    <td>
-                      <span className={styles.badgeMeta}>—</span>
-                    </td>
                   </tr>
                 ))}
                 {summary?.data.summary.length === 0 && (
                   <tr>
-                    <td colSpan={4} className={styles.badgeMeta} style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
+                    <td colSpan={3} className={styles.badgeMeta} style={{ textAlign: 'center', padding: 'var(--space-6)' }}>
                       {t('badges.summary.empty')}
                     </td>
                   </tr>

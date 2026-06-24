@@ -378,7 +378,17 @@ export async function registerEventRoutes(
       if (badgeService && result.goingUserIds.length > 0) {
         void Promise.allSettled(
           result.goingUserIds.map((userId) => badgeService.evaluateEventBadges(userId)),
-        );
+        ).then((settledResults) => {
+          settledResults.forEach((settledResult, index) => {
+            if (settledResult.status === 'rejected') {
+              const userId = result.goingUserIds[index];
+              request.log.error(
+                { error: settledResult.reason, userId, eventId: params.eventId },
+                'Failed to evaluate event badges after event completion.',
+              );
+            }
+          });
+        });
       }
 
       return { ok: true, data: { event: result.event } };

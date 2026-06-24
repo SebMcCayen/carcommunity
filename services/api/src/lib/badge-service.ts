@@ -391,34 +391,50 @@ export class BadgeService {
 
     const now = new Date();
 
-    const [created] = await this.prisma.$transaction([
-      this.prisma.userBadge.create({
-        data: {
-          userId: targetUserId,
-          badgeKey: 'helpful_member',
-          awardedAt: now,
-          awardedByUserId: actor.userId,
-          source: 'admin_manual',
-          metadata: Prisma.DbNull,
-        },
-        select: { badgeKey: true, awardedAt: true },
-      }),
-      this.prisma.auditLog.create({
-        data: {
-          actorUserId: actor.userId,
-          action: 'badge.award_helpful_member',
-          entityType: 'user',
-          entityId: targetUserId,
-          reason: reason.trim(),
-          metadata: {
+    try {
+      const [created] = await this.prisma.$transaction([
+        this.prisma.userBadge.create({
+          data: {
+            userId: targetUserId,
             badgeKey: 'helpful_member',
-            targetUserId,
+            awardedAt: now,
+            awardedByUserId: actor.userId,
+            source: 'admin_manual',
+            metadata: Prisma.DbNull,
           },
-        },
-      }),
-    ]);
+          select: { badgeKey: true, awardedAt: true },
+        }),
+        this.prisma.auditLog.create({
+          data: {
+            actorUserId: actor.userId,
+            action: 'badge.award_helpful_member',
+            entityType: 'user',
+            entityId: targetUserId,
+            reason: reason.trim(),
+            metadata: {
+              badgeKey: 'helpful_member',
+              targetUserId,
+            },
+          },
+        }),
+      ]);
 
-    return { badge: toAwardedBadge(created), alreadyAwarded: false };
+      return { badge: toAwardedBadge(created), alreadyAwarded: false };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const row = await this.prisma.userBadge.findUnique({
+          where: { userId_badgeKey: { userId: targetUserId, badgeKey: 'helpful_member' } },
+          select: { badgeKey: true, awardedAt: true },
+        });
+        if (row) {
+          return { badge: toAwardedBadge(row), alreadyAwarded: true };
+        }
+      }
+      throw error;
+    }
   }
 
   // -------------------------------------------------------------------------
