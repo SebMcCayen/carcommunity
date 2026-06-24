@@ -59,6 +59,8 @@ model User {
   groupDriveParticipations EventGroupDriveParticipant[]
   savedDrives             SavedDrive[]
   vehicles                Vehicle[]
+  badges                  UserBadge[]
+  badgesAwarded           UserBadge[]              @relation("BadgeAwardedBy")
 
   @@index([deletedAt])
   @@index([status])
@@ -685,4 +687,43 @@ model Vehicle {
   @@index([userId])
   @@index([userId, createdAt(sort: Desc)])
   @@map("vehicles")
+}
+
+// ---------------------------------------------------------------------------
+// Badges
+// ---------------------------------------------------------------------------
+
+/**
+ * A badge awarded to a user.
+ *
+ * Design rules:
+ *  - Each user receives each badge at most once (unique constraint on userId + badgeKey).
+ *  - Badges are never automatically removed — not even on suspension or vehicle deletion.
+ *  - awardedByUserId records the admin who manually awarded the badge, if applicable.
+ *  - source distinguishes automatic awards from admin-manual ones.
+ *  - metadata is minimal and must never contain personal data, tokens, or location.
+ *  - No points, rankings, or competitive fields.
+ *
+ * Privacy rules:
+ *  - Only the owning user may read their own badges via the user API.
+ *  - Admins access aggregate counts only via the admin summary endpoint.
+ *  - No public badge profiles in this step.
+ */
+model UserBadge {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  badgeKey        String    @map("badge_key") @db.VarChar(100)
+  awardedAt       DateTime  @map("awarded_at")
+  awardedByUserId String?   @map("awarded_by_user_id") @db.Uuid
+  source          String?   @db.VarChar(50)
+  metadata        Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  awardedByUser   User?     @relation("BadgeAwardedBy", fields: [awardedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, badgeKey])
+  @@index([userId])
+  @@index([badgeKey])
+  @@index([awardedAt])
+  @@map("user_badges")
 }

@@ -55,6 +55,10 @@
     "./garage": {
       "types": "./dist/garage.d.ts",
       "default": "./dist/garage.js"
+    },
+    "./badges": {
+      "types": "./dist/badges.d.ts",
+      "default": "./dist/badges.js"
     }
   },
   "scripts": {

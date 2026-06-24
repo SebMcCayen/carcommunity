@@ -29,6 +29,8 @@ import type { EventChatService } from './lib/event-chat-service.js';
 import type { UserService } from './lib/user-service.js';
 import { registerSavedDrivesRoutes } from './routes/saved-drives.js';
 import { registerGarageRoutes } from './routes/garage.js';
+import { registerBadgeRoutes } from './routes/badges.js';
+import { BadgeService } from './lib/badge-service.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -45,6 +47,7 @@ export interface ServerDependencies {
   blockingService?: BlockingService;
   savedDriveService?: import('./lib/saved-drive-service.js').SavedDriveService;
   garageService?: import('./lib/garage-service.js').GarageService;
+  badgeService?: BadgeService;
 }
 
 export async function createServer(
@@ -96,10 +99,12 @@ export async function createServer(
     createAuthProviderVerifier({
       config: resolveAuthVerificationConfig(config).providers,
     });
+  const badgeService =
+    dependencies.badgeService ?? new BadgeService(app.prisma, config.earlyMemberCutoffDate);
   await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
-  await registerAuthRoutes(app, config, authService, authProviderVerifier);
+  await registerAuthRoutes(app, config, authService, authProviderVerifier, badgeService);
   await registerFeatureFlagRoutes(app);
   await registerLiveLocationRoutes(app, {
     liveLocationService: dependencies.liveLocationService,
@@ -108,6 +113,7 @@ export async function createServer(
   });
   await registerEventRoutes(app, {
     eventService: dependencies.eventService,
+    badgeService,
   });
   await registerUserRoutes(app, { userService: dependencies.userService });
   await registerBlockingRoutes(app, { blockingService: dependencies.blockingService });
@@ -133,6 +139,10 @@ export async function createServer(
   });
   await registerGarageRoutes(app, {
     garageService: dependencies.garageService,
+    badgeService,
+  });
+  await registerBadgeRoutes(app, {
+    badgeService,
   });
 
   return app;

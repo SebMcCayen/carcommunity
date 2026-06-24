@@ -98,6 +98,15 @@ const envSchema = z
     AUTH_APPLE_BUNDLE_ID: z.string().optional(),
     AUTH_APPLE_SERVICE_ID: z.string().optional(),
     AUTH_GOOGLE_ALLOWED_CLIENT_IDS: z.string().optional(),
+    /**
+     * ISO 8601 date string (YYYY-MM-DD or full datetime).
+     * Users whose accounts were created before this date receive the early_member badge.
+     * Leave unset in production until the cutoff date is officially decided.
+     * Safe default: not configured = badge not awarded.
+     *
+     * Example: EARLY_MEMBER_CUTOFF_DATE=2026-07-01
+     */
+    EARLY_MEMBER_CUTOFF_DATE: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === 'production' && !value.DATABASE_URL) {
@@ -150,6 +159,11 @@ export type AppConfig = {
   isProduction: boolean;
   authVerificationMode?: AuthVerificationMode;
   authProviders?: AuthProviderVerificationConfig;
+  /**
+   * Cutoff date for the early_member badge.
+   * Null when not configured — badge is not awarded in that case.
+   */
+  earlyMemberCutoffDate?: Date | null;
 };
 
 export function resolveAuthVerificationConfig(config: Pick<AppConfig, 'authVerificationMode' | 'authProviders'>): {
@@ -185,5 +199,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     isProduction: parsed.NODE_ENV === 'production',
     authVerificationMode: parsed.AUTH_VERIFICATION_MODE,
     authProviders: authVerification,
+    earlyMemberCutoffDate: parsed.EARLY_MEMBER_CUTOFF_DATE
+      ? (() => {
+          const d = new Date(parsed.EARLY_MEMBER_CUTOFF_DATE!);
+          return isNaN(d.getTime()) ? null : d;
+        })()
+      : null,
   };
 }

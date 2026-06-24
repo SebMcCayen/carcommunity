@@ -143,5 +143,37 @@
     "adminOnTheWay": "På väg",
     "adminArrived": "Framme",
     "adminNoData": "Ingen aktiv gruppkörning för detta event."
+  },
+  "badges": {
+    "pageTitle": "Utmärkelser",
+    "summary": {
+      "title": "Sammanfattning – utmärkelser",
+      "loading": "Laddar sammanfattning...",
+      "error": "Kunde inte hämta sammanfattning.",
+      "retry": "Försök igen",
+      "empty": "Inga utmärkelser tilldelade ännu.",
+      "tableLabel": "Utmärkelsestatistik"
+    },
+    "columns": {
+      "badge": "Utmärkelse",
+      "totalAwards": "Totalt tilldelade",
+      "recentAwards": "Senaste 30 dagarna",
+      "lastAwardedAt": "Senast tilldelad"
+    },
+    "award": {
+      "title": "Tilldela \"Hjälpsam medlem\"",
+      "description": "Tilldela utmärkelsen Hjälpsam medlem manuellt. En orsak krävs och åtgärden loggas.",
+      "userIdLabel": "Användar-ID",
+      "userIdPlaceholder": "Klistra in användar-ID",
+      "userIdHint": "Ange det interna användar-ID:t (UUID) för användaren.",
+      "reasonLabel": "Orsak",
+      "reasonPlaceholder": "Beskriv varför användaren tilldelas utmärkelsen",
+      "reasonHint": "Orsaken sparas i granskningsloggen.",
+      "submit": "Tilldela utmärkelse",
+      "submitting": "Tilldelar...",
+      "success": "Utmärkelsen tilldelades",
+      "alreadyAwarded": "Användaren har redan fått denna utmärkelse.",
+      "error": "Kunde inte tilldela utmärkelsen. Försök igen."
+    }
   }
 }

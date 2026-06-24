@@ -31,6 +31,7 @@ import { SavedDrivesScreen } from '../screens/SavedDrivesScreen';
 import { SavedDriveDetailScreen } from '../screens/SavedDriveDetailScreen';
 import { VehicleDetailScreen } from '../screens/VehicleDetailScreen';
 import { VehicleFormScreen } from '../screens/VehicleFormScreen';
+import { BadgesScreen } from '../screens/BadgesScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -175,6 +176,11 @@ export const AppNavigator = () => {
               options={({ route }) =>
                 ({ title: route.params?.vehicleId ? t('garage.formTitleEdit') : t('garage.formTitleCreate') })
               }
+            />
+            <Stack.Screen
+              name="Badges"
+              component={BadgesScreen}
+              options={{ title: t('badges.screenTitle') }}
             />
           </>
         )}

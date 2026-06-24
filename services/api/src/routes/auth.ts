@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { type AppConfig, resolveAuthVerificationConfig } from '../config.js';
 import type { AuthProviderVerifier } from '../lib/auth-provider-verifier.js';
 import { parseBearerToken, type AuthService } from '../lib/auth-service.js';
+import type { BadgeService } from '../lib/badge-service.js';
 import { AppError } from '../lib/errors.js';
 
 const loginRequestSchema = z
@@ -42,6 +43,7 @@ export async function registerAuthRoutes(
   config: AppConfig,
   authService: AuthService,
   authProviderVerifier: AuthProviderVerifier,
+  badgeService?: BadgeService,
 ): Promise<void> {
   const authVerification = resolveAuthVerificationConfig(config);
 
@@ -101,6 +103,15 @@ export async function registerAuthRoutes(
         providerEmail,
       });
       const session = await authService.createSession(user.userId);
+
+      if (badgeService) {
+        void badgeService.evaluateEarlyMember(user.userId).catch((error: unknown) => {
+          request.log.error(
+            { error, userId: user.userId },
+            'Failed to evaluate early_member badge during login.',
+          );
+        });
+      }
 
       return reply.status(200).send({
         ok: true,
