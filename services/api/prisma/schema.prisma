@@ -815,7 +815,6 @@ model PointsLedgerEntry {
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId])
   @@index([source])
-  @@index([idempotencyKey])
   @@map("points_ledger_entries")
 }
 

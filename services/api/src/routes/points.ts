@@ -40,8 +40,6 @@ import {
   type PaginatedPointsLedgerResponse,
   type AdminPointsAdjustmentResponse,
 } from '@carcommunity/shared/points';
-import { canAccessAdminFeatures, isSuspendedStatus } from '@carcommunity/shared/users';
-
 import { requireAuthenticatedHook, requireAdminHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import { PointsService } from '../lib/points-service.js';
@@ -185,14 +183,6 @@ export async function registerPointsRoutes(
     async (request): Promise<AdminPointsAdjustmentResponse> => {
       const auth = request.auth!;
 
-      if (!canAccessAdminFeatures({ role: auth.role, status: auth.status })) {
-        throw new AppError(403, 'forbidden', 'Admin access required.');
-      }
-
-      if (isSuspendedStatus(auth.status)) {
-        throw new AppError(403, 'suspended', 'Your account has been suspended.');
-      }
-
       const params = adminUserIdParamsSchema.parse(request.params);
       const body = adminAdjustmentBodySchema.parse(request.body);
 
@@ -232,12 +222,6 @@ export async function registerPointsRoutes(
     buildAdminUserPointsBalancePath(':userId'),
     { preHandler: requireAdminHook },
     async (request): Promise<PointsBalanceResponse> => {
-      const auth = request.auth!;
-
-      if (!canAccessAdminFeatures({ role: auth.role, status: auth.status })) {
-        throw new AppError(403, 'forbidden', 'Admin access required.');
-      }
-
       const params = adminUserIdParamsSchema.parse(request.params);
       const balance = await pointsService.getPointsBalance(params.userId);
 
@@ -258,12 +242,6 @@ export async function registerPointsRoutes(
     buildAdminUserPointsLedgerPath(':userId'),
     { preHandler: requireAdminHook },
     async (request): Promise<PaginatedPointsLedgerResponse> => {
-      const auth = request.auth!;
-
-      if (!canAccessAdminFeatures({ role: auth.role, status: auth.status })) {
-        throw new AppError(403, 'forbidden', 'Admin access required.');
-      }
-
       const params = adminUserIdParamsSchema.parse(request.params);
       const query = ledgerQuerySchema.parse(request.query);
 

@@ -30,7 +30,7 @@ export interface UsePointsResult {
   loadMore: () => Promise<void>;
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = MAX_POINTS_PAGE_SIZE;
 
 /**
  * Fetches the current user's Kronpoäng balance and recent ledger from the backend.
@@ -120,6 +120,3 @@ export function usePoints(): UsePointsResult {
 
   return { balance, transactions, isLoading, error, hasMore, currentPage, refresh, loadMore };
 }
-
-// Prevent page size from exceeding the backend maximum.
-void MAX_POINTS_PAGE_SIZE;

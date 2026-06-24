@@ -134,6 +134,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
   // ---------------------------------------------------------------------------
   async function handleAdjustConfirm() {
     if (adjustingRef.current) return;
+    if (!validAmount || !adjustReason.trim()) return;
 
     adjustingRef.current = true;
     setAdjustLoading(true);
@@ -300,6 +301,7 @@ export function UserPointsSection({ userId }: UserPointsSectionProps) {
           className={styles.form}
           onSubmit={(e) => {
             e.preventDefault();
+            if (!validAmount || !adjustReason.trim()) return;
             setShowConfirm(true);
           }}
           noValidate

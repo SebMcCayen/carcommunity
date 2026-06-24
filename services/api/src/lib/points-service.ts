@@ -44,7 +44,7 @@ import {
   type PointsTransactionSummary,
   type PointsAccessDecision,
 } from '@carcommunity/shared/points';
-import { isSuspendedStatus, type UserStatus } from '@carcommunity/shared/users';
+import { canAccessAdminFeatures, isSuspendedStatus, type UserRole, type UserStatus } from '@carcommunity/shared/users';
 
 import { AppError } from './errors.js';
 
@@ -54,7 +54,7 @@ import { AppError } from './errors.js';
 
 export interface PointsActor {
   userId: string;
-  role: string;
+  role: UserRole;
   status: UserStatus;
 }
 
@@ -382,6 +382,25 @@ export class PointsService {
       throw new AppError(403, 'suspended', 'Cannot debit points from a suspended user.');
     }
 
+    // Check idempotency: if key is set and already exists, return existing entry.
+    if (params.idempotencyKey) {
+      const existing = await this.prisma.pointsLedgerEntry.findUnique({
+        where: { idempotencyKey: params.idempotencyKey },
+        select: {
+          id: true,
+          transactionType: true,
+          source: true,
+          amount: true,
+          balanceAfter: true,
+          description: true,
+          createdAt: true,
+        },
+      });
+      if (existing) {
+        return toTransactionSummary(existing);
+      }
+    }
+
     const entry = await this.prisma.$transaction(async (tx) => {
       // Acquire per-user advisory lock to serialize concurrent debits.
       // Namespace 1 = points operations.
@@ -449,6 +468,10 @@ export class PointsService {
     params: AdminAdjustmentParams,
   ): Promise<PointsTransactionSummary> {
     const { actor, targetUserId, type, amount, reason } = params;
+
+    if (!canAccessAdminFeatures({ role: actor.role, status: actor.status })) {
+      throw new AppError(403, 'forbidden', 'Admin access required.');
+    }
 
     assertPositiveInteger(amount);
 
