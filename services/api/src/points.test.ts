@@ -403,7 +403,7 @@ test('POST /v1/admin/.../points/adjust writes an audit log via service', async (
   const app = await createServer(TEST_CONFIG, {
     pointsService: buildFakePointsService({
       applyAdminPointsAdjustment: async (params) => {
-        capturedParams = params as Record<string, unknown>;
+        capturedParams = params as unknown as Record<string, unknown>;
         return SAMPLE_TRANSACTION;
       },
     }),

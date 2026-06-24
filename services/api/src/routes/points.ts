@@ -5,6 +5,8 @@
  *  GET  /v1/points/balance
  *  GET  /v1/points/ledger
  *  POST /v1/admin/users/:userId/points/adjust
+ *  GET  /v1/admin/users/:userId/points/balance
+ *  GET  /v1/admin/users/:userId/points/ledger
  *
  * Access control:
  *  - GET /v1/points/balance: requires authentication. Deleted users denied.
@@ -13,6 +15,8 @@
  *    Returns only the current user's entries.
  *  - POST /v1/admin/users/:userId/points/adjust: requires admin or owner.
  *    Writes an audit log. Debit rejected if balance would go negative.
+ *  - GET /v1/admin/users/:userId/points/balance: requires admin or owner.
+ *  - GET /v1/admin/users/:userId/points/ledger: requires admin or owner.
  *
  * Privacy:
  *  - Balance and ledger responses never include another user's data.
@@ -27,6 +31,8 @@ import { z } from 'zod';
 import {
   POINTS_ROUTE_PATHS,
   buildAdminPointsAdjustPath,
+  buildAdminUserPointsBalancePath,
+  buildAdminUserPointsLedgerPath,
   DEFAULT_POINTS_PAGE_SIZE,
   MAX_POINTS_PAGE_SIZE,
   MAX_ADMIN_ADJUSTMENT_AMOUNT,
@@ -210,6 +216,74 @@ export async function registerPointsRoutes(
           amount: entry.amount,
           balanceAfter: entry.balanceAfter,
           createdAt: entry.createdAt,
+        },
+      };
+    },
+  );
+
+  /**
+   * GET /v1/admin/users/:userId/points/balance
+   * Returns the KP balance for a specific user.
+   *
+   * Requires admin or owner role.
+   * The balance is authoritative — never calculated on the client.
+   */
+  app.get(
+    buildAdminUserPointsBalancePath(':userId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<PointsBalanceResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessAdminFeatures({ role: auth.role, status: auth.status })) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = adminUserIdParamsSchema.parse(request.params);
+      const balance = await pointsService.getPointsBalance(params.userId);
+
+      return {
+        ok: true,
+        data: { balance, displayName: 'Kronpoäng', shortForm: 'KP' },
+      };
+    },
+  );
+
+  /**
+   * GET /v1/admin/users/:userId/points/ledger
+   * Returns a paginated KP ledger for a specific user.
+   *
+   * Requires admin or owner role.
+   */
+  app.get(
+    buildAdminUserPointsLedgerPath(':userId'),
+    { preHandler: requireAdminHook },
+    async (request): Promise<PaginatedPointsLedgerResponse> => {
+      const auth = request.auth!;
+
+      if (!canAccessAdminFeatures({ role: auth.role, status: auth.status })) {
+        throw new AppError(403, 'forbidden', 'Admin access required.');
+      }
+
+      const params = adminUserIdParamsSchema.parse(request.params);
+      const query = ledgerQuerySchema.parse(request.query);
+
+      const result = await pointsService.listPointsLedger({
+        userId: params.userId,
+        page: query.page,
+        pageSize: query.pageSize,
+      });
+
+      return {
+        ok: true,
+        data: {
+          balance: result.balance,
+          transactions: result.transactions,
+        },
+        meta: {
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          hasNext: result.hasNext,
         },
       };
     },

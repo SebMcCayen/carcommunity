@@ -89,6 +89,14 @@ export function buildAdminPointsAdjustPath(userId: string): string {
   return `/v1/admin/users/${userId}/points/adjust`;
 }
 
+export function buildAdminUserPointsBalancePath(userId: string): string {
+  return `/v1/admin/users/${userId}/points/balance`;
+}
+
+export function buildAdminUserPointsLedgerPath(userId: string): string {
+  return `/v1/admin/users/${userId}/points/ledger`;
+}
+
 // ---------------------------------------------------------------------------
 // Ledger default limits
 // ---------------------------------------------------------------------------

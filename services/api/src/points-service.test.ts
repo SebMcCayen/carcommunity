@@ -82,13 +82,17 @@ function buildFakePrisma(options: {
   auditLogs?: FakeAuditEntry[];
 } = {}): Record<string, unknown> {
   const users: FakeUserRecord[] = options.users ?? [];
-  const ledger: FakeLedgerEntry[] = options.ledger ? [...options.ledger] : [];
-  const auditLogs: FakeAuditEntry[] = options.auditLogs ? [...options.auditLogs] : [];
+  // Use the arrays by reference so that interactive transactions share mutations.
+  const ledger: FakeLedgerEntry[] = options.ledger ?? [];
+  const auditLogs: FakeAuditEntry[] = options.auditLogs ?? [];
 
   let idCounter = 1;
   const nextId = () => `entry-id-${idCounter++}`;
 
-  const fakePrisma: Record<string, unknown> = {
+  // fakePrisma is declared with let so $transaction can refer to it by self-reference.
+  let fakePrisma: Record<string, unknown>;
+
+  fakePrisma = {
     user: {
       async findUnique({ where }: { where: { id?: string } }) {
         return users.find((u) => u.id === where.id) ?? null;
@@ -104,7 +108,6 @@ function buildFakePrisma(options: {
       },
       async findMany({
         where,
-        orderBy,
         skip = 0,
         take = 20,
       }: {
@@ -114,7 +117,6 @@ function buildFakePrisma(options: {
         take?: number;
       }) {
         let result = ledger.filter((e) => !where?.userId || e.userId === where.userId);
-        // Simulate createdAt desc
         result = [...result].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return result.slice(skip, skip + take);
       },
@@ -127,7 +129,6 @@ function buildFakePrisma(options: {
         return { _sum: { amount: entries.length > 0 ? total : null } };
       },
       async create({ data }: { data: Partial<FakeLedgerEntry> }) {
-        // Simulate unique idempotency key constraint
         if (data.idempotencyKey && ledger.find((e) => e.idempotencyKey === data.idempotencyKey)) {
           const err = Object.assign(new Error('Unique constraint'), { code: 'P2002' });
           throw err;
@@ -169,27 +170,20 @@ function buildFakePrisma(options: {
       },
     },
 
+    // No-op advisory lock for tests.
+    async $executeRaw() {
+      return 0;
+    },
+
     async $transaction(ops: unknown) {
       if (typeof ops === 'function') {
-        // Interactive transaction — pass fake prisma (no-op advisory lock)
-        const txPrisma = buildFakePrisma({ users, ledger, auditLogs });
-        // Override $executeRaw to be a no-op (advisory lock)
-        (txPrisma as Record<string, unknown>).$executeRaw = async () => 0;
-        (txPrisma as Record<string, unknown>).$transaction = async (innerOps: unknown) => {
-          if (Array.isArray(innerOps)) return Promise.all(innerOps as Promise<unknown>[]);
-          return (innerOps as (tx: unknown) => Promise<unknown>)(txPrisma);
-        };
-        return (ops as (tx: unknown) => Promise<unknown>)(txPrisma);
+        // Reuse the same fake prisma so idCounter, ledger, and auditLogs are shared.
+        return (ops as (tx: unknown) => Promise<unknown>)(fakePrisma);
       }
       if (Array.isArray(ops)) {
         return Promise.all(ops as Promise<unknown>[]);
       }
       throw new Error('Unexpected $transaction usage');
-    },
-
-    async $executeRaw() {
-      // No-op for advisory locks in non-interactive paths
-      return 0;
     },
 
     _ledger: ledger,
@@ -526,7 +520,9 @@ await test('correction uses a compensating entry — original entry is preserved
   // The original entry must still exist (append-only)
   const ledger = (prisma as Record<string, unknown>)._ledger as FakeLedgerEntry[];
   assert.equal(ledger.length, 2);
-  assert.equal(ledger[0].amount, 100); // original still there
+  const firstEntry = ledger[0];
+  assert.ok(firstEntry !== undefined);
+  assert.equal(firstEntry.amount, 100); // original still there
 
   // Balance should be 0
   const balance = await svc.getPointsBalance(USER_ID);
@@ -584,7 +580,9 @@ await test('listPointsLedger returns only current user entries', async () => {
   const result = await svc.listPointsLedger({ userId: USER_ID });
 
   assert.equal(result.transactions.length, 1);
-  assert.equal(result.transactions[0].amount, 10);
+  const firstTx = result.transactions[0];
+  assert.ok(firstTx !== undefined);
+  assert.equal(firstTx.amount, 10);
   // Should not contain the other user's entry
   for (const tx of result.transactions) {
     assert.notEqual(tx.amount, 999);
@@ -636,13 +634,15 @@ await test('admin adjustment writes an audit log', async () => {
 
   const auditLogs = (prisma as Record<string, unknown>)._auditLogs as FakeAuditEntry[];
   assert.equal(auditLogs.length, 1);
-  assert.equal(auditLogs[0].action, 'points.adjustment_credit');
-  assert.equal(auditLogs[0].actorUserId, ADMIN_ID);
-  assert.equal(auditLogs[0].entityId, USER_ID);
-  assert.equal(auditLogs[0].reason, 'Testjustering');
+  const auditEntry = auditLogs[0];
+  assert.ok(auditEntry !== undefined);
+  assert.equal(auditEntry.action, 'points.adjustment_credit');
+  assert.equal(auditEntry.actorUserId, ADMIN_ID);
+  assert.equal(auditEntry.entityId, USER_ID);
+  assert.equal(auditEntry.reason, 'Testjustering');
 
   // Audit log must not contain session tokens or raw auth data
-  const meta = auditLogs[0].metadata as Record<string, unknown>;
+  const meta = auditEntry.metadata as Record<string, unknown>;
   assert.ok(!('token' in meta));
   assert.ok(!('sessionId' in meta));
 });

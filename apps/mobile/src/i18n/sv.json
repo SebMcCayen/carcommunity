@@ -139,7 +139,8 @@
     "title": "Profil",
     "badges": "Utmärkelser",
     "openSettings": "Öppna inställningar",
-    "openAbout": "Öppna om appen"
+    "openAbout": "Öppna om appen",
+    "points": "Kronpoäng"
   },
   "map": {
     "title": "Karta",
@@ -369,5 +370,18 @@
       "early_member": "Tidig medlem",
       "garage_created": "Garageprofil skapad"
     }
+  },
+  "points": {
+    "screenTitle": "Kronpoäng",
+    "balanceLabel": "Ditt saldo",
+    "shortForm": "KP",
+    "disclaimer": "Kronpoäng är digitala poäng utan kontantvärde.",
+    "noTransfer": "Poängen kan inte köpas, säljas, överföras eller växlas till pengar.",
+    "recentTransactions": "Senaste transaktionerna",
+    "loading": "Laddar Kronpoäng...",
+    "error": "Kunde inte hämta Kronpoäng. Försök igen.",
+    "retry": "Försök igen",
+    "empty": "Inga transaktioner ännu.",
+    "loadMore": "Ladda fler"
   }
 }

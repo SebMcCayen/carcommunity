@@ -227,7 +227,7 @@ export class PointsService {
     );
     const skip = (page - 1) * pageSize;
 
-    const [rows, total, balance] = await this.prisma.$transaction([
+    const [rows, total, aggregateResult] = await this.prisma.$transaction([
       this.prisma.pointsLedgerEntry.findMany({
         where: { userId: params.userId },
         select: {
@@ -244,8 +244,12 @@ export class PointsService {
         take: pageSize,
       }),
       this.prisma.pointsLedgerEntry.count({ where: { userId: params.userId } }),
-      this.calculateBalance(params.userId),
+      this.prisma.pointsLedgerEntry.aggregate({
+        where: { userId: params.userId },
+        _sum: { amount: true },
+      }),
     ]);
+    const balance = (aggregateResult as { _sum: { amount: number | null } })._sum.amount ?? 0;
 
     return {
       transactions: rows.map(toTransactionSummary),

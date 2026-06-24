@@ -175,5 +175,44 @@
       "alreadyAwarded": "Användaren har redan fått denna utmärkelse.",
       "error": "Kunde inte tilldela utmärkelsen. Försök igen."
     }
+  },
+  "points": {
+    "pageTitle": "Kronpoäng",
+    "loading": "Laddar Kronpoäng...",
+    "error": "Kunde inte hämta Kronpoäng. Försök igen.",
+    "retry": "Försök igen",
+    "balanceLabel": "Aktuellt saldo",
+    "shortForm": "KP",
+    "recentTransactions": "Senaste transaktioner",
+    "empty": "Inga transaktioner.",
+    "adjust": {
+      "title": "Justera saldo",
+      "creditLabel": "Lägg till poäng",
+      "debitLabel": "Dra av poäng",
+      "amountLabel": "Belopp",
+      "amountPlaceholder": "Ange antal poäng",
+      "reasonLabel": "Orsak",
+      "reasonPlaceholder": "Beskriv anledningen till justeringen",
+      "expectedBalance": "Förväntat saldo (ej garanterat)",
+      "notice": "Åtgärden loggas och kan inte ändra tidigare transaktioner.",
+      "confirm": "Bekräfta justering",
+      "confirmTitle": "Bekräfta justering av Kronpoäng",
+      "confirmDescription": "Vill du genomföra justeringen? Åtgärden loggas.",
+      "submit": "Justera",
+      "submitting": "Justerar...",
+      "cancel": "Avbryt",
+      "success": "Saldo justerat.",
+      "error": "Kunde inte justera saldo. Försök igen.",
+      "insufficientBalance": "Otillräckligt saldo för avdrag.",
+      "invalidAmount": "Ogiltigt belopp."
+    },
+    "columns": {
+      "date": "Datum",
+      "type": "Typ",
+      "source": "Källa",
+      "amount": "Belopp",
+      "balanceAfter": "Saldo efter",
+      "description": "Beskrivning"
+    }
   }
 }

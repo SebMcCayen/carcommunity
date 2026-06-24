@@ -15,8 +15,13 @@ export const ProfileScreen = ({ navigation }: ProfileScreenProps) => {
   return (
     <ScreenContainer>
       <KccButton
+        label={t('profile.points')}
+        onPress={() => navigation.navigate('PointsWallet')}
+      />
+      <KccButton
         label={t('profile.badges')}
         onPress={() => navigation.navigate('Badges')}
+        variant="secondary"
       />
       <KccButton
         label={t('profile.openSettings')}
