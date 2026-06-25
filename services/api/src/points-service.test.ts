@@ -89,10 +89,8 @@ function buildFakePrisma(options: {
   let idCounter = 1;
   const nextId = () => `entry-id-${idCounter++}`;
 
-  // fakePrisma is declared with let so $transaction can refer to it by self-reference.
-  let fakePrisma: Record<string, unknown>;
-
-  fakePrisma = {
+  // fakePrisma is referenced from $transaction callback.
+  const fakePrisma: Record<string, unknown> = {
     user: {
       async findUnique({ where }: { where: { id?: string } }) {
         return users.find((u) => u.id === where.id) ?? null;
@@ -682,9 +680,6 @@ await test('admin adjustment debit rejects if balance would go negative', async 
 });
 
 await test('admin cannot set absolute balance — only credit or debit are accepted', async () => {
-  const prisma = buildFakePrisma({ users: [activeUser(), adminUser()] });
-  const svc = new PointsService(prisma as never);
-
   // The service only accepts 'adjustment_credit' | 'adjustment_debit'.
   // Passing anything else should be caught at the route validation layer,
   // but we verify the service interface enforces the type.
