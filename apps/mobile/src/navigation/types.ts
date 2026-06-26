@@ -18,6 +18,7 @@ export type RootStackParamList = {
   VehicleForm: { vehicleId?: string };
   Badges: undefined;
   PointsWallet: undefined;
+  CrownHunt: undefined;
 };
 
 export type MainTabParamList = {
