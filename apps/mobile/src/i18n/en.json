@@ -407,7 +407,7 @@
     "resultPointInactive": "This point is no longer available.",
     "resultCooldownActive": "Wait before collecting again.",
     "resultDailyLimit": "You have reached today's collection limit.",
-    "resultRiskReview": "Your claim needs review and no points have been awarded yet.",
+    "resultRiskReview": "The claim needs review and no points have been awarded yet.",
     "resultFeatureDisabled": "Crown Hunt is not available right now.",
     "resultNotEligible": "You are not eligible to collect right now."
   }
