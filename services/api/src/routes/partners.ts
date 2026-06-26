@@ -626,5 +626,4 @@ export async function registerPartnerRoutes(
   void buildAdminPartnerActivatePath;
   void buildAdminPartnerPausePath;
   void buildAdminPartnerEndPath;
-  void AppError;
 }

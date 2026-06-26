@@ -778,13 +778,19 @@ const CompaniesTab = () => {
       setIsCreating(true);
       setCreateError(null);
       try {
+        const latitude = parseFloat(form.latitude);
+        const longitude = parseFloat(form.longitude);
+        if (isNaN(latitude) || isNaN(longitude)) {
+          setCreateError(t('partners.invalidCoordinates'));
+          return;
+        }
         const req: AdminCreatePartnerRequest = {
           companyName: form.companyName,
           category: form.category,
           publicDescription: form.publicDescription,
           address: form.address,
-          latitude: parseFloat(form.latitude),
-          longitude: parseFloat(form.longitude),
+          latitude,
+          longitude,
           publicPhone: form.publicPhone || null,
           publicWebsiteUrl: form.publicWebsiteUrl || null,
         };

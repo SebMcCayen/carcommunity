@@ -593,7 +593,7 @@ export class PartnerCompanyService {
     requireValidActivationData(company);
 
     const now = new Date();
-    const [updated] = await this.prisma.$transaction([
+    const [activated] = await this.prisma.$transaction([
       this.prisma.partnerCompany.update({
         where: { id: input.partnerId },
         data: {
@@ -612,7 +612,7 @@ export class PartnerCompanyService {
       }),
     ]);
 
-    return toAdminDetail(updated);
+    return toAdminDetail(activated);
   }
 
   // -----------------------------------------------------------------------
@@ -636,7 +636,7 @@ export class PartnerCompanyService {
       );
     }
 
-    const [updated] = await this.prisma.$transaction([
+    const [paused] = await this.prisma.$transaction([
       this.prisma.partnerCompany.update({
         where: { id: input.partnerId },
         data: {
@@ -656,7 +656,7 @@ export class PartnerCompanyService {
       }),
     ]);
 
-    return toAdminDetail(updated);
+    return toAdminDetail(paused);
   }
 
   // -----------------------------------------------------------------------
@@ -676,7 +676,7 @@ export class PartnerCompanyService {
       throw new AppError(409, 'invalid_status_transition', 'Partnership has already ended.');
     }
 
-    const [updated] = await this.prisma.$transaction([
+    const [ended] = await this.prisma.$transaction([
       this.prisma.partnerCompany.update({
         where: { id: input.partnerId },
         data: {
@@ -696,7 +696,7 @@ export class PartnerCompanyService {
       }),
     ]);
 
-    return toAdminDetail(updated);
+    return toAdminDetail(ended);
   }
 
   // -----------------------------------------------------------------------

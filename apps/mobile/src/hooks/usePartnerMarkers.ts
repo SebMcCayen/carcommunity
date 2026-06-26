@@ -29,6 +29,7 @@ import { getPartnerMapMarkers, PartnerApiError } from '../api/partners';
 import type { PartnerMapMarker } from '@carcommunity/shared/partners';
 import type { MapMarkerViewModel } from '../map/types';
 import { partnerMarkersToViewModels } from '../map/markerMapping';
+import { useI18n } from './useI18n';
 
 /** Polling interval in milliseconds. Partners change rarely — 60 s is conservative. */
 const POLL_INTERVAL_MS = 60_000;
@@ -49,6 +50,7 @@ export interface UsePartnerMarkersResult {
 }
 
 export function usePartnerMarkers(): UsePartnerMarkersResult {
+  const { t } = useI18n();
   const [rawMarkers, setRawMarkers] = useState<PartnerMapMarker[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export function usePartnerMarkers(): UsePartnerMarkersResult {
     } catch (err) {
       if (isMounted.current) {
         if (err instanceof PartnerApiError && err.statusCode >= 500) {
-          setError('Kunde inte hämta företagspartner.');
+          setError(t('partners.error'));
         }
         retryDelay.current = Math.min(retryDelay.current * 2, MAX_RETRY_DELAY_MS);
       }

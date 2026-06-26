@@ -339,6 +339,7 @@
     "reasonRequired": "Orsak krävs",
     "applicationMessage": "Meddelande från sökande",
     "reviewState": "Granskningsstatus",
-    "contactDetails": "Kontaktuppgifter"
+    "contactDetails": "Kontaktuppgifter",
+    "invalidCoordinates": "Ogiltiga koordinater. Ange giltiga decimaltal för latitud och longitud."
   }
 }
