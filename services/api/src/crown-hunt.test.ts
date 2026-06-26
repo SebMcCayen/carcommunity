@@ -86,7 +86,7 @@ interface FakeCrownHuntClaim {
   riskReasons: unknown;
   idempotencyKey: string;
   createdAt: Date;
-  point: { title: string };
+  point: { title: string; rewardPoints?: number };
 }
 
 interface FakeLedgerEntry {
@@ -149,7 +149,7 @@ function buildFakePrisma(options: {
       async findUnique({ where }: { where: { id?: string } }) {
         return points.find((p) => p.id === where.id) ?? null;
       },
-      async findMany({ where = {}, skip = 0, take = 20, orderBy }: { where?: Record<string, unknown>; skip?: number; take?: number; orderBy?: unknown }) {
+      async findMany({ where = {}, skip = 0, take = 20, orderBy: _orderBy }: { where?: Record<string, unknown>; skip?: number; take?: number; orderBy?: unknown }) {
         let filtered = [...points];
         if (where['status']) filtered = filtered.filter((p) => p.status === where['status']);
         if (where['AND']) {
@@ -228,7 +228,10 @@ function buildFakePrisma(options: {
           riskReasons: data['riskReasons'] ?? null,
           idempotencyKey: data['idempotencyKey'] as string,
           createdAt: new Date(),
-          point: { title: points.find((p) => p.id === data['pointId'])?.title ?? '' },
+          point: {
+            title: points.find((p) => p.id === data['pointId'])?.title ?? '',
+            rewardPoints: points.find((p) => p.id === data['pointId'])?.rewardPoints ?? 0,
+          },
         };
         // Enforce unique constraint on idempotencyKey
         if (claims.some((c) => c.idempotencyKey === claim.idempotencyKey)) {
@@ -254,15 +257,21 @@ function buildFakePrisma(options: {
           return true;
         }).length;
       },
-      async findMany({ where = {}, include, skip = 0, take = 20 }: { where?: Record<string, unknown>; include?: unknown; skip?: number; take?: number }) {
-        let filtered = claims.filter((c) => {
+      async findMany({ where = {}, include: _include, skip = 0, take = 20 }: { where?: Record<string, unknown>; include?: unknown; skip?: number; take?: number }) {
+        const filtered = claims.filter((c) => {
           if (where['userId'] && c.userId !== where['userId']) return false;
           if (where['result'] && c.result !== where['result']) return false;
           return true;
         });
-        return filtered.slice(skip, skip + take);
+        return filtered.slice(skip, skip + take).map((claim) => ({
+          ...claim,
+          point: {
+            title: claim.point.title || (points.find((p) => p.id === claim.pointId)?.title ?? ''),
+            rewardPoints: claim.point.rewardPoints ?? points.find((p) => p.id === claim.pointId)?.rewardPoints ?? 0,
+          },
+        }));
       },
-      async groupBy({ by, where = {}, _count }: { by: string[]; where?: Record<string, unknown>; _count?: unknown }) {
+      async groupBy({ by: _by, where = {}, _count }: { by: string[]; where?: Record<string, unknown>; _count?: unknown }) {
         const filtered = claims.filter((c) => {
           if ((where['result'] as string) && c.result !== where['result']) return false;
           return true;
@@ -344,7 +353,7 @@ function buildFakePrisma(options: {
     },
 
     liveLocationLatestPosition: {
-      async findFirst({ where = {}, orderBy }: { where?: Record<string, unknown>; orderBy?: unknown } = {}) {
+      async findFirst({ where = {}, orderBy: _orderBy }: { where?: Record<string, unknown>; orderBy?: unknown } = {}) {
         const pos = liveLocationPositions.find((p) => p.userId === where['userId']);
         return pos ?? null;
       },
@@ -713,10 +722,95 @@ await test('duplicate idempotency key does not duplicate award', async () => {
   // Second call with same key — should return original result without duplicate award
   const second = await svc.claimPoint({ ...claimInput, recordedAt: freshRecordedAt() });
   assert.equal(second.result, 'awarded');
+  assert.equal(second.pointsAwarded, first.pointsAwarded);
+  assert.equal(second.newBalance, first.newBalance);
 
   // Only ONE ledger entry must exist
   const ledger = (prisma as Record<string, unknown>)._ledger as FakeLedgerEntry[];
   assert.equal(ledger.length, 1, 'Duplicate idempotency key must not create a second ledger entry');
+});
+
+await test('same client idempotency key can be reused by different users', async () => {
+  const otherUserId = 'aaaaaaaa-0000-4000-8000-000000000099';
+  const prisma = buildFakePrisma({
+    points: [activePoint()],
+    users: [
+      { id: USER_ID, status: 'active', role: 'user', subscriptionEntitlement: 'member_monthly' },
+      { id: otherUserId, status: 'active', role: 'user', subscriptionEntitlement: 'member_monthly' },
+    ],
+  });
+  const svc = buildService(prisma);
+
+  const idempotencyKey = 'shared-client-key';
+  const first = await svc.claimPoint({
+    actor: memberActor(),
+    pointId: POINT_ID,
+    recordedAt: freshRecordedAt(),
+    latitude: INSIDE_LAT,
+    longitude: INSIDE_LON,
+    speedMetersPerSecond: 0,
+    idempotencyKey,
+    crownHuntFeatureEnabled: true,
+  });
+  const second = await svc.claimPoint({
+    actor: memberActor({ userId: otherUserId }),
+    pointId: POINT_ID,
+    recordedAt: freshRecordedAt(),
+    latitude: INSIDE_LAT,
+    longitude: INSIDE_LON,
+    speedMetersPerSecond: 0,
+    idempotencyKey,
+    crownHuntFeatureEnabled: true,
+  });
+
+  assert.equal(first.result, 'awarded');
+  assert.equal(second.result, 'awarded');
+
+  const ledger = (prisma as Record<string, unknown>)._ledger as FakeLedgerEntry[];
+  assert.equal(ledger.length, 2, 'Different users should not collide on client idempotency keys');
+});
+
+await test('awarded claim replay returns original award after a unique-constraint race', async () => {
+  const prisma = buildFakePrisma({
+    points: [activePoint()],
+    users: [{ id: USER_ID, status: 'active', role: 'user', subscriptionEntitlement: 'member_monthly' }],
+  });
+  const svc = buildService(prisma);
+
+  const claimModel = (prisma as Record<string, unknown>).crownHuntClaim as {
+    create: ({ data }: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
+  const originalCreate = claimModel.create.bind(claimModel);
+  let injectedRace = false;
+  claimModel.create = async ({ data }) => {
+    if (!injectedRace && data['result'] === 'awarded') {
+      injectedRace = true;
+      await originalCreate({ data });
+      const error = Object.assign(new Error('Unique constraint'), { code: 'P2002' });
+      throw error;
+    }
+    return originalCreate({ data });
+  };
+
+  const result = await svc.claimPoint({
+    actor: memberActor(),
+    pointId: POINT_ID,
+    recordedAt: freshRecordedAt(),
+    latitude: INSIDE_LAT,
+    longitude: INSIDE_LON,
+    speedMetersPerSecond: 0,
+    idempotencyKey: 'race-key-001',
+    crownHuntFeatureEnabled: true,
+  });
+
+  assert.equal(result.result, 'awarded');
+  assert.equal(result.pointsAwarded, 10);
+  assert.equal(result.newBalance, 10);
+
+  const claims = (prisma as Record<string, unknown>)._claims as FakeCrownHuntClaim[];
+  const ledger = (prisma as Record<string, unknown>)._ledger as FakeLedgerEntry[];
+  assert.equal(claims.length, 1);
+  assert.equal(ledger.length, 1);
 });
 
 await test('repeat rule "once" is enforced (already_claimed)', async () => {
@@ -819,7 +913,7 @@ await test('high-risk claim receives no points (risk_review)', async () => {
       riskReasons: null,
       idempotencyKey: `attempt-key-${i}`,
       createdAt: new Date(),
-      point: { title: 'Testpunkt' },
+      point: { title: 'Testpunkt', rewardPoints: 10 },
     })),
   });
   const svc = buildService(prisma);
@@ -1031,7 +1125,7 @@ await test('claim history does not expose exact claim coordinates', async () => 
     riskReasons: null,
     idempotencyKey: 'history-key-001',
     createdAt: new Date(),
-    point: { title: 'Testpunkt' },
+    point: { title: 'Testpunkt', rewardPoints: 10 },
   };
 
   const prisma = buildFakePrisma({ claims: [claim] });
@@ -1047,6 +1141,7 @@ await test('claim history does not expose exact claim coordinates', async () => 
   assert.equal('longitude' in entry, false, 'Exact longitude must not be in claim history');
   assert.equal('claimLatitude' in entry, false);
   assert.equal('claimLongitude' in entry, false);
+  assert.equal(entry.pointsAwarded, 10);
 });
 
 await test('coordinates, tokens, and integrity values are not in admin claim list', async () => {
@@ -1064,7 +1159,7 @@ await test('coordinates, tokens, and integrity values are not in admin claim lis
     riskReasons: ['impossible_jump', 'platform_integrity_failed'],
     idempotencyKey: 'admin-key-001',
     createdAt: new Date(),
-    point: { title: 'Testpunkt' },
+    point: { title: 'Testpunkt', rewardPoints: 10 },
   };
 
   const prisma = buildFakePrisma({ claims: [claim] });
@@ -1193,7 +1288,7 @@ await test('listActivePoints does not return other users claim state', async () 
       riskReasons: null,
       idempotencyKey: 'other-user-claim',
       createdAt: new Date(),
-      point: { title: 'Testpunkt' },
+      point: { title: 'Testpunkt', rewardPoints: 10 },
     }],
   });
   const svc = buildService(prisma);

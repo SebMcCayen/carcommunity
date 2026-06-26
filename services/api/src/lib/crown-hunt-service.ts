@@ -22,10 +22,11 @@
  * TODO: Add richer anomaly detection.
  */
 
+import { createHash } from 'node:crypto';
+
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { CrownHuntClaimResult, CrownHuntRepeatRule } from '@carcommunity/shared/crown-hunt';
 import {
-  MAX_POSITION_AGE_SECONDS,
   MAX_CLAIM_SPEED_MPS,
   MIN_GEOFENCE_RADIUS_METERS,
   MAX_GEOFENCE_RADIUS_METERS,
@@ -63,9 +64,7 @@ import {
 } from './crown-hunt-geo.js';
 import {
   evaluateClaimRisk,
-  RISK_REVIEW_THRESHOLD,
   HIGH_VELOCITY_WINDOW_SECONDS,
-  EXCESSIVE_ATTEMPTS_PER_MINUTE_THRESHOLD,
 } from './crown-hunt-risk.js';
 
 // ---------------------------------------------------------------------------
@@ -175,6 +174,18 @@ export interface AdminListClaimsOutput {
 // ---------------------------------------------------------------------------
 // Swedish claim result messages
 // ---------------------------------------------------------------------------
+
+function scopeClaimIdempotencyKey(userId: string, idempotencyKey: string): string {
+  return createHash('sha256')
+    .update(userId)
+    .update(':')
+    .update(idempotencyKey)
+    .digest('hex');
+}
+
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
 
 function getClaimMessage(result: CrownHuntClaimResult): string {
   switch (result) {
@@ -374,6 +385,7 @@ export class CrownHuntService {
   public async claimPoint(input: ClaimInput): Promise<ClaimOutput> {
     const { actor, pointId, idempotencyKey } = input;
     const now = new Date();
+    const scopedIdempotencyKey = scopeClaimIdempotencyKey(actor.userId, idempotencyKey);
 
     // 1. Feature flag check
     if (!input.crownHuntFeatureEnabled) {
@@ -395,8 +407,8 @@ export class CrownHuntService {
 
     // 4. Check idempotency key (duplicate submission guard)
     const existingClaim = await this.prisma.crownHuntClaim.findUnique({
-      where: { idempotencyKey },
-      select: { id: true, result: true, pointId: true },
+      where: { idempotencyKey: scopedIdempotencyKey },
+      select: { result: true, pointId: true, pointsLedgerEntryId: true },
     });
 
     if (existingClaim) {
@@ -404,15 +416,7 @@ export class CrownHuntService {
         // Idempotency key reuse across different points — treat as duplicate
         return { result: 'already_claimed', pointsAwarded: null, newBalance: null, message: getClaimMessage('already_claimed') };
       }
-      // Return the original result for idempotent replay
-      const originalResult = existingClaim.result as CrownHuntClaimResult;
-      let pointsAwarded: number | null = null;
-      let newBalance: number | null = null;
-      if (originalResult === 'awarded') {
-        pointsAwarded = 0; // do not re-query balance; just confirm awarded
-        newBalance = null;
-      }
-      return { result: originalResult, pointsAwarded, newBalance, message: getClaimMessage(originalResult) };
+      return this.buildReplayClaimOutput(existingClaim);
     }
 
     // 5. Load the point
@@ -427,7 +431,7 @@ export class CrownHuntService {
           userId: actor.userId,
           result: 'point_inactive',
           claimedAt: now,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'point_inactive', pointsAwarded: null, newBalance: null, message: getClaimMessage('point_inactive') };
@@ -453,7 +457,7 @@ export class CrownHuntService {
           result: 'position_too_old',
           claimedAt: now,
           positionRecordedAt: recordedAtDate,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'position_too_old', pointsAwarded: null, newBalance: null, message: getClaimMessage('position_too_old') };
@@ -476,7 +480,7 @@ export class CrownHuntService {
           distanceMeters,
           positionRecordedAt: recordedAtDate,
           reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'outside_geofence', pointsAwarded: null, newBalance: null, message: getClaimMessage('outside_geofence') };
@@ -493,7 +497,7 @@ export class CrownHuntService {
           distanceMeters,
           positionRecordedAt: recordedAtDate,
           reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'moving_too_fast', pointsAwarded: null, newBalance: null, message: getClaimMessage('moving_too_fast') };
@@ -510,7 +514,7 @@ export class CrownHuntService {
           claimedAt: now,
           distanceMeters,
           positionRecordedAt: recordedAtDate,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: repeatResult, pointsAwarded: null, newBalance: null, message: getClaimMessage(repeatResult) };
@@ -527,7 +531,7 @@ export class CrownHuntService {
           claimedAt: now,
           distanceMeters,
           positionRecordedAt: recordedAtDate,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'daily_limit_reached', pointsAwarded: null, newBalance: null, message: getClaimMessage('daily_limit_reached') };
@@ -584,7 +588,7 @@ export class CrownHuntService {
           reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
           riskScore: riskEval.riskScore,
           riskReasons: riskEval.riskReasons as Prisma.InputJsonValue,
-          idempotencyKey,
+          idempotencyKey: scopedIdempotencyKey,
         },
       });
       return { result: 'risk_review', pointsAwarded: null, newBalance: null, message: getClaimMessage('risk_review') };
@@ -597,7 +601,7 @@ export class CrownHuntService {
     // on both idempotencyKey columns.
     const rewardPoints = point.rewardPoints;
     const description = `Kronjakt: ${point.title}`;
-    const ledgerIdempotencyKey = `crown_hunt_claim:${idempotencyKey}`;
+    const ledgerIdempotencyKey = `crown_hunt_claim:${scopedIdempotencyKey}`;
 
     let pointsAwarded: number | null = null;
     let newBalance: number | null = null;
@@ -616,21 +620,34 @@ export class CrownHuntService {
     });
 
     // Create the claim record (unique idempotencyKey prevents duplicate on concurrent retry)
-    await this.prisma.crownHuntClaim.create({
-      data: {
-        pointId,
-        userId: actor.userId,
-        pointsLedgerEntryId: ledgerEntry.transactionId,
-        result: 'awarded',
-        claimedAt: now,
-        distanceMeters,
-        positionRecordedAt: recordedAtDate,
-        reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
-        riskScore: riskEval.riskScore,
-        riskReasons: riskEval.riskReasons.length > 0 ? riskEval.riskReasons as Prisma.InputJsonValue : Prisma.JsonNull,
-        idempotencyKey,
-      },
-    });
+    try {
+      await this.prisma.crownHuntClaim.create({
+        data: {
+          pointId,
+          userId: actor.userId,
+          pointsLedgerEntryId: ledgerEntry.transactionId,
+          result: 'awarded',
+          claimedAt: now,
+          distanceMeters,
+          positionRecordedAt: recordedAtDate,
+          reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+          riskScore: riskEval.riskScore,
+          riskReasons: riskEval.riskReasons.length > 0 ? riskEval.riskReasons as Prisma.InputJsonValue : Prisma.JsonNull,
+          idempotencyKey: scopedIdempotencyKey,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const replayClaim = await this.prisma.crownHuntClaim.findUnique({
+          where: { idempotencyKey: scopedIdempotencyKey },
+          select: { result: true, pointId: true, pointsLedgerEntryId: true },
+        });
+        if (replayClaim) {
+          return this.buildReplayClaimOutput(replayClaim);
+        }
+      }
+      throw error;
+    }
 
     pointsAwarded = ledgerEntry.amount;
     newBalance = ledgerEntry.balanceAfter;
@@ -653,7 +670,7 @@ export class CrownHuntService {
       this.prisma.crownHuntClaim.count({ where }),
       this.prisma.crownHuntClaim.findMany({
         where,
-        include: { point: { select: { title: true } } },
+        include: { point: { select: { title: true, rewardPoints: true } } },
         orderBy: { claimedAt: 'desc' },
         skip,
         take: pageSize,
@@ -665,12 +682,32 @@ export class CrownHuntService {
       pointId: row.pointId,
       pointTitle: row.point.title,
       result: row.result as CrownHuntClaimResult,
-      // pointsLedgerEntryId links to actual award; for display we show rewardPoints when awarded
-      pointsAwarded: row.result === 'awarded' ? 0 : 0, // balance is in ledger; do not fetch here
+      pointsAwarded: row.result === 'awarded' ? row.point.rewardPoints : 0,
       claimedAt: row.claimedAt.toISOString(),
     }));
 
     return { claims, page, pageSize, total, hasNext: skip + rows.length < total };
+  }
+
+  private async buildReplayClaimOutput(existingClaim: {
+    result: string;
+    pointId: string;
+    pointsLedgerEntryId: string | null;
+  }): Promise<ClaimOutput> {
+    const result = existingClaim.result as CrownHuntClaimResult;
+    let pointsAwarded: number | null = null;
+    let newBalance: number | null = null;
+
+    if (result === 'awarded' && existingClaim.pointsLedgerEntryId) {
+      const ledgerEntry = await this.prisma.pointsLedgerEntry.findUnique({
+        where: { id: existingClaim.pointsLedgerEntryId },
+        select: { amount: true, balanceAfter: true },
+      });
+      pointsAwarded = ledgerEntry?.amount ?? null;
+      newBalance = ledgerEntry?.balanceAfter ?? null;
+    }
+
+    return { result, pointsAwarded, newBalance, message: getClaimMessage(result) };
   }
 
   // ---------------------------------------------------------------------------
@@ -946,7 +983,7 @@ export class CrownHuntService {
       this.prisma.crownHuntClaim.count({ where }),
       this.prisma.crownHuntClaim.findMany({
         where,
-        include: { point: { select: { title: true } } },
+        include: { point: { select: { title: true, rewardPoints: true } } },
         orderBy: { claimedAt: 'desc' },
         skip,
         take: pageSize,

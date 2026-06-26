@@ -18,7 +18,7 @@ import {
   type CrownHuntClaimRequest,
   type CrownHuntClaimResponse,
   type CrownHuntPointDetail,
-  type CrownHuntPointSummary,
+  type CrownHuntPointDetailResponse,
   type PaginatedCrownHuntPointsResponse,
   type PaginatedCrownHuntClaimHistoryResponse,
 } from '@carcommunity/shared/crown-hunt';
@@ -88,10 +88,11 @@ export async function getCrownHuntPoint(
   pointId: string,
   token?: string,
 ): Promise<CrownHuntPointDetail> {
-  return requestJson<CrownHuntPointDetail>(buildCrownHuntPointPath(pointId), {
+  const response = await requestJson<CrownHuntPointDetailResponse>(buildCrownHuntPointPath(pointId), {
     method: 'GET',
     headers: buildAuthHeader(token),
   });
+  return response.data;
 }
 
 /**

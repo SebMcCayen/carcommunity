@@ -35,7 +35,11 @@ import {
   View,
 } from 'react-native';
 
-import type { CrownHuntPointDetail, CrownHuntClaimResponse } from '@carcommunity/shared/crown-hunt';
+import {
+  MAX_CLAIM_SPEED_MPS,
+  type CrownHuntPointDetail,
+  type CrownHuntClaimResponse,
+} from '@carcommunity/shared/crown-hunt';
 
 import { getMapboxAccessToken } from '../config/mapbox';
 import { useAppTheme } from '../hooks/useAppTheme';
@@ -116,7 +120,7 @@ const PointDetailSheet = ({
   const { t } = useI18n();
 
   const isMovingTooFast =
-    currentSpeedMs !== null && currentSpeedMs > 1.4;
+    currentSpeedMs !== null && currentSpeedMs > MAX_CLAIM_SPEED_MPS;
   const hasAlreadyClaimed = point.claimedByCurrentUser === true;
   const isUnavailable = point.status !== 'active';
 

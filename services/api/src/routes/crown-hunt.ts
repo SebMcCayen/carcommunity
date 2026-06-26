@@ -55,6 +55,7 @@ import {
   type CrownHuntPointDetailResponse,
   type CrownHuntClaimResponse,
   type PaginatedCrownHuntClaimHistoryResponse,
+  type AdminCrownHuntPointResponse,
   type PaginatedAdminCrownHuntPointsResponse,
   type PaginatedAdminCrownHuntClaimsResponse,
 } from '@carcommunity/shared/crown-hunt';
@@ -407,7 +408,7 @@ export async function registerCrownHuntRoutes(
   app.post(
     CROWN_HUNT_ROUTE_PATHS.adminPoints,
     { preHandler: requireAdminHook },
-    async (request): Promise<{ ok: true; data: object }> => {
+    async (request): Promise<AdminCrownHuntPointResponse> => {
       const auth = request.auth!;
       const body = adminCreatePointBodySchema.parse(request.body);
 
@@ -440,7 +441,7 @@ export async function registerCrownHuntRoutes(
   app.patch(
     buildAdminCrownHuntPointPath(':pointId'),
     { preHandler: requireAdminHook },
-    async (request): Promise<{ ok: true; data: object }> => {
+    async (request): Promise<AdminCrownHuntPointResponse> => {
       const auth = request.auth!;
       const { pointId } = pointIdParamsSchema.parse(request.params);
       const body = adminUpdatePointBodySchema.parse(request.body);
@@ -474,7 +475,7 @@ export async function registerCrownHuntRoutes(
   app.post(
     buildAdminCrownHuntActivatePath(':pointId'),
     { preHandler: requireAdminHook },
-    async (request): Promise<{ ok: true; data: object }> => {
+    async (request): Promise<AdminCrownHuntPointResponse> => {
       const auth = request.auth!;
       const { pointId } = pointIdParamsSchema.parse(request.params);
       const body = adminActivateBodySchema.parse(request.body);
@@ -503,7 +504,7 @@ export async function registerCrownHuntRoutes(
   app.post(
     buildAdminCrownHuntPausePath(':pointId'),
     { preHandler: requireAdminHook },
-    async (request): Promise<{ ok: true; data: object }> => {
+    async (request): Promise<AdminCrownHuntPointResponse> => {
       const auth = request.auth!;
       const { pointId } = pointIdParamsSchema.parse(request.params);
       const body = adminPauseBodySchema.parse(request.body);

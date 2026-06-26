@@ -264,10 +264,8 @@ export function useCrownHunt(): UseCrownHuntResult {
       const auth = await loadSessionToken().catch(() => null);
       const token = auth?.token ?? undefined;
 
-      // Idempotency key: point ID + approximate timestamp (minute granularity).
-      // Not a secret. Prevents double-submission from network retries.
-      const minuteBucket = Math.floor(Date.now() / 60_000);
-      const idempotencyKey = `${selectedPoint.pointId}:${minuteBucket}`;
+      const idempotencyKey = globalThis.crypto?.randomUUID?.()
+        ?? `${Date.now()}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 
       const result = await claimCrownHuntPoint(
         selectedPoint.pointId,

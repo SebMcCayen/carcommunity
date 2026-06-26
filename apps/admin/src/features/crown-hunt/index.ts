@@ -23,6 +23,7 @@ import {
   type AdminActivateCrownHuntPointRequest,
   type AdminCreateCrownHuntPointRequest,
   type AdminUpdateCrownHuntPointRequest,
+  type AdminCrownHuntPointResponse,
   type AdminCrownHuntPointSummary,
   type AdminCrownHuntClaimSummary,
   type CrownHuntClaimResult,
@@ -70,8 +71,8 @@ export async function adminListCrownHuntPoints(
 export async function adminCreateCrownHuntPoint(
   request: AdminCreateCrownHuntPointRequest,
   token?: string,
-): Promise<PaginatedAdminCrownHuntPointsResponse> {
-  return apiRequest<PaginatedAdminCrownHuntPointsResponse>(CROWN_HUNT_ROUTE_PATHS.adminPoints, {
+): Promise<AdminCrownHuntPointResponse> {
+  return apiRequest<AdminCrownHuntPointResponse>(CROWN_HUNT_ROUTE_PATHS.adminPoints, {
     method: 'POST',
     body: request,
     token,
@@ -86,8 +87,8 @@ export async function adminUpdateCrownHuntPoint(
   pointId: string,
   request: AdminUpdateCrownHuntPointRequest,
   token?: string,
-): Promise<PaginatedAdminCrownHuntPointsResponse> {
-  return apiRequest<PaginatedAdminCrownHuntPointsResponse>(buildAdminCrownHuntPointPath(pointId), {
+): Promise<AdminCrownHuntPointResponse> {
+  return apiRequest<AdminCrownHuntPointResponse>(buildAdminCrownHuntPointPath(pointId), {
     method: 'PATCH',
     body: request,
     token,
@@ -103,8 +104,8 @@ export async function adminActivateCrownHuntPoint(
   pointId: string,
   approvalNote: string,
   token?: string,
-): Promise<PaginatedAdminCrownHuntPointsResponse> {
-  return apiRequest<PaginatedAdminCrownHuntPointsResponse>(buildAdminCrownHuntActivatePath(pointId), {
+): Promise<AdminCrownHuntPointResponse> {
+  return apiRequest<AdminCrownHuntPointResponse>(buildAdminCrownHuntActivatePath(pointId), {
     method: 'POST',
     body: { safeLocationConfirmed: true, approvalNote } satisfies AdminActivateCrownHuntPointRequest,
     token,
@@ -118,8 +119,8 @@ export async function adminActivateCrownHuntPoint(
 export async function adminPauseCrownHuntPoint(
   pointId: string,
   token?: string,
-): Promise<PaginatedAdminCrownHuntPointsResponse> {
-  return apiRequest<PaginatedAdminCrownHuntPointsResponse>(buildAdminCrownHuntPausePath(pointId), {
+): Promise<AdminCrownHuntPointResponse> {
+  return apiRequest<AdminCrownHuntPointResponse>(buildAdminCrownHuntPausePath(pointId), {
     method: 'POST',
     body: {},
     token,

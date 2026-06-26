@@ -404,6 +404,11 @@ export interface PaginatedAdminCrownHuntPointsResponse {
   };
 }
 
+export interface AdminCrownHuntPointResponse {
+  ok: true;
+  data: AdminCrownHuntPointSummary;
+}
+
 // ---------------------------------------------------------------------------
 // Admin: Kronjakt summary stats
 // ---------------------------------------------------------------------------

@@ -325,7 +325,7 @@ const ActivateModal = ({ pointTitle, onConfirm, onCancel, isConfirming, error }:
           <button
             className={styles.btnPrimary}
             onClick={() => void onConfirm(safetyNote)}
-            disabled={isConfirming || !checked || safetyNote.trim().length < 5}
+            disabled={isConfirming || !checked || safetyNote.trim().length < 3}
           >
             {isConfirming ? t('crownHunt.loading') : t('crownHunt.confirm')}
           </button>
