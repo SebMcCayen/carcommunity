@@ -136,7 +136,8 @@
     "title": "Profile",
     "badges": "Awards",
     "openSettings": "Open settings",
-    "openAbout": "Open about app"
+    "openAbout": "Open about app",
+    "points": "Kronpoäng"
   },
   "map": {
     "title": "Map",
@@ -366,5 +367,18 @@
       "early_member": "Early member",
       "garage_created": "Garage profile created"
     }
+  },
+  "points": {
+    "screenTitle": "Kronpoäng",
+    "balanceLabel": "Your balance",
+    "shortForm": "KP",
+    "disclaimer": "Kronpoäng are digital points with no cash value.",
+    "noTransfer": "Points cannot be purchased, sold, transferred, or exchanged for money.",
+    "recentTransactions": "Recent transactions",
+    "loading": "Loading Kronpoäng...",
+    "error": "Could not load Kronpoäng. Please try again.",
+    "retry": "Try again",
+    "empty": "No transactions yet.",
+    "loadMore": "Load more"
   }
 }

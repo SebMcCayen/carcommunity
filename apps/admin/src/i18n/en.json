@@ -175,5 +175,44 @@
       "alreadyAwarded": "This user has already received this award.",
       "error": "Could not award the badge. Please try again."
     }
+  },
+  "points": {
+    "pageTitle": "Kronpoäng",
+    "loading": "Loading Kronpoäng...",
+    "error": "Could not load Kronpoäng. Please try again.",
+    "retry": "Try again",
+    "balanceLabel": "Current balance",
+    "shortForm": "KP",
+    "recentTransactions": "Recent transactions",
+    "empty": "No transactions.",
+    "adjust": {
+      "title": "Adjust balance",
+      "creditLabel": "Add points",
+      "debitLabel": "Deduct points",
+      "amountLabel": "Amount",
+      "amountPlaceholder": "Enter number of points",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Describe the reason for the adjustment",
+      "expectedBalance": "Expected balance (not guaranteed)",
+      "notice": "This action is logged and cannot modify previous transactions.",
+      "confirm": "Confirm adjustment",
+      "confirmTitle": "Confirm Kronpoäng adjustment",
+      "confirmDescription": "Do you want to proceed with this adjustment? The action will be logged.",
+      "submit": "Adjust",
+      "submitting": "Adjusting...",
+      "cancel": "Cancel",
+      "success": "Balance adjusted.",
+      "error": "Could not adjust balance. Please try again.",
+      "insufficientBalance": "Insufficient balance for deduction.",
+      "invalidAmount": "Invalid amount."
+    },
+    "columns": {
+      "date": "Date",
+      "type": "Type",
+      "source": "Source",
+      "amount": "Amount",
+      "balanceAfter": "Balance after",
+      "description": "Description"
+    }
   }
 }

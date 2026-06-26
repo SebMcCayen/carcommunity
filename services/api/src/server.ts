@@ -31,6 +31,7 @@ import { registerSavedDrivesRoutes } from './routes/saved-drives.js';
 import { registerGarageRoutes } from './routes/garage.js';
 import { registerBadgeRoutes } from './routes/badges.js';
 import { BadgeService } from './lib/badge-service.js';
+import { registerPointsRoutes } from './routes/points.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -48,6 +49,7 @@ export interface ServerDependencies {
   savedDriveService?: import('./lib/saved-drive-service.js').SavedDriveService;
   garageService?: import('./lib/garage-service.js').GarageService;
   badgeService?: BadgeService;
+  pointsService?: import('./lib/points-service.js').PointsService;
 }
 
 export async function createServer(
@@ -143,6 +145,9 @@ export async function createServer(
   });
   await registerBadgeRoutes(app, {
     badgeService,
+  });
+  await registerPointsRoutes(app, {
+    pointsService: dependencies.pointsService,
   });
 
   return app;

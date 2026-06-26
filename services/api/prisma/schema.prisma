@@ -61,6 +61,8 @@ model User {
   vehicles                Vehicle[]
   badges                  UserBadge[]
   badgesAwarded           UserBadge[]              @relation("BadgeAwardedBy")
+  pointsLedgerEntries     PointsLedgerEntry[]
+  pointsLedgerEntriesCreated PointsLedgerEntry[]   @relation("PointsEntryCreatedBy")
 
   @@index([deletedAt])
   @@index([status])
@@ -727,3 +729,92 @@ model UserBadge {
   @@index([awardedAt])
   @@map("user_badges")
 }
+
+// ---------------------------------------------------------------------------
+// Kronpoäng (KP) Points Ledger
+// ---------------------------------------------------------------------------
+
+/**
+ * Transaction type for a points ledger entry.
+ *
+ * - earn: awarded by the backend for completing an eligible activity.
+ * - spend: deducted for a cosmetic or in-app use (not implemented in MVP).
+ * - adjustment_credit: manual admin credit.
+ * - adjustment_debit: manual admin debit.
+ * - reversal: compensating entry that corrects a prior transaction.
+ */
+enum PointsTransactionType {
+  earn
+  spend
+  adjustment_credit
+  adjustment_debit
+  reversal
+}
+
+/**
+ * Source system or feature area that produced the ledger entry.
+ *
+ * `future_crown_hunt` is reserved and must not be used until Crown Hunt
+ * is fully designed and implemented.
+ */
+enum PointsTransactionSource {
+  badge
+  event
+  garage
+  admin_adjustment
+  system
+  future_crown_hunt
+}
+
+/**
+ * Append-only ledger of all Kronpoäng transactions.
+ *
+ * Design rules:
+ *  - Entries are never updated or deleted in normal application flows.
+ *  - Corrections must use a new compensating entry (reversal or adjustment).
+ *  - `amount` is a signed integer; positive = credit, negative = debit.
+ *  - `balanceAfter` caches the running balance for display and audit purposes.
+ *  - The authoritative balance is always computed from SUM(amount) inside a
+ *    database transaction with serialization safeguards.
+ *  - `idempotencyKey` prevents duplicate automated awards; unique where present.
+ *  - `metadata` must be minimal and must not contain personal data or tokens.
+ *
+ * Balance architecture:
+ *  - Balance is calculated as SUM(amount) from this table for the MVP.
+ *  - Spend/debit operations use a PostgreSQL advisory lock inside a database
+ *    transaction to prevent concurrent overdraft.
+ *  - `balanceAfter` is stored for display and is set atomically with each entry.
+ */
+model PointsLedgerEntry {
+  id                String               @id @default(uuid()) @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  transactionType   PointsTransactionType @map("transaction_type")
+  source            PointsTransactionSource
+  /// Signed integer KP amount. Positive = credit, negative = debit.
+  amount            Int
+  /// Running balance after this entry was applied. Set atomically.
+  balanceAfter      Int                  @map("balance_after")
+  /// Swedish human-readable description. Safe for display to the user.
+  description       String               @db.VarChar(500)
+  /// Optional idempotency key for repeatable automated awards.
+  /// Unique where present to prevent duplicate entries.
+  idempotencyKey    String?              @unique @map("idempotency_key") @db.VarChar(200)
+  /// Optional opaque entity type for traceability (e.g. "badge", "event").
+  relatedEntityType String?              @map("related_entity_type") @db.VarChar(100)
+  /// Optional opaque entity ID for traceability.
+  relatedEntityId   String?              @map("related_entity_id") @db.Uuid
+  /// Admin user who created this entry, if applicable.
+  createdByUserId   String?              @map("created_by_user_id") @db.Uuid
+  /// Minimal sanitized metadata. Must not contain personal data or tokens.
+  metadata          Json?
+  createdAt         DateTime             @default(now()) @map("created_at")
+
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdByUser     User?                @relation("PointsEntryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([source])
+  @@map("points_ledger_entries")
+}
+
