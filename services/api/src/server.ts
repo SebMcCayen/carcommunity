@@ -32,6 +32,7 @@ import { registerGarageRoutes } from './routes/garage.js';
 import { registerBadgeRoutes } from './routes/badges.js';
 import { BadgeService } from './lib/badge-service.js';
 import { registerPointsRoutes } from './routes/points.js';
+import { registerCrownHuntRoutes } from './routes/crown-hunt.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -50,6 +51,7 @@ export interface ServerDependencies {
   garageService?: import('./lib/garage-service.js').GarageService;
   badgeService?: BadgeService;
   pointsService?: import('./lib/points-service.js').PointsService;
+  crownHuntService?: import('./lib/crown-hunt-service.js').CrownHuntService;
 }
 
 export async function createServer(
@@ -148,6 +150,9 @@ export async function createServer(
   });
   await registerPointsRoutes(app, {
     pointsService: dependencies.pointsService,
+  });
+  await registerCrownHuntRoutes(app, {
+    crownHuntService: dependencies.crownHuntService,
   });
 
   return app;

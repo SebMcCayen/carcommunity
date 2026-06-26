@@ -51,8 +51,8 @@ export type PointsTransactionType = (typeof POINTS_TRANSACTION_TYPES)[number];
 /**
  * Sources that may produce a ledger entry.
  *
- * `future_crown_hunt` is reserved for a later dedicated feature and must not
- * be used until Crown Hunt is fully designed and implemented.
+ * `future_crown_hunt` is retained for backward-compatibility with existing ledger entries
+ * and must not be used for new entries. Use `crown_hunt` for all Kronjakt awards.
  */
 export const POINTS_TRANSACTION_SOURCES = [
   'badge',
@@ -60,13 +60,15 @@ export const POINTS_TRANSACTION_SOURCES = [
   'garage',
   'admin_adjustment',
   'system',
+  'crown_hunt',
   'future_crown_hunt',
 ] as const;
 export type PointsTransactionSource = (typeof POINTS_TRANSACTION_SOURCES)[number];
 
 /**
  * Sources that are permitted for general automated awards in the current MVP.
- * `future_crown_hunt` must not be used until Crown Hunt is implemented.
+ * `crown_hunt` is the live Kronjakt award source.
+ * `future_crown_hunt` must not be used for new entries.
  */
 export const ACTIVE_POINTS_TRANSACTION_SOURCES: ReadonlyArray<PointsTransactionSource> = [
   'badge',
@@ -74,6 +76,7 @@ export const ACTIVE_POINTS_TRANSACTION_SOURCES: ReadonlyArray<PointsTransactionS
   'garage',
   'admin_adjustment',
   'system',
+  'crown_hunt',
 ];
 
 // ---------------------------------------------------------------------------
