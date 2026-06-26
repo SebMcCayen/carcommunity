@@ -33,6 +33,7 @@ import { registerBadgeRoutes } from './routes/badges.js';
 import { BadgeService } from './lib/badge-service.js';
 import { registerPointsRoutes } from './routes/points.js';
 import { registerCrownHuntRoutes } from './routes/crown-hunt.js';
+import { registerPartnerRoutes } from './routes/partners.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -52,6 +53,8 @@ export interface ServerDependencies {
   badgeService?: BadgeService;
   pointsService?: import('./lib/points-service.js').PointsService;
   crownHuntService?: import('./lib/crown-hunt-service.js').CrownHuntService;
+  partnerApplicationService?: import('./lib/partner-application-service.js').PartnerApplicationService;
+  partnerCompanyService?: import('./lib/partner-company-service.js').PartnerCompanyService;
 }
 
 export async function createServer(
@@ -153,6 +156,10 @@ export async function createServer(
   });
   await registerCrownHuntRoutes(app, {
     crownHuntService: dependencies.crownHuntService,
+  });
+  await registerPartnerRoutes(app, {
+    partnerApplicationService: dependencies.partnerApplicationService,
+    partnerCompanyService: dependencies.partnerCompanyService,
   });
 
   return app;

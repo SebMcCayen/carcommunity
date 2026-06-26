@@ -67,6 +67,10 @@
     "./crown-hunt": {
       "types": "./dist/crown-hunt.d.ts",
       "default": "./dist/crown-hunt.js"
+    },
+    "./partners": {
+      "types": "./dist/partners.d.ts",
+      "default": "./dist/partners.js"
     }
   },
   "scripts": {
