@@ -98,7 +98,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
     async (phone: string) => {
       setOpenError(null);
       if (!isSafePhone(phone)) {
-        setOpenError('Ogiltigt telefonnummer.');
+        setOpenError(t('partners.invalidPhone'));
         return;
       }
       const url = `tel:${phone.replace(/\s/g, '')}`;
@@ -107,29 +107,29 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         if (canOpen) {
           await Linking.openURL(url);
         } else {
-          setOpenError('Kunde inte öppna telefon.');
+          setOpenError(t('partners.cannotOpenPhone'));
         }
       } catch {
-        setOpenError('Kunde inte öppna telefon.');
+        setOpenError(t('partners.cannotOpenPhone'));
       }
     },
-    [],
+    [t],
   );
 
   const openWebsite = useCallback(
     async (url: string) => {
       setOpenError(null);
       if (!isSafeUrl(url)) {
-        setOpenError('Ogiltig webbadress.');
+        setOpenError(t('partners.invalidWebsite'));
         return;
       }
       try {
         await Linking.openURL(url);
       } catch {
-        setOpenError('Kunde inte öppna webbplatsen.');
+        setOpenError(t('partners.cannotOpenWebsite'));
       }
     },
-    [],
+    [t],
   );
 
   const openNavigation = useCallback(
@@ -148,10 +148,10 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
           await Linking.openURL(mapsUrl);
         }
       } catch {
-        setOpenError('Kunde inte öppna navigering.');
+        setOpenError(t('partners.cannotOpenNavigation'));
       }
     },
-    [],
+    [t],
   );
 
   if (isLoading) {

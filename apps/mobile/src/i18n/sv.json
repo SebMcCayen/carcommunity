@@ -443,6 +443,11 @@
     "submitting": "Skickar...",
     "close": "Stäng",
     "applicationEntryLabel": "För företag",
-    "applicationEntryHint": "Vill ditt företag synas här?"
+    "applicationEntryHint": "Vill ditt företag synas här?",
+    "invalidPhone": "Ogiltigt telefonnummer.",
+    "cannotOpenPhone": "Kunde inte öppna telefon.",
+    "invalidWebsite": "Ogiltig webbadress.",
+    "cannotOpenWebsite": "Kunde inte öppna webbplatsen.",
+    "cannotOpenNavigation": "Kunde inte öppna navigering."
   }
 }

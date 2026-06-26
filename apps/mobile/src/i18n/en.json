@@ -440,6 +440,11 @@
     "submitting": "Submitting...",
     "close": "Close",
     "applicationEntryLabel": "For businesses",
-    "applicationEntryHint": "Want your business to appear here?"
+    "applicationEntryHint": "Want your business to appear here?",
+    "invalidPhone": "Invalid phone number.",
+    "cannotOpenPhone": "Could not open phone.",
+    "invalidWebsite": "Invalid website URL.",
+    "cannotOpenWebsite": "Could not open website.",
+    "cannotOpenNavigation": "Could not open navigation."
   }
 }

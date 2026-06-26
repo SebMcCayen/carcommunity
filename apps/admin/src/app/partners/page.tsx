@@ -428,9 +428,6 @@ const ActivateModal = ({ onConfirm, onCancel, isSubmitting, error }: ActivateMod
     <div className={styles.modal}>
       <h2 className={styles.modalTitle}>{t('partners.activateConfirmTitle')}</h2>
       <p className={styles.modalBody}>{t('partners.activateConfirmBody')}</p>
-      <p className={styles.safetyWarning}>
-        Placeringen ska motsvara företagets faktiska verksamhetsplats.
-      </p>
       {error !== null && <p className={styles.errorText}>{error}</p>}
       <div className={styles.formActions}>
         <button className={styles.btnSecondary} onClick={onCancel} disabled={isSubmitting}>
