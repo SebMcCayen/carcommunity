@@ -41,21 +41,21 @@ import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PartnerApplication'>;
 
-const CATEGORY_LABELS: Record<PartnerCategory, string> = {
-  workshop: 'Verkstad',
-  car_care: 'Bilvård',
-  parts: 'Reservdelar',
-  tires: 'Däck',
-  charging: 'Laddning',
-  restaurant: 'Restaurang',
-  retail: 'Butik',
-  other: 'Annat',
-};
-
 export const PartnerApplicationScreen = ({ navigation }: Props) => {
   const { theme } = useAppTheme();
   const { t } = useI18n();
   const { isAuthenticated } = useAuth();
+
+  const CATEGORY_LABELS: Record<PartnerCategory, string> = {
+    workshop: t('partners.categoryWorkshop'),
+    car_care: t('partners.categoryCarCare'),
+    parts: t('partners.categoryParts'),
+    tires: t('partners.categoryTires'),
+    charging: t('partners.categoryCharging'),
+    restaurant: t('partners.categoryRestaurant'),
+    retail: t('partners.categoryRetail'),
+    other: t('partners.categoryOther'),
+  };
 
   const [companyName, setCompanyName] = useState('');
   const [category, setCategory] = useState<PartnerCategory>('other');
@@ -123,7 +123,7 @@ export const PartnerApplicationScreen = ({ navigation }: Props) => {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.pageBackground }]}>
         <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
-          Du måste vara inloggad för att skicka in en ansökan.
+          {t('partners.loginRequired')}
         </Text>
       </View>
     );

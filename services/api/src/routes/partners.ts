@@ -616,14 +616,4 @@ export async function registerPartnerRoutes(
       return { ok: true, data: detail };
     },
   );
-
-  void buildPartnerPath; // used above in route registration
-  void buildAdminApplicationPath;
-  void buildAdminApplicationStartReviewPath;
-  void buildAdminApplicationApprovePath;
-  void buildAdminApplicationRejectPath;
-  void buildAdminPartnerPath;
-  void buildAdminPartnerActivatePath;
-  void buildAdminPartnerPausePath;
-  void buildAdminPartnerEndPath;
 }

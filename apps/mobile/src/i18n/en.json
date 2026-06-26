@@ -445,6 +445,15 @@
     "cannotOpenPhone": "Could not open phone.",
     "invalidWebsite": "Invalid website URL.",
     "cannotOpenWebsite": "Could not open website.",
-    "cannotOpenNavigation": "Could not open navigation."
+    "cannotOpenNavigation": "Could not open navigation.",
+    "loginRequired": "You must be logged in to submit an application.",
+    "categoryWorkshop": "Workshop",
+    "categoryCarCare": "Car Care",
+    "categoryParts": "Parts",
+    "categoryTires": "Tires",
+    "categoryCharging": "Charging",
+    "categoryRestaurant": "Restaurant",
+    "categoryRetail": "Retail",
+    "categoryOther": "Other"
   }
 }

@@ -624,7 +624,7 @@ const ApplicationsTab = () => {
                 <td>{app.category}</td>
                 <td>{app.contactName}</td>
                 <td>{app.contactEmail}</td>
-                <td>{formatDate(app.createdAt)}</td>
+                <td>{formatDate(app.submittedAt)}</td>
                 <td>
                   <span className={`${styles.badge} ${appStatusBadgeClass(app.status)}`}>
                     {appStatusLabel(app.status)}
