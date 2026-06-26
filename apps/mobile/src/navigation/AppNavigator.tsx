@@ -34,6 +34,8 @@ import { VehicleFormScreen } from '../screens/VehicleFormScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { PointsWalletScreen } from '../screens/PointsWalletScreen';
 import { CrownHuntScreen } from '../screens/CrownHuntScreen';
+import { PartnerDetailScreen } from '../screens/PartnerDetailScreen';
+import { PartnerApplicationScreen } from '../screens/PartnerApplicationScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -193,6 +195,16 @@ export const AppNavigator = () => {
               name="CrownHunt"
               component={CrownHuntScreen}
               options={{ title: t('crownHunt.screenTitle') }}
+            />
+            <Stack.Screen
+              name="PartnerDetail"
+              component={PartnerDetailScreen}
+              options={{ title: t('partners.detailTitle') }}
+            />
+            <Stack.Screen
+              name="PartnerApplication"
+              component={PartnerApplicationScreen}
+              options={{ title: t('partners.applicationTitle') }}
             />
           </>
         )}

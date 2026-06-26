@@ -13,6 +13,7 @@
  */
 
 import type { PublicLiveLocationMarker } from '@carcommunity/shared/live-location';
+import type { PartnerMapMarker } from '@carcommunity/shared/partners';
 
 import type { MapMarkerViewModel } from './types';
 
@@ -43,4 +44,29 @@ export function liveLocationMarkersToViewModels(
   markers: PublicLiveLocationMarker[],
 ): MapMarkerViewModel[] {
   return markers.map(liveLocationMarkerToViewModel);
+}
+
+/**
+ * Converts a {@link PartnerMapMarker} from the API response into a
+ * {@link MapMarkerViewModel} for the map rendering layer.
+ *
+ * Partner markers are always type 'partner' to be visually distinct from
+ * member and self markers. Only safe public fields are used.
+ */
+export function partnerMarkerToViewModel(marker: PartnerMapMarker): MapMarkerViewModel {
+  return {
+    id: `partner-${marker.partnerId}`,
+    coordinate: {
+      latitude: marker.latitude,
+      longitude: marker.longitude,
+    },
+    type: 'partner',
+  };
+}
+
+/**
+ * Converts an array of {@link PartnerMapMarker} objects to view models.
+ */
+export function partnerMarkersToViewModels(markers: PartnerMapMarker[]): MapMarkerViewModel[] {
+  return markers.map(partnerMarkerToViewModel);
 }

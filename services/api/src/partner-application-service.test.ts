@@ -181,7 +181,7 @@ function buildFakePrisma(options: {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -291,7 +291,7 @@ test('startReview transitions status to under_review and writes audit log', asyn
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -323,7 +323,7 @@ test('approveApplication creates a DRAFT partner company — not active', async 
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -380,7 +380,7 @@ test('rejectApplication writes audit log with rejection action', async () => {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },

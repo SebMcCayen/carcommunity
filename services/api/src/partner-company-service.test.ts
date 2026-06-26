@@ -137,7 +137,7 @@ function buildFakePrisma(options: {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -282,7 +282,7 @@ test('activatePartner writes audit log', async () => {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -406,7 +406,7 @@ test('pausePartner writes audit log', async () => {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },
@@ -441,7 +441,7 @@ test('endPartnership writes audit log', async () => {
     },
     auditLog: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        auditLogs.push(data as FakeAuditLog);
+        auditLogs.push(data as unknown as FakeAuditLog);
         return data;
       },
     },

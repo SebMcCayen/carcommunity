@@ -100,15 +100,15 @@ class FakeApplicationService extends PartnerApplicationService {
     super(null as unknown as import('@prisma/client').PrismaClient);
   }
 
-  override async submitApplication() {
+  override async submitApplication(_input: import('./lib/partner-application-service.js').SubmitApplicationInput) {
     return { applicationId: APP_ID, submittedAt: new Date().toISOString() };
   }
 
-  override async listApplications() {
+  override async listApplications(_input: import('./lib/partner-application-service.js').ListApplicationsInput = {}) {
     return { applications: [], page: 1, pageSize: 20, total: 0, hasNext: false };
   }
 
-  override async getApplicationDetail() {
+  override async getApplicationDetail(_applicationId: string) {
     return {
       applicationId: APP_ID,
       companyName: 'Testas AB',
@@ -132,13 +132,13 @@ class FakeApplicationService extends PartnerApplicationService {
     };
   }
 
-  override async startReview() { return; }
+  override async startReview(_input: import('./lib/partner-application-service.js').ReviewActionInput) { return; }
 
-  override async approveApplication() {
+  override async approveApplication(_input: import('./lib/partner-application-service.js').ApproveApplicationInput) {
     return { partnerCompanyId: COMPANY_ID };
   }
 
-  override async rejectApplication() { return; }
+  override async rejectApplication(_input: import('./lib/partner-application-service.js').RejectApplicationInput) { return; }
 }
 
 class FakeCompanyService extends PartnerCompanyService {
@@ -164,11 +164,11 @@ class FakeCompanyService extends PartnerCompanyService {
     return [ACTIVE_MARKER];
   }
 
-  override async listAdminPartners() {
+  override async listAdminPartners(_input: import('./lib/partner-company-service.js').ListAdminPartnersInput = {}) {
     return { partners: [], page: 1, pageSize: 20, total: 0, hasNext: false };
   }
 
-  override async getAdminPartnerDetail() {
+  override async getAdminPartnerDetail(_partnerId: string) {
     return {
       partnerId: COMPANY_ID,
       applicationId: null,
@@ -218,15 +218,15 @@ class FakeCompanyService extends PartnerCompanyService {
     return this.getAdminPartnerDetail(input.partnerId);
   }
 
-  override async activatePartner() {
+  override async activatePartner(_input: import('./lib/partner-company-service.js').ActivatePartnerInput) {
     return this.getAdminPartnerDetail(COMPANY_ID);
   }
 
-  override async pausePartner() {
+  override async pausePartner(_input: import('./lib/partner-company-service.js').StatusActionInput) {
     return this.getAdminPartnerDetail(COMPANY_ID);
   }
 
-  override async endPartnership() {
+  override async endPartnership(_input: import('./lib/partner-company-service.js').StatusActionInput) {
     return this.getAdminPartnerDetail(COMPANY_ID);
   }
 }
@@ -236,12 +236,8 @@ async function buildTestServer() {
     {
       nodeEnv: 'test',
       port: 4000,
-      host: '0.0.0.0',
       databaseUrl: 'postgresql://placeholder',
       isProduction: false,
-      rateLimitMax: 1000,
-      rateLimitWindowMs: 60_000,
-      earlyMemberCutoffDate: new Date('2026-01-01'),
     },
     {
       partnerApplicationService: new FakeApplicationService(),
@@ -445,7 +441,7 @@ test('admin approval returns a partner company ID', async () => {
 test('admin rejection requires a reason', async () => {
   // Use a service that rejects when reason is missing
   class RejectingService extends FakeApplicationService {
-    override async rejectApplication(input: { reason: string }): Promise<void> {
+    override async rejectApplication(input: import('./lib/partner-application-service.js').RejectApplicationInput): Promise<void> {
       if (!input.reason || input.reason.trim().length === 0) {
         throw new AppError(422, 'reason_required', 'A reason is required for rejection.');
       }
@@ -456,12 +452,8 @@ test('admin rejection requires a reason', async () => {
     {
       nodeEnv: 'test',
       port: 4000,
-      host: '0.0.0.0',
       databaseUrl: 'postgresql://placeholder',
       isProduction: false,
-      rateLimitMax: 1000,
-      rateLimitWindowMs: 60_000,
-      earlyMemberCutoffDate: new Date('2026-01-01'),
     },
     {
       partnerApplicationService: new RejectingService(),

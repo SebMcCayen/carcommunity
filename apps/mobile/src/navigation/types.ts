@@ -19,6 +19,8 @@ export type RootStackParamList = {
   Badges: undefined;
   PointsWallet: undefined;
   CrownHunt: undefined;
+  PartnerDetail: { partnerId: string };
+  PartnerApplication: undefined;
 };
 
 export type MainTabParamList = {
