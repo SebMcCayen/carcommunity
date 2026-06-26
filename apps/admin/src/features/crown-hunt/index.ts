@@ -20,6 +20,7 @@ import {
   buildAdminCrownHuntPointPath,
   buildAdminCrownHuntActivatePath,
   buildAdminCrownHuntPausePath,
+  type AdminActivateCrownHuntPointRequest,
   type AdminCreateCrownHuntPointRequest,
   type AdminUpdateCrownHuntPointRequest,
   type AdminCrownHuntPointSummary,
@@ -100,12 +101,12 @@ export async function adminUpdateCrownHuntPoint(
  */
 export async function adminActivateCrownHuntPoint(
   pointId: string,
-  safetyConfirmationNote: string,
+  approvalNote: string,
   token?: string,
 ): Promise<PaginatedAdminCrownHuntPointsResponse> {
   return apiRequest<PaginatedAdminCrownHuntPointsResponse>(buildAdminCrownHuntActivatePath(pointId), {
     method: 'POST',
-    body: { safetyConfirmationNote },
+    body: { safeLocationConfirmed: true, approvalNote } satisfies AdminActivateCrownHuntPointRequest,
     token,
   });
 }

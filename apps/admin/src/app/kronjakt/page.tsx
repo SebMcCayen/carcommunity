@@ -487,8 +487,8 @@ const ClaimsTab = ({
         <tbody>
           {claims.map((claim) => (
             <tr key={claim.claimId}>
-              <td>{claim.pointId}</td>
-              <td>{claim.userId}</td>
+              <td>{claim.pointTitle}</td>
+              <td title={claim.userId}>{claim.userId.slice(0, 8)}…</td>
               <td>
                 <span
                   className={`${styles.badge} ${claim.result === 'risk_review' ? styles.badge_risk : claim.result === 'awarded' ? styles.badge_active : styles.badge_draft}`}
