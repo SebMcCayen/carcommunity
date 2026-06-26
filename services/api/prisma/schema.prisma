@@ -63,6 +63,9 @@ model User {
   badgesAwarded           UserBadge[]              @relation("BadgeAwardedBy")
   pointsLedgerEntries     PointsLedgerEntry[]
   pointsLedgerEntriesCreated PointsLedgerEntry[]   @relation("PointsEntryCreatedBy")
+  crownHuntClaims         CrownHuntClaim[]         @relation("CrownHuntClaimUser")
+  crownHuntPointsCreated  CrownHuntPoint[]         @relation("CrownHuntPointCreatedBy")
+  crownHuntPointsApproved CrownHuntPoint[]         @relation("CrownHuntPointApprovedBy")
 
   @@index([deletedAt])
   @@index([status])
@@ -754,8 +757,8 @@ enum PointsTransactionType {
 /**
  * Source system or feature area that produced the ledger entry.
  *
- * `future_crown_hunt` is reserved and must not be used until Crown Hunt
- * is fully designed and implemented.
+ * `future_crown_hunt` is retained for backward-compatibility and must not be
+ * used for new entries. Use `crown_hunt` for all Kronjakt awards.
  */
 enum PointsTransactionSource {
   badge
@@ -763,6 +766,7 @@ enum PointsTransactionSource {
   garage
   admin_adjustment
   system
+  crown_hunt
   future_crown_hunt
 }
 
@@ -816,5 +820,148 @@ model PointsLedgerEntry {
   @@index([userId])
   @@index([source])
   @@map("points_ledger_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Kronjakt (Crown Hunt)
+// ---------------------------------------------------------------------------
+
+/**
+ * Status of a Kronjakt point.
+ *
+ *  - draft:  Created by admin, not yet visible to users. Requires admin approval to activate.
+ *  - active: Visible and claimable by eligible users.
+ *  - paused: Temporarily hidden. No new claims allowed.
+ *  - ended:  Permanently closed. Points are not hard-deleted.
+ */
+enum CrownHuntPointStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+/**
+ * How often a user may claim the same point.
+ *
+ *  - once:   The user may claim the point at most once, ever.
+ *  - daily:  The user may claim the point once per calendar day.
+ *  - weekly: The user may claim the point once per calendar week.
+ */
+enum CrownHuntRepeatRule {
+  once
+  daily
+  weekly
+}
+
+/**
+ * The authoritative result of a claim attempt.
+ * Returned by the backend and stored on the claim record.
+ */
+enum CrownHuntClaimResult {
+  awarded
+  already_claimed
+  outside_geofence
+  moving_too_fast
+  position_too_old
+  point_inactive
+  cooldown_active
+  daily_limit_reached
+  risk_review
+  feature_disabled
+  not_eligible
+}
+
+/**
+ * A Kronjakt collection point.
+ *
+ * Design rules:
+ *  - Only active admin-approved points may be claimed.
+ *  - Points start in `draft` status. Activation requires admin safety confirmation.
+ *  - Active and previously-claimed points must not be hard-deleted. Use paused/ended.
+ *  - Points must only be placed at safe public stopping locations.
+ *  - Points must not be placed on active road lanes, motorways, or intersections.
+ *  - No first-to-arrive, speed-bonus, or route-history fields.
+ *  - No public leaderboard fields.
+ *
+ * Privacy rules:
+ *  - Internal fraud metadata is never exposed to mobile clients.
+ *  - Other users' claim details are never returned.
+ */
+model CrownHuntPoint {
+  id                    String                @id @default(uuid()) @db.Uuid
+  title                 String                @db.VarChar(100)
+  description           String?               @db.VarChar(500)
+  latitude              Float                 @db.DoublePrecision
+  longitude             Float                 @db.DoublePrecision
+  geofenceRadiusMeters  Int                   @map("geofence_radius_meters")
+  rewardPoints          Int                   @map("reward_points")
+  status                CrownHuntPointStatus  @default(draft)
+  repeatRule            CrownHuntRepeatRule   @default(once) @map("repeat_rule")
+  availableFrom         DateTime?             @map("available_from")
+  availableUntil        DateTime?             @map("available_until")
+  approvedAt            DateTime?             @map("approved_at")
+  approvedByUserId      String?               @map("approved_by_user_id") @db.Uuid
+  createdByUserId       String                @map("created_by_user_id") @db.Uuid
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  approvedBy            User?                 @relation("CrownHuntPointApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  createdBy             User                  @relation("CrownHuntPointCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  claims                CrownHuntClaim[]
+
+  @@index([status])
+  @@index([availableFrom])
+  @@index([availableUntil])
+  @@index([latitude, longitude])
+  @@map("crown_hunt_points")
+}
+
+/**
+ * A single Kronjakt claim attempt by a user.
+ *
+ * Design rules:
+ *  - Claims are never created automatically. The user must press the claim button.
+ *  - Backend is the sole authority for eligibility, result, and points awarded.
+ *  - An idempotencyKey prevents duplicate claims for the same button press.
+ *  - Risk metadata is stored for admin review but never exposed to mobile clients.
+ *  - Exact claim coordinates are not stored — distanceMeters is sufficient evidence.
+ *  - No permanent route history is created.
+ *  - Claim results are stored for all attempts (including rejections) for audit.
+ *  - Points are awarded only when result = awarded.
+ *
+ * Privacy rules:
+ *  - riskScore and riskReasons are internal — never return to mobile clients.
+ *  - Other users' claims are never exposed.
+ *  - No public leaderboard fields.
+ */
+model CrownHuntClaim {
+  id                          String               @id @default(uuid()) @db.Uuid
+  pointId                     String               @map("point_id") @db.Uuid
+  userId                      String               @map("user_id") @db.Uuid
+  /// Links to the Kronpoäng ledger entry created by an `awarded` claim.
+  pointsLedgerEntryId         String?              @unique @map("points_ledger_entry_id") @db.Uuid
+  result                      CrownHuntClaimResult
+  claimedAt                   DateTime             @map("claimed_at")
+  /// Distance from user's reported position to the point centre, in meters.
+  /// Stored as evidence. Exact coordinates are NOT stored.
+  distanceMeters              Float?               @map("distance_meters") @db.DoublePrecision
+  reportedSpeedMetersPerSecond Float?              @map("reported_speed_meters_per_second") @db.DoublePrecision
+  positionRecordedAt          DateTime?            @map("position_recorded_at")
+  /// Internal risk score for this claim (0–100). Never exposed to mobile clients.
+  riskScore                   Float?               @map("risk_score") @db.DoublePrecision
+  /// Internal risk reason labels. Never exposed to mobile clients.
+  riskReasons                 Json?                @map("risk_reasons")
+  /// Prevents duplicate awards for the same button press.
+  idempotencyKey              String               @unique @map("idempotency_key") @db.VarChar(200)
+  createdAt                   DateTime             @default(now()) @map("created_at")
+
+  point                       CrownHuntPoint       @relation(fields: [pointId], references: [id], onDelete: Restrict)
+  user                        User                 @relation("CrownHuntClaimUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, claimedAt(sort: Desc)])
+  @@index([pointId, claimedAt(sort: Desc)])
+  @@index([result])
+  @@map("crown_hunt_claims")
 }
 

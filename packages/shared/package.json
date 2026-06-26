@@ -63,6 +63,10 @@
     "./points": {
       "types": "./dist/points.d.ts",
       "default": "./dist/points.js"
+    },
+    "./crown-hunt": {
+      "types": "./dist/crown-hunt.d.ts",
+      "default": "./dist/crown-hunt.js"
     }
   },
   "scripts": {
