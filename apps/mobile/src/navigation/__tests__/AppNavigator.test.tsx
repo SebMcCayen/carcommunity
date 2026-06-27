@@ -168,6 +168,31 @@ jest.mock('../../screens/VehicleFormScreen', () => ({
   VehicleFormScreen: () => require('react').createElement('View', { testID: 'stub-vehicle-form-screen' }),
 }));
 
+jest.mock('../../screens/BadgesScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BadgesScreen: () => require('react').createElement('View', { testID: 'stub-badges-screen' }),
+}));
+
+jest.mock('../../screens/PointsWalletScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  PointsWalletScreen: () => require('react').createElement('View', { testID: 'stub-points-wallet-screen' }),
+}));
+
+jest.mock('../../screens/CrownHuntScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  CrownHuntScreen: () => require('react').createElement('View', { testID: 'stub-crown-hunt-screen' }),
+}));
+
+jest.mock('../../screens/PartnerDetailScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  PartnerDetailScreen: () => require('react').createElement('View', { testID: 'stub-partner-detail-screen' }),
+}));
+
+jest.mock('../../screens/PartnerApplicationScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  PartnerApplicationScreen: () => require('react').createElement('View', { testID: 'stub-partner-application-screen' }),
+}));
+
 // ── useAuth mock ──────────────────────────────────────────────────────────────
 const mockUseAuth = jest.fn();
 

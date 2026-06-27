@@ -83,6 +83,11 @@ jest.mock('../../hooks/useI18n', () => ({
   }),
 }));
 
+// Mock useNavigation so MapScreen does not require a NavigationContainer.
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn() }),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { MapScreen } = require('../MapScreen') as typeof import('../MapScreen');
 
