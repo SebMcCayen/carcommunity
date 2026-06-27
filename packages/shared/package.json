@@ -71,6 +71,10 @@
     "./partners": {
       "types": "./dist/partners.d.ts",
       "default": "./dist/partners.js"
+    },
+    "./partner-offers": {
+      "types": "./dist/partner-offers.d.ts",
+      "default": "./dist/partner-offers.js"
     }
   },
   "scripts": {

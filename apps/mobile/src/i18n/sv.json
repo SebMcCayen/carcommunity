@@ -458,5 +458,32 @@
     "categoryRestaurant": "Restaurang",
     "categoryRetail": "Butik",
     "categoryOther": "Annat"
+  },
+  "partnerOffers": {
+    "sectionTitle": "Erbjudanden & förmåner",
+    "noOffers": "Inga aktuella erbjudanden.",
+    "memberRequired": "KCC Medlem krävs för att visa erbjudandet.",
+    "memberRequiredHint": "Bli KCC-medlem för att ta del av exklusiva erbjudanden och förmåner från våra partners.",
+    "showCode": "Visa kod",
+    "saveOffer": "Spara erbjudande",
+    "unsaveOffer": "Ta bort från sparade",
+    "validFrom": "Gäller från",
+    "validUntil": "Gäller till",
+    "validPeriod": "Giltighetstid",
+    "terms": "Villkor",
+    "howToRedeem": "Så här löser du in",
+    "drivingSafetyWarning": "Stanna säkert innan du använder ett erbjudande.",
+    "codeVisible": "Kod",
+    "codeAlertTitle": "Rabattkod",
+    "codeAlertClose": "Stäng",
+    "loadError": "Kunde inte hämta erbjudanden.",
+    "codeLoadError": "Kunde inte hämta koden. Försök igen.",
+    "saveError": "Kunde inte spara erbjudandet.",
+    "offerTypeDiscountCode": "Rabattkod",
+    "offerTypePercentageDiscount": "Procentrabatt",
+    "offerTypeFixedDiscount": "Fast rabatt",
+    "offerTypeMemberBenefit": "Medlemsförmån",
+    "offerTypeSpecialOffer": "Specialerbjudande",
+    "offerTypeOther": "Erbjudande"
   }
 }

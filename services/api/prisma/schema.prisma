@@ -70,6 +70,9 @@ model User {
   partnerApplicationsReviewed  PartnerApplication[] @relation("PartnerApplicationReviewedBy")
   partnerCompaniesCreated      PartnerCompany[]     @relation("PartnerCompanyCreatedBy")
   partnerCompaniesUpdated      PartnerCompany[]     @relation("PartnerCompanyUpdatedBy")
+  partnerOffersCreated         PartnerOffer[]        @relation("PartnerOfferCreatedBy")
+  partnerOffersUpdated         PartnerOffer[]        @relation("PartnerOfferUpdatedBy")
+  savedPartnerOffers           SavedPartnerOffer[]
 
   @@index([deletedAt])
   @@index([status])
@@ -1112,11 +1115,82 @@ model PartnerCompany {
   application       PartnerApplication?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
   createdBy         User                 @relation("PartnerCompanyCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   updatedBy         User?                @relation("PartnerCompanyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  offers            PartnerOffer[]
 
   @@index([status])
   @@index([category])
   @@index([companyName])
   @@index([latitude, longitude])
   @@map("partner_companies")
+}
+
+enum PartnerOfferStatus {
+  draft
+  active
+  paused
+  ended
+  expired
+}
+
+enum PartnerOfferType {
+  discount_code
+  percentage_discount
+  fixed_discount
+  member_benefit
+  special_offer
+  other
+}
+
+model PartnerOffer {
+  id                         String              @id @default(uuid()) @db.Uuid
+  partnerCompanyId           String              @map("partner_company_id") @db.Uuid
+  title                      String              @db.VarChar(150)
+  teaserText                 String              @map("teaser_text") @db.VarChar(250)
+  description                String?             @db.Text
+  offerType                  PartnerOfferType    @map("offer_type")
+  status                     PartnerOfferStatus  @default(draft)
+  /// Sensitive — must never appear in logs, teaser responses, or list responses.
+  discountCode               String?             @map("discount_code") @db.VarChar(100)
+  redemptionInstructions     String?             @map("redemption_instructions") @db.Text
+  terms                      String?             @db.Text
+  percentageDiscount         Float?              @map("percentage_discount") @db.DoublePrecision
+  fixedDiscountMinorUnits    Int?                @map("fixed_discount_minor_units")
+  currencyCode               String?             @map("currency_code") @db.VarChar(3)
+  availableFrom              DateTime?           @map("available_from")
+  availableUntil             DateTime?           @map("available_until")
+  activatedAt                DateTime?           @map("activated_at")
+  pausedAt                   DateTime?           @map("paused_at")
+  endedAt                    DateTime?           @map("ended_at")
+  createdByUserId            String              @map("created_by_user_id") @db.Uuid
+  updatedByUserId            String?             @map("updated_by_user_id") @db.Uuid
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  updatedAt                  DateTime            @updatedAt @map("updated_at")
+
+  partnerCompany             PartnerCompany      @relation(fields: [partnerCompanyId], references: [id], onDelete: Restrict)
+  createdBy                  User                @relation("PartnerOfferCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy                  User?               @relation("PartnerOfferUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  savedByUsers               SavedPartnerOffer[]
+
+  @@index([partnerCompanyId])
+  @@index([status])
+  @@index([availableFrom])
+  @@index([availableUntil])
+  @@index([partnerCompanyId, status])
+  @@map("partner_offers")
+}
+
+model SavedPartnerOffer {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  offerId   String       @map("offer_id") @db.Uuid
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offer     PartnerOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, offerId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([offerId])
+  @@map("saved_partner_offers")
 }
 

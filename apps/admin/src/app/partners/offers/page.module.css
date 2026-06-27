@@ -1,0 +1,40 @@
+.filterRow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.filterLabel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+}
+
+.filterInput {
+  margin-top: 0;
+  width: auto;
+}
+
+.createRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.createInput {
+  margin-top: 0;
+  width: 320px;
+}
+
+.successText {
+  color: var(--status-success);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
+}
