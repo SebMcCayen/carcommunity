@@ -529,7 +529,7 @@ export default function PartnerOffersPage() {
     setIsActing(true);
     setModalError(null);
     try {
-      await adminCreatePartnerOffer(modal.partnerId, formToRequest(form) as CreatePartnerOfferRequest);
+      await adminCreatePartnerOffer(modal.partnerId, formToRequest(form));
       setModal({ type: 'none' });
       showSuccess(t('partnerOffers.createSuccess'));
       void load();
@@ -545,7 +545,7 @@ export default function PartnerOffersPage() {
     setIsActing(true);
     setModalError(null);
     try {
-      await adminUpdatePartnerOffer(modal.offer.offerId, formToRequest(form) as UpdatePartnerOfferRequest);
+      await adminUpdatePartnerOffer(modal.offer.offerId, formToRequest(form));
       setModal({ type: 'none' });
       showSuccess(t('partnerOffers.updateSuccess'));
       void load();
