@@ -306,28 +306,6 @@ export class PartnerOfferService {
     const skip = (page - 1) * pageSize;
     const now = new Date();
 
-    type WhereClause = {
-      status: 'active';
-      availableFrom?: { lte: Date } | undefined;
-      availableUntil?: { gte: Date } | undefined;
-      partnerCompanyId?: string;
-      partnerCompany: { status: 'active' };
-    };
-
-    const where: WhereClause = {
-      status: 'active',
-      partnerCompany: { status: 'active' },
-    };
-
-    // Filter out offers whose availability window hasn't started
-    (where as Record<string, unknown>).availableFrom = { lte: now };
-    // Filter out expired offers — only return offers whose availableUntil is null or in the future
-    (where as Record<string, unknown>).OR = [
-      { availableUntil: null },
-      { availableUntil: { gte: now } },
-    ];
-    delete (where as Record<string, unknown>).availableFrom;
-
     const baseWhere = {
       status: 'active' as const,
       partnerCompany: { status: 'active' as const },
@@ -352,7 +330,6 @@ export class PartnerOfferService {
           description: true,
           offerType: true,
           status: true,
-          discountCode: false, // NEVER select discountCode
           redemptionInstructions: true,
           terms: true,
           percentageDiscount: true,

@@ -85,7 +85,9 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   const [loadingCodeId, setLoadingCodeId] = useState<string | null>(null);
   const [savingOfferId, setSavingOfferId] = useState<string | null>(null);
 
-  // Safe-driving mode: defaults to false. When true, offer interactions are blocked.
+  // TODO: Wire isDriving to real safe-driving mode context when implemented.
+  // When true, offer interactions (show-code, save/unsave) are blocked and a
+  // safety warning is displayed. Defaults to false until driving detection exists.
   const [isDriving] = useState(false);
 
   const isMounted = useRef(true);

@@ -45,6 +45,7 @@ import {
 import { translate } from '@/i18n';
 
 import styles from '../../kronjakt/page.module.css';
+import offerStyles from './page.module.css';
 
 const t = (key: string) => translate('sv', key);
 
@@ -635,16 +636,15 @@ export default function PartnerOffersPage() {
       </div>
 
       {successMessage !== null && (
-        <p className={styles.successText}>{successMessage}</p>
+        <p className={offerStyles.successText}>{successMessage}</p>
       )}
 
       {/* Filters */}
-      <div className={styles.tabHeader} style={{ flexDirection: 'row', gap: '12px', justifyContent: 'flex-start', flexWrap: 'wrap', marginBottom: '16px' }}>
-        <label className={styles.label} style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', marginBottom: 0 }}>
+      <div className={offerStyles.filterRow}>
+        <label className={offerStyles.filterLabel}>
           {t('partnerOffers.filterByStatus')}:
           <select
-            className={styles.input}
-            style={{ marginTop: 0, width: 'auto' }}
+            className={`${styles.input} ${offerStyles.filterInput}`}
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as PartnerOfferStatus | '')}
           >
@@ -657,11 +657,10 @@ export default function PartnerOffersPage() {
           </select>
         </label>
 
-        <label className={styles.label} style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', marginBottom: 0 }}>
+        <label className={offerStyles.filterLabel}>
           {t('partnerOffers.filterByPartner')}:
           <input
-            className={styles.input}
-            style={{ marginTop: 0, width: 'auto' }}
+            className={`${styles.input} ${offerStyles.filterInput}`}
             type="text"
             placeholder={t('partnerOffers.formPartnerLabel')}
             value={filterPartnerId}
@@ -672,10 +671,9 @@ export default function PartnerOffersPage() {
 
       {/* Create offer controls */}
       <div className={styles.tabHeader}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className={offerStyles.createRow}>
           <input
-            className={styles.input}
-            style={{ marginTop: 0, width: '320px' }}
+            className={`${styles.input} ${offerStyles.createInput}`}
             type="text"
             placeholder={t('partnerOffers.formPartnerLabel')}
             value={newPartnerIdInput}
