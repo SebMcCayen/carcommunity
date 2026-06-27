@@ -85,6 +85,24 @@ const paginationQuerySchema = z
   })
   .strict();
 
+const memberOffersQuerySchema = z
+  .object({
+    page: z.string().optional().transform((v) => (v ? Math.max(1, parseInt(v, 10) || 1) : 1)),
+    pageSize: z
+      .string()
+      .optional()
+      .transform((v) =>
+        v
+          ? Math.min(
+              MAX_PARTNER_OFFER_PAGE_SIZE,
+              Math.max(1, parseInt(v, 10) || DEFAULT_PARTNER_OFFER_PAGE_SIZE),
+            )
+          : DEFAULT_PARTNER_OFFER_PAGE_SIZE,
+      ),
+    partnerId: z.string().uuid().optional(),
+  })
+  .strict();
+
 const teaserQuerySchema = z
   .object({
     page: z.string().optional().transform((v) => (v ? Math.max(1, parseInt(v, 10) || 1) : 1)),
@@ -264,6 +282,7 @@ export async function registerPartnerOfferRoutes(
    * GET /v1/partner-offers
    *
    * Lists all currently active member offers across all active partners.
+   * Optionally filtered by partnerId to show offers for a specific partner.
    * Full detail returned but discountCode is NOT included.
    */
   app.get(
@@ -271,7 +290,7 @@ export async function registerPartnerOfferRoutes(
     { preHandler: requireMemberHook },
     async (request): Promise<PaginatedMemberPartnerOffersResponse> => {
       const auth = request.auth!;
-      const query = paginationQuerySchema.parse(request.query);
+      const query = memberOffersQuerySchema.parse(request.query);
 
       const result = await service.listMemberOffers(
         {
@@ -279,7 +298,7 @@ export async function registerPartnerOfferRoutes(
           status: auth.status,
           subscriptionEntitlement: auth.subscriptionEntitlement,
         },
-        { page: query.page, pageSize: query.pageSize },
+        { page: query.page, pageSize: query.pageSize, partnerId: query.partnerId },
       );
 
       return {

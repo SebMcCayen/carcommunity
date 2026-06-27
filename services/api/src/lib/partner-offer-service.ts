@@ -55,6 +55,7 @@ export interface ListOfferTeasersInput {
 export interface ListMemberOffersInput {
   page?: number;
   pageSize?: number;
+  partnerId?: string;
 }
 
 export interface ListAdminOffersInput {
@@ -309,9 +310,9 @@ export class PartnerOfferService {
     const baseWhere = {
       status: 'active' as const,
       partnerCompany: { status: 'active' as const },
-      OR: [
-        { availableUntil: null },
-        { availableUntil: { gte: now } },
+      AND: [
+        { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+        { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
       ],
       ...(input.partnerId ? { partnerCompanyId: input.partnerId } : {}),
     };
@@ -394,7 +395,14 @@ export class PartnerOfferService {
       },
     });
 
-    if (!row || row.status !== 'active' || row.partnerCompany.status !== 'active') {
+    const now = new Date();
+    if (
+      !row ||
+      row.status !== 'active' ||
+      row.partnerCompany.status !== 'active' ||
+      (row.availableFrom && row.availableFrom > now) ||
+      (row.availableUntil && row.availableUntil < now)
+    ) {
       return null;
     }
 
@@ -430,10 +438,11 @@ export class PartnerOfferService {
     const where = {
       status: 'active' as const,
       partnerCompany: { status: 'active' as const },
-      OR: [
-        { availableUntil: null },
-        { availableUntil: { gte: now } },
+      AND: [
+        { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+        { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
       ],
+      ...(input.partnerId ? { partnerCompanyId: input.partnerId } : {}),
     };
 
     const [rows, total] = await Promise.all([
@@ -521,7 +530,14 @@ export class PartnerOfferService {
       },
     });
 
-    if (!row || row.status !== 'active' || row.partnerCompany.status !== 'active') {
+    const now = new Date();
+    if (
+      !row ||
+      row.status !== 'active' ||
+      row.partnerCompany.status !== 'active' ||
+      (row.availableFrom && row.availableFrom > now) ||
+      (row.availableUntil && row.availableUntil < now)
+    ) {
       throw new AppError(404, 'not_found', 'Offer not found.');
     }
 
@@ -625,7 +641,18 @@ export class PartnerOfferService {
 
     await this.prisma.savedPartnerOffer
       .delete({ where: { userId_offerId: { userId: user.userId, offerId } } })
-      .catch(() => undefined); // idempotent — ignore not found
+      .catch((error: unknown) => {
+        // Idempotent: ignore "record not found" (Prisma P2025), but surface everything else.
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: string }).code === 'P2025'
+        ) {
+          return;
+        }
+        throw error;
+      });
   }
 
   // -----------------------------------------------------------------------
@@ -659,9 +686,9 @@ export class PartnerOfferService {
       offer: {
         status: 'active' as const,
         partnerCompany: { status: 'active' as const },
-        OR: [
-          { availableUntil: null },
-          { availableUntil: { gte: now } },
+        AND: [
+          { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+          { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
         ],
       },
     };

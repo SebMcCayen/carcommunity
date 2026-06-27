@@ -638,3 +638,91 @@ test('activation description required', async () => {
     (err) => err instanceof AppError && err.code === 'offer_description_required',
   );
 });
+
+test('getOfferTeaser returns null for offer with future availableFrom', async () => {
+  const future = new Date(Date.now() + 60_000);
+  const prisma = buildFakePrisma({
+    findUniqueOfferResult: {
+      ...makeFakeOffer({ status: 'active', availableFrom: future }),
+      partnerCompany: { companyName: 'Test AB', status: 'active' },
+    },
+  });
+  const service = new PartnerOfferService(prisma);
+
+  const result = await service.getOfferTeaser(OFFER_ID);
+  assert.strictEqual(result, null);
+});
+
+test('getOfferTeaser returns null for expired offer (availableUntil in past)', async () => {
+  const past = new Date(Date.now() - 60_000);
+  const prisma = buildFakePrisma({
+    findUniqueOfferResult: {
+      ...makeFakeOffer({ status: 'active', availableUntil: past }),
+      partnerCompany: { companyName: 'Test AB', status: 'active' },
+    },
+  });
+  const service = new PartnerOfferService(prisma);
+
+  const result = await service.getOfferTeaser(OFFER_ID);
+  assert.strictEqual(result, null);
+});
+
+test('getMemberOfferDetail throws 404 for not-yet-started offer', async () => {
+  const future = new Date(Date.now() + 60_000);
+  const prisma = buildFakePrisma({
+    findUniqueOfferResult: {
+      ...makeFakeOffer({ status: 'active', availableFrom: future }),
+      partnerCompany: { companyName: 'Test AB', status: 'active' },
+    },
+  });
+  const service = new PartnerOfferService(prisma);
+
+  await assert.rejects(
+    () => service.getMemberOfferDetail(MEMBER_USER, OFFER_ID),
+    (err) => err instanceof AppError && err.statusCode === 404,
+  );
+});
+
+test('getMemberOfferDetail throws 404 for expired offer', async () => {
+  const past = new Date(Date.now() - 60_000);
+  const prisma = buildFakePrisma({
+    findUniqueOfferResult: {
+      ...makeFakeOffer({ status: 'active', availableUntil: past }),
+      partnerCompany: { companyName: 'Test AB', status: 'active' },
+    },
+  });
+  const service = new PartnerOfferService(prisma);
+
+  await assert.rejects(
+    () => service.getMemberOfferDetail(MEMBER_USER, OFFER_ID),
+    (err) => err instanceof AppError && err.statusCode === 404,
+  );
+});
+
+test('unsaveOffer is idempotent for P2025 (record not found)', async () => {
+  const prisma = buildFakePrisma({});
+  // Override delete to throw a P2025 error
+  (prisma.savedPartnerOffer as unknown as Record<string, unknown>).delete = async () => {
+    const err = new Error('Record not found');
+    (err as unknown as Record<string, unknown>).code = 'P2025';
+    throw err;
+  };
+  const service = new PartnerOfferService(prisma);
+
+  // Should not throw
+  await service.unsaveOffer({ userId: USER_ID, ...MEMBER_USER }, OFFER_ID);
+});
+
+test('unsaveOffer rethrows non-P2025 errors', async () => {
+  const prisma = buildFakePrisma({});
+  const dbError = new Error('DB connection failed');
+  (prisma.savedPartnerOffer as unknown as Record<string, unknown>).delete = async () => {
+    throw dbError;
+  };
+  const service = new PartnerOfferService(prisma);
+
+  await assert.rejects(
+    () => service.unsaveOffer({ userId: USER_ID, ...MEMBER_USER }, OFFER_ID),
+    (err) => err === dbError,
+  );
+});

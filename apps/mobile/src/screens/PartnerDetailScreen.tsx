@@ -35,7 +35,8 @@ import { canViewPartnerOfferDetails } from '@carcommunity/shared/users';
 import { getPartnerDetail, PartnerApiError } from '../api/partners';
 import {
   getPartnerOfferTeasers,
-  getMemberOfferDetail,
+  getMemberOffers,
+  getSavedOffers,
   showOfferCode,
   saveOffer,
   unsaveOffer,
@@ -139,25 +140,32 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
     }
   }, [partnerId, withToken]);
 
-  // Load full member offer details — only for active members
+  // Load full member offer details — only for active members.
+  // Uses the partner-scoped member offers endpoint to avoid per-offer N+1 requests.
   const loadMemberOffers = useCallback(async () => {
     if (!isMember) return;
     try {
-      // Fetch full detail for each teaser using the member endpoint
-      const teaserIds = offerTeasers.map((o) => o.offerId);
-      const details = await withToken(async (token) => {
-        const results = await Promise.all(
-          teaserIds.map((id) => getMemberOfferDetail(id, token)),
-        );
-        return results.filter((d): d is MemberPartnerOfferDetail => d !== null);
-      });
-      if (isMounted.current && details !== null) {
-        setMemberOffers(details);
+      const result = await withToken((token) => getMemberOffers(token, 1, partnerId));
+      if (isMounted.current && result !== null) {
+        setMemberOffers(result.data.offers);
       }
     } catch {
       if (isMounted.current) setOfferError(t('partnerOffers.loadError'));
     }
-  }, [isMember, offerTeasers, withToken, t]);
+  }, [isMember, partnerId, withToken, t]);
+
+  // Hydrate saved offer IDs from backend — only for active members.
+  const loadSavedOfferIds = useCallback(async () => {
+    if (!isMember) return;
+    try {
+      const result = await withToken((token) => getSavedOffers(token));
+      if (isMounted.current && result !== null) {
+        setSavedOfferIds(new Set(result.data.offers.map((o) => o.offerId)));
+      }
+    } catch {
+      // Non-fatal — optimistic save/unsave still works without initial hydration
+    }
+  }, [isMember, withToken]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
@@ -171,12 +179,13 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
     }
   }, [currentUser, loadOfferTeasers]);
 
-  // Load member details after teasers load
+  // Load member details and saved offer IDs after teasers load
   useEffect(() => {
     if (isMember && offerTeasers.length > 0) {
       void loadMemberOffers();
+      void loadSavedOfferIds();
     }
-  }, [isMember, offerTeasers, loadMemberOffers]);
+  }, [isMember, offerTeasers, loadMemberOffers, loadSavedOfferIds]);
 
   // Clear protected offer data on logout
   useEffect(() => {

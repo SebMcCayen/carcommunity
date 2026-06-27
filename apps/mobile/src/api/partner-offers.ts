@@ -95,14 +95,17 @@ export async function getPartnerOfferTeasers(
 
 /**
  * Fetches full list of active member offers for the authenticated user.
+ * Optionally filtered by partnerId to show offers for a specific partner.
  * Requires active member_monthly subscription (enforced server-side).
  * discountCode is NOT included — use showOfferCode for that.
  */
 export async function getMemberOffers(
   token: string,
   page = 1,
+  partnerId?: string,
 ): Promise<PaginatedMemberPartnerOffersResponse> {
   const params = new URLSearchParams({ page: String(page) });
+  if (partnerId) params.set('partnerId', partnerId);
   return requestJson<PaginatedMemberPartnerOffersResponse>(
     `${PARTNER_OFFER_ROUTE_PATHS.memberOffers}?${params.toString()}`,
     {
@@ -143,20 +146,24 @@ export async function getMemberOfferDetail(
  * Reveals the discount code and redemption instructions for the specified offer.
  * Requires explicit user action before calling — never call automatically.
  * Requires active member_monthly subscription (enforced server-side).
- * Backend rate-limits this endpoint per user.
+ * Backend is rate-limited via the API's global rate limiter (see services/api/src/plugins/security.ts).
  */
 export async function showOfferCode(
   offerId: string,
   token: string,
 ): Promise<ShowCodeResponse> {
-  return requestJson<ShowCodeResponse>(buildMemberOfferShowCodePath(offerId), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildAuthHeader(token),
+  const response = await requestJson<{ ok: true; data: ShowCodeResponse }>(
+    buildMemberOfferShowCodePath(offerId),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeader(token),
+      },
+      body: JSON.stringify({}),
     },
-    body: JSON.stringify({}),
-  });
+  );
+  return response.data;
 }
 
 /**
