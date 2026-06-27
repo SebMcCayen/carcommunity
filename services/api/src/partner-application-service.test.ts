@@ -122,11 +122,9 @@ function buildFakePrisma(options: {
 }) {
   const auditLogs: FakeAuditLog[] = options.auditLogs ?? [];
   let applicationStore: FakeApplication = options.findUniqueResult ?? makeFakeApplication();
-  let companyStore: FakeCompany | null = options.createdCompany ?? null;
-
   return {
     partnerApplication: {
-      findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+      findFirst: async (_args: { where: Record<string, unknown> }) => {
         if (options.findFirstResult !== undefined) return options.findFirstResult;
 
         // For duplicate check: return null by default (no existing)
@@ -175,7 +173,6 @@ function buildFakePrisma(options: {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        companyStore = created;
         return created;
       },
     },

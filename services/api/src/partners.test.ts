@@ -29,7 +29,6 @@ import {
   PARTNER_ROUTE_PATHS,
   buildAdminApplicationApprovePath,
   buildAdminApplicationRejectPath,
-  buildAdminApplicationStartReviewPath,
   buildAdminApplicationPath,
   buildPartnerPath,
   buildAdminPartnerActivatePath,

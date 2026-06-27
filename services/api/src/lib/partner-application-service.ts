@@ -30,7 +30,7 @@ import {
   type AdminPartnerApplicationSummary,
   type AdminPartnerApplicationDetail,
 } from '@carcommunity/shared/partners';
-import { canAccessAdminFeatures, type UserRole, type UserStatus } from '@carcommunity/shared/users';
+import type { UserRole, UserStatus } from '@carcommunity/shared/users';
 
 import { AppError } from './errors.js';
 import type { WriteAuditLogInput } from './moderation-service.js';
@@ -71,7 +71,7 @@ export interface ReviewActionInput {
   applicationId: string;
 }
 
-export interface ApproveApplicationInput extends ReviewActionInput {}
+export type ApproveApplicationInput = ReviewActionInput;
 
 export interface RejectApplicationInput extends ReviewActionInput {
   reason: string;

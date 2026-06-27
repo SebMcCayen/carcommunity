@@ -73,7 +73,6 @@ import {
 } from '@carcommunity/shared/partners';
 
 import { requireAuthHook, requireAdminHook } from '../lib/auth-context.js';
-import { AppError } from '../lib/errors.js';
 import { PartnerApplicationService } from '../lib/partner-application-service.js';
 import { PartnerCompanyService } from '../lib/partner-company-service.js';
 
@@ -85,17 +84,6 @@ const urlSchema = z.string().max(MAX_PARTNER_WEBSITE_URL_LENGTH).url().refine(
   (v) => v.startsWith('http://') || v.startsWith('https://'),
   { message: 'URL must use http or https.' },
 );
-
-const paginationSchema = z
-  .object({
-    page: z.string().optional().transform((v) => (v ? Math.max(1, parseInt(v, 10) || 1) : 1)),
-    pageSize: z.string().optional().transform((v) =>
-      v
-        ? Math.min(MAX_PARTNER_PAGE_SIZE, Math.max(1, parseInt(v, 10) || DEFAULT_PARTNER_PAGE_SIZE))
-        : DEFAULT_PARTNER_PAGE_SIZE,
-    ),
-  })
-  .strict();
 
 const viewportQuerySchema = z
   .object({

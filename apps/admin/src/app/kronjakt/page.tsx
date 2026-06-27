@@ -587,13 +587,11 @@ export default function KronjaktPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void loadPoints();
   }, [loadPoints]);
 
   useEffect(() => {
     if (activeTab === 'claims') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
       void loadClaims(filterRiskReview);
     }
   }, [activeTab, filterRiskReview, loadClaims]);
