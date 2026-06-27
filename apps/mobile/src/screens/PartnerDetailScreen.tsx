@@ -175,6 +175,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   // Load teasers after partner loads
   useEffect(() => {
     if (currentUser !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
       void loadOfferTeasers();
     }
   }, [currentUser, loadOfferTeasers]);
@@ -182,6 +183,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   // Load member details and saved offer IDs after teasers load
   useEffect(() => {
     if (isMember && offerTeasers.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
       void loadMemberOffers();
       void loadSavedOfferIds();
     }
@@ -190,6 +192,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   // Clear protected offer data on logout
   useEffect(() => {
     if (currentUser === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronous reset on logout; no cascading risk
       setMemberOffers([]);
       setSavedOfferIds(new Set());
       setVisibleCodes(new Map());

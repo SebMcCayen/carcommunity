@@ -187,7 +187,6 @@ const FREE_USER = { role: 'user' as const, status: 'active' as const, subscripti
 const MEMBER_USER = { role: 'user' as const, status: 'active' as const, subscriptionEntitlement: 'member_monthly' as const };
 const SUSPENDED_MEMBER = { role: 'user' as const, status: 'temporarily_suspended' as const, subscriptionEntitlement: 'member_monthly' as const };
 const DELETED_USER = { role: 'user' as const, status: 'deleted' as const, subscriptionEntitlement: 'member_monthly' as const };
-const ADMIN_USER = { role: 'admin' as const, status: 'active' as const, subscriptionEntitlement: 'none' as const };
 
 // ---------------------------------------------------------------------------
 // Tests

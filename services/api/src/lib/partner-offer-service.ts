@@ -33,9 +33,7 @@ import {
 } from '@carcommunity/shared/partner-offers';
 
 import {
-  canManagePartnerOffers,
   canViewPartnerOfferDetails,
-  canViewPartnerOfferTeaser,
 } from '@carcommunity/shared/users';
 
 import type { UserRole, UserStatus, SubscriptionEntitlement } from '@carcommunity/shared/users';
