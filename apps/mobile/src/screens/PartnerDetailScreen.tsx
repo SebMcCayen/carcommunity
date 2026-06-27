@@ -102,7 +102,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   const isMember =
     currentUser !== null &&
     canViewPartnerOfferDetails({
-      role: currentUser.role,
+      role: currentUser.roles[0] ?? 'user',
       status: currentUser.status,
       subscriptionEntitlement: currentUser.subscriptionEntitlement,
     });
