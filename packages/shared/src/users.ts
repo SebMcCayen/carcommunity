@@ -212,6 +212,49 @@ export function canAccessGarage(input: {
   return canAccessMemberFeatures(input);
 }
 
+/**
+ * Returns true if the user can view safe offer teasers.
+ * Active non-suspended, non-deleted users may view teasers.
+ */
+export function canViewPartnerOfferTeaser(input: { role: UserRole; status: UserStatus }): boolean {
+  if (isSuspendedStatus(input.status) || input.status === 'deleted') return false;
+  return true;
+}
+
+/**
+ * Returns true if the user can view full protected partner offer details.
+ * Requires active member_monthly entitlement. Suspension overrides entitlement.
+ */
+export function canViewPartnerOfferDetails(input: {
+  role: UserRole;
+  status: UserStatus;
+  subscriptionEntitlement: SubscriptionEntitlement;
+}): boolean {
+  return canAccessMemberFeatures(input);
+}
+
+/**
+ * Returns true if the user can manage partner offers (admin/owner only).
+ */
+export function canManagePartnerOffers(input: { role: UserRole; status: UserStatus }): boolean {
+  return canAccessAdminFeatures(input);
+}
+
+/**
+ * Returns true if the offer is currently available based on server time.
+ * availableFrom and availableUntil are optional ISO strings.
+ */
+export function isPartnerOfferCurrentlyAvailable(input: {
+  availableFrom: string | null;
+  availableUntil: string | null;
+  now?: Date;
+}): boolean {
+  const now = input.now ?? new Date();
+  if (input.availableFrom && new Date(input.availableFrom) > now) return false;
+  if (input.availableUntil && new Date(input.availableUntil) < now) return false;
+  return true;
+}
+
 export function hasBackendAccess(input: {
   role: UserRole;
   status: UserStatus;

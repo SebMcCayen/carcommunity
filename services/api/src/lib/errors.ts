@@ -29,7 +29,20 @@ export type ErrorCode =
   | 'invalid_status_for_update'
   | 'location_confirmation_required'
   | 'application_not_approved'
-  | 'partner_already_created';
+  | 'partner_already_created'
+  // Partner offers
+  | 'offer_not_active'
+  | 'offer_partner_not_active'
+  | 'offer_description_required'
+  | 'offer_teaser_required'
+  | 'offer_activation_not_confirmed'
+  | 'offer_invalid_status_for_update'
+  | 'offer_invalid_status_transition'
+  | 'offer_reason_required'
+  | 'offer_invalid_percentage_discount'
+  | 'offer_invalid_fixed_discount'
+  | 'offer_currency_required'
+  | 'offer_date_range_invalid';
 
 export class AppError extends Error {
   public readonly statusCode: number;

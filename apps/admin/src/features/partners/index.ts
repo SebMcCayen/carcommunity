@@ -1,17 +1,17 @@
 /**
  * Partners (KCC Företagspartner) feature module for the admin portal.
  *
- * Provides API client functions for managing partner applications and companies.
+ * Provides API client functions for managing partner applications, companies, and offers.
  *
  * Security notes:
  *  - Backend is the sole authority for approval, publication, and all status transitions.
  *  - All operations are validated and authorised server-side.
- *  - New companies start as draft — public activation is a separate explicit admin action.
+ *  - New companies and offers start as draft — public activation is a separate explicit admin action.
  *  - Important changes are audited server-side.
  *  - Application contact details are internal — never returned through public APIs.
  *  - Partners are never hard-deleted after being active; use pause or end.
  *  - No personal data, live location, or individual user tracking data is exposed.
- *  - No offers, analytics, digital billboards, or invoice tables in this step.
+ *  - discountCode is NEVER included in list/detail responses — only via show-code endpoint (member-facing).
  */
 
 import {
@@ -40,6 +40,25 @@ import {
   type PartnerCategory,
 } from '@carcommunity/shared/partners';
 
+import {
+  PARTNER_OFFER_ROUTE_PATHS,
+  PARTNER_OFFER_STATUSES,
+  PARTNER_OFFER_TYPES,
+  buildAdminOfferPath,
+  buildAdminOfferActivatePath,
+  buildAdminOfferPausePath,
+  buildAdminOfferEndPath,
+  buildAdminCreateOfferPath,
+  type AdminPartnerOfferSummary,
+  type AdminPartnerOfferDetail,
+  type CreatePartnerOfferRequest,
+  type UpdatePartnerOfferRequest,
+  type PaginatedAdminPartnerOffersResponse,
+  type AdminPartnerOfferDetailResponse,
+  type PartnerOfferStatus,
+  type PartnerOfferType,
+} from '@carcommunity/shared/partner-offers';
+
 import { ApiError, apiRequest } from '../../lib/api';
 
 export type {
@@ -52,8 +71,15 @@ export type {
   PartnerApplicationStatus,
   PartnerCompanyStatus,
   PartnerCategory,
+  // Offer types
+  AdminPartnerOfferSummary,
+  AdminPartnerOfferDetail,
+  CreatePartnerOfferRequest,
+  UpdatePartnerOfferRequest,
+  PartnerOfferStatus,
+  PartnerOfferType,
 };
-export { ApiError, PARTNER_CATEGORIES };
+export { ApiError, PARTNER_CATEGORIES, PARTNER_OFFER_STATUSES, PARTNER_OFFER_TYPES };
 
 // ---------------------------------------------------------------------------
 // Application API functions
@@ -266,6 +292,145 @@ export async function adminEndPartnership(
 ): Promise<AdminPartnerCompanyDetail> {
   const response = await apiRequest<AdminPartnerCompanyDetailResponse>(
     buildAdminPartnerEndPath(partnerId),
+    {
+      method: 'POST',
+      body: { reason },
+      token,
+    },
+  );
+  return response.data;
+}
+
+// ---------------------------------------------------------------------------
+// Partner Offer API functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists all partner offers (all statuses) for the admin view.
+ * discountCode is NEVER included in the response.
+ * Requires admin or owner role (enforced server-side).
+ */
+export async function adminListPartnerOffers(
+  options: { page?: number; partnerId?: string; status?: PartnerOfferStatus } = {},
+  token?: string,
+): Promise<PaginatedAdminPartnerOffersResponse> {
+  const params = new URLSearchParams({ page: String(options.page ?? 1) });
+  if (options.partnerId) params.set('partnerId', options.partnerId);
+  if (options.status) params.set('status', options.status);
+  return apiRequest<PaginatedAdminPartnerOffersResponse>(
+    `${PARTNER_OFFER_ROUTE_PATHS.adminOffers}?${params.toString()}`,
+    { token },
+  );
+}
+
+/**
+ * Returns full admin detail for a single partner offer.
+ * discountCode is intentionally NOT included — never in list/detail.
+ */
+export async function adminGetPartnerOffer(
+  offerId: string,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminOfferPath(offerId),
+    { token },
+  );
+  return response.data;
+}
+
+/**
+ * Creates a new partner offer in draft status for the given partner.
+ * Status cannot be set via this endpoint — always starts as draft.
+ * Backend enforces validation and writes an audit entry.
+ */
+export async function adminCreatePartnerOffer(
+  partnerId: string,
+  request: CreatePartnerOfferRequest,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminCreateOfferPath(partnerId),
+    {
+      method: 'POST',
+      body: request,
+      token,
+    },
+  );
+  return response.data;
+}
+
+/**
+ * Updates an existing draft or paused partner offer.
+ * Active offers cannot be edited — pause first.
+ * Status cannot be changed here; use dedicated activate/pause/end actions.
+ */
+export async function adminUpdatePartnerOffer(
+  offerId: string,
+  request: UpdatePartnerOfferRequest,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminOfferPath(offerId),
+    {
+      method: 'PATCH',
+      body: request,
+      token,
+    },
+  );
+  return response.data;
+}
+
+/**
+ * Activates a partner offer.
+ * Requires explicit confirmation. Partner company must be active.
+ * Backend validates offer completeness and writes an audit entry.
+ */
+export async function adminActivatePartnerOffer(
+  offerId: string,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminOfferActivatePath(offerId),
+    {
+      method: 'POST',
+      body: { confirmed: true },
+      token,
+    },
+  );
+  return response.data;
+}
+
+/**
+ * Pauses an active partner offer. A reason is required.
+ * Backend writes an audit entry with the reason.
+ */
+export async function adminPausePartnerOffer(
+  offerId: string,
+  reason: string,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminOfferPausePath(offerId),
+    {
+      method: 'POST',
+      body: { reason },
+      token,
+    },
+  );
+  return response.data;
+}
+
+/**
+ * Ends a partner offer permanently. A reason is required.
+ * Backend writes an audit entry with the reason.
+ */
+export async function adminEndPartnerOffer(
+  offerId: string,
+  reason: string,
+  token?: string,
+): Promise<AdminPartnerOfferDetail> {
+  const response = await apiRequest<AdminPartnerOfferDetailResponse>(
+    buildAdminOfferEndPath(offerId),
     {
       method: 'POST',
       body: { reason },

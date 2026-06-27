@@ -455,5 +455,32 @@
     "categoryRestaurant": "Restaurant",
     "categoryRetail": "Retail",
     "categoryOther": "Other"
+  },
+  "partnerOffers": {
+    "sectionTitle": "Offers & Benefits",
+    "noOffers": "No current offers.",
+    "memberRequired": "KCC Membership required to view this offer.",
+    "memberRequiredHint": "Become a KCC member to access exclusive offers and benefits from our partners.",
+    "showCode": "Show code",
+    "saveOffer": "Save offer",
+    "unsaveOffer": "Remove from saved",
+    "validFrom": "Valid from",
+    "validUntil": "Valid until",
+    "validPeriod": "Validity period",
+    "terms": "Terms",
+    "howToRedeem": "How to redeem",
+    "drivingSafetyWarning": "Park safely before using an offer.",
+    "codeVisible": "Code",
+    "codeAlertTitle": "Discount code",
+    "codeAlertClose": "Close",
+    "loadError": "Could not load offers.",
+    "codeLoadError": "Could not load the code. Please try again.",
+    "saveError": "Could not save the offer.",
+    "offerTypeDiscountCode": "Discount code",
+    "offerTypePercentageDiscount": "Percentage discount",
+    "offerTypeFixedDiscount": "Fixed discount",
+    "offerTypeMemberBenefit": "Member benefit",
+    "offerTypeSpecialOffer": "Special offer",
+    "offerTypeOther": "Offer"
   }
 }
