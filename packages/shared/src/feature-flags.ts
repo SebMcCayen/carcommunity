@@ -9,6 +9,7 @@ export type FeatureFlagKey =
   | 'liveLocation'
   | 'chat'
   | 'crownHunt'
+  | 'partners'
   | 'partnerStats'
   | 'pushNotifications'
   | 'socialSharing'
@@ -26,6 +27,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   liveLocation: true,
   chat: true,
   crownHunt: true,
+  partners: true,
   partnerStats: true,
   pushNotifications: true,
   socialSharing: true,

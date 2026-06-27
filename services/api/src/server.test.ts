@@ -169,6 +169,7 @@ test('shared default feature flags match the MVP baseline contract', () => {
     'externalDataSources',
     'liveLocation',
     'partnerStats',
+    'partners',
     'pushNotifications',
     'socialSharing',
   ] as const;

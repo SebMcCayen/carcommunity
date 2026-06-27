@@ -22,14 +22,18 @@
  */
 
 import MapboxGL from '@rnmapbox/maps';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { getMapboxAccessToken } from '../config/mapbox';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useLiveLocation } from '../context/LiveLocationContext';
 import { useLiveLocationMarkers } from '../hooks/useLiveLocationMarkers';
+import { usePartnerMarkers } from '../hooks/usePartnerMarkers';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
+import type { RootStackParamList } from '../navigation/types';
 
 // Kungsbacka, Sweden — [longitude, latitude] as required by Mapbox.
 const KUNGSBACKA_CENTER: [number, number] = [12.0742, 57.5086];
@@ -44,6 +48,7 @@ if (mapboxToken) {
 }
 
 const MARKER_SIZE = 20;
+const PARTNER_MARKER_SIZE = 24;
 
 type MarkerDotProps = {
   color: string;
@@ -59,16 +64,33 @@ const MarkerDot = ({ color }: MarkerDotProps) => (
   />
 );
 
+type PartnerMarkerDotProps = {
+  color: string;
+};
+
+/** Partner marker — visually distinct from member/self markers with a diamond shape. */
+const PartnerMarkerDot = ({ color }: PartnerMarkerDotProps) => (
+  <View
+    style={[
+      styles.partnerMarkerDot,
+      { backgroundColor: color, width: PARTNER_MARKER_SIZE, height: PARTNER_MARKER_SIZE },
+    ]}
+    accessible={false}
+  />
+);
+
 export const MapScreen = () => {
   const { theme } = useAppTheme();
   const { status, currentPosition } = useLiveLocation();
   const { isAuthenticated } = useAuth();
   const { t } = useI18n();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
     markers: memberMarkers,
     isLoading: isMemberMarkersLoading,
     isMemberEligible,
   } = useLiveLocationMarkers();
+  const { rawMarkers: partnerRawMarkers, markers: partnerViewMarkers } = usePartnerMarkers();
 
   // Show the user's real position only while actively sharing.
   // Coordinates are not logged.
@@ -112,6 +134,34 @@ export const MapScreen = () => {
             <MarkerDot color={theme.colors.textSecondary} />
           </MapboxGL.PointAnnotation>
         ))}
+
+        {/*
+          Partner markers — Samarbetspartner.
+          Visually distinct from member/self markers (diamond shape, brand accent).
+          Shown to all users; no auth required.
+          Tapping opens the partner detail screen.
+          No popup while safe-driving mode is active (future step).
+        */}
+        {partnerRawMarkers.map((raw) => (
+          <MapboxGL.PointAnnotation
+            key={`partner-${raw.partnerId}`}
+            id={`partner-${raw.partnerId}`}
+            coordinate={[raw.longitude, raw.latitude]}
+            onSelected={() => {
+              navigation.navigate('PartnerDetail', { partnerId: raw.partnerId });
+            }}
+          >
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`${raw.label}: ${raw.companyName}`}
+              onPress={() => {
+                navigation.navigate('PartnerDetail', { partnerId: raw.partnerId });
+              }}
+            >
+              <PartnerMarkerDot color={theme.colors.brandPrimary} />
+            </TouchableOpacity>
+          </MapboxGL.PointAnnotation>
+        ))}
       </MapboxGL.MapView>
 
       {/* Member notice: shown to authenticated users without member_monthly. */}
@@ -151,6 +201,12 @@ const styles = StyleSheet.create({
   markerDot: {
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  partnerMarkerDot: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    transform: [{ rotate: '45deg' }],
+    borderRadius: 4,
   },
   notice: {
     position: 'absolute',

@@ -12,7 +12,24 @@ export type ErrorCode =
   | 'suspended'
   | 'feature_disabled'
   | 'conflict'
-  | 'self_block';
+  | 'self_block'
+  // Partner application
+  | 'duplicate_application'
+  | 'invalid_status_transition'
+  | 'reason_required'
+  | 'invalid_category'
+  // Partner company
+  | 'invalid_latitude'
+  | 'invalid_longitude'
+  | 'coordinates_required'
+  | 'coordinates_both_required'
+  | 'company_name_required'
+  | 'description_required'
+  | 'address_required'
+  | 'invalid_status_for_update'
+  | 'location_confirmation_required'
+  | 'application_not_approved'
+  | 'partner_already_created';
 
 export class AppError extends Error {
   public readonly statusCode: number;

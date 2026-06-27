@@ -66,6 +66,10 @@ model User {
   crownHuntClaims         CrownHuntClaim[]         @relation("CrownHuntClaimUser")
   crownHuntPointsCreated  CrownHuntPoint[]         @relation("CrownHuntPointCreatedBy")
   crownHuntPointsApproved CrownHuntPoint[]         @relation("CrownHuntPointApprovedBy")
+  partnerApplicationsSubmitted PartnerApplication[] @relation("PartnerApplicationSubmittedBy")
+  partnerApplicationsReviewed  PartnerApplication[] @relation("PartnerApplicationReviewedBy")
+  partnerCompaniesCreated      PartnerCompany[]     @relation("PartnerCompanyCreatedBy")
+  partnerCompaniesUpdated      PartnerCompany[]     @relation("PartnerCompanyUpdatedBy")
 
   @@index([deletedAt])
   @@index([status])
@@ -963,5 +967,156 @@ model CrownHuntClaim {
   @@index([pointId, claimedAt(sort: Desc)])
   @@index([result])
   @@map("crown_hunt_claims")
+}
+
+// ---------------------------------------------------------------------------
+// KCC Företagspartner (Business Partner)
+// ---------------------------------------------------------------------------
+
+/**
+ * Status of a partner application.
+ *
+ *  - submitted:    Application received, awaiting admin review.
+ *  - under_review: An admin has started reviewing the application.
+ *  - approved:     Application approved; a draft partner company may be created.
+ *  - rejected:     Application rejected by admin (review reason required).
+ *  - withdrawn:    Applicant or admin withdrew the application.
+ */
+enum PartnerApplicationStatus {
+  submitted
+  under_review
+  approved
+  rejected
+  withdrawn
+}
+
+/**
+ * Status of a partner company.
+ *
+ *  - draft:  Created by admin, not yet publicly visible.
+ *  - active: Approved and publicly visible on the map.
+ *  - paused: Temporarily hidden from the public map.
+ *  - ended:  Partnership has ended; never hard-deleted.
+ */
+enum PartnerCompanyStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+/**
+ * Category of a partner company.
+ */
+enum PartnerCategory {
+  workshop
+  car_care
+  parts
+  tires
+  charging
+  restaurant
+  retail
+  other
+}
+
+/**
+ * A partner application submitted via the app or the KCC website.
+ *
+ * Privacy rules:
+ *  - Contact fields (contactName, contactEmail, contactPhone) are internal only.
+ *    They must never appear in the public partner company response.
+ *  - reviewReason is internal; never returned to the applicant or the public.
+ *  - submittedByUserId is opaque and never exposed publicly.
+ *
+ * Access rules:
+ *  - Admins and owners may list, review, approve, and reject applications.
+ *  - The submitting user receives a status-only acknowledgement after submission.
+ *  - Unauthenticated website submissions are prepared for (submittedByUserId is nullable).
+ *
+ * Soft-delete: applications are never hard-deleted; use withdrawn/rejected.
+ */
+model PartnerApplication {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  companyName         String                  @db.VarChar(150)
+  organizationNumber  String?                 @map("organization_number") @db.VarChar(30)
+  category            PartnerCategory
+  contactName         String                  @map("contact_name") @db.VarChar(120)
+  /// Internal contact email — never exposed publicly.
+  contactEmail        String                  @map("contact_email") @db.VarChar(254)
+  contactPhone        String?                 @map("contact_phone") @db.VarChar(30)
+  websiteUrl          String?                 @map("website_url") @db.VarChar(500)
+  proposedDescription String?                 @map("proposed_description") @db.VarChar(1000)
+  proposedAddress     String?                 @map("proposed_address") @db.VarChar(300)
+  /// Applicant message. Plain text only.
+  message             String?                 @db.VarChar(2000)
+  status              PartnerApplicationStatus @default(submitted)
+  /// Null for website submissions; set for authenticated app submissions.
+  submittedByUserId   String?                 @map("submitted_by_user_id") @db.Uuid
+  reviewedByUserId    String?                 @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt          DateTime?               @map("reviewed_at")
+  /// Reason for rejection or review note. Internal only.
+  reviewReason        String?                 @map("review_reason") @db.Text
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+
+  submittedBy         User?                   @relation("PartnerApplicationSubmittedBy", fields: [submittedByUserId], references: [id], onDelete: SetNull)
+  reviewedBy          User?                   @relation("PartnerApplicationReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  partnerCompany      PartnerCompany?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([contactEmail])
+  @@map("partner_applications")
+}
+
+/**
+ * A partner company publicly visible on the KCC map.
+ *
+ * Design rules:
+ *  - Partners start as `draft`. Activation requires explicit admin action.
+ *  - Only `active` partners are visible through public APIs.
+ *  - Partners are placed at their actual business location (latitude + longitude).
+ *  - Partners cannot choose arbitrary advertising locations.
+ *  - Do not hard-delete previously active partners; prefer `paused` or `ended`.
+ *  - No offer, analytics, billboard, or invoice fields.
+ *
+ * Privacy rules:
+ *  - publicPhone and publicWebsiteUrl are the only contact fields exposed.
+ *  - Internal application contact details are never stored here.
+ *  - No revenue, billing, or subscription data.
+ */
+model PartnerCompany {
+  id                String               @id @default(uuid()) @db.Uuid
+  /// Optional link to the approved application this company was created from.
+  applicationId     String?              @unique @map("application_id") @db.Uuid
+  companyName       String               @map("company_name") @db.VarChar(150)
+  category          PartnerCategory
+  /// Safe public-facing description. Plain text only.
+  publicDescription String               @map("public_description") @db.VarChar(1000)
+  address           String               @db.VarChar(300)
+  latitude          Float                @db.DoublePrecision
+  longitude         Float                @db.DoublePrecision
+  /// Optional public phone number.
+  publicPhone       String?              @map("public_phone") @db.VarChar(30)
+  /// Optional public website URL.
+  publicWebsiteUrl  String?              @map("public_website_url") @db.VarChar(500)
+  status            PartnerCompanyStatus @default(draft)
+  activatedAt       DateTime?            @map("activated_at")
+  pausedAt          DateTime?            @map("paused_at")
+  endedAt           DateTime?            @map("ended_at")
+  createdByUserId   String               @map("created_by_user_id") @db.Uuid
+  updatedByUserId   String?              @map("updated_by_user_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  application       PartnerApplication?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  createdBy         User                 @relation("PartnerCompanyCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy         User?                @relation("PartnerCompanyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([category])
+  @@index([companyName])
+  @@index([latitude, longitude])
+  @@map("partner_companies")
 }
 

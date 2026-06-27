@@ -7,7 +7,7 @@
  */
 
 /** Marker type used to distinguish between different icon styles on the map. */
-export type MapMarkerType = 'self' | 'member';
+export type MapMarkerType = 'self' | 'member' | 'partner';
 
 /** A lat/lng coordinate used by the map UI layer. */
 export interface MapCoordinate {
