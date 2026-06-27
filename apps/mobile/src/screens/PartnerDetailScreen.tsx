@@ -185,7 +185,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
       contentContainerStyle={styles.scrollContent}
     >
       {/* Status label */}
-      <View style={[styles.badge, { backgroundColor: theme.colors.brandPrimarySubtle }]}>
+      <View style={[styles.badge, { backgroundColor: theme.colors.subtleBackground }]}>
         <Text style={[styles.badgeText, { color: theme.colors.brandPrimary }]}>
           {partner.statusLabel}
         </Text>

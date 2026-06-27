@@ -16,7 +16,7 @@
  *  - Form errors use accessibilityLiveRegion.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -70,6 +70,12 @@ export const PartnerApplicationScreen = ({ navigation }: Props) => {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     setSubmitError(null);
@@ -89,7 +95,11 @@ export const PartnerApplicationScreen = ({ navigation }: Props) => {
 
     setIsSubmitting(true);
     try {
-      const token = await loadSessionToken();
+      const session = await loadSessionToken();
+      if (!session) {
+        if (isMounted.current) setSubmitError(t('partners.loginRequired'));
+        return;
+      }
 
       const request: SubmitPartnerApplicationRequest = {
         companyName: companyName.trim(),
@@ -101,7 +111,7 @@ export const PartnerApplicationScreen = ({ navigation }: Props) => {
         message: message.trim() || null,
       };
 
-      await submitPartnerApplication(request, token ?? undefined);
+      await submitPartnerApplication(request, session.token);
 
       if (isMounted.current) {
         setIsSuccess(true);
@@ -161,7 +171,7 @@ export const PartnerApplicationScreen = ({ navigation }: Props) => {
         </Text>
 
         {/* Privacy notice */}
-        <View style={[styles.privacyNotice, { backgroundColor: theme.colors.surfaceAlt }]}>
+        <View style={[styles.privacyNotice, { backgroundColor: theme.colors.subtleBackground }]}>
           <Text style={[styles.privacyText, { color: theme.colors.textSecondary }]}>
             {t('partners.privacyNotice')}
           </Text>

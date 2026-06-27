@@ -16,6 +16,7 @@
 
 import {
   PARTNER_ROUTE_PATHS,
+  PARTNER_CATEGORIES,
   buildAdminApplicationPath,
   buildAdminApplicationStartReviewPath,
   buildAdminApplicationApprovePath,
@@ -52,7 +53,7 @@ export type {
   PartnerCompanyStatus,
   PartnerCategory,
 };
-export { ApiError };
+export { ApiError, PARTNER_CATEGORIES };
 
 // ---------------------------------------------------------------------------
 // Application API functions

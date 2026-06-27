@@ -43,6 +43,7 @@ import {
   adminPausePartner,
   adminEndPartnership,
   ApiError,
+  PARTNER_CATEGORIES,
 } from '@/features/partners';
 import { translate } from '@/i18n';
 
@@ -98,40 +99,29 @@ function companyStatusLabel(status: PartnerCompanyStatus): string {
 function appStatusBadgeClass(status: PartnerApplicationStatus): string {
   switch (status) {
     case 'approved':
-      return styles.badge_active;
+      return styles.badge_active ?? '';
     case 'under_review':
-      return styles.badge_paused;
+      return styles.badge_paused ?? '';
     case 'rejected':
     case 'withdrawn':
-      return styles.badge_ended;
+      return styles.badge_ended ?? '';
     default:
-      return styles.badge_draft;
+      return styles.badge_draft ?? '';
   }
 }
 
 function companyStatusBadgeClass(status: PartnerCompanyStatus): string {
   switch (status) {
     case 'active':
-      return styles.badge_active;
+      return styles.badge_active ?? '';
     case 'paused':
-      return styles.badge_paused;
+      return styles.badge_paused ?? '';
     case 'ended':
-      return styles.badge_ended;
+      return styles.badge_ended ?? '';
     default:
-      return styles.badge_draft;
+      return styles.badge_draft ?? '';
   }
 }
-
-const PARTNER_CATEGORIES: PartnerCategory[] = [
-  'workshop',
-  'car_care',
-  'parts',
-  'tires',
-  'charging',
-  'restaurant',
-  'retail',
-  'other',
-];
 
 // ---------------------------------------------------------------------------
 // Company form
