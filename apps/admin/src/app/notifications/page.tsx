@@ -113,7 +113,7 @@ interface NotificationPreviewProps {
 const NotificationPreview = ({ title, previewText, category }: NotificationPreviewProps) => (
   <div className={styles.notificationPreview}>
     <div className={styles.previewHeader}>
-      <span className={styles.previewApp}>KCC</span>
+      <span className={styles.previewApp}>{brand.shortName}</span>
       <span className={styles.previewCategory}>{category}</span>
     </div>
     <div className={styles.previewTitle}>{title || t('notifications.titleLabel')}</div>
