@@ -80,7 +80,7 @@ export class EventReminderService {
         eventId: input.eventId,
         status: 'going',
         user: {
-          status: 'active',
+          status: { in: ['active', 'warned'] },
           deletedAt: null,
         },
       },
