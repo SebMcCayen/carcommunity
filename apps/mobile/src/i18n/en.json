@@ -503,6 +503,8 @@
   "notifications": {
     "title": "Notifications",
     "empty": "No notifications yet.",
+    "loadError": "Could not load notifications. Try again.",
+    "retry": "Try again",
     "markAllRead": "Mark all as read",
     "unreadLabel": "New",
     "categoryEvent": "Event",
