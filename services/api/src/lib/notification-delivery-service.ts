@@ -191,8 +191,7 @@ export class NotificationDeliveryService {
         let attempt: { success: boolean; safeErrorCode?: string } = { success: false, safeErrorCode: 'not_attempted' };
 
         for (let retry = 0; retry <= MAX_PUSH_RETRIES; retry++) {
-          const decrypted = decryptPushToken(device.encryptedPushToken);
-          if (!decrypted) {
+          if (!decryptPushToken(device.encryptedPushToken)) {
             attempt = { success: false, safeErrorCode: 'token_decrypt_failed' };
             await this.recordDeliveryAttempt({
               userNotificationId: notificationId,
