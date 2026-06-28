@@ -80,7 +80,9 @@ const adminSendBodySchema = z
     actionType: z.enum(NOTIFICATION_ACTION_TYPES).optional(),
     eventId: z.string().uuid().optional(),
     targetUserId: z.string().uuid().optional(),
+    reason: z.string().min(1, 'Reason is required.').max(1000),
     idempotencyKey: z.string().trim().min(1).max(255),
+    confirmed: z.boolean().optional(),
   })
   .strict();
 
