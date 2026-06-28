@@ -230,6 +230,13 @@ export class NotificationDeliveryService {
                 where: { id: device.deviceId },
                 data: { isActive: false, revokedAt: new Date() },
               });
+              await this.recordDeliveryAttempt({
+                userNotificationId: notificationId,
+                deviceRegistrationId: device.deviceId,
+                channel: 'push',
+                status: 'failed',
+                safeErrorCode: attempt.safeErrorCode,
+              });
               break;
             }
             if (retry === MAX_PUSH_RETRIES) {
