@@ -309,11 +309,24 @@ export class NotificationDeliveryService {
     }
 
     // Resolve recipient user IDs.
-    const recipientIds = await this.resolveAudienceUserIds(input);
+    let recipientIds = await this.resolveAudienceUserIds(input);
+
+    // Respect per-category in-app preferences for admin sends (defaults to enabled).
+    if (!ESSENTIAL_NOTIFICATION_CATEGORIES.includes(input.category) && recipientIds.length > 0) {
+      const disabled = await this.prisma.notificationPreference.findMany({
+        where: { userId: { in: recipientIds }, category: input.category, inAppEnabled: false },
+        select: { userId: true },
+      });
+      const disabledSet = new Set(disabled.map((d) => d.userId));
+      recipientIds = recipientIds.filter((id) => !disabledSet.has(id));
+    }
 
     if (recipientIds.length > MAX_SYNC_AUDIENCE_SIZE) {
-      // TODO: Emit to background queue instead of truncating.
-      recipientIds.splice(MAX_SYNC_AUDIENCE_SIZE);
+      throw new AppError(
+        400,
+        'validation_error',
+        `Audience too large for synchronous send (max ${MAX_SYNC_AUDIENCE_SIZE}).`,
+      );
     }
 
     const batchId = crypto.randomUUID();
