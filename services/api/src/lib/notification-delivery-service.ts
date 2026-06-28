@@ -171,7 +171,7 @@ export class NotificationDeliveryService {
       notificationId = notification.notificationId;
       inAppDelivered = true;
     } catch (err) {
-      // In-app failure does not affect push attempt.
+      // If in-app creation fails, we can't send push because the payload requires a notificationId.
       console.error('[DeliveryService] Failed to create in-app notification:', err instanceof Error ? err.message : 'unknown');
     }
 
