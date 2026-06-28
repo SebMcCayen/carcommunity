@@ -20,7 +20,7 @@
  *  - Essential categories show a non-interactive label instead of a toggle.
  */
 
-import { Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import type { NotificationCategory, NotificationPreferenceSummary } from '@carcommunity/shared/notifications';
 import { ACTIVE_NOTIFICATION_CATEGORIES, ESSENTIAL_NOTIFICATION_CATEGORIES } from '@carcommunity/shared/notifications';
@@ -187,6 +187,12 @@ export const NotificationSettingsScreen = () => {
   const [isSaving, setIsSaving] = useState(false);
   const mountedRef = useRef(true);
 
+  const refreshPushPermission = useCallback(async () => {
+    const permStatus = await checkPushPermissionStatus();
+    if (!mountedRef.current) return;
+    setPushPermission(permStatus);
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -226,6 +232,18 @@ export const NotificationSettingsScreen = () => {
 
     void loadData();
   }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void refreshPushPermission();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshPushPermission]);
 
   const handleToggle = useCallback(
     async (

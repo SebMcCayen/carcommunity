@@ -228,6 +228,8 @@ export const NotificationsScreen = () => {
     notifications,
     unreadCount,
     isLoading,
+    isRefreshing,
+    isLoadingMore,
     error,
     hasMore,
     refresh,
@@ -308,9 +310,9 @@ export const NotificationsScreen = () => {
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.4}
           onRefresh={refresh}
-          refreshing={isLoading}
+          refreshing={isRefreshing}
           ListFooterComponent={
-            hasMore ? (
+            hasMore && isLoadingMore ? (
               <View style={styles.footer}>
                 <ActivityIndicator color={theme.colors.brandPrimary} />
               </View>

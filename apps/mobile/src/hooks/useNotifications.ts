@@ -27,6 +27,8 @@ export interface UseNotificationsResult {
   notifications: NotificationSummary[];
   unreadCount: number;
   isLoading: boolean;
+  isRefreshing: boolean;
+  isLoadingMore: boolean;
   error: string | null;
   hasMore: boolean;
   currentPage: number;
@@ -48,6 +50,8 @@ export function useNotifications(): UseNotificationsResult {
   const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,6 +70,8 @@ export function useNotifications(): UseNotificationsResult {
 
   const load = useCallback(async (page: number, append: boolean) => {
     setIsLoading(true);
+    setIsRefreshing(!append);
+    setIsLoadingMore(append);
     setError(null);
     try {
       const stored = await loadSessionToken().catch(() => null);
@@ -87,6 +93,8 @@ export function useNotifications(): UseNotificationsResult {
     } finally {
       if (mountedRef.current) {
         setIsLoading(false);
+        setIsRefreshing(false);
+        setIsLoadingMore(false);
       }
     }
   }, [t]);
@@ -101,9 +109,9 @@ export function useNotifications(): UseNotificationsResult {
   }, [load]);
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || isLoading) return;
+    if (!hasMore || isLoadingMore) return;
     await load(currentPage + 1, true);
-  }, [hasMore, isLoading, currentPage, load]);
+  }, [hasMore, isLoadingMore, currentPage, load]);
 
   const markRead = useCallback(async (notificationId: string) => {
     const wasUnread = notifications.some((n) => n.notificationId === notificationId && !n.readAt);
@@ -147,6 +155,8 @@ export function useNotifications(): UseNotificationsResult {
     notifications,
     unreadCount,
     isLoading,
+    isRefreshing,
+    isLoadingMore,
     error,
     hasMore,
     currentPage,
