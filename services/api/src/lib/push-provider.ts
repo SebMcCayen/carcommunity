@@ -92,19 +92,24 @@ export class DevPushNotificationProvider implements PushNotificationProvider {
     _encryptedToken: string,
     payload: PushPayload,
   ): Promise<PushSendResult> {
+    if (process.env.NODE_ENV === 'production') {
+      return { success: false, safeErrorCode: 'dev_push_provider_not_allowed_in_production' };
+    }
+
     // Deliberately not logging token values — only safe payload fields.
-    // In development, this simulates a successful send.
-    // TODO: Replace with Expo Push Service or APNs/FCM after security review.
-    console.log(
-      '[DEV push provider] Simulated push send:',
-      JSON.stringify({
-        notificationId: payload.notificationId,
-        category: payload.category,
-        // title/previewText logged for dev visibility only — omit in production provider
-        title: payload.title,
-        actionType: payload.actionType,
-      }),
-    );
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(
+        '[DEV push provider] Simulated push send:',
+        JSON.stringify({
+          notificationId: payload.notificationId,
+          category: payload.category,
+          // title/previewText logged for dev visibility only — omit in production provider
+          title: payload.title,
+          actionType: payload.actionType,
+        }),
+      );
+    }
+
     return { success: true };
   }
 }
