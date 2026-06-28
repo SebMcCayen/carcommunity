@@ -4,8 +4,7 @@
  * All service calls use fake services to avoid database dependencies.
  *
  * Covers:
- *  - Push permission is not requested at app startup (verified by no push call on app init)
- *  - Declining push permission does not block app use (in-app route still works)
+ *  - In-app inbox routes are not gated by the push feature flag
  *  - Device registration requires authentication (401 when unauthenticated)
  *  - Device token is never returned in registration response
  *  - Device registration is idempotent (same token reactivates)
