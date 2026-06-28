@@ -73,6 +73,9 @@ model User {
   partnerOffersCreated         PartnerOffer[]        @relation("PartnerOfferCreatedBy")
   partnerOffersUpdated         PartnerOffer[]        @relation("PartnerOfferUpdatedBy")
   savedPartnerOffers           SavedPartnerOffer[]
+  billboardsApproved      SponsoredBillboard[]     @relation("BillboardApprovedBy")
+  billboardsCreated       SponsoredBillboard[]     @relation("BillboardCreatedBy")
+  billboardsUpdated       SponsoredBillboard[]     @relation("BillboardUpdatedBy")
 
   @@index([deletedAt])
   @@index([status])
@@ -1115,10 +1118,11 @@ model PartnerCompany {
   application       PartnerApplication?      @relation(fields: [applicationId], references: [id], onDelete: SetNull)
   createdBy         User                     @relation("PartnerCompanyCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   updatedBy         User?                    @relation("PartnerCompanyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  offers            PartnerOffer[]
-  interactionEvents PartnerInteractionEvent[]
-  metricAggregates  PartnerMetricAggregate[]
-  passbyContributions PartnerPassByContribution[]
+  offers               PartnerOffer[]
+  interactionEvents    PartnerInteractionEvent[]
+  metricAggregates     PartnerMetricAggregate[]
+  passbyContributions  PartnerPassByContribution[]
+  sponsoredBillboards  SponsoredBillboard[]
 
   @@index([status])
   @@index([category])
@@ -1313,4 +1317,92 @@ model PartnerPassByContribution {
   @@index([partnerCompanyId, aggregationDate])
   @@index([expiresAt])
   @@map("partner_pass_by_contributions")
+}
+
+
+// ---------------------------------------------------------------------------
+// Digital billboards
+// ---------------------------------------------------------------------------
+
+enum BillboardStatus {
+  draft
+  active
+  paused
+  ended
+}
+
+enum BillboardPlacementType {
+  map_billboard
+  event_area
+  partner_area
+  other_approved_location
+}
+
+enum BillboardCallToActionType {
+  navigate
+  phone
+  website
+  offer_view
+  partner_profile
+}
+
+/**
+ * A sponsored digital billboard placement on the map.
+ *
+ * Design rules:
+ *  - Billboards are separate from the partner's real business location.
+ *  - Billboards always start as draft.
+ *  - Activation requires explicit admin safety confirmation.
+ *  - Do not hard-delete active or previously-active billboards.
+ *  - Status transitions only via dedicated service operations.
+ *  - No scripts, HTML, executable content, or targeting profiles.
+ *  - No image/video uploads in this step.
+ *  - No auction or billing fields.
+ *
+ * Privacy rules:
+ *  - safetyNote and approvalReason are internal only — never exposed publicly.
+ *  - No user-level analytics on this model.
+ *  - No personalisation or targeting fields.
+ */
+model SponsoredBillboard {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  partnerCompanyId    String                     @map("partner_company_id") @db.Uuid
+  /// Plain text only. Max 100 characters.
+  headline            String                     @db.VarChar(100)
+  /// Plain text only. Max 300 characters.
+  message             String                     @db.VarChar(300)
+  placementType       BillboardPlacementType     @map("placement_type")
+  latitude            Float                      @db.DoublePrecision
+  longitude           Float                      @db.DoublePrecision
+  status              BillboardStatus            @default(draft)
+  availableFrom       DateTime?                  @map("available_from")
+  availableUntil      DateTime?                  @map("available_until")
+  callToActionType    BillboardCallToActionType? @map("call_to_action_type")
+  /// Phone or URL only where callToActionType requires it. Max 500 chars.
+  callToActionValue   String?                    @map("call_to_action_value") @db.VarChar(500)
+  /// Internal note for admin reference. Never exposed publicly. Max 500 chars.
+  safetyNote          String?                    @map("safety_note") @db.VarChar(500)
+  /// Approval reason written at activation. Internal only.
+  approvalReason      String?                    @map("approval_reason") @db.Text
+  approvedAt          DateTime?                  @map("approved_at")
+  approvedByUserId    String?                    @map("approved_by_user_id") @db.Uuid
+  activatedAt         DateTime?                  @map("activated_at")
+  pausedAt            DateTime?                  @map("paused_at")
+  endedAt             DateTime?                  @map("ended_at")
+  createdByUserId     String                     @map("created_by_user_id") @db.Uuid
+  updatedByUserId     String?                    @map("updated_by_user_id") @db.Uuid
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+
+  partnerCompany      PartnerCompany             @relation(fields: [partnerCompanyId], references: [id], onDelete: Restrict)
+  approvedBy          User?                      @relation("BillboardApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  createdBy           User                       @relation("BillboardCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy           User?                      @relation("BillboardUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([partnerCompanyId])
+  @@index([availableFrom])
+  @@index([availableUntil])
+  @@index([latitude, longitude])
+  @@map("sponsored_billboards")
 }

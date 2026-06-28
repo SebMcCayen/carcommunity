@@ -22,7 +22,7 @@
  */
 
 import MapboxGL from '@rnmapbox/maps';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -31,9 +31,11 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { useLiveLocation } from '../context/LiveLocationContext';
 import { useLiveLocationMarkers } from '../hooks/useLiveLocationMarkers';
 import { usePartnerMarkers } from '../hooks/usePartnerMarkers';
+import { useBillboardMarkers } from '../hooks/useBillboardMarkers';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
 import { fireAndForgetInteraction } from '../api/partner-insights';
+import { fireAndForgetBillboardInteraction } from '../api/digital-billboards';
 import type { RootStackParamList } from '../navigation/types';
 
 // Kungsbacka, Sweden — [longitude, latitude] as required by Mapbox.
@@ -80,6 +82,18 @@ const PartnerMarkerDot = ({ color }: PartnerMarkerDotProps) => (
   />
 );
 
+const BILLBOARD_MARKER_SIZE = 22;
+
+const BillboardMarkerDot = ({ color }: { color: string }) => (
+  <View
+    style={[
+      styles.billboardMarkerDot,
+      { backgroundColor: color, width: BILLBOARD_MARKER_SIZE, height: BILLBOARD_MARKER_SIZE },
+    ]}
+    accessible={false}
+  />
+);
+
 export const MapScreen = () => {
   const { theme } = useAppTheme();
   const { status, currentPosition } = useLiveLocation();
@@ -92,10 +106,12 @@ export const MapScreen = () => {
     isMemberEligible,
   } = useLiveLocationMarkers();
   const { rawMarkers: partnerRawMarkers } = usePartnerMarkers();
+  const { markers: billboardMarkers } = useBillboardMarkers(true);
 
   // Show the user's real position only while actively sharing.
   // Coordinates are not logged.
   const isSharingActive = status === 'sharing';
+  const isSafeDrivingMode = isSharingActive;
   const selfMarkerCoordinate =
     isSharingActive && currentPosition !== null
       ? ([currentPosition.longitude, currentPosition.latitude] as [number, number])
@@ -169,6 +185,42 @@ export const MapScreen = () => {
             </TouchableOpacity>
           </MapboxGL.PointAnnotation>
         ))}
+
+        {billboardMarkers.map((raw) => (
+          <MapboxGL.PointAnnotation
+            key={`billboard-${raw.billboardId}`}
+            id={`billboard-${raw.billboardId}`}
+            coordinate={[raw.longitude, raw.latitude]}
+            testID="billboard-marker"
+            onSelected={() => {
+              if (isSafeDrivingMode) {
+                Alert.alert('', t('billboard.safeDrivingWarning'));
+                return;
+              }
+              navigation.navigate('BillboardDetail', { billboardId: raw.billboardId });
+              void withToken(async (token) => {
+                fireAndForgetBillboardInteraction(raw.billboardId, 'open', token);
+              });
+            }}
+          >
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`${t('billboard.sponsoredLabel')}: ${raw.partnerCompanyName}`}
+              onPress={() => {
+                if (isSafeDrivingMode) {
+                  Alert.alert('', t('billboard.safeDrivingWarning'));
+                  return;
+                }
+                navigation.navigate('BillboardDetail', { billboardId: raw.billboardId });
+                void withToken(async (token) => {
+                  fireAndForgetBillboardInteraction(raw.billboardId, 'open', token);
+                });
+              }}
+            >
+              <BillboardMarkerDot color={'#F59E0B'} />
+            </TouchableOpacity>
+          </MapboxGL.PointAnnotation>
+        ))}
       </MapboxGL.MapView>
 
       {/* Member notice: shown to authenticated users without member_monthly. */}
@@ -213,6 +265,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
     transform: [{ rotate: '45deg' }],
+    borderRadius: 4,
+  },
+  billboardMarkerDot: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     borderRadius: 4,
   },
   notice: {

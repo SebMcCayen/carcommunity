@@ -488,5 +488,19 @@
     "offerTypeMemberBenefit": "Medlemsförmån",
     "offerTypeSpecialOffer": "Specialerbjudande",
     "offerTypeOther": "Erbjudande"
+  },
+  "billboard": {
+    "sponsoredLabel": "Sponsrad placering",
+    "advertisingFrom": "Marknadsföring",
+    "viewCompany": "Visa företag",
+    "navigate": "Navigera",
+    "call": "Ring",
+    "visitWebsite": "Besök webbplats",
+    "viewOffer": "Visa erbjudande",
+    "safeDrivingWarning": "Stanna säkert innan du öppnar marknadsföringen.",
+    "safeDrivingInteractionDisabled": "Marknadsföringsinteraktioner är avstängda medan du kör.",
+    "availableUntil": "Tillgänglig till",
+    "availableFrom": "Tillgänglig från",
+    "loadError": "Kunde inte hämta reklamskylten."
   }
 }

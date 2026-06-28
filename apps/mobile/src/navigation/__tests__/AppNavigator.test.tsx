@@ -193,6 +193,12 @@ jest.mock('../../screens/PartnerApplicationScreen', () => ({
   PartnerApplicationScreen: () => require('react').createElement('View', { testID: 'stub-partner-application-screen' }),
 }));
 
+
+jest.mock('../../screens/BillboardDetailScreen', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BillboardDetailScreen: () => require('react').createElement('View', { testID: 'stub-billboard-detail-screen' }),
+}));
+
 // ── useAuth mock ──────────────────────────────────────────────────────────────
 const mockUseAuth = jest.fn();
 

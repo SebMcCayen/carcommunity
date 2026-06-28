@@ -79,6 +79,10 @@
     "./partner-insights": {
       "types": "./dist/partner-insights.d.ts",
       "default": "./dist/partner-insights.js"
+    },
+    "./digital-billboards": {
+      "types": "./dist/digital-billboards.d.ts",
+      "default": "./dist/digital-billboards.js"
     }
   },
   "scripts": {
