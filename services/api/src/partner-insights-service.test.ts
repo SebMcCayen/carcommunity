@@ -133,8 +133,21 @@ function buildFakePrisma(options?: {
       },
     },
     partnerMetricAggregate: {
-      upsert: async ({ where, create, update }: { where: Record<string, any>; create: Record<string, any>; update: Record<string, any> }) => {
-        const key = where.partnerCompanyId_interactionType_periodType_periodStart;
+      upsert: async ({
+        where,
+        create,
+        update,
+      }: {
+        where: Record<string, unknown>;
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        const key = where.partnerCompanyId_interactionType_periodType_periodStart as {
+          partnerCompanyId: string;
+          interactionType: string;
+          periodType: string;
+          periodStart: Date;
+        };
         const existing = aggregates.find(
           (aggregate) =>
             aggregate.partnerCompanyId === key.partnerCompanyId &&
@@ -162,20 +175,24 @@ function buildFakePrisma(options?: {
         aggregates.push(created);
         return created;
       },
-      findMany: async ({ where }: { where: Record<string, any> }) =>
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
         aggregates
           .filter((aggregate) => {
             if (where.partnerCompanyId && aggregate.partnerCompanyId !== where.partnerCompanyId) return false;
             if (where.periodType && aggregate.periodType !== where.periodType) return false;
-            if (where.periodStart && aggregate.periodStart < where.periodStart.gte) return false;
-            if (where.periodEnd && aggregate.periodEnd > where.periodEnd.lte) return false;
+            if (where.periodStart && aggregate.periodStart < (where.periodStart as { gte: Date }).gte) return false;
+            if (where.periodEnd && aggregate.periodEnd > (where.periodEnd as { lte: Date }).lte) return false;
             return true;
           })
           .sort((a, b) => a.periodStart.getTime() - b.periodStart.getTime()),
     },
     partnerPassByContribution: {
-      findUnique: async ({ where }: { where: Record<string, any> }) => {
-        const key = where.partnerCompanyId_scopedContributorHash_aggregationDate;
+      findUnique: async ({ where }: { where: Record<string, unknown> }) => {
+        const key = where.partnerCompanyId_scopedContributorHash_aggregationDate as {
+          partnerCompanyId: string;
+          scopedContributorHash: string;
+          aggregationDate: Date;
+        };
         return (
           contributions.find(
             (contribution) =>
@@ -197,8 +214,9 @@ function buildFakePrisma(options?: {
         contributions.push(created);
         return created;
       },
-      findMany: async ({ where, take }: { where: Record<string, any>; take?: number }) => {
-        let result = contributions.filter((contribution) => contribution.expiresAt <= where.expiresAt.lte);
+      findMany: async ({ where, take }: { where: Record<string, unknown>; take?: number }) => {
+        const expiresAt = (where.expiresAt as { lte: Date }).lte;
+        let result = contributions.filter((contribution) => contribution.expiresAt <= expiresAt);
         result = result.sort((a, b) => a.expiresAt.getTime() - b.expiresAt.getTime());
         return typeof take === 'number' ? result.slice(0, take) : result;
       },

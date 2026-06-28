@@ -4,7 +4,6 @@ import test from 'node:test';
 import { createServer } from './server.js';
 import { PartnerInsightsService } from './lib/partner-insights-service.js';
 import {
-  PARTNER_INSIGHTS_ROUTE_PATHS,
   buildAdminInsightsPath,
   buildAdminInsightsSummaryPath,
   buildRecordInteractionPath,
@@ -29,7 +28,6 @@ const FREE_USER = JSON.stringify({
 });
 
 const PARTNER_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
-const OFFER_ID = 'cccccccc-0000-4000-8000-000000000001';
 
 const SUMMARY: PartnerInsightsSummary = {
   partnerId: PARTNER_ID,

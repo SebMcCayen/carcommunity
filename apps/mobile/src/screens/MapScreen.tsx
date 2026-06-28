@@ -91,7 +91,7 @@ export const MapScreen = () => {
     isLoading: isMemberMarkersLoading,
     isMemberEligible,
   } = useLiveLocationMarkers();
-  const { rawMarkers: partnerRawMarkers, markers: partnerViewMarkers } = usePartnerMarkers();
+  const { rawMarkers: partnerRawMarkers } = usePartnerMarkers();
 
   // Show the user's real position only while actively sharing.
   // Coordinates are not logged.
