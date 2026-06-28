@@ -239,20 +239,23 @@ export const NotificationSettingsScreen = () => {
       );
 
       setIsSaving(true);
+      const stored = await loadSessionToken().catch(() => null);
+      const token = stored?.token ?? undefined;
       try {
-        const stored = await loadSessionToken().catch(() => null);
-        const token = stored?.token ?? undefined;
         const res = await patchNotificationPreferences([{ category, [field]: value }], token);
         if (!mountedRef.current) return;
         setPreferences(res.data.preferences);
       } catch {
-        // Roll back optimistic update on failure.
+        // Refresh from backend to avoid incorrect rollback on failure.
         if (!mountedRef.current) return;
-        setPreferences((prev) =>
-          prev.map((p) =>
-            p.category === category ? { ...p, [field]: !value } : p,
-          ),
-        );
+        try {
+          const prefRes = await getNotificationPreferences(token);
+          if (!mountedRef.current) return;
+          setPreferences(prefRes.data.preferences);
+        } catch {
+          // Non-fatal — user can retry later.
+        }
+      }
       } finally {
         if (mountedRef.current) setIsSaving(false);
       }
