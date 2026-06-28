@@ -406,7 +406,7 @@ export class NotificationDeliveryService {
           throw new AppError(400, 'notification_target_user_required', 'targetUserId is required for specific_user audience.');
         }
         const user = await this.prisma.user.findUnique({ where: { id: input.targetUserId } });
-        if (!user || user.deletedAt || user.status !== 'active') {
+        if (!user || user.deletedAt || !['active', 'warned'].includes(user.status)) {
           return [];
         }
         return [input.targetUserId];
