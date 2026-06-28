@@ -423,7 +423,7 @@ export class NotificationDeliveryService {
           where: {
             subscriptionEntitlement: 'member_monthly',
             deletedAt: null,
-            status: 'active',
+            status: { in: ['active', 'warned'] },
           },
           select: { id: true },
         });
