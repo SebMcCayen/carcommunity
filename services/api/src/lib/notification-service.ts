@@ -58,19 +58,21 @@ const DEV_ENCRYPTION_KEY = 'dev-placeholder-key-32bytes-pad00'; // 32 chars for 
 
 /**
  * Returns the active push-token encryption key.
- * In production, PUSH_TOKEN_ENCRYPTION_KEY must be set or startup fails.
+ * In production, PUSH_TOKEN_ENCRYPTION_KEY must be set (and >= 32 chars) or startup fails.
  * In development, falls back to a local placeholder key.
  */
-function getEncryptionKey(): string {
+if (process.env.NODE_ENV === 'production') {
   const envKey = process.env.PUSH_TOKEN_ENCRYPTION_KEY;
-  if (envKey) return envKey;
-  if (process.env.NODE_ENV === 'production') {
+  if (!envKey || envKey.length < 32) {
     throw new Error(
-      'PUSH_TOKEN_ENCRYPTION_KEY environment variable must be set in production. ' +
+      'PUSH_TOKEN_ENCRYPTION_KEY environment variable must be set in production and be at least 32 characters. ' +
         'Never use the development placeholder key in production.',
     );
   }
-  return DEV_ENCRYPTION_KEY;
+}
+
+function getEncryptionKey(): string {
+  return process.env.PUSH_TOKEN_ENCRYPTION_KEY ?? DEV_ENCRYPTION_KEY;
 }
 
 let derivedPushTokenKey: Buffer | null = null;
