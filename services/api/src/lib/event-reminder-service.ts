@@ -60,7 +60,7 @@ export class EventReminderService {
    * Send an event reminder to all eligible RSVP'd users.
    *
    * Eligibility:
-   *  - Event status is 'upcoming' or 'published'.
+   *  - Event status is 'published'.
    *  - RSVP status is 'going'.
    *  - User account is active (not deleted, not suspended for non-essential).
    *  - Idempotency key prevents duplicate reminders per event + window.
