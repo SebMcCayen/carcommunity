@@ -124,7 +124,7 @@ export class NotificationDeliveryService {
    * Deliver a notification to a single user.
    *
    * Steps:
-   *  1. Check account status (deleted = skip unless essential; suspended = essential only).
+   *  1. Check account status (deleted = skip; suspended = essential only).
    *  2. Check in-app preference.
    *  3. Create in-app notification.
    *  4. Check push feature flag and push preference.
