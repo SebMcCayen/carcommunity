@@ -17,7 +17,7 @@
  *
  * Accessibility:
  *  - All interactive elements have accessibilityRole and accessibilityLabel.
- *  - Unread state is communicated via accessibilityState.
+ *  - Unread state is communicated via the accessibilityLabel (and visually via the unread dot).
  *  - Text uses readable contrast via design tokens.
  */
 
