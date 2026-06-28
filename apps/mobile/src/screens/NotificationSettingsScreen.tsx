@@ -104,7 +104,7 @@ const PreferenceRow = ({
       <Text
         style={[
           styles.prefLabel,
-          { color: theme.colors.textPrimary, fontSize: theme.typography.size.body },
+          { color: theme.colors.textPrimary, fontSize: theme.typography.size.bodyMd },
         ]}
       >
         {label}
@@ -126,7 +126,7 @@ const PreferenceRow = ({
             <Text
               style={[
                 styles.toggleLabel,
-                { color: theme.colors.textSecondary, fontSize: theme.typography.size.xs ?? 11 },
+                { color: theme.colors.textSecondary, fontSize: theme.typography.size.caption },
               ]}
             >
               {t('notifications.settingsInApp')}
@@ -150,7 +150,7 @@ const PreferenceRow = ({
             <Text
               style={[
                 styles.toggleLabel,
-                { color: theme.colors.textSecondary, fontSize: theme.typography.size.xs ?? 11 },
+                { color: theme.colors.textSecondary, fontSize: theme.typography.size.caption },
               ]}
             >
               {t('notifications.settingsPush')}

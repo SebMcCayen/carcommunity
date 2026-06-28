@@ -378,7 +378,7 @@ export class NotificationDeliveryService {
             subscriptionEntitlement: 'member_monthly',
             deletedAt: null,
             status: 'active',
-          }
+          },
           select: { id: true },
         });
         return users.map((u) => u.id);
@@ -390,7 +390,7 @@ export class NotificationDeliveryService {
             subscriptionEntitlement: 'none',
             deletedAt: null,
             status: 'active',
-          }
+          },
           select: { id: true },
         });
         return users.map((u) => u.id);
@@ -413,7 +413,7 @@ export class NotificationDeliveryService {
             eventId: input.eventId,
             status: { in: ['going', 'maybe'] },
             user: { deletedAt: null, status: 'active' },
-          }
+          },
           select: { userId: true },
         });
         return [...new Set(rsvps.map((r) => r.userId))];

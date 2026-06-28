@@ -72,15 +72,11 @@ function useHandleNotificationAction() {
             teaser: {
               id: notification.relatedEntityId,
               title: notification.title,
-              summary: null,
               status: 'published',
               startsAt: '',
               endsAt: null,
               approximateArea: '',
-              locationName: null,
               isOfficial: false,
-              rsvpStatus: null,
-              rsvpCount: 0,
             },
           });
         }
@@ -159,7 +155,7 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
         styles.row,
         {
           backgroundColor: isUnread
-            ? theme.colors.surfaceHighlight ?? theme.colors.surfaceBackground
+            ? theme.colors.subtleBackground
             : theme.colors.surfaceBackground,
           borderBottomColor: theme.colors.borderDefault,
         },
@@ -176,7 +172,7 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
           <Text
             style={[
               styles.categoryLabel,
-              { color: theme.colors.textSecondary, fontSize: theme.typography.size.xs ?? 11 },
+              { color: theme.colors.textSecondary, fontSize: theme.typography.size.caption },
             ]}
           >
             {categoryLabel}
@@ -184,7 +180,7 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
           <Text
             style={[
               styles.date,
-              { color: theme.colors.textSecondary, fontSize: theme.typography.size.xs ?? 11 },
+              { color: theme.colors.textSecondary, fontSize: theme.typography.size.caption },
             ]}
           >
             {date}
@@ -195,7 +191,7 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
             styles.title,
             {
               color: theme.colors.textPrimary,
-              fontSize: theme.typography.size.body,
+              fontSize: theme.typography.size.bodyMd,
               fontWeight: isUnread ? '600' : '400',
             },
           ]}
@@ -257,7 +253,7 @@ export const NotificationsScreen = () => {
         <Text
           style={[
             styles.heading,
-            { color: theme.colors.textPrimary, fontSize: theme.typography.size.lg },
+            { color: theme.colors.textPrimary, fontSize: theme.typography.size.headingLg },
           ]}
           accessibilityRole="header"
         >

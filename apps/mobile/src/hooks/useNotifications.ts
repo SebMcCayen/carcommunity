@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useI18n } from './useI18n';
+
 import type { NotificationSummary } from '@carcommunity/shared/notifications';
 import { DEFAULT_NOTIFICATION_PAGE_SIZE } from '@carcommunity/shared/notifications';
 
@@ -42,6 +44,7 @@ const PAGE_SIZE = DEFAULT_NOTIFICATION_PAGE_SIZE;
  * Clears notification data on unmount to protect private data after logout.
  */
 export function useNotifications(): UseNotificationsResult {
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +84,7 @@ export function useNotifications(): UseNotificationsResult {
     } catch {
       if (!mountedRef.current) return;
       setError(t('notifications.loadError'));
-    }
+    } finally {
       if (mountedRef.current) {
         setIsLoading(false);
       }
@@ -89,6 +92,7 @@ export function useNotifications(): UseNotificationsResult {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void load(1, false);
   }, [load]);
 

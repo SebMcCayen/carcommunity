@@ -42,10 +42,7 @@ import {
   type MarkAllNotificationsReadResponse,
   type RegisterPushDeviceResponse,
   type UnregisterPushDeviceResponse,
-  type GetNotificationPreferencesResponse,
-  type PatchNotificationPreferencesResponse,
   type AdminSendNotificationResponse,
-  type PaginatedAdminNotificationBatchesResponse,
   type NotificationSummary,
   type NotificationPreferenceSummary,
 } from '@carcommunity/shared/notifications';

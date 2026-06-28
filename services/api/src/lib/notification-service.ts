@@ -41,7 +41,6 @@ import {
   type NotificationPreferenceSummary,
   type NotificationSummary,
   type NotificationDetail,
-  type AdminNotificationAudience,
   type NotificationActionType,
 } from '@carcommunity/shared/notifications';
 
