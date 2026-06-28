@@ -79,8 +79,9 @@ export interface PushNotificationProvider {
 /**
  * Development-only no-op push provider.
  *
- * Logs a redacted message (no token values) and returns success.
+ * Returns success without sending anything (and without logging any notification content or token data).
  * This is the default provider in non-production environments.
+ */
  *
  * TODO: Replace with a real provider for production deployment.
  *
