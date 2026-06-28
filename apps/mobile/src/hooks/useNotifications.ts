@@ -106,23 +106,28 @@ export function useNotifications(): UseNotificationsResult {
   }, [hasMore, isLoading, currentPage, load]);
 
   const markRead = useCallback(async (notificationId: string) => {
+    const wasUnread = notifications.some((n) => n.notificationId === notificationId && !n.readAt);
+
     try {
       const stored = await loadSessionToken().catch(() => null);
       const token = stored?.token ?? undefined;
       await markNotificationRead(notificationId, token);
       if (!mountedRef.current) return;
+
+      const now = new Date().toISOString();
       setNotifications((prev) =>
         prev.map((n) =>
-          n.notificationId === notificationId
-            ? { ...n, readAt: new Date().toISOString() }
-            : n,
+          n.notificationId === notificationId ? { ...n, readAt: n.readAt ?? now } : n,
         ),
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+
+      if (wasUnread) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
     } catch {
       // Non-fatal; the user can retry by refreshing.
     }
-  }, []);
+  }, [notifications]);
 
   const markAllRead = useCallback(async () => {
     try {
