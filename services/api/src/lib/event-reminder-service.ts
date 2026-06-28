@@ -98,6 +98,7 @@ export class EventReminderService {
           weekday: 'long',
           month: 'long',
           day: 'numeric',
+          timeZone: 'Europe/Stockholm',
         })
       : '';
 
