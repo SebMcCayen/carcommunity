@@ -174,13 +174,7 @@ export class NotificationDeliveryService {
       inAppDelivered = true;
     } catch (err) {
       // If in-app creation fails, we can't send push because the payload requires a notificationId.
-      if (process.env.NODE_ENV !== 'test') {
-        console.error(
-          '[DeliveryService] Failed to create in-app notification:',
-          err instanceof Error ? err.message : 'unknown',
-        );
-      }
-    }
+      // Avoid console logging in library code; callers should log with Fastify's logger at the boundary if needed.
 
     // Push delivery — gated by feature flag and preference.
     let pushAttempted = false;
