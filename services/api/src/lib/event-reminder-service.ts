@@ -175,7 +175,7 @@ export class EventReminderService {
       where: {
         eventId: input.eventId,
         status: { in: ['going', 'maybe'] },
-        user: { status: 'active', deletedAt: null },
+        user: { status: { in: ['active', 'warned'] }, deletedAt: null },
       },
       include: { user: { select: { id: true, status: true } } },
     });
