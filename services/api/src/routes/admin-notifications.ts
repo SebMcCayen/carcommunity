@@ -60,9 +60,24 @@ const adminSendBodySchema = z
   .object({
     category: z.enum(ACTIVE_NOTIFICATION_CATEGORIES),
     audience: z.enum(ADMIN_NOTIFICATION_AUDIENCES),
-    title: z.string().min(1).max(MAX_NOTIFICATION_TITLE_LENGTH),
-    previewText: z.string().min(1).max(MAX_NOTIFICATION_PREVIEW_LENGTH),
-    body: z.string().min(1).max(MAX_NOTIFICATION_BODY_LENGTH),
+    title: z
+      .string()
+      .min(1)
+      .max(MAX_NOTIFICATION_TITLE_LENGTH)
+      .refine((v) => !/[<>]/.test(v), { message: 'HTML is not allowed.' })
+      .refine((v) => !/(https?:\/\/|www\.)/i.test(v), { message: 'External URLs are not allowed.' }),
+    previewText: z
+      .string()
+      .min(1)
+      .max(MAX_NOTIFICATION_PREVIEW_LENGTH)
+      .refine((v) => !/[<>]/.test(v), { message: 'HTML is not allowed.' })
+      .refine((v) => !/(https?:\/\/|www\.)/i.test(v), { message: 'External URLs are not allowed.' }),
+    body: z
+      .string()
+      .min(1)
+      .max(MAX_NOTIFICATION_BODY_LENGTH)
+      .refine((v) => !/[<>]/.test(v), { message: 'HTML is not allowed.' })
+      .refine((v) => !/(https?:\/\/|www\.)/i.test(v), { message: 'External URLs are not allowed.' }),
     actionType: z.enum(NOTIFICATION_ACTION_TYPES).optional(),
     eventId: z.string().uuid().optional(),
     targetUserId: z.string().uuid().optional(),
