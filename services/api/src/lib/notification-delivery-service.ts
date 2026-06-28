@@ -172,9 +172,10 @@ export class NotificationDeliveryService {
       });
       notificationId = notification.notificationId;
       inAppDelivered = true;
-    } catch (err) {
+    } catch {
       // If in-app creation fails, we can't send push because the payload requires a notificationId.
       // Avoid console logging in library code; callers should log with Fastify's logger at the boundary if needed.
+    }
 
     // Push delivery — gated by feature flag and preference.
     let pushAttempted = false;
