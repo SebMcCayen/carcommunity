@@ -242,7 +242,10 @@ export async function registerDigitalBillboardRoutes(
               userStatus: request.auth?.status,
               idempotencyKey: body.idempotencyKey,
             });
-          } catch {
+          } catch (insightsErr) {
+            // Analytics failure must never block the user's main action.
+            // Log at debug level so the error is visible without alarming production monitors.
+            app.log.debug({ err: insightsErr, billboardId, partnerId }, 'billboard interaction analytics failed');
           }
         }
       }

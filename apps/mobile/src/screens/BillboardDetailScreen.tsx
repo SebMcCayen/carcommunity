@@ -52,9 +52,9 @@ function isSafePhone(phone: string): boolean {
 }
 
 function stripHtmlTags(value: string): string {
-  // Remove all HTML tags and strip remaining angle brackets for defense in depth.
-  // React Native's Text component does not render HTML, but we sanitize as a precaution.
-  return value.replace(/<[^>]*>/g, '').replace(/</g, '').replace(/>/g, '').trim();
+  // React Native's Text component does not render HTML.
+  // Strip angle brackets as a defense-in-depth measure against accidental HTML injection.
+  return value.replace(/[<>]/g, '').trim();
 }
 
 export const BillboardDetailScreen = ({ route, navigation }: Props) => {
