@@ -102,7 +102,7 @@ export type PushPermissionStatus = 'granted' | 'denied' | 'undetermined' | 'unav
 
 /**
  * Check current push notification permission status without prompting.
- * Returns 'unavailable' in development when expo-notifications is not installed.
+ * In this stub implementation, always returns 'undetermined'.
  *
  * TODO: Replace stub with expo-notifications getPermissionsAsync.
  */
