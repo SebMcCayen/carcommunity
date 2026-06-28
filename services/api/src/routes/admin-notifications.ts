@@ -188,16 +188,34 @@ export async function registerAdminNotificationRoutes(
       });
 
       // Write audit log.
-      // Use the ModerationService's writeAuditLog via the injected service if available,
-      // or write directly via prisma otherwise.
-      await writeNotificationAuditLog(app.prisma, {
-        actorUserId: auth.userId,
-        batchId: result.batchId,
-        category: body.category,
-        audience: body.audience,
-        recipientCount: result.recipientCount,
-        reason: body.reason,
-      });
+      // Prefer ModerationService if provided (non-blocking), otherwise write directly via prisma.
+      try {
+        if (dependencies.moderationService) {
+          await dependencies.moderationService.writeAuditLog({
+            actorUserId: auth.userId,
+            action: 'admin_notification_sent',
+            entityType: 'admin_notification_batch',
+            entityId: result.batchId,
+            reason: body.reason,
+            metadata: {
+              category: body.category,
+              audience: body.audience,
+              recipientCount: result.recipientCount,
+            },
+          });
+        } else {
+          await writeNotificationAuditLog(app.prisma, {
+            actorUserId: auth.userId,
+            batchId: result.batchId,
+            category: body.category,
+            audience: body.audience,
+            recipientCount: result.recipientCount,
+            reason: body.reason,
+          });
+        }
+      } catch {
+        // Audit log failure must not block the send operation.
+      }
 
       return {
         ok: true,
