@@ -194,6 +194,13 @@ export class NotificationDeliveryService {
           const decrypted = decryptPushToken(device.encryptedPushToken);
           if (!decrypted) {
             attempt = { success: false, safeErrorCode: 'token_decrypt_failed' };
+            await this.recordDeliveryAttempt({
+              userNotificationId: notificationId,
+              deviceRegistrationId: device.deviceId,
+              channel: 'push',
+              status: 'failed',
+              safeErrorCode: attempt.safeErrorCode,
+            });
             break;
           }
 
