@@ -12,9 +12,10 @@
  *  PATCH /v1/users/me/notification-preferences      — update preferences
  *
  * Access control:
- *  - All routes require authentication.
+ *  - All routes require an authenticated session.
+ *  - Most routes require an active (non-deleted, non-suspended) account.
+ *  - Device unregistration uses requireAuthenticatedHook so cleanup still works if feature access is lost.
  *  - User ID is always derived from the authenticated session.
- *  - Deleted users denied (403).
  *  - Raw push tokens must never be returned in API responses.
  *  - Users may only access their own notifications and preferences.
  *
