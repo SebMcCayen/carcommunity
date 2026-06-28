@@ -255,8 +255,7 @@ export const NotificationSettingsScreen = () => {
         } catch {
           // Non-fatal — user can retry later.
         }
-      }
-      } finally {
+      finally {
         if (mountedRef.current) setIsSaving(false);
       }
     },
