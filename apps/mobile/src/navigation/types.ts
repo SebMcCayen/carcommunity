@@ -21,6 +21,7 @@ export type RootStackParamList = {
   CrownHunt: undefined;
   PartnerDetail: { partnerId: string };
   PartnerApplication: undefined;
+  BillboardDetail: { billboardId: string };
 };
 
 export type MainTabParamList = {

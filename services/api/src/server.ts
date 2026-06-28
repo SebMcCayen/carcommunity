@@ -38,6 +38,7 @@ import { registerPartnerOfferRoutes } from './routes/partner-offers.js';
 import { registerPartnerInsightsRoutes } from './routes/partner-insights.js';
 import { PartnerOfferService } from './lib/partner-offer-service.js';
 import { PartnerInsightsService } from './lib/partner-insights-service.js';
+import { registerDigitalBillboardRoutes } from './routes/digital-billboards.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -61,6 +62,7 @@ export interface ServerDependencies {
   partnerCompanyService?: import('./lib/partner-company-service.js').PartnerCompanyService;
   partnerOfferService?: PartnerOfferService;
   partnerInsightsService?: PartnerInsightsService;
+  billboardService?: import('./lib/billboard-service.js').BillboardService;
 }
 
 export async function createServer(
@@ -175,6 +177,11 @@ export async function createServer(
   await registerPartnerInsightsRoutes(app, {
     partnerInsightsService,
     config,
+  });
+  await registerDigitalBillboardRoutes(app, {
+    billboardService: dependencies.billboardService,
+    partnerInsightsService,
+    digitalBillboardsFeatureEnabled: true,
   });
 
   return app;

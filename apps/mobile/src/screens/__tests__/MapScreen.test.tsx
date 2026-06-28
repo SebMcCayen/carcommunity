@@ -61,6 +61,23 @@ jest.mock('../../hooks/useLiveLocationMarkers', () => ({
   }),
 }));
 
+jest.mock('../../hooks/usePartnerMarkers', () => ({
+  usePartnerMarkers: jest.fn().mockReturnValue({
+    markers: [],
+    rawMarkers: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+jest.mock('../../hooks/useBillboardMarkers', () => ({
+  useBillboardMarkers: jest.fn().mockReturnValue({
+    markers: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Mock useAuth so MapScreen does not require a real AuthProvider.
 jest.mock('../../hooks/useAuth', () => ({
   useAuth: jest.fn().mockReturnValue({

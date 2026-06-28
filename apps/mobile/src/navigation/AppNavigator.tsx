@@ -36,6 +36,7 @@ import { PointsWalletScreen } from '../screens/PointsWalletScreen';
 import { CrownHuntScreen } from '../screens/CrownHuntScreen';
 import { PartnerDetailScreen } from '../screens/PartnerDetailScreen';
 import { PartnerApplicationScreen } from '../screens/PartnerApplicationScreen';
+import { BillboardDetailScreen } from '../screens/BillboardDetailScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -205,6 +206,11 @@ export const AppNavigator = () => {
               name="PartnerApplication"
               component={PartnerApplicationScreen}
               options={{ title: t('partners.applicationTitle') }}
+            />
+            <Stack.Screen
+              name="BillboardDetail"
+              component={BillboardDetailScreen}
+              options={{ title: t('billboard.sponsoredLabel') }}
             />
           </>
         )}

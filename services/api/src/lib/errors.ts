@@ -48,7 +48,20 @@ export type ErrorCode =
   | 'interaction_partner_inactive'
   | 'interaction_offer_not_found'
   | 'interaction_offer_partner_mismatch'
-  | 'insights_partner_not_found';
+  | 'insights_partner_not_found'
+  // Digital billboards
+  | 'billboard_headline_required'
+  | 'billboard_message_required'
+  | 'billboard_partner_not_found'
+  | 'billboard_partner_not_active'
+  | 'billboard_invalid_status_for_update'
+  | 'billboard_invalid_status_transition'
+  | 'billboard_reason_required'
+  | 'billboard_safety_confirmation_required'
+  | 'billboard_invalid_coordinates'
+  | 'billboard_invalid_date_range'
+  | 'billboard_invalid_cta'
+  | 'billboard_feature_disabled';
 
 export class AppError extends Error {
   public readonly statusCode: number;
