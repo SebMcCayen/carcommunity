@@ -43,7 +43,6 @@ import {
   type PaginatedAdminNotificationBatchesResponse,
   type AdminNotificationBatchDetailResponse,
 } from '@carcommunity/shared/notifications';
-import { isOwnerRole } from '@carcommunity/shared/users';
 
 import { requireAdminHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
