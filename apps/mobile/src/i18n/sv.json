@@ -518,7 +518,7 @@
     "categoryAccountSuspension": "Kontostatus",
     "categorySubscription": "Medlemskap",
     "categorySystem": "System",
-    "settingsTitle": "Notisinstallningar",
+    "settingsTitle": "Notisinställningar",
     "settingsPushTitle": "Push-notiser",
     "settingsPushGrantedBody": "Push-notiser är aktiverade. Du kan ändra dina val nedan.",
     "settingsPushDeniedBody": "Push-notiser är inaktiverade. Du kan ändra detta i systeminställningarna. Du kan ändra dina val senare under Inställningar.",
