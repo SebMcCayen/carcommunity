@@ -195,14 +195,18 @@ export class NotificationDeliveryService {
             break;
           }
 
-          const result = await this.pushProvider.sendPushNotification(device.encryptedPushToken, {
-            notificationId,
-            category: input.category,
-            title: input.title,
-            previewText: input.previewText,
-            actionType: input.actionType ?? 'open_notifications',
-          });
-
+          let result: import('./push-provider.js').PushSendResult;
+          try {
+            result = await this.pushProvider.sendPushNotification(device.encryptedPushToken, {
+              notificationId,
+              category: input.category,
+              title: input.title,
+              previewText: input.previewText,
+              actionType: input.actionType ?? 'open_notifications',
+            });
+          } catch {
+            result = { success: false, safeErrorCode: 'push_provider_error' };
+          }
           if (result.success) {
             attempt = { success: true };
             pushSucceeded = true;
