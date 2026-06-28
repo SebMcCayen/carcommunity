@@ -178,8 +178,8 @@ export function buildNotificationDevicePath(deviceId: string): string {
   return `/v1/notifications/devices/${deviceId}`;
 }
 
-export function buildAdminNotificationDetailPath(notificationId: string): string {
-  return `/v1/admin/notifications/${notificationId}`;
+export function buildAdminNotificationDetailPath(batchId: string): string {
+  return `/v1/admin/notifications/${batchId}`;
 }
 
 // ---------------------------------------------------------------------------
