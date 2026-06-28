@@ -328,14 +328,12 @@ export class NotificationService {
    * Mark a device token as invalid (e.g. returned invalid-token error from push provider).
    * Internal use only.
    */
-  async deactivateDeviceByHash(tokenHash: string, safeErrorCode?: string): Promise<void> {
+  async deactivateDeviceByHash(tokenHash: string): Promise<void> {
     await this.prisma.pushDeviceRegistration.updateMany({
       where: { pushTokenHash: tokenHash },
       data: {
         isActive: false,
         revokedAt: new Date(),
-        // safeErrorCode stored for diagnostics only — never expose in API responses
-        ...(safeErrorCode ? {} : {}),
       },
     });
   }
