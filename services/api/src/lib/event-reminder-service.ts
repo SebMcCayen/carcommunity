@@ -107,18 +107,25 @@ export class EventReminderService {
       ? `Eventet börjar ${startDateLabel}.`
       : 'Eventet börjar snart.';
 
-    for (const rsvp of rsvps) {
-      // Idempotency key: event + category + user + window.
+    const planned = rsvps.map((rsvp) => {
       const idempotencyKey = buildReminderIdempotencyKey(
         input.eventId,
         'event_reminder',
         rsvp.user.id,
         input.reminderWindow,
       );
+      return { rsvp, idempotencyKey, batchId: buildReminderBatchId(idempotencyKey) };
+    });
 
+    const existing = await this.prisma.userNotification.findMany({
+      where: { batchId: { in: planned.map((p) => p.batchId) } },
+      select: { batchId: true },
+    });
+    const existingSet = new Set(existing.map((n) => n.batchId));
+
+    for (const { rsvp, idempotencyKey, batchId } of planned) {
       // Check if already sent for this window.
-      const alreadySent = await this.checkIdempotencyKey(idempotencyKey);
-      if (alreadySent) {
+      if (existingSet.has(batchId)) {
         skipped++;
         continue;
       }
