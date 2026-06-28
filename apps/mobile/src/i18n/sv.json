@@ -506,6 +506,8 @@
   "notifications": {
     "title": "Notiser",
     "empty": "Inga notiser ännu.",
+    "loadError": "Kunde inte hämta notiser. Försök igen.",
+    "retry": "Försök igen",
     "markAllRead": "Markera alla som lästa",
     "unreadLabel": "Nytt",
     "categoryEvent": "Event",
