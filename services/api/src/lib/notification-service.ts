@@ -74,6 +74,14 @@ function getEncryptionKey(): string {
   return DEV_ENCRYPTION_KEY;
 }
 
+let derivedPushTokenKey: Buffer | null = null;
+
+function getDerivedPushTokenKey(): Buffer {
+  if (derivedPushTokenKey) return derivedPushTokenKey;
+  derivedPushTokenKey = crypto.scryptSync(getEncryptionKey(), 'kcc-push-salt', 32);
+  return derivedPushTokenKey;
+}
+
 /**
  * Encrypts a push token using AES-256-GCM with a random IV.
  * In development, uses a placeholder key.
@@ -82,7 +90,7 @@ function getEncryptionKey(): string {
  * Returns a base64url-encoded string: iv:authTag:ciphertext
  */
 export function encryptPushToken(token: string): string {
-  const key = crypto.scryptSync(getEncryptionKey(), 'kcc-push-salt', 32);
+  const key = getDerivedPushTokenKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
@@ -97,7 +105,7 @@ export function encryptPushToken(token: string): string {
  */
 export function decryptPushToken(encrypted: string): string | null {
   try {
-    const key = crypto.scryptSync(getEncryptionKey(), 'kcc-push-salt', 32);
+    const key = getDerivedPushTokenKey();
     const parts = encrypted.split(':');
     if (parts.length !== 3) return null;
     const ivB64 = parts[0]!;
