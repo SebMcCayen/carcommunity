@@ -41,7 +41,7 @@ import { DevPushNotificationProvider } from './push-provider.js';
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Maximum push retry attempts per notification per device. */
+/** Maximum number of retries after the initial push attempt (total attempts = 1 + MAX_PUSH_RETRIES). */
 const MAX_PUSH_RETRIES = 2;
 
 /**
