@@ -18,6 +18,8 @@
  * TODO: Add Azure scheduling for event reminder triggers.
  */
 
+import crypto from 'node:crypto';
+
 import type { PrismaClient } from '@prisma/client';
 
 import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
