@@ -66,7 +66,7 @@ const adminSendBodySchema = z
       .refine((v) => !/[<>]/.test(v), { message: 'HTML is not allowed.' })
       .refine((v) => !/(https?:\/\/|www\.)/i.test(v), { message: 'External URLs are not allowed.' }),
     previewText: z
-      .string()
+      .string().trim()
       .min(1)
       .max(MAX_NOTIFICATION_PREVIEW_LENGTH)
       .refine((v) => !/[<>]/.test(v), { message: 'HTML is not allowed.' })
