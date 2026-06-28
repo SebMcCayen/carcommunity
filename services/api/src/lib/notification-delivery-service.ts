@@ -320,23 +320,39 @@ export class NotificationDeliveryService {
     const now = new Date();
 
     // Create batch record.
-    await this.prisma.adminNotificationBatch.create({
-      data: {
-        id: batchId,
-        category: input.category,
-        audience: input.audience,
-        title: input.title,
-        previewText: input.previewText,
-        body: input.body,
-        actionType: input.actionType ?? null,
-        relatedEntityId: input.relatedEntityId ?? null,
-        recipientCount: recipientIds.length,
-        reason: input.reason,
-        idempotencyKey: input.idempotencyKey,
-        createdByUserId: input.createdByUserId,
-        createdAt: now,
-      },
-    });
+    try {
+      await this.prisma.adminNotificationBatch.create({
+        data: {
+          id: batchId,
+          category: input.category,
+          audience: input.audience,
+          title: input.title,
+          previewText: input.previewText,
+          body: input.body,
+          actionType: input.actionType ?? null,
+          relatedEntityId: input.relatedEntityId ?? null,
+          recipientCount: recipientIds.length,
+          reason: input.reason,
+          idempotencyKey: input.idempotencyKey,
+          createdByUserId: input.createdByUserId,
+          createdAt: now,
+        },
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: unknown }).code === 'P2002'
+      ) {
+        throw new AppError(
+          409,
+          'notification_duplicate_idempotency_key',
+          'A notification batch with this idempotency key already exists.',
+        );
+      }
+      throw error;
+    }
 
     // Fan-out in-app notifications using createMany for efficiency.
     if (recipientIds.length > 0) {
