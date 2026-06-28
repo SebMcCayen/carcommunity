@@ -21,6 +21,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from '../api/notifications';
+import { useI18n } from '../hooks/useI18n';
 import { loadSessionToken } from '../storage/tokenStorage';
 
 export interface UseNotificationsResult {
