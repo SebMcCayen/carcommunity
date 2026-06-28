@@ -270,3 +270,26 @@ export function hasBackendAccess(input: {
 
   return input.subscriptionEntitlement === 'member_monthly';
 }
+
+/**
+ * Returns true if the user may contribute to anonymous partner pass-by statistics.
+ *
+ * Rules (all must be true):
+ *  - authenticated user (non-null)
+ *  - status is active or warned (not suspended, not deleted)
+ *  - anonymousPartnerStatsOptIn is explicitly true
+ *
+ * Temporarily and permanently suspended users are excluded.
+ * Deleted users are excluded.
+ * Opt-in defaults to false — backend is authoritative.
+ * Client-submitted consent is never trusted.
+ */
+export function canContributeAnonymousPartnerStats(input: {
+  status: UserStatus;
+  anonymousPartnerStatsOptIn: boolean;
+}): boolean {
+  if (isSuspendedStatus(input.status) || input.status === 'deleted') {
+    return false;
+  }
+  return input.anonymousPartnerStatsOptIn === true;
+}

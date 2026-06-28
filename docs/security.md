@@ -134,6 +134,17 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Do not share personal data with companies.
 - Do not share exact location, routes, drive history, or individual timestamps.
 
+
+## Partner Insights (Anonymiserad partnerstatistik)
+
+- Distinguish explicit interaction analytics (for example profile views, website clicks, offer actions) from location-derived pass-by statistics.
+- Anonymous pass-by statistics require explicit backend-verified consent via `anonymousPartnerStatsOptIn`; default is false.
+- Anonymous pass-by metrics must meet a minimum aggregation threshold of 10 unique opted-in users before any partner-facing reporting is available.
+- Raw partner interaction events are short-lived, retained for 7 days, and cleaned up through TTL-based deletion jobs.
+- Partner Insights never exposes user-level partner data, identities, conversations, live positions, routes, or exact event timestamps to partners.
+- Partner data is not sold, and partner companies never receive drive history or individual tracking data.
+- A dedicated privacy review must be completed before any future partner portal launch or wider partner self-service analytics rollout.
+
 ## Digital billboard safety and advertising controls
 
 - Digital billboards must be clearly marked as marketing or sponsored placement.

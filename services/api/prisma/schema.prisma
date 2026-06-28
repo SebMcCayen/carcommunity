@@ -1112,10 +1112,13 @@ model PartnerCompany {
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
 
-  application       PartnerApplication?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  createdBy         User                 @relation("PartnerCompanyCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  updatedBy         User?                @relation("PartnerCompanyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  application       PartnerApplication?      @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  createdBy         User                     @relation("PartnerCompanyCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedBy         User?                    @relation("PartnerCompanyUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   offers            PartnerOffer[]
+  interactionEvents PartnerInteractionEvent[]
+  metricAggregates  PartnerMetricAggregate[]
+  passbyContributions PartnerPassByContribution[]
 
   @@index([status])
   @@index([category])
@@ -1194,3 +1197,120 @@ model SavedPartnerOffer {
   @@map("saved_partner_offers")
 }
 
+
+enum PartnerInteractionType {
+  map_view
+  profile_view
+  navigate
+  phone
+  website
+  offer_view
+  show_code
+  save_offer
+  anonymous_pass_by
+}
+
+enum AggregationPeriodType {
+  day
+  week
+  month
+}
+
+enum InsightResultStatus {
+  available
+  insufficient_data
+  no_data
+}
+
+/**
+ * Short-lived raw partner interaction event.
+ *
+ * Privacy rules:
+ *  - userReferenceHash is a scoped pseudonymous value — not reversible or cross-partner-correlatable.
+ *  - No exact coordinates, IP addresses, device IDs, or offer codes.
+ *  - Raw events expire after INTERACTION_EVENT_TTL_DAYS (7 days by default).
+ *  - expiresAt is set at insert time; a scheduled cleanup job removes expired rows.
+ *  - Only allowlisted metadata may be stored (see PartnerInsightsService).
+ *  - Explicit actions (map view, profile view, etc.) do not require anonymousPartnerStatsOptIn.
+ *  - anonymous_pass_by type requires explicit opt-in — enforced in PartnerInsightsService.
+ */
+model PartnerInteractionEvent {
+  id                String                 @id @default(uuid()) @db.Uuid
+  partnerCompanyId  String                 @map("partner_company_id") @db.Uuid
+  interactionType   PartnerInteractionType @map("interaction_type")
+  /// Scoped pseudonymous hash — not the real user ID. Null for truly anonymous events.
+  userReferenceHash String?                @map("user_reference_hash") @db.VarChar(64)
+  occurredAt        DateTime               @map("occurred_at")
+  aggregationDate   DateTime               @map("aggregation_date") @db.Date
+  expiresAt         DateTime               @map("expires_at")
+  /// Allowlisted metadata only — no codes, coordinates, or PII.
+  metadata          Json?
+  createdAt         DateTime               @default(now()) @map("created_at")
+
+  partnerCompany    PartnerCompany         @relation(fields: [partnerCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([partnerCompanyId, aggregationDate])
+  @@index([interactionType])
+  @@index([expiresAt])
+  @@index([partnerCompanyId, interactionType, aggregationDate])
+  @@map("partner_interaction_events")
+}
+
+/**
+ * Aggregated partner interaction metrics.
+ *
+ * Privacy rules:
+ *  - No user-level data. totalCount and uniqueContributorCount are aggregate values only.
+ *  - resultStatus reflects threshold enforcement (insufficient_data suppresses totalCount).
+ *  - uniqueContributorCount is only populated when resultStatus = 'available'.
+ *  - Aggregates are retained for reporting; raw events are cleaned up separately.
+ */
+model PartnerMetricAggregate {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  partnerCompanyId       String                 @map("partner_company_id") @db.Uuid
+  interactionType        PartnerInteractionType @map("interaction_type")
+  periodType             AggregationPeriodType  @map("period_type")
+  periodStart            DateTime               @map("period_start") @db.Date
+  periodEnd              DateTime               @map("period_end") @db.Date
+  totalCount             Int                    @map("total_count") @default(0)
+  uniqueContributorCount Int?                   @map("unique_contributor_count")
+  resultStatus           InsightResultStatus    @map("result_status") @default(no_data)
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  partnerCompany         PartnerCompany         @relation(fields: [partnerCompanyId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerCompanyId, interactionType, periodType, periodStart])
+  @@index([partnerCompanyId, periodStart])
+  @@index([interactionType])
+  @@index([periodType])
+  @@map("partner_metric_aggregates")
+}
+
+/**
+ * Temporary pass-by contribution tracker.
+ *
+ * Purpose: Prevents double-counting a single user's pass-by for the same partner
+ * on the same aggregation date. Deleted after aggregation.
+ *
+ * Privacy rules:
+ *  - scopedContributorHash is a scoped pseudonymous hash — not the real user ID.
+ *  - No exact coordinates, timestamps, or routes.
+ *  - Expires after PASS_BY_CONTRIBUTION_TTL_DAYS (2 days by default).
+ *  - Delete records immediately after aggregation.
+ */
+model PartnerPassByContribution {
+  id                    String         @id @default(uuid()) @db.Uuid
+  partnerCompanyId      String         @map("partner_company_id") @db.Uuid
+  scopedContributorHash String         @map("scoped_contributor_hash") @db.VarChar(64)
+  aggregationDate       DateTime       @map("aggregation_date") @db.Date
+  expiresAt             DateTime       @map("expires_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+
+  partnerCompany        PartnerCompany @relation(fields: [partnerCompanyId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerCompanyId, scopedContributorHash, aggregationDate])
+  @@index([partnerCompanyId, aggregationDate])
+  @@index([expiresAt])
+  @@map("partner_pass_by_contributions")
+}
