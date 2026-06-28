@@ -78,7 +78,7 @@ let derivedPushTokenKey: Buffer | null = null;
 
 function getDerivedPushTokenKey(): Buffer {
   if (derivedPushTokenKey) return derivedPushTokenKey;
-  derivedPushTokenKey = crypto.scryptSync(getEncryptionKey(), 'kcc-push-salt', 32);
+  derivedPushTokenKey = crypto.scryptSync(getEncryptionKey(), 'carcommunity-push-salt', 32);
   return derivedPushTokenKey;
 }
 
