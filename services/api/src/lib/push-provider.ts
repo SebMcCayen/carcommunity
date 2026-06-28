@@ -90,7 +90,7 @@ export interface PushNotificationProvider {
 export class DevPushNotificationProvider implements PushNotificationProvider {
   async sendPushNotification(
     _encryptedToken: string,
-    payload: PushPayload,
+    _payload: PushPayload,
   ): Promise<PushSendResult> {
     if (process.env.NODE_ENV === 'production') {
       return { success: false, safeErrorCode: 'dev_push_provider_not_allowed_in_production' };
