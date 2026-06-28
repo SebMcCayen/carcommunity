@@ -86,7 +86,7 @@ export function useNotifications(): UseNotificationsResult {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load(1, false);
