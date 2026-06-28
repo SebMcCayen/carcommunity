@@ -212,8 +212,11 @@ export async function registerAdminNotificationRoutes(
             reason: body.reason,
           });
         }
-      } catch {
-        // Audit log failure must not block the send operation.
+      } catch (error) {
+        request.log.error(
+          { err: error, batchId: result.batchId, actorUserId: auth.userId },
+          'Failed to write admin notification audit log',
+        );
       }
 
       return {
