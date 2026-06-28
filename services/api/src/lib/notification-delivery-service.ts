@@ -435,7 +435,7 @@ export class NotificationDeliveryService {
           where: {
             subscriptionEntitlement: 'none',
             deletedAt: null,
-            status: 'active',
+            status: { in: ['active', 'warned'] },
           },
           select: { id: true },
         });
