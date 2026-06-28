@@ -96,19 +96,7 @@ export class DevPushNotificationProvider implements PushNotificationProvider {
       return { success: false, safeErrorCode: 'dev_push_provider_not_allowed_in_production' };
     }
 
-    // Deliberately not logging token values — only safe payload fields.
-    if (process.env.NODE_ENV !== 'test') {
-      console.log(
-        '[DEV push provider] Simulated push send:',
-        JSON.stringify({
-          notificationId: payload.notificationId,
-          category: payload.category,
-          // title/previewText logged for dev visibility only — omit in production provider
-          title: payload.title,
-          actionType: payload.actionType,
-        }),
-      );
-    }
+    // Intentionally not logging here to keep notification content out of logs.
 
     return { success: true };
   }
