@@ -412,8 +412,8 @@ export class NotificationDeliveryService {
           where: {
             eventId: input.eventId,
             status: { in: ['going', 'maybe'] },
-            user: { deletedAt: null, status: { not: 'deleted' } },
-          },
+            user: { deletedAt: null, status: 'active' },
+          }
           select: { userId: true },
         });
         return [...new Set(rsvps.map((r) => r.userId))];
