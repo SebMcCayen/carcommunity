@@ -149,7 +149,6 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={notification.title}
-      accessibilityState={{ selected: !isUnread }}
       onPress={() => onPress(notification)}
       style={[
         styles.row,
