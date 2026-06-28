@@ -123,9 +123,6 @@ export class EventReminderService {
       }
 
       try {
-        const hash = crypto.createHash('sha256').update(idempotencyKey).digest('hex');
-        const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-
         const outcome = await this.deliveryService.deliverToUser({
           userId: rsvp.user.id,
           userStatus: rsvp.user.status as import('@carcommunity/shared/users').UserStatus,
@@ -138,7 +135,7 @@ export class EventReminderService {
           relatedEntityType: 'event',
           // relatedEntityId used to deep-link after app open; backend re-validates access.
           relatedEntityId: input.eventId,
-          batchId,
+          batchId: buildReminderBatchId(idempotencyKey),
         });
 
         if (outcome.inAppDelivered) {
@@ -203,9 +200,6 @@ export class EventReminderService {
       }
 
       try {
-        const hash = crypto.createHash('sha256').update(idempotencyKey).digest('hex');
-        const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-
         const outcome = await this.deliveryService.deliverToUser({
           userId: rsvp.user.id,
           userStatus: rsvp.user.status as import('@carcommunity/shared/users').UserStatus,
@@ -216,7 +210,7 @@ export class EventReminderService {
           actionType: 'open_event',
           relatedEntityType: 'event',
           relatedEntityId: input.eventId,
-          batchId,
+          batchId: buildReminderBatchId(idempotencyKey),
         });
 
         if (outcome.inAppDelivered) {
@@ -281,9 +275,6 @@ export class EventReminderService {
       }
 
       try {
-        const hash = crypto.createHash('sha256').update(idempotencyKey).digest('hex');
-        const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-
         const outcome = await this.deliveryService.deliverToUser({
           userId: rsvp.user.id,
           userStatus: rsvp.user.status as import('@carcommunity/shared/users').UserStatus,
@@ -294,7 +285,7 @@ export class EventReminderService {
           actionType: 'open_event',
           relatedEntityType: 'event',
           relatedEntityId: input.eventId,
-          batchId,
+          batchId: buildReminderBatchId(idempotencyKey),
         });
 
         if (outcome.inAppDelivered) {
@@ -320,10 +311,8 @@ export class EventReminderService {
    * Uses the UserNotification batchId convention via a dedicated check.
    */
   private async checkIdempotencyKey(key: string): Promise<boolean> {
-    const hash = crypto.createHash('sha256').update(key).digest('hex');
-    const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
     const existing = await this.prisma.userNotification.findFirst({
-      where: { batchId },
+      where: { batchId: buildReminderBatchId(key) },
       select: { id: true },
     });
     return existing !== null;
@@ -347,4 +336,9 @@ function buildReminderIdempotencyKey(
   window: string,
 ): string {
   return `event-reminder:${eventId}:${category}:${userId}:${window}`;
+}
+
+function buildReminderBatchId(key: string): string {
+  const hash = crypto.createHash('sha256').update(key).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
 }
