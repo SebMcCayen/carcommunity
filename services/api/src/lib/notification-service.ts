@@ -245,6 +245,7 @@ export class NotificationService {
         where: { id: existing.id },
         data: {
           userId: input.userId,
+          platform: input.platform,
           encryptedPushToken: encryptedToken,
           appVersion: input.appVersion ?? existing.appVersion,
           buildNumber: input.buildNumber ?? existing.buildNumber,
