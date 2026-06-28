@@ -256,7 +256,7 @@ export class NotificationService {
       return {
         deviceId: updated.id,
         platform: updated.platform as NotificationDevicePlatform,
-        registeredAt: updated.createdAt,
+        registeredAt: updated.lastSeenAt,
       };
     }
 
