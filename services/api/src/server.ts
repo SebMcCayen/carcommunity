@@ -39,6 +39,8 @@ import { registerPartnerInsightsRoutes } from './routes/partner-insights.js';
 import { PartnerOfferService } from './lib/partner-offer-service.js';
 import { PartnerInsightsService } from './lib/partner-insights-service.js';
 import { registerDigitalBillboardRoutes } from './routes/digital-billboards.js';
+import { registerNotificationRoutes } from './routes/notifications.js';
+import { registerAdminNotificationRoutes } from './routes/admin-notifications.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -63,6 +65,9 @@ export interface ServerDependencies {
   partnerOfferService?: PartnerOfferService;
   partnerInsightsService?: PartnerInsightsService;
   billboardService?: import('./lib/billboard-service.js').BillboardService;
+  notificationService?: import('./lib/notification-service.js').NotificationService;
+  notificationDeliveryService?: import('./lib/notification-delivery-service.js').NotificationDeliveryService;
+  pushNotificationsFeatureEnabled?: boolean;
 }
 
 export async function createServer(
@@ -181,6 +186,15 @@ export async function createServer(
   await registerDigitalBillboardRoutes(app, {
     billboardService: dependencies.billboardService,
     partnerInsightsService,
+  });
+  await registerNotificationRoutes(app, {
+    notificationService: dependencies.notificationService,
+    pushNotificationsFeatureEnabled: dependencies.pushNotificationsFeatureEnabled,
+  });
+  await registerAdminNotificationRoutes(app, {
+    notificationService: dependencies.notificationService,
+    deliveryService: dependencies.notificationDeliveryService,
+    pushNotificationsFeatureEnabled: dependencies.pushNotificationsFeatureEnabled,
   });
 
   return app;

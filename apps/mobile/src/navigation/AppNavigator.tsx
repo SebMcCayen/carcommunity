@@ -37,6 +37,8 @@ import { CrownHuntScreen } from '../screens/CrownHuntScreen';
 import { PartnerDetailScreen } from '../screens/PartnerDetailScreen';
 import { PartnerApplicationScreen } from '../screens/PartnerApplicationScreen';
 import { BillboardDetailScreen } from '../screens/BillboardDetailScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
 import { MainTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -211,6 +213,16 @@ export const AppNavigator = () => {
               name="BillboardDetail"
               component={BillboardDetailScreen}
               options={{ title: t('billboard.sponsoredLabel') }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ title: t('notifications.title') }}
+            />
+            <Stack.Screen
+              name="NotificationSettings"
+              component={NotificationSettingsScreen}
+              options={{ title: t('notifications.settingsTitle') }}
             />
           </>
         )}

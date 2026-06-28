@@ -83,6 +83,10 @@
     "./digital-billboards": {
       "types": "./dist/digital-billboards.d.ts",
       "default": "./dist/digital-billboards.js"
+    },
+    "./notifications": {
+      "types": "./dist/notifications.d.ts",
+      "default": "./dist/notifications.js"
     }
   },
   "scripts": {

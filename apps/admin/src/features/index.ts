@@ -7,3 +7,4 @@
  */
 
 export * as digitalBillboards from './digital-billboards';
+export * as notifications from './notifications';

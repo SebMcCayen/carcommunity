@@ -28,6 +28,7 @@ const navGroups: NavGroup[] = [
     title: 'Content',
     items: [
       { label: 'Events', href: '/events', icon: '◈' },
+      { label: 'Notifications', href: '/notifications', icon: '◻' },
       { label: 'Partners', href: '/partners', icon: '◇' },
       { label: 'Digital Billboards', href: '/billboards', icon: '▣' },
       { label: 'Kronjakt', href: '/kronjakt', icon: '✦' },
