@@ -219,8 +219,11 @@ export class NotificationDeliveryService {
           } else {
             attempt = { success: false, safeErrorCode: result.safeErrorCode };
             if (result.shouldDeactivateToken) {
-              // Token is invalid — deactivate it.
-              await this.notificationService.deactivateAllDevices({ userId: input.userId });
+              // Token is invalid — deactivate only this device registration.
+              await this.prisma.pushDeviceRegistration.update({
+                where: { id: device.deviceId },
+                data: { isActive: false, revokedAt: new Date() },
+              });
               break;
             }
             if (retry === MAX_PUSH_RETRIES) {
