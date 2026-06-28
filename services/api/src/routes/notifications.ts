@@ -93,7 +93,7 @@ const deviceIdParamsSchema = z
  * This covers Expo push tokens (ExponentPushToken[...]) and raw APNs/FCM token formats.
  * Never log the token value.
  */
-const PUSH_TOKEN_REGEX = /^[A-Za-z0-9\-_.:/[\]]+$/;
+const PUSH_TOKEN_REGEX = /^[A-Za-z0-9\-_.:/\[\]]+$/;
 
 const registerDeviceBodySchema = z
   .object({
