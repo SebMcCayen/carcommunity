@@ -194,6 +194,7 @@ export async function createServer(
   await registerAdminNotificationRoutes(app, {
     notificationService: dependencies.notificationService,
     deliveryService: dependencies.notificationDeliveryService,
+    moderationService: dependencies.moderationService,
     pushNotificationsFeatureEnabled: dependencies.pushNotificationsFeatureEnabled,
   });
 
