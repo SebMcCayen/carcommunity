@@ -387,8 +387,8 @@ export class NotificationDeliveryService {
           where: {
             subscriptionEntitlement: 'none',
             deletedAt: null,
-            status: { not: 'deleted' },
-          },
+            status: 'active',
+          }
           select: { id: true },
         });
         return users.map((u) => u.id);
