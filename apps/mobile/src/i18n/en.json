@@ -526,7 +526,7 @@
     "settingsPush": "Push",
     "settingsEssential": "Always on",
     "settingsSaving": "Saving...",
-    "permissionRationale": "Receive reminders about events and important messages from KCC.",
+    "permissionRationale": "Receive reminders about events and important messages.",
     "permissionOptional": "Notifications are optional.",
     "permissionChangeHint": "You can change your preferences later under Settings."
   }
