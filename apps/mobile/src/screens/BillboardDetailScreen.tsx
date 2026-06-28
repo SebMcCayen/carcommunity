@@ -191,7 +191,7 @@ export const BillboardDetailScreen = ({ route, navigation }: Props) => {
     >
       <View style={[styles.sponsorBadge, { backgroundColor: theme.colors.brandPrimary }]}>
         <Text style={styles.sponsorBadgeText} accessibilityRole="text">
-          {detail.sponsorLabel || t('billboard.sponsoredLabel')}
+          {t('billboard.sponsoredLabel')}
         </Text>
       </View>
 

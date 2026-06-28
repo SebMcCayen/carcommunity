@@ -181,7 +181,6 @@ export async function createServer(
   await registerDigitalBillboardRoutes(app, {
     billboardService: dependencies.billboardService,
     partnerInsightsService,
-    digitalBillboardsFeatureEnabled: true,
   });
 
   return app;

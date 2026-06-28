@@ -113,7 +113,7 @@ function billboardToForm(billboard: AdminBillboardSummary): BillboardFormState {
     availableFrom: billboard.availableFrom ? new Date(billboard.availableFrom).toISOString().slice(0, 16) : '',
     availableUntil: billboard.availableUntil ? new Date(billboard.availableUntil).toISOString().slice(0, 16) : '',
     callToActionType: billboard.callToActionType ?? '',
-    callToActionValue: '',
+    callToActionValue: billboard.callToActionValue ?? '',
     safetyNote: billboard.safetyNote ?? '',
   };
 }
@@ -372,12 +372,12 @@ const ActivateModal = ({ billboard, onConfirm, onCancel, isSaving, saveError }: 
             event.preventDefault();
             if (!canSubmit) return;
             void onConfirm({
-              notBusinessLocationConfirmed: true,
-              notRoadLaneConfirmed: true,
-              notRoadSignConfirmed: true,
-              notObstructingMapConfirmed: true,
-              markedAsAdvertisingConfirmed: true,
-              suitableForMapConfirmed: true,
+              notBusinessLocationConfirmed: checks.notBusinessLocationConfirmed,
+              notRoadLaneConfirmed: checks.notRoadLaneConfirmed,
+              notRoadSignConfirmed: checks.notRoadSignConfirmed,
+              notObstructingMapConfirmed: checks.notObstructingMapConfirmed,
+              markedAsAdvertisingConfirmed: checks.markedAsAdvertisingConfirmed,
+              suitableForMapConfirmed: checks.suitableForMapConfirmed,
               approvalReason: approvalReason.trim(),
             });
           }}
@@ -546,7 +546,10 @@ export default function BillboardsPage() {
         availableFrom: form.availableFrom ? new Date(form.availableFrom).toISOString() : null,
         availableUntil: form.availableUntil ? new Date(form.availableUntil).toISOString() : null,
         callToActionType: (form.callToActionType as BillboardCtaType) || null,
-        callToActionValue: form.callToActionValue || null,
+        callToActionValue:
+          (form.callToActionType === 'phone' || form.callToActionType === 'website') && form.callToActionValue.trim()
+            ? form.callToActionValue.trim()
+            : null,
         safetyNote: form.safetyNote || null,
       };
       await adminCreateBillboard(request);

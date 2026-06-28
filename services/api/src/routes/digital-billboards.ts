@@ -44,11 +44,12 @@ import {
   type AdminEndBillboardResponse,
   type RecordBillboardInteractionResponse,
 } from '@carcommunity/shared/digital-billboards';
+import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 
 import { requireAuthHook, requireAdminHook } from '../lib/auth-context.js';
 import { AppError } from '../lib/errors.js';
 import { BillboardService } from '../lib/billboard-service.js';
-import { PartnerInsightsService } from '../lib/partner-insights-service.js';
+import type { PartnerInsightsService } from '../lib/partner-insights-service.js';
 
 const paginationQuerySchema = z
   .object({
@@ -142,7 +143,7 @@ export async function registerDigitalBillboardRoutes(
   dependencies: RegisterDigitalBillboardRoutesDependencies = {},
 ): Promise<void> {
   const billboardService = dependencies.billboardService ?? new BillboardService(app.prisma);
-  const featureEnabled = dependencies.digitalBillboardsFeatureEnabled ?? true;
+  const featureEnabled = dependencies.digitalBillboardsFeatureEnabled ?? DEFAULT_FEATURE_FLAGS.digitalBillboards;
 
   app.get(
     DIGITAL_BILLBOARD_ROUTE_PATHS.list,
@@ -211,6 +212,9 @@ export async function registerDigitalBillboardRoutes(
     '/v1/digital-billboards/:billboardId/interactions',
     { preHandler: [requireAuthHook] },
     async (request, reply) => {
+      if (!featureEnabled) {
+        throw new AppError(403, 'billboard_feature_disabled', 'Digital billboards feature is disabled.');
+      }
       const { billboardId } = billboardIdParamsSchema.parse(request.params);
       const body = interactionBodySchema.parse(request.body);
 

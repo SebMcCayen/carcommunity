@@ -186,6 +186,7 @@ export interface AdminBillboardSummary {
   availableFrom: string | null;
   availableUntil: string | null;
   callToActionType: BillboardCtaType | null;
+  callToActionValue: string | null;
   approvedAt: string | null;
   approvedByUserId: string | null;
   activatedAt: string | null;

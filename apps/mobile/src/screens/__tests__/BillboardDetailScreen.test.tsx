@@ -144,7 +144,7 @@ describe('BillboardDetailScreen', () => {
     });
 
     const json = JSON.stringify(renderer!.toJSON());
-    expect(json).toContain('Sponsrad placering');
+    expect(json).toContain('billboard.sponsoredLabel');
     expect(openUrlSpy).not.toHaveBeenCalled();
   });
 });
