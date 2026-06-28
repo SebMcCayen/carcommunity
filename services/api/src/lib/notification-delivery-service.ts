@@ -364,7 +364,7 @@ export class NotificationDeliveryService {
 
       case 'admins': {
         const users = await this.prisma.user.findMany({
-          where: { role: { in: ['admin', 'owner'] }, deletedAt: null, status: { not: 'deleted' } },
+          where: { role: { in: ['admin', 'owner'] }, deletedAt: null, status: 'active' },
           select: { id: true },
         });
         return users.map((u) => u.id);
