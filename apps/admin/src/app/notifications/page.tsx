@@ -40,6 +40,7 @@ import {
   ApiError,
 } from '@/features/notifications';
 import { translate } from '@/i18n';
+import { brand } from '@/config/brand';
 
 import styles from './page.module.css';
 
