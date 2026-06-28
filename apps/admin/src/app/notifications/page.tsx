@@ -222,7 +222,7 @@ export default function AdminNotificationsPage() {
       idempotencyKey: form.idempotencyKey,
       ...(form.eventId ? { eventId: form.eventId } : {}),
       ...(form.targetUserId ? { targetUserId: form.targetUserId } : {}),
-      ...(needsConfirmation || confirmed ? { confirmed: true } : {}),
+      ...(confirmed ? { confirmed: true } : {}),
     };
 
     setIsSending(true);
