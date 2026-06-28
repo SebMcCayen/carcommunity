@@ -189,7 +189,9 @@ export const NotificationSettingsScreen = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -255,7 +257,7 @@ export const NotificationSettingsScreen = () => {
         } catch {
           // Non-fatal — user can retry later.
         }
-      finally {
+      } finally {
         if (mountedRef.current) setIsSaving(false);
       }
     },
