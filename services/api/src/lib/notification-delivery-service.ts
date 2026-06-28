@@ -190,19 +190,20 @@ export class NotificationDeliveryService {
 
         let attempt: { success: boolean; safeErrorCode?: string } = { success: false, safeErrorCode: 'not_attempted' };
 
-        for (let retry = 0; retry <= MAX_PUSH_RETRIES; retry++) {
-          if (!decryptPushToken(device.encryptedPushToken)) {
-            attempt = { success: false, safeErrorCode: 'token_decrypt_failed' };
-            await this.recordDeliveryAttempt({
-              userNotificationId: notificationId,
-              deviceRegistrationId: device.deviceId,
-              channel: 'push',
-              status: 'failed',
-              safeErrorCode: attempt.safeErrorCode,
-            });
-            break;
-          }
+        const canDecrypt = decryptPushToken(device.encryptedPushToken) !== null;
+        if (!canDecrypt) {
+          attempt = { success: false, safeErrorCode: 'token_decrypt_failed' };
+          await this.recordDeliveryAttempt({
+            userNotificationId: notificationId,
+            deviceRegistrationId: device.deviceId,
+            channel: 'push',
+            status: 'failed',
+            safeErrorCode: attempt.safeErrorCode,
+          });
+          continue;
+        }
 
+        for (let retry = 0; retry <= MAX_PUSH_RETRIES; retry++) {
           let result: import('./push-provider.js').PushSendResult;
           try {
             result = await this.pushProvider.sendPushNotification(device.encryptedPushToken, {
