@@ -174,7 +174,12 @@ export class NotificationDeliveryService {
       inAppDelivered = true;
     } catch (err) {
       // If in-app creation fails, we can't send push because the payload requires a notificationId.
-      console.error('[DeliveryService] Failed to create in-app notification:', err instanceof Error ? err.message : 'unknown');
+      if (process.env.NODE_ENV !== 'test') {
+        console.error(
+          '[DeliveryService] Failed to create in-app notification:',
+          err instanceof Error ? err.message : 'unknown',
+        );
+      }
     }
 
     // Push delivery — gated by feature flag and preference.
