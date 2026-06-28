@@ -452,7 +452,7 @@ export class NotificationDeliveryService {
         const users = await this.prisma.user.findMany({
           where: { deletedAt: null, status: { in: ['active', 'warned'] } },
           select: { id: true },
-          take: MAX_SYNC_AUDIENCE_SIZE,
+          take: MAX_SYNC_AUDIENCE_SIZE + 1,
         });
         return users.map((u) => u.id);
       }
