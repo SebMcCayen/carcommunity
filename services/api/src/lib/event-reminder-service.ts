@@ -161,10 +161,7 @@ export class EventReminderService {
   }
 
   /**
-   * Send an event-updated notice to all eligible RSVP'd users.
-   *
-   * Eligibility same as reminder, except RSVP may also be 'interested'.
-   * Idempotent per event update cycle — caller should pass a unique triggerKey.
+   * Eligibility same as reminder, except RSVP may also be 'maybe'.
    */
   async sendEventUpdatedNotice(
     input: EventUpdatedInput,
