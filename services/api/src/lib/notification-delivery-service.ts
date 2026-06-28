@@ -454,6 +454,15 @@ export class NotificationDeliveryService {
           select: { id: true },
           take: MAX_SYNC_AUDIENCE_SIZE + 1,
         });
+
+        if (users.length > MAX_SYNC_AUDIENCE_SIZE) {
+          throw new AppError(
+            400,
+            'validation_error',
+            `Audience too large for synchronous send (max ${MAX_SYNC_AUDIENCE_SIZE}).`,
+          );
+        }
+
         return users.map((u) => u.id);
       }
 
