@@ -325,25 +325,20 @@ async function writeNotificationAuditLog(
     reason: string;
   },
 ): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        actorUserId: input.actorUserId,
-        action: 'admin_notification_sent',
-        entityType: 'admin_notification_batch',
-        entityId: input.batchId,
-        reason: input.reason,
-        metadata: {
-          // Audit metadata must not include push tokens, full recipient lists,
-          // exact locations, session data, or personal data.
-          category: input.category,
-          audience: input.audience,
-          recipientCount: input.recipientCount,
-        },
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: input.actorUserId,
+      action: 'admin_notification_sent',
+      entityType: 'admin_notification_batch',
+      entityId: input.batchId,
+      reason: input.reason,
+      metadata: {
+        // Audit metadata must not include push tokens, full recipient lists,
+        // exact locations, session data, or personal data.
+        category: input.category,
+        audience: input.audience,
+        recipientCount: input.recipientCount,
       },
-    });
-  } catch {
-    // Audit log failure must not block the send operation.
-    // TODO: Add alerting if audit log write fails.
-  }
+    },
+  });
 }
