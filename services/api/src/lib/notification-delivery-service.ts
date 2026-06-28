@@ -458,7 +458,7 @@ export class NotificationDeliveryService {
           where: {
             eventId: input.eventId,
             status: { in: ['going', 'maybe'] },
-            user: { deletedAt: null, status: 'active' },
+            user: { deletedAt: null, status: { in: ['active', 'warned'] } },
           },
           select: { userId: true },
         });
