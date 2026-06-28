@@ -531,7 +531,7 @@
     "settingsPush": "Push",
     "settingsEssential": "Alltid aktivt",
     "settingsSaving": "Sparar...",
-    "permissionRationale": "Få påminnelser om event och viktiga meddelanden från KCC.",
+    "permissionRationale": "Få påminnelser om event och viktiga meddelanden.",
     "permissionOptional": "Notiser är valfria.",
     "permissionChangeHint": "Du kan ändra dina val senare under Inställningar."
   }
