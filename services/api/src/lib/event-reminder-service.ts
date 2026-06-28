@@ -310,13 +310,10 @@ export class EventReminderService {
    * Check whether a reminder with this key has already been delivered.
    * Uses the UserNotification batchId convention via a dedicated check.
    */
-  private async checkIdempotencyKey(key: string): Promise<boolean> {
-    // We store idempotency in AdminNotificationBatch for admin sends.
-    // For event reminders we use a simple check via UserNotification batchId
-    // equal to a hash of the key.
-    const keyHash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 32);
+    const hash = crypto.createHash('sha256').update(key).digest('hex');
+    const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
     const existing = await this.prisma.userNotification.findFirst({
-      where: { batchId: keyHash as unknown as string },
+      where: { batchId },
       select: { id: true },
     });
     return existing !== null;
