@@ -61,6 +61,11 @@ export const SettingsScreen = () => {
         onPress={() => navigation.navigate('PrivacySettings')}
       />
       <KccButton
+        label={t('settings.notifications')}
+        variant="secondary"
+        onPress={() => navigation.navigate('NotificationSettings')}
+      />
+      <KccButton
         label={t('settings.blockedUsers')}
         variant="secondary"
         onPress={() => navigation.navigate('BlockedUsers')}

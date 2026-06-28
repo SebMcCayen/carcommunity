@@ -22,6 +22,8 @@ export type RootStackParamList = {
   PartnerDetail: { partnerId: string };
   PartnerApplication: undefined;
   BillboardDetail: { billboardId: string };
+  Notifications: undefined;
+  NotificationSettings: undefined;
 };
 
 export type MainTabParamList = {

@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import type { EventChatMessage } from '@carcommunity/shared/event-chat';
+import type { EventChatMessage, ReportChatMessageRequest } from '@carcommunity/shared/event-chat';
 
 import {
   EventChatApiError,
@@ -28,7 +28,6 @@ import {
   postEventChatMessage,
   reportEventChatMessage,
 } from '../api/event-chat';
-import type { ReportChatMessageRequest } from '@carcommunity/shared/event-chat';
 
 /** Interval in milliseconds between chat polls while screen is visible. */
 const POLL_INTERVAL_MS = 7_000;

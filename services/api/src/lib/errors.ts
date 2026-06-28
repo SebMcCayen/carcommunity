@@ -61,7 +61,20 @@ export type ErrorCode =
   | 'billboard_invalid_coordinates'
   | 'billboard_invalid_date_range'
   | 'billboard_invalid_cta'
-  | 'billboard_feature_disabled';
+  | 'billboard_feature_disabled'
+  // Notifications
+  | 'notification_not_found'
+  | 'notification_invalid_category'
+  | 'notification_invalid_audience'
+  | 'notification_reason_required'
+  | 'notification_confirmation_required'
+  | 'notification_duplicate_idempotency_key'
+  | 'notification_target_user_required'
+  | 'notification_event_required'
+  | 'notification_invalid_push_token'
+  | 'notification_device_not_found'
+  | 'notification_feature_disabled'
+  | 'notification_essential_category_protected';
 
 export class AppError extends Error {
   public readonly statusCode: number;
