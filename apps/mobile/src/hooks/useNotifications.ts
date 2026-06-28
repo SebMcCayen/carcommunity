@@ -78,10 +78,10 @@ export function useNotifications(): UseNotificationsResult {
       setUnreadCount(res.data.unreadCount);
       setHasMore(res.meta.hasNext);
       setCurrentPage(page);
-    } catch (err) {
+    } catch {
       if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : 'Kunde inte hämta notiser.');
-    } finally {
+      setError(t('notifications.loadError'));
+    }
       if (mountedRef.current) {
         setIsLoading(false);
       }
