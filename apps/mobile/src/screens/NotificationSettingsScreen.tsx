@@ -207,7 +207,16 @@ export const NotificationSettingsScreen = () => {
         setPushPermission(permStatus);
         setPreferences(prefRes.data.preferences);
       } catch {
-        // Non-fatal — use defaults.
+        // Non-fatal — fall back to defaults so toggles still work.
+        if (!mountedRef.current) return;
+        setPreferences(
+          ACTIVE_NOTIFICATION_CATEGORIES.map((category) => ({
+            category,
+            pushEnabled: false,
+            inAppEnabled: true,
+            updatedAt: new Date(0).toISOString(),
+          })),
+        );
       } finally {
         if (mountedRef.current) setIsLoading(false);
       }
