@@ -316,6 +316,7 @@ export class EventReminderService {
    * Check whether a reminder with this key has already been delivered.
    * Uses the UserNotification batchId convention via a dedicated check.
    */
+  private async checkIdempotencyKey(key: string): Promise<boolean> {
     const hash = crypto.createHash('sha256').update(key).digest('hex');
     const batchId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
     const existing = await this.prisma.userNotification.findFirst({
