@@ -411,5 +411,30 @@
     "reasonRequired": "Orsak krävs.",
     "codeNeverShownInList": "⚠️ Rabattkoden visas aldrig i listor eller detaljer — endast via Visa kod-funktionen för aktiva KCC-medlemmar.",
     "confirmRequired": "Bekräftelse krävs."
+  },
+  "partnerInsights": {
+    "pageTitle": "Partner Insights",
+    "pageDescription": "Statistiken visas endast i aggregerad form.",
+    "thresholdNote": "Minst 10 unika användare krävs för anonymiserad passeringsstatistik.",
+    "selectPeriod": "Välj period",
+    "periodLast7Days": "Senaste 7 dagarna",
+    "periodLast30Days": "Senaste 30 dagarna",
+    "periodCurrentMonth": "Den här månaden",
+    "periodPreviousMonth": "Föregående månad",
+    "insufficientData": "För lite data",
+    "noData": "Inga data",
+    "metricMapView": "Kartvisningar",
+    "metricProfileView": "Profilsidesvisningar",
+    "metricNavigate": "Navigeringar",
+    "metricPhone": "Telefonsamtalsåtgärder",
+    "metricWebsite": "Webbplatsklick",
+    "metricOfferView": "Erbjudandevisningar",
+    "metricShowCode": "Visa kod",
+    "metricSaveOffer": "Sparade erbjudanden",
+    "metricAnonymousPassBy": "Anonymiserade passeringar",
+    "loading": "Laddar...",
+    "error": "Kunde inte hämta statistik.",
+    "retry": "Försök igen",
+    "backToPartner": "Tillbaka till partner"
   }
 }

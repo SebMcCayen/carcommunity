@@ -42,7 +42,13 @@ export type ErrorCode =
   | 'offer_invalid_percentage_discount'
   | 'offer_invalid_fixed_discount'
   | 'offer_currency_required'
-  | 'offer_date_range_invalid';
+  | 'offer_date_range_invalid'
+  // Partner insights
+  | 'interaction_type_unsupported'
+  | 'interaction_partner_inactive'
+  | 'interaction_offer_not_found'
+  | 'interaction_offer_partner_mismatch'
+  | 'insights_partner_not_found';
 
 export class AppError extends Error {
   public readonly statusCode: number;

@@ -33,6 +33,7 @@ import { useLiveLocationMarkers } from '../hooks/useLiveLocationMarkers';
 import { usePartnerMarkers } from '../hooks/usePartnerMarkers';
 import { useAuth } from '../hooks/useAuth';
 import { useI18n } from '../hooks/useI18n';
+import { fireAndForgetInteraction } from '../api/partner-insights';
 import type { RootStackParamList } from '../navigation/types';
 
 // Kungsbacka, Sweden — [longitude, latitude] as required by Mapbox.
@@ -82,7 +83,7 @@ const PartnerMarkerDot = ({ color }: PartnerMarkerDotProps) => (
 export const MapScreen = () => {
   const { theme } = useAppTheme();
   const { status, currentPosition } = useLiveLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, withToken } = useAuth();
   const { t } = useI18n();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
@@ -90,7 +91,7 @@ export const MapScreen = () => {
     isLoading: isMemberMarkersLoading,
     isMemberEligible,
   } = useLiveLocationMarkers();
-  const { rawMarkers: partnerRawMarkers, markers: partnerViewMarkers } = usePartnerMarkers();
+  const { rawMarkers: partnerRawMarkers } = usePartnerMarkers();
 
   // Show the user's real position only while actively sharing.
   // Coordinates are not logged.
@@ -149,6 +150,9 @@ export const MapScreen = () => {
             coordinate={[raw.longitude, raw.latitude]}
             onSelected={() => {
               navigation.navigate('PartnerDetail', { partnerId: raw.partnerId });
+              void withToken(async (token) => {
+                fireAndForgetInteraction(raw.partnerId, 'map_view', token);
+              });
             }}
           >
             <TouchableOpacity
@@ -156,6 +160,9 @@ export const MapScreen = () => {
               accessibilityLabel={`${raw.label}: ${raw.companyName}`}
               onPress={() => {
                 navigation.navigate('PartnerDetail', { partnerId: raw.partnerId });
+                void withToken(async (token) => {
+                  fireAndForgetInteraction(raw.partnerId, 'map_view', token);
+                });
               }}
             >
               <PartnerMarkerDot color={theme.colors.brandPrimary} />

@@ -85,6 +85,12 @@ export const PrivacySettingsScreen = () => {
       backgroundColor: theme.colors.pageBackground,
       padding: 20,
     },
+    pageTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      marginBottom: 16,
+    },
     sectionTitle: {
       fontSize: 17,
       fontWeight: '600',
@@ -128,15 +134,18 @@ export const PrivacySettingsScreen = () => {
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.body}>{t('auth.loading')}</Text>
+        <Text style={styles.body}>{t('privacySettings.loading')}</Text>
       </View>
     );
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Text style={styles.pageTitle}>{t('privacySettings.title')}</Text>
       <Text style={styles.sectionTitle}>{t('privacySettings.partnerStatsTitle')}</Text>
       <Text style={styles.body}>{t('privacySettings.partnerStatsBody')}</Text>
+      <Text style={styles.body}>{t('privacySettings.partnerStatsExplainer')}</Text>
+      <Text style={styles.note}>{t('privacySettings.partnerStatsNotice')}</Text>
 
       <View style={styles.row} testID="partner-stats-row">
         <Switch
@@ -151,7 +160,9 @@ export const PrivacySettingsScreen = () => {
         <Text style={styles.switchLabel}>{t('privacySettings.partnerStatsOptIn')}</Text>
       </View>
 
-      <Text style={styles.note}>{t('privacySettings.partnerStatsNote')}</Text>
+      <Text style={styles.note}>
+        {t('privacySettings.partnerStatsOptOut')} {t('privacySettings.partnerStatsNote')}
+      </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {saved ? <Text style={styles.savedText}>{t('privacySettings.saved')}</Text> : null}

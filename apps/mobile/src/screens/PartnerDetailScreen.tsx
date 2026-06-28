@@ -29,10 +29,12 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import type { PartnerInteractionType } from '@carcommunity/shared/partner-insights';
 import type { PartnerCompanyPublicDetail } from '@carcommunity/shared/partners';
 import { canViewPartnerOfferDetails } from '@carcommunity/shared/users';
 
 import { getPartnerDetail, PartnerApiError } from '../api/partners';
+import { fireAndForgetInteraction } from '../api/partner-insights';
 import {
   getPartnerOfferTeasers,
   getMemberOffers,
@@ -92,6 +94,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   const [isDriving] = useState(false);
 
   const isMounted = useRef(true);
+  const recordedOfferViewsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     isMounted.current = true;
     return () => {
@@ -106,6 +109,16 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
       status: currentUser.status,
       subscriptionEntitlement: currentUser.subscriptionEntitlement,
     });
+
+  const recordInteraction = useCallback(
+    (interactionType: PartnerInteractionType, relatedOfferId?: string) => {
+      void withToken(async (token) => {
+        fireAndForgetInteraction(partnerId, interactionType, token, relatedOfferId);
+        return null;
+      });
+    },
+    [partnerId, withToken],
+  );
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -170,7 +183,8 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- triggers async fetch; state updates happen in async callbacks
     void load();
-  }, [load]);
+    recordInteraction('profile_view');
+  }, [load, recordInteraction]);
 
   // Load teasers after partner loads
   useEffect(() => {
@@ -188,6 +202,20 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
       void loadSavedOfferIds();
     }
   }, [isMember, offerTeasers, loadMemberOffers, loadSavedOfferIds]);
+
+  useEffect(() => {
+    if (offerTeasers.length === 0) {
+      return;
+    }
+
+    offerTeasers.forEach((teaser) => {
+      if (recordedOfferViewsRef.current.has(teaser.offerId)) {
+        return;
+      }
+      recordedOfferViewsRef.current.add(teaser.offerId);
+      recordInteraction('offer_view', teaser.offerId);
+    });
+  }, [offerTeasers, recordInteraction]);
 
   // Clear protected offer data on logout
   useEffect(() => {
@@ -208,6 +236,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         const result = await withToken((token) => showOfferCode(offerId, token));
         if (isMounted.current && result !== null) {
           setVisibleCodes((prev) => new Map(prev).set(offerId, result.code));
+          recordInteraction('show_code', offerId);
           Alert.alert(
             t('partnerOffers.codeAlertTitle'),
             result.code ?? t('partnerOffers.noOffers'),
@@ -223,7 +252,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         if (isMounted.current) setLoadingCodeId(null);
       }
     },
-    [isDriving, loadingCodeId, withToken, t],
+    [isDriving, loadingCodeId, recordInteraction, withToken, t],
   );
 
   const handleSaveToggle = useCallback(
@@ -246,6 +275,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
           if (isMounted.current) {
             setSavedOfferIds((prev) => new Set(prev).add(offerId));
           }
+          recordInteraction('save_offer', offerId);
         }
       } catch {
         if (isMounted.current) setOfferError(t('partnerOffers.saveError'));
@@ -253,7 +283,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         if (isMounted.current) setSavingOfferId(null);
       }
     },
-    [isDriving, savingOfferId, savedOfferIds, withToken, t],
+    [isDriving, recordInteraction, savingOfferId, savedOfferIds, withToken, t],
   );
 
   const openPhone = useCallback(
@@ -268,6 +298,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         const canOpen = await Linking.canOpenURL(url);
         if (canOpen) {
           await Linking.openURL(url);
+          recordInteraction('phone');
         } else {
           setOpenError(t('partners.cannotOpenPhone'));
         }
@@ -275,7 +306,7 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         setOpenError(t('partners.cannotOpenPhone'));
       }
     },
-    [t],
+    [recordInteraction, t],
   );
 
   const openWebsite = useCallback(
@@ -287,11 +318,12 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
       }
       try {
         await Linking.openURL(url);
+        recordInteraction('website');
       } catch {
         setOpenError(t('partners.cannotOpenWebsite'));
       }
     },
-    [t],
+    [recordInteraction, t],
   );
 
   const openNavigation = useCallback(
@@ -304,16 +336,18 @@ export const PartnerDetailScreen = ({ route, navigation }: Props) => {
         const canOpen = await Linking.canOpenURL(url);
         if (canOpen) {
           await Linking.openURL(url);
+          recordInteraction('navigate');
         } else {
           // Fall back to Google Maps web URL
           const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
           await Linking.openURL(mapsUrl);
+          recordInteraction('navigate');
         }
       } catch {
         setOpenError(t('partners.cannotOpenNavigation'));
       }
     },
-    [t],
+    [recordInteraction, t],
   );
 
   if (isLoading) {

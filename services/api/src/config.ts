@@ -107,6 +107,24 @@ const envSchema = z
      * Example: EARLY_MEMBER_CUTOFF_DATE=2026-07-01
      */
     EARLY_MEMBER_CUTOFF_DATE: z.string().optional(),
+    PARTNER_INSIGHTS_MIN_THRESHOLD: z
+      .string()
+      .default('10')
+      .transform((value, ctx) => {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'PARTNER_INSIGHTS_MIN_THRESHOLD must be a positive integer.',
+          });
+          return z.NEVER;
+        }
+        return parsed;
+      }),
+    PARTNER_INSIGHTS_PASS_BY_ENABLED: z
+      .string()
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === 'production' && !value.DATABASE_URL) {
@@ -164,6 +182,8 @@ export type AppConfig = {
    * Null when not configured — badge is not awarded in that case.
    */
   earlyMemberCutoffDate?: Date | null;
+  partnerInsightsMinThreshold?: number;
+  partnerInsightsPassByFeatureEnabled?: boolean;
 };
 
 export function resolveAuthVerificationConfig(config: Pick<AppConfig, 'authVerificationMode' | 'authProviders'>): {
@@ -205,5 +225,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
           return isNaN(d.getTime()) ? null : d;
         })()
       : null,
+    partnerInsightsMinThreshold: parsed.PARTNER_INSIGHTS_MIN_THRESHOLD,
+    partnerInsightsPassByFeatureEnabled: parsed.PARTNER_INSIGHTS_PASS_BY_ENABLED,
   };
 }

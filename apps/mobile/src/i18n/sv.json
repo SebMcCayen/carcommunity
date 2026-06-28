@@ -116,8 +116,11 @@
   },
   "privacySettings": {
     "title": "Integritet",
-    "partnerStatsTitle": "Partnerstatistik",
-    "partnerStatsBody": "Bidra med anonymiserad statistik om din användning av partnerförmåner. Inga personuppgifter eller platser samlas in.",
+    "partnerStatsTitle": "Anonymiserad partnerstatistik",
+    "partnerStatsBody": "Jag vill bidra med anonymiserad partnerstatistik.",
+    "partnerStatsExplainer": "När funktionen är på kan aggregerad statistik bidra till att visa hur många användare som passerar nära KCC:s företagspartner.",
+    "partnerStatsNotice": "Företag får aldrig se din identitet, liveposition eller körhistorik.",
+    "partnerStatsOptOut": "Du kan stänga av funktionen när som helst.",
     "partnerStatsOptIn": "Bidra med anonymiserad partnerstatistik",
     "partnerStatsNote": "Opt-in är frivillig. Du kan ändra dig när som helst.",
     "saveButton": "Spara",

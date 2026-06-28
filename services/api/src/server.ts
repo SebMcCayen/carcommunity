@@ -35,7 +35,9 @@ import { registerPointsRoutes } from './routes/points.js';
 import { registerCrownHuntRoutes } from './routes/crown-hunt.js';
 import { registerPartnerRoutes } from './routes/partners.js';
 import { registerPartnerOfferRoutes } from './routes/partner-offers.js';
+import { registerPartnerInsightsRoutes } from './routes/partner-insights.js';
 import { PartnerOfferService } from './lib/partner-offer-service.js';
+import { PartnerInsightsService } from './lib/partner-insights-service.js';
 
 export interface ServerDependencies {
   authService?: AuthService;
@@ -58,6 +60,7 @@ export interface ServerDependencies {
   partnerApplicationService?: import('./lib/partner-application-service.js').PartnerApplicationService;
   partnerCompanyService?: import('./lib/partner-company-service.js').PartnerCompanyService;
   partnerOfferService?: PartnerOfferService;
+  partnerInsightsService?: PartnerInsightsService;
 }
 
 export async function createServer(
@@ -111,6 +114,8 @@ export async function createServer(
     });
   const badgeService =
     dependencies.badgeService ?? new BadgeService(app.prisma, config.earlyMemberCutoffDate);
+  const partnerInsightsService =
+    dependencies.partnerInsightsService ?? new PartnerInsightsService(app.prisma, config);
   await registerAuthContext(app, config, authService);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
@@ -166,6 +171,10 @@ export async function createServer(
   });
   await registerPartnerOfferRoutes(app, {
     partnerOfferService: dependencies.partnerOfferService,
+  });
+  await registerPartnerInsightsRoutes(app, {
+    partnerInsightsService,
+    config,
   });
 
   return app;

@@ -336,5 +336,30 @@
     "reasonRequired": "Reason required.",
     "codeNeverShownInList": "⚠️ Discount codes are never shown in lists or details — only via the Show code feature for active KCC members.",
     "confirmRequired": "Confirmation required."
+  },
+  "partnerInsights": {
+    "pageTitle": "Partner Insights",
+    "pageDescription": "Statistics are shown only in aggregate form.",
+    "thresholdNote": "At least 10 unique users are required for anonymous pass-by statistics.",
+    "selectPeriod": "Select period",
+    "periodLast7Days": "Last 7 days",
+    "periodLast30Days": "Last 30 days",
+    "periodCurrentMonth": "Current month",
+    "periodPreviousMonth": "Previous month",
+    "insufficientData": "Insufficient data",
+    "noData": "No data",
+    "metricMapView": "Map views",
+    "metricProfileView": "Profile views",
+    "metricNavigate": "Navigations",
+    "metricPhone": "Phone call actions",
+    "metricWebsite": "Website clicks",
+    "metricOfferView": "Offer views",
+    "metricShowCode": "Show code",
+    "metricSaveOffer": "Saved offers",
+    "metricAnonymousPassBy": "Anonymous pass-bys",
+    "loading": "Loading...",
+    "error": "Could not load statistics.",
+    "retry": "Retry",
+    "backToPartner": "Back to partner"
   }
 }
