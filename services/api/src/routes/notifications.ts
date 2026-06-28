@@ -119,7 +119,10 @@ const preferencesUpdateBodySchema = z
         }).strict(),
       )
       .min(1)
-      .max(20),
+      .max(20)
+      .refine((prefs) => new Set(prefs.map((p) => p.category)).size === prefs.length, {
+        message: 'Duplicate categories are not allowed.',
+      }),
   })
   .strict();
 
