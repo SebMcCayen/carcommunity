@@ -48,11 +48,14 @@ export function useBillboardMarkers(featureEnabled = true): UseBillboardMarkersR
   const retryDelay = useRef(INITIAL_RETRY_DELAY_MS);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
+  // Tracks whether any markers have been fetched; avoids showing the loading
+  // spinner on subsequent polls when markers are already visible.
+  const hasEverFetchedRef = useRef(false);
 
   useEffect(() => {
     if (!featureEnabled) {
+      hasEverFetchedRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- feature flag cleared; state must reset immediately when feature is disabled
       setMarkers([]);
       setError(null);
       return;
@@ -63,12 +66,13 @@ export function useBillboardMarkers(featureEnabled = true): UseBillboardMarkersR
     const poll = async () => {
       if (inFlight.current || !isMounted.current) return;
       inFlight.current = true;
-      if (markersRef.current.length === 0) setIsLoading(true);
+      if (!hasEverFetchedRef.current) setIsLoading(true);
 
       try {
         await withToken(async (token) => {
           const response = await fetchBillboardMapMarkers(token);
           if (isMounted.current) {
+            hasEverFetchedRef.current = true;
             setMarkers(response.data.markers);
             setError(null);
             retryDelay.current = INITIAL_RETRY_DELAY_MS;
