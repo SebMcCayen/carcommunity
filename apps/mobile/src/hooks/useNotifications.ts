@@ -89,7 +89,6 @@ export function useNotifications(): UseNotificationsResult {
         setIsLoading(false);
       }
     }
-  }
   }, [t]);
 
   useEffect(() => {
