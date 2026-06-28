@@ -282,7 +282,7 @@ export const NotificationsScreen = () => {
       {error && !isLoading && (
         <View style={styles.centered}>
           <Text style={[styles.emptyText, { color: theme.colors.statusError }]}>{error}</Text>
-          <KccButton label={t('common.retry')} onPress={refresh} variant="secondary" />
+          <KccButton label={t('notifications.retry')} onPress={refresh} variant="secondary" />
         </View>
       )}
 
