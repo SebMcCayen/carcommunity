@@ -137,6 +137,7 @@ interface NotificationRowProps {
 
 const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationRowProps) => {
   const { theme } = useAppTheme();
+  const { t } = useI18n();
   const isUnread = !notification.readAt;
 
   const date = new Date(notification.createdAt).toLocaleDateString('sv-SE', {
@@ -145,11 +146,14 @@ const NotificationRow = ({ notification, onPress, categoryLabel }: NotificationR
     day: 'numeric',
   });
 
+  const accessibilityLabel = isUnread
+    ? `${notification.title}, ${t('notifications.unreadLabel')}`
+    : notification.title;
+
   return (
     <TouchableOpacity
       accessibilityRole="button"
-      accessibilityLabel={notification.title}
-      accessibilityState={{ selected: isUnread }}
+      accessibilityLabel={accessibilityLabel}
       onPress={() => onPress(notification)}
       style={[
         styles.row,
