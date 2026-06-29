@@ -1,16 +1,34 @@
 # GitHub Copilot Instructions for `carcommunity`
 
+## Mandatory mobile parity
+
+The project targets two separate native mobile applications:
+
+- `apps/ios` (expected): Swift and SwiftUI
+- `apps/android` (expected): Kotlin and Jetpack Compose
+
+Any product change that affects mobile functionality must be evaluated and implemented for both platforms.
+
+A mobile feature is not complete when only one platform has been updated.
+
+Platform-native implementation details and UI conventions may differ, but functionality, business rules, security, privacy, localization, analytics, API behavior, and user outcomes must remain equivalent.
+
+Follow the full mobile parity instructions defined in:
+
+`.github/instructions/mobile-platform-parity.instructions.md`
+
 ## Repository context
 
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - React Native / Expo mobile app (iOS and Android)
+  - iOS native app (Swift and SwiftUI) expected at `apps/ios`
+  - Android native app (Kotlin and Jetpack Compose) expected at `apps/android`
   - Admin web app
   - Node.js LTS backend API
   - PostgreSQL database
   - Mapbox maps
-  - Apple login (iOS), Google login (Android)
+  - Sign in with Apple (iOS), Google Sign-In (Android)
 
 ## Language and naming rules
 
