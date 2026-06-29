@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/node": "^24.13.2",
     "@types/pg": "^8.20.0",
-    "eslint": "^9.0.0",
+    "eslint": "^10.6.0",
     "prisma": "6.19.3",
     "tsx": "^4.22.4",
     "typescript": "~6.0.3",
