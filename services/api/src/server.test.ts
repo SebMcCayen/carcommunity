@@ -53,7 +53,7 @@ function createFakeAuthService(): AuthService {
   let sessionCounter = 0;
 
   return {
-    async findOrCreateUserByFirebaseUid(firebaseUid: string) {
+    async findOrCreateUserByFirebaseUid(_firebaseUid: string) {
       userCounter += 1;
       const userId = `firebase-user-${userCounter}`;
       userProfiles.set(userId, {
