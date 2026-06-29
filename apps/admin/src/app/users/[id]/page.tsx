@@ -1,9 +1,13 @@
-import { useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
 import { UserPointsSection } from './PointsSection';
 
 export default function UserDetailPage() {
-  const { id = '' } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
+
+  if (!id) {
+    return <Navigate to="/users" replace />;
+  }
 
   return (
     <>
