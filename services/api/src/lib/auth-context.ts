@@ -1,9 +1,15 @@
 /**
  * Placeholder auth context for backend request authorization.
  *
- * @remarks NOT PRODUCTION READY — this is a development-only placeholder.
- *   Real auth must verify tokens server-side and look up sessions from the database.
- *   Replace all TODOs before any production deployment.
+ * @remarks
+ *   When FIREBASE_PROJECT_ID is configured, the primary auth path verifies
+ *   Firebase ID tokens using the Firebase Admin SDK. The Firebase UID is
+ *   the canonical identity source; the `admin: true` custom claim is
+ *   the authoritative grant for admin access.
+ *
+ *   A legacy session-based path remains active for backward-compatible
+ *   development tooling.  The development-only x-dev-user header is
+ *   accepted only in non-production environments.
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -11,6 +17,7 @@ import { z } from 'zod';
 
 import type { AppConfig } from '../config.js';
 import { parseBearerToken, type AuthService } from './auth-service.js';
+import type { FirebaseIdTokenVerifier } from './firebase-id-token-verifier.js';
 import { AppError } from './errors.js';
 import {
   SUBSCRIPTION_ENTITLEMENTS,
@@ -36,6 +43,19 @@ export interface AuthContext {
   lastActiveAt: string | null;
   /** ISO 8601 timestamp when onboarding was completed, or null if not yet done. */
   onboardingCompletedAt: string | null;
+  /**
+   * Firebase UID extracted from a verified Firebase ID token.
+   * Present only when the request was authenticated via Firebase.
+   * Never sourced from client-supplied request body or URL parameters.
+   */
+  firebaseUid?: string;
+  /**
+   * Whether the user holds the `admin: true` Firebase custom claim.
+   * This claim is set exclusively by trusted backend code and cannot
+   * be assigned by clients.
+   * Present only when the request was authenticated via Firebase.
+   */
+  isFirebaseAdmin?: boolean;
 }
 
 declare module 'fastify' {
@@ -71,15 +91,16 @@ function parseDevAuthContext(value: string): DevAuthContext | null {
 
 /**
  * Registers the auth context decoration on FastifyRequest and an onRequest hook
- * that populates `request.auth` from a verified session.
+ * that populates `request.auth` from a verified token.
  *
- * In non-production environments, a `x-dev-user` header containing a JSON
- * AuthContext can be used to inject a fake auth context for local testing.
- * This header is silently ignored in production.
- *
- * Production safety: login remains disabled in production until provider token
- * verification is implemented. This hook still performs backend session lookup
- * for any provided bearer token.
+ * Auth resolution order:
+ * 1. If `firebaseIdTokenVerifier` is provided, attempt Firebase ID token
+ *    verification. On success, look up or create the user by Firebase UID and
+ *    populate request.auth including the `admin` custom claim.
+ * 2. Fall back to legacy session-based lookup via `authService.lookupSession`.
+ * 3. In non-production environments, accept the `x-dev-user` header as a
+ *    convenience for local development and testing. Silently ignored in
+ *    production.
  *
  * Rate limiting is applied globally by the `@fastify/rate-limit` plugin
  * registered in `registerSecurity` before this hook runs.
@@ -88,25 +109,50 @@ export async function registerAuthContext(
   app: FastifyInstance,
   config: AppConfig,
   authService: AuthService,
+  firebaseIdTokenVerifier?: FirebaseIdTokenVerifier,
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
   // lgtm[js/missing-rate-limiting] Global rate limiting is registered in registerSecurity before this hook.
   app.addHook('onRequest', async (request) => {
-    // TODO: Add session fingerprinting and token binding checks.
-    // TODO: Add refresh-token rotation and single-use semantics.
-    // TODO: Add session idle timeout and max-session lifetime policy.
-    // TODO: Add device/session metadata validation and anomaly detection.
-    // TODO: Verify Apple identity token (JWT signed by Apple).
-    //   Validate issuer (https://appleid.apple.com) and audience (bundle ID).
-    // TODO: Verify Google identity token.
-    //   Validate issuer (accounts.google.com) and audience (OAuth client ID).
-    // TODO: Validate nonce and anti-replay safeguards during login/provider verification.
-
     const authorizationHeader = request.headers.authorization;
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
 
     if (token) {
+      // --- Firebase ID token path (preferred in production) ---
+      if (firebaseIdTokenVerifier) {
+        try {
+          const decoded = await firebaseIdTokenVerifier.verifyIdToken(token);
+
+          // Look up or create the backend user record by Firebase UID.
+          // The Firebase UID is the authoritative identity source; it is never
+          // sourced from client-supplied request parameters.
+          const userSummary = await authService.findOrCreateUserByFirebaseUid(
+            decoded.uid,
+            decoded.email,
+          );
+
+          request.auth = {
+            userId: userSummary.userId,
+            role: userSummary.roles[0] ?? 'user',
+            status: userSummary.status,
+            subscriptionEntitlement: userSummary.subscriptionEntitlement,
+            user: userSummary,
+            sessionId: `firebase:${decoded.uid}`,
+            sessionExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            lastActiveAt: null,
+            onboardingCompletedAt: userSummary.onboardingCompletedAt ?? null,
+            firebaseUid: decoded.uid,
+            isFirebaseAdmin: decoded.isAdmin,
+          };
+          return;
+        } catch {
+          // Invalid Firebase token — leave auth null; protected routes will reject below.
+          return;
+        }
+      }
+
+      // --- Legacy session path (development and backward compatibility) ---
       const session = await authService.lookupSession(token);
       if (session) {
         request.auth = {
@@ -192,6 +238,10 @@ export async function requireAuthenticatedHook(request: FastifyRequest, _reply: 
 /**
  * Fastify preHandler hook: requires admin or owner role.
  * Throws 401 if unauthenticated, 403 if authenticated but not admin or owner.
+ *
+ * For Firebase-authenticated requests the `admin: true` custom claim is the
+ * authoritative grant; only trusted backend code can set custom claims.
+ * For legacy session-authenticated requests the database role is used.
  */
 export async function requireAdminHook(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   if (!request.auth) {
@@ -203,6 +253,18 @@ export async function requireAdminHook(request: FastifyRequest, _reply: FastifyR
   if (request.auth.status === 'deleted') {
     throw new AppError(403, 'forbidden', 'Your account has been deleted.');
   }
+
+  if (request.auth.firebaseUid !== undefined) {
+    // Firebase-authenticated path: require the `admin: true` custom claim.
+    // Custom claims can only be set by trusted backend code via Firebase Admin SDK.
+    // Clients cannot forge them because they cannot produce a Firebase-signed token.
+    if (!request.auth.isFirebaseAdmin) {
+      throw new AppError(403, 'forbidden', 'Admin access required.');
+    }
+    return;
+  }
+
+  // Legacy session path: fall back to the database role check.
   if (!canAccessAdminFeatures({ role: request.auth.role, status: request.auth.status })) {
     throw new AppError(403, 'forbidden', 'Admin access required.');
   }

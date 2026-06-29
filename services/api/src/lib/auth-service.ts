@@ -34,6 +34,7 @@ export interface CreatedSession {
 
 export interface AuthService {
   findOrCreateUserByProviderIdentity(input: ProviderIdentityLoginInput): Promise<AuthenticatedSession['user']>;
+  findOrCreateUserByFirebaseUid(firebaseUid: string, email?: string | null): Promise<AuthenticatedSession['user']>;
   createSession(userId: string): Promise<CreatedSession>;
   lookupSession(rawToken: string): Promise<AuthenticatedSession | null>;
   revokeSession(rawToken: string): Promise<boolean>;
@@ -65,6 +66,48 @@ function buildAuthenticatedUserSummary(input: {
 
 export function createAuthService(prisma: PrismaClient): AuthService {
   return {
+    async findOrCreateUserByFirebaseUid(firebaseUid, email) {
+      const trimmedUid = firebaseUid.trim();
+      const normalizedEmail = email?.trim().toLowerCase() ?? null;
+
+      const user = await prisma.$transaction(async (tx) => {
+        const existing = await tx.user.findUnique({
+          where: { firebaseUid: trimmedUid },
+          include: { identities: true },
+        });
+
+        if (existing) {
+          return existing;
+        }
+
+        // Create a new user record linked to this Firebase UID.
+        // Role and status default to 'user' / 'active' — admin access is
+        // determined solely from the Firebase custom claim, not the DB role.
+        const created = await tx.user.create({
+          data: {
+            firebaseUid: trimmedUid,
+            email: normalizedEmail,
+          },
+          include: { identities: true },
+        });
+
+        return created;
+      });
+
+      return buildAuthenticatedUserSummary({
+        id: user.id,
+        displayName: user.displayName,
+        role: user.role,
+        status: user.status,
+        subscriptionEntitlement: user.subscriptionEntitlement,
+        identities: user.identities.map((identity) => ({
+          provider: identity.provider,
+          providerSubject: identity.providerSubject,
+        })),
+        onboardingCompletedAt: user.onboardingCompletedAt,
+      });
+    },
+
     async findOrCreateUserByProviderIdentity(input) {
       const provider = input.provider as IdentityProvider;
       const providerSubject = input.providerSubject.trim();
