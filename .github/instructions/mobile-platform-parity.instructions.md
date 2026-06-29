@@ -151,7 +151,7 @@ The API contract is the source of truth for:
 
 When changing an API used by mobile applications:
 
-1. Update the OpenAPI contract first or in the same change.
+1. Update the versioned backend API contract (for example, the shared TypeScript contracts in `packages/shared`) first or in the same change.
 2. Update the iOS implementation.
 3. Update the Android implementation.
 4. Update tests for both clients.
