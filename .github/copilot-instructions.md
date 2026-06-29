@@ -22,8 +22,8 @@ Follow the full mobile parity instructions defined in:
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - iOS native app (Swift and SwiftUI) at `apps/ios`
-  - Android native app (Kotlin and Jetpack Compose) at `apps/android`
+  - iOS native app (Swift and SwiftUI) expected at `apps/ios`
+  - Android native app (Kotlin and Jetpack Compose) expected at `apps/android`
   - Admin web app
   - Node.js LTS backend API
   - PostgreSQL database
