@@ -94,7 +94,7 @@ function parseDevAuthContext(value: string): DevAuthContext | null {
  * that populates `request.auth` from a verified token.
  *
  * Auth resolution order:
- * 1. If `firebaseIdTokenVerifier` is provided and a ****** is present,
+ * 1. If `firebaseIdTokenVerifier` is provided and an `Authorization: Bearer <token>` header is present,
  *    attempt Firebase ID token verification. On success, look up or create the
  *    user by Firebase UID and populate request.auth including the `admin` custom
  *    claim. On failure the token is rejected and request.auth is left null —
