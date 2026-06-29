@@ -2,17 +2,16 @@
  * Admin portal API client.
  *
  * Connects to the backend API using a configurable base URL.
- * In development, a dev auth token can be injected via NEXT_PUBLIC_DEV_AUTH_TOKEN
+ * In development, a dev auth token can be injected via VITE_DEV_AUTH_TOKEN
  * to populate the x-dev-user header (non-production only).
  *
  * SECURITY NOTES:
  * - Never log auth tokens.
  * - Never embed credentials in source code.
  * - Backend role validation is always required — client-side auth is not a security boundary.
- * - Replace the dev auth mechanism with real Microsoft Entra ID tokens before production use.
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000';
 
 /**
  * Dev-only: raw value of the x-dev-user header to send in non-production.
@@ -20,8 +19,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
  * Never set this in production.
  */
 const DEV_AUTH_HEADER_VALUE: string | undefined =
-  process.env.NODE_ENV !== 'production'
-    ? process.env.NEXT_PUBLIC_DEV_AUTH_TOKEN
+  !import.meta.env.PROD
+    ? (import.meta.env.VITE_DEV_AUTH_TOKEN as string | undefined)
     : undefined;
 
 export class ApiError extends Error {
@@ -41,7 +40,7 @@ export class ApiError extends Error {
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
-  /** Authentication token for real auth (Entra ID replaces dev header in production). */
+  /** Firebase ID token for authenticating the request. */
   token?: string;
 }
 

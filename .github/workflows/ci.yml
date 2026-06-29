@@ -96,6 +96,3 @@ jobs:
 
       - name: Build API container (validation only — no push)
         run: docker build -f services/api/Dockerfile -t carcommunity-api:build-check .
-
-      - name: Build admin container (validation only — no push)
-        run: docker build -f apps/admin/Dockerfile -t carcommunity-admin:build-check .

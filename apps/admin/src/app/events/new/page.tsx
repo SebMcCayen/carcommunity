@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { EventForm } from '@/components/events/EventForm';
 import { createAdminEvent, type ApiError, type CreateEventRequest, type UpdateEventRequest } from '@/features/events';
@@ -11,7 +11,7 @@ import styles from './page.module.css';
 const t = (key: string) => translate('sv', key);
 
 export default function NewEventPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export default function NewEventPage() {
     setSubmitError(null);
     try {
       const result = await createAdminEvent(data as CreateEventRequest);
-      router.push(`/events/${result.data.event.id}`);
+      navigate(`/events/${result.data.event.id}`);
     } catch (err) {
       const apiErr = err as ApiError;
       setSubmitError(apiErr.message ?? t('events.createError'));
@@ -33,7 +33,7 @@ export default function NewEventPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <Link href="/events" className={styles.backLink}>
+          <Link to="/events" className={styles.backLink}>
             ← {t('events.backToList')}
           </Link>
           <h1 className={styles.title}>{t('events.createEvent')}</h1>
@@ -43,7 +43,7 @@ export default function NewEventPage() {
 
       <EventForm
         onSubmit={handleSubmit}
-        onCancel={() => router.push('/events')}
+        onCancel={() => navigate('/events')}
         isSubmitting={isSubmitting}
         submitError={submitError}
       />

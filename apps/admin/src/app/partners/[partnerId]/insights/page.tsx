@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -78,7 +78,7 @@ export default function PartnerInsightsPage() {
 
   return (
     <div className={styles.page}>
-      <Link href="/partners" className={styles.backLink}>
+      <Link to="/partners" className={styles.backLink}>
         ← {t('partnerInsights.backToPartner')}
       </Link>
 

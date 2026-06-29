@@ -1,22 +1,19 @@
 /**
- * Admin authentication — placeholder.
+ * Admin authentication — Firebase Authentication with Google Sign-In.
  *
- * TODO: Implement admin login using Microsoft Entra ID (Azure AD) via the
- *   MSAL browser SDK or a server-side OAuth code flow. Do NOT use simple
- *   username/password authentication for the admin portal.
+ * Authentication is implemented in src/lib/auth.ts and src/components/auth/.
  *
- * Security requirements (MUST be enforced before any admin feature is live):
+ * Security requirements (enforced before any admin feature goes live):
  *
- * - TODO: All admin access decisions MUST be verified by backend role checks.
- *   The backend returns the authoritative role for each user (Role enum:
- *   'user' | 'admin' | 'owner'). Never trust a role or admin flag that
- *   originates from the client side.
+ * - All admin access decisions MUST be verified by backend role checks.
+ *   The backend checks the Firebase `admin: true` custom claim on every
+ *   privileged request. Never trust a role or admin flag from the client.
  *
- * - TODO: Gate every admin route/page behind a server-side role assertion that
- *   calls the backend /v1/auth/me endpoint and checks the returned roles array.
+ * - Every protected route is guarded by ProtectedRoute which verifies the
+ *   admin claim via Firebase ID token inspection.
  *
- * - TODO: Do NOT cache or persist role information in the browser beyond the
- *   active authenticated session.
+ * - Admin claim status is not cached or persisted beyond the active
+ *   Firebase auth session.
  */
 
 export {};

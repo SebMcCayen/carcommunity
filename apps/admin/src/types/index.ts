@@ -43,8 +43,8 @@ export type AuditAction =
 
 /**
  * Placeholder admin user type.
- * TODO: Replace with real admin identity from Microsoft Entra ID after
- * authentication is implemented. Admin role must be verified by backend.
+ * Admin identity comes from Firebase Authentication (Google Sign-In).
+ * Admin role is verified by the backend via the `admin: true` custom claim.
  */
 export interface AdminUser {
   id: string;
