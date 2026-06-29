@@ -24,11 +24,11 @@ Follow the full mobile parity instructions defined in:
 - Platform scope includes:
   - iOS native app (Swift and SwiftUI) expected at `apps/ios`
   - Android native app (Kotlin and Jetpack Compose) expected at `apps/android`
-  - Admin web app
-  - Node.js LTS backend API
-  - PostgreSQL database
+  - Admin web app (Next.js, hosted on Firebase Hosting)
+  - Cloud Functions for Firebase (Node.js 22, TypeScript)
+  - Cloud Firestore and Firebase Realtime Database
   - Mapbox maps
-  - Sign in with Apple (iOS), Google Sign-In (Android)
+  - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
 
 ## Language and naming rules
 
@@ -39,7 +39,7 @@ Follow the full mobile parity instructions defined in:
 
 ## Security and secrets
 
-- Never commit secrets or sensitive data: tokens, credentials, private keys, signing keys, production data, `.env` files, Apple/Google/Azure credentials, DB connection strings.
+- Never commit secrets or sensitive data: tokens, credentials, private keys, signing keys, production data, `.env` files, Apple/Google/Firebase credentials, service account keys, DB connection strings.
 - Use `.env.example` placeholders only.
 - Never generate fake secrets or placeholder values that look real.
 - Never expose personal data in logs, analytics, GitHub Issues, partner statistics, or admin dashboards.
@@ -47,8 +47,8 @@ Follow the full mobile parity instructions defined in:
 ## Backend authority and access control
 
 - Backend is the source of truth for:
-  - authentication
-  - admin roles
+  - authentication (Firebase Authentication + custom claims)
+  - admin roles (Firebase custom claims set by Cloud Functions)
   - subscription access
   - feature access
   - live location access
@@ -72,7 +72,7 @@ Follow the full mobile parity instructions defined in:
 
 ## Engineering principles
 
-- MVP runs only in Azure Production; keep code conservative and production-safe.
+- MVP runs on Firebase (production only); keep code conservative and production-safe.
 - Put risky functionality behind feature flags.
 - Prefer simple, secure, maintainable solutions over clever complexity.
 - Use TypeScript where applicable.
