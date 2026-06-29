@@ -53,7 +53,7 @@ function createFakeAuthService(): AuthService {
   let sessionCounter = 0;
 
   return {
-    async findOrCreateUserByFirebaseUid(_firebaseUid: string) {
+    async findOrCreateUserByFirebaseUid(_firebaseUid: string, _email?: string | null) {
       userCounter += 1;
       const userId = `firebase-user-${userCounter}`;
       userProfiles.set(userId, {
@@ -453,7 +453,7 @@ test('POST /v1/auth/login in strict mode does not trust client-provided provider
   let capturedProviderInput: ProviderIdentityLoginInput | null = null;
 
   const authService: AuthService = {
-    async findOrCreateUserByFirebaseUid() {
+    async findOrCreateUserByFirebaseUid(_firebaseUid: string, _email?: string | null) {
       return {
         userId: 'user-strict-1',
         displayName: null,
