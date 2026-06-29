@@ -123,7 +123,7 @@ The visual design may differ where required by native platform conventions, but 
 Authentication is intentionally platform-specific in the MVP:
 
 - iOS uses Sign in with Apple only.
-- Android uses Google Sign-In only.
+- Android uses Google Sign-In (optionally via Credential Manager) only.
 - Account linking between providers is not included in the MVP.
 
 These authentication differences are approved and must not be treated as a parity violation.
