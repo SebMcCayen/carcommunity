@@ -207,7 +207,9 @@ service cloud.firestore {
     match /accountDeletionRequests/{requestId} {
       allow create: if isOwner(requestId);
       allow read: if isOwner(requestId);
-      allow read, write: if isAdmin();
+      // Admins may read all requests and update status (e.g. mark as processed).
+      // Account deletion itself is handled by backend Cloud Functions.
+      allow read, update: if isAdmin();
     }
 
     // -------------------------------------------------------------------------

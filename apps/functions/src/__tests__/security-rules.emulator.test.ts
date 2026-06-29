@@ -207,7 +207,7 @@ describe('Firestore – vehicle ownership', () => {
     await assertSucceeds(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-delete-test')));
   });
 
-  it('another user cannot delete someone else vehicle', async () => {
+  it("another user cannot delete someone else's vehicle", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
     await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-no-delete')));
   });
@@ -302,7 +302,7 @@ describe('Firestore – subscriptions', () => {
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'subscriptions', OWNER)));
   });
 
-  it('another user cannot read someone else subscription', async () => {
+  it("another user cannot read someone else's subscription", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
     await assertFails(getDoc(doc(ctx.firestore(), 'subscriptions', OWNER)));
   });
@@ -389,7 +389,7 @@ describe('Realtime Database – liveLocations', () => {
     );
   });
 
-  it('owner cannot write to another user live location', async () => {
+  it("owner cannot write to another user's live location", async () => {
     const ctx = testEnv.authenticatedContext(NON_MEMBER);
     await assertFails(
       dbSet(dbRef(ctx.database(), `liveLocations/${SHARER}`), {
@@ -434,7 +434,7 @@ describe('Realtime Database – presence', () => {
     );
   });
 
-  it('user cannot write to another user presence', async () => {
+  it("user cannot write to another user's presence", async () => {
     const ctx = testEnv.authenticatedContext(USER_A);
     await assertFails(
       dbSet(dbRef(ctx.database(), `presence/${USER_B}`), {
@@ -487,7 +487,7 @@ describe('Cloud Storage – ownership validation', () => {
     await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
   });
 
-  it('user cannot upload to another user profile image path', async () => {
+  it("user cannot upload to another user's profile image path", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
     const ref = storageRef(ctx.storage(), `profileImages/${OWNER}/avatar.jpg`);
@@ -511,12 +511,12 @@ describe('Cloud Storage – ownership validation', () => {
     await assertSucceeds(getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)));
   });
 
-  it('another user cannot read someone else ride route', async () => {
+  it("another user cannot read someone else's ride route", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
     await assertFails(getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)));
   });
 
-  it('another user cannot upload to someone else ride route path', async () => {
+  it("another user cannot upload to someone else's ride route path", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
     const data = new Uint8Array([0x00, 0x01, 0x02]);
     const ref = storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-spoof/route.bin`);
