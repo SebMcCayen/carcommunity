@@ -6,6 +6,7 @@
     "packages/shared",
     "apps/mobile",
     "apps/admin",
+    "apps/functions",
     "services/api"
   ],
   "scripts": {
@@ -31,6 +32,9 @@
     "xcode@3.0.1": {
       "uuid": "11.1.1"
     }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@firebase/util", "esbuild", "protobufjs", "re2"]
   },
   "engines": {
     "node": ">=24"

@@ -1,0 +1,34 @@
+{
+  "name": "@carcommunity/functions",
+  "version": "0.1.0",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:emulator": "vitest run --config vitest.emulator.config.ts",
+    "emulators:start": "firebase emulators:start --config ../../firebase/firebase.json",
+    "emulators:test": "firebase emulators:exec --config ../../firebase/firebase.json 'pnpm test:emulator'"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "firebase": "^11.0.0",
+    "firebase-tools": "^14.0.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^3.0.0"
+  }
+}

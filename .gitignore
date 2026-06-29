@@ -119,6 +119,12 @@ dist
 # Firebase cache directory
 .firebase/
 
+# Firebase emulator data exports
+firebase/emulator-data/
+
+# Cloud Functions build output
+apps/functions/lib/
+
 # TernJS port file
 .tern-port
 
