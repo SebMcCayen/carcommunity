@@ -18,12 +18,12 @@ Functional parity between iOS and Android is a mandatory project requirement.
 The mobile applications are expected to live in:
 Shared specifications and contracts may be located in:
 
+- `packages/shared` (versioned TypeScript API contract)
 - `contracts`
 - `design`
 - `docs/features`
 - `docs/architecture`
 - `docs/adr`
-
 The following may be shared as specifications, but must be implemented natively on each platform:
 
 - API contracts
