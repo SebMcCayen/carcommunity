@@ -2,24 +2,33 @@
 
 ## Overview
 
-carcommunity is planned as a monorepo with a mobile client, an admin web client, and a backend API as the system of truth. The architecture is designed for a production-only MVP hosted on Azure, with strong control over privacy, subscription entitlement, moderation, and operational safety.
+> **Note:** This document describes the *target* post-migration architecture. The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + TypeScript, PostgreSQL). The migration to Firebase and separate native mobile apps is in progress. See [ADR-001](adr/001-firebase-platform.md) for the migration decision.
+
+carcommunity is a monorepo targeting native mobile clients, an admin web client, and a Firebase backend as the system of truth. The architecture targets a production-only MVP on Firebase, with strong control over privacy, subscription entitlement, moderation, and operational safety.
+
+Expected initial usage: 20–30 active users. Maximum operating budget: SEK 500 per month.
 
 ```text
-apps/mobile (Expo React Native) ─┐
-apps/admin  (React web)          ├──> services/api (Node.js + TypeScript) ───> PostgreSQL
-external providers/APIs          ┘                 │
-                                                    ├── Realtime WebSocket
-                                                    ├── Error ingestion + GitHub issue bridge
-                                                    └── Feature flags + operational controls
+apps/ios     (Swift / SwiftUI)     ─┐
+apps/android (Kotlin / Compose)    ─┤──> Firebase backend ───> Cloud Firestore
+apps/admin   (Next.js web)         ─┘         │               Firebase Realtime Database
+                                               │               Cloud Storage for Firebase
+                                               ├── Firebase Authentication
+                                               ├── Cloud Functions (Firebase-supported Node.js + TypeScript)
+                                               ├── Firebase Cloud Messaging
+                                               ├── Firebase App Check
+                                               ├── Firebase Hosting (admin web)
+                                               └── Feature flags + operational controls
 ```
 
 ## Architecture goals
 
-- Keep one source of truth in backend services for security-critical and business-critical state.
-- Ship MVP safely in production-only Azure without separate dev/staging environments.
+- Keep one source of truth in Firebase backend for security-critical and business-critical state.
+- Ship MVP safely in production-only Firebase without separate dev/staging cloud environments.
 - Minimize privacy risk by default, especially for location and partner analytics.
 - Support modular growth for social, partner, and event capabilities.
 - Maintain high performance on mobile-first user journeys.
+- Stay within the SEK 500 per month operating budget.
 
 ## Monorepo structure
 
@@ -28,51 +37,61 @@ Planned structure:
 ```text
 .
 ├── apps/
-│   ├── mobile/         # React Native / Expo app
-│   └── admin/          # React-based admin web app (for example Next.js or similar)
+│   ├── ios/            # Swift / SwiftUI native iOS app (planned)
+│   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
+│   ├── mobile/         # React Native / Expo app (current implementation)
+│   └── admin/          # Next.js admin web app (hosted on Firebase Hosting)
+├── functions/          # Cloud Functions for Firebase (Firebase-supported Node.js + TypeScript, planned)
 ├── services/
-│   └── api/            # Node.js (latest LTS) + TypeScript backend
+│   └── api/            # Node.js + TypeScript API (current implementation)
+├── packages/
+│   └── shared/         # Versioned TypeScript API contracts
 ├── docs/
+│   └── adr/            # Architecture decision records
 └── .github/
 ```
 
 ## Application boundaries
 
-- **apps/mobile**: end-user UX, map rendering, client-side purchase initiation, realtime consumption.
-- **apps/admin**: moderation, partner management, billboard approval, operational dashboards.
-- **services/api**: authentication verification, subscription verification, entitlements, authorization, business rules, realtime coordination, persistence, integrations.
-- **PostgreSQL**: durable storage for users, entitlements, moderation state, saved drives, partner aggregates, and operational metadata.
+- **apps/ios**: native iOS UX (Swift / SwiftUI), map rendering, client-side purchase initiation, realtime consumption.
+- **apps/android**: native Android UX (Kotlin / Jetpack Compose), map rendering, client-side purchase initiation, realtime consumption.
+- **apps/admin**: moderation, partner management, billboard approval, operational dashboards. Hosted on Firebase Hosting.
+- **functions**: Cloud Functions for Firebase — authentication verification, subscription verification, entitlements, authorization, business rules, realtime coordination, persistence, integrations.
+- **Cloud Firestore**: durable storage for users, entitlements, moderation state, saved drives, partner aggregates, and operational metadata.
+- **Firebase Realtime Database**: ephemeral realtime state — live location, active drive sessions, presence.
 
 ## Mobile app architecture
 
-- Built with **React Native / Expo**.
-- Uses Mapbox as the selected mapping provider for MVP mobile map flows.
-- Selection rationale: current product decisions prioritize one cross-platform map stack for MVP delivery speed, consistent behavior, and required map SDK capability in one implementation path; licensing/pricing fit must remain part of ongoing release governance and post-MVP re-evaluation.
-- Calls backend APIs for all trusted operations and data requiring secrets/caching.
-- Handles Apple/Google purchase flows client-side, then submits receipts/tokens to backend verification.
-- Receives feature flags and remote config to safely gate MVP features.
+Two separate native applications:
+
+- **apps/ios**: Swift and SwiftUI, Swift Concurrency, StoreKit 2, Core Location, Keychain, Mapbox Maps SDK for iOS, Sign in with Apple through Firebase Authentication.
+- **apps/android**: Kotlin and Jetpack Compose, Coroutines/Flow, Google Play Billing, Android location APIs, Android Keystore, Mapbox Maps SDK for Android, Google Sign-In through Firebase Authentication.
+
+Both applications must provide equivalent user-facing functionality. Mobile platform parity is mandatory. See `.github/instructions/mobile-platform-parity.instructions.md`.
+
+Both apps use Mapbox as the mapping provider for MVP.
+
+Both apps call Cloud Functions for trusted operations. They use Firebase SDKs for Firestore, Realtime Database, FCM, and App Check.
 
 ## Admin web architecture
 
-- Built as a modern React-based web app (for example Next.js or similar).
-- Authenticates against backend and uses backend-issued authorization context.
+- Next.js app hosted on Firebase Hosting.
+- Authenticates using Google Sign-In through Firebase Authentication.
+- Admin authorization uses server-managed Firebase custom claims verified by Cloud Functions.
 - Focus areas:
   - user moderation (blocking/suspension),
   - partner and billboard administration,
   - partner statistics (aggregated only),
   - operational controls and feature rollout.
 
-## Backend API architecture
+## Backend architecture
 
-- Node.js latest LTS with TypeScript.
-- Layered services:
-  - API layer (HTTP + WebSocket endpoints),
-  - domain services (auth, entitlement, moderation, social features),
-  - integration adapters (Apple/Google verification, external data sources),
-  - data access layer for PostgreSQL.
+- Cloud Functions for Firebase 2nd generation, Firebase-supported Node.js runtime, TypeScript.
+- Functions are organized by domain: auth, entitlement, moderation, social features, location, notifications, integrations.
+- Firebase Emulator Suite is used for local development.
 - Backend is source of truth for:
   - auth identity binding,
-  - admin role,
+  - admin role (via custom claims),
   - subscription entitlement,
   - live location visibility,
   - blocking/suspension,
@@ -80,33 +99,32 @@ Planned structure:
   - partner statistics,
   - admin actions.
 
-## Database architecture
+## Data architecture
 
-- **PostgreSQL** as primary datastore.
-- Core domains:
-  - identity and auth subject mapping,
-  - subscription entitlements (`member_monthly`),
-  - moderation and safety state,
-  - social/group/event entities,
-  - saved drives,
-  - partner entities and aggregate metrics,
-  - operational tables (feature flags snapshot references, idempotency, audit logs).
-- Live location is stored as ephemeral latest-state records with short TTL behavior, not long-term history.
+- **Cloud Firestore**: primary durable store.
+  - Core domains: identity and auth subject mapping, subscription entitlements (`member_monthly`), moderation and safety state, social/group/event entities, saved drives, partner entities and aggregate metrics, operational collections (feature flags, idempotency, audit logs).
+- **Firebase Realtime Database**: ephemeral realtime state.
+  - Live location latest-state records with short TTL behavior.
+  - Active drive session state.
+  - Presence and connection state.
+- Live location is not stored as long-term history.
 
 ## Authentication architecture
 
-- iOS: Apple login.
-- Android: Google login.
-- Backend verifies provider identity tokens.
-- Stable provider subject (`sub`) is canonical identity key; email is not identity.
-- Backend issues/maintains session/auth context for app and admin access.
+- iOS: Sign in with Apple through Firebase Authentication.
+- Android: Google Sign-In through Firebase Authentication.
+- Admin web: Google Sign-In through Firebase Authentication.
+- Firebase Authentication verifies provider identity tokens.
+- Stable provider subject (`uid`) is the canonical identity key; email is not identity.
+- Admin authorization uses server-managed Firebase custom claims set by Cloud Functions.
+- Provider account linking is not included in the MVP.
 
 ```text
-Client login (Apple/Google)
+Client login (Apple / Google)
     -> provider token
-    -> backend verifies with provider
-    -> backend binds stable provider subject
-    -> backend session/token returned
+    -> Firebase Authentication verifies with provider
+    -> Firebase uid is canonical identity
+    -> custom claims set by Cloud Function for admin role
 ```
 
 ## Subscription architecture
@@ -137,15 +155,16 @@ Client login (Apple/Google)
 
 ## Realtime architecture
 
-- MVP realtime is backend-managed **WebSocket**.
-- WebSocket channels support live location visibility, chat updates, and group-driving state updates.
-- Backend enforces auth and entitlement per channel/event.
+- Realtime is provided by **Firebase Realtime Database** listeners and **Cloud Firestore** snapshot listeners.
+- Realtime channels support live location visibility, chat updates, and group-driving state updates.
+- Cloud Functions enforce auth and entitlement before writing to realtime paths.
+- Firebase Security Rules enforce read access controls on Realtime Database and Firestore.
 - Fan-out is coordinated server-side to keep privacy controls centralized.
 
 ## Event chat architecture
 
-- Event chat runs through backend realtime + persisted messages in PostgreSQL.
-- Membership and moderation checks happen before send/read.
+- Event chat runs through Firestore persisted messages and Firestore snapshot listeners for realtime delivery.
+- Cloud Functions enforce membership and moderation checks before write.
 - Chat feature is gateable by feature flag.
 - Message processing supports sanitization and abuse controls.
 
@@ -220,23 +239,24 @@ Flags/config are backend-controlled and consumed by clients for safe rollout and
 - Keep auth, entitlement, and moderation checks backed by authoritative server state with strict invalidation.
 - Use short-lived caching for realtime-adjacent reads to balance freshness and load.
 
-## Production-only Azure hosting model
+## Production Firebase hosting model
 
-- MVP runs in **production-only Azure** (no separate dev/staging Azure environments).
-- Local development and testing run outside Azure production (developer-local environments plus CI validation on branches/PRs) before production rollout.
+- MVP runs in **production-only Firebase** (no separate dev/staging Firebase projects).
+- Local development and testing use Firebase Emulator Suite.
 - Risk mitigation relies on:
   - CI/CD quality gates,
   - branch protection,
   - feature flags/kill switches,
-  - automated backups,
-  - safe, backward-compatible migrations,
+  - Firestore backups,
+  - safe, backward-compatible data migrations,
   - production-safe rollout controls (smoke checks, phased enablement, and rapid rollback paths).
+- Maximum operating budget: SEK 500 per month.
 
 ## Performance-first architecture
 
 - Mobile-first latency optimization for map, feed, and realtime interactions.
-- API design prioritizes coarse-grained, low-roundtrip endpoints.
-- Use targeted indexing and query shaping in PostgreSQL.
+- API design prioritizes coarse-grained, low-roundtrip Cloud Function calls.
+- Use targeted Firestore indexing and denormalized read models where needed.
 - Apply pagination, bounded payloads, and transport compression where appropriate.
 
 ## Observability and operational controls
@@ -248,15 +268,18 @@ Flags/config are backend-controlled and consumed by clients for safe rollout and
 
 ## Security boundaries
 
-- Backend-only handling of secrets and provider verification.
-- Stable provider subject identity mapping protects against email-based account drift.
-- Strict server-side authorization for all protected reads/writes and realtime channels.
+- Firebase Authentication handles provider token verification and identity binding.
+- Firebase App Check protects Cloud Functions from unauthorized callers.
+- Firebase Security Rules enforce read/write access on Firestore and Realtime Database.
+- Cloud Functions are the only path for admin operations and privilege escalation.
+- Custom claims are set server-side only; clients cannot self-elevate.
 - Data minimization for location and partner insights.
 - Sanitization and deduplication in error pipelines before downstream issue creation.
 
 ## Future scalability
 
-- Monorepo boundaries support independent scaling of mobile, admin, and API concerns.
-- Realtime architecture can evolve from single-node WebSocket handling to distributed pub/sub-backed fan-out as load grows.
-- Domain modules (chat, group driving, rewards, partner analytics) can be isolated into separate services when required.
+- Monorepo boundaries support independent scaling of mobile, admin, and backend concerns.
+- Cloud Functions scale automatically with usage; no server management required.
+- Realtime architecture can evolve from Firestore/Realtime Database listeners to additional Cloud Functions fan-out as load grows.
+- Domain modules (chat, group driving, rewards, partner analytics) can be isolated into separate function groups when required.
 - Feature flagging enables incremental rollout of new capabilities without destabilizing core MVP flows.

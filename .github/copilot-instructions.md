@@ -22,13 +22,15 @@ Follow the full mobile parity instructions defined in:
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - iOS native app (Swift and SwiftUI) expected at `apps/ios`
-  - Android native app (Kotlin and Jetpack Compose) expected at `apps/android`
-  - Admin web app
-  - Node.js LTS backend API
-  - PostgreSQL database
+  - React Native / Expo mobile app (current implementation) at `apps/mobile`
+  - iOS native app (Swift and SwiftUI) planned at `apps/ios` (post-migration target)
+  - Android native app (Kotlin and Jetpack Compose) planned at `apps/android` (post-migration target)
+  - Admin web app (Next.js, hosted on Firebase Hosting)
+  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript, planned post-migration)
+  - Node.js + TypeScript API at `services/api` (current backend implementation)
+  - Cloud Firestore and Firebase Realtime Database
   - Mapbox maps
-  - Sign in with Apple (iOS), Google Sign-In (Android)
+  - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
 
 ## Language and naming rules
 
@@ -39,7 +41,7 @@ Follow the full mobile parity instructions defined in:
 
 ## Security and secrets
 
-- Never commit secrets or sensitive data: tokens, credentials, private keys, signing keys, production data, `.env` files, Apple/Google/Azure credentials, DB connection strings.
+- Never commit secrets or sensitive data: tokens, credentials, private keys, signing keys, production data, `.env` files, Apple/Google/Firebase credentials, service account keys, DB connection strings.
 - Use `.env.example` placeholders only.
 - Never generate fake secrets or placeholder values that look real.
 - Never expose personal data in logs, analytics, GitHub Issues, partner statistics, or admin dashboards.
@@ -47,8 +49,8 @@ Follow the full mobile parity instructions defined in:
 ## Backend authority and access control
 
 - Backend is the source of truth for:
-  - authentication
-  - admin roles
+  - authentication (Firebase Authentication + custom claims)
+  - admin roles (Firebase custom claims set by Cloud Functions)
   - subscription access
   - feature access
   - live location access
@@ -72,7 +74,7 @@ Follow the full mobile parity instructions defined in:
 
 ## Engineering principles
 
-- MVP runs only in Azure Production; keep code conservative and production-safe.
+- MVP runs on Firebase (production only); keep code conservative and production-safe.
 - Put risky functionality behind feature flags.
 - Prefer simple, secure, maintainable solutions over clever complexity.
 - Use TypeScript where applicable.
