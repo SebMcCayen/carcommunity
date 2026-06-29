@@ -161,10 +161,8 @@ Do not create platform-specific backend behavior unless required by platform rul
 
 ## Localization
 
-Both applications must support:
-
-- Swedish
-- English
+Both applications must support Swedish and English.
+Swedish is the default MVP language, but any shipped user-facing UI must also include English translations (always via i18n keys).
 
 Every new or changed user-facing string must be added to both applications.
 
