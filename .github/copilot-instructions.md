@@ -2,10 +2,10 @@
 
 ## Mandatory mobile parity
 
-The project contains two separate native mobile applications:
+The project targets two separate native mobile applications:
 
-- `apps/ios`: Swift and SwiftUI
-- `apps/android`: Kotlin and Jetpack Compose
+- `apps/ios` (expected): Swift and SwiftUI
+- `apps/android` (expected): Kotlin and Jetpack Compose
 
 Any product change that affects mobile functionality must be evaluated and implemented for both platforms.
 
