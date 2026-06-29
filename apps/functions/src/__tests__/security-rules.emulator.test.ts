@@ -523,3 +523,139 @@ describe('Cloud Storage – ownership validation', () => {
     await assertFails(uploadBytes(ref, data, { contentType: 'application/octet-stream' }));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cloud Storage: vehicle images
+// ---------------------------------------------------------------------------
+
+describe('Cloud Storage – vehicle images', () => {
+  const OWNER = 'vehicle-img-owner';
+  const OTHER = 'vehicle-img-other';
+
+  it('owner can upload a vehicle image to their own path', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it("another user cannot upload to someone else's vehicle image path", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('authenticated user can read a vehicle image', async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    await assertSucceeds(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`)));
+  });
+
+  it('unauthenticated user cannot read a vehicle image', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cloud Storage: ride preview images
+// ---------------------------------------------------------------------------
+
+describe('Cloud Storage – ride preview images', () => {
+  const OWNER = 'ride-preview-owner';
+  const OTHER = 'ride-preview-other';
+
+  it('owner can upload a ride preview image to their own path', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it("another user cannot upload to someone else's ride preview path", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('authenticated user can read a ride preview image', async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    await assertSucceeds(
+      getBytes(storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`)),
+    );
+  });
+
+  it('unauthenticated user cannot read a ride preview image', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(
+      getBytes(storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`)),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cloud Storage: company images (admin-managed)
+// ---------------------------------------------------------------------------
+
+describe('Cloud Storage – company images', () => {
+  const ADMIN_UID = 'storage-admin';
+  const USER_UID = 'storage-regular';
+
+  it('admin can upload a company image', async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, { admin: true });
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `companyImages/company-1/logo.jpg`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('non-admin cannot upload a company image', async () => {
+    const ctx = testEnv.authenticatedContext(USER_UID);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `companyImages/company-1/logo.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('authenticated user can read a company image', async () => {
+    const ctx = testEnv.authenticatedContext(USER_UID);
+    await assertSucceeds(getBytes(storageRef(ctx.storage(), `companyImages/company-1/logo.jpg`)));
+  });
+
+  it('unauthenticated user cannot read a company image', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getBytes(storageRef(ctx.storage(), `companyImages/company-1/logo.jpg`)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cloud Storage: offer images (admin-managed)
+// ---------------------------------------------------------------------------
+
+describe('Cloud Storage – offer images', () => {
+  const ADMIN_UID = 'offer-img-admin';
+  const USER_UID = 'offer-img-user';
+
+  it('admin can upload an offer image', async () => {
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, { admin: true });
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `offerImages/company-2/offer.jpg`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('non-admin cannot upload an offer image', async () => {
+    const ctx = testEnv.authenticatedContext(USER_UID);
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `offerImages/company-2/offer.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('authenticated user can read an offer image', async () => {
+    const ctx = testEnv.authenticatedContext(USER_UID);
+    await assertSucceeds(getBytes(storageRef(ctx.storage(), `offerImages/company-2/offer.jpg`)));
+  });
+
+  it('unauthenticated user cannot read an offer image', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getBytes(storageRef(ctx.storage(), `offerImages/company-2/offer.jpg`)));
+  });
+});

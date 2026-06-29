@@ -56,14 +56,13 @@ service firebase.storage {
     // -------------------------------------------------------------------------
     // Compressed ride routes:  rideRoutes/{userId}/{rideId}/{filename}
     // Only the owner may read or write. Routes are binary (polyline-encoded and
-    // optionally gzip-compressed); executables and scripts are blocked.
+    // optionally gzip-compressed); only binary content types are accepted.
     // Max 50 MB per file.
     // -------------------------------------------------------------------------
     match /rideRoutes/{userId}/{rideId}/{filename} {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId) && isUnderMB(50) &&
-        !request.resource.contentType.matches('text/.*') &&
-        !request.resource.contentType.matches('application/x-(executable|sharedlib|msdownload)');
+        request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)');
       allow read, write: if isAdmin();
     }
 

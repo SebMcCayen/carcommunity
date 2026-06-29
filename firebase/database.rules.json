@@ -6,14 +6,14 @@
       "$uid": {
         ".read": "auth != null && auth.token.activeMember == true",
         ".write": "auth != null && auth.uid == $uid",
-        ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp']) && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('timestamp').isNumber()"
+        ".validate": "newData.hasOnly(['lat', 'lng', 'timestamp']) && newData.child('lat').isNumber() && newData.child('lng').isNumber() && newData.child('timestamp').isNumber()"
       }
     },
     "presence": {
       "$uid": {
         ".read": "auth != null",
         ".write": "auth != null && auth.uid == $uid",
-        ".validate": "newData.hasChildren(['online', 'lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber()"
+        ".validate": "newData.hasOnly(['online', 'lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber()"
       }
     }
   }

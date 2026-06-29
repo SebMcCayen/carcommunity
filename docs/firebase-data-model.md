@@ -71,12 +71,13 @@ Document ID: auto-generated.
 | `model` | `string` | Vehicle model |
 | `year` | `number` | Model year |
 | `color` | `string?` | Optional color description |
-| `registrationPlate` | `string?` | Optional — stored privately, displayed at owner's choice |
 | `imagePath` | `string?` | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}` |
 | `createdAt` | `Timestamp` | Server timestamp |
 | `updatedAt` | `Timestamp` | Server timestamp |
 
 Security: any authenticated user can read; owner can create/update/delete.
+
+> **Note:** Registration plate numbers must **not** be stored on the shared `vehicles` document, as it is readable by any authenticated user. If the feature requires storing a plate, it must be written to the owner's `userPrivate` document (owner-only access) and never exposed on the publicly readable `vehicles` record.
 
 Composite index: `userId ASC, createdAt DESC` (user's garage list, paginated).
 

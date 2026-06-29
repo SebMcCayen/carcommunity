@@ -64,10 +64,11 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     // userPrivate – sensitive data (contact details, settings, push tokens)
     // Document ID == Firebase UID.
+    // Owner-only. Admin access must use the Admin SDK (backend-only); no
+    // privileged client-side read is permitted for this collection.
     // -------------------------------------------------------------------------
     match /userPrivate/{userId} {
       allow read, write: if isOwner(userId);
-      allow read, write: if isAdmin();
     }
 
     // -------------------------------------------------------------------------
