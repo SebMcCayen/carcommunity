@@ -1,11 +1,2 @@
 packages:
   - 'apps/functions'
-
-# Allow native build scripts for packages that require compilation.
-# Required by Firebase Tools (re2), Firebase SDK (@firebase/util),
-# Vitest/esbuild (esbuild), and Protocol Buffers (protobufjs).
-allowBuilds:
-  '@firebase/util': true
-  esbuild: true
-  protobufjs: true
-  re2: true

@@ -1,7 +1,5 @@
 {
   "rules": {
-    // Deny all access by default.
-    // Explicit rules will be added here per path as features are implemented.
     ".read": false,
     ".write": false
   }
