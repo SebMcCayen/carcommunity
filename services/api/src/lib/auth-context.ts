@@ -94,10 +94,13 @@ function parseDevAuthContext(value: string): DevAuthContext | null {
  * that populates `request.auth` from a verified token.
  *
  * Auth resolution order:
- * 1. If `firebaseIdTokenVerifier` is provided, attempt Firebase ID token
- *    verification. On success, look up or create the user by Firebase UID and
- *    populate request.auth including the `admin` custom claim.
- * 2. Fall back to legacy session-based lookup via `authService.lookupSession`.
+ * 1. If `firebaseIdTokenVerifier` is provided and a ****** is present,
+ *    attempt Firebase ID token verification. On success, look up or create the
+ *    user by Firebase UID and populate request.auth including the `admin` custom
+ *    claim. On failure the token is rejected and request.auth is left null —
+ *    there is no fallback to the legacy session path.
+ * 2. If `firebaseIdTokenVerifier` is not provided, fall back to legacy
+ *    session-based lookup via `authService.lookupSession`.
  * 3. In non-production environments, accept the `x-dev-user` header as a
  *    convenience for local development and testing. Silently ignored in
  *    production.
@@ -134,7 +137,11 @@ export async function registerAuthContext(
 
           request.auth = {
             userId: userSummary.userId,
-            role: userSummary.roles[0] ?? 'user',
+            // When the Firebase `admin: true` custom claim is present, use
+            // 'admin' as the effective role so that legacy role-based checks
+            // (e.g. canAccessAdminFeatures) remain consistent with the
+            // claim-based authorization enforced in requireAdminHook.
+            role: decoded.isAdmin ? 'admin' : (userSummary.roles[0] ?? 'user'),
             status: userSummary.status,
             subscriptionEntitlement: userSummary.subscriptionEntitlement,
             user: userSummary,

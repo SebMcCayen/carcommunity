@@ -22,7 +22,7 @@ Android app      →  Google Sign-In        →  Firebase Authentication  →  F
 - Firebase Authentication is the identity broker for both platforms.
 - The **Firebase UID** (`uid`) is the canonical user identity on the backend.
 - Mobile clients exchange the provider credential for a **Firebase ID token**.
-- Every API request carries the Firebase ID token as `Authorization: ******`.
+- Every API request carries the Firebase ID token as `Authorization: Bearer <token>`.
 - The backend verifies the token with Firebase Admin SDK and never trusts a UID
   supplied in the request body or URL.
 
@@ -55,7 +55,7 @@ Account linking between providers is **not** included in the MVP.
    Auth.auth().signIn(with: credential) { result, error in ... }
    ```
 4. Call `Auth.auth().currentUser?.getIDToken()` to obtain the Firebase ID token.
-5. Attach the token to API requests: `Authorization: ******`.
+5. Attach the token to API requests: `Authorization: Bearer <token>`.
 
 ### Token storage
 
@@ -104,7 +104,7 @@ Account linking between providers is **not** included in the MVP.
    ```
 4. Call `FirebaseAuth.getInstance().currentUser?.getIdToken(false)` to obtain
    the Firebase ID token.
-5. Attach the token to API requests: `Authorization: ******`.
+5. Attach the token to API requests: `Authorization: Bearer <token>`.
 
 ### Token storage
 
@@ -145,7 +145,7 @@ Both platforms must implement the following contract for every authenticated API
 ### Authorization header
 
 ```
-Authorization: ******
+Authorization: Bearer <token>
 ```
 
 ### Token lifecycle

@@ -70,28 +70,14 @@ export function createAuthService(prisma: PrismaClient): AuthService {
       const trimmedUid = firebaseUid.trim();
       const normalizedEmail = email?.trim().toLowerCase() ?? null;
 
-      const user = await prisma.$transaction(async (tx) => {
-        const existing = await tx.user.findUnique({
-          where: { firebaseUid: trimmedUid },
-          include: { identities: true },
-        });
-
-        if (existing) {
-          return existing;
-        }
-
-        // Create a new user record linked to this Firebase UID.
-        // Role and status default to 'user' / 'active' — admin access is
-        // determined solely from the Firebase custom claim, not the DB role.
-        const created = await tx.user.create({
-          data: {
-            firebaseUid: trimmedUid,
-            email: normalizedEmail,
-          },
-          include: { identities: true },
-        });
-
-        return created;
+      const user = await prisma.user.upsert({
+        where: { firebaseUid: trimmedUid },
+        update: {},
+        create: {
+          firebaseUid: trimmedUid,
+          email: normalizedEmail,
+        },
+        include: { identities: true },
       });
 
       return buildAuthenticatedUserSummary({

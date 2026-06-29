@@ -43,15 +43,23 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAdminAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        const adminStatus = await checkAdminClaim(firebaseUser);
-        setUser(firebaseUser);
-        setIsAdmin(adminStatus);
-      } else {
+      try {
+        if (firebaseUser) {
+          const adminStatus = await checkAdminClaim(firebaseUser);
+          setUser(firebaseUser);
+          setIsAdmin(adminStatus);
+        } else {
+          setUser(null);
+          setIsAdmin(false);
+        }
+      } catch {
+        // If claim check fails (e.g. transient network error), treat the user
+        // as unauthenticated to avoid leaving loading stuck or granting access.
         setUser(null);
         setIsAdmin(false);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return unsubscribe;

@@ -134,6 +134,14 @@ const envSchema = z
     FIREBASE_PROJECT_ID: z.string().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.NODE_ENV === 'production' && !value.FIREBASE_PROJECT_ID?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'FIREBASE_PROJECT_ID is required in production for Firebase ID token verification.',
+        path: ['FIREBASE_PROJECT_ID'],
+      });
+    }
+
     if (value.NODE_ENV === 'production' && !value.DATABASE_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -193,7 +201,7 @@ export type AppConfig = {
   partnerInsightsPassByFeatureEnabled?: boolean;
   /**
    * Firebase project ID. When set, Firebase ID token verification is enabled.
-   * Clients send Firebase ID tokens as the Authorization: ****** value.
+   * Clients send Firebase ID tokens as the `Authorization: Bearer <token>`.
    */
   firebaseProjectId?: string | null;
 };

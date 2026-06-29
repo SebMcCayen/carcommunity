@@ -8,7 +8,7 @@
  *   Clients cannot assign or modify custom claims.
  * - Hiding UI elements is NOT authorization — the backend independently
  *   verifies the `admin` claim on every protected API request.
- * - The Firebase ID token is sent as an Authorization: ****** on all API requests so the
+ * - The Firebase ID token is sent as an Authorization: Bearer <token> on all API requests so the
  *   backend can verify the claim server-side.
  *
  * Do NOT cache admin status beyond the lifetime of an active Firebase auth session.
