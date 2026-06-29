@@ -193,7 +193,7 @@ export type AppConfig = {
   partnerInsightsPassByFeatureEnabled?: boolean;
   /**
    * Firebase project ID. When set, Firebase ID token verification is enabled.
-   * Clients send Firebase ID tokens as the ******
+   * Clients send Firebase ID tokens as the Authorization: ****** value.
    */
   firebaseProjectId?: string | null;
 };
