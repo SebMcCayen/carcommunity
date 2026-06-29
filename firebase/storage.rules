@@ -1,10 +1,98 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Deny all access by default.
-    // Explicit rules will be added here per path as features are implemented.
+
+    // -------------------------------------------------------------------------
+    // Helper functions
+    // -------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    function isUnderMB(mb) {
+      return request.resource.size <= mb * 1024 * 1024;
+    }
+
+    // -------------------------------------------------------------------------
+    // Deny-all catch-all (rules below override for specific paths)
+    // -------------------------------------------------------------------------
     match /{allPaths=**} {
       allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Profile images:  profileImages/{userId}/{imageId}
+    // Owner may upload images up to 5 MB. Any authenticated user may read.
+    // -------------------------------------------------------------------------
+    match /profileImages/{userId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isImage() && isUnderMB(5);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Vehicle images:  vehicleImages/{userId}/{imageId}
+    // Owner may upload images up to 10 MB. Any authenticated user may read.
+    // -------------------------------------------------------------------------
+    match /vehicleImages/{userId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isImage() && isUnderMB(10);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Compressed ride routes:  rideRoutes/{userId}/{rideId}/{filename}
+    // Only the owner may read or write. Routes are binary (polyline-encoded and
+    // optionally gzip-compressed); executables and scripts are blocked.
+    // Max 50 MB per file.
+    // -------------------------------------------------------------------------
+    match /rideRoutes/{userId}/{rideId}/{filename} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isUnderMB(50) &&
+        !request.resource.contentType.matches('text/.*') &&
+        !request.resource.contentType.matches('application/x-(executable|sharedlib|msdownload)');
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Ride preview images:  ridePreviewImages/{userId}/{rideId}/{filename}
+    // Owner may upload images up to 5 MB. Any authenticated user may read.
+    // -------------------------------------------------------------------------
+    match /ridePreviewImages/{userId}/{rideId}/{filename} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isImage() && isUnderMB(5);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Company images (admin-managed):  companyImages/{companyId}/{imageId}
+    // Any authenticated user may read. Only admins may write.
+    // -------------------------------------------------------------------------
+    match /companyImages/{companyId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // Offer images (admin-managed):  offerImages/{companyId}/{imageId}
+    // Any authenticated user may read. Only admins may write.
+    // -------------------------------------------------------------------------
+    match /offerImages/{companyId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }
