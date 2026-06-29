@@ -33,7 +33,7 @@ Replace the Azure stack with Firebase:
 
 ### Runtime
 
-- Cloud Functions for Firebase 2nd generation, Node.js 22, TypeScript.
+- Cloud Functions for Firebase 2nd generation, Firebase-supported Node.js runtime, TypeScript.
 - Firebase Emulator Suite for local development.
 
 ### Authentication
@@ -46,14 +46,16 @@ Replace the Azure stack with Firebase:
 
 ### Mobile applications
 
-The native mobile applications remain separate native codebases:
+The current mobile application is `apps/mobile` (React Native / Expo). The target architecture plans separate native codebases:
 
-- `apps/ios`: Swift and SwiftUI.
-- `apps/android`: Kotlin and Jetpack Compose.
+- `apps/ios`: Swift and SwiftUI (planned).
+- `apps/android`: Kotlin and Jetpack Compose (planned).
 
-Both applications must provide equivalent functionality. Mobile platform parity remains mandatory.
+The migration from `apps/mobile` to separate native applications is a separate migration task and is not included in this decision.
 
-React Native, Flutter, Kotlin Multiplatform, and other shared mobile runtimes are not introduced.
+Both target applications must provide equivalent functionality. Mobile platform parity remains mandatory.
+
+React Native, Flutter, Kotlin Multiplatform, and other shared mobile runtimes are not introduced in the target native architecture.
 
 ### Budget
 

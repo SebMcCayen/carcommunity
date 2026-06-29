@@ -22,10 +22,12 @@ Follow the full mobile parity instructions defined in:
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - iOS native app (Swift and SwiftUI) expected at `apps/ios`
-  - Android native app (Kotlin and Jetpack Compose) expected at `apps/android`
+  - React Native / Expo mobile app (current implementation) at `apps/mobile`
+  - iOS native app (Swift and SwiftUI) planned at `apps/ios` (post-migration target)
+  - Android native app (Kotlin and Jetpack Compose) planned at `apps/android` (post-migration target)
   - Admin web app (Next.js, hosted on Firebase Hosting)
-  - Cloud Functions for Firebase (Node.js 22, TypeScript)
+  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript, planned post-migration)
+  - Node.js + TypeScript API at `services/api` (current backend implementation)
   - Cloud Firestore and Firebase Realtime Database
   - Mapbox maps
   - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)

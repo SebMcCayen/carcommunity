@@ -10,12 +10,14 @@ See [ADR-001](adr/001-firebase-platform.md) for the decision to migrate from Azu
 
 ## Service Overview
 
+> **Note:** The table below lists *planned* post-migration deployment targets. The current implementation uses `services/api` (Node.js container), `apps/mobile` (React Native / Expo), and `apps/admin` (Next.js). The migration to Firebase and separate native mobile apps is in progress.
+
 | Service | Hosting |
 |---------|---------|
-| Backend functions (`functions/`) | Cloud Functions for Firebase (2nd gen, Node.js 22) |
+| Backend functions (`functions/`) — planned | Cloud Functions for Firebase (2nd gen, Firebase-supported Node.js) |
 | Admin web (`apps/admin`) | Firebase Hosting |
-| iOS app (`apps/ios`) | App Store |
-| Android app (`apps/android`) | Google Play |
+| iOS app (`apps/ios`) — planned | App Store |
+| Android app (`apps/android`) — planned | Google Play |
 
 ## Local Development
 
@@ -47,7 +49,7 @@ Use Firebase Emulator Suite for all local and CI testing.
 
 ## CI Validation
 
-CI validates TypeScript compilation and tests for Cloud Functions on every push/PR to `main`. Functions are **not deployed** from CI unless an explicit deployment workflow is added.
+CI currently runs workspace lint, typecheck, test, and build for `apps/mobile`, `apps/admin`, and `services/api`, and validates the container build on every push/PR to `main`. Functions are **not deployed** from CI unless an explicit deployment workflow is added. Cloud Functions CI validation will be added in a follow-up migration PR.
 
 ## Future Steps
 

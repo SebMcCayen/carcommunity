@@ -2,11 +2,11 @@
 
 ## Overview
 
-carcommunity is a monorepo with native mobile clients, an admin web client, and a Firebase backend as the system of truth. The architecture targets a production-only MVP on Firebase, with strong control over privacy, subscription entitlement, moderation, and operational safety.
+> **Note:** This document describes the *target* post-migration architecture. The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + TypeScript, PostgreSQL). The migration to Firebase and separate native mobile apps is in progress. See [ADR-001](adr/001-firebase-platform.md) for the migration decision.
+
+carcommunity is a monorepo targeting native mobile clients, an admin web client, and a Firebase backend as the system of truth. The architecture targets a production-only MVP on Firebase, with strong control over privacy, subscription entitlement, moderation, and operational safety.
 
 Expected initial usage: 20–30 active users. Maximum operating budget: SEK 500 per month.
-
-See [ADR-001](adr/001-firebase-platform.md) for the decision to migrate from Azure to Firebase.
 
 ```text
 apps/ios     (Swift / SwiftUI)     ─┐
@@ -14,7 +14,7 @@ apps/android (Kotlin / Compose)    ─┤──> Firebase backend ───> Clo
 apps/admin   (Next.js web)         ─┘         │               Firebase Realtime Database
                                                │               Cloud Storage for Firebase
                                                ├── Firebase Authentication
-                                               ├── Cloud Functions (Node.js 22 + TypeScript)
+                                               ├── Cloud Functions (Firebase-supported Node.js + TypeScript)
                                                ├── Firebase Cloud Messaging
                                                ├── Firebase App Check
                                                ├── Firebase Hosting (admin web)
@@ -37,10 +37,13 @@ Planned structure:
 ```text
 .
 ├── apps/
-│   ├── ios/            # Swift / SwiftUI native iOS app
-│   ├── android/        # Kotlin / Jetpack Compose native Android app
+│   ├── ios/            # Swift / SwiftUI native iOS app (planned)
+│   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
+│   ├── mobile/         # React Native / Expo app (current implementation)
 │   └── admin/          # Next.js admin web app (hosted on Firebase Hosting)
-├── functions/          # Cloud Functions for Firebase (Node.js 22 + TypeScript)
+├── functions/          # Cloud Functions for Firebase (Firebase-supported Node.js + TypeScript, planned)
+├── services/
+│   └── api/            # Node.js + TypeScript API (current implementation)
 ├── packages/
 │   └── shared/         # Versioned TypeScript API contracts
 ├── docs/
@@ -83,7 +86,7 @@ Both apps call Cloud Functions for trusted operations. They use Firebase SDKs fo
 
 ## Backend architecture
 
-- Cloud Functions for Firebase 2nd generation, Node.js 22, TypeScript.
+- Cloud Functions for Firebase 2nd generation, Firebase-supported Node.js runtime, TypeScript.
 - Functions are organized by domain: auth, entitlement, moderation, social features, location, notifications, integrations.
 - Firebase Emulator Suite is used for local development.
 - Backend is source of truth for:

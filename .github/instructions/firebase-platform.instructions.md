@@ -6,7 +6,7 @@ applyTo: "functions/**,apps/admin/**"
 
 ## Backend runtime
 
-- Cloud Functions for Firebase 2nd generation, Node.js 22, TypeScript.
+- Cloud Functions for Firebase 2nd generation, Firebase-supported Node.js runtime, TypeScript.
 - Organize functions by domain: auth, entitlement, moderation, location, notifications, social, integrations.
 - Use `onCall` (HTTPS callable) for client-initiated operations. Use `onRequest` only when an external webhook or REST contract requires it.
 - Use `onDocumentWritten` / `onValueWritten` triggers for Firestore and Realtime Database event-driven logic.
