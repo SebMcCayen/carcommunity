@@ -1,10 +1,227 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Deny all access by default.
-    // Explicit rules will be added here per collection as features are implemented.
+
+    // -------------------------------------------------------------------------
+    // Helper functions
+    // -------------------------------------------------------------------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Admin role is granted via server-managed Firebase custom claims only.
+    // Clients must never set or modify this claim.
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // Active member: subscription entitlement verified by backend and stored
+    // as a custom claim. Clients must not self-elevate this claim.
+    function isActiveMember() {
+      return isAuthenticated() && request.auth.token.activeMember == true;
+    }
+
+    // Returns true when the incoming write does not touch any field that
+    // must only be modified by backend (Cloud Functions / Admin SDK).
+    function noProtectedUserFieldsChanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement']);
+    }
+
+    // Returns true when a create request does not set any protected field.
+    function noProtectedUserFieldsSet() {
+      return !request.resource.data.keys()
+        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Deny-all catch-all (rules below override for specific paths)
+    // -------------------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // users – public profile
+    // Document ID == Firebase UID.
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      // Any authenticated user may read the public profile.
+      allow read: if isAuthenticated();
+      // Owner may create their own profile without setting protected fields.
+      allow create: if isOwner(userId) && noProtectedUserFieldsSet();
+      // Owner may update display fields but must not touch protected fields.
+      allow update: if isOwner(userId) && noProtectedUserFieldsChanged();
+      // Admins have unrestricted access.
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // userPrivate – sensitive data (contact details, settings, push tokens)
+    // Document ID == Firebase UID.
+    // Owner-only. Admin access must use the Admin SDK (backend-only); no
+    // privileged client-side read is permitted for this collection.
+    // -------------------------------------------------------------------------
+    match /userPrivate/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // vehicles – user's garage
+    // Each document carries a `userId` field with the owning UID.
+    // -------------------------------------------------------------------------
+    match /vehicles/{vehicleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // rides – saved drive history
+    // Each document carries a `userId` field. Route GPS data lives in Cloud
+    // Storage; only the storage path is recorded here, not GPS coordinates.
+    // -------------------------------------------------------------------------
+    match /rides/{rideId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // friends – accepted friendship records
+    // Document carries `userId` (list owner) and `friendId`.
+    // -------------------------------------------------------------------------
+    match /friends/{friendId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || resource.data.friendId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // friendRequests – pending friend requests
+    // Document carries `senderId` and `receiverId`.
+    // -------------------------------------------------------------------------
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      // Receiver may accept or decline.
+      allow update: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
+      // Sender may cancel.
+      allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // events – community calendar
+    // -------------------------------------------------------------------------
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // companies – partner companies
+    // -------------------------------------------------------------------------
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // offers – partner offers and promotions
+    // -------------------------------------------------------------------------
+    match /offers/{offerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // announcements – community announcements
+    // -------------------------------------------------------------------------
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // hazards – road hazard reports
+    // -------------------------------------------------------------------------
+    match /hazards/{hazardId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
+      // Only admins may modify or remove hazard records.
+      allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // communityMessages – event and community chat messages
+    // -------------------------------------------------------------------------
+    match /communityMessages/{messageId} {
+      allow read: if isAuthenticated();
+      // Only active members may post; the message must carry the poster's UID.
+      allow create: if isActiveMember() && request.resource.data.userId == request.auth.uid;
+      // Sender may delete their own message.
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // moderationReports – abuse and content reports
+    // Any authenticated user may submit a report; only admins may read them.
+    // -------------------------------------------------------------------------
+    match /moderationReports/{reportId} {
+      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // errorReports – client error telemetry
+    // -------------------------------------------------------------------------
+    match /errorReports/{reportId} {
+      allow create: if isAuthenticated();
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // adminAuditEvents – backend-written audit log
+    // Clients must never write to this collection. Backend uses Admin SDK.
+    // -------------------------------------------------------------------------
+    match /adminAuditEvents/{eventId} {
+      allow read: if isAdmin();
+      // No client writes allowed.
+    }
+
+    // -------------------------------------------------------------------------
+    // accountDeletionRequests – user-initiated account deletion
+    // Document ID == Firebase UID of the requesting user.
+    // -------------------------------------------------------------------------
+    match /accountDeletionRequests/{requestId} {
+      allow create: if isOwner(requestId);
+      allow read: if isOwner(requestId);
+      // Admins may read all requests and update status (e.g. mark as processed).
+      // Account deletion itself is handled by backend Cloud Functions.
+      allow read, update: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // subscriptions – subscription entitlement records
+    // Written exclusively by Cloud Functions after receipt verification.
+    // Clients must never write to this collection.
+    // -------------------------------------------------------------------------
+    match /subscriptions/{userId} {
+      allow read: if isOwner(userId);
+      allow read, write: if isAdmin();
+      // No client writes allowed.
     }
   }
 }
