@@ -34,6 +34,7 @@ export interface CreatedSession {
 
 export interface AuthService {
   findOrCreateUserByProviderIdentity(input: ProviderIdentityLoginInput): Promise<AuthenticatedSession['user']>;
+  findOrCreateUserByFirebaseUid(firebaseUid: string, email?: string | null): Promise<AuthenticatedSession['user']>;
   createSession(userId: string): Promise<CreatedSession>;
   lookupSession(rawToken: string): Promise<AuthenticatedSession | null>;
   revokeSession(rawToken: string): Promise<boolean>;
@@ -65,6 +66,34 @@ function buildAuthenticatedUserSummary(input: {
 
 export function createAuthService(prisma: PrismaClient): AuthService {
   return {
+    async findOrCreateUserByFirebaseUid(firebaseUid, email) {
+      const trimmedUid = firebaseUid.trim();
+      const normalizedEmail = email?.trim().toLowerCase() ?? null;
+
+      const user = await prisma.user.upsert({
+        where: { firebaseUid: trimmedUid },
+        update: {},
+        create: {
+          firebaseUid: trimmedUid,
+          email: normalizedEmail,
+        },
+        include: { identities: true },
+      });
+
+      return buildAuthenticatedUserSummary({
+        id: user.id,
+        displayName: user.displayName,
+        role: user.role,
+        status: user.status,
+        subscriptionEntitlement: user.subscriptionEntitlement,
+        identities: user.identities.map((identity) => ({
+          provider: identity.provider,
+          providerSubject: identity.providerSubject,
+        })),
+        onboardingCompletedAt: user.onboardingCompletedAt,
+      });
+    },
+
     async findOrCreateUserByProviderIdentity(input) {
       const provider = input.provider as IdentityProvider;
       const providerSubject = input.providerSubject.trim();

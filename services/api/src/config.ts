@@ -125,8 +125,23 @@ const envSchema = z
       .string()
       .default('false')
       .transform((value) => value === 'true'),
+    /**
+     * Firebase project ID used to initialize Firebase Admin SDK.
+     * Required in production for Firebase ID token verification.
+     * When absent, Firebase ID token verification is disabled and the
+     * server falls back to the legacy session-based mechanism.
+     */
+    FIREBASE_PROJECT_ID: z.string().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.NODE_ENV === 'production' && !value.FIREBASE_PROJECT_ID?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'FIREBASE_PROJECT_ID is required in production for Firebase ID token verification.',
+        path: ['FIREBASE_PROJECT_ID'],
+      });
+    }
+
     if (value.NODE_ENV === 'production' && !value.DATABASE_URL) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -184,6 +199,11 @@ export type AppConfig = {
   earlyMemberCutoffDate?: Date | null;
   partnerInsightsMinThreshold?: number;
   partnerInsightsPassByFeatureEnabled?: boolean;
+  /**
+   * Firebase project ID. When set, Firebase ID token verification is enabled.
+   * Clients send Firebase ID tokens as the `Authorization: Bearer <token>`.
+   */
+  firebaseProjectId?: string | null;
 };
 
 export function resolveAuthVerificationConfig(config: Pick<AppConfig, 'authVerificationMode' | 'authProviders'>): {
@@ -227,5 +247,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       : null,
     partnerInsightsMinThreshold: parsed.PARTNER_INSIGHTS_MIN_THRESHOLD,
     partnerInsightsPassByFeatureEnabled: parsed.PARTNER_INSIGHTS_PASS_BY_ENABLED,
+    firebaseProjectId: parsed.FIREBASE_PROJECT_ID?.trim() || null,
   };
 }

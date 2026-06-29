@@ -21,6 +21,7 @@
     "@prisma/adapter-pg": "6.19.3",
     "@prisma/client": "6.19.3",
     "fastify": "^5.8.5",
+    "firebase-admin": "^13.10.0",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },

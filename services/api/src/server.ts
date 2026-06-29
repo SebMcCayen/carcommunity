@@ -4,6 +4,8 @@ import { type AppConfig, loadConfig, resolveAuthVerificationConfig } from './con
 import { createAuthProviderVerifier, type AuthProviderVerifier } from './lib/auth-provider-verifier.js';
 import { createAuthService, type AuthService } from './lib/auth-service.js';
 import { registerAuthContext } from './lib/auth-context.js';
+import { getFirebaseAdminAuth } from './lib/firebase-admin.js';
+import { createFirebaseIdTokenVerifier, type FirebaseIdTokenVerifier } from './lib/firebase-id-token-verifier.js';
 import { AppError, fromUnknownError } from './lib/errors.js';
 import type { LiveLocationService } from './lib/live-location-service.js';
 import type { EventService } from './lib/event-service.js';
@@ -45,6 +47,7 @@ import { registerAdminNotificationRoutes } from './routes/admin-notifications.js
 export interface ServerDependencies {
   authService?: AuthService;
   authProviderVerifier?: AuthProviderVerifier;
+  firebaseIdTokenVerifier?: FirebaseIdTokenVerifier;
   liveLocationService?: LiveLocationService;
   liveLocationFeatureEnabled?: boolean;
   eventService?: EventService;
@@ -119,11 +122,16 @@ export async function createServer(
     createAuthProviderVerifier({
       config: resolveAuthVerificationConfig(config).providers,
     });
+  const firebaseIdTokenVerifier: FirebaseIdTokenVerifier | undefined =
+    dependencies.firebaseIdTokenVerifier ??
+    (config.firebaseProjectId
+      ? createFirebaseIdTokenVerifier(getFirebaseAdminAuth(config.firebaseProjectId))
+      : undefined);
   const badgeService =
     dependencies.badgeService ?? new BadgeService(app.prisma, config.earlyMemberCutoffDate);
   const partnerInsightsService =
     dependencies.partnerInsightsService ?? new PartnerInsightsService(app.prisma, config);
-  await registerAuthContext(app, config, authService);
+  await registerAuthContext(app, config, authService, firebaseIdTokenVerifier);
   await registerHealthRoutes(app);
   await registerVersionRoutes(app);
   await registerAuthRoutes(app, config, authService, authProviderVerifier, badgeService);

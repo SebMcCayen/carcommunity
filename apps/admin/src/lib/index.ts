@@ -1,10 +1,8 @@
 /**
  * Shared utility library for the admin portal.
- *
- * TODO: Add API client and shared helpers as backend integration is implemented.
  */
 
-export { ADMIN_AUTH_PLACEHOLDER_NOTE } from './auth';
+export { signInWithGoogle, signOut, checkAdminClaim, getCurrentIdToken, onAdminAuthStateChanged } from './auth';
 
 /** Format a date to a readable admin-friendly string (Swedish locale). */
 export function formatDate(date: Date | string): string {

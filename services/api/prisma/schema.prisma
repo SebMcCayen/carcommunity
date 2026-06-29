@@ -36,6 +36,14 @@ model User {
   privacyPolicyAcceptedAt    DateTime?                @map("privacy_policy_accepted_at")
   anonymousPartnerStatsOptIn Boolean                  @default(false) @map("anonymous_partner_stats_opt_in")
   lastActiveAt               DateTime?                @map("last_active_at")
+  /**
+   * Firebase UID assigned by Firebase Authentication.
+   * Set when the user first authenticates via a Firebase ID token.
+   * Used as the canonical identity source for Firebase-authenticated requests.
+   * Never trust a firebase_uid supplied by the client — it is only populated
+   * from a verified Firebase ID token.
+   */
+  firebaseUid                String?                  @unique @map("firebase_uid") @db.VarChar(128)
   createdAt                  DateTime                 @default(now()) @map("created_at")
   updatedAt                  DateTime                 @updatedAt @map("updated_at")
   deletedAt                  DateTime?                @map("deleted_at")
