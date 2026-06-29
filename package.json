@@ -6,6 +6,7 @@
     "packages/shared",
     "apps/mobile",
     "apps/admin",
+    "apps/functions",
     "services/api"
   ],
   "scripts": {
