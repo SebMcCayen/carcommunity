@@ -15,11 +15,7 @@ Functional parity between iOS and Android is a mandatory project requirement.
 
 ## Project structure
 
-The mobile applications are located in:
-
-- `apps/ios`
-- `apps/android`
-
+The mobile applications are expected to live in:
 Shared specifications and contracts may be located in:
 
 - `contracts`
