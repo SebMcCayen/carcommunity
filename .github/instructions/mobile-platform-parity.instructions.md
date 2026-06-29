@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Kungsbacka Car Community mobile application is implemented as two completely separate native applications:
+The carcommunity mobile applications are implemented as two completely separate native applications:
 
 - iOS: Swift and SwiftUI
 - Android: Kotlin and Jetpack Compose
