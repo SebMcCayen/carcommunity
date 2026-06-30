@@ -1,0 +1,72 @@
+name: Test Firebase Rules
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firebase/firestore.rules'
+      - 'firebase/database.rules.json'
+      - 'firebase/storage.rules'
+      - 'firebase/firestore.indexes.json'
+      - 'firebase/firebase.json'
+      - 'apps/functions/src/**/*.emulator.test.ts'
+      - 'apps/functions/vitest.emulator.config.ts'
+      - '.github/workflows/test-firebase-rules.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'firebase/firestore.rules'
+      - 'firebase/database.rules.json'
+      - 'firebase/storage.rules'
+      - 'firebase/firestore.indexes.json'
+      - 'firebase/firebase.json'
+      - 'apps/functions/src/**/*.emulator.test.ts'
+      - 'apps/functions/vitest.emulator.config.ts'
+      - '.github/workflows/test-firebase-rules.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test-firebase-rules:
+    name: test-firebase-rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('apps/functions/package.json') }}
+          restore-keys: |
+            firebase-emulators-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: apps/functions
+        run: pnpm install --frozen-lockfile
+
+      - name: Run emulator integration tests
+        working-directory: apps/functions
+        run: pnpm run emulators:test

@@ -4,7 +4,7 @@
  * Requires the Firebase Emulator Suite to be running:
  *   pnpm emulators:start   (from apps/functions)
  *   — or —
- *   firebase emulators:start --config ../../firebase/firebase.json
+ *   firebase emulators:start --project demo-test --config ../../firebase/firebase.json
  *
  * Run with:
  *   pnpm test:emulator

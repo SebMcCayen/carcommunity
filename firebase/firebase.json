@@ -19,11 +19,9 @@
   "database": {
     "rules": "database.rules.json"
   },
-  "storage": [
-    {
-      "rules": "storage.rules"
-    }
-  ],
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "target": "admin",
     "public": "../apps/admin/dist",

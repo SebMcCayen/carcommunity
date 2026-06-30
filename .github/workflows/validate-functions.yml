@@ -1,0 +1,60 @@
+name: Validate Firebase Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/functions/**'
+      - 'firebase/firebase.json'
+      - '.github/workflows/validate-functions.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/functions/**'
+      - 'firebase/firebase.json'
+      - '.github/workflows/validate-functions.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-functions:
+    name: validate-functions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: apps/functions
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        working-directory: apps/functions
+        run: pnpm run lint
+
+      - name: Type check
+        working-directory: apps/functions
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        working-directory: apps/functions
+        run: pnpm run test
+
+      - name: Build
+        working-directory: apps/functions
+        run: pnpm run build
