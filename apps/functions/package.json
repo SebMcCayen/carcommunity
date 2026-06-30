@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
     "emulators:start": "firebase emulators:start --config ../../firebase/firebase.json",
-    "emulators:test": "firebase emulators:exec --config ../../firebase/firebase.json 'pnpm test:emulator'"
+    "emulators:test": "firebase emulators:exec --project demo-test --config ../../firebase/firebase.json 'pnpm test:emulator'"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
