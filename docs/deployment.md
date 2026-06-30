@@ -100,7 +100,7 @@ See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-
 The `main` branch must be protected with the following rules configured in **GitHub repository Settings → Branches**:
 
 - **Require a pull request before merging** — direct pushes to `main` are not allowed.
-- **Require status checks to pass before merging** — require `ci`, `validate-functions`, `validate-admin-web`, and `codeql` to pass.
+- **Require status checks to pass before merging** — require `ci`, `validate-functions`, `validate-admin-web`, `test-firebase-rules`, and `codeql` to pass.
 - **Require branches to be up to date before merging** — prevents merging stale branches.
 - **Require signed commits** — all commits must be GPG or SSH signed.
 - **Do not allow bypassing the above settings** — applies to administrators as well.

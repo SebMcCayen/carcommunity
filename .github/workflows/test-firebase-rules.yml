@@ -69,6 +69,4 @@ jobs:
 
       - name: Run emulator integration tests
         working-directory: apps/functions
-        env:
-          FIREBASE_APP_CHECK_DEBUG_TOKEN: ${{ secrets.FIREBASE_APP_CHECK_DEBUG_TOKEN }}
         run: pnpm run emulators:test
