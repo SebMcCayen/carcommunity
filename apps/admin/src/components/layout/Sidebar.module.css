@@ -99,20 +99,33 @@
 
 .authPlaceholder {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background-color: rgba(240, 165, 0, 0.12);
-  border: 1px solid rgba(240, 165, 0, 0.3);
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);
-}
-
-.authIcon {
-  font-size: var(--text-sm);
-  color: var(--color-warning);
 }
 
 .authText {
   font-size: var(--text-xs);
-  color: var(--color-warning);
+  color: var(--text-on-sidebar-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signOutButton {
+  font-size: var(--text-xs);
+  color: var(--text-on-sidebar-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+}
+
+.signOutButton:hover {
+  color: var(--text-on-sidebar);
 }

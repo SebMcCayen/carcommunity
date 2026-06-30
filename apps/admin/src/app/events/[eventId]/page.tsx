@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EventForm } from '@/components/events/EventForm';
 import { EventStatusBadge } from '@/components/events/EventStatusBadge';
@@ -27,7 +27,7 @@ const t = (key: string) => translate('sv', key);
 
 export default function EventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const [event, setEvent] = useState<AdminEventDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,7 +129,7 @@ export default function EventDetailPage() {
   if (loading) {
     return (
       <div className={styles.page}>
-        <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
+        <Link to="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
         <div className={styles.loadingState} aria-live="polite" aria-busy="true">{t('events.loading')}</div>
       </div>
     );
@@ -138,7 +138,7 @@ export default function EventDetailPage() {
   if (error || !event) {
     return (
       <div className={styles.page}>
-        <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
+        <Link to="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
         <div className={styles.errorState} role="alert">
           {error ?? t('events.notFound')}
         </div>
@@ -152,7 +152,7 @@ export default function EventDetailPage() {
 
   return (
     <div className={styles.page}>
-      <Link href="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
+      <Link to="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
 
       <div className={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
@@ -272,7 +272,7 @@ export default function EventDetailPage() {
           <EventForm
             initialData={event}
             onSubmit={handleUpdate}
-            onCancel={() => router.push('/events')}
+            onCancel={() => navigate('/events')}
             isSubmitting={isUpdating}
             submitError={updateError}
           />

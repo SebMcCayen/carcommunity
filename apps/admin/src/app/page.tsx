@@ -26,16 +26,6 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Auth warning — must be removed once real auth is in place */}
-      <div className={styles.authWarning} role="alert">
-        <span aria-hidden="true">⚠</span>
-        <span>
-          <strong>Authentication not configured.</strong> Microsoft Entra ID integration and backend
-          role validation are required before production use. Admin access must be verified by the
-          backend. Do not trust client-side admin flags.
-        </span>
-      </div>
-
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Overview</h2>
         <div className={styles.statsGrid}>

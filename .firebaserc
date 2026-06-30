@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "kungsbacka-car-community"
+  },
+  "targets": {
+    "kungsbacka-car-community": {
+      "hosting": {
+        "admin": [
+          "kungsbacka-car-community"
+        ]
+      }
+    }
   }
 }

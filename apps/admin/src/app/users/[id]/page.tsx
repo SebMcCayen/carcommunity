@@ -1,12 +1,14 @@
+import { Navigate, useParams } from 'react-router-dom';
 import { PlaceholderPage } from '@/components/ui/PlaceholderPage';
 import { UserPointsSection } from './PointsSection';
 
-interface UserDetailPageProps {
-  params: Promise<{ id: string }>;
-}
+export default function UserDetailPage() {
+  const { id } = useParams<{ id: string }>();
 
-export default async function UserDetailPage({ params }: UserDetailPageProps) {
-  const { id } = await params;
+  if (!id) {
+    return <Navigate to="/users" replace />;
+  }
+
   return (
     <>
       <UserPointsSection userId={id} />

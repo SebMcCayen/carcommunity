@@ -1,6 +1,4 @@
-'use client';
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelAdminEvent,
@@ -117,7 +115,7 @@ export default function EventsPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>{t('events.title')}</h1>
         <div className={styles.headerActions}>
-          <Link href="/events/new" className={styles.buttonPrimary}>
+          <Link to="/events/new" className={styles.buttonPrimary}>
             <span aria-hidden="true">+</span>
             {t('events.createEvent')}
           </Link>
@@ -235,7 +233,7 @@ export default function EventsPage() {
                     <td>
                       <div className={styles.actionList}>
                         <Link
-                          href={`/events/${event.id}`}
+                          to={`/events/${event.id}`}
                           className={`${styles.actionButton} ${styles.actionButtonPrimary}`}
                         >
                           {t('events.actions.edit')}

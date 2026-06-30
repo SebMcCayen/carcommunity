@@ -1,8 +1,7 @@
-'use client';
-
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'react-router-dom';
 import { brand } from '@/config/brand';
+import { useAdminAuth } from '@/components/auth/FirebaseAuthProvider';
+import { signOut } from '@/lib/auth';
 import styles from './Sidebar.module.css';
 
 interface NavItem {
@@ -28,6 +27,7 @@ const navGroups: NavGroup[] = [
     title: 'Content',
     items: [
       { label: 'Events', href: '/events', icon: '◈' },
+      { label: 'Announcements', href: '/announcements', icon: '◻' },
       { label: 'Notifications', href: '/notifications', icon: '◻' },
       { label: 'Partners', href: '/partners', icon: '◇' },
       { label: 'Digital Billboards', href: '/billboards', icon: '▣' },
@@ -37,7 +37,9 @@ const navGroups: NavGroup[] = [
   {
     title: 'Moderation',
     items: [
-      { label: 'Reports', href: '/reports', icon: '◬' },
+      { label: 'Moderation Reports', href: '/moderation-reports', icon: '◬' },
+      { label: 'Error Reports', href: '/error-reports', icon: '◭' },
+      { label: 'Account Deletions', href: '/account-deletions', icon: '◫' },
       { label: 'Event Chat', href: '/event-chat', icon: '◫' },
       { label: 'Live Location', href: '/live-location', icon: '◉' },
       { label: 'Support', href: '/support', icon: '◐' },
@@ -54,7 +56,8 @@ const navGroups: NavGroup[] = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
+  const { user } = useAdminAuth();
 
   function isActive(href: string): boolean {
     if (href === '/') return pathname === '/';
@@ -78,7 +81,7 @@ export function Sidebar() {
             {group.items.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                to={item.href}
                 className={`${styles.navItem} ${isActive(item.href) ? styles.active : ''}`}
                 aria-current={isActive(item.href) ? 'page' : undefined}
               >
@@ -93,17 +96,21 @@ export function Sidebar() {
       </nav>
 
       <div className={styles.footer}>
-        {/*
-         * TODO: Replace with real Microsoft Entra ID authentication.
-         * TODO: Admin role must be verified by the backend before production use.
-         * TODO: Never trust client-side admin flags.
-         */}
-        <div className={styles.authPlaceholder} role="status">
-          <span className={styles.authIcon} aria-hidden="true">
-            ⚠
-          </span>
-          <span className={styles.authText}>Auth not configured</span>
-        </div>
+        {user ? (
+          <div className={styles.authPlaceholder} role="status">
+            <span className={styles.authText} title={user.email ?? undefined}>
+              {user.displayName ?? user.email ?? 'Admin'}
+            </span>
+            <button
+              type="button"
+              className={styles.signOutButton}
+              onClick={() => void signOut()}
+              aria-label="Logga ut"
+            >
+              Logga ut
+            </button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

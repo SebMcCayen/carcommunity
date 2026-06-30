@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Admin login page.
  *
@@ -13,15 +11,19 @@
  * - This page only handles the UX flow — it does NOT constitute a security boundary.
  */
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { signInWithGoogle } from '@/lib/auth';
 import { brand } from '@/config/brand';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Redirect back to the page the user tried to access before being sent here.
+  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/';
 
   async function handleGoogleSignIn() {
     setLoading(true);
@@ -29,7 +31,7 @@ export default function LoginPage() {
 
     try {
       await signInWithGoogle();
-      router.replace('/');
+      navigate(from, { replace: true });
     } catch (err: unknown) {
       if (err instanceof Error && err.message === 'not_admin') {
         setError(
@@ -71,7 +73,7 @@ export default function LoginPage() {
 
       <button
         type="button"
-        onClick={handleGoogleSignIn}
+        onClick={() => void handleGoogleSignIn()}
         disabled={loading}
         aria-busy={loading}
         style={{

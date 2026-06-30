@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Admin partner applications sub-route.
  *
@@ -8,14 +6,14 @@
  */
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 
 export default function PartnerApplicationsPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    router.replace('/partners');
-  }, [router]);
+    void navigate('/partners', { replace: true });
+  }, [navigate]);
 
   return null;
 }
