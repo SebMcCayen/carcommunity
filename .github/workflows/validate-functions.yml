@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   validate-functions:
-    name: Lint, typecheck, test and build
+    name: validate-functions
     runs-on: ubuntu-latest
 
     steps:
@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: apps/functions/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: apps/functions

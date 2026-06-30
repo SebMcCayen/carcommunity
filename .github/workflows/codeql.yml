@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze JavaScript/TypeScript
+    name: codeql
     runs-on: ubuntu-latest
 
     steps:

@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   validate-admin-web:
-    name: Lint, typecheck, test and build
+    name: validate-admin-web
     runs-on: ubuntu-latest
 
     steps:

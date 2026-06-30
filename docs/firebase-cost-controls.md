@@ -1,6 +1,6 @@
 # Firebase Cost Controls
 
-This document describes the budget alert configuration and architecture rules for the KCC Firebase project.
+This document describes the budget alert configuration and architecture rules for the production Firebase project.
 
 ## Budget alerts
 
