@@ -1,0 +1,58 @@
+name: Deploy Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy-hosting:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-hosting-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install pnpm dependencies (for firebase-tools)
+        working-directory: apps/functions
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: npm run build --workspace @carcommunity/shared
+
+      - name: Build admin web
+        run: npm run build --workspace apps/admin
+
+      - name: Deploy Firebase Hosting
+        working-directory: apps/functions
+        run: pnpm exec firebase deploy --only hosting --config ../../firebase/firebase.json --project kungsbacka-car-community --non-interactive

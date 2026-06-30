@@ -1,0 +1,51 @@
+name: Validate Admin Web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/admin/**'
+      - 'packages/shared/**'
+      - '.github/workflows/validate-admin-web.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/admin/**'
+      - 'packages/shared/**'
+      - '.github/workflows/validate-admin-web.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-admin-web:
+    name: Lint, typecheck, test and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace @carcommunity/shared
+
+      - name: Lint
+        run: npm run lint --workspace apps/admin
+
+      - name: Type check
+        run: npm run typecheck --workspace apps/admin
+
+      - name: Unit tests
+        run: npm test --workspace apps/admin
+
+      - name: Build
+        run: npm run build --workspace apps/admin

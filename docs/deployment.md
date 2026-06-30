@@ -49,21 +49,72 @@ Use Firebase Emulator Suite for all local and CI testing.
 
 ## CI Validation
 
-CI currently runs workspace lint, typecheck, test, and build for `apps/mobile`, `apps/admin`, and `services/api`, and validates the container build on every push/PR to `main`. Functions are **not deployed** from CI unless an explicit deployment workflow is added. Cloud Functions CI validation will be added in a follow-up migration PR.
+CI runs on every push and pull request targeting `main`. Path filters ensure that unrelated changes do not trigger every workflow.
 
-## Future Steps
+| Workflow | Trigger paths | What it validates |
+|----------|---------------|-------------------|
+| `ci.yml` | All paths | API, mobile, admin, shared lint/typecheck/test/build |
+| `validate-functions.yml` | `apps/functions/**`, `firebase/firebase.json` | Functions lint, typecheck, unit tests, build |
+| `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `apps/functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
+| `validate-admin-web.yml` | `apps/admin/**`, `packages/shared/**` | Admin web lint, typecheck, tests, build |
+| `codeql.yml` | All paths | CodeQL security analysis (JS/TS) |
+| `dependency-review.yml` | Pull requests only | Dependency vulnerability review |
 
-The following steps are required before live production deployment and are **not yet configured**:
+Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
 
-1. **Firebase project** — Create a Firebase project and configure `firebase.json` and `.firebaserc`.
-2. **Cloud Functions deployment** — Configure `firebase deploy --only functions` in a deployment workflow (requires service account credentials in repository secrets).
-3. **Firebase Hosting deployment** — Configure `firebase deploy --only hosting` for the admin web.
-4. **Firebase Authentication** — Enable Sign in with Apple (iOS) and Google Sign-In (Android and admin web) providers.
-5. **Firebase App Check** — Enable App Check with DeviceCheck (iOS) and Play Integrity (Android) in production.
-6. **Firestore Security Rules** — Author and deploy production-safe Firestore Security Rules.
-7. **Realtime Database Security Rules** — Author and deploy production-safe Realtime Database Security Rules.
-8. **Cloud Storage Security Rules** — Author and deploy production-safe Cloud Storage Security Rules.
-9. **Firestore indexes** — Define composite indexes required by application queries.
-10. **Firestore backups** — Configure scheduled Firestore exports to Cloud Storage.
-11. **Monitoring** — Set up Firebase Performance Monitoring, Crashlytics, and Cloud Functions logs and alerts.
-12. **Custom domains** — Configure a custom domain for Firebase Hosting if required.
+## Production Deployment
+
+Production deployment uses GitHub OIDC and Google Workload Identity Federation. No long-lived Google service account keys are stored as GitHub secrets.
+
+| Workflow | What it deploys | Requirement |
+|----------|-----------------|-------------|
+| `deploy-firebase-functions.yml` | Cloud Functions | Push to `main`, `production` environment approval |
+| `deploy-firebase-hosting.yml` | Admin web (Firebase Hosting) | Push to `main`, `production` environment approval |
+
+### Required secrets
+
+Configure the following secrets in the GitHub repository `production` environment:
+
+| Secret | Description |
+|--------|-------------|
+| `WIF_PROVIDER` | Workload Identity Federation provider resource name (e.g. `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER`) |
+| `WIF_SERVICE_ACCOUNT` | Service account email used for Firebase deployment (e.g. `github-deploy@PROJECT_ID.iam.gserviceaccount.com`) |
+
+The service account must be granted only the permissions required for deployment:
+
+- `roles/cloudfunctions.developer` — for Functions deploy
+- `roles/firebasehosting.admin` — for Hosting deploy
+- `roles/iam.serviceAccountUser` — to act as the Cloud Functions runtime service account
+
+### Setting up Workload Identity Federation
+
+1. Create a Workload Identity Pool in Google Cloud IAM.
+2. Add a GitHub Actions OIDC provider to the pool, scoped to this repository.
+3. Create a least-privilege service account and bind it to the pool with a condition that limits access to the `main` branch.
+4. Store the provider resource name and service account email as secrets in the `production` GitHub environment.
+
+See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for step-by-step instructions.
+
+## Branch Protection
+
+The `main` branch must be protected with the following rules configured in **GitHub repository Settings → Branches**:
+
+- **Require a pull request before merging** — direct pushes to `main` are not allowed.
+- **Require status checks to pass before merging** — require `ci`, `validate-functions`, `validate-admin-web`, and `codeql` to pass.
+- **Require branches to be up to date before merging** — prevents merging stale branches.
+- **Require signed commits** — all commits must be GPG or SSH signed.
+- **Do not allow bypassing the above settings** — applies to administrators as well.
+
+## Dependency Security
+
+| Feature | Configuration |
+|---------|---------------|
+| Dependabot version updates | `.github/dependabot.yml` — weekly updates for all npm workspaces and GitHub Actions |
+| Dependabot security updates | Enabled in repository settings |
+| CodeQL | `.github/workflows/codeql.yml` — JS/TS analysis on push, PR, and weekly schedule |
+| Secret scanning | Enabled in repository settings (GitHub Advanced Security) |
+| Dependency review | `.github/workflows/dependency-review.yml` — reviews dependency changes on every PR |
+
+Major dependency updates are not automatically merged. Dependabot groups minor and patch updates and submits major updates as individual pull requests for manual review.
+
+
