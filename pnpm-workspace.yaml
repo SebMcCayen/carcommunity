@@ -1,2 +1,7 @@
 packages:
   - 'apps/functions'
+allowBuilds:
+  '@firebase/util': set this to true or false
+  esbuild: set this to true or false
+  protobufjs: set this to true or false
+  re2: set this to true or false
