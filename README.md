@@ -51,7 +51,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 ## Local development
 
-Local development uses the **Firebase Emulator Suite** for all backend services. No cloud account is required for day-to-day development.
+For migration-target development, local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `apps/functions`). No cloud account is required for day-to-day development. (The legacy `services/api` backend still requires PostgreSQL + Prisma if you need to run it.)
 
 Minimum prerequisites:
 
