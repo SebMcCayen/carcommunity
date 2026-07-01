@@ -8,7 +8,7 @@ Each item must be explicitly verified, not assumed. Legacy deletion requires a s
 
 ## Part 1 — Firebase backend readiness
 
-- [ ] Firebase Emulator tests pass for all Cloud Functions (unit tests via `vitest run`, emulator tests via `pnpm emulators:test`).
+- [ ] Firebase Emulator tests pass for all Cloud Functions (unit tests via `npm run test -w functions` or `vitest run`, emulator tests via the `emulators:test` script in the functions workspace — the exact command depends on the package manager standardized in Phase 3 of the migration plan).
 - [ ] All callable functions have at least one passing emulator integration test.
 - [ ] All scheduled cleanup functions are deployed and verified (live location expiry, partner insights cleanup, notification cleanup, diagnostics cleanup).
 - [ ] Subscription callable function (`verifySubscription`) is verified against Apple sandbox and Google test environment.
