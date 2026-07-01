@@ -25,7 +25,7 @@ Follow the full mobile parity instructions defined in:
   - React Native / Expo mobile app (current implementation) at `apps/mobile`
   - iOS native app (Swift and SwiftUI) planned at `apps/ios` (post-migration target)
   - Android native app (Kotlin and Jetpack Compose) planned at `apps/android` (post-migration target)
-  - Admin web app (Next.js, hosted on Firebase Hosting)
+  - Admin web app (React + Vite, hosted on Firebase Hosting)
   - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript, planned post-migration)
   - Node.js + TypeScript API at `services/api` (current backend implementation)
   - Cloud Firestore and Firebase Realtime Database

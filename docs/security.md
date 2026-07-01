@@ -30,10 +30,10 @@ This document defines baseline security requirements for CarCommunity. It is a t
 ## Secret management
 
 - No secrets in repo.
-- Use GitHub Secrets and Azure Key Vault-backed secrets for CI/CD and runtime.
+- Use GitHub Secrets and Google Cloud Secret Manager for CI/CD and runtime secrets.
 - Commit `.env.example` only.
 - Ignore real `.env` files in Git.
-- Never commit signing keys, Apple keys, Google credentials, Azure credentials, GitHub tokens, database connection strings, production data, or private certificates.
+- Never commit signing keys, Apple keys, Google credentials, Firebase credentials, GitHub tokens, database connection strings, production data, or private certificates.
 
 ## GitHub security configuration
 
@@ -48,8 +48,8 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Protect default and release branches with required reviews and status checks.
 - Require CI to pass before merge.
 - Require signed/verified commits where feasible.
-- Deployments to production must use trusted workflows and protected environments.
-- CI/CD credentials must come from GitHub Secrets/Azure secrets, never hardcoded.
+- Deployments to production must use trusted workflows, Google Workload Identity Federation, and protected GitHub environments.
+- CI/CD credentials must come from GitHub Secrets or Google Cloud Secret Manager; never hardcoded.
 
 ## Production-only risk controls
 
@@ -246,7 +246,7 @@ This document defines baseline security requirements for CarCommunity. It is a t
 
 - [ ] No secrets committed; `.env.example` is the only environment template committed.
 - [ ] Real `.env` files are ignored and absent from commits.
-- [ ] CI/CD uses GitHub Secrets and Azure secrets only.
+- [ ] CI/CD uses GitHub Secrets and Google Cloud Secret Manager only.
 - [ ] Branch protection and required checks are enabled.
 - [ ] Security-sensitive logic has tests.
 - [ ] Backend verifies admin role and subscription entitlement.
