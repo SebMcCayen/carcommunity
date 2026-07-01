@@ -180,23 +180,23 @@ Each item must be explicitly verified, not assumed. Legacy deletion requires a s
 
 All checklist parts above must be explicitly checked by the responsible maintainer before production cutover.
 
-| Part | Verified by | Date |
-|---|---|---|
-| Part 1 — Firebase backend | | |
-| Part 2 — Firestore rules | | |
-| Part 3 — RTDB rules | | |
-| Part 4 — Storage rules | | |
-| Part 5 — Cloud Functions tests | | |
-| Part 6 — Admin web | | |
-| Part 7 — iOS | | |
-| Part 8 — Android | | |
-| Part 9 — Feature parity matrix | | |
-| Part 10 — Localization | | |
-| Part 11 — Accessibility | | |
-| Part 12 — Security and privacy | | |
-| Part 13 — Subscription behavior | | |
-| Part 14 — Physical device verification | | |
-| Part 15 — Data integrity | | |
-| Part 16 — Rollback procedure | | |
-| Part 17 — App Check production enforcement | | |
-| Part 18 — Legacy deletion approval | | |
+| Part                                       | Verified by | Date |
+| ------------------------------------------ | ----------- | ---- |
+| Part 1 — Firebase backend                  |             |      |
+| Part 2 — Firestore rules                   |             |      |
+| Part 3 — RTDB rules                        |             |      |
+| Part 4 — Storage rules                     |             |      |
+| Part 5 — Cloud Functions tests             |             |      |
+| Part 6 — Admin web                         |             |      |
+| Part 7 — iOS                               |             |      |
+| Part 8 — Android                           |             |      |
+| Part 9 — Feature parity matrix             |             |      |
+| Part 10 — Localization                     |             |      |
+| Part 11 — Accessibility                    |             |      |
+| Part 12 — Security and privacy             |             |      |
+| Part 13 — Subscription behavior            |             |      |
+| Part 14 — Physical device verification     |             |      |
+| Part 15 — Data integrity                   |             |      |
+| Part 16 — Rollback procedure               |             |      |
+| Part 17 — App Check production enforcement |             |      |
+| Part 18 — Legacy deletion approval         |             |      |

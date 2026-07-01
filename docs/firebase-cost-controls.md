@@ -6,12 +6,12 @@ This document describes the budget alert configuration and architecture rules fo
 
 The Firebase project (`kungsbacka-car-community`) must have four billing budget alerts configured in Google Cloud Billing.
 
-| Threshold | Amount | Purpose |
-|-----------|--------|---------|
-| Alert 1 | SEK 100 | Early warning — investigate unexpected usage |
-| Alert 2 | SEK 250 | Elevated usage — review active features and query patterns |
-| Alert 3 | SEK 400 | High usage — consider temporarily disabling non-critical features |
-| Alert 4 | SEK 500 | Maximum monthly budget — immediate action required |
+| Threshold | Amount  | Purpose                                                           |
+| --------- | ------- | ----------------------------------------------------------------- |
+| Alert 1   | SEK 100 | Early warning — investigate unexpected usage                      |
+| Alert 2   | SEK 250 | Elevated usage — review active features and query patterns        |
+| Alert 3   | SEK 400 | High usage — consider temporarily disabling non-critical features |
+| Alert 4   | SEK 500 | Maximum monthly budget — immediate action required                |
 
 ### How to configure
 

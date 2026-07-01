@@ -10,14 +10,14 @@ See [ADR-001](adr/001-firebase-platform.md) for the decision to migrate from Azu
 
 ## Service Overview
 
-> **Note:** The table below lists *planned* post-migration deployment targets. The current implementation uses `services/api` (Node.js container), `apps/mobile` (React Native / Expo), and `apps/admin` (Next.js). The migration to Firebase and separate native mobile apps is in progress.
+> **Note:** The table below lists _planned_ post-migration deployment targets. The current implementation uses `services/api` (Node.js container), `apps/mobile` (React Native / Expo), and `apps/admin` (React + Vite). The migration to Firebase and separate native mobile apps is in progress.
 
-| Service | Hosting |
-|---------|---------|
+| Service                                    | Hosting                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------ |
 | Backend functions (`functions/`) — planned | Cloud Functions for Firebase (2nd gen, Firebase-supported Node.js) |
-| Admin web (`apps/admin`) | Firebase Hosting |
-| iOS app (`apps/ios`) — planned | App Store |
-| Android app (`apps/android`) — planned | Google Play |
+| Admin web (`apps/admin`)                   | Firebase Hosting                                                   |
+| iOS app (`apps/ios`) — planned             | App Store                                                          |
+| Android app (`apps/android`) — planned     | Google Play                                                        |
 
 ## Local Development
 
@@ -51,14 +51,14 @@ Use Firebase Emulator Suite for all local and CI testing.
 
 CI runs on every push and pull request targeting `main`. Path filters ensure that unrelated changes do not trigger every workflow.
 
-| Workflow | Trigger paths | What it validates |
-|----------|---------------|-------------------|
-| `ci.yml` | All paths | API, mobile, admin, shared lint/typecheck/test/build |
-| `validate-functions.yml` | `apps/functions/**`, `firebase/firebase.json` | Functions lint, typecheck, unit tests, build |
+| Workflow                  | Trigger paths                                                                     | What it validates                                                    |
+| ------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `ci.yml`                  | All paths                                                                         | API, mobile, admin, shared lint/typecheck/test/build                 |
+| `validate-functions.yml`  | `apps/functions/**`, `firebase/firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
 | `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `apps/functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
-| `validate-admin-web.yml` | `apps/admin/**`, `packages/shared/**` | Admin web lint, typecheck, tests, build |
-| `codeql.yml` | All paths | CodeQL security analysis (JS/TS) |
-| `dependency-review.yml` | Pull requests only | Dependency vulnerability review |
+| `validate-admin-web.yml`  | `apps/admin/**`, `packages/shared/**`                                             | Admin web lint, typecheck, tests, build                              |
+| `codeql.yml`              | All paths                                                                         | CodeQL security analysis (JS/TS)                                     |
+| `dependency-review.yml`   | Pull requests only                                                                | Dependency vulnerability review                                      |
 
 Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
 
@@ -66,19 +66,19 @@ Functions are **not deployed** from validation workflows. Deployments are intent
 
 Production deployment uses GitHub OIDC and Google Workload Identity Federation. No long-lived Google service account keys are stored as GitHub secrets.
 
-| Workflow | What it deploys | Requirement |
-|----------|-----------------|-------------|
-| `deploy-firebase-functions.yml` | Cloud Functions | Push to `main`, `production` environment approval |
-| `deploy-firebase-hosting.yml` | Admin web (Firebase Hosting) | Push to `main`, `production` environment approval |
+| Workflow                        | What it deploys              | Requirement                                       |
+| ------------------------------- | ---------------------------- | ------------------------------------------------- |
+| `deploy-firebase-functions.yml` | Cloud Functions              | Push to `main`, `production` environment approval |
+| `deploy-firebase-hosting.yml`   | Admin web (Firebase Hosting) | Push to `main`, `production` environment approval |
 
 ### Required secrets
 
 Configure the following secrets in the GitHub repository `production` environment:
 
-| Secret | Description |
-|--------|-------------|
-| `WIF_PROVIDER` | Workload Identity Federation provider resource name (e.g. `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER`) |
-| `WIF_SERVICE_ACCOUNT` | Service account email used for Firebase deployment (e.g. `github-deploy@PROJECT_ID.iam.gserviceaccount.com`) |
+| Secret                | Description                                                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WIF_PROVIDER`        | Workload Identity Federation provider resource name (e.g. `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER`) |
+| `WIF_SERVICE_ACCOUNT` | Service account email used for Firebase deployment (e.g. `github-deploy@PROJECT_ID.iam.gserviceaccount.com`)                                        |
 
 The service account must be granted only the permissions required for deployment:
 
@@ -107,14 +107,12 @@ The `main` branch must be protected with the following rules configured in **Git
 
 ## Dependency Security
 
-| Feature | Configuration |
-|---------|---------------|
-| Dependabot version updates | `.github/dependabot.yml` — weekly updates for all npm workspaces and GitHub Actions |
-| Dependabot security updates | Enabled in repository settings |
-| CodeQL | `.github/workflows/codeql.yml` — JS/TS analysis on push, PR, and weekly schedule |
-| Secret scanning | Enabled in repository settings (GitHub Advanced Security) |
-| Dependency review | `.github/workflows/dependency-review.yml` — reviews dependency changes on every PR |
+| Feature                     | Configuration                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| Dependabot version updates  | `.github/dependabot.yml` — weekly updates for all npm workspaces and GitHub Actions |
+| Dependabot security updates | Enabled in repository settings                                                      |
+| CodeQL                      | `.github/workflows/codeql.yml` — JS/TS analysis on push, PR, and weekly schedule    |
+| Secret scanning             | Enabled in repository settings (GitHub Advanced Security)                           |
+| Dependency review           | `.github/workflows/dependency-review.yml` — reviews dependency changes on every PR  |
 
 Major dependency updates are not automatically merged. Dependabot groups minor and patch updates and submits major updates as individual pull requests for manual review.
-
-

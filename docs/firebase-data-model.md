@@ -6,11 +6,11 @@ For PostgreSQL data model (current `services/api` implementation) see [data-mode
 
 ## Overview
 
-| Concern | Service |
-|---|---|
-| Durable user and application data | Cloud Firestore |
+| Concern                                            | Service                    |
+| -------------------------------------------------- | -------------------------- |
+| Durable user and application data                  | Cloud Firestore            |
 | Ephemeral realtime state (live location, presence) | Firebase Realtime Database |
-| User-uploaded files and ride routes | Cloud Storage for Firebase |
+| User-uploaded files and ride routes                | Cloud Storage for Firebase |
 
 ## Cloud Firestore
 
@@ -28,17 +28,17 @@ For PostgreSQL data model (current `services/api` implementation) see [data-mode
 
 Document ID: Firebase UID.
 
-| Field | Type | Notes |
-|---|---|---|
-| `displayName` | `string` | Visible username |
-| `avatarPath` | `string?` | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}` |
-| `bio` | `string?` | Short profile description |
-| `role` | `string` | `'user'` \| `'admin'` — **backend-managed only** |
-| `activeMember` | `boolean` | Subscription entitlement — **backend-managed only** |
-| `suspended` | `boolean` | Moderation state — **backend-managed only** |
-| `deleted` | `boolean` | Soft-delete flag — **backend-managed only** |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field          | Type        | Notes                                                    |
+| -------------- | ----------- | -------------------------------------------------------- |
+| `displayName`  | `string`    | Visible username                                         |
+| `avatarPath`   | `string?`   | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}` |
+| `bio`          | `string?`   | Short profile description                                |
+| `role`         | `string`    | `'user'` \| `'admin'` — **backend-managed only**         |
+| `activeMember` | `boolean`   | Subscription entitlement — **backend-managed only**      |
+| `suspended`    | `boolean`   | Moderation state — **backend-managed only**              |
+| `deleted`      | `boolean`   | Soft-delete flag — **backend-managed only**              |
+| `createdAt`    | `Timestamp` | Server timestamp                                         |
+| `updatedAt`    | `Timestamp` | Server timestamp                                         |
 
 Security: any authenticated user can read; owner can update non-protected fields; backend (Admin SDK) manages protected fields.
 
@@ -48,13 +48,13 @@ Security: any authenticated user can read; owner can update non-protected fields
 
 Document ID: Firebase UID.
 
-| Field | Type | Notes |
-|---|---|---|
-| `email` | `string?` | Contact channel, not identity key |
-| `phone` | `string?` | Optional |
-| `notificationPreferences` | `map?` | Push/email preferences |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field                     | Type        | Notes                             |
+| ------------------------- | ----------- | --------------------------------- |
+| `email`                   | `string?`   | Contact channel, not identity key |
+| `phone`                   | `string?`   | Optional                          |
+| `notificationPreferences` | `map?`      | Push/email preferences            |
+| `createdAt`               | `Timestamp` | Server timestamp                  |
+| `updatedAt`               | `Timestamp` | Server timestamp                  |
 
 Security: owner-only read and write. No other users may access this collection.
 
@@ -64,16 +64,16 @@ Security: owner-only read and write. No other users may access this collection.
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Owner Firebase UID |
-| `make` | `string` | Vehicle make, e.g. `'Volvo'` |
-| `model` | `string` | Vehicle model |
-| `year` | `number` | Model year |
-| `color` | `string?` | Optional color description |
-| `imagePath` | `string?` | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}` |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field       | Type        | Notes                                                    |
+| ----------- | ----------- | -------------------------------------------------------- |
+| `userId`    | `string`    | Owner Firebase UID                                       |
+| `make`      | `string`    | Vehicle make, e.g. `'Volvo'`                             |
+| `model`     | `string`    | Vehicle model                                            |
+| `year`      | `number`    | Model year                                               |
+| `color`     | `string?`   | Optional color description                               |
+| `imagePath` | `string?`   | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}` |
+| `createdAt` | `Timestamp` | Server timestamp                                         |
+| `updatedAt` | `Timestamp` | Server timestamp                                         |
 
 Security: any authenticated user can read; owner can create/update/delete.
 
@@ -87,17 +87,17 @@ Composite index: `userId ASC, createdAt DESC` (user's garage list, paginated).
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Owner Firebase UID |
-| `title` | `string?` | Optional user-given title |
-| `distanceMeters` | `number` | Total distance |
-| `durationSeconds` | `number` | Total duration |
-| `startedAt` | `Timestamp` | Ride start time |
-| `endedAt` | `Timestamp` | Ride end time |
-| `routePath` | `string` | Cloud Storage path to compressed route, e.g. `rideRoutes/{uid}/{rideId}/route.bin` |
-| `previewImagePath` | `string?` | Cloud Storage path to static map preview |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field              | Type        | Notes                                                                              |
+| ------------------ | ----------- | ---------------------------------------------------------------------------------- |
+| `userId`           | `string`    | Owner Firebase UID                                                                 |
+| `title`            | `string?`   | Optional user-given title                                                          |
+| `distanceMeters`   | `number`    | Total distance                                                                     |
+| `durationSeconds`  | `number`    | Total duration                                                                     |
+| `startedAt`        | `Timestamp` | Ride start time                                                                    |
+| `endedAt`          | `Timestamp` | Ride end time                                                                      |
+| `routePath`        | `string`    | Cloud Storage path to compressed route, e.g. `rideRoutes/{uid}/{rideId}/route.bin` |
+| `previewImagePath` | `string?`   | Cloud Storage path to static map preview                                           |
+| `createdAt`        | `Timestamp` | Server timestamp                                                                   |
 
 **Route GPS points are never stored in Firestore.** They are encoded, compressed, and stored as a single file in Cloud Storage.
 
@@ -111,11 +111,11 @@ Composite index: `userId ASC, createdAt DESC` (user's ride history, paginated).
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | The user who owns this friendship record |
-| `friendId` | `string` | The friend's Firebase UID |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field       | Type        | Notes                                    |
+| ----------- | ----------- | ---------------------------------------- |
+| `userId`    | `string`    | The user who owns this friendship record |
+| `friendId`  | `string`    | The friend's Firebase UID                |
+| `createdAt` | `Timestamp` | Server timestamp                         |
 
 Security: either party (`userId` or `friendId`) can read; `userId` owner can delete.
 
@@ -125,13 +125,13 @@ Security: either party (`userId` or `friendId`) can read; `userId` owner can del
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `senderId` | `string` | Sender Firebase UID |
-| `receiverId` | `string` | Receiver Firebase UID |
-| `status` | `string` | `'pending'` \| `'accepted'` \| `'declined'` |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field        | Type        | Notes                                       |
+| ------------ | ----------- | ------------------------------------------- |
+| `senderId`   | `string`    | Sender Firebase UID                         |
+| `receiverId` | `string`    | Receiver Firebase UID                       |
+| `status`     | `string`    | `'pending'` \| `'accepted'` \| `'declined'` |
+| `createdAt`  | `Timestamp` | Server timestamp                            |
+| `updatedAt`  | `Timestamp` | Server timestamp                            |
 
 Security: sender or receiver can read; sender can create/delete; receiver can update (accept/decline).
 
@@ -143,17 +143,17 @@ Composite indexes: `receiverId ASC, status ASC, createdAt DESC` and `senderId AS
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `title` | `string` | |
-| `description` | `string?` | |
-| `location` | `map?` | `{ name, lat, lng }` |
-| `startsAt` | `Timestamp` | |
-| `endsAt` | `Timestamp?` | |
-| `status` | `string` | `'draft'` \| `'published'` \| `'cancelled'` |
-| `createdBy` | `string` | Admin UID |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field         | Type         | Notes                                       |
+| ------------- | ------------ | ------------------------------------------- |
+| `title`       | `string`     |                                             |
+| `description` | `string?`    |                                             |
+| `location`    | `map?`       | `{ name, lat, lng }`                        |
+| `startsAt`    | `Timestamp`  |                                             |
+| `endsAt`      | `Timestamp?` |                                             |
+| `status`      | `string`     | `'draft'` \| `'published'` \| `'cancelled'` |
+| `createdBy`   | `string`     | Admin UID                                   |
+| `createdAt`   | `Timestamp`  | Server timestamp                            |
+| `updatedAt`   | `Timestamp`  | Server timestamp                            |
 
 Security: any authenticated user can read; admin-only write.
 
@@ -165,15 +165,15 @@ Composite index: `status ASC, startsAt ASC` (upcoming events list, paginated).
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `name` | `string` | |
-| `description` | `string?` | |
-| `website` | `string?` | |
-| `logoPath` | `string?` | Cloud Storage path |
-| `active` | `boolean` | |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field         | Type        | Notes              |
+| ------------- | ----------- | ------------------ |
+| `name`        | `string`    |                    |
+| `description` | `string?`   |                    |
+| `website`     | `string?`   |                    |
+| `logoPath`    | `string?`   | Cloud Storage path |
+| `active`      | `boolean`   |                    |
+| `createdAt`   | `Timestamp` | Server timestamp   |
+| `updatedAt`   | `Timestamp` | Server timestamp   |
 
 Security: any authenticated user can read; admin-only write.
 
@@ -183,16 +183,16 @@ Security: any authenticated user can read; admin-only write.
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `companyId` | `string` | |
-| `title` | `string` | |
-| `description` | `string?` | |
-| `imagePath` | `string?` | Cloud Storage path |
-| `active` | `boolean` | |
-| `expiresAt` | `Timestamp?` | |
-| `createdAt` | `Timestamp` | Server timestamp |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field         | Type         | Notes              |
+| ------------- | ------------ | ------------------ |
+| `companyId`   | `string`     |                    |
+| `title`       | `string`     |                    |
+| `description` | `string?`    |                    |
+| `imagePath`   | `string?`    | Cloud Storage path |
+| `active`      | `boolean`    |                    |
+| `expiresAt`   | `Timestamp?` |                    |
+| `createdAt`   | `Timestamp`  | Server timestamp   |
+| `updatedAt`   | `Timestamp`  | Server timestamp   |
 
 Security: any authenticated user can read; admin-only write.
 
@@ -204,11 +204,11 @@ Composite index: `companyId ASC, active ASC, expiresAt ASC`.
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `title` | `string` | |
-| `body` | `string` | |
-| `active` | `boolean` | |
+| Field       | Type        | Notes            |
+| ----------- | ----------- | ---------------- |
+| `title`     | `string`    |                  |
+| `body`      | `string`    |                  |
+| `active`    | `boolean`   |                  |
 | `createdAt` | `Timestamp` | Server timestamp |
 | `updatedAt` | `Timestamp` | Server timestamp |
 
@@ -222,13 +222,13 @@ Composite index: `active ASC, createdAt DESC`.
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `type` | `string` | e.g. `'police'`, `'pothole'`, `'obstacle'`, `'camera'` |
-| `lat` | `number` | Approximate location — rounded, not exact GPS |
-| `lng` | `number` | Approximate location — rounded, not exact GPS |
-| `reportedBy` | `string` | Reporter Firebase UID |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field        | Type        | Notes                                                  |
+| ------------ | ----------- | ------------------------------------------------------ |
+| `type`       | `string`    | e.g. `'police'`, `'pothole'`, `'obstacle'`, `'camera'` |
+| `lat`        | `number`    | Approximate location — rounded, not exact GPS          |
+| `lng`        | `number`    | Approximate location — rounded, not exact GPS          |
+| `reportedBy` | `string`    | Reporter Firebase UID                                  |
+| `createdAt`  | `Timestamp` | Server timestamp                                       |
 
 Security: any authenticated user can read or create (reporter's UID must match); admin-only update and delete.
 
@@ -240,12 +240,12 @@ Composite index: `type ASC, createdAt DESC`.
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Sender Firebase UID |
-| `eventId` | `string?` | If message belongs to an event chat thread |
-| `body` | `string` | Sanitized message text |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field       | Type        | Notes                                      |
+| ----------- | ----------- | ------------------------------------------ |
+| `userId`    | `string`    | Sender Firebase UID                        |
+| `eventId`   | `string?`   | If message belongs to an event chat thread |
+| `body`      | `string`    | Sanitized message text                     |
+| `createdAt` | `Timestamp` | Server timestamp                           |
 
 Security: any authenticated user can read; active members can create (sender UID must match); sender or admin can delete.
 
@@ -257,15 +257,15 @@ Composite index: `eventId ASC, createdAt ASC` (paginated chat thread).
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `reportedBy` | `string` | Reporter Firebase UID |
-| `targetType` | `string` | e.g. `'user'`, `'message'`, `'event'` |
-| `targetId` | `string` | ID of the reported entity |
-| `reason` | `string` | Report category |
-| `details` | `string?` | Optional additional context |
-| `status` | `string` | `'pending'` \| `'reviewed'` \| `'dismissed'` |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field        | Type        | Notes                                        |
+| ------------ | ----------- | -------------------------------------------- |
+| `reportedBy` | `string`    | Reporter Firebase UID                        |
+| `targetType` | `string`    | e.g. `'user'`, `'message'`, `'event'`        |
+| `targetId`   | `string`    | ID of the reported entity                    |
+| `reason`     | `string`    | Report category                              |
+| `details`    | `string?`   | Optional additional context                  |
+| `status`     | `string`    | `'pending'` \| `'reviewed'` \| `'dismissed'` |
+| `createdAt`  | `Timestamp` | Server timestamp                             |
 
 Security: any authenticated user can create (reporter's UID must match); admin-only read and update.
 
@@ -277,15 +277,15 @@ Composite index: `status ASC, createdAt DESC` (admin review queue).
 
 Document ID: auto-generated.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Reporting user's Firebase UID |
-| `platform` | `string` | `'ios'` \| `'android'` \| `'admin'` |
-| `errorCode` | `string` | |
-| `message` | `string` | Sanitized error message — must not contain tokens, credentials, or PII |
-| `stackTrace` | `string?` | Sanitized |
-| `appVersion` | `string?` | |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field        | Type        | Notes                                                                  |
+| ------------ | ----------- | ---------------------------------------------------------------------- |
+| `userId`     | `string`    | Reporting user's Firebase UID                                          |
+| `platform`   | `string`    | `'ios'` \| `'android'` \| `'admin'`                                    |
+| `errorCode`  | `string`    |                                                                        |
+| `message`    | `string`    | Sanitized error message — must not contain tokens, credentials, or PII |
+| `stackTrace` | `string?`   | Sanitized                                                              |
+| `appVersion` | `string?`   |                                                                        |
+| `createdAt`  | `Timestamp` | Server timestamp                                                       |
 
 Security: any authenticated user can create; admin-only read.
 
@@ -295,14 +295,14 @@ Security: any authenticated user can create; admin-only read.
 
 Document ID: auto-generated. **Written by backend (Admin SDK) only. No client writes.**
 
-| Field | Type | Notes |
-|---|---|---|
-| `adminId` | `string` | Admin Firebase UID |
-| `action` | `string` | e.g. `'user.suspend'`, `'offer.create'`, `'hazard.delete'` |
-| `targetType` | `string?` | Entity type affected |
-| `targetId` | `string?` | Entity ID affected |
-| `details` | `map?` | Safe summary of the change |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field        | Type        | Notes                                                      |
+| ------------ | ----------- | ---------------------------------------------------------- |
+| `adminId`    | `string`    | Admin Firebase UID                                         |
+| `action`     | `string`    | e.g. `'user.suspend'`, `'offer.create'`, `'hazard.delete'` |
+| `targetType` | `string?`   | Entity type affected                                       |
+| `targetId`   | `string?`   | Entity ID affected                                         |
+| `details`    | `map?`      | Safe summary of the change                                 |
+| `createdAt`  | `Timestamp` | Server timestamp                                           |
 
 Security: admin-only read; no client writes.
 
@@ -312,12 +312,12 @@ Security: admin-only read; no client writes.
 
 Document ID: Firebase UID of the requesting user.
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Firebase UID |
-| `reason` | `string?` | Optional stated reason |
-| `status` | `string` | `'pending'` \| `'processed'` |
-| `createdAt` | `Timestamp` | Server timestamp |
+| Field       | Type        | Notes                        |
+| ----------- | ----------- | ---------------------------- |
+| `userId`    | `string`    | Firebase UID                 |
+| `reason`    | `string?`   | Optional stated reason       |
+| `status`    | `string`    | `'pending'` \| `'processed'` |
+| `createdAt` | `Timestamp` | Server timestamp             |
 
 Security: owner can create and read their own request; admin-only write and full read.
 
@@ -327,14 +327,14 @@ Security: owner can create and read their own request; admin-only write and full
 
 Document ID: Firebase UID. **Written by Cloud Functions only after receipt verification. No client writes.**
 
-| Field | Type | Notes |
-|---|---|---|
-| `userId` | `string` | Firebase UID |
-| `entitlement` | `string` | Internal name, e.g. `'member_monthly'` |
-| `status` | `string` | `'active'` \| `'expired'` \| `'cancelled'` |
-| `platform` | `string` | `'ios'` \| `'android'` |
-| `expiresAt` | `Timestamp?` | |
-| `updatedAt` | `Timestamp` | Server timestamp |
+| Field         | Type         | Notes                                      |
+| ------------- | ------------ | ------------------------------------------ |
+| `userId`      | `string`     | Firebase UID                               |
+| `entitlement` | `string`     | Internal name, e.g. `'member_monthly'`     |
+| `status`      | `string`     | `'active'` \| `'expired'` \| `'cancelled'` |
+| `platform`    | `string`     | `'ios'` \| `'android'`                     |
+| `expiresAt`   | `Timestamp?` |                                            |
+| `updatedAt`   | `Timestamp`  | Server timestamp                           |
 
 Security: owner can read their own subscription; no client writes; admin-only full access.
 
@@ -356,13 +356,14 @@ Latest live location for an active location-sharing session.
 }
 ```
 
-| Field | Type | Notes |
-|---|---|---|
-| `lat` | `number` | Current latitude |
-| `lng` | `number` | Current longitude |
+| Field       | Type     | Notes                                                                              |
+| ----------- | -------- | ---------------------------------------------------------------------------------- |
+| `lat`       | `number` | Current latitude                                                                   |
+| `lng`       | `number` | Current longitude                                                                  |
 | `timestamp` | `number` | Unix milliseconds — clients must ignore records older than a short TTL (e.g. 60 s) |
 
 Rules:
+
 - Write: authenticated owner (`auth.uid == $uid`) only.
 - Read: authenticated active members (`auth.token.activeMember == true`) only.
 - Record is removed immediately when the sharing session ends ("Hide me now").
@@ -379,20 +380,21 @@ Online/offline presence for UI indicators.
 }
 ```
 
-| Field | Type | Notes |
-|---|---|---|
-| `online` | `boolean` | Whether the user is currently connected |
-| `lastSeen` | `number` | Unix milliseconds |
+| Field      | Type      | Notes                                   |
+| ---------- | --------- | --------------------------------------- |
+| `online`   | `boolean` | Whether the user is currently connected |
+| `lastSeen` | `number`  | Unix milliseconds                       |
 
 Rules:
+
 - Write: authenticated owner only.
 - Read: any authenticated user.
 
 ### Reserved paths (future)
 
-| Path | Purpose |
-|---|---|
-| `/convoyPresence/{convoyId}/{uid}` | Active convoy participant state |
+| Path                                     | Purpose                              |
+| ---------------------------------------- | ------------------------------------ |
+| `/convoyPresence/{convoyId}/{uid}`       | Active convoy participant state      |
 | `/convoyMessages/{convoyId}/{messageId}` | Temporary in-convoy chat (short TTL) |
 
 ---
@@ -407,14 +409,14 @@ Rules:
 
 ### Paths
 
-| Path | Max size | Content type | Reader | Writer |
-|---|---|---|---|---|
-| `profileImages/{userId}/{imageId}` | 5 MB | `image/jpeg`, `image/png`, `image/webp`, `image/gif` | Authenticated users | Owner |
-| `vehicleImages/{userId}/{imageId}` | 10 MB | `image/jpeg`, `image/png`, `image/webp`, `image/gif` | Authenticated users | Owner |
-| `rideRoutes/{userId}/{rideId}/{filename}` | 50 MB | Binary (e.g. `application/octet-stream`, `application/gzip`) | Owner only | Owner |
-| `ridePreviewImages/{userId}/{rideId}/{filename}` | 5 MB | `image/jpeg`, `image/png`, `image/webp`, `image/gif` | Authenticated users | Owner |
-| `companyImages/{companyId}/{imageId}` | — | Image | Authenticated users | Admin only |
-| `offerImages/{companyId}/{imageId}` | — | Image | Authenticated users | Admin only |
+| Path                                             | Max size | Content type                                                 | Reader              | Writer     |
+| ------------------------------------------------ | -------- | ------------------------------------------------------------ | ------------------- | ---------- |
+| `profileImages/{userId}/{imageId}`               | 5 MB     | `image/jpeg`, `image/png`, `image/webp`, `image/gif`         | Authenticated users | Owner      |
+| `vehicleImages/{userId}/{imageId}`               | 10 MB    | `image/jpeg`, `image/png`, `image/webp`, `image/gif`         | Authenticated users | Owner      |
+| `rideRoutes/{userId}/{rideId}/{filename}`        | 50 MB    | Binary (e.g. `application/octet-stream`, `application/gzip`) | Owner only          | Owner      |
+| `ridePreviewImages/{userId}/{rideId}/{filename}` | 5 MB     | `image/jpeg`, `image/png`, `image/webp`, `image/gif`         | Authenticated users | Owner      |
+| `companyImages/{companyId}/{imageId}`            | —        | Image                                                        | Authenticated users | Admin only |
+| `offerImages/{companyId}/{imageId}`              | —        | Image                                                        | Authenticated users | Admin only |
 
 ### Ride route storage flow
 
@@ -432,18 +434,18 @@ Rules:
 
 All services are deny-by-default. Rules grant only what is explicitly required.
 
-| Rule | Enforcement |
-|---|---|
-| Unauthenticated access denied | Catch-all `allow ... if false` in all three services |
-| Owner reads/updates own profile | `users/{userId}`: `isOwner(userId)` |
-| Users cannot change role or entitlement | Firestore `noProtectedUserFieldsChanged()` helper |
-| Private data owner-only | `userPrivate/{userId}`: `isOwner(userId)` only |
-| Vehicle/ride ownership | Document `userId` field checked against `request.auth.uid` |
-| Live location reads restricted to active members | RTDB: `auth.token.activeMember == true` |
-| Subscription records are backend-only writes | `subscriptions/{userId}`: read-only for owner, no client writes |
-| Admin audit log is backend-only writes | `adminAuditEvents/{eventId}`: no client writes |
-| Admin access to protected collections | `isAdmin()` checks `request.auth.token.admin == true` |
-| Storage path ownership | Path UID segment matched against `request.auth.uid` |
+| Rule                                             | Enforcement                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------- |
+| Unauthenticated access denied                    | Catch-all `allow ... if false` in all three services            |
+| Owner reads/updates own profile                  | `users/{userId}`: `isOwner(userId)`                             |
+| Users cannot change role or entitlement          | Firestore `noProtectedUserFieldsChanged()` helper               |
+| Private data owner-only                          | `userPrivate/{userId}`: `isOwner(userId)` only                  |
+| Vehicle/ride ownership                           | Document `userId` field checked against `request.auth.uid`      |
+| Live location reads restricted to active members | RTDB: `auth.token.activeMember == true`                         |
+| Subscription records are backend-only writes     | `subscriptions/{userId}`: read-only for owner, no client writes |
+| Admin audit log is backend-only writes           | `adminAuditEvents/{eventId}`: no client writes                  |
+| Admin access to protected collections            | `isAdmin()` checks `request.auth.token.admin == true`           |
+| Storage path ownership                           | Path UID segment matched against `request.auth.uid`             |
 
 Security Rules source files:
 

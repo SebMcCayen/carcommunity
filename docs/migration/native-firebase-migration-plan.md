@@ -6,6 +6,26 @@ See [ADR-001](../adr/001-firebase-platform.md) and [current-state-inventory.md](
 
 ---
 
+## Migration status
+
+Last updated: 2026-07-01
+
+| Milestone                                                                                                                                                                                                                                                                            | Status         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| Phase 1a — Planning documents created (`docs/migration/`, `docs/adr/001`, `docs/firebase-data-model.md`, `docs/architecture.md`)                                                                                                                                                     | ✅ Complete    |
+| Phase 1b — Source-of-truth cleanup (this change: `docs/product-decisions.md`, `docs/api-guidelines.md`, `docs/auth-mobile-requirements.md`, `docs/data-model.md` legacy notice, `apps/mobile/LEGACY.md`, `services/api/LEGACY.md`, `.github/copilot-instructions.md` freeze section) | ✅ Complete    |
+| Phase 2 — Language-neutral contracts (`contracts/` directory: schemas, error codes, callable function names, feature flags, localization, design tokens)                                                                                                                             | 🔲 Next        |
+| Phase 3 — Move `apps/functions` → `functions/`, update all config paths                                                                                                                                                                                                              | 🔲 Not started |
+| Phase 4 — iOS app scaffolding (`apps/ios`)                                                                                                                                                                                                                                           | 🔲 Not started |
+| Phase 5 — Android app scaffolding (`apps/android`)                                                                                                                                                                                                                                   | 🔲 Not started |
+| Phases 6–17 — Feature implementation, backend migration, native tests, App Check, CI                                                                                                                                                                                                 | 🔲 Not started |
+| Phase 18 — Cutover                                                                                                                                                                                                                                                                   | 🔲 Not started |
+| Phase 19 — Legacy code deletion                                                                                                                                                                                                                                                      | 🔲 Not started |
+
+> **Important:** Only documentation and governance work is complete. No application features have been implemented in the native iOS or Android apps. No Cloud Functions domain logic has been migrated. No production data has been migrated. The feature parity matrix reflects this: all native implementation columns remain 🔲 Not started.
+
+---
+
 ## Migration principles
 
 - **Incremental, not big-bang.** One vertical feature slice at a time.
@@ -51,6 +71,7 @@ See [ADR-001](../adr/001-firebase-platform.md) and [current-state-inventory.md](
 **Recommendation: move `apps/functions` to a root `functions/` directory.**
 
 Rationale:
+
 - Firebase CLI convention (`firebase.json` `functions.source`) can point to `functions/` more cleanly.
 - The functions workspace is the entire backend; placing it under `apps/` implies it is an end-user application, which it is not.
 - A root `functions/` directory aligns with Firebase documentation, reducing onboarding confusion.
@@ -483,6 +504,7 @@ See [backend-domain-mapping.md](backend-domain-mapping.md) for complete field-le
 ### Expected output
 
 For each domain listed in [current-state-inventory.md](current-state-inventory.md):
+
 - Firestore collection defined with correct fields, Security Rules, and indexes.
 - Callable or trigger Cloud Function implementing business logic.
 - Unit tests for function logic.
@@ -1008,10 +1030,10 @@ Restore from git history. This is a one-way destructive operation; requires expl
 
 ## Proposed first five implementation pull requests
 
-| PR | Phase | Scope | Validation |
-|---|---|---|---|
-| PR-A | Phase 1b | Update `README.md`, `docs/product-decisions.md`, `docs/security.md` to reflect target architecture | Documentation review |
-| PR-B | Phase 2a | Create `contracts/` directory: README, JSON Schema for auth + user profile, error codes | JSON Schema lint |
-| PR-C | Phase 2b–2d | Remaining contracts: all domain schemas, localization, design tokens | JSON Schema lint, localization diff |
-| PR-D | Phase 3 | Move `apps/functions` → `functions/`, update all config paths and CI | All Firebase CI workflows pass |
-| PR-E | Phase 7a | `onUserCreate` trigger + Firestore `users/{uid}` creation + Firestore rules for user document | Emulator rules test + trigger test |
+| PR   | Phase       | Scope                                                                                              | Validation                          |
+| ---- | ----------- | -------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| PR-A | Phase 1b    | Update `README.md`, `docs/product-decisions.md`, `docs/security.md` to reflect target architecture | Documentation review                |
+| PR-B | Phase 2a    | Create `contracts/` directory: README, JSON Schema for auth + user profile, error codes            | JSON Schema lint                    |
+| PR-C | Phase 2b–2d | Remaining contracts: all domain schemas, localization, design tokens                               | JSON Schema lint, localization diff |
+| PR-D | Phase 3     | Move `apps/functions` → `functions/`, update all config paths and CI                               | All Firebase CI workflows pass      |
+| PR-E | Phase 7a    | `onUserCreate` trigger + Firestore `users/{uid}` creation + Firestore rules for user document      | Emulator rules test + trigger test  |

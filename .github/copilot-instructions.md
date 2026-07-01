@@ -1,5 +1,41 @@
 # GitHub Copilot Instructions for `carcommunity`
 
+## Authoritative source priority
+
+When documentation conflicts, use this priority order:
+
+1. `docs/adr/001-firebase-platform.md`
+2. `docs/architecture.md`
+3. `docs/migration/native-firebase-migration-plan.md`
+4. `.github/instructions/mobile-platform-parity.instructions.md`
+5. `.github/instructions/firebase-platform.instructions.md`
+6. `.github/instructions/firebase-data.instructions.md`
+7. `.github/instructions/firebase-security.instructions.md`
+8. `.github/instructions/firebase-ci-cost.instructions.md`
+9. `docs/product-decisions.md`
+10. Legacy implementation code — as evidence of existing product behavior only
+
+## Legacy freeze
+
+`apps/mobile` (React Native / Expo) and `services/api` (Node.js / Fastify / Prisma / PostgreSQL) are **frozen to new product features**.
+
+Changes in those directories are only allowed for:
+
+- Critical security fixes.
+- Keeping the legacy build operational during migration.
+- Extracting behavior descriptions into migration documentation or contracts.
+- Migration-specific compatibility work explicitly requested by a task.
+
+New mobile features must be implemented in both `apps/ios` and `apps/android`.
+
+New backend business logic must target Firebase Cloud Functions, Firestore, Realtime Database, Storage, Security Rules, and App Check.
+
+The TypeScript package `packages/shared` is **not** an executable shared mobile library. It contains TypeScript contracts for the backend and admin web. Native platforms must align through language-neutral contracts, not shared runtime code.
+
+A mobile feature is incomplete until both native platform implementations and their tests are present.
+
+Copilot must not continue extending React Native (`apps/mobile`) or Fastify (`services/api`) merely because those implementations currently contain more code.
+
 ## Mandatory mobile parity
 
 The project targets two separate native mobile applications:
@@ -22,15 +58,17 @@ Follow the full mobile parity instructions defined in:
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - React Native / Expo mobile app (current implementation) at `apps/mobile`
-  - iOS native app (Swift and SwiftUI) planned at `apps/ios` (post-migration target)
-  - Android native app (Kotlin and Jetpack Compose) planned at `apps/android` (post-migration target)
-  - Admin web app (React + Vite, hosted on Firebase Hosting)
-  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript, planned post-migration)
-  - Node.js + TypeScript API at `services/api` (current backend implementation)
-  - Cloud Firestore and Firebase Realtime Database
-  - Mapbox maps
+  - iOS native app (Swift and SwiftUI) at `apps/ios` (target — not yet scaffolded)
+  - Android native app (Kotlin and Jetpack Compose) at `apps/android` (target — not yet scaffolded)
+  - Admin web app (React + Vite, hosted on Firebase Hosting) at `apps/admin`
+  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript) at `apps/functions` (planned move to `functions/`)
+  - Cloud Firestore (durable data) and Firebase Realtime Database (ephemeral live location, presence)
+  - Cloud Storage for Firebase
+  - Firebase Authentication, App Check, Cloud Messaging
+  - Mapbox Maps SDK (iOS and Android native SDKs)
   - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
+  - **LEGACY (frozen):** React Native / Expo mobile app at `apps/mobile`
+  - **LEGACY (frozen):** Node.js + Fastify + Prisma + PostgreSQL API at `services/api`
 
 ## Language and naming rules
 
