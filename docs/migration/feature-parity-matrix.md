@@ -20,11 +20,11 @@ This matrix tracks the implementation status of every product feature across all
 | Sign out | `screens/LoginScreen.tsx` | `routes/auth.ts` | Firebase Authentication | — | Client-side `auth.signOut()` | 🔲 | 🔲 | 🔲 | ✅ | ✅ | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
 | Session token management | `src/session/` | `routes/auth.ts` (custom sessions) | Firebase Authentication ID tokens | — | — | 🔲 | 🔲 | 🔲 | N/A | N/A | 🔲 | 🔲 | 🟡 (verifier exists) | N/A | Required | iOS: Keychain; Android: Android Keystore | 🔲 Not started |
 | **Onboarding and profile** | | | | | | | | | | | | | | | | | |
-| Onboarding flow | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `users/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`onboarding.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Onboarding flow | `screens/OnboardingScreen.tsx` | `routes/users.ts` | Firestore | `users/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`onboarding.test.ts`) | 🔲 | Required | None | 🔲 Not started |
 | Profile view and edit | `screens/ProfileScreen.tsx` | `routes/users.ts` | Firestore | `users/{uid}` | `updateProfile` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
 | Privacy settings | `screens/PrivacySettingsScreen.tsx` | `routes/users.ts` | Firestore | `userPrivate/{uid}` | `updatePrivacySettings` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
-| Age confirmation | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
-| Terms acceptance | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Age confirmation | `screens/OnboardingScreen.tsx` | `routes/users.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Terms acceptance | `screens/OnboardingScreen.tsx` | `routes/users.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
 | **Roles and access** | | | | | | | | | | | | | | | | | |
 | Admin role | `src/context/` | `lib/auth-context.ts` | Firebase custom claims | `users/{uid}.role` (Firestore, read-only) | `setAdminRole` callable (admin only) | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ (`access.test.ts`) | 🔲 | Required | None | 🔲 Not started |
 | Suspended user access | `screens/SuspendedAccountScreen.tsx` | `lib/auth-context.ts` | Firebase custom claims + Firestore | `users/{uid}.suspended` | `suspendUser` callable (admin only) | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
