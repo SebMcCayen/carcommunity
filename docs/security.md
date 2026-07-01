@@ -30,7 +30,7 @@ This document defines baseline security requirements for CarCommunity. It is a t
 ## Secret management
 
 - No secrets in repo.
-- Use GitHub Secrets and Google Cloud Secret Manager or Firebase environment configuration for CI/CD and runtime secrets.
+- Use GitHub Secrets and Google Cloud Secret Manager for CI/CD and runtime secrets.
 - Commit `.env.example` only.
 - Ignore real `.env` files in Git.
 - Never commit signing keys, Apple keys, Google credentials, Firebase credentials, GitHub tokens, database connection strings, production data, or private certificates.
