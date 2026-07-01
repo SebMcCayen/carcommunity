@@ -161,7 +161,7 @@ liveLocation/
 **Transaction requirements:** None for position updates (single-node overwrite). Session start/stop uses callable function to update both RTDB session node and custom claim if needed.
 
 **Security-rule requirements:**
-- `liveLocation/{uid}/session` — owner write, `activeMember` claim required to read others.
+- `liveLocation/{uid}/session` — deny all client writes (callable function / Admin SDK only); `activeMember` claim required to read others.
 - `liveLocation/{uid}/latest` — owner write; `activeMember` claim + no blocking required to read others.
 - `liveLocation/{uid}/presence` — owner write only.
 
