@@ -240,7 +240,7 @@ All React Native-specific code (screens, hooks, navigation, API clients, session
 ## `apps/admin` — Admin web application
 
 **Path:** `apps/admin/`  
-**Technology:** Vite 7, React, TypeScript, react-router-dom v7, Vitest  
+**Technology:** Vite 8, React, TypeScript, react-router-dom v7, Vitest  
 **Status:** Feature-rich; Firebase Authentication integration incomplete.  
 **Tests:** Vitest; test files under `src/features/*/`  
 **Dependencies:** React, react-router-dom, Vite
