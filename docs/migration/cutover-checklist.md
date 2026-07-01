@@ -44,7 +44,7 @@ Each item must be explicitly verified, not assumed. Legacy deletion requires a s
 - [ ] All domain callable functions have unit tests with >80% statement coverage.
 - [ ] All domain callable functions have emulator integration tests.
 - [ ] Functions CI workflow (`validate-functions.yml`) passes on `main`.
-- [ ] Functions build produces no TypeScript errors (`npm run typecheck -w functions`).
+- [ ] Functions build produces no TypeScript errors (`npm run typecheck -w @carcommunity/functions`).
 
 ## Part 6 — Admin web Firebase integration
 
