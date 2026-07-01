@@ -20,16 +20,16 @@ Firebase provides a managed, consumption-based platform that scales to near-zero
 
 Replace the Azure stack with Firebase:
 
-| Previous | Replacement |
-|---|---|
-| Azure Container Apps | Cloud Functions for Firebase (2nd gen) |
-| Azure Database for PostgreSQL | Cloud Firestore + Firebase Realtime Database |
-| Azure Blob Storage | Cloud Storage for Firebase |
-| Azure Notification Hubs | Firebase Cloud Messaging (FCM) |
-| Microsoft Entra ID | Firebase Authentication |
+| Previous                           | Replacement                                     |
+| ---------------------------------- | ----------------------------------------------- |
+| Azure Container Apps               | Cloud Functions for Firebase (2nd gen)          |
+| Azure Database for PostgreSQL      | Cloud Firestore + Firebase Realtime Database    |
+| Azure Blob Storage                 | Cloud Storage for Firebase                      |
+| Azure Notification Hubs            | Firebase Cloud Messaging (FCM)                  |
+| Microsoft Entra ID                 | Firebase Authentication                         |
 | Azure Bicep infrastructure-as-code | Firebase project configuration via Firebase CLI |
-| Prisma ORM | Firebase Admin SDK + Firestore SDK |
-| Admin web on Azure Container Apps | Firebase Hosting |
+| Prisma ORM                         | Firebase Admin SDK + Firestore SDK              |
+| Admin web on Azure Container Apps  | Firebase Hosting                                |
 
 ### Runtime
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-> **Note:** This document describes the *target* post-migration architecture. The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + TypeScript, PostgreSQL). The migration to Firebase and separate native mobile apps is in progress. See [ADR-001](adr/001-firebase-platform.md) for the migration decision.
+> **Note:** This document describes the _target_ post-migration architecture. The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + TypeScript, PostgreSQL). The migration to Firebase and separate native mobile apps is in progress. See [ADR-001](adr/001-firebase-platform.md) for the migration decision.
 
 carcommunity is a monorepo targeting native mobile clients, an admin web client, and a Firebase backend as the system of truth. The architecture targets a production-only MVP on Firebase, with strong control over privacy, subscription entitlement, moderation, and operational safety.
 

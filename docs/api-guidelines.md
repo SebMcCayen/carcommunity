@@ -1,59 +1,187 @@
-# API Guidelines (Node.js Backend)
+# API Guidelines
 
 These guidelines define how backend APIs must be designed for consistency, security, and product correctness.
+
+> **Migration in progress.** The target backend interaction model is Firebase-native (Callable Cloud Functions, direct Firebase SDK access, and HTTP Cloud Functions for external integrations). The legacy `/v1` REST conventions that apply only to the frozen `services/api` implementation are documented in the [Legacy `/v1` REST conventions (frozen)](#legacy-v1-rest-conventions-frozen) section at the bottom of this document.
 
 ## API principles
 
 - Backend is the source of truth for all state and decisions.
 - Never trust the client for admin rights, subscription status, access control, Kronjakt/Kronpoäng awarding, or live location visibility.
-- Keep endpoint naming consistent, resource-oriented, and versioned.
-- Validate every request body, path parameter, and query parameter server-side.
-- Prefer explicit, predictable response and error formats across all endpoints.
+- Validate all inputs server-side.
+- Prefer explicit, predictable response and error formats.
 - Do not introduce GraphQL unless explicitly requested.
 
-## Versioning
+---
 
-- All public endpoints must be namespaced under `/v1`.
-- Breaking changes require a new version namespace (for example `/v2`).
-- Non-breaking additions can be introduced within the current version.
+## Target Firebase interaction model
 
-## Authentication
+### Callable Cloud Functions
 
-- All protected endpoints require authenticated user context.
-- Authentication must be enforced server-side for every request, including realtime and push-related APIs.
-- Never rely on client-declared identity or role.
+Use callable functions for:
 
-## Authorization
+- Authenticated mobile operations (iOS and Android).
+- Authenticated admin operations.
+- Security-sensitive mutations.
+- Operations requiring server-side validation.
+- Subscription verification.
+- Moderation actions.
+- Kronpoäng awarding and Kronjakt claims.
+- Business rules that cannot safely run directly in clients.
 
-- Authorization is enforced by API policy, not by client UI behavior.
-- Blocking must be enforced by API, especially for live location visibility and user interaction.
-- Suspended users must be blocked from community/member actions.
-- Suspended users must still be allowed access to support, account deletion, policy/terms, and subscription management endpoints.
+Callable functions must:
 
-## Admin authorization
+- Use the Firebase SDK authentication context — clients do not attach a manual `Authorization` header.
+- Verify that `context.auth` (or equivalent Gen 2 `CallableRequest.auth`) is present before processing any request.
+- Verify App Check on every callable function in production.
+- Return stable machine-readable error codes using `HttpsError` status codes (for example `unauthenticated`, `permission-denied`, `invalid-argument`, `not-found`, `internal`).
+- Use `FieldValue.serverTimestamp()` — never trust client-supplied timestamps.
+- Be idempotent where possible; use Firestore transactions for multi-document operations.
+- Log only privacy-safe diagnostics — never log tokens, credentials, or user-identifying sensitive data.
 
-- Admin access is restricted to backend-verified admin principals.
-- Dangerous admin actions must require:
-  - explicit reason
-  - explicit confirmation
-- Admin list endpoints must minimize returned personal data and avoid unnecessary fields.
+#### Callable function naming
 
-## Subscription entitlement checks
+Callable function names follow a `domain.action` or `domainAction` convention.
+Canonical names are defined in the language-neutral contracts (`contracts/functions/` — planned).
 
-- Subscription-gated endpoints must verify entitlement `member_monthly` on the backend.
-- Admin users bypass subscription gating checks only where appropriate.
-- Admin bypass does **not** bypass security logging and audit requirements.
+Examples:
 
-## Request validation
+- `auth.completeOnboarding`
+- `live.startSession`
+- `live.stopSession`
+- `live.hideMeNow`
+- `subscription.verify`
+- `admin.suspendUser`
+- `admin.setFeatureFlag`
 
-- Validate all request bodies using strict schemas.
-- Reject unknown/invalid fields where possible.
-- Validate all path/query inputs for type, range, enum, and format.
-- Do not process unsafe input until validation passes.
+#### Firebase Authentication context
 
-## Response format
+Every callable function receives the authenticated Firebase UID via `context.auth.uid`.
 
-Use a consistent top-level shape:
+- Never trust a UID supplied in the request body or URL for authorization.
+- The `admin: true` Firebase custom claim gates admin-only callables.
+- The `activeMember: true` custom claim gates subscription-gated callables (verified by the subscription callable, not the client).
+- Clients must refresh their ID-token claims (force-refresh) after a privileged claim change.
+
+#### App Check context
+
+Every callable function and HTTP function must enforce App Check in production.
+
+- Use the Firebase Admin SDK `AppCheck.verifyToken()` or the Gen 2 built-in enforcement.
+- Disable App Check enforcement in Firebase console during emulator development; use the debug App Check provider.
+
+### Direct Firebase SDK access
+
+Allow direct Firestore or Realtime Database access from native clients only where all of the following hold:
+
+- Firebase Security Rules can fully enforce access (read and write).
+- The operation is simple and safe (for example reading the authenticated user's own profile).
+- The read pattern is bounded (no unbounded collection scans).
+- The data model is intentionally designed for client access.
+- Privacy-sensitive fields are separated into restricted subcollections or documents (for example `userPrivate/{uid}`).
+
+Do not allow direct client access to documents that contain moderation state, admin flags, subscription entitlement decisions, exact partner analytics, or other sensitive backend-managed fields.
+
+#### Firestore pagination
+
+Use cursor-based pagination for all client-visible list reads:
+
+```
+startAfter(lastDocumentSnapshot).limit(pageSize)
+```
+
+Do not use offset-based pagination. Offsets are expensive and inconsistent in Firestore.
+
+#### Realtime Database listeners
+
+Bound all Realtime Database listeners to specific paths or shallow queries. Do not allow clients to listen to root-level or unscoped paths.
+
+### HTTP Cloud Functions
+
+Use HTTP functions only for:
+
+- External provider webhooks (for example App Store server notifications, Google Play developer notifications).
+- Third-party integrations that require a specific HTTP contract.
+
+HTTP functions must:
+
+- Verify request authenticity (webhook signature or equivalent) before processing.
+- Not be used as a general-purpose mobile API endpoint — use callable functions instead.
+- Use `Authorization: Bearer <Firebase ID token>` when the function requires an authenticated user context that cannot use the callable SDK.
+
+---
+
+## Stable error codes
+
+Use these stable machine-readable codes in callable function errors:
+
+| Code                  | Meaning                          |
+| --------------------- | -------------------------------- |
+| `unauthenticated`     | No valid Firebase session        |
+| `permission-denied`   | Authenticated but not authorized |
+| `invalid-argument`    | Input validation failed          |
+| `not-found`           | Resource does not exist          |
+| `already-exists`      | Conflict with existing resource  |
+| `resource-exhausted`  | Rate limit or quota exceeded     |
+| `failed-precondition` | State precondition not met       |
+| `internal`            | Unexpected server error          |
+| `unavailable`         | Temporary unavailability         |
+
+## Idempotency
+
+Non-idempotent operations that can be retried safely should use Firestore transactions or conditional writes to prevent duplicate effects.
+
+## Audit logging
+
+Sensitive actions must produce audit logs in Firestore (for example `auditLog/` collection).
+
+Dangerous admin actions must include: actor UID, target UID, action type, reason, confirmation state, and server timestamp.
+
+Audit logs must be written by Cloud Functions (not clients) and must be immutable from client writes.
+
+## Privacy-safe logging
+
+- Log only what is required for operations and security.
+- Never log tokens, credentials, personal data, exact location traces, routes, or raw sensitive payloads.
+- Sanitize payloads server-side before forwarding to error-tracking services.
+
+## Input validation
+
+All callable function inputs must be validated server-side before processing.
+
+Reject unknown/invalid fields. Validate all types, ranges, enums, and formats. Do not process unsafe input until validation passes.
+
+## Testing expectations
+
+- Input validation tests for all callable functions.
+- Authorization and role-enforcement tests, including admin-only callables.
+- Subscription entitlement tests for `member_monthly`-gated callables.
+- Blocking/suspension enforcement tests.
+- Firestore Security Rules tests (emulator) for every collection.
+- Realtime Database Security Rules tests for live location paths.
+- Callable function integration tests (emulator) for every business-rule path.
+- Kronjakt claim tests: geofence, speed, active session, cooldown, risk score.
+- Partner statistics tests: aggregated-only, threshold enforcement, no individual-user exposure.
+
+---
+
+## Legacy `/v1` REST conventions (frozen)
+
+> ⚠️ **This section applies only to the frozen legacy `services/api` implementation (Node.js / Fastify / Prisma / PostgreSQL).** These conventions do not apply to the target Firebase backend. Do not add new endpoints here.
+
+The legacy `services/api` uses REST endpoints under `/v1`. The conventions below remain in effect only for bug fixes and migration-compatibility work in that frozen directory.
+
+### Versioning
+
+- All legacy endpoints are namespaced under `/v1`.
+- Breaking changes would require `/v2` — but new versions must not be added; target new features in Firebase callable functions.
+
+### Authentication (legacy)
+
+- Protected legacy endpoints require `Authorization: Bearer <Firebase ID token>`.
+- The legacy backend verifies the token with Firebase Admin SDK `verifyIdToken()`.
+
+### Response format (legacy)
 
 ```json
 {
@@ -63,15 +191,7 @@ Use a consistent top-level shape:
 }
 ```
 
-Guidelines:
-
-- `ok`: boolean success indicator.
-- `data`: response payload object/array.
-- `meta`: optional metadata (pagination, filters, request identifiers, etc.).
-
-## Error format
-
-Use a consistent error shape:
+### Error format (legacy)
 
 ```json
 {
@@ -84,182 +204,16 @@ Use a consistent error shape:
 }
 ```
 
-Rules:
+### Pagination (legacy)
 
-- Always return stable machine-readable `error.code`.
-- Keep `error.message` safe and user-appropriate.
-- Never expose stack traces to clients.
-- Include `details` only when safe and useful.
+Page-based: `page`, `pageSize` query parameters with `meta.total`, `meta.hasNext`.
 
-## Pagination
+### Legacy endpoint groups
 
-- All list endpoints must support pagination.
-- Use explicit pagination parameters (for example `page`, `pageSize`, cursor-based alternatives where needed).
-- Return pagination metadata in `meta`.
+- `/v1/auth`, `/v1/me`, `/v1/subscription`, `/v1/live`, `/v1/events`, `/v1/chat`
+- `/v1/groups`, `/v1/vehicles`, `/v1/badges`, `/v1/points`, `/v1/crown-hunt`
+- `/v1/partners`, `/v1/offers`, `/v1/reports`, `/v1/feedback`
+- `/v1/notifications`, `/v1/settings`, `/v1/feature-flags`
+- `/v1/admin/*`
 
-Example:
-
-```json
-{
-  "ok": true,
-  "data": [],
-  "meta": {
-    "page": 1,
-    "pageSize": 20,
-    "total": 140,
-    "hasNext": true
-  }
-}
-```
-
-## Filtering and sorting
-
-- List endpoints should support explicit filtering and sorting query parameters.
-- Only allow whitelisted filter/sort fields.
-- Default sorting should be deterministic and documented.
-- Reject invalid filter/sort values with a consistent validation error.
-
-## Rate limiting
-
-- Apply rate limiting per endpoint class and risk profile.
-- Use stricter limits for authentication, write operations, and abuse-prone endpoints.
-- Return clear limit-exceeded errors and retry hints when appropriate.
-
-## Idempotency
-
-- Non-idempotent operations that can be retried safely must support idempotency keys.
-- Duplicate submissions with the same idempotency key must not create duplicate effects.
-- Log idempotency collisions and suspicious repeated requests.
-
-## Audit logging
-
-- Sensitive actions must produce audit logs.
-- Dangerous admin actions must include actor, target, action type, reason, confirmation state, and timestamp.
-- Audit logs must be immutable and queryable for investigations.
-
-## Privacy-safe logging
-
-- Log only what is required for operations and security.
-- Never log tokens, secrets, personal data, exact location traces, routes, or raw sensitive payloads.
-- For error reporting, sanitize payloads server-side before storage or forwarding.
-
-## Feature flags
-
-- Feature flag evaluation is backend-authoritative for protected capabilities.
-- Expose client-consumable flags through `/v1/feature-flags` only after server-side eligibility checks.
-- Admin changes to flags must be audited.
-
-## Realtime API
-
-Live location endpoints:
-
-- `POST /v1/live/sessions/start` (start session)
-- `PATCH /v1/live/sessions/location` (update latest location)
-- `POST /v1/live/sessions/stop` (stop session)
-- `POST /v1/live/hide-now` (hide me now)
-- `GET /v1/live/visible-users` (fetch visible live users, entitled users only)
-
-Rules:
-
-- Visibility must be enforced backend-side.
-- Blocked users and suspended users must be enforced by API policy.
-- Client-reported state must not bypass entitlement or safety controls.
-
-## Push notification API
-
-- Push registration and delivery preferences must be authenticated.
-- Token/device registration updates must be validated and rate-limited.
-- Push-triggering actions should be auditable when security-sensitive.
-
-## External API proxy/caching guidelines
-
-- External integrations (for example SMHI, Trafikverket, NOBIL, Mapbox-related backend calls) must be proxied by backend where relevant.
-- Apply caching to reduce latency, external dependency load, and quota cost.
-- Mobile clients must not hold secret API keys.
-- Cache policy should balance freshness and operational reliability.
-
-## GitHub issue integration rules
-
-For backend error-reporting workflows that optionally create GitHub Issues:
-
-- Always sanitize and deduplicate server-side before issue creation.
-- Never include:
-  - tokens
-  - personal data
-  - exact location
-  - routes
-  - raw logs
-- Include minimal diagnostic context needed for triage.
-
-## API endpoint groups
-
-Recommended public groups:
-
-- `/v1/auth`
-- `/v1/me`
-- `/v1/subscription`
-- `/v1/live`
-- `/v1/events`
-- `/v1/chat`
-- `/v1/groups`
-- `/v1/vehicles`
-- `/v1/badges`
-- `/v1/points`
-- `/v1/crown-hunt`
-- `/v1/partners`
-- `/v1/offers`
-- `/v1/reports`
-- `/v1/feedback`
-- `/v1/notifications`
-- `/v1/settings`
-- `/v1/feature-flags`
-- `/v1/admin`
-
-Admin groups:
-
-- `/v1/admin/dashboard`
-- `/v1/admin/users`
-- `/v1/admin/events`
-- `/v1/admin/reports`
-- `/v1/admin/partners`
-- `/v1/admin/offers`
-- `/v1/admin/billboards`
-- `/v1/admin/crown-hunt`
-- `/v1/admin/support`
-- `/v1/admin/audit`
-- `/v1/admin/statistics`
-- `/v1/admin/feature-flags`
-
-## Testing expectations
-
-- Request validation tests for all write endpoints.
-- Authorization and role-enforcement tests, including admin-only paths.
-- Subscription entitlement tests for `member_monthly`-gated features.
-- Blocking/suspension behavior tests, especially for live location and interaction paths.
-- Pagination/filter/sort contract tests for all list endpoints.
-- Error-shape consistency tests across representative failure scenarios.
-- Audit-log coverage tests for sensitive and dangerous actions.
-- Realtime live-location flow tests (start/update/stop/hide/visible users).
-- Kronjakt claim tests ensuring backend validates geofence, speed, active session, cooldown, and risk score.
-- Partner statistics tests verifying aggregated-only responses with threshold enforcement and no individual-user exposure.
-
-## Endpoint naming examples
-
-- `GET /v1/events`
-- `GET /v1/events/{eventId}`
-- `POST /v1/events/{eventId}/join`
-- `POST /v1/reports`
-- `GET /v1/admin/reports`
-- `POST /v1/admin/users/{userId}/suspend`
-
-## Additional domain rules
-
-- Kronjakt claim endpoint must be backend-authoritative:
-  - validate geofence
-  - validate speed
-  - require active session
-  - enforce cooldown
-  - evaluate risk score
-  - app never awards points directly
-- Kronjakt is the gameplay feature; Kronpoäng is the awarded points currency.
-- Partner statistics endpoints must expose only aggregated data, enforce minimum thresholds, and never expose individual users.
+These endpoint groups exist as migration reference only. New product features must not be added to them.

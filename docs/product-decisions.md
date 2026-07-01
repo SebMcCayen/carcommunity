@@ -54,10 +54,14 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 ## Authentication and accounts
 
-- iOS använder Apple-login i MVP.
-- Android använder Google-login i MVP.
+- iOS använder Sign in with Apple via Firebase Authentication i MVP.
+- Android använder Google Sign-In via Firebase Authentication i MVP.
+- Admin web använder Google Sign-In via Firebase Authentication, om inte annat Firebase-stött adminprovider godkänns senare.
 - Kontolänkning mellan Apple och Google ingår inte i MVP.
 - Datamodellen ska förberedas så kontolänkning kan stödjas senare.
+- Cloud Functions och Firebase Security Rules är auktoritativa för säkerhetskänsliga operationer.
+- Roller, suspension och entitlement styrs av Firebase custom claims och auktoritativa Firestore-dokument satta av backend; aldrig av klienten.
+- Firebase SDK hanterar token-persistence och token-refresh; native-appar ska inte manuellt persistera Firebase ID-tokens.
 - Appen är 18+ i MVP.
 
 ## Account deletion

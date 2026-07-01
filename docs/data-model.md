@@ -1,6 +1,19 @@
-# Data model design (PostgreSQL)
+# Data model design (PostgreSQL) — LEGACY REFERENCE
 
-This document defines the planned PostgreSQL data model for **carcommunity**.
+> ⚠️ **Legacy document — not the target persistence architecture.**
+>
+> This document describes the legacy PostgreSQL data model that belongs to `services/api`
+> (the frozen Fastify / Prisma backend). It is kept as a migration reference only.
+>
+> **Do not add new Firebase schema decisions to this document.**
+>
+> The target persistence architecture is defined in:
+>
+> - [`docs/firebase-data-model.md`](firebase-data-model.md) — Cloud Firestore, Realtime Database, and Storage paths
+> - [`docs/migration/backend-domain-mapping.md`](migration/backend-domain-mapping.md) — PostgreSQL → Firebase domain mapping
+> - [`docs/adr/001-firebase-platform.md`](adr/001-firebase-platform.md) — authoritative platform decision
+
+This document defines the legacy PostgreSQL data model for **carcommunity** (`services/api`).
 
 It is a conceptual design document and intentionally does **not** contain SQL migrations or ORM-specific code.
 

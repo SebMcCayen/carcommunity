@@ -134,7 +134,6 @@ This document defines baseline security requirements for CarCommunity. It is a t
 - Do not share personal data with companies.
 - Do not share exact location, routes, drive history, or individual timestamps.
 
-
 ## Partner Insights (Anonymiserad partnerstatistik)
 
 - Distinguish explicit interaction analytics (for example profile views, website clicks, offer actions) from location-derived pass-by statistics.

@@ -8,15 +8,15 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 
 ## Custom sessions → Firebase Authentication ID tokens
 
-| Aspect | Legacy (`services/api`) | Target (Firebase) |
-|---|---|---|
-| Session concept | Custom `Session` Prisma model with hashed token, expiry, revocation | Firebase ID token (JWT, short-lived, auto-refreshed) |
-| Token storage | `session_tokens` table (hashed) | Firebase SDK manages token lifecycle; never stored in Firestore |
-| Token verification | `firebase-id-token-verifier.ts` (already calls Firebase Admin SDK) | Firebase Admin SDK `auth.verifyIdToken()` in every callable function |
-| Token revocation | `revokedAt` field on Session record | Firebase `auth.revokeRefreshTokens(uid)` |
-| Identity key | Internal UUID `users.id` | Firebase UID (`uid`) — stable, provider-independent |
-| Provider binding | `UserIdentity` table (apple/google provider + subject) | Firebase Authentication handles provider binding |
-| Provider subject | `user_identities.provider_subject` | Firebase UID is the canonical identity; raw subject managed by Firebase |
+| Aspect             | Legacy (`services/api`)                                             | Target (Firebase)                                                       |
+| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Session concept    | Custom `Session` Prisma model with hashed token, expiry, revocation | Firebase ID token (JWT, short-lived, auto-refreshed)                    |
+| Token storage      | `session_tokens` table (hashed)                                     | Firebase SDK manages token lifecycle; never stored in Firestore         |
+| Token verification | `firebase-id-token-verifier.ts` (already calls Firebase Admin SDK)  | Firebase Admin SDK `auth.verifyIdToken()` in every callable function    |
+| Token revocation   | `revokedAt` field on Session record                                 | Firebase `auth.revokeRefreshTokens(uid)`                                |
+| Identity key       | Internal UUID `users.id`                                            | Firebase UID (`uid`) — stable, provider-independent                     |
+| Provider binding   | `UserIdentity` table (apple/google provider + subject)              | Firebase Authentication handles provider binding                        |
+| Provider subject   | `user_identities.provider_subject`                                  | Firebase UID is the canonical identity; raw subject managed by Firebase |
 
 **Migration risk:** Low. `services/api` already verifies Firebase ID tokens for Firebase-authenticated requests. The custom session system is additive legacy; removing it requires no data migration since sessions are short-lived.
 
@@ -26,16 +26,17 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 
 ## User roles → Firebase custom claims + authoritative Firestore user state
 
-| Aspect | Legacy | Target |
-|---|---|---|
-| Role storage | `users.role` PostgreSQL enum (`user`, `admin`, `owner`) | Firebase custom claim `admin: true` set by `setAdminRole` callable function |
-| Role check in API | `requireAdminHook` reads role from Prisma session context | Callable function middleware reads `decodedToken.admin` claim |
-| Role promotion | Admin sets role via API endpoint | Admin-only `setAdminRole` callable function; no client self-elevation |
-| Role persistence | PostgreSQL | Firestore `users/{uid}.role` field (read-only; set by Admin SDK only) |
-| Role refresh | Immediately reflected on next request | Custom claims propagate on next token refresh (≤1 hour); force refresh for immediate effect |
-| Organization roles | `OrganizationMember.role` enum | Firestore `users/{uid}.orgRole` or `config/organizations/{orgId}/members/{uid}` — evaluate at implementation |
+| Aspect             | Legacy                                                    | Target                                                                                                       |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Role storage       | `users.role` PostgreSQL enum (`user`, `admin`, `owner`)   | Firebase custom claim `admin: true` set by `setAdminRole` callable function                                  |
+| Role check in API  | `requireAdminHook` reads role from Prisma session context | Callable function middleware reads `decodedToken.admin` claim                                                |
+| Role promotion     | Admin sets role via API endpoint                          | Admin-only `setAdminRole` callable function; no client self-elevation                                        |
+| Role persistence   | PostgreSQL                                                | Firestore `users/{uid}.role` field (read-only; set by Admin SDK only)                                        |
+| Role refresh       | Immediately reflected on next request                     | Custom claims propagate on next token refresh (≤1 hour); force refresh for immediate effect                  |
+| Organization roles | `OrganizationMember.role` enum                            | Firestore `users/{uid}.orgRole` or `config/organizations/{orgId}/members/{uid}` — evaluate at implementation |
 
 **Collection/path design:**
+
 - `users/{uid}` — public profile document with `role` field (backend-managed only, blocked for client writes in Security Rules)
 - Custom claim: `{ admin: true }` (set via Firebase Admin SDK in `setAdminRole` callable)
 
@@ -53,23 +54,23 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 
 ## Prisma user data → Firestore user documents
 
-| Prisma field | Firestore path | Notes |
-|---|---|---|
-| `users.id` (UUID) | Firebase UID (replaces UUID) | Firebase UID is the new canonical key |
-| `users.displayName` | `users/{uid}.displayName` | Public |
-| `users.email` | `userPrivate/{uid}.email` | Private; not identity key |
-| `users.role` | `users/{uid}.role` + custom claim | Backend-managed only |
-| `users.status` | `users/{uid}.suspended` (boolean) + `users/{uid}.deleted` | Simplified from enum to boolean flags |
-| `users.subscriptionEntitlement` | `users/{uid}.activeMember` (boolean) + custom claim | Backend-managed only |
-| `users.onboardingCompletedAt` | `users/{uid}.onboardingCompletedAt` | Timestamp |
-| `users.ageConfirmedAt` | `userPrivate/{uid}.ageConfirmedAt` | Private |
-| `users.termsAcceptedAt` | `userPrivate/{uid}.termsAcceptedAt` | Private |
-| `users.privacyPolicyAcceptedAt` | `userPrivate/{uid}.privacyPolicyAcceptedAt` | Private |
-| `users.anonymousPartnerStatsOptIn` | `userPrivate/{uid}.anonymousPartnerStatsOptIn` | Private; default false |
-| `users.lastActiveAt` | `users/{uid}.lastActiveAt` | Semi-public |
-| `users.firebaseUid` | Firebase UID directly | No mapping needed |
-| `users.createdAt` | `users/{uid}.createdAt` | Server timestamp |
-| `users.deletedAt` | `users/{uid}.deleted` (boolean) | Soft-delete becomes boolean flag |
+| Prisma field                       | Firestore path                                            | Notes                                 |
+| ---------------------------------- | --------------------------------------------------------- | ------------------------------------- |
+| `users.id` (UUID)                  | Firebase UID (replaces UUID)                              | Firebase UID is the new canonical key |
+| `users.displayName`                | `users/{uid}.displayName`                                 | Public                                |
+| `users.email`                      | `userPrivate/{uid}.email`                                 | Private; not identity key             |
+| `users.role`                       | `users/{uid}.role` + custom claim                         | Backend-managed only                  |
+| `users.status`                     | `users/{uid}.suspended` (boolean) + `users/{uid}.deleted` | Simplified from enum to boolean flags |
+| `users.subscriptionEntitlement`    | `users/{uid}.activeMember` (boolean) + custom claim       | Backend-managed only                  |
+| `users.onboardingCompletedAt`      | `users/{uid}.onboardingCompletedAt`                       | Timestamp                             |
+| `users.ageConfirmedAt`             | `userPrivate/{uid}.ageConfirmedAt`                        | Private                               |
+| `users.termsAcceptedAt`            | `userPrivate/{uid}.termsAcceptedAt`                       | Private                               |
+| `users.privacyPolicyAcceptedAt`    | `userPrivate/{uid}.privacyPolicyAcceptedAt`               | Private                               |
+| `users.anonymousPartnerStatsOptIn` | `userPrivate/{uid}.anonymousPartnerStatsOptIn`            | Private; default false                |
+| `users.lastActiveAt`               | `users/{uid}.lastActiveAt`                                | Semi-public                           |
+| `users.firebaseUid`                | Firebase UID directly                                     | No mapping needed                     |
+| `users.createdAt`                  | `users/{uid}.createdAt`                                   | Server timestamp                      |
+| `users.deletedAt`                  | `users/{uid}.deleted` (boolean)                           | Soft-delete becomes boolean flag      |
 
 **Read patterns:** User profile read by UID (point read, O(1), no index needed). User list for admin uses `users` collection with pagination (`startAfter`, `limit`).
 
@@ -94,52 +95,53 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 
 ### Collection design
 
-| Domain | Firestore path | Notes |
-|---|---|---|
-| User profile | `users/{uid}` | Public profile. Document ID = Firebase UID |
-| User private data | `userPrivate/{uid}` | Owner-only. Email, phone, preferences, consent timestamps |
-| Vehicles (garage) | `vehicles/{vehicleId}` | Top-level; filtered by `userId` field. Paginated by `userId, createdAt DESC` |
-| Events | `events/{eventId}` | Top-level; composite index: `status ASC, startsAt ASC` |
-| Event RSVPs | `events/{eventId}/rsvps/{uid}` | Subcollection; document ID = Firebase UID of respondent |
-| Event group drive participants | `events/{eventId}/groupDriveParticipants/{uid}` | Subcollection; document ID = Firebase UID |
-| Event chat messages | `events/{eventId}/messages/{messageId}` | Subcollection; paginated by `createdAt DESC` |
-| Event chat message reports | `events/{eventId}/messageReports/{reportId}` | Subcollection |
-| User blocks | `userBlocks/{uid}/blocked/{targetUid}` | Subcollection; document ID = blocked Firebase UID |
-| Subscription records | `subscriptions/{uid}` | Single document per user (latest active subscription) |
-| Saved drives | `rides/{rideId}` | Top-level; filtered by `userId`; route data in Cloud Storage |
-| User badges | `users/{uid}/badges/{badgeId}` | Subcollection; badge definitions denormalized |
-| Points ledger | `pointsLedger/{uid}/entries/{entryId}` | Subcollection; balance denormalized to `pointsLedger/{uid}.balance` |
-| Crown hunt points | `crownHuntPoints/{pointId}` | Top-level; admin-managed geographic points |
-| Crown hunt claims | `crownHuntClaims/{claimId}` | Top-level; created by `submitCrownHuntClaim` callable |
-| Partner companies | `companies/{companyId}` | Top-level; admin-managed |
-| Partner offers | `offers/{offerId}` | Top-level; filtered by `companyId` |
-| Saved partner offers | `users/{uid}/savedOffers/{offerId}` | Subcollection |
-| Partner applications | `partnerApplications/{applicationId}` | Top-level; admin-reviewed |
-| Partner insights events (raw) | `partnerInsightsEvents/{eventId}` | Top-level; 7-day TTL; scheduled cleanup |
-| Partner insights (aggregated) | `partnerInsights/{period}/{companyId}` | Top-level; aggregated by scheduled function |
-| Sponsored billboards | `billboards/{billboardId}` | Top-level; admin-approved |
-| Push tokens | `userPrivate/{uid}/pushTokens/{tokenId}` | Subcollection; encrypted token |
-| In-app notifications | `notifications/{uid}/items/{notificationId}` | Subcollection; paginated by `createdAt DESC` |
-| Feature flags | `config/featureFlags/{key}` | Nested under `config` document group |
-| Moderation actions | `moderationActions/{actionId}` | Top-level; admin-only write; immutable records |
-| Audit logs | `auditLogs/{logId}` | Top-level; admin-only write; immutable records |
-| Diagnostics reports | `diagnosticsReports/{reportId}` | Top-level; admin-only read |
-| Organization config | `config/organizations/{orgId}` | Single organization for MVP |
+| Domain                         | Firestore path                                  | Notes                                                                        |
+| ------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| User profile                   | `users/{uid}`                                   | Public profile. Document ID = Firebase UID                                   |
+| User private data              | `userPrivate/{uid}`                             | Owner-only. Email, phone, preferences, consent timestamps                    |
+| Vehicles (garage)              | `vehicles/{vehicleId}`                          | Top-level; filtered by `userId` field. Paginated by `userId, createdAt DESC` |
+| Events                         | `events/{eventId}`                              | Top-level; composite index: `status ASC, startsAt ASC`                       |
+| Event RSVPs                    | `events/{eventId}/rsvps/{uid}`                  | Subcollection; document ID = Firebase UID of respondent                      |
+| Event group drive participants | `events/{eventId}/groupDriveParticipants/{uid}` | Subcollection; document ID = Firebase UID                                    |
+| Event chat messages            | `events/{eventId}/messages/{messageId}`         | Subcollection; paginated by `createdAt DESC`                                 |
+| Event chat message reports     | `events/{eventId}/messageReports/{reportId}`    | Subcollection                                                                |
+| User blocks                    | `userBlocks/{uid}/blocked/{targetUid}`          | Subcollection; document ID = blocked Firebase UID                            |
+| Subscription records           | `subscriptions/{uid}`                           | Single document per user (latest active subscription)                        |
+| Saved drives                   | `rides/{rideId}`                                | Top-level; filtered by `userId`; route data in Cloud Storage                 |
+| User badges                    | `users/{uid}/badges/{badgeId}`                  | Subcollection; badge definitions denormalized                                |
+| Points ledger                  | `pointsLedger/{uid}/entries/{entryId}`          | Subcollection; balance denormalized to `pointsLedger/{uid}.balance`          |
+| Crown hunt points              | `crownHuntPoints/{pointId}`                     | Top-level; admin-managed geographic points                                   |
+| Crown hunt claims              | `crownHuntClaims/{claimId}`                     | Top-level; created by `submitCrownHuntClaim` callable                        |
+| Partner companies              | `companies/{companyId}`                         | Top-level; admin-managed                                                     |
+| Partner offers                 | `offers/{offerId}`                              | Top-level; filtered by `companyId`                                           |
+| Saved partner offers           | `users/{uid}/savedOffers/{offerId}`             | Subcollection                                                                |
+| Partner applications           | `partnerApplications/{applicationId}`           | Top-level; admin-reviewed                                                    |
+| Partner insights events (raw)  | `partnerInsightsEvents/{eventId}`               | Top-level; 7-day TTL; scheduled cleanup                                      |
+| Partner insights (aggregated)  | `partnerInsights/{period}/{companyId}`          | Top-level; aggregated by scheduled function                                  |
+| Sponsored billboards           | `billboards/{billboardId}`                      | Top-level; admin-approved                                                    |
+| Push tokens                    | `userPrivate/{uid}/pushTokens/{tokenId}`        | Subcollection; encrypted token                                               |
+| In-app notifications           | `notifications/{uid}/items/{notificationId}`    | Subcollection; paginated by `createdAt DESC`                                 |
+| Feature flags                  | `config/featureFlags/{key}`                     | Nested under `config` document group                                         |
+| Moderation actions             | `moderationActions/{actionId}`                  | Top-level; admin-only write; immutable records                               |
+| Audit logs                     | `auditLogs/{logId}`                             | Top-level; admin-only write; immutable records                               |
+| Diagnostics reports            | `diagnosticsReports/{reportId}`                 | Top-level; admin-only read                                                   |
+| Organization config            | `config/organizations/{orgId}`                  | Single organization for MVP                                                  |
 
 ---
 
 ## Live location latest position → Realtime Database
 
-| Aspect | Legacy (`services/api`) | Target (Firebase Realtime Database) |
-|---|---|---|
-| Storage | `live_location_latest_positions` (PostgreSQL table) | `liveLocation/{uid}/latest` (RTDB node) |
-| Fields | `latitude`, `longitude`, `accuracy_meters`, `heading_degrees`, `speed_meters_per_second`, `recorded_at` | Same fields, snake_case to camelCase |
-| Write | `PATCH /v1/live/sessions/location` REST endpoint | `updateLivePosition` callable function |
-| Read | `GET /v1/live/visible-users` REST endpoint | RTDB snapshot listener (entitlement-gated) |
-| TTL | `expiresAt` field; scheduled cleanup | RTDB `onDisconnect` clear + scheduled Cloud Function cleanup |
-| Hide me now | `DELETE` latest position row | RTDB `liveLocation/{uid}/latest` node delete (Admin SDK) |
+| Aspect      | Legacy (`services/api`)                                                                                 | Target (Firebase Realtime Database)                          |
+| ----------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Storage     | `live_location_latest_positions` (PostgreSQL table)                                                     | `liveLocation/{uid}/latest` (RTDB node)                      |
+| Fields      | `latitude`, `longitude`, `accuracy_meters`, `heading_degrees`, `speed_meters_per_second`, `recorded_at` | Same fields, snake_case to camelCase                         |
+| Write       | `PATCH /v1/live/sessions/location` REST endpoint                                                        | `updateLivePosition` callable function                       |
+| Read        | `GET /v1/live/visible-users` REST endpoint                                                              | RTDB snapshot listener (entitlement-gated)                   |
+| TTL         | `expiresAt` field; scheduled cleanup                                                                    | RTDB `onDisconnect` clear + scheduled Cloud Function cleanup |
+| Hide me now | `DELETE` latest position row                                                                            | RTDB `liveLocation/{uid}/latest` node delete (Admin SDK)     |
 
 **Path design:**
+
 ```
 liveLocation/
   {uid}/
@@ -161,6 +163,7 @@ liveLocation/
 **Transaction requirements:** None for position updates (single-node overwrite). Session start/stop uses callable function to update both RTDB session node and custom claim if needed.
 
 **Security-rule requirements:**
+
 - `liveLocation/{uid}/session` — deny all client writes (callable function / Admin SDK only); `activeMember` claim required to read others.
 - `liveLocation/{uid}/latest` — owner write; `activeMember` claim + no blocking required to read others.
 - `liveLocation/{uid}/presence` — owner write only.
@@ -175,8 +178,8 @@ liveLocation/
 
 ## Active presence → Realtime Database
 
-| Path | Purpose |
-|---|---|
+| Path             | Purpose                                          |
+| ---------------- | ------------------------------------------------ |
 | `presence/{uid}` | Online/offline indicator; set via `onDisconnect` |
 
 **Write pattern:** Client sets `presence/{uid}` to `{ online: true, lastSeen: timestamp }` on connect; `onDisconnect` sets `{ online: false, lastSeen: timestamp }`.
@@ -187,12 +190,12 @@ liveLocation/
 
 ## Saved drives → Firestore + Cloud Storage
 
-| Aspect | Legacy | Target |
-|---|---|---|
-| Drive metadata | `saved_drives` table (Prisma) | `rides/{rideId}` Firestore document |
-| Route GPS data | Not stored (drive only has summary stats) | Cloud Storage: `rideRoutes/{uid}/{rideId}/route.bin` |
-| Distance/duration | Computed by `drive-calculations.ts` service | Same logic ported to `saveDrive` callable function |
-| Ownership | `userId` UUID foreign key | `userId` = Firebase UID |
+| Aspect            | Legacy                                      | Target                                               |
+| ----------------- | ------------------------------------------- | ---------------------------------------------------- |
+| Drive metadata    | `saved_drives` table (Prisma)               | `rides/{rideId}` Firestore document                  |
+| Route GPS data    | Not stored (drive only has summary stats)   | Cloud Storage: `rideRoutes/{uid}/{rideId}/route.bin` |
+| Distance/duration | Computed by `drive-calculations.ts` service | Same logic ported to `saveDrive` callable function   |
+| Ownership         | `userId` UUID foreign key                   | `userId` = Firebase UID                              |
 
 **Firestore document:** `rides/{rideId}` — `userId`, `title`, `distanceMeters`, `durationSeconds`, `startedAt`, `endedAt`, `routePath` (Cloud Storage path), `previewImagePath`, `createdAt`.
 
@@ -208,12 +211,12 @@ liveLocation/
 
 ## Event and RSVP data → Firestore
 
-| Aspect | Legacy | Target |
-|---|---|---|
-| Event | `events` table | `events/{eventId}` Firestore document |
-| RSVP | `event_rsvps` table | `events/{eventId}/rsvps/{uid}` subcollection |
-| Chat messages | `event_chat_messages` table | `events/{eventId}/messages/{messageId}` subcollection |
-| Chat reports | `event_chat_message_reports` table | `events/{eventId}/messageReports/{reportId}` subcollection |
+| Aspect                   | Legacy                                 | Target                                                        |
+| ------------------------ | -------------------------------------- | ------------------------------------------------------------- |
+| Event                    | `events` table                         | `events/{eventId}` Firestore document                         |
+| RSVP                     | `event_rsvps` table                    | `events/{eventId}/rsvps/{uid}` subcollection                  |
+| Chat messages            | `event_chat_messages` table            | `events/{eventId}/messages/{messageId}` subcollection         |
+| Chat reports             | `event_chat_message_reports` table     | `events/{eventId}/messageReports/{reportId}` subcollection    |
 | Group drive participants | `event_group_drive_participants` table | `events/{eventId}/groupDriveParticipants/{uid}` subcollection |
 
 **Index for events list:** Composite index: `status ASC, startsAt ASC`.
@@ -221,6 +224,7 @@ liveLocation/
 **Transaction requirements:** RSVP update is idempotent (set document by UID); no transaction needed. Group drive join uses a transaction to update participant status and prevent race conditions.
 
 **Security-rule requirements:**
+
 - Events: any authenticated user can read published events; admin-only write.
 - RSVPs: active members create/read their own RSVP; admin reads all.
 - Chat messages: active members read published messages (blocking filter applied client-side or via callable); active members write own messages; admin removes messages.
@@ -252,6 +256,7 @@ liveLocation/
 **Balance:** `pointsLedger/{uid}.balance` (denormalized total, updated atomically)
 
 **Transaction pattern:**
+
 ```
 runTransaction:
   1. Read pointsLedger/{uid}.balance (or initialize to 0)
@@ -272,6 +277,7 @@ runTransaction:
 **Path:** `crownHuntClaims/{claimId}` + `crownHuntPoints/{pointId}`
 
 **Callable function (`submitCrownHuntClaim`) logic:**
+
 1. Verify Firebase ID token and `activeMember` claim.
 2. Look up `crownHuntPoints/{pointId}` to get geofence coordinates.
 3. Validate client-reported position is within geofence (server-side using `crown-hunt-geo.ts` logic).
@@ -308,12 +314,12 @@ runTransaction:
 
 ## Notifications → FCM + durable in-app notification documents
 
-| Aspect | Legacy | Target |
-|---|---|---|
-| Push delivery | `notification-service.ts` via a push provider | Firebase Cloud Messaging (FCM) via `firebase-admin` messaging API |
-| Token storage | `push_device_registrations` table (encrypted token) | `userPrivate/{uid}/pushTokens/{tokenId}` (encrypted or FCM token hash only) |
-| In-app notifications | `user_notifications` table | `notifications/{uid}/items/{notificationId}` |
-| Preference storage | `notification_preferences` table | `userPrivate/{uid}.notificationPreferences` map |
+| Aspect               | Legacy                                              | Target                                                                      |
+| -------------------- | --------------------------------------------------- | --------------------------------------------------------------------------- |
+| Push delivery        | `notification-service.ts` via a push provider       | Firebase Cloud Messaging (FCM) via `firebase-admin` messaging API           |
+| Token storage        | `push_device_registrations` table (encrypted token) | `userPrivate/{uid}/pushTokens/{tokenId}` (encrypted or FCM token hash only) |
+| In-app notifications | `user_notifications` table                          | `notifications/{uid}/items/{notificationId}`                                |
+| Preference storage   | `notification_preferences` table                    | `userPrivate/{uid}.notificationPreferences` map                             |
 
 **FCM send pattern:** Callable function sends FCM via `admin.messaging().send()`; does not store tokens in plaintext.
 
@@ -327,16 +333,17 @@ runTransaction:
 
 ## Files → Cloud Storage
 
-| Content | Storage path |
-|---|---|
-| Profile images | `profileImages/{uid}/{imageId}` |
-| Vehicle images | `vehicleImages/{uid}/{vehicleId}/{imageId}` |
-| Ride route data (compressed GPS) | `rideRoutes/{uid}/{rideId}/route.bin` |
-| Ride map preview images | `rideRoutes/{uid}/{rideId}/preview.png` |
-| Partner logos | `partnerLogos/{companyId}/{imageId}` |
-| Billboard images | `billboardImages/{billboardId}/{imageId}` |
+| Content                          | Storage path                                |
+| -------------------------------- | ------------------------------------------- |
+| Profile images                   | `profileImages/{uid}/{imageId}`             |
+| Vehicle images                   | `vehicleImages/{uid}/{vehicleId}/{imageId}` |
+| Ride route data (compressed GPS) | `rideRoutes/{uid}/{rideId}/route.bin`       |
+| Ride map preview images          | `rideRoutes/{uid}/{rideId}/preview.png`     |
+| Partner logos                    | `partnerLogos/{companyId}/{imageId}`        |
+| Billboard images                 | `billboardImages/{billboardId}/{imageId}`   |
 
 **Security-rule requirements:**
+
 - Profile/vehicle images: owner read/write; any authenticated user reads profile images.
 - Ride routes: owner read/write only.
 - Partner/billboard images: any authenticated user read; admin write only.
@@ -347,11 +354,11 @@ runTransaction:
 
 ## Admin authorization → Firebase Authentication and custom claims
 
-| Aspect | Legacy | Target |
-|---|---|---|
-| Admin session | Custom `Session` with `user.role = 'admin'` | Google Sign-In → Firebase ID token + `admin: true` custom claim |
-| Authorization check | `requireAdminHook` reads DB role | Callable function middleware reads `decodedToken.admin` |
-| Claim management | N/A | `setAdminRole` callable function (admin-only) |
+| Aspect              | Legacy                                      | Target                                                          |
+| ------------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| Admin session       | Custom `Session` with `user.role = 'admin'` | Google Sign-In → Firebase ID token + `admin: true` custom claim |
+| Authorization check | `requireAdminHook` reads DB role            | Callable function middleware reads `decodedToken.admin`         |
+| Claim management    | N/A                                         | `setAdminRole` callable function (admin-only)                   |
 
 **Risk:** Admin claims must be set server-side only. The Firebase console must be restricted; no direct claim manipulation allowed outside the callable function path.
 
@@ -359,11 +366,11 @@ runTransaction:
 
 ## External integrations and webhooks → HTTP Cloud Functions
 
-| Integration | Legacy | Target |
-|---|---|---|
-| Apple subscription receipt verification | `subscription-service.ts` via HTTP call | HTTP Cloud Function (or callable function wrapping HTTP call to Apple) |
-| Google Play receipt verification | `subscription-service.ts` via HTTP call | HTTP Cloud Function (or callable function wrapping HTTP call to Google) |
-| GitHub Issues creation (diagnostics) | `diagnostics-service.ts` | HTTP Cloud Function triggered by callable function threshold check |
+| Integration                             | Legacy                                  | Target                                                                  |
+| --------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
+| Apple subscription receipt verification | `subscription-service.ts` via HTTP call | HTTP Cloud Function (or callable function wrapping HTTP call to Apple)  |
+| Google Play receipt verification        | `subscription-service.ts` via HTTP call | HTTP Cloud Function (or callable function wrapping HTTP call to Google) |
+| GitHub Issues creation (diagnostics)    | `diagnostics-service.ts`                | HTTP Cloud Function triggered by callable function threshold check      |
 
 **Pattern:** HTTP Cloud Functions are used only for external webhooks or integrations requiring HTTP. Internal trusted operations use callable functions.
 
@@ -373,12 +380,12 @@ runTransaction:
 
 ## Scheduled cleanup → scheduled Cloud Functions
 
-| Job | Trigger | Logic |
-|---|---|---|
+| Job                           | Trigger         | Logic                                                                                            |
+| ----------------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
 | Expire live location sessions | Every 5 minutes | Delete `liveLocation/{uid}/session` and `liveLocation/{uid}/latest` where `expiresAt` has passed |
-| Clean partner insights events | Daily | Delete `partnerInsightsEvents/` documents older than 7 days |
-| Clean read notifications | Weekly | Delete `notifications/{uid}/items/` documents where `read: true` and older than 7 days |
-| Clean old diagnostics | Monthly | Archive or delete `diagnosticsReports/` older than 90 days |
+| Clean partner insights events | Daily           | Delete `partnerInsightsEvents/` documents older than 7 days                                      |
+| Clean read notifications      | Weekly          | Delete `notifications/{uid}/items/` documents where `read: true` and older than 7 days           |
+| Clean old diagnostics         | Monthly         | Archive or delete `diagnosticsReports/` older than 90 days                                       |
 
 **Cost consideration:** Scheduled functions have no minimum instances cost when idle. At MVP scale (20–30 users), scheduled function invocations are infrequent and inexpensive.
 
@@ -386,17 +393,17 @@ runTransaction:
 
 ## Migration risk summary
 
-| Domain | Risk level | Notes |
-|---|---|---|
-| Authentication / sessions | Low | Firebase token verification already exists in legacy API |
-| User roles / custom claims | Medium | Requires mapping existing admin UIDs to Firebase UIDs |
-| Live location | Low | Ephemeral; no data migration required |
-| Events and RSVP | Low | Small dataset; JSON export + Firestore import if needed |
-| Chat messages | Medium | May have a history worth preserving; consider archiving |
-| Points ledger | High | Financial-adjacent; requires atomic transaction design; test thoroughly |
-| Kronjakt claims | High | Anti-fraud logic complexity; must be ported exactly; risk of claim manipulation |
-| Subscriptions | High | Revenue-critical; Apple/Google verification must be correct; test on real devices |
-| Partner insights | Medium | Privacy-critical; aggregation threshold enforcement must be correct |
-| Saved drives | Low | Small dataset; no external dependency |
-| Files / Cloud Storage | Low | Move files via gsutil or Storage API |
-| Admin authorization | Medium | Admin UIDs must be mapped and claims set before admin web cutover |
+| Domain                     | Risk level | Notes                                                                             |
+| -------------------------- | ---------- | --------------------------------------------------------------------------------- |
+| Authentication / sessions  | Low        | Firebase token verification already exists in legacy API                          |
+| User roles / custom claims | Medium     | Requires mapping existing admin UIDs to Firebase UIDs                             |
+| Live location              | Low        | Ephemeral; no data migration required                                             |
+| Events and RSVP            | Low        | Small dataset; JSON export + Firestore import if needed                           |
+| Chat messages              | Medium     | May have a history worth preserving; consider archiving                           |
+| Points ledger              | High       | Financial-adjacent; requires atomic transaction design; test thoroughly           |
+| Kronjakt claims            | High       | Anti-fraud logic complexity; must be ported exactly; risk of claim manipulation   |
+| Subscriptions              | High       | Revenue-critical; Apple/Google verification must be correct; test on real devices |
+| Partner insights           | Medium     | Privacy-critical; aggregation threshold enforcement must be correct               |
+| Saved drives               | Low        | Small dataset; no external dependency                                             |
+| Files / Cloud Storage      | Low        | Move files via gsutil or Storage API                                              |
+| Admin authorization        | Medium     | Admin UIDs must be mapped and claims set before admin web cutover                 |

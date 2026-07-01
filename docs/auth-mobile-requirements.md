@@ -10,28 +10,36 @@ approved (see [Authentication providers](#authentication-providers)).
 ## Architecture overview
 
 ```
-iOS app          →  Sign in with Apple   →  Firebase Authentication  →  Firebase ID token
-Android app      →  Google Sign-In        →  Firebase Authentication  →  Firebase ID token
-                                                                                │
-                                          Backend (services/api) ←─────────────┘
-                                          verifyIdToken(token)
-                                          extract uid + admin claim
-                                          look up / create DB user
+iOS app       →  Sign in with Apple   →  Firebase Authentication  →  Firebase ID token
+Android app   →  Google Sign-In        →  Firebase Authentication  →  Firebase ID token
+                                                                             │
+                                       ┌─────────────────────────────────────┘
+                                       │
+                                       ├── Callable Cloud Functions (via Firebase SDK)
+                                       │     Auth context injected automatically
+                                       │     App Check verified server-side
+                                       │
+                                       ├── Firestore / Realtime Database (via Firebase SDK)
+                                       │     Security Rules enforce access
+                                       │
+                                       └── HTTP Cloud Functions (webhooks / integrations only)
+                                             Authorization: Bearer <Firebase ID token>
 ```
 
 - Firebase Authentication is the identity broker for both platforms.
-- The **Firebase UID** (`uid`) is the canonical user identity on the backend.
-- Mobile clients exchange the provider credential for a **Firebase ID token**.
-- Every API request carries the Firebase ID token as `Authorization: Bearer <token>`.
-- The backend verifies the token with Firebase Admin SDK and never trusts a UID
-  supplied in the request body or URL.
+- The **Firebase UID** (`uid`) is the canonical user identity.
+- Mobile clients obtain a **Firebase ID token** from the Firebase SDK.
+- **Callable functions** use the Firebase SDK authentication context automatically — clients do not attach a manual `Authorization` header.
+- **HTTP bearer tokens** (`Authorization: Bearer <Firebase ID token>`) are only needed when calling HTTP Cloud Functions or other explicitly authenticated HTTP interfaces, not for callable functions or direct SDK access.
+- The backend verifies identity via Firebase Admin SDK and never trusts a UID supplied in the request body or URL.
+- Firebase SDKs manage token persistence and refresh internally — native apps must not manually persist Firebase ID tokens.
 
 ---
 
 ## Authentication providers
 
-| Platform | Provider         | Approved difference |
-| -------- | ---------------- | ------------------- |
+| Platform | Provider                                             | Approved difference                                          |
+| -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
 | iOS      | Sign in with Apple (through Firebase Authentication) | Yes — Apple mandates Apple Sign-In for apps on the App Store |
 | Android  | Google Sign-In (through Firebase Authentication)     | Yes — Google Sign-In is the natural default on Android       |
 
@@ -73,12 +81,12 @@ Account linking between providers is **not** included in the MVP.
 
 ### Error handling
 
-| Firebase error code         | User-facing action                         |
-| --------------------------- | ------------------------------------------ |
-| `ERROR_USER_DISABLED`       | Show account suspended message, sign out   |
-| `ERROR_USER_NOT_FOUND`      | Sign out and return to login screen        |
-| `ERROR_INVALID_CREDENTIAL`  | Sign out and prompt user to sign in again  |
-| Network error               | Show offline state, do not sign out        |
+| Firebase error code        | User-facing action                        |
+| -------------------------- | ----------------------------------------- |
+| `ERROR_USER_DISABLED`      | Show account suspended message, sign out  |
+| `ERROR_USER_NOT_FOUND`     | Sign out and return to login screen       |
+| `ERROR_INVALID_CREDENTIAL` | Sign out and prompt user to sign in again |
+| Network error              | Show offline state, do not sign out       |
 
 ### Privacy and security
 
@@ -122,12 +130,12 @@ Account linking between providers is **not** included in the MVP.
 
 ### Error handling
 
-| Firebase error code              | User-facing action                         |
-| -------------------------------- | ------------------------------------------ |
-| `ERROR_USER_DISABLED`            | Show account suspended message, sign out   |
-| `ERROR_USER_NOT_FOUND`           | Sign out and return to login screen        |
-| `ERROR_INVALID_CREDENTIAL`       | Sign out and prompt user to sign in again  |
-| Network / timeout error          | Show offline state, do not sign out        |
+| Firebase error code        | User-facing action                        |
+| -------------------------- | ----------------------------------------- |
+| `ERROR_USER_DISABLED`      | Show account suspended message, sign out  |
+| `ERROR_USER_NOT_FOUND`     | Sign out and return to login screen       |
+| `ERROR_INVALID_CREDENTIAL` | Sign out and prompt user to sign in again |
+| Network / timeout error    | Show offline state, do not sign out       |
 
 ### Privacy and security
 
@@ -138,45 +146,66 @@ Account linking between providers is **not** included in the MVP.
 
 ---
 
-## Shared API authentication contract
+## Shared backend authentication contract
 
-Both platforms must implement the following contract for every authenticated API request.
+Both platforms must implement the following contract for every authenticated backend interaction.
 
-### Authorization header
+### Callable Cloud Functions
+
+Callable functions use the Firebase SDK authentication context automatically.
+
+- iOS: call the function via `Functions.functions().httpsCallable(name)`.
+- Android: call via `FirebaseFunctions.getInstance().getHttpsCallable(name)`.
+- The SDK attaches the current user's ID token and App Check token automatically.
+- Do not attach a manual `Authorization` header for callable function calls.
+
+### Direct Firestore and Realtime Database access
+
+Direct SDK reads and writes use the authenticated Firebase session automatically.
+
+- Security Rules evaluate `request.auth.uid` server-side on every operation.
+- No manual `Authorization` header is required.
+
+### HTTP Cloud Functions (webhooks and integrations only)
+
+When calling HTTP Cloud Functions that require user authentication (rare — only for integrations that cannot use callable functions):
 
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <Firebase ID token>
 ```
+
+Obtain the token: `Auth.auth().currentUser?.getIDToken()` (iOS) or `FirebaseAuth.getInstance().currentUser?.getIdToken(false)` (Android).
 
 ### Token lifecycle
 
-1. Obtain the token by calling the Firebase Auth SDK (see platform sections above).
-2. Include it on every request to a protected backend endpoint.
-3. On `401 Unauthorized`, attempt a token force-refresh **once** before giving up.
-4. On repeated `401` failures, sign the user out and navigate to the login screen.
+1. The Firebase SDK maintains the authenticated session and refreshes tokens automatically.
+2. For callable functions and direct SDK access, the SDK handles token refresh transparently.
+3. For HTTP functions: obtain a fresh token before each request — the SDK refreshes automatically when the token is close to expiry.
+4. On `401 Unauthorized` from an HTTP function, force-refresh once before retrying. If the second attempt also returns `401`, sign the user out.
+5. On repeated auth failures, sign the user out and navigate to the login screen.
 
 ### Admin authorization
 
 - Admin access is controlled by the `admin: true` Firebase custom claim.
-- The claim is set **only** by trusted backend code — never by the mobile app.
+- The claim is set **only** by trusted Cloud Functions code — never by the mobile app.
 - Mobile apps must never attempt to read or modify custom claims directly.
-- The backend verifies the claim server-side on every admin endpoint — hiding
-  UI elements on the client is not an authorization control.
+- The backend verifies the claim server-side — hiding UI elements on the client is not an authorization control.
+- Clients must force-refresh their ID token after a privileged claim change so that callable functions receive the updated claims.
 
 ---
 
 ## Account model
 
-| Field         | Source                         | Notes                                         |
-| ------------- | ------------------------------ | --------------------------------------------- |
-| `firebaseUid` | Verified Firebase ID token     | Never trust a UID from the request body or URL |
-| `userId`      | Backend database (UUID)        | Created on first successful authentication     |
-| `role`        | Backend database               | Defaults to `user`                             |
-| `admin` claim | Firebase custom claim          | Set by trusted backend code only              |
+| Field          | Source                               | Notes                                          |
+| -------------- | ------------------------------------ | ---------------------------------------------- |
+| `firebaseUid`  | Verified Firebase ID token           | Never trust a UID from the request body or URL |
+| `users/{uid}`  | Firestore document (Cloud Functions) | Created on first successful authentication     |
+| `role`         | Firestore `users/{uid}.role`         | Defaults to `user`; read-only from client      |
+| `admin` claim  | Firebase custom claim                | Set by trusted Cloud Functions code only       |
+| `activeMember` | Firebase custom claim                | Set by subscription verification callable      |
+| `suspended`    | Firebase custom claim + Firestore    | Set by admin callable; enforced by backend     |
 
-On first sign-in a backend user record is created and linked to the Firebase UID.
-Subsequent sign-ins look up the existing record by Firebase UID.
-
+On first sign-in a Cloud Function trigger creates the `users/{uid}` Firestore document and links it to the Firebase UID. Subsequent sign-ins look up the existing document by UID.
 ---
 
 ## Security checklist
