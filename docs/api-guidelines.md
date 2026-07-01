@@ -107,7 +107,7 @@ HTTP functions must:
 
 - Verify request authenticity (webhook signature or equivalent) before processing.
 - Not be used as a general-purpose mobile API endpoint — use callable functions instead.
-- Use `Authorization: ****** ID token>` when the function requires an authenticated user context that cannot use the callable SDK.
+- Use `Authorization: Bearer <Firebase ID token>` when the function requires an authenticated user context that cannot use the callable SDK.
 
 ---
 
@@ -126,7 +126,6 @@ Use these stable machine-readable codes in callable function errors:
 | `failed-precondition` | State precondition not met       |
 | `internal`            | Unexpected server error          |
 | `unavailable`         | Temporary unavailability         |
-| `feature-disabled`    | Feature flag is off              |
 
 ## Idempotency
 
@@ -179,7 +178,7 @@ The legacy `services/api` uses REST endpoints under `/v1`. The conventions below
 
 ### Authentication (legacy)
 
-- Protected legacy endpoints require `Authorization: ****** ID token>`.
+- Protected legacy endpoints require `Authorization: Bearer <Firebase ID token>`.
 - The legacy backend verifies the token with Firebase Admin SDK `verifyIdToken()`.
 
 ### Response format (legacy)

@@ -23,14 +23,14 @@ Android app   →  Google Sign-In        →  Firebase Authentication  →  Fire
                                        │     Security Rules enforce access
                                        │
                                        └── HTTP Cloud Functions (webhooks / integrations only)
-                                             Authorization: ****** token>
+                                             Authorization: Bearer <Firebase ID token>
 ```
 
 - Firebase Authentication is the identity broker for both platforms.
 - The **Firebase UID** (`uid`) is the canonical user identity.
 - Mobile clients obtain a **Firebase ID token** from the Firebase SDK.
 - **Callable functions** use the Firebase SDK authentication context automatically — clients do not attach a manual `Authorization` header.
-- **HTTP bearer tokens** (`Authorization: ****** are only needed when calling HTTP Cloud Functions or other explicitly authenticated HTTP interfaces, not for callable functions or direct SDK access.
+- **HTTP bearer tokens** (`Authorization: Bearer <Firebase ID token>`) are only needed when calling HTTP Cloud Functions or other explicitly authenticated HTTP interfaces, not for callable functions or direct SDK access.
 - The backend verifies identity via Firebase Admin SDK and never trusts a UID supplied in the request body or URL.
 - Firebase SDKs manage token persistence and refresh internally — native apps must not manually persist Firebase ID tokens.
 
@@ -171,7 +171,7 @@ Direct SDK reads and writes use the authenticated Firebase session automatically
 When calling HTTP Cloud Functions that require user authentication (rare — only for integrations that cannot use callable functions):
 
 ```
-Authorization: ****** token>
+Authorization: Bearer <Firebase ID token>
 ```
 
 Obtain the token: `Auth.auth().currentUser?.getIDToken()` (iOS) or `FirebaseAuth.getInstance().currentUser?.getIdToken(false)` (Android).
