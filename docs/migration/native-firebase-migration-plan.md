@@ -1,0 +1,1017 @@
+# Native Firebase Migration Plan
+
+This document defines the phased migration from the current React Native / Fastify / PostgreSQL implementation to the target architecture: separate native iOS and Android applications backed by Firebase.
+
+See [ADR-001](../adr/001-firebase-platform.md) and [current-state-inventory.md](current-state-inventory.md) for context.
+
+---
+
+## Migration principles
+
+- **Incremental, not big-bang.** One vertical feature slice at a time.
+- **Keep legacy buildable** until replacement parity is verified.
+- **Freeze new features** in `apps/mobile` and `services/api`.
+- **Each shared mobile slice includes both iOS and Android.** A slice is not done until both platforms are complete.
+- **Backend stays platform-neutral.** Cloud Functions serve iOS, Android, and admin web identically.
+- **Test before cutover.** Add emulator tests, rule tests, and native unit tests before removing legacy code.
+- **No production data migration required** until real production data exists in PostgreSQL.
+
+---
+
+## Recommended repository structure (target)
+
+```text
+.
+├── apps/
+│   ├── ios/                # Swift / SwiftUI native iOS app
+│   ├── android/            # Kotlin / Jetpack Compose native Android app
+│   ├── mobile/             # LEGACY — React Native / Expo (frozen)
+│   └── admin/              # React admin web app (Vite, hosted on Firebase Hosting)
+├── functions/              # Cloud Functions for Firebase (recommended move from apps/functions)
+├── firebase/               # Firebase CLI config, rules, indexes
+├── contracts/              # Language-neutral cross-platform contracts
+│   ├── schemas/            # JSON Schema for request/response shapes
+│   ├── errors/             # Canonical error codes
+│   ├── functions/          # Callable function names and signatures
+│   ├── features/           # Feature flag names
+│   ├── localization/       # Shared localization source strings (sv, en)
+│   └── design-tokens/      # Design tokens (colors, spacing, typography)
+├── packages/
+│   └── shared/             # TypeScript contracts (backend/admin use only)
+├── services/
+│   └── api/                # LEGACY — Fastify / Prisma API (frozen)
+├── docs/
+│   ├── adr/                # Architecture decision records
+│   └── migration/          # This directory
+└── .github/
+```
+
+### Functions directory recommendation
+
+**Recommendation: move `apps/functions` to a root `functions/` directory.**
+
+Rationale:
+- Firebase CLI convention (`firebase.json` `functions.source`) can point to `functions/` more cleanly.
+- The functions workspace is the entire backend; placing it under `apps/` implies it is an end-user application, which it is not.
+- A root `functions/` directory aligns with Firebase documentation, reducing onboarding confusion.
+- `firebase.json` currently points `source` to `../apps/functions`; after the move it would point to `functions/` directly.
+- npm workspace and Dependabot entries require a path update, but no deep code changes.
+- The move creates minimal migration risk because only config paths change.
+
+This move should occur in Phase 3 (canonical structure) as a dedicated PR before domain functions are added.
+
+---
+
+## Phase 1 — Resolve documentation and source-of-truth conflicts
+
+**Objective:** Ensure all documentation accurately reflects the target architecture. Remove ambiguous legacy statements. Establish clear freeze signals for `apps/mobile` and `services/api`.
+
+### Files affected
+
+- `README.md`
+- `docs/product-decisions.md`
+- `docs/security.md`
+- `.github/copilot-instructions.md`
+- `docs/migration/` (create this directory with planning documents)
+
+### Prerequisites
+
+None.
+
+### Expected output
+
+- All documentation refers to Firebase as the target backend.
+- `docs/product-decisions.md` no longer presents Azure or PostgreSQL as the target.
+- `docs/security.md` no longer references Azure Key Vault or Azure-specific CI.
+- `README.md` shows the target architecture diagram, not the legacy one.
+- `docs/migration/` exists with this plan, inventory, matrix, and domain mapping.
+- A freeze notice is documented on `apps/mobile` and `services/api`.
+
+### Tests
+
+No code tests. Documentation review is the gate.
+
+### Rollback approach
+
+Revert documentation PR. No application behavior changes.
+
+### Definition of done
+
+- All source-of-truth conflicts listed in the inventory are resolved.
+- PRs reviewed and merged.
+
+### Estimated PR boundaries
+
+- PR 1a: Create `docs/migration/` directory with all five planning documents.
+- PR 1b: Update `README.md`, `docs/product-decisions.md`, `docs/security.md`, `.github/copilot-instructions.md`.
+
+---
+
+## Phase 2 — Establish language-neutral contracts
+
+**Objective:** Create a `contracts/` directory with language-neutral definitions that iOS, Android, backend, and admin can all use. The TypeScript `packages/shared` remains for backend/admin; `contracts/` adds native-consumable equivalents.
+
+### Files affected
+
+- `contracts/` (new directory)
+- `contracts/schemas/` — JSON Schema for every request/response shape
+- `contracts/errors/errors.json` — canonical error codes
+- `contracts/functions/functions.json` — callable function names and signatures
+- `contracts/features/feature-flags.json` — feature flag key names
+- `contracts/localization/sv.json`, `en.json` — source localization strings
+- `contracts/design-tokens/tokens.json` — design token values
+
+### Prerequisites
+
+- Phase 1 complete (documentation aligned).
+
+### Expected output
+
+- `contracts/` directory with initial JSON Schema definitions for at minimum:
+  - User profile
+  - Authentication
+  - Live location session
+  - Events and RSVP
+  - Feature flag names
+  - Error codes
+  - Callable function names
+- `contracts/localization/sv.json` and `en.json` seeded from `apps/mobile/src/i18n/sv.json` and `en.json`.
+- `contracts/design-tokens/tokens.json` seeded from `apps/mobile/src/design/`.
+- A `contracts/README.md` explaining the strategy and how backends and native apps consume it.
+
+### Tests
+
+- Validate JSON Schema files are valid (jsonschema lint or ajv validate in CI).
+- Confirm localization files are complete and match.
+
+### Rollback approach
+
+Remove `contracts/` directory. No application behavior changes.
+
+### Definition of done
+
+- `contracts/` has at least the domains listed above.
+- A CI step validates JSON Schema files.
+- Native app teams can use contracts as the canonical reference.
+
+### Estimated PR boundaries
+
+- PR 2a: `contracts/` structure, README, initial schemas for auth and user profile.
+- PR 2b: Remaining domain schemas, error codes, function names, feature flags.
+- PR 2c: Localization migration from `apps/mobile/src/i18n/`.
+- PR 2d: Design token export.
+
+---
+
+## Phase 3 — Establish canonical Firebase structure and Emulator Suite
+
+**Objective:** Move `apps/functions` to `functions/`. Align Firebase CLI config. Ensure emulator commands work from the root. Standardize the package manager for the functions workspace.
+
+### Files affected
+
+- `functions/` (new root directory, content from `apps/functions/`)
+- `firebase/firebase.json` — update `functions.source` path
+- `package.json` — update workspace path
+- `pnpm-workspace.yaml` — update workspace path
+- `.github/dependabot.yml` — update functions workspace path
+- `.github/workflows/validate-functions.yml` — update working directory
+- `.github/workflows/test-firebase-rules.yml` — update emulator path
+- `.github/workflows/deploy-firebase-functions.yml` — update path
+
+### Prerequisites
+
+- Phase 1 complete.
+
+### Expected output
+
+- `functions/` at root with all content from `apps/functions/`.
+- `firebase.json` `functions.source` updated to `"source": "functions"` (relative to `firebase/`), or adjust `firebase.json` to root.
+- All CI workflows updated to use the new path.
+- Emulator start command works from root: `firebase emulators:start --config firebase/firebase.json`.
+- npm workspace updated; pnpm workspace updated.
+- Dual lock file issue addressed (choose npm or pnpm consistently for functions).
+
+### Tests
+
+- CI `validate-functions` workflow passes with new path.
+- CI `test-firebase-rules` workflow passes.
+- `npm run emulators:start` (or equivalent) launches all emulators successfully.
+
+### Rollback approach
+
+Revert path changes. No application logic changes.
+
+### Definition of done
+
+- All CI workflows pass.
+- Emulator suite starts cleanly.
+- Single package manager for functions workspace.
+
+### Estimated PR boundaries
+
+- PR 3: Move `apps/functions` to `functions/`, update all config paths, update CI.
+
+---
+
+## Phase 4 — Scaffold the native iOS application
+
+**Objective:** Create the initial `apps/ios` Xcode project with correct structure, dependency management, and placeholder shell.
+
+### Files affected
+
+- `apps/ios/` (new)
+
+### Prerequisites
+
+- Phase 2 complete (contracts available to reference).
+- Phase 3 complete (functions at canonical path).
+- A macOS build environment with Xcode.
+
+### Expected output
+
+- Xcode project at `apps/ios/`.
+- Swift Package Manager for dependencies.
+- Firebase Apple SDK added: `FirebaseAuth`, `FirebaseFirestore`, `FirebaseDatabase`, `FirebaseMessaging`, `FirebaseAnalytics`, `FirebaseAppCheck`.
+- `MapboxMaps` SDK added via SPM.
+- Placeholder app shell: launch screen, app icon placeholder, main `App.swift`.
+- `Localizable.xcstrings` (or equivalent String Catalog) seeded with top-level keys from `contracts/localization/sv.json`.
+- Initial `AppEnvironment` or configuration layer reading Firebase config from `GoogleService-Info.plist` (file gitignored; placeholder documented).
+- Initial XCTest target.
+- CI: add `validate-ios.yml` workflow using `xcodebuild` (no signing required for PR validation).
+
+### Tests
+
+- iOS unit test target compiles and runs (empty passing test).
+- CI `validate-ios.yml` passes.
+
+### Rollback approach
+
+Delete `apps/ios/`. No impact on existing workspaces.
+
+### Definition of done
+
+- `apps/ios/` project compiles.
+- Firebase SDK is linked.
+- Mapbox SDK is linked.
+- CI validates iOS build.
+- `GoogleService-Info.plist` is gitignored with a clear placeholder note.
+
+### Estimated PR boundaries
+
+- PR 4: iOS project scaffold, Firebase SDK, Mapbox SDK, CI workflow.
+
+---
+
+## Phase 5 — Scaffold the native Android application
+
+**Objective:** Create the initial `apps/android` Android project with correct structure, dependency management, and placeholder shell.
+
+### Files affected
+
+- `apps/android/` (new)
+
+### Prerequisites
+
+- Phase 2 complete (contracts available to reference).
+- Phase 3 complete.
+
+### Expected output
+
+- Android project at `apps/android/` using Gradle Version Catalogs.
+- Firebase Android SDK dependencies: `firebase-auth`, `firebase-firestore`, `firebase-database`, `firebase-messaging`, `firebase-appcheck`.
+- `mapbox-maps-android` SDK added.
+- Placeholder Compose app shell: `MainActivity`, empty composable root.
+- `res/values/strings.xml` (Swedish) and `res/values-en/strings.xml` (English) seeded from `contracts/localization/`.
+- JUnit and Compose UI test targets configured.
+- CI: add `validate-android.yml` workflow with Gradle lint, unit tests, build (no signing required for PR validation).
+
+### Tests
+
+- Android project compiles.
+- JUnit tests compile and run (empty passing test).
+- CI `validate-android.yml` passes.
+
+### Rollback approach
+
+Delete `apps/android/`. No impact on existing workspaces.
+
+### Definition of done
+
+- `apps/android/` project compiles.
+- Firebase SDK is linked.
+- Mapbox SDK is linked.
+- CI validates Android build.
+- `google-services.json` is gitignored with a clear placeholder note.
+
+### Estimated PR boundaries
+
+- PR 5: Android project scaffold, Firebase SDK, Mapbox SDK, CI workflow.
+
+---
+
+## Phase 6 — Establish mobile design tokens and localization parity
+
+**Objective:** Wire the `contracts/design-tokens/` and `contracts/localization/` into both native apps. Establish the KCC Crown UI baseline on both platforms.
+
+### Files affected
+
+- `apps/ios/` — design token constants, localization String Catalog
+- `apps/android/` — design token constants, `strings.xml` resources
+- `contracts/design-tokens/`, `contracts/localization/`
+
+### Prerequisites
+
+- Phases 4 and 5 complete.
+
+### Expected output
+
+- iOS: generated Swift constants for all design tokens; all localization keys present in String Catalog (sv, en).
+- Android: generated Kotlin/Compose theme constants for all design tokens; all localization keys in `strings.xml` and `values-en/strings.xml`.
+- Light mode, dark mode, and system-adaptive theme verified on both platforms.
+- Accessibility baseline: large tap targets, scalable text, semantic labels.
+
+### Tests
+
+- iOS: snapshot test or compile-time token check.
+- Android: Compose preview compiles; no missing string resources.
+
+### Rollback approach
+
+Revert design/localization changes. No backend impact.
+
+### Definition of done
+
+- Both platforms display the Crown UI baseline color scheme and typography.
+- All top-level localization keys present on both platforms in sv and en.
+- Accessibility minimums met on both platforms.
+
+### Estimated PR boundaries
+
+- PR 6a: Design token export and iOS integration.
+- PR 6b: Design token export and Android integration.
+- PR 6c: Localization parity (sv + en) on both platforms.
+
+---
+
+## Phase 7 — Migrate authentication and user identity
+
+**Objective:** Implement full authentication flows on iOS and Android backed by Firebase Authentication. Replace the custom session system in `services/api` with Firebase ID tokens for admin web.
+
+### Files affected
+
+- `functions/src/auth/` (new callable functions)
+- `apps/ios/` — Sign in with Apple, Firebase Auth
+- `apps/android/` — Google Sign-In, Firebase Auth
+- `apps/admin/src/features/auth/` — Firebase Auth integration
+- `firebase/firestore.rules` — user document creation rules
+- `contracts/schemas/auth.json` — auth contract
+
+### Prerequisites
+
+- Phase 6 complete.
+- Firebase project provisioned with Authentication enabled (Apple and Google providers).
+
+### Expected output
+
+- iOS: Sign in with Apple → Firebase Auth → Firebase UID established; ID token stored in Keychain.
+- Android: Google Sign-In → Firebase Auth → Firebase UID established; ID token stored via Android Keystore-backed storage.
+- Admin web: Google Sign-In → Firebase Auth → admin custom claim verified.
+- `functions/src/auth/onUserCreate.ts`: Firestore `users/{uid}` document created on first sign-in via `functions.auth.user().onCreate` trigger.
+- `functions/src/auth/completeOnboarding.ts`: callable function for post-login profile setup.
+- Firebase Auth ID tokens replace custom session tokens for admin web API calls.
+- `firebase/firestore.rules` updated: any authenticated user can read `users/{uid}`; owner can update non-protected fields; backend manages role/status/entitlement.
+
+### Tests
+
+- iOS: unit tests for auth service, Keychain storage mock.
+- Android: unit tests for auth service, Credential Manager flow mock.
+- Functions: emulator test for `onUserCreate` trigger.
+- Firestore rules test: owner can write profile fields; non-owner cannot; protected fields blocked.
+
+### Rollback approach
+
+- `services/api` and `apps/mobile` continue to work unaffected.
+- Admin web can revert to legacy auth flow.
+
+### Definition of done
+
+- iOS user can sign in with Apple and receive a Firebase UID.
+- Android user can sign in with Google and receive a Firebase UID.
+- Admin user can sign in with Google and have admin claim verified server-side.
+- `users/{uid}` Firestore document created on first login.
+- All tests pass.
+
+### Estimated PR boundaries
+
+- PR 7a: `onUserCreate` trigger + Firestore rule for user document.
+- PR 7b: iOS Sign in with Apple + Keychain storage.
+- PR 7c: Android Google Sign-In + secure token storage.
+- PR 7d: Admin web Firebase Auth integration.
+
+---
+
+## Phase 8 — Migrate authorization, roles, moderation status, and entitlements
+
+**Objective:** Establish Firebase custom claims as the authoritative source for `admin` role, `suspended` status, and `activeMember` entitlement. Port moderation and suspension callable functions.
+
+### Files affected
+
+- `functions/src/admin/` (callable functions for role management)
+- `functions/src/moderation/` (suspension, restore-access)
+- `firebase/firestore.rules` (role and entitlement checks)
+- `firebase/database.rules.json` (entitlement checks for live location visibility)
+- `contracts/schemas/moderation.json`
+
+### Prerequisites
+
+- Phase 7 complete.
+
+### Expected output
+
+- `setAdminRole` callable function (admin-only): sets `admin: true` custom claim.
+- `suspendUser` callable function (admin-only): sets `suspended: true` custom claim + updates `users/{uid}.suspended`.
+- `restoreAccess` callable function (admin-only): clears suspension.
+- Firestore and RTDB rules enforce custom claims for protected paths.
+- Moderation action written to `moderationActions/` Firestore collection.
+- Audit log written to `auditLogs/` Firestore collection for admin actions.
+
+### Tests
+
+- Emulator tests for custom claims enforcement in Firestore rules.
+- Functions tests for suspension callable with admin vs. non-admin callers.
+- RTDB rules test for live location visibility based on `activeMember` claim.
+
+### Rollback approach
+
+Legacy `services/api` moderation endpoints remain active until cutover.
+
+### Definition of done
+
+- Custom claims set server-side only.
+- Suspension overrides feature access.
+- Suspended users retain access to support and account deletion paths.
+- Admin actions produce audit log entries.
+- All tests pass.
+
+### Estimated PR boundaries
+
+- PR 8a: Admin role callable function + Firestore rules enforcement.
+- PR 8b: Suspension callable function + RTDB rules enforcement.
+- PR 8c: Moderation and audit log domain in Firestore.
+
+---
+
+## Phase 9 — Migrate durable data from Prisma concepts to Firestore
+
+**Objective:** Implement Firestore collections for all durable domain data. Port Cloud Function business logic from `services/api/src/lib/` to `functions/src/`. Expand Firestore rules and indexes.
+
+### Files affected
+
+- `functions/src/` (all domain callable functions)
+- `firebase/firestore.rules` (all domain rules)
+- `firebase/firestore.indexes.json` (all domain indexes)
+- `contracts/schemas/` (finalize all domain schemas)
+
+### Domain mapping
+
+See [backend-domain-mapping.md](backend-domain-mapping.md) for complete field-level mapping.
+
+### Prerequisites
+
+- Phase 8 complete.
+
+### Expected output
+
+For each domain listed in [current-state-inventory.md](current-state-inventory.md):
+- Firestore collection defined with correct fields, Security Rules, and indexes.
+- Callable or trigger Cloud Function implementing business logic.
+- Unit tests for function logic.
+- Emulator-backed Firestore rules tests.
+
+Domain order:
+
+1. User profile, privacy settings, onboarding (depends on Phase 7)
+2. Events and RSVP
+3. Event chat
+4. Saved drives + Cloud Storage for route files
+5. Garage / vehicles
+6. Badges
+7. Kronpoäng ledger (Firestore transactions)
+8. Kronjakt points and claims
+9. Partner companies, offers, applications
+10. Partner insights (aggregated events, short-TTL raw events)
+11. Digital billboards
+12. Notifications (in-app notification documents)
+13. Feature flags (Firestore config collection)
+14. Diagnostics reports
+15. Audit logs and moderation history
+16. Account deletion workflow
+
+### Tests
+
+- Per-domain Firestore rules tests using `@firebase/rules-unit-testing`.
+- Per-domain callable function unit tests.
+- Emulator integration tests for write → read round-trips.
+
+### Rollback approach
+
+Firestore data is additive; legacy PostgreSQL data is untouched. Remove new Firestore collections if needed.
+
+### Definition of done
+
+- All domain Firestore collections have rules, indexes, and callable function coverage.
+- All tests pass.
+- `feature-parity-matrix.md` columns `Target Firebase domain` and `Callable function or trigger` are complete for all rows.
+
+### Estimated PR boundaries
+
+One PR per domain group (e.g., PR 9a for user/profile, PR 9b for events/RSVP, PR 9c for chat, etc.).
+
+---
+
+## Phase 10 — Migrate ephemeral live-location data to Realtime Database
+
+**Objective:** Implement live location session and latest-position tracking in Firebase Realtime Database. Port live-location callable functions.
+
+### Files affected
+
+- `functions/src/live-location/` (start, stop, update, hide-now callable functions)
+- `firebase/database.rules.json` (live location rules)
+- `contracts/schemas/live-location.json`
+
+### Prerequisites
+
+- Phase 8 complete (entitlement enforcement in RTDB rules).
+
+### Expected output
+
+- RTDB paths:
+  - `liveLocation/{uid}/session` — active session state
+  - `liveLocation/{uid}/latest` — latest position (write-once, overwrite on update)
+  - `liveLocation/{uid}/presence` — online/disconnected state
+- Callable functions: `startLiveSession`, `updateLivePosition`, `stopLiveSession`, `hideMeNow`.
+- TTL enforcement: scheduled function or `onDisconnect` callback clears positions after 15 minutes.
+- Entitlement check: `activeMember` custom claim required to read others' positions.
+- Blocking enforcement: blocked users excluded from visible users.
+- "Hide me now" removes `liveLocation/{uid}/latest` immediately.
+
+### Tests
+
+- RTDB rules tests: entitlement enforcement, owner-write, block enforcement.
+- Functions tests for session lifecycle.
+- Emulator integration test for start → update → stop lifecycle.
+
+### Rollback approach
+
+Legacy `services/api` live-location endpoints remain active.
+
+### Definition of done
+
+- Live location lifecycle fully functional in emulator.
+- TTL cleanup verified.
+- "Hide me now" removes position immediately.
+- Entitlement and blocking enforced in RTDB rules.
+
+### Estimated PR boundaries
+
+- PR 10a: RTDB rules + session callable functions.
+- PR 10b: TTL cleanup scheduled function.
+- PR 10c: Emulator integration tests.
+
+---
+
+## Phase 11 — Migrate backend business operations to callable functions
+
+**Objective:** Port remaining `services/api` service classes that have not yet been covered by Phases 7–10 to Cloud Functions. This includes subscription verification, group driving, Kronjakt claim validation, notifications, and partner insights aggregation.
+
+### Files affected
+
+- `functions/src/subscription/`
+- `functions/src/groupDrive/`
+- `functions/src/crownHunt/`
+- `functions/src/notifications/`
+- `functions/src/partnerInsights/`
+- `functions/src/scheduled/` (cleanup jobs)
+
+### Prerequisites
+
+- Phases 9 and 10 complete.
+
+### Expected output
+
+- Subscription: `verifySubscription` callable function (validates Apple/Google receipt against provider; updates Firestore entitlement and custom claim).
+- Group drive: `joinGroupDrive`, `updateDriveStatus`, `leaveGroupDrive` callable functions.
+- Kronjakt: `submitCrownHuntClaim` callable function with full anti-fraud validation (geofence, speed, stationary time, cooldown, risk score).
+- Notifications: FCM callable function to send push; scheduled function to deliver in-app notifications.
+- Partner insights: short-TTL raw event writes; scheduled aggregation function.
+- Scheduled cleanup: expired live-location sessions, old diagnostics reports, raw partner insights events.
+
+### Tests
+
+- Subscription: mock provider verification; entitlement update test.
+- Group drive: lifecycle and participant status transitions.
+- Kronjakt: anti-fraud boundary tests (speed, stationary, cooldown, impossible jump).
+- Notifications: FCM delivery mock test.
+- Partner insights: aggregation threshold enforcement (minimum 10 unique users).
+
+### Rollback approach
+
+Legacy `services/api` endpoints remain active.
+
+### Definition of done
+
+- All callable functions in this phase have unit tests and emulator tests.
+- Kronjakt anti-fraud rules match `docs/security.md` baselines.
+- Partner insights never expose individual user data.
+
+### Estimated PR boundaries
+
+One PR per domain (subscription, group drive, Kronjakt, notifications, partner insights, scheduled cleanup).
+
+---
+
+## Phase 12 — Port each mobile feature to both native applications
+
+**Objective:** Implement every product feature on iOS and Android using the Firebase SDK, callable functions, and language-neutral contracts. Follow the vertical-slice order below.
+
+### Files affected
+
+- `apps/ios/` — all feature modules
+- `apps/android/` — all feature modules
+
+### Prerequisites
+
+- Phases 7–11 complete (backend functions available in emulator).
+
+### Vertical-slice order
+
+1. App shell, navigation, design tokens, localization, configuration
+2. Authentication (Sign in with Apple / Google)
+3. Onboarding and profile
+4. Roles, status, entitlement, feature flags
+5. Live location start/stop/hide
+6. Background location
+7. Map and live markers (Mapbox)
+8. Blocking
+9. Events and RSVP
+10. Event chat
+11. Group driving
+12. Saved drives
+13. Garage
+14. Badges
+15. Kronpoäng
+16. Kronjakt
+17. Partners and partner offers
+18. Partner application
+19. Partner insights opt-in
+20. Digital billboards
+21. Notifications (FCM + in-app)
+22. Diagnostics
+23. Moderation flows (mobile admin actions)
+24. Subscriptions and store verification
+25. Account deletion and compliance flows
+
+### Rules per slice
+
+- Each slice must include both iOS and Android implementations.
+- Each slice must include updated Swedish and English localization.
+- Each slice must include unit tests for both platforms.
+- Each slice must be gated by the relevant feature flag.
+- Security and privacy controls from `docs/security.md` must be replicated exactly.
+
+### Tests (per slice)
+
+- iOS: XCTest/Swift Testing unit tests; UI tests for critical flows.
+- Android: JUnit + Compose UI tests.
+
+### Rollback approach
+
+Feature flags gate each slice. Disable the flag to roll back without a code change.
+
+### Definition of done
+
+- Both platforms implement equivalent functionality for the slice.
+- Both platforms pass their tests.
+- Localization is complete on both platforms.
+- `feature-parity-matrix.md` row for the slice is marked complete on both platforms.
+
+### Estimated PR boundaries
+
+One or two PRs per vertical slice (iOS PR + Android PR, or combined if small).
+
+---
+
+## Phase 13 — Connect the admin app to Firebase Authentication and callable functions
+
+**Objective:** Migrate the admin web from the legacy `services/api` HTTP client to Firebase Authentication and callable Cloud Functions.
+
+### Files affected
+
+- `apps/admin/src/features/auth/`
+- `apps/admin/src/lib/` (API client wrappers → Firebase callable wrappers)
+- All admin feature pages
+
+### Prerequisites
+
+- Phase 8 complete (admin role via custom claims).
+- Phase 11 complete (all domain callable functions available).
+
+### Expected output
+
+- Admin web authenticates with Firebase Auth (Google Sign-In).
+- Admin role verified by custom claim on every privileged action.
+- All admin operations call callable Cloud Functions instead of `services/api` REST endpoints.
+- Sensitive admin actions produce audit logs via callable functions.
+
+### Tests
+
+- Admin auth tests: Google Sign-In mock, custom claim verification.
+- Callable function integration tests (emulator).
+- Vitest unit tests for all admin feature modules.
+
+### Rollback approach
+
+Revert admin web to legacy API client. `services/api` remains running.
+
+### Definition of done
+
+- All admin features functional via Firebase.
+- No direct calls to `services/api` from admin web.
+- All tests pass.
+
+### Estimated PR boundaries
+
+- PR 13a: Firebase Auth integration in admin web.
+- PR 13b–13n: One PR per admin feature domain (users, events, partners, etc.).
+
+---
+
+## Phase 14 — Move admin hosting to Firebase Hosting
+
+**Objective:** Confirm admin web is deployed on Firebase Hosting (already configured in `firebase.json`). Validate production build and hosting headers.
+
+### Files affected
+
+- `firebase/firebase.json` — already configured
+- `.github/workflows/deploy-firebase-hosting.yml` — already configured
+
+### Prerequisites
+
+- Phase 13 complete.
+- Firebase project provisioned.
+
+### Expected output
+
+- Admin web served from Firebase Hosting.
+- CSP, HSTS, and cache headers verified.
+- Firebase Hosting `rewrites` for SPA routing working.
+
+### Tests
+
+- Static build produces correct `dist/` output.
+- Hosting emulator serves admin web locally.
+
+### Rollback approach
+
+Keep existing hosting target; deploy previous build artifact.
+
+### Definition of done
+
+- Admin web accessible via Firebase Hosting URL.
+- All security headers present.
+- `deploy-firebase-hosting.yml` workflow succeeds.
+
+### Estimated PR boundaries
+
+- PR 14: Hosting configuration validation + admin build CI verification.
+
+---
+
+## Phase 15 — Add App Check
+
+**Objective:** Enable Firebase App Check to protect Cloud Functions from unauthorized callers.
+
+### Files affected
+
+- `functions/src/` — App Check enforcement configuration
+- `apps/ios/` — App Attest / DeviceCheck registration
+- `apps/android/` — Play Integrity registration
+- `apps/admin/` — reCAPTCHA Enterprise (or approved provider) registration
+
+### Prerequisites
+
+- Phase 12 complete (native apps functional).
+- Phase 13 complete (admin web functional).
+
+### Expected output
+
+- App Check registered on all clients.
+- Production enforcement documented but not enabled until monitoring is prepared.
+- Debug provider configured for emulator and CI.
+
+### Tests
+
+- Emulator: App Check debug token accepted.
+- Functions: verify App Check token middleware present.
+
+### Rollback approach
+
+Disable App Check enforcement in Firebase console. Client-side registration can remain.
+
+### Definition of done
+
+- App Check registered on iOS (App Attest), Android (Play Integrity), and admin web.
+- Debug provider works in emulator.
+- Production enforcement plan documented with rollout criteria.
+
+### Estimated PR boundaries
+
+- PR 15a: App Check on iOS.
+- PR 15b: App Check on Android.
+- PR 15c: App Check on admin web.
+- PR 15d: Functions App Check enforcement middleware.
+
+---
+
+## Phase 16 — Add emulator integration tests and security-rule tests
+
+**Objective:** Achieve comprehensive emulator-backed test coverage for all Firestore, RTDB, and Storage rules, and all callable functions.
+
+### Files affected
+
+- `functions/src/__tests__/` (emulator integration tests)
+
+### Prerequisites
+
+- Phase 11 complete (all domain functions implemented).
+
+### Expected output
+
+- Emulator tests for every Firestore collection covering:
+  - Unauthenticated read/write (must deny).
+  - Non-owner read of private data (must deny).
+  - Owner read/write of own data (must allow for correct fields).
+  - Protected-field write (must deny).
+  - Admin read/write (must allow via Admin SDK).
+- Emulator tests for RTDB live location paths.
+- Emulator tests for Storage paths.
+- All tests run in CI via `test-firebase-rules.yml`.
+
+### Tests
+
+This phase is all tests. Pass rate: 100%.
+
+### Rollback approach
+
+Remove failing tests. Fix rules or test expectations.
+
+### Definition of done
+
+- `test-firebase-rules.yml` CI workflow passes.
+- Every Firestore collection has deny-by-default test coverage.
+- Every sensitive operation has both allow and deny case coverage.
+
+### Estimated PR boundaries
+
+One PR per domain (e.g., PR 16a for user/auth rules, PR 16b for events, etc.).
+
+---
+
+## Phase 17 — Add native CI builds and tests
+
+**Objective:** Add CI workflows for iOS and Android build validation.
+
+### Files affected
+
+- `.github/workflows/validate-ios.yml` (new or expand from Phase 4)
+- `.github/workflows/validate-android.yml` (new or expand from Phase 5)
+
+### Prerequisites
+
+- Phases 12 complete (native apps have meaningful implementations).
+
+### Expected output
+
+- iOS CI: Swift lint (if adopted), build, unit tests, UI tests where practical. No signing required for PR validation.
+- Android CI: Gradle lint, build, unit tests, Compose UI tests where practical.
+- Both workflows pass on every PR.
+
+### Tests
+
+CI is the test.
+
+### Rollback approach
+
+Disable CI workflows temporarily. Fix failures.
+
+### Definition of done
+
+- Both CI workflows pass.
+- No skipped tests hiding failures.
+
+### Estimated PR boundaries
+
+- PR 17a: iOS CI finalization.
+- PR 17b: Android CI finalization.
+
+---
+
+## Phase 18 — Cutover
+
+**Objective:** Enable production Firebase deployment. Direct real users to the native apps. Verify all cutover checklist gates.
+
+### Files affected
+
+- Firebase project configuration (production)
+- App Store / Google Play submission packages
+
+### Prerequisites
+
+- All phases 1–17 complete.
+- Cutover checklist (see [cutover-checklist.md](cutover-checklist.md)) verified.
+
+### Expected output
+
+- Native iOS app submitted to App Store.
+- Native Android app submitted to Google Play.
+- Firebase backend deployed to production.
+- `apps/mobile` and `services/api` no longer receive traffic.
+
+### Tests
+
+- All CI workflows pass.
+- Smoke tests run against production endpoints.
+- Physical device tests for live location and push notifications.
+
+### Rollback approach
+
+- Revert App Store / Play Store to previous build.
+- Redirect DNS or disable native app if needed.
+- Legacy `apps/mobile` and `services/api` remain available until approved for deletion.
+
+### Definition of done
+
+- All cutover checklist gates met.
+- Native apps live in stores.
+- Firebase backend deployed.
+
+### Estimated PR boundaries
+
+- PR 18: Production deployment configuration and cutover documentation.
+
+---
+
+## Phase 19 — Remove legacy React Native and Fastify/Prisma code
+
+**Objective:** Delete `apps/mobile` and `services/api` after native parity is verified. Remove all legacy Dependabot entries, Docker files, and CI container build jobs.
+
+### Prerequisites
+
+- Phase 18 complete.
+- Cutover checklist signed off.
+- Legacy deletion approved in a separate PR (as stated in cutover checklist).
+- No production data depends solely on the legacy backend.
+
+### Files affected
+
+- `apps/mobile/` — delete
+- `services/api/` — delete
+- `services/api/Dockerfile` — delete
+- `.github/dependabot.yml` — remove legacy entries
+- `.github/workflows/ci.yml` — remove mobile, api, and container-build jobs
+- `package.json` — remove legacy workspace entries
+- `pnpm-workspace.yaml` — clean up if no longer needed
+- `docs/` — update to remove legacy references
+
+### Tests
+
+- All remaining CI workflows pass after deletion.
+- No broken imports in remaining workspaces.
+
+### Rollback approach
+
+Restore from git history. This is a one-way destructive operation; requires explicit approval.
+
+### Definition of done
+
+- `apps/mobile` and `services/api` directories removed.
+- All CI green.
+- Documentation updated.
+- `feature-parity-matrix.md` updated to reflect archived legacy status.
+
+### Estimated PR boundaries
+
+- PR 19: Legacy code deletion (single PR for `apps/mobile` removal after approval).
+- PR 20: Legacy code deletion (single PR for `services/api` removal after approval).
+
+---
+
+## Proposed first five implementation pull requests
+
+| PR | Phase | Scope | Validation |
+|---|---|---|---|
+| PR-A | Phase 1b | Update `README.md`, `docs/product-decisions.md`, `docs/security.md` to reflect target architecture | Documentation review |
+| PR-B | Phase 2a | Create `contracts/` directory: README, JSON Schema for auth + user profile, error codes | JSON Schema lint |
+| PR-C | Phase 2b–2d | Remaining contracts: all domain schemas, localization, design tokens | JSON Schema lint, localization diff |
+| PR-D | Phase 3 | Move `apps/functions` → `functions/`, update all config paths and CI | All Firebase CI workflows pass |
+| PR-E | Phase 7a | `onUserCreate` trigger + Firestore `users/{uid}` creation + Firestore rules for user document | Emulator rules test + trigger test |

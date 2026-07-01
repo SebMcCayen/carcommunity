@@ -11,7 +11,7 @@ Expected initial usage: 20–30 active users. Maximum operating budget: SEK 500 
 ```text
 apps/ios     (Swift / SwiftUI)     ─┐
 apps/android (Kotlin / Compose)    ─┤──> Firebase backend ───> Cloud Firestore
-apps/admin   (Next.js web)         ─┘         │               Firebase Realtime Database
+apps/admin   (React + Vite web)         ─┘         │               Firebase Realtime Database
                                                │               Cloud Storage for Firebase
                                                ├── Firebase Authentication
                                                ├── Cloud Functions (Firebase-supported Node.js + TypeScript)
@@ -39,13 +39,15 @@ Planned structure:
 ├── apps/
 │   ├── ios/            # Swift / SwiftUI native iOS app (planned)
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
-│   ├── mobile/         # React Native / Expo app (current implementation)
-│   └── admin/          # Next.js admin web app (hosted on Firebase Hosting)
-├── functions/          # Cloud Functions for Firebase (Firebase-supported Node.js + TypeScript, planned)
+│   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
+│   └── admin/          # React + Vite admin web app (hosted on Firebase Hosting)
+├── functions/          # Cloud Functions for Firebase (planned move from apps/functions)
+├── firebase/           # Firebase CLI config, Security Rules, indexes
+├── contracts/          # Language-neutral cross-platform contracts (planned)
 ├── services/
-│   └── api/            # Node.js + TypeScript API (current implementation)
+│   └── api/            # LEGACY: Node.js + Fastify + PostgreSQL API (frozen — migration source)
 ├── packages/
-│   └── shared/         # Versioned TypeScript API contracts
+│   └── shared/         # Versioned TypeScript API contracts (backend/admin)
 ├── docs/
 │   └── adr/            # Architecture decision records
 └── .github/
@@ -55,7 +57,7 @@ Planned structure:
 
 - **apps/ios**: native iOS UX (Swift / SwiftUI), map rendering, client-side purchase initiation, realtime consumption.
 - **apps/android**: native Android UX (Kotlin / Jetpack Compose), map rendering, client-side purchase initiation, realtime consumption.
-- **apps/admin**: moderation, partner management, billboard approval, operational dashboards. Hosted on Firebase Hosting.
+- **apps/admin**: moderation, partner management, billboard approval, operational dashboards. React + Vite SPA hosted on Firebase Hosting.
 - **functions**: Cloud Functions for Firebase — authentication verification, subscription verification, entitlements, authorization, business rules, realtime coordination, persistence, integrations.
 - **Cloud Firestore**: durable storage for users, entitlements, moderation state, saved drives, partner aggregates, and operational metadata.
 - **Firebase Realtime Database**: ephemeral realtime state — live location, active drive sessions, presence.
@@ -75,8 +77,7 @@ Both apps call Cloud Functions for trusted operations. They use Firebase SDKs fo
 
 ## Admin web architecture
 
-- Next.js app hosted on Firebase Hosting.
-- Authenticates using Google Sign-In through Firebase Authentication.
+- **apps/admin**: React + Vite SPA, Google Sign-In through Firebase Authentication.
 - Admin authorization uses server-managed Firebase custom claims verified by Cloud Functions.
 - Focus areas:
   - user moderation (blocking/suspension),

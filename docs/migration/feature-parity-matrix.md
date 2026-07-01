@@ -1,0 +1,123 @@
+# Feature Parity Matrix
+
+This matrix tracks the implementation status of every product feature across all target platforms. A feature is not considered complete until both iOS and Android columns are marked complete.
+
+**Status legend:**
+- ✅ Complete
+- 🟡 In progress / partial
+- 🔲 Not started
+- N/A Not applicable to this platform
+- ❄️ Frozen (legacy source — do not add features)
+
+> **Note:** `apps/mobile` and `services/api` columns reflect the current legacy implementation status. They are migration sources and are frozen to new product features.
+
+---
+
+| Feature | RN mobile path | API path | Target Firebase domain | Firestore collection / RTDB path | Callable function or trigger | iOS status | Android status | Admin status | Swedish i18n | English i18n | iOS tests | Android tests | Backend tests | Rules tests | Privacy review | Intentional platform differences | Migration status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Authentication** | | | | | | | | | | | | | | | | | |
+| Sign in | `screens/LoginScreen.tsx` | `routes/auth.ts` | Firebase Authentication | `users/{uid}` | `auth.user().onCreate` trigger | 🔲 | 🔲 | 🔲 | ✅ (sv.json) | ✅ (en.json) | 🔲 | 🔲 | 🟡 (token verifier) | 🔲 | Required | iOS: Sign in with Apple; Android: Google Sign-In | 🔲 Not started |
+| Sign out | `screens/LoginScreen.tsx` | `routes/auth.ts` | Firebase Authentication | — | Client-side `auth.signOut()` | 🔲 | 🔲 | 🔲 | ✅ | ✅ | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| Session token management | `src/session/` | `routes/auth.ts` (custom sessions) | Firebase Authentication ID tokens | — | — | 🔲 | 🔲 | 🔲 | N/A | N/A | 🔲 | 🔲 | 🟡 (verifier exists) | N/A | Required | iOS: Keychain; Android: Android Keystore | 🔲 Not started |
+| **Onboarding and profile** | | | | | | | | | | | | | | | | | |
+| Onboarding flow | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `users/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`onboarding.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Profile view and edit | `screens/ProfileScreen.tsx` | `routes/users.ts` | Firestore | `users/{uid}` | `updateProfile` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Privacy settings | `screens/PrivacySettingsScreen.tsx` | `routes/users.ts` | Firestore | `userPrivate/{uid}` | `updatePrivacySettings` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Age confirmation | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Terms acceptance | `screens/OnboardingScreen.tsx` | `routes/onboarding.ts` | Firestore | `userPrivate/{uid}` | `completeOnboarding` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Roles and access** | | | | | | | | | | | | | | | | | |
+| Admin role | `src/context/` | `lib/auth-context.ts` | Firebase custom claims | `users/{uid}.role` (Firestore, read-only) | `setAdminRole` callable (admin only) | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ (`access.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Suspended user access | `screens/SuspendedAccountScreen.tsx` | `lib/auth-context.ts` | Firebase custom claims + Firestore | `users/{uid}.suspended` | `suspendUser` callable (admin only) | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Subscription and entitlement** | | | | | | | | | | | | | | | | | |
+| Subscription purchase | `src/api/subscription.ts` | `routes/subscription.ts` | Firestore | `subscriptions/{uid}` | `verifySubscription` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`subscription.test.ts`) | 🔲 | Required | iOS: StoreKit 2; Android: Google Play Billing | 🔲 Not started |
+| Subscription status check | `src/api/subscription.ts` | `routes/subscription.ts` | Firebase custom claims | `users/{uid}.activeMember` | — (claim set by `verifySubscription`) | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Member-gated content | `components/LockedFeatureNotice.tsx` | (middleware) | Firestore rules + RTDB rules | — | — | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Feature flags** | | | | | | | | | | | | | | | | | |
+| Feature flag fetch | `src/featureFlags/` | `routes/feature-flags.ts` | Firestore | `config/featureFlags/{key}` | `getFeatureFlags` callable | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| Feature flag admin | — | `routes/feature-flags.ts` | Firestore | `config/featureFlags/{key}` | `setFeatureFlag` callable (admin only) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Live location** | | | | | | | | | | | | | | | | | |
+| Start live session | `screens/LiveLocationScreen.tsx` | `routes/live-location.ts` | Realtime Database | `liveLocation/{uid}/session` | `startLiveSession` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`live-location.test.ts`) | 🔲 | Required | Background location handling differs by platform | 🔲 Not started |
+| Update live position | `hooks/useLiveLocationSession.ts` | `routes/live-location.ts` | Realtime Database | `liveLocation/{uid}/latest` | `updateLivePosition` callable | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Stop live session | `screens/LiveLocationScreen.tsx` | `routes/live-location.ts` | Realtime Database | `liveLocation/{uid}/session` | `stopLiveSession` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Hide me now | `screens/LiveLocationScreen.tsx` | `routes/live-location.ts` | Realtime Database | `liveLocation/{uid}/latest` (delete) | `hideMeNow` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| View others' live positions | `hooks/useLiveLocationMarkers.ts` | `routes/live-location.ts` | Realtime Database | `liveLocation/*/latest` | RTDB listener (entitlement gated) | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Live location TTL | `hooks/useLiveLocationSession.ts` | `lib/live-location-service.ts` | Realtime Database / scheduled function | `liveLocation/{uid}/session.expiresAt` | Scheduled cleanup function | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Background location | `hooks/useLiveLocationSession.ts` | — | Platform | — | — | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | N/A | N/A | Required | iOS: Core Location background mode; Android: WorkManager / ForegroundService | 🔲 Not started |
+| **Map** | | | | | | | | | | | | | | | | | |
+| Standard map view | `screens/MapScreen.tsx` | — | Mapbox Maps SDK | — | — | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| Satellite map view | `screens/MapScreen.tsx` | — | Mapbox Maps SDK | — | — | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| 3D map mode | — | — | Mapbox Maps SDK | — | — | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| Live driver markers | `hooks/useLiveLocationMarkers.ts` | — | Realtime Database + Mapbox | `liveLocation/*/latest` | RTDB listener | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | N/A | N/A | Required | None | 🔲 Not started |
+| Partner map markers | `hooks/usePartnerMarkers.ts` | — | Firestore + Mapbox | `companies/` | Firestore listener | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| Billboard map markers | `hooks/useBillboardMarkers.ts` | — | Firestore + Mapbox | `billboards/` | Firestore listener | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | None | None | 🔲 Not started |
+| Group drive markers | `hooks/useGroupDriveMarkers.ts` | — | Realtime Database + Mapbox | `liveLocation/*/latest` | RTDB listener | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | Required | None | 🔲 Not started |
+| **Blocking** | | | | | | | | | | | | | | | | | |
+| Block user | `screens/BlockedUsersScreen.tsx` | `routes/blocking.ts` | Firestore | `userBlocks/{uid}/blocked/{targetUid}` | `blockUser` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`blocking.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Unblock user | `screens/BlockedUsersScreen.tsx` | `routes/blocking.ts` | Firestore | `userBlocks/{uid}/blocked/{targetUid}` (delete) | `unblockUser` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Block enforcement (live location) | `hooks/useLiveLocationSession.ts` | `lib/live-location-service.ts` | Firestore + RTDB rules | `userBlocks/` | RTDB Security Rules | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Block enforcement (chat) | `hooks/useEventChat.ts` | `lib/event-chat-service.ts` | Firestore rules | `events/{eventId}/messages/` | Firestore Security Rules | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Events** | | | | | | | | | | | | | | | | | |
+| Events list | `screens/EventsScreen.tsx` | `routes/events.ts` | Firestore | `events/` | `getEvents` callable or direct SDK | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`events.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Event detail | `screens/EventDetailScreen.tsx` | `routes/events.ts` | Firestore | `events/{eventId}` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| Event creation (admin) | — | `routes/events.ts` | Firestore | `events/` | `createEvent` callable (admin only) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| RSVP | `screens/EventDetailScreen.tsx` | `routes/events.ts` | Firestore | `events/{eventId}/rsvps/{uid}` | `updateRsvp` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Free vs. member event visibility | `screens/EventDetailScreen.tsx` | `routes/events.ts` | Firestore rules | `events/{eventId}` | Firestore Security Rules | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Event chat** | | | | | | | | | | | | | | | | | |
+| Send chat message | `screens/EventChatScreen.tsx` | `routes/event-chat.ts` | Firestore | `events/{eventId}/messages/` | `sendChatMessage` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`event-chat.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Realtime chat updates | `hooks/useEventChat.ts` | `routes/event-chat.ts` | Firestore | `events/{eventId}/messages/` | Firestore snapshot listener | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Report chat message | `screens/EventChatScreen.tsx` | `routes/event-chat.ts` | Firestore | `events/{eventId}/messageReports/` | `reportChatMessage` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Moderate chat message (admin) | — | `routes/event-chat.ts` | Firestore | `events/{eventId}/messages/{msgId}` | `removeChatMessage` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Group driving** | | | | | | | | | | | | | | | | | |
+| Join group drive | `screens/GroupDriveScreen.tsx` | `routes/group-drive.ts` | Firestore + RTDB | `events/{eventId}/groupDriveParticipants/` | `joinGroupDrive` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`group-drive.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Update drive status | `hooks/useGroupDrive.ts` | `routes/group-drive.ts` | Firestore | `events/{eventId}/groupDriveParticipants/{uid}` | `updateDriveStatus` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Leave group drive | `hooks/useGroupDrive.ts` | `routes/group-drive.ts` | Firestore | `events/{eventId}/groupDriveParticipants/{uid}` | `leaveGroupDrive` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Participant map markers | `hooks/useGroupDriveMarkers.ts` | — | RTDB + Mapbox | `liveLocation/*/latest` | RTDB listener | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | N/A | N/A | Required | None | 🔲 Not started |
+| **Saved drives** | | | | | | | | | | | | | | | | | |
+| Save drive | `screens/LiveLocationScreen.tsx` | `routes/saved-drives.ts` | Firestore + Cloud Storage | `rides/` + `rideRoutes/` | `saveDrive` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`saved-drives.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Saved drives list | `screens/SavedDrivesScreen.tsx` | `routes/saved-drives.ts` | Firestore | `rides/` | Direct SDK read | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Saved drive detail | `screens/SavedDriveDetailScreen.tsx` | `routes/saved-drives.ts` | Firestore + Cloud Storage | `rides/{rideId}` + route file | Direct SDK read | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Delete saved drive | `screens/SavedDrivesScreen.tsx` | `routes/saved-drives.ts` | Firestore + Cloud Storage | `rides/{rideId}` + route file | `deleteDrive` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Garage / vehicles** | | | | | | | | | | | | | | | | | |
+| Add vehicle | `screens/VehicleFormScreen.tsx` | `routes/garage.ts` | Firestore | `vehicles/` | `addVehicle` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`garage.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| View garage | `screens/GarageScreen.tsx` | `routes/garage.ts` | Firestore | `vehicles/` (userId filter) | Direct SDK read | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| Edit / delete vehicle | `screens/VehicleFormScreen.tsx` | `routes/garage.ts` | Firestore | `vehicles/{vehicleId}` | `updateVehicle` / `deleteVehicle` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Badges** | | | | | | | | | | | | | | | | | |
+| View badges | `screens/BadgesScreen.tsx` | `routes/badges.ts` | Firestore | `users/{uid}/badges/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`badges.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Award badge (admin) | — | `routes/badges.ts` | Firestore | `users/{uid}/badges/` | `awardBadge` callable (admin only) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Kronpoäng (points)** | | | | | | | | | | | | | | | | | |
+| View points wallet | `screens/PointsWalletScreen.tsx` | `routes/points.ts` | Firestore | `pointsLedger/{uid}/entries/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`points.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Award points (backend) | — | `lib/points-service.ts` | Firestore transaction | `pointsLedger/{uid}/entries/` + balance | `awardPoints` callable (admin/system) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Kronjakt (crown hunt)** | | | | | | | | | | | | | | | | | |
+| View crown hunt points | `screens/CrownHuntScreen.tsx` | `routes/crown-hunt.ts` | Firestore | `crownHuntPoints/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`crown-hunt.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Submit claim | `screens/CrownHuntScreen.tsx` | `routes/crown-hunt.ts` | Firestore transaction | `crownHuntClaims/` + `pointsLedger/` | `submitCrownHuntClaim` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | iOS: App Attest for anti-fraud signal; Android: Play Integrity | 🔲 Not started |
+| Admin Kronjakt management | — | `routes/crown-hunt.ts` | Firestore | `crownHuntPoints/` | `manageCrownHuntPoint` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Partners** | | | | | | | | | | | | | | | | | |
+| Partner list | `screens/PartnerDetailScreen.tsx` | `routes/partners.ts` | Firestore | `companies/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`partners.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Partner detail | `screens/PartnerDetailScreen.tsx` | `routes/partners.ts` | Firestore | `companies/{companyId}` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| Partner application | `screens/PartnerApplicationScreen.tsx` | `routes/partners.ts` | Firestore | `partnerApplications/` | `submitPartnerApplication` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Partner offers** | | | | | | | | | | | | | | | | | |
+| Offer list (member only) | (within PartnerDetailScreen) | `routes/partner-offers.ts` | Firestore | `offers/` | Direct SDK read (entitlement gated) | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`partner-offers.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Saved offers | — | `routes/partner-offers.ts` | Firestore | `users/{uid}/savedOffers/` | `saveOffer` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Partner insights** | | | | | | | | | | | | | | | | | |
+| Opt-in to partner stats | (within privacy settings) | `routes/partner-insights.ts` | Firestore | `userPrivate/{uid}.anonymousPartnerStatsOptIn` | `updatePartnerStatsOptIn` callable | 🔲 | 🔲 | N/A | ✅ | ✅ | 🔲 | 🔲 | ✅ (`partner-insights.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Partner insights admin view | — | `routes/partner-insights.ts` | Firestore | `partnerInsights/` (aggregated) | `getPartnerInsights` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Digital billboards** | | | | | | | | | | | | | | | | | |
+| View billboard | `screens/BillboardDetailScreen.tsx` | `routes/digital-billboards.ts` | Firestore | `billboards/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`digital-billboards.test.ts`) | 🔲 | None | None | 🔲 Not started |
+| Billboard admin approval | — | `routes/digital-billboards.ts` | Firestore | `billboards/{billboardId}` | `approveBillboard` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | None | None | 🔲 Not started |
+| **Notifications** | | | | | | | | | | | | | | | | | |
+| Notification preferences | `screens/NotificationSettingsScreen.tsx` | `routes/notifications.ts` | Firestore | `userPrivate/{uid}.notificationPreferences` | `updateNotificationPreferences` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`notifications.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Notifications list | `screens/NotificationsScreen.tsx` | `routes/notifications.ts` | Firestore | `notifications/{uid}/items/` | Direct SDK read | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| Push notification delivery | — | `lib/notification-service.ts` | FCM | — | `sendPushNotification` callable (system) | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ | N/A | Required | iOS: APNs via FCM; Android: FCM direct | 🔲 Not started |
+| FCM token registration | — | `routes/notifications.ts` | Firestore | `userPrivate/{uid}/pushTokens/` | `registerPushToken` callable | 🔲 | 🔲 | N/A | N/A | N/A | 🔲 | 🔲 | ✅ | 🔲 | Required | iOS: UserNotifications; Android: FCM SDK | 🔲 Not started |
+| **Diagnostics** | | | | | | | | | | | | | | | | | |
+| Submit crash/error report | — | `routes/diagnostics.ts` | Firestore | `diagnosticsReports/` | `submitDiagnosticsReport` callable | 🔲 | 🔲 | ✅ | N/A | N/A | 🔲 | 🔲 | ✅ (`diagnostics.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Admin error report view | — | `routes/diagnostics.ts` | Firestore | `diagnosticsReports/` | `getDiagnosticsReports` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Moderation** | | | | | | | | | | | | | | | | | |
+| Report user | — | `routes/moderation.ts` | Firestore | `moderationReports/` | `reportUser` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ (`moderation.test.ts`) | 🔲 | Required | None | 🔲 Not started |
+| Admin moderation actions | — | `routes/moderation.ts` | Firestore + custom claims | `moderationActions/` | `suspendUser` / `warnUser` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Audit logs** | | | | | | | | | | | | | | | | | |
+| Admin audit log view | — | `routes/moderation.ts` | Firestore | `auditLogs/` | `getAuditLogs` callable (admin) | N/A | N/A | ✅ | N/A | N/A | N/A | N/A | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **Account deletion** | | | | | | | | | | | | | | | | | |
+| Delete account | `screens/SettingsScreen.tsx` | `routes/users.ts` | Firebase Auth + Firestore | `users/{uid}` soft-delete | `deleteAccount` callable | 🔲 | 🔲 | ✅ | ✅ | ✅ | 🔲 | 🔲 | ✅ | 🔲 | Required | None | 🔲 Not started |
+| **App Check** | | | | | | | | | | | | | | | | | |
+| App Check registration | — | — | Firebase App Check | — | Middleware in all callable functions | 🔲 | 🔲 | 🔲 | N/A | N/A | 🔲 | 🔲 | 🔲 | N/A | None | iOS: App Attest; Android: Play Integrity; Admin: reCAPTCHA | 🔲 Not started |
