@@ -17,7 +17,7 @@
     "emulators:test": "firebase emulators:exec --only auth,firestore,database,storage --project demo-test --config ../firebase/firebase.json 'pnpm test:emulator'"
   },
   "dependencies": {
-    "firebase-admin": "^13.0.0",
+    "firebase-admin": "^14.1.0",
     "firebase-functions": "^7.2.5",
     "zod": "^4.4.3"
   },
