@@ -6,12 +6,14 @@ on:
     paths:
       - 'apps/android/**'
       - 'contracts/localization/**'
+      - 'contracts/design-tokens/**'
       - '.github/workflows/validate-android.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/android/**'
       - 'contracts/localization/**'
+      - 'contracts/design-tokens/**'
       - '.github/workflows/validate-android.yml'
 
 permissions:
@@ -42,6 +44,14 @@ jobs:
           node apps/android/scripts/generate-strings.mjs
           if ! git diff --exit-code apps/android/app/src/main/res/values/strings.xml apps/android/app/src/main/res/values-en/strings.xml; then
             echo "::error::Generated strings.xml files are out of date. Run: node apps/android/scripts/generate-strings.mjs"
+            exit 1
+          fi
+
+      - name: Verify generated design tokens are up to date
+        run: |
+          node apps/android/scripts/generate-tokens.mjs
+          if ! git diff --exit-code apps/android/app/src/main/java/com/kungsbackacarcommunity/app/design/Tokens.kt; then
+            echo "::error::Generated Tokens.kt is out of date. Run: node apps/android/scripts/generate-tokens.mjs"
             exit 1
           fi
 
