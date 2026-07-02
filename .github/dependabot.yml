@@ -15,6 +15,9 @@ updates:
       timezone: 'Europe/Stockholm'
     # Keep concurrent lockfile-touching PRs low to shrink the stale-base merge window.
     open-pull-requests-limit: 3
+    # 'security' label intentionally not applied: Dependabot uses the same labels for
+    # version and security updates, so it mislabeled routine bumps (e.g. #193-#196).
+    # Security triage uses the Dependabot alerts dashboard, not PR labels.
     labels:
       - 'dependencies'
       - 'npm'
@@ -74,8 +77,13 @@ updates:
         update-types:
           - 'version-update:semver-major'
 
-  # Firebase Functions workspace — pnpm with its own pnpm-lock.yaml, so it does not
-  # contend with the root package-lock.json and stays a separate entry.
+  # Firebase Functions — a pnpm workspace (see pnpm-workspace.yaml) whose lockfile is
+  # the ROOT pnpm-lock.yaml. pnpm's lockfile is separate from npm's package-lock.json,
+  # so this entry does not contend with the consolidated npm entry above.
+  # NOTE: pnpm-lock.yaml lives at the repo root, outside this entry's directory — the
+  # same layout that made #192 ship a stale package-lock.json (fixed in #198). If
+  # functions PRs start arriving with manifest-only changes and a stale pnpm-lock.yaml,
+  # this entry must move to the workspace root or functions needs its own lockfile.
   - package-ecosystem: 'npm'
     directory: '/functions'
     schedule:
