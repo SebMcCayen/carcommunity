@@ -12,7 +12,7 @@ importers:
         specifier: ^3.9.4
         version: 3.9.4
 
-  apps/functions:
+  functions:
     dependencies:
       firebase-admin:
         specifier: ^13.0.0
@@ -5927,7 +5927,7 @@ snapshots:
   gcp-metadata@8.1.2:
     dependencies:
       gaxios: 7.1.5
-      google-logging-utils: 1.1.3
+      google-logging-utils: 1.1.4
       json-bigint: 1.0.0
     transitivePeerDependencies:
       - supports-color

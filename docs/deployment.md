@@ -51,14 +51,14 @@ Use Firebase Emulator Suite for all local and CI testing.
 
 CI runs on every push and pull request targeting `main`. Path filters ensure that unrelated changes do not trigger every workflow.
 
-| Workflow                  | Trigger paths                                                                     | What it validates                                                    |
-| ------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `ci.yml`                  | All paths                                                                         | API, mobile, admin, shared lint/typecheck/test/build                 |
-| `validate-functions.yml`  | `apps/functions/**`, `firebase/firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
-| `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `apps/functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
-| `validate-admin-web.yml`  | `apps/admin/**`, `packages/shared/**`                                             | Admin web lint, typecheck, tests, build                              |
-| `codeql.yml`              | All paths                                                                         | CodeQL security analysis (JS/TS)                                     |
-| `dependency-review.yml`   | Pull requests only                                                                | Dependency vulnerability review                                      |
+| Workflow                  | Trigger paths                                                                | What it validates                                                    |
+| ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `ci.yml`                  | All paths                                                                    | API, mobile, admin, shared lint/typecheck/test/build                 |
+| `validate-functions.yml`  | `functions/**`, `firebase/firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
+| `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
+| `validate-admin-web.yml`  | `apps/admin/**`, `packages/shared/**`                                        | Admin web lint, typecheck, tests, build                              |
+| `codeql.yml`              | All paths                                                                    | CodeQL security analysis (JS/TS)                                     |
+| `dependency-review.yml`   | Pull requests only                                                           | Dependency vulnerability review                                      |
 
 Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
 

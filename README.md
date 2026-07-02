@@ -20,7 +20,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 - iOS native app (Swift / SwiftUI) — planned at `apps/ios`
 - Android native app (Kotlin / Jetpack Compose) — planned at `apps/android`
 - Admin web app (React, hosted on Firebase Hosting) — `apps/admin`
-- Cloud Functions for Firebase (2nd gen, Node.js 22, TypeScript) — `functions/` (planned move from `apps/functions`)
+- Cloud Functions for Firebase (2nd gen, Node.js 22, TypeScript) — `functions/`
 - Cloud Firestore (durable data) and Firebase Realtime Database (live location, presence)
 - Firebase Authentication (Sign in with Apple on iOS; Google Sign-In on Android and admin web)
 - Firebase Cloud Messaging (push notifications)
@@ -37,7 +37,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
 │   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
 │   └── admin/          # Admin web app (React, hosted on Firebase Hosting)
-├── functions/          # Cloud Functions for Firebase (planned move from apps/functions)
+├── functions/          # Cloud Functions for Firebase
 ├── firebase/           # Firebase CLI config, Security Rules, indexes
 ├── contracts/          # Language-neutral cross-platform contracts (planned)
 ├── services/
@@ -51,7 +51,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 ## Local development
 
-For migration-target development, local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `apps/functions`). No cloud account is required for day-to-day development. (The legacy `services/api` backend still requires PostgreSQL + Prisma if you need to run it.)
+For migration-target development, local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `functions/`). No cloud account is required for day-to-day development. (The legacy `services/api` backend still requires PostgreSQL + Prisma if you need to run it.)
 
 Minimum prerequisites:
 

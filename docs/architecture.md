@@ -41,7 +41,7 @@ Planned structure:
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
 │   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
 │   └── admin/          # React + Vite admin web app (hosted on Firebase Hosting)
-├── functions/          # Cloud Functions for Firebase (planned move from apps/functions)
+├── functions/          # Cloud Functions for Firebase
 ├── firebase/           # Firebase CLI config, Security Rules, indexes
 ├── contracts/          # Language-neutral cross-platform contracts (planned)
 ├── services/

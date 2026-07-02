@@ -146,7 +146,7 @@ updates:
 
   # Firebase Functions workspace (pnpm)
   - package-ecosystem: 'npm'
-    directory: '/apps/functions'
+    directory: '/functions'
     schedule:
       interval: 'weekly'
       day: 'monday'

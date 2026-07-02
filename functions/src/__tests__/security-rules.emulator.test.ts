@@ -2,9 +2,9 @@
  * Security rules emulator tests.
  *
  * Requires the Firebase Emulator Suite to be running:
- *   pnpm emulators:start   (from apps/functions)
+ *   pnpm emulators:start   (from functions/)
  *   — or —
- *   firebase emulators:start --project demo-test --config ../../firebase/firebase.json
+ *   firebase emulators:start --project demo-test --config ../firebase/firebase.json
  *
  * Run with:
  *   pnpm test:emulator
@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 
-const FIREBASE_DIR = resolve(__dirname, '../../../../firebase');
+const FIREBASE_DIR = resolve(__dirname, '../../../firebase');
 
 let testEnv: RulesTestEnvironment;
 

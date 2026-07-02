@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/functions/**'
+      - 'functions/**'
       - 'firebase/firebase.json'
       - '.github/workflows/validate-functions.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'apps/functions/**'
+      - 'functions/**'
       - 'firebase/firebase.json'
       - '.github/workflows/validate-functions.yml'
 
@@ -40,21 +40,21 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm install --frozen-lockfile
 
       - name: Lint
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm run lint
 
       - name: Type check
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm run typecheck
 
       - name: Unit tests
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm run test
 
       - name: Build
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm run build
