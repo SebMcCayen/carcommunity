@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "description": "Canonical feature flag key names and default values, sourced from packages/shared/src/feature-flags.ts. Keys are camelCase. Defaults are the fallback when the backend is unreachable and the initial static backend response. Flag values are backend-managed (admin.setFeatureFlag); clients never persist flag changes locally as authoritative.",
+  "flags": [
+    {
+      "key": "liveLocation",
+      "default": true,
+      "description": "Live location sharing and map markers."
+    },
+    {
+      "key": "chat",
+      "default": true,
+      "description": "Event chat."
+    },
+    {
+      "key": "crownHunt",
+      "default": true,
+      "description": "Kronjakt geographic point hunt."
+    },
+    {
+      "key": "partners",
+      "default": true,
+      "description": "Partner companies and offers."
+    },
+    {
+      "key": "partnerStats",
+      "default": true,
+      "description": "Anonymous partner pass-by statistics (requires explicit user opt-in regardless of flag)."
+    },
+    {
+      "key": "pushNotifications",
+      "default": true,
+      "description": "Push notification delivery."
+    },
+    {
+      "key": "socialSharing",
+      "default": true,
+      "description": "Sharing content to external social platforms."
+    },
+    {
+      "key": "externalDataSources",
+      "default": true,
+      "description": "Integrations with external data sources."
+    },
+    {
+      "key": "digitalBillboards",
+      "default": true,
+      "description": "Digital billboard content."
+    }
+  ]
+}

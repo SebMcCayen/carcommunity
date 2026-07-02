@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/functions/functions.schema.json",
+  "title": "Callable function registry schema",
+  "description": "Meta-schema that functions.json must validate against. Enforced in CI.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string" },
+    "accessLevels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "functions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z]*\\.[a-z][a-zA-Z]*$",
+            "description": "domain.action, both camelCase."
+          },
+          "domain": { "type": "string", "pattern": "^[a-z][a-zA-Z]*$" },
+          "description": { "type": "string", "minLength": 1 },
+          "access": {
+            "type": "string",
+            "enum": ["authenticated", "member", "admin"]
+          },
+          "appCheck": { "type": "boolean" },
+          "status": {
+            "type": "string",
+            "enum": ["planned", "implemented"]
+          },
+          "source": { "type": "string", "minLength": 1 }
+        },
+        "required": ["name", "domain", "description", "access", "appCheck", "status", "source"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version", "functions"],
+  "additionalProperties": false
+}

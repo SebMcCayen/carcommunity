@@ -109,7 +109,9 @@ jobs:
           npx ajv compile --spec=draft2020 -c ajv-formats \
             -r contracts/schemas/common.schema.json \
             -s contracts/schemas/auth.schema.json \
-            -s contracts/schemas/user-profile.schema.json
+            -s contracts/schemas/user-profile.schema.json \
+            -s contracts/schemas/live-location.schema.json \
+            -s contracts/schemas/events.schema.json
 
       - name: Validate error codes registry
         run: |
@@ -117,14 +119,33 @@ jobs:
             -s contracts/errors/errors.schema.json \
             -d contracts/errors/errors.json
 
-      - name: Check error codes are unique
+      - name: Validate callable function registry
         run: |
-          dupes=$(jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d)
-          if [ -n "$dupes" ]; then
-            echo "Duplicate error codes found:"
-            echo "$dupes"
-            exit 1
-          fi
+          npx ajv validate --spec=draft2020 -c ajv-formats \
+            -s contracts/functions/functions.schema.json \
+            -d contracts/functions/functions.json
+
+      - name: Validate feature flag registry
+        run: |
+          npx ajv validate --spec=draft2020 -c ajv-formats \
+            -s contracts/features/feature-flags.schema.json \
+            -d contracts/features/feature-flags.json
+
+      - name: Check registry keys are unique
+        run: |
+          fail=0
+          check() {
+            dupes=$(jq -r "$2" "$1" | sort | uniq -d)
+            if [ -n "$dupes" ]; then
+              echo "Duplicate entries in $1:"
+              echo "$dupes"
+              fail=1
+            fi
+          }
+          check contracts/errors/errors.json '.errorCodes[].code'
+          check contracts/functions/functions.json '.functions[].name'
+          check contracts/features/feature-flags.json '.flags[].key'
+          exit $fail
 
   container-build:
     name: Container build check
