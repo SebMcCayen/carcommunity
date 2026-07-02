@@ -131,6 +131,28 @@ jobs:
             -s contracts/features/feature-flags.schema.json \
             -d contracts/features/feature-flags.json
 
+      - name: Check localization key parity (sv vs en)
+        run: |
+          diff <(jq -r 'paths(scalars) | join(".")' contracts/localization/sv.json | sort) \
+               <(jq -r 'paths(scalars) | join(".")' contracts/localization/en.json | sort)
+
+      - name: Check localization values are non-empty strings
+        run: |
+          fail=0
+          for f in contracts/localization/sv.json contracts/localization/en.json; do
+            bad=$(jq -r '
+              [paths(scalars) as $p | select((getpath($p) | type != "string") or (getpath($p) == "")) | ($p | join("."))]
+              + [paths(arrays) as $p | ($p | join(".")) + " (array not allowed)"]
+              + [paths(objects) as $p | select(getpath($p) == {}) | ($p | join(".")) + " (empty object)"]
+              | .[]' "$f")
+            if [ -n "$bad" ]; then
+              echo "Invalid leaf values in $f:"
+              echo "$bad"
+              fail=1
+            fi
+          done
+          exit $fail
+
       - name: Check registry keys are unique
         run: |
           fail=0
