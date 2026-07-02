@@ -28,6 +28,16 @@ node apps/android/scripts/generate-strings.mjs   # from repo root
 
 Never edit the generated files by hand — edit `contracts/localization/*.json` and regenerate. CI fails if the generated files are out of date.
 
+## Design tokens (KCC Crown UI)
+
+`app/src/main/java/.../design/Tokens.kt` is **generated** from `contracts/design-tokens/tokens.json`:
+
+```bash
+node apps/android/scripts/generate-tokens.mjs   # from repo root
+```
+
+`KccTheme` (hand-written, in `design/KccTheme.kt`) maps the semantic tokens onto Material3 — light, dark, and system-adaptive. `statusSuccess`/`statusWarning` have no Material3 slot and are exposed via `LocalKccStatusColors`. Use `MaterialTheme.colorScheme`/`typography` in composables — never hard-code colors, sizes, or radii.
+
 ## Commands
 
 ```bash
