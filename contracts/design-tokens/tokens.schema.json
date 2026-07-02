@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/design-tokens/tokens.schema.json",
+  "title": "Design token registry schema",
+  "description": "Meta-schema that tokens.json must validate against. Enforced in CI. Both themes must define the exact same set of semantic color keys.",
+  "type": "object",
+  "$defs": {
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9A-F]{6}$",
+      "description": "Uppercase 6-digit hex color."
+    },
+    "nonNegativeNumber": {
+      "type": "number",
+      "minimum": 0
+    },
+    "themeColors": {
+      "type": "object",
+      "properties": {
+        "pageBackground": { "$ref": "#/$defs/hexColor" },
+        "surfaceBackground": { "$ref": "#/$defs/hexColor" },
+        "subtleBackground": { "$ref": "#/$defs/hexColor" },
+        "textPrimary": { "$ref": "#/$defs/hexColor" },
+        "textSecondary": { "$ref": "#/$defs/hexColor" },
+        "borderDefault": { "$ref": "#/$defs/hexColor" },
+        "brandPrimary": { "$ref": "#/$defs/hexColor" },
+        "statusSuccess": { "$ref": "#/$defs/hexColor" },
+        "statusError": { "$ref": "#/$defs/hexColor" },
+        "statusWarning": { "$ref": "#/$defs/hexColor" }
+      },
+      "required": [
+        "pageBackground",
+        "surfaceBackground",
+        "subtleBackground",
+        "textPrimary",
+        "textSecondary",
+        "borderDefault",
+        "brandPrimary",
+        "statusSuccess",
+        "statusError",
+        "statusWarning"
+      ],
+      "additionalProperties": false
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "colors": { "$ref": "#/$defs/themeColors" }
+      },
+      "required": ["colors"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string" },
+    "palette": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z][a-zA-Z]*$" },
+      "additionalProperties": { "$ref": "#/$defs/hexColor" }
+    },
+    "spacing": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^\\d+$" },
+      "additionalProperties": { "$ref": "#/$defs/nonNegativeNumber" }
+    },
+    "radius": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z]+$" },
+      "additionalProperties": { "$ref": "#/$defs/nonNegativeNumber" }
+    },
+    "typography": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "size": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/nonNegativeNumber" }
+        },
+        "weight": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "pattern": "^[1-9]00$" }
+        }
+      },
+      "required": ["family", "size", "weight"],
+      "additionalProperties": false
+    },
+    "themes": {
+      "type": "object",
+      "properties": {
+        "light": { "$ref": "#/$defs/theme" },
+        "dark": { "$ref": "#/$defs/theme" }
+      },
+      "required": ["light", "dark"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["version", "palette", "spacing", "radius", "typography", "themes"],
+  "additionalProperties": false
+}
