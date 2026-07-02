@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/live-location.schema.json",
+  "title": "Live location contract",
+  "description": "Language-neutral live location sharing shapes shared by iOS, Android, backend, and admin. Values are sourced from packages/shared/src/live-location.ts. Sessions have a maximum duration chosen at start; positions older than 60 seconds are stale and must not be returned by the backend or rendered by clients. In the target model the latest position lives in Firebase Realtime Database at liveLocation/{uid}/latest (see docs/migration/backend-domain-mapping.md).",
+  "$defs": {
+    "liveLocationSessionStatus": {
+      "type": "string",
+      "enum": ["active", "stopped", "expired"],
+      "description": "Lifecycle state of a live location sharing session."
+    },
+    "liveLocationDuration": {
+      "type": "string",
+      "enum": ["1h", "2h", "4h"],
+      "description": "User-selected session duration. Backend computes expiresAt from startedAt + duration."
+    },
+    "liveLocationStopReason": {
+      "type": "string",
+      "enum": ["user_stop", "hide_me_now", "admin_stop"],
+      "description": "Why a session was stopped. hide_me_now immediately stops all sessions and removes the latest position."
+    },
+    "liveLocationCoordinate": {
+      "type": "object",
+      "description": "A single recorded position. recordedAt is compared against the 60-second staleness threshold.",
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "accuracyMeters": { "type": "number", "minimum": 0 },
+        "headingDegrees": { "type": "number", "minimum": 0, "maximum": 360 },
+        "speedMetersPerSecond": { "type": "number", "minimum": 0 },
+        "recordedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["latitude", "longitude", "recordedAt"],
+      "additionalProperties": false
+    },
+    "liveLocationSessionSummary": {
+      "type": "object",
+      "description": "Backend-owned session summary. All timestamps are server-written.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/liveLocationSessionStatus" },
+        "duration": { "$ref": "#/$defs/liveLocationDuration" },
+        "startedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "stoppedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": ["id", "status", "duration", "startedAt", "expiresAt", "stoppedAt"],
+      "additionalProperties": false
+    },
+    "publicLiveLocationMarker": {
+      "type": "object",
+      "description": "Marker visible to entitled members on the map. Never exposes sensitive profile data beyond displayName. Only active sessions produce markers.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "sessionId": { "type": "string", "minLength": 1 },
+        "coordinate": { "$ref": "#/$defs/liveLocationCoordinate" },
+        "status": { "const": "active" },
+        "displayName": { "type": ["string", "null"] },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/isoTimestamp",
+          "description": "Session expiry; clients may use this for preemptive marker removal."
+        }
+      },
+      "required": ["userId", "sessionId", "coordinate", "status"],
+      "additionalProperties": false
+    },
+    "liveLocationStartRequest": {
+      "type": "object",
+      "properties": {
+        "duration": { "$ref": "#/$defs/liveLocationDuration" }
+      },
+      "required": ["duration"],
+      "additionalProperties": false
+    },
+    "liveLocationUpdateRequest": {
+      "type": "object",
+      "properties": {
+        "coordinate": { "$ref": "#/$defs/liveLocationCoordinate" }
+      },
+      "required": ["coordinate"],
+      "additionalProperties": false
+    },
+    "liveLocationStopRequest": {
+      "type": "object",
+      "properties": {
+        "reason": { "$ref": "#/$defs/liveLocationStopReason" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "version": "1.0.0",
+  "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable must verify authentication context and App Check in production, and return error codes from contracts/errors/errors.json. No callable has been implemented yet — status tracks migration progress.",
+  "accessLevels": {
+    "authenticated": "Any signed-in, non-suspended, non-deleted user.",
+    "member": "Requires active member_monthly entitlement; suspension always overrides entitlement.",
+    "admin": "Requires admin or owner role; does not require member subscription."
+  },
+  "functions": [
+    {
+      "name": "auth.completeOnboarding",
+      "domain": "auth",
+      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "subscription.verify",
+      "domain": "subscription",
+      "description": "Verifies the caller's store subscription receipt and updates the backend-managed entitlement.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "live.startSession",
+      "domain": "live",
+      "description": "Starts a live location sharing session with a chosen duration (see contracts/schemas/live-location.schema.json liveLocationStartRequest).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "live.updatePosition",
+      "domain": "live",
+      "description": "Writes the caller's latest position (liveLocationUpdateRequest). Target storage is RTDB liveLocation/{uid}/latest.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/migration/backend-domain-mapping.md (documented as updateLivePosition)"
+    },
+    {
+      "name": "live.stopSession",
+      "domain": "live",
+      "description": "Stops the caller's active session (liveLocationStopRequest).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "live.hideMeNow",
+      "domain": "live",
+      "description": "Immediately stops all of the caller's sessions and removes the latest position.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "drives.save",
+      "domain": "drives",
+      "description": "Saves a completed drive with computed distance/duration; route GPS data goes to Cloud Storage. Route overview in responses is member-only.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/migration/backend-domain-mapping.md (documented as saveDrive)"
+    },
+    {
+      "name": "crownHunt.submitClaim",
+      "domain": "crownHunt",
+      "description": "Submits a Kronjakt point claim. Requires backend validation and anti-fraud checks (docs/product-decisions.md); final access gating confirmed when the domain migrates.",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/migration/backend-domain-mapping.md (documented as submitCrownHuntClaim)"
+    },
+    {
+      "name": "admin.suspendUser",
+      "domain": "admin",
+      "description": "Suspends a user (moderation). Must write an immutable audit log entry with actor, target, reason, and server timestamp.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "admin.setFeatureFlag",
+      "domain": "admin",
+      "description": "Sets a feature flag value. Flag keys are defined in contracts/features/feature-flags.json.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "admin.setAdminRole",
+      "domain": "admin",
+      "description": "Grants or revokes the admin custom claim and mirrors it to users/{uid}.role. No client self-elevation.",
+      "access": "admin",
+      "appCheck": true,
+      "status": "planned",
+      "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
+    }
+  ]
+}

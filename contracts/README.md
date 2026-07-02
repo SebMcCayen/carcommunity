@@ -8,14 +8,14 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 
 ## Structure
 
-| Path                              | Contents                                                       | Status                                   |
-| --------------------------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| `schemas/`                        | JSON Schema (draft 2020-12) for shared request/response shapes | 🟡 Partial — auth + user profile (PR 2a) |
-| `errors/errors.json`              | Canonical machine-readable error codes                         | ✅ Seeded (PR 2a)                        |
-| `functions/functions.json`        | Callable function names and signatures                         | 🔲 Planned (PR 2b)                       |
-| `features/feature-flags.json`     | Feature flag key names                                         | 🔲 Planned (PR 2b)                       |
-| `localization/sv.json`, `en.json` | Source localization strings                                    | 🔲 Planned (PR 2c)                       |
-| `design-tokens/tokens.json`       | Design token values                                            | 🔲 Planned (PR 2d)                       |
+| Path                              | Contents                                                       | Status                                                                                                   |
+| --------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `schemas/`                        | JSON Schema (draft 2020-12) for shared request/response shapes | 🟡 auth, user profile (PR 2a); live location, events/RSVP (PR 2b); further domains added as they migrate |
+| `errors/errors.json`              | Canonical machine-readable error codes                         | ✅ Seeded (PR 2a)                                                                                        |
+| `functions/functions.json`        | Callable function names, access levels, and status             | ✅ Seeded (PR 2b)                                                                                        |
+| `features/feature-flags.json`     | Feature flag key names and defaults                            | ✅ Seeded (PR 2b)                                                                                        |
+| `localization/sv.json`, `en.json` | Source localization strings                                    | 🔲 Planned (PR 2c)                                                                                       |
+| `design-tokens/tokens.json`       | Design token values                                            | 🔲 Planned (PR 2d)                                                                                       |
 
 ## Conventions
 
@@ -39,12 +39,19 @@ npx ajv compile --spec=draft2020 -c ajv-formats -s contracts/schemas/common.sche
 npx ajv compile --spec=draft2020 -c ajv-formats \
   -r contracts/schemas/common.schema.json \
   -s contracts/schemas/auth.schema.json \
-  -s contracts/schemas/user-profile.schema.json
+  -s contracts/schemas/user-profile.schema.json \
+  -s contracts/schemas/live-location.schema.json \
+  -s contracts/schemas/events.schema.json
 npx ajv validate --spec=draft2020 -c ajv-formats \
-  -s contracts/errors/errors.schema.json \
-  -d contracts/errors/errors.json
+  -s contracts/errors/errors.schema.json -d contracts/errors/errors.json
+npx ajv validate --spec=draft2020 -c ajv-formats \
+  -s contracts/functions/functions.schema.json -d contracts/functions/functions.json
+npx ajv validate --spec=draft2020 -c ajv-formats \
+  -s contracts/features/feature-flags.schema.json -d contracts/features/feature-flags.json
 jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d
-# (must print nothing — duplicates fail CI)
+jq -r '.functions[].name' contracts/functions/functions.json | sort | uniq -d
+jq -r '.flags[].key' contracts/features/feature-flags.json | sort | uniq -d
+# (the three jq commands must print nothing — duplicates fail CI)
 ```
 
 ## Changing a contract

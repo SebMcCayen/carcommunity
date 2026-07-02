@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/features/feature-flags.schema.json",
+  "title": "Feature flag registry schema",
+  "description": "Meta-schema that feature-flags.json must validate against. Enforced in CI.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string" },
+    "flags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z]*$",
+            "description": "camelCase flag key, matching the backend JSON response."
+          },
+          "default": { "type": "boolean" },
+          "description": { "type": "string", "minLength": 1 }
+        },
+        "required": ["key", "default", "description"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version", "flags"],
+  "additionalProperties": false
+}

@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/events.schema.json",
+  "title": "Events and RSVP contract",
+  "description": "Language-neutral event and RSVP shapes shared by iOS, Android, backend, and admin. Values are sourced from packages/shared/src/events.ts. Teasers expose only safe information (no exact location) to all authenticated users; full detail including location is member-only; admin shapes are admin/owner-only.",
+  "$defs": {
+    "eventStatus": {
+      "type": "string",
+      "enum": ["draft", "published", "cancelled", "completed"],
+      "description": "Backend-managed event lifecycle state. Only published events are visible to non-admin users."
+    },
+    "eventRsvpStatus": {
+      "type": "string",
+      "enum": ["going", "maybe", "not_going"],
+      "description": "A member's RSVP answer for an event."
+    },
+    "eventRsvpSummary": {
+      "type": "object",
+      "description": "Aggregated RSVP counts only — never exposes who RSVP'd.",
+      "properties": {
+        "going": { "type": "integer", "minimum": 0 },
+        "maybe": { "type": "integer", "minimum": 0 },
+        "not_going": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["going", "maybe", "not_going"],
+      "additionalProperties": false
+    },
+    "eventTeaser": {
+      "type": "object",
+      "description": "Public teaser: only safe information, no exact location or personal data. Visible to all authenticated users regardless of subscription.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approximateArea": {
+          "type": "string",
+          "description": "Coarse area label (e.g. municipality) — never an exact address."
+        },
+        "isOfficial": { "type": "boolean" },
+        "status": { "$ref": "#/$defs/eventStatus" }
+      },
+      "required": ["id", "title", "startsAt", "endsAt", "approximateArea", "isOfficial", "status"],
+      "additionalProperties": false
+    },
+    "eventDetail": {
+      "type": "object",
+      "description": "Full event detail — member-only fields included (exact location). Never exposes internal admin fields.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "locationName": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "isOfficial": { "type": "boolean" },
+        "status": { "$ref": "#/$defs/eventStatus" },
+        "rsvpSummary": { "$ref": "#/$defs/eventRsvpSummary" },
+        "currentUserRsvp": {
+          "oneOf": [{ "$ref": "#/$defs/eventRsvpStatus" }, { "type": "null" }]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "description",
+        "startsAt",
+        "endsAt",
+        "locationName",
+        "address",
+        "latitude",
+        "longitude",
+        "isOfficial",
+        "status",
+        "rsvpSummary",
+        "currentUserRsvp"
+      ],
+      "additionalProperties": false
+    },
+    "eventRsvpRequest": {
+      "type": "object",
+      "properties": {
+        "status": { "$ref": "#/$defs/eventRsvpStatus" }
+      },
+      "required": ["status"],
+      "additionalProperties": false
+    },
+    "eventRsvpData": {
+      "type": "object",
+      "description": "A member's stored RSVP. updatedAt is backend-written.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "status": { "$ref": "#/$defs/eventRsvpStatus" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["eventId", "userId", "status", "updatedAt"],
+      "additionalProperties": false
+    },
+    "adminEventSummary": {
+      "type": "object",
+      "description": "Admin-facing event summary with operational context. Only returned to admin/owner roles.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/eventStatus" },
+        "isOfficial": { "type": "boolean" },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approximateArea": { "type": "string" },
+        "rsvpCounts": { "$ref": "#/$defs/eventRsvpSummary" },
+        "cancelledAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "isOfficial",
+        "startsAt",
+        "endsAt",
+        "approximateArea",
+        "rsvpCounts",
+        "cancelledAt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "adminEventDetail": {
+      "type": "object",
+      "description": "Full admin event detail — all fields including exact location. Only returned to admin/owner roles.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/eventStatus" },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approximateArea": { "type": "string" },
+        "locationName": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "isOfficial": { "type": "boolean" },
+        "createdByUserId": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/uid" }, { "type": "null" }]
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "cancelledAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "rsvpCounts": { "$ref": "#/$defs/eventRsvpSummary" }
+      },
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "description",
+        "status",
+        "startsAt",
+        "endsAt",
+        "approximateArea",
+        "locationName",
+        "address",
+        "latitude",
+        "longitude",
+        "isOfficial",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt",
+        "cancelledAt",
+        "rsvpCounts"
+      ],
+      "additionalProperties": false
+    },
+    "createEventRequest": {
+      "type": "object",
+      "description": "Admin-only event creation payload.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approximateArea": { "type": "string", "minLength": 1 },
+        "locationName": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "isOfficial": { "type": "boolean" }
+      },
+      "required": ["title", "startsAt", "approximateArea"],
+      "additionalProperties": false
+    },
+    "updateEventRequest": {
+      "type": "object",
+      "description": "Admin-only partial event update payload. All fields optional.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approximateArea": { "type": "string", "minLength": 1 },
+        "locationName": { "type": ["string", "null"] },
+        "address": { "type": ["string", "null"] },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "isOfficial": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "cancelEventRequest": {
+      "type": "object",
+      "description": "Admin-only event cancellation payload. Reason is required for audit logging.",
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "required": ["reason"],
+      "additionalProperties": false
+    }
+  }
+}
