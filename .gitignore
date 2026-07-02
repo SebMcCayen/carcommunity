@@ -147,3 +147,10 @@ functions/lib/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Android (apps/android)
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/local.properties
+apps/android/app/google-services.json
+apps/android/.kotlin/

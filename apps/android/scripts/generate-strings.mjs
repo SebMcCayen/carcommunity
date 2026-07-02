@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+/**
+ * Generates Android strings.xml resources from the canonical localization
+ * contracts (contracts/localization/sv.json and en.json).
+ *
+ * - Keys are flattened dot-paths with dots converted to underscores,
+ *   preserving camelCase (liveLocation.start -> liveLocation_start).
+ *   Note: aapt2 only requires lowercase for FILE-based resources
+ *   (drawables, layouts); <string name="..."> entries may contain
+ *   uppercase letters, keeping a 1:1 mapping to contract keys.
+ * - Values are escaped for Android resource XML (&, <, >, ', ", newline).
+ * - Swedish is the default locale (res/values/), English is res/values-en/.
+ * - app_name comes from the app.name contract key — no hardcoded branding here.
+ *
+ * Usage: node apps/android/scripts/generate-strings.mjs   (from repo root)
+ * CI verifies the generated files are up to date; run this after editing
+ * contracts/localization/*.json.
+ */
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+
+const targets = [
+  { source: 'contracts/localization/sv.json', out: 'apps/android/app/src/main/res/values/strings.xml' },
+  { source: 'contracts/localization/en.json', out: 'apps/android/app/src/main/res/values-en/strings.xml' },
+];
+
+function flatten(obj, prefix = '', acc = new Map()) {
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'string') {
+      acc.set(path, value);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      flatten(value, path, acc);
+    } else {
+      throw new Error(`Unsupported leaf at ${path}: ${JSON.stringify(value)}`);
+    }
+  }
+  return acc;
+}
+
+function toResourceName(dotPath) {
+  const name = dotPath.replaceAll('.', '_');
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid Android resource name derived from ${dotPath}: ${name}`);
+  }
+  return name;
+}
+
+function escapeAndroid(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll("'", "\\'")
+    .replaceAll('"', '\\"')
+    .replaceAll('\n', '\\n');
+}
+
+for (const { source, out } of targets) {
+  const dict = JSON.parse(readFileSync(resolve(repoRoot, source), 'utf8'));
+  const entries = flatten(dict);
+
+  if (!entries.has('app.name')) {
+    throw new Error(`${source} is missing the app.name key (used for the Android app_name resource)`);
+  }
+
+  const lines = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<!-- GENERATED FILE — do not edit by hand.',
+    `     Source: ${source}`,
+    '     Regenerate: node apps/android/scripts/generate-strings.mjs -->',
+    '<resources>',
+  ];
+
+  for (const [dotPath, value] of entries) {
+    const formatted = value.includes('%') ? ' formatted="false"' : '';
+    lines.push(`    <string name="${toResourceName(dotPath)}"${formatted}>${escapeAndroid(value)}</string>`);
+  }
+
+  lines.push('</resources>', '');
+  writeFileSync(resolve(repoRoot, out), lines.join('\n'));
+  console.log(`${out}: ${entries.size} strings`);
+}

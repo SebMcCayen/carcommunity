@@ -1,0 +1,61 @@
+name: Validate Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - 'contracts/localization/**'
+      - '.github/workflows/validate-android.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - 'contracts/localization/**'
+      - '.github/workflows/validate-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-android:
+    name: validate-android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Node.js (for strings generation check)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify generated strings are up to date
+        run: |
+          node apps/android/scripts/generate-strings.mjs
+          if ! git diff --exit-code apps/android/app/src/main/res/values/strings.xml apps/android/app/src/main/res/values-en/strings.xml; then
+            echo "::error::Generated strings.xml files are out of date. Run: node apps/android/scripts/generate-strings.mjs"
+            exit 1
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        working-directory: apps/android
+        run: ./gradlew --no-daemon test
+
+      - name: Android Lint
+        working-directory: apps/android
+        run: ./gradlew --no-daemon lintDebug
+
+      - name: Assemble debug APK
+        working-directory: apps/android
+        run: ./gradlew --no-daemon assembleDebug

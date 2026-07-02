@@ -17,8 +17,8 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 **Target architecture:**
 
-- iOS native app (Swift / SwiftUI) — planned at `apps/ios`
-- Android native app (Kotlin / Jetpack Compose) — planned at `apps/android`
+- Android native app (Kotlin / Jetpack Compose) — `apps/android` (MVP mobile client)
+- iOS native app — descoped from MVP (parked on the Future Ideas board)
 - Admin web app (React, hosted on Firebase Hosting) — `apps/admin`
 - Cloud Functions for Firebase (2nd gen, Node.js 22, TypeScript) — `functions/`
 - Cloud Firestore (durable data) and Firebase Realtime Database (live location, presence)
@@ -33,8 +33,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 ```text
 .
 ├── apps/
-│   ├── ios/            # Swift / SwiftUI native iOS app (planned)
-│   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
+│   ├── android/        # Kotlin / Jetpack Compose native Android app (MVP)
 │   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
 │   └── admin/          # Admin web app (React, hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase
