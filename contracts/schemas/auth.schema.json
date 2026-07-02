@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/auth.schema.json",
+  "title": "Authentication contract",
+  "description": "Language-neutral authentication entities shared by iOS, Android, backend, and admin. Native apps authenticate with the Firebase Authentication SDK directly; these definitions describe the canonical authenticated-user data the backend exposes (today via the frozen legacy /v1 REST API, in the target model via callable Cloud Functions such as auth.completeOnboarding). Backend is the source of truth for all auth and access decisions.",
+  "$defs": {
+    "authIdentity": {
+      "type": "object",
+      "description": "A linked sign-in identity. Provider subject is the stable identifier — email is intentionally absent.",
+      "properties": {
+        "provider": { "$ref": "common.schema.json#/$defs/authProvider" },
+        "providerSubject": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable subject identifier issued by the provider."
+        }
+      },
+      "required": ["provider", "providerSubject"],
+      "additionalProperties": false
+    },
+    "authSession": {
+      "type": "object",
+      "description": "Backend-issued session summary.",
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["sessionId", "expiresAt"],
+      "additionalProperties": false
+    },
+    "onboardingStatus": {
+      "type": "object",
+      "description": "Onboarding completion state. All timestamps are backend-written; null means the step has not been completed.",
+      "properties": {
+        "onboardingCompletedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "ageConfirmedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "termsAcceptedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "privacyPolicyAcceptedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": [
+        "onboardingCompletedAt",
+        "ageConfirmedAt",
+        "termsAcceptedAt",
+        "privacyPolicyAcceptedAt"
+      ],
+      "additionalProperties": false
+    },
+    "authenticatedUserSummary": {
+      "type": "object",
+      "description": "Summary of the authenticated user returned by the backend. Backend is the source of truth — suspended/deleted users must not access protected features regardless of other fields.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "identities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/authIdentity" },
+          "minItems": 1
+        },
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/userRole" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "status": { "$ref": "common.schema.json#/$defs/userStatus" },
+        "subscriptionEntitlement": {
+          "$ref": "common.schema.json#/$defs/subscriptionEntitlement"
+        },
+        "displayName": { "type": ["string", "null"] },
+        "avatarUrl": { "type": ["string", "null"] },
+        "onboardingCompletedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": ["userId", "identities", "roles", "status", "subscriptionEntitlement"],
+      "additionalProperties": false
+    }
+  }
+}

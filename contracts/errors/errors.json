@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "description": "Canonical machine-readable error codes for all backend surfaces. Codes use the Firebase HttpsError status-code vocabulary as documented in docs/api-guidelines.md (Stable error codes). Callable Cloud Functions must return these codes; clients must branch on the code, never on the human-readable message. httpStatus is the HTTP status the Firebase callable protocol maps each code to.",
+  "errorCodes": [
+    {
+      "code": "unauthenticated",
+      "meaning": "No valid Firebase session",
+      "httpStatus": 401
+    },
+    {
+      "code": "permission-denied",
+      "meaning": "Authenticated but not authorized",
+      "httpStatus": 403
+    },
+    {
+      "code": "invalid-argument",
+      "meaning": "Input validation failed",
+      "httpStatus": 400
+    },
+    {
+      "code": "not-found",
+      "meaning": "Resource does not exist",
+      "httpStatus": 404
+    },
+    {
+      "code": "already-exists",
+      "meaning": "Conflict with existing resource",
+      "httpStatus": 409
+    },
+    {
+      "code": "resource-exhausted",
+      "meaning": "Rate limit or quota exceeded",
+      "httpStatus": 429
+    },
+    {
+      "code": "failed-precondition",
+      "meaning": "State precondition not met",
+      "httpStatus": 400
+    },
+    {
+      "code": "internal",
+      "meaning": "Unexpected server error",
+      "httpStatus": 500
+    },
+    {
+      "code": "unavailable",
+      "meaning": "Temporary unavailability",
+      "httpStatus": 503
+    }
+  ]
+}

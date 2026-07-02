@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/common.schema.json",
+  "title": "Common shared definitions",
+  "description": "Language-neutral shared enums and primitives used across all contract schemas. Values are sourced from packages/shared (TypeScript), the current implementation source of truth; known divergences from docs/firebase-data-model.md are called out on the affected definition (see userRole). Once adopted, these contract values are canonical for iOS, Android, backend, and admin.",
+  "$defs": {
+    "uid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Firebase Authentication UID. Stable user identifier across the platform."
+    },
+    "isoTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp string (e.g. 2026-07-02T12:00:00Z). JSON serialization of Firestore server timestamps. Backend-generated via FieldValue.serverTimestamp() — never trust client-supplied timestamps."
+    },
+    "nullableIsoTimestamp": {
+      "oneOf": [{ "$ref": "#/$defs/isoTimestamp" }, { "type": "null" }],
+      "description": "ISO 8601 timestamp string, or null when the event has not occurred."
+    },
+    "userRole": {
+      "type": "string",
+      "enum": ["user", "admin", "owner"],
+      "description": "Backend-managed role. Never trust client-side role claims. The Firestore target model documents 'user' and 'admin'; 'owner' is an elevated backend-managed role retained from packages/shared/src/users.ts."
+    },
+    "userStatus": {
+      "type": "string",
+      "enum": ["active", "warned", "temporarily_suspended", "permanently_suspended", "deleted"],
+      "description": "Backend-managed account status. Suspended or deleted users must not access protected features regardless of other fields. Suspension always overrides subscription entitlement."
+    },
+    "subscriptionEntitlement": {
+      "type": "string",
+      "enum": ["none", "member_monthly"],
+      "description": "Backend-managed subscription entitlement. Clients may use this for UX gating only — never for security enforcement."
+    },
+    "authProvider": {
+      "type": "string",
+      "enum": ["apple", "google"],
+      "description": "Supported sign-in identity providers. Provider subject is the stable identity key; email is a contact channel, not an identity key."
+    }
+  }
+}

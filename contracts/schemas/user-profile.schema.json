@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/user-profile.schema.json",
+  "title": "User profile contract",
+  "description": "Language-neutral user profile shapes shared by iOS, Android, backend, and admin. userProfile and userPrivate mirror the target Firestore collections documented in docs/firebase-data-model.md (documents keyed by Firebase UID). Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "userProfile": {
+      "type": "object",
+      "description": "Public user profile — Firestore `users/{uid}`. Any authenticated user can read; owner can update non-protected fields; backend (Admin SDK) manages protected fields (role, activeMember, suspended, deleted).",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Visible username."
+        },
+        "avatarPath": {
+          "type": "string",
+          "description": "Cloud Storage path, e.g. profileImages/{uid}/{imageId}."
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short profile description."
+        },
+        "role": { "$ref": "common.schema.json#/$defs/userRole" },
+        "activeMember": {
+          "type": "boolean",
+          "description": "Subscription entitlement — backend-managed only."
+        },
+        "suspended": {
+          "type": "boolean",
+          "description": "Moderation state — backend-managed only."
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "Soft-delete flag — backend-managed only."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "displayName",
+        "role",
+        "activeMember",
+        "suspended",
+        "deleted",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "userPrivate": {
+      "type": "object",
+      "description": "Sensitive user data — Firestore `userPrivate/{uid}`. Owner-only read and write; no other users may access this collection. Email is a contact channel, not an identity key.",
+      "properties": {
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "notificationPreferences": {
+          "type": "object",
+          "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["createdAt", "updatedAt"],
+      "additionalProperties": false
+    },
+    "userSummary": {
+      "type": "object",
+      "description": "Admin-facing user summary as exposed by backend list endpoints (mirrors packages/shared/src/users.ts UserSummary).",
+      "properties": {
+        "id": { "$ref": "common.schema.json#/$defs/uid" },
+        "displayName": { "type": ["string", "null"] },
+        "email": { "type": ["string", "null"] },
+        "role": { "$ref": "common.schema.json#/$defs/userRole" },
+        "status": { "$ref": "common.schema.json#/$defs/userStatus" },
+        "subscriptionEntitlement": {
+          "$ref": "common.schema.json#/$defs/subscriptionEntitlement"
+        },
+        "lastActiveAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "email",
+        "role",
+        "status",
+        "subscriptionEntitlement",
+        "lastActiveAt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
