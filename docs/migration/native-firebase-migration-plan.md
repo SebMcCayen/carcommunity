@@ -31,7 +31,7 @@ Last updated: 2026-07-02
 - **Incremental, not big-bang.** One vertical feature slice at a time.
 - **Keep legacy buildable** until replacement parity is verified.
 - **Freeze new features** in `apps/mobile` and `services/api`.
-- **Each shared mobile slice includes both iOS and Android.** A slice is not done until both platforms are complete. _Scope change 2026-07-02: iOS is out of the MVP (see status table) — for the MVP, mobile slices are Android-only. The language-neutral contracts keep iOS re-entry cheap._
+- **MVP mobile slices are Android-only.** _Scope change 2026-07-02: iOS is out of the MVP (see status table); the language-neutral contracts keep iOS re-entry cheap._ If iOS re-enters scope post-MVP, the original parity rule applies again: a shared mobile slice is not done until both platforms are complete.
 - **Backend stays platform-neutral.** Cloud Functions serve iOS, Android, and admin web identically.
 - **Test before cutover.** Add emulator tests, rule tests, and native unit tests before removing legacy code.
 - **No production data migration required** until real production data exists in PostgreSQL.

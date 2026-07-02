@@ -6,7 +6,7 @@ Native Android app (Kotlin, Jetpack Compose). Created in migration plan Phase 5;
 
 - JDK 17+
 - Android SDK (compileSdk 35) — install via Android Studio or `sdkmanager`
-- Node.js 20+ — only for the localization generator script (`scripts/generate-strings.mjs`); the app build itself is Gradle-only and this workspace is intentionally not part of the JS monorepo workspaces
+- Node.js 24+ (the repo baseline) — only for the localization generator script (`scripts/generate-strings.mjs`); the app build itself is Gradle-only and this workspace is intentionally not part of the JS monorepo workspaces
 
 ## Firebase setup (`google-services.json`)
 
