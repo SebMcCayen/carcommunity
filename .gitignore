@@ -123,7 +123,7 @@ dist
 firebase/emulator-data/
 
 # Cloud Functions build output
-apps/functions/lib/
+functions/lib/
 
 # TernJS port file
 .tern-port

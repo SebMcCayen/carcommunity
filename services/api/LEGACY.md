@@ -30,7 +30,7 @@ It is kept alive so that:
 
 The replacement for `services/api` is the Firebase backend:
 
-- **Cloud Functions for Firebase** (2nd gen, Firebase-supported Node.js, TypeScript) at `apps/functions` (planned move to `functions/`)
+- **Cloud Functions for Firebase** (2nd gen, Firebase-supported Node.js, TypeScript) at `functions/`
 - **Cloud Firestore** for durable application data
 - **Firebase Realtime Database** for ephemeral live-location and presence data
 - **Cloud Storage for Firebase** for files and route storage

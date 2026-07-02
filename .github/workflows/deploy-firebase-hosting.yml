@@ -44,7 +44,7 @@ jobs:
         run: npm ci
 
       - name: Install pnpm dependencies (for firebase-tools)
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm install --frozen-lockfile
 
       - name: Build shared package
@@ -54,5 +54,5 @@ jobs:
         run: npm run build --workspace apps/admin
 
       - name: Deploy Firebase Hosting
-        working-directory: apps/functions
-        run: pnpm exec firebase deploy --only hosting --config ../../firebase/firebase.json --project kungsbacka-car-community --non-interactive
+        working-directory: functions
+        run: pnpm exec firebase deploy --only hosting --config ../firebase/firebase.json --project kungsbacka-car-community --non-interactive

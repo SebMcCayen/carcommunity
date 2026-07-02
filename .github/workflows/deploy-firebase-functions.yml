@@ -42,13 +42,13 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        working-directory: apps/functions
+        working-directory: functions
         run: pnpm run build
 
       - name: Deploy Cloud Functions
-        working-directory: apps/functions
-        run: pnpm exec firebase deploy --only functions --config ../../firebase/firebase.json --project kungsbacka-car-community --non-interactive
+        working-directory: functions
+        run: pnpm exec firebase deploy --only functions --config ../firebase/firebase.json --project kungsbacka-car-community --non-interactive

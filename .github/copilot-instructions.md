@@ -61,7 +61,7 @@ Follow the full mobile parity instructions defined in:
   - iOS native app (Swift and SwiftUI) at `apps/ios` (target — not yet scaffolded)
   - Android native app (Kotlin and Jetpack Compose) at `apps/android` (target — not yet scaffolded)
   - Admin web app (React + Vite, hosted on Firebase Hosting) at `apps/admin`
-  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript) at `apps/functions` (planned move to `functions/`)
+  - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript) at `functions/`
   - Cloud Firestore (durable data) and Firebase Realtime Database (ephemeral live location, presence)
   - Cloud Storage for Firebase
   - Firebase Authentication, App Check, Cloud Messaging

@@ -453,11 +453,11 @@ Security Rules source files:
 - Realtime Database: `firebase/database.rules.json`
 - Cloud Storage: `firebase/storage.rules`
 
-Emulator rule tests: `apps/functions/src/__tests__/security-rules.emulator.test.ts`
+Emulator rule tests: `functions/src/__tests__/security-rules.emulator.test.ts`
 
 Run with:
 
 ```sh
-cd apps/functions
+cd functions
 pnpm emulators:test
 ```

@@ -6,7 +6,6 @@
     "packages/shared",
     "apps/mobile",
     "apps/admin",
-    "apps/functions",
     "services/api"
   ],
   "scripts": {
@@ -34,7 +33,12 @@
     }
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@firebase/util", "esbuild", "protobufjs", "re2"]
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "esbuild",
+      "protobufjs",
+      "re2"
+    ]
   },
   "engines": {
     "node": ">=24"
