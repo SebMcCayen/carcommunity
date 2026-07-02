@@ -76,6 +76,23 @@ updates:
       - dependency-name: 'jest-expo'
         update-types:
           - 'version-update:semver-major'
+      # functions: this root entry ALSO discovers the pnpm workspace (root holds
+      # pnpm-workspace.yaml + pnpm-lock.yaml), so the /functions ignore rules must be
+      # mirrored here or they are bypassed — #202 shipped a firebase-admin major from
+      # this entry despite the /functions ignore. Firebase majors are upgraded manually
+      # as a set (firebase-admin 14 has no compatible firebase-functions release yet).
+      - dependency-name: 'firebase-admin'
+        update-types:
+          - 'version-update:semver-major'
+      - dependency-name: 'firebase-functions'
+        update-types:
+          - 'version-update:semver-major'
+      - dependency-name: 'firebase'
+        update-types:
+          - 'version-update:semver-major'
+      - dependency-name: 'firebase-tools'
+        update-types:
+          - 'version-update:semver-major'
 
   # Firebase Functions — a pnpm workspace (see pnpm-workspace.yaml) whose lockfile is
   # the ROOT pnpm-lock.yaml. pnpm's lockfile is separate from npm's package-lock.json,
