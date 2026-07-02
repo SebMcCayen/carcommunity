@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Placeholder theme. KCC Crown UI tokens (contracts/design-tokens/tokens.json)
+         are applied in Phase 6. -->
+    <style name="Theme.KCC" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
