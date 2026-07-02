@@ -1,4 +1,7 @@
 {
+  "app": {
+    "name": "Kungsbacka Car Community"
+  },
   "navigation": {
     "home": "Hem",
     "map": "Karta",

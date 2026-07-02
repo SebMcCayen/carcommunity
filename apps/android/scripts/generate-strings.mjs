@@ -3,12 +3,14 @@
  * Generates Android strings.xml resources from the canonical localization
  * contracts (contracts/localization/sv.json and en.json).
  *
- * - Keys are flattened dot-paths converted to snake resource names
- *   (liveLocation.start -> livelocation_start is NOT used; dots become
- *   underscores preserving camelCase: liveLocation.start -> liveLocation_start).
+ * - Keys are flattened dot-paths with dots converted to underscores,
+ *   preserving camelCase (liveLocation.start -> liveLocation_start).
+ *   Note: aapt2 only requires lowercase for FILE-based resources
+ *   (drawables, layouts); <string name="..."> entries may contain
+ *   uppercase letters, keeping a 1:1 mapping to contract keys.
  * - Values are escaped for Android resource XML (&, <, >, ', ", newline).
  * - Swedish is the default locale (res/values/), English is res/values-en/.
- * - app_name is injected as a fixed extra resource.
+ * - app_name comes from the app.name contract key — no hardcoded branding here.
  *
  * Usage: node apps/android/scripts/generate-strings.mjs   (from repo root)
  * CI verifies the generated files are up to date; run this after editing
@@ -20,8 +22,6 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-
-const APP_NAME = 'Kungsbacka Car Community';
 
 const targets = [
   { source: 'contracts/localization/sv.json', out: 'apps/android/app/src/main/res/values/strings.xml' },
@@ -64,13 +64,16 @@ for (const { source, out } of targets) {
   const dict = JSON.parse(readFileSync(resolve(repoRoot, source), 'utf8'));
   const entries = flatten(dict);
 
+  if (!entries.has('app.name')) {
+    throw new Error(`${source} is missing the app.name key (used for the Android app_name resource)`);
+  }
+
   const lines = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<!-- GENERATED FILE — do not edit by hand.',
     `     Source: ${source}`,
     '     Regenerate: node apps/android/scripts/generate-strings.mjs -->',
     '<resources>',
-    `    <string name="app_name">${escapeAndroid(APP_NAME)}</string>`,
   ];
 
   for (const [dotPath, value] of entries) {
@@ -80,5 +83,5 @@ for (const { source, out } of targets) {
 
   lines.push('</resources>', '');
   writeFileSync(resolve(repoRoot, out), lines.join('\n'));
-  console.log(`${out}: ${entries.size + 1} strings`);
+  console.log(`${out}: ${entries.size} strings`);
 }

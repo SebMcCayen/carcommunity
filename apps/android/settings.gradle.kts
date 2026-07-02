@@ -17,8 +17,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Mapbox Maps SDK v11+ — public release repository (no secret token required
-        // for downloads; a public access token is required at runtime).
+        // Mapbox Maps SDK v11+ public release repository.
+        // No secret token is required for downloads (verified); a public access
+        // token is required at runtime and arrives with the map feature slice.
         maven {
             url = uri("https://api.mapbox.com/downloads/v2/releases/maven")
         }
