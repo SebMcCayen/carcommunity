@@ -11,6 +11,9 @@ composeBom = "2024.12.01"
 firebaseBom = "33.7.0"
 mapbox = "11.8.0"
 googleServices = "4.4.2"
+credentials = "1.5.0"
+googleid = "1.1.1"
+coroutinesTest = "1.9.0"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espressoCore = "3.6.1"
@@ -38,8 +41,14 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 # Mapbox
 mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapbox" }
 
+# Credential Manager (Google Sign-In)
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutinesTest" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }

@@ -105,7 +105,9 @@ describe('Firestore – user profile', () => {
 
   it('owner can update their own display name', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: 'Updated Name' }));
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: 'Updated Name' }),
+    );
   });
 
   it('owner cannot change their own role', async () => {
@@ -129,6 +131,23 @@ describe('Firestore – user profile', () => {
       setDoc(doc(ctx.firestore(), 'users', 'new-user-with-role'), {
         displayName: 'Hacker',
         role: 'admin',
+      }),
+    );
+  });
+
+  it('owner cannot self-complete onboarding on their profile', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { onboardingCompletedAt: new Date() }),
+    );
+  });
+
+  it('owner cannot create a profile with onboardingCompletedAt pre-set', async () => {
+    const ctx = testEnv.authenticatedContext('new-user-onboarded');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'users', 'new-user-onboarded'), {
+        displayName: 'Speedrunner',
+        onboardingCompletedAt: new Date(),
       }),
     );
   });
@@ -166,6 +185,61 @@ describe('Firestore – userPrivate', () => {
     await assertFails(
       setDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { email: 'evil@example.com' }),
     );
+  });
+
+  it('owner can update their own contact details', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { phone: '+46700000001' }),
+    );
+  });
+
+  it('owner can update their own privacy settings', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        anonymousPartnerStatsOptIn: true,
+      }),
+    );
+  });
+
+  it('owner cannot write consent timestamps (backend-managed audit records)', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { ageConfirmedAt: new Date() }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { termsAcceptedAt: new Date() }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        privacyPolicyAcceptedAt: new Date(),
+      }),
+    );
+  });
+
+  it('owner cannot create their private doc with consent timestamps pre-set', async () => {
+    const ctx = testEnv.authenticatedContext('private-new-user');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'userPrivate', 'private-new-user'), {
+        email: 'new@example.com',
+        termsAcceptedAt: new Date(),
+      }),
+    );
+  });
+
+  it('owner can create their private doc without consent timestamps', async () => {
+    const ctx = testEnv.authenticatedContext('private-clean-user');
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'userPrivate', 'private-clean-user'), {
+        email: 'clean@example.com',
+      }),
+    );
+  });
+
+  it('owner cannot delete their private doc (backend deletion workflow only)', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'userPrivate', OWNER)));
   });
 });
 
@@ -508,12 +582,16 @@ describe('Cloud Storage – ownership validation', () => {
 
   it('owner can read their own ride route', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)));
+    await assertSucceeds(
+      getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
+    );
   });
 
   it("another user cannot read someone else's ride route", async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
-    await assertFails(getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)));
+    await assertFails(
+      getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
+    );
   });
 
   it("another user cannot upload to someone else's ride route path", async () => {
