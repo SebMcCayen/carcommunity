@@ -1,7 +1,11 @@
 version: 2
 
 updates:
-  # Root workspace / shared tooling
+  # All npm workspaces: root, packages/shared, apps/mobile, apps/admin, services/api.
+  # These share the single root package-lock.json, so they MUST be one update entry:
+  # separate per-workspace entries each regenerate the shared lockfile and their PRs
+  # race each other on merge (see the vite ^8.1.2/^8.1.3 lockfile breakage fixed in #198).
+  # Dependabot discovers workspace members from the root package.json "workspaces" field.
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
@@ -9,10 +13,10 @@ updates:
       day: 'monday'
       time: '08:00'
       timezone: 'Europe/Stockholm'
-    open-pull-requests-limit: 5
+    # Keep concurrent lockfile-touching PRs low to shrink the stale-base merge window.
+    open-pull-requests-limit: 3
     labels:
       - 'dependencies'
-      - 'security'
       - 'npm'
     commit-message:
       prefix: 'deps'
@@ -22,36 +26,13 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    # Ignore rules apply across all npm workspaces (Dependabot cannot scope them
+    # per workspace within a single entry).
     ignore:
       - dependency-name: '@types/node'
         update-types:
           - 'version-update:semver-major'
-
-  # Backend API workspace
-  - package-ecosystem: 'npm'
-    directory: '/services/api'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:15'
-      timezone: 'Europe/Stockholm'
-    open-pull-requests-limit: 5
-    labels:
-      - 'dependencies'
-      - 'api'
-      - 'npm'
-    commit-message:
-      prefix: 'deps'
-      include: 'scope'
-    groups:
-      npm-minor-and-patch:
-        update-types:
-          - 'minor'
-          - 'patch'
-    ignore:
-      - dependency-name: '@types/node'
-        update-types:
-          - 'version-update:semver-major'
+      # services/api: Prisma 7 migration deferred
       - dependency-name: 'prisma'
         versions:
           - '7.x'
@@ -61,32 +42,7 @@ updates:
       - dependency-name: '@prisma/adapter-pg'
         versions:
           - '7.x'
-
-  # Mobile app workspace
-  - package-ecosystem: 'npm'
-    directory: '/apps/mobile'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:20'
-      timezone: 'Europe/Stockholm'
-    open-pull-requests-limit: 5
-    labels:
-      - 'dependencies'
-      - 'mobile'
-      - 'npm'
-    commit-message:
-      prefix: 'deps'
-      include: 'scope'
-    groups:
-      npm-minor-and-patch:
-        update-types:
-          - 'minor'
-          - 'patch'
-    ignore:
-      - dependency-name: '@types/node'
-        update-types:
-          - 'version-update:semver-major'
+      # apps/mobile: Expo SDK majors are upgraded manually as a set
       - dependency-name: 'expo'
         update-types:
           - 'version-update:semver-major'
@@ -118,33 +74,8 @@ updates:
         update-types:
           - 'version-update:semver-major'
 
-  # Admin web app workspace
-  - package-ecosystem: 'npm'
-    directory: '/apps/admin'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:25'
-      timezone: 'Europe/Stockholm'
-    open-pull-requests-limit: 5
-    labels:
-      - 'dependencies'
-      - 'admin'
-      - 'npm'
-    commit-message:
-      prefix: 'deps'
-      include: 'scope'
-    groups:
-      npm-minor-and-patch:
-        update-types:
-          - 'minor'
-          - 'patch'
-    ignore:
-      - dependency-name: '@types/node'
-        update-types:
-          - 'version-update:semver-major'
-
-  # Firebase Functions workspace (pnpm)
+  # Firebase Functions workspace — pnpm with its own pnpm-lock.yaml, so it does not
+  # contend with the root package-lock.json and stays a separate entry.
   - package-ecosystem: 'npm'
     directory: '/functions'
     schedule:
