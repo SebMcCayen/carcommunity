@@ -35,6 +35,7 @@
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "approximateArea": {
           "type": "string",
+          "minLength": 1,
           "description": "Coarse area label (e.g. municipality) — never an exact address."
         },
         "isOfficial": { "type": "boolean" },
@@ -112,7 +113,7 @@
         "isOfficial": { "type": "boolean" },
         "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "approximateArea": { "type": "string" },
+        "approximateArea": { "type": "string", "minLength": 1 },
         "rsvpCounts": { "$ref": "#/$defs/eventRsvpSummary" },
         "cancelledAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
@@ -144,7 +145,7 @@
         "status": { "$ref": "#/$defs/eventStatus" },
         "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "approximateArea": { "type": "string" },
+        "approximateArea": { "type": "string", "minLength": 1 },
         "locationName": { "type": ["string", "null"] },
         "address": { "type": ["string", "null"] },
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
