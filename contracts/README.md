@@ -8,14 +8,14 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 
 ## Structure
 
-| Path                              | Contents                                                       | Status                                                                                                   |
-| --------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `schemas/`                        | JSON Schema (draft 2020-12) for shared request/response shapes | 🟡 auth, user profile (PR 2a); live location, events/RSVP (PR 2b); further domains added as they migrate |
-| `errors/errors.json`              | Canonical machine-readable error codes                         | ✅ Seeded (PR 2a)                                                                                        |
-| `functions/functions.json`        | Callable function names, access levels, and status             | ✅ Seeded (PR 2b)                                                                                        |
-| `features/feature-flags.json`     | Feature flag key names and defaults                            | ✅ Seeded (PR 2b)                                                                                        |
-| `localization/sv.json`, `en.json` | Source localization strings                                    | ✅ Seeded from `apps/mobile/src/i18n/` (PR 2c)                                                           |
-| `design-tokens/tokens.json`       | Design token values                                            | 🔲 Planned (PR 2d)                                                                                       |
+| Path                              | Contents                                                                             | Status                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `schemas/`                        | JSON Schema (draft 2020-12) for shared request/response shapes                       | 🟡 auth, user profile (PR 2a); live location, events/RSVP (PR 2b); further domains added as they migrate |
+| `errors/errors.json`              | Canonical machine-readable error codes                                               | ✅ Seeded (PR 2a)                                                                                        |
+| `functions/functions.json`        | Callable function names, access levels, and status                                   | ✅ Seeded (PR 2b)                                                                                        |
+| `features/feature-flags.json`     | Feature flag key names and defaults                                                  | ✅ Seeded (PR 2b)                                                                                        |
+| `localization/sv.json`, `en.json` | Source localization strings                                                          | ✅ Seeded from `apps/mobile/src/i18n/` (PR 2c)                                                           |
+| `design-tokens/tokens.json`       | KCC Crown UI design tokens (palette, spacing, radius, typography, light/dark themes) | ✅ Seeded from `apps/mobile/src/design/` (PR 2d)                                                         |
 
 ## Conventions
 
@@ -49,6 +49,8 @@ npx ajv validate --spec=draft2020 -c ajv-formats \
   -s contracts/functions/functions.schema.json -d contracts/functions/functions.json
 npx ajv validate --spec=draft2020 -c ajv-formats \
   -s contracts/features/feature-flags.schema.json -d contracts/features/feature-flags.json
+npx ajv validate --spec=draft2020 -c ajv-formats \
+  -s contracts/design-tokens/tokens.schema.json -d contracts/design-tokens/tokens.json
 jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d
 jq -r '.functions[].name' contracts/functions/functions.json | sort | uniq -d
 jq -r '.flags[].key' contracts/features/feature-flags.json | sort | uniq -d

@@ -131,6 +131,12 @@ jobs:
             -s contracts/features/feature-flags.schema.json \
             -d contracts/features/feature-flags.json
 
+      - name: Validate design token registry
+        run: |
+          npx ajv validate --spec=draft2020 -c ajv-formats \
+            -s contracts/design-tokens/tokens.schema.json \
+            -d contracts/design-tokens/tokens.json
+
       - name: Check localization key parity (sv vs en)
         run: |
           diff <(jq -r 'paths(scalars) | join(".")' contracts/localization/sv.json | sort) \
