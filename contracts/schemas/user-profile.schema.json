@@ -56,7 +56,7 @@
         "phone": { "type": "string" },
         "notificationPreferences": {
           "type": "object",
-          "description": "Push/email preferences map."
+          "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }

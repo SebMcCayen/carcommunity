@@ -117,6 +117,15 @@ jobs:
             -s contracts/errors/errors.schema.json \
             -d contracts/errors/errors.json
 
+      - name: Check error codes are unique
+        run: |
+          dupes=$(jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate error codes found:"
+            echo "$dupes"
+            exit 1
+          fi
+
   container-build:
     name: Container build check
     runs-on: ubuntu-latest

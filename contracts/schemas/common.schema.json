@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/common.schema.json",
   "title": "Common shared definitions",
-  "description": "Language-neutral shared enums and primitives used across all contract schemas. These mirror the canonical values in packages/shared (TypeScript) and docs/firebase-data-model.md. iOS, Android, backend, and admin must all treat these values as the single source of truth.",
+  "description": "Language-neutral shared enums and primitives used across all contract schemas. Values are sourced from packages/shared (TypeScript), the current implementation source of truth; known divergences from docs/firebase-data-model.md are called out on the affected definition (see userRole). Once adopted, these contract values are canonical for iOS, Android, backend, and admin.",
   "$defs": {
     "uid": {
       "type": "string",

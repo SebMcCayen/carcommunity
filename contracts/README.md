@@ -43,6 +43,8 @@ npx ajv compile --spec=draft2020 -c ajv-formats \
 npx ajv validate --spec=draft2020 -c ajv-formats \
   -s contracts/errors/errors.schema.json \
   -d contracts/errors/errors.json
+jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d
+# (must print nothing — duplicates fail CI)
 ```
 
 ## Changing a contract
