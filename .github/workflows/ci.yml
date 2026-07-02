@@ -85,6 +85,38 @@ jobs:
       - name: Admin build
         run: npm --workspace apps/admin run build
 
+  contracts:
+    name: Validate contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install JSON Schema tools
+        run: npm install --no-save --no-audit --no-fund ajv-cli@5 ajv-formats@3
+
+      - name: Compile common schema
+        run: npx ajv compile --spec=draft2020 -c ajv-formats -s contracts/schemas/common.schema.json
+
+      - name: Compile domain schemas
+        run: |
+          npx ajv compile --spec=draft2020 -c ajv-formats \
+            -r contracts/schemas/common.schema.json \
+            -s contracts/schemas/auth.schema.json \
+            -s contracts/schemas/user-profile.schema.json
+
+      - name: Validate error codes registry
+        run: |
+          npx ajv validate --spec=draft2020 -c ajv-formats \
+            -s contracts/errors/errors.schema.json \
+            -d contracts/errors/errors.json
+
   container-build:
     name: Container build check
     runs-on: ubuntu-latest
