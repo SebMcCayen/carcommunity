@@ -14,7 +14,7 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 | `errors/errors.json`              | Canonical machine-readable error codes                         | ✅ Seeded (PR 2a)                                                                                        |
 | `functions/functions.json`        | Callable function names, access levels, and status             | ✅ Seeded (PR 2b)                                                                                        |
 | `features/feature-flags.json`     | Feature flag key names and defaults                            | ✅ Seeded (PR 2b)                                                                                        |
-| `localization/sv.json`, `en.json` | Source localization strings                                    | 🔲 Planned (PR 2c)                                                                                       |
+| `localization/sv.json`, `en.json` | Source localization strings                                    | ✅ Seeded from `apps/mobile/src/i18n/` (PR 2c)                                                           |
 | `design-tokens/tokens.json`       | Design token values                                            | 🔲 Planned (PR 2d)                                                                                       |
 
 ## Conventions
@@ -24,6 +24,7 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 - **Timestamps are ISO 8601 strings** in JSON representations. Firestore stores native `Timestamp` values; the contract describes the serialized form. Timestamps are backend-written (`FieldValue.serverTimestamp()`) — never trust client clocks.
 - **Backend is the source of truth.** Nothing in these contracts permits a client to assert roles, subscription status, moderation state, or access decisions.
 - **Error codes** use the Firebase `HttpsError` vocabulary (see `errors/errors.json`). Clients branch on `code`, never on the human-readable message.
+- **Localization**: `localization/sv.json` and `en.json` are the canonical string sources (nested dot-path keys, e.g. `liveLocation.start`). Swedish is the primary product language; both files must have identical key sets (CI-enforced). Native apps consume these directly; the frozen legacy app keeps its copy in `apps/mobile/src/i18n/`.
 
 ## How platforms consume this
 
@@ -52,6 +53,9 @@ jq -r '.errorCodes[].code' contracts/errors/errors.json | sort | uniq -d
 jq -r '.functions[].name' contracts/functions/functions.json | sort | uniq -d
 jq -r '.flags[].key' contracts/features/feature-flags.json | sort | uniq -d
 # (the three jq commands must print nothing — duplicates fail CI)
+diff <(jq -r 'paths(scalars) | join(".")' contracts/localization/sv.json | sort) \
+     <(jq -r 'paths(scalars) | join(".")' contracts/localization/en.json | sort)
+# (must print nothing — sv/en key mismatch fails CI)
 ```
 
 ## Changing a contract
