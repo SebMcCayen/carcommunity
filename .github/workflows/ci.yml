@@ -140,9 +140,13 @@ jobs:
         run: |
           fail=0
           for f in contracts/localization/sv.json contracts/localization/en.json; do
-            bad=$(jq -r 'paths(scalars) as $p | select((getpath($p) | type != "string") or (getpath($p) == "")) | ($p | join("."))' "$f")
+            bad=$(jq -r '
+              [paths(scalars) as $p | select((getpath($p) | type != "string") or (getpath($p) == "")) | ($p | join("."))]
+              + [paths(arrays) as $p | ($p | join(".")) + " (array not allowed)"]
+              + [paths(objects) as $p | select(getpath($p) == {}) | ($p | join(".")) + " (empty object)"]
+              | .[]' "$f")
             if [ -n "$bad" ]; then
-              echo "Non-string or empty values in $f:"
+              echo "Invalid leaf values in $f:"
               echo "$bad"
               fail=1
             fi

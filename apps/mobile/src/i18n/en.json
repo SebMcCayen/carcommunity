@@ -75,7 +75,7 @@
     "lastUpdated": "Last updated",
     "safeDrivingWarning": "Do not use the app while driving.",
     "whoCanSeeTitle": "Who can see me?",
-    "whoCanSeeBody": "Only Community members with an active subscription can see your location while you are sharing.",
+    "whoCanSeeBody": "The backend always determines who can share and see live locations.",
     "privacyOptional": "Sharing is optional and always initiated by you.",
     "privacyTimeLimited": "Your location is shared only for the time you select.",
     "privacyStopAnytime": "You can stop sharing at any time using \"Stop sharing\" or \"Hide me now\".",
