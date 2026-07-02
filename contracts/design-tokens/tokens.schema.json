@@ -77,6 +77,8 @@
       "properties": {
         "family": {
           "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-z][a-zA-Z]*$" },
           "additionalProperties": { "type": "string", "minLength": 1 }
         },
         "size": {
