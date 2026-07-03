@@ -43,8 +43,9 @@ export async function provisionUserDocuments(
     }
     tx.set(profileRef, buildUserProfileDocument(input, serverTimestamp));
     if (privateSnap.exists) {
-      // The owner may legally create userPrivate/{uid} before this trigger
-      // runs — never clobber their fields; only refresh updatedAt.
+      // Rules deny client creates (Phase 9a), but a doc may still exist here
+      // from a retried delivery or an earlier backend write — never clobber
+      // its fields; only refresh updatedAt.
       tx.update(privateRef, { updatedAt: serverTimestamp() });
     } else {
       tx.set(privateRef, buildUserPrivateDocument(input, serverTimestamp));

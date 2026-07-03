@@ -37,31 +37,77 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.activeMember == true && isNotSuspended();
     }
 
-    // Returns true when the incoming write does not touch any field that
-    // must only be modified by backend (Cloud Functions / Admin SDK).
-    // onboardingCompletedAt is written by auth.completeOnboarding with a
-    // server timestamp — clients must not self-complete onboarding.
-    function noProtectedUserFieldsChanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement', 'onboardingCompletedAt']);
+    // ---- users/{uid} owner-write validation (Phase 9a) ----------------------
+    // Owner writes are whitelist-based: only the keys listed in
+    // validUserProfileCreate/Update may be set or changed. All protected
+    // fields (role, admin, activeMember, suspended, deleted, entitlement,
+    // onboardingCompletedAt) are backend-managed via the Admin SDK and are
+    // rejected by omission from the whitelist. Field shapes follow
+    // contracts/schemas/user-profile.schema.json.
+
+    function validDisplayName(data) {
+      return data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 120;
     }
 
-    // Returns true when a create request does not set any protected field.
-    function noProtectedUserFieldsSet() {
-      return !request.resource.data.keys()
-        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement', 'onboardingCompletedAt']);
+    // avatarPath must point into the caller's own Cloud Storage prefix
+    // (profileImages/{uid}/...).
+    function validAvatarPath(data, uid) {
+      return data.avatarPath is string
+        && data.avatarPath.size() <= 500
+        && data.avatarPath.matches('profileImages/' + uid + '/.+');
     }
 
-    // Consent timestamps on userPrivate are backend-written audit records
-    // (auth.completeOnboarding); clients must never set or modify them.
-    function noConsentTimestampsChanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['ageConfirmedAt', 'termsAcceptedAt', 'privacyPolicyAcceptedAt']);
+    function validBio(data) {
+      return data.bio is string && data.bio.size() <= 500;
     }
 
-    function noConsentTimestampsSet() {
-      return !request.resource.data.keys()
-        .hasAny(['ageConfirmedAt', 'termsAcceptedAt', 'privacyPolicyAcceptedAt']);
+    // Client-written timestamps must be the server timestamp sentinel
+    // (FieldValue.serverTimestamp() resolves to request.time).
+    function isServerTimestamp(value) {
+      return value == request.time;
+    }
+
+    function validUserProfileFields(keys, uid) {
+      let data = request.resource.data;
+      return (!keys.hasAny(['displayName']) || validDisplayName(data))
+        && (!keys.hasAny(['avatarPath']) || validAvatarPath(data, uid))
+        && (!keys.hasAny(['bio']) || validBio(data))
+        && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
+    }
+
+    // Owner update: only whitelisted keys may change; changed keys are validated.
+    // There is no owner create: users/{uid} is provisioned exclusively by the
+    // backend (onUserCreate trigger + auth.completeOnboarding fallback). A
+    // client-created partial doc would make the idempotent trigger a
+    // permanent no-op and skip backend-managed defaults.
+    function validUserProfileUpdate(uid) {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return keys.hasOnly(['displayName', 'avatarPath', 'bio', 'updatedAt'])
+        && validUserProfileFields(keys, uid);
+    }
+
+    // ---- userPrivate/{uid} owner-write validation (Phase 9a) ----------------
+    // The whitelist excludes the consent timestamps (ageConfirmedAt,
+    // termsAcceptedAt, privacyPolicyAcceptedAt) — backend-written compliance
+    // records (auth.completeOnboarding) that clients can never set or modify.
+
+    function validUserPrivateFields(keys) {
+      let data = request.resource.data;
+      return (!keys.hasAny(['email']) || (data.email is string && data.email.size() <= 320))
+        && (!keys.hasAny(['phone']) || (data.phone is string && data.phone.size() <= 32))
+        && (!keys.hasAny(['notificationPreferences']) || data.notificationPreferences is map)
+        && (!keys.hasAny(['anonymousPartnerStatsOptIn']) || data.anonymousPartnerStatsOptIn is bool)
+        && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
+    }
+
+    // No owner create (backend provisioning only — see users note above).
+    function validUserPrivateUpdate() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return keys.hasOnly(['email', 'phone', 'notificationPreferences',
+          'anonymousPartnerStatsOptIn', 'updatedAt'])
+        && validUserPrivateFields(keys);
     }
 
     // -------------------------------------------------------------------------
@@ -78,12 +124,12 @@ service cloud.firestore {
     match /users/{userId} {
       // Any authenticated user may read the public profile.
       allow read: if isAuthenticated();
-      // Owner may create their own profile without setting protected fields.
-      allow create: if isOwner(userId) && isNotSuspended() && noProtectedUserFieldsSet();
-      // Owner may update display fields but must not touch protected fields.
-      // Suspended users may not edit their profile (suspension overrides
-      // feature access); they retain read access to their own data.
-      allow update: if isOwner(userId) && isNotSuspended() && noProtectedUserFieldsChanged();
+      // No owner create: users/{uid} is provisioned exclusively by the
+      // backend (onUserCreate trigger + auth.completeOnboarding fallback).
+      // Owner may update whitelisted display fields only, with field-level
+      // validation (Phase 9a). Suspended users may not edit their profile
+      // (suspension overrides feature access); they retain read access.
+      allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
       // Admins have unrestricted access.
       allow read, write: if isAdmin();
     }
@@ -99,8 +145,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /userPrivate/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && noConsentTimestampsSet();
-      allow update: if isOwner(userId) && noConsentTimestampsChanged();
+      // No owner create: provisioned by backend alongside users/{uid}.
+      // Owner updates are whitelist-based with field-level validation
+      // (Phase 9a); consent timestamps are excluded from the whitelist.
+      allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
     }
 

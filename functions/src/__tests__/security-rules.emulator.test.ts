@@ -17,7 +17,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { get as dbGet, ref as dbRef, set as dbSet } from 'firebase/database';
 import { getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
@@ -218,19 +218,12 @@ describe('Firestore – userPrivate', () => {
     );
   });
 
-  it('owner cannot create their private doc with consent timestamps pre-set', async () => {
-    const ctx = testEnv.authenticatedContext('private-new-user');
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'userPrivate', 'private-new-user'), {
-        email: 'new@example.com',
-        termsAcceptedAt: new Date(),
-      }),
-    );
-  });
-
-  it('owner can create their private doc without consent timestamps', async () => {
+  it('owner cannot create their private doc directly (backend provisioning only)', async () => {
+    // Provisioned by the backend alongside users/{uid}; a client-created doc
+    // could lack createdAt/updatedAt forever (onUserCreate never clobbers an
+    // existing userPrivate doc).
     const ctx = testEnv.authenticatedContext('private-clean-user');
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'userPrivate', 'private-clean-user'), {
         email: 'clean@example.com',
       }),
@@ -240,6 +233,184 @@ describe('Firestore – userPrivate', () => {
   it('owner cannot delete their private doc (backend deletion workflow only)', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
     await assertFails(deleteDoc(doc(ctx.firestore(), 'userPrivate', OWNER)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Firestore: user profile field validation (Phase 9a)
+// Owner writes are whitelist-based with per-field validation; shapes follow
+// contracts/schemas/user-profile.schema.json.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – user profile field validation (Phase 9a)', () => {
+  const OWNER = 'validation-owner';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER), {
+        displayName: 'Validation Owner',
+        role: 'user',
+        activeMember: false,
+        suspended: false,
+      });
+    });
+  });
+
+  it('owner cannot set a display name longer than 120 characters', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: 'x'.repeat(121) }),
+    );
+  });
+
+  it('owner cannot set an empty display name', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: '' }));
+  });
+
+  it('owner cannot set a non-string display name', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: 42 }));
+  });
+
+  it('owner can set a display name at the 120-character limit', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { displayName: 'x'.repeat(120) }),
+    );
+  });
+
+  it('owner cannot write a field outside the whitelist', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { favoriteCar: 'Koenigsegg' }),
+    );
+  });
+
+  it('owner can set an avatar path under their own storage prefix', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        avatarPath: `profileImages/${OWNER}/avatar-1.jpg`,
+      }),
+    );
+  });
+
+  it("owner cannot point their avatar at another user's storage prefix", async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        avatarPath: 'profileImages/someone-else/avatar-1.jpg',
+      }),
+    );
+  });
+
+  it('owner cannot set an avatar path outside profileImages', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        avatarPath: 'https://evil.example.com/avatar.jpg',
+      }),
+    );
+  });
+
+  it('owner can set a bio up to 500 characters but not beyond', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { bio: 'b'.repeat(500) }),
+    );
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { bio: 'b'.repeat(501) }));
+  });
+
+  it('owner can write updatedAt only as a server timestamp', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        displayName: 'Timestamped',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        displayName: 'Backdated',
+        updatedAt: new Date('2020-01-01T00:00:00Z'),
+      }),
+    );
+  });
+
+  it('owner cannot create their profile directly (backend provisioning only)', async () => {
+    // A client-created partial users/{uid} doc would make the idempotent
+    // onUserCreate trigger a permanent no-op and skip backend-managed
+    // defaults — creates are backend-only (trigger + completeOnboarding).
+    const uid = 'validation-create-user';
+    const ctx = testEnv.authenticatedContext(uid);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'users', uid), {
+        displayName: 'Fresh User',
+        bio: 'Hello',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Firestore: userPrivate field validation (Phase 9a)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – userPrivate field validation (Phase 9a)', () => {
+  const OWNER = 'private-validation-owner';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        email: 'validation@example.com',
+        anonymousPartnerStatsOptIn: false,
+      });
+    });
+  });
+
+  it('owner cannot set a non-boolean partner-stats opt-in', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        anonymousPartnerStatsOptIn: 'yes',
+      }),
+    );
+  });
+
+  it('owner can update notification preferences as a map', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        notificationPreferences: { push: true, email: false },
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        notificationPreferences: 'all',
+      }),
+    );
+  });
+
+  it('owner cannot write a field outside the userPrivate whitelist', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { secretBackendField: 1 }),
+    );
+  });
+
+  it('owner cannot set an overlong email or phone', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), {
+        email: `${'a'.repeat(320)}@example.com`,
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { phone: '0'.repeat(33) }),
+    );
   });
 });
 
