@@ -127,7 +127,7 @@
     {
       "name": "events.complete",
       "domain": "events",
-      "description": "Marks a published event completed. Badge evaluation for going attendees migrates with the badges domain (Phase 9, domain 6). Deployed via grouped export as events-complete (functions/src/events/eventLifecycle.ts).",
+      "description": "Marks a published event completed; going-RSVP attendees receive badge attendance credit (first_event / five_events, Phase 9f). Deployed via grouped export as events-complete (functions/src/events/eventLifecycle.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
@@ -186,6 +186,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
+      "name": "badges.awardHelpfulMember",
+      "domain": "badges",
+      "description": "Manually awards the helpful_member badge (the only manually awardable key). Requires a non-empty reason; writes an adminAuditEvents record on first award only; idempotent repeats never duplicate audit entries; suspended/deleted targets rejected. Deployed via grouped export as badges-awardHelpfulMember (functions/src/badges/awardHelpfulMember.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/badge-service.ts (awardHelpfulMemberByAdmin)"
     },
     {
       "name": "admin.suspendUser",

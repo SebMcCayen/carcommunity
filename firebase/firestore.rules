@@ -144,6 +144,17 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isNotSuspended() && validUserProfileUpdate(userId);
       // Admins have unrestricted access.
       allow read, write: if isAdmin();
+
+      // Badges (Phase 9f) — users/{uid}/badges/{badgeKey}. Awarded by the
+      // backend only (automatic evaluators + badges.awardHelpfulMember);
+      // strictly owner-only read, matching the legacy API which never
+      // exposes other users' badges. Admin workflows use the Admin SDK /
+      // callables — no privileged client-side read (same rule as
+      // userPrivate).
+      match /badges/{badgeKey} {
+        allow read: if isOwner(userId);
+        // No client writes: awards are backend-only and never revoked here.
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -320,6 +331,14 @@ service cloud.firestore {
         && request.resource.data.reportedBy == request.auth.uid;
       // Only admins may modify or remove hazard records.
       allow update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // badgeProgress – backend-only attendance counters (Phase 9f)
+    // Maintained by events.complete; feeds first_event / five_events.
+    // -------------------------------------------------------------------------
+    match /badgeProgress/{userId} {
+      allow read, write: if false;
     }
 
     // (event chat rules live in the Phase 9c messages/messageReports blocks

@@ -14,14 +14,15 @@
  * prefix. Ownership failures return not-found — never permission-denied —
  * so callers cannot probe whether another user's vehicle exists.
  *
- * Legacy garage_created badge evaluation hooks in when the badges domain
- * migrates (Phase 9, domain 6).
+ * garage_created badge evaluation runs after each verified vehicle
+ * creation (Phase 9f); a badge failure never fails the add itself.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
+import { tryAutomaticAward } from '../badges/awards';
 import {
   MAX_VEHICLES_PER_USER,
   buildVehicleDocument,
@@ -73,6 +74,12 @@ export const addVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehicle
       buildVehicleDocument(input, actor.uid, () => FieldValue.serverTimestamp()),
     );
   });
+
+  // Legacy parity: garage_created is evaluated after every verified vehicle
+  // creation. Awaited (Cloud Functions cannot safely fire-and-forget), but a
+  // badge failure never FAILS the response — errors are logged and swallowed
+  // (Phase 9f badges domain).
+  await tryAutomaticAward(actor.uid, 'garage_created', 'garage.addVehicle');
 
   return { vehicleId: vehicleRef.id };
 });

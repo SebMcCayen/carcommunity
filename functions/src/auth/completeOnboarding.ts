@@ -17,6 +17,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { computeOnboardingWrites, parseCompleteOnboardingInput } from './onboarding-core';
 import { buildUserPrivateDocument, buildUserProfileDocument } from './provisioning';
+import { evaluateEarlyMember } from '../badges/awards';
+import { logger } from 'firebase-functions';
 
 /** onboardingStatus per contracts/schemas/auth.schema.json. */
 export interface OnboardingStatusResponse {
@@ -98,6 +100,16 @@ export const completeOnboarding = onCall(
       tx.set(profileRef, { ...profileBase, ...profileUpdate }, { merge: true });
       tx.set(privateRef, { ...privateBase, ...privateUpdate }, { merge: true });
     });
+
+    // early_member evaluation (Phase 9f, legacy: evaluated on sign-in; here
+    // once per user at onboarding completion). No-op unless the
+    // EARLY_MEMBER_CUTOFF_DATE configuration is set; a badge failure never
+    // fails onboarding.
+    try {
+      await evaluateEarlyMember(uid);
+    } catch (error) {
+      logger.error('early_member evaluation failed', { uid, error: String(error) });
+    }
 
     // Re-read after commit to resolve the server timestamps into real values.
     const [profileSnap, privateSnap] = await Promise.all([profileRef.get(), privateRef.get()]);
