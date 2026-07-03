@@ -11,14 +11,18 @@
         "displayName": {
           "type": "string",
           "minLength": 1,
+          "maxLength": 120,
           "description": "Visible username."
         },
         "avatarPath": {
           "type": "string",
+          "maxLength": 500,
+          "pattern": "^profileImages/",
           "description": "Cloud Storage path, e.g. profileImages/{uid}/{imageId}."
         },
         "bio": {
           "type": "string",
+          "maxLength": 500,
           "description": "Short profile description."
         },
         "role": { "$ref": "common.schema.json#/$defs/userRole" },
@@ -56,8 +60,8 @@
       "type": "object",
       "description": "Sensitive user data — Firestore `userPrivate/{uid}`. Owner-only read and write; no other users may access this collection. Email is a contact channel, not an identity key.",
       "properties": {
-        "email": { "type": "string" },
-        "phone": { "type": "string" },
+        "email": { "type": "string", "maxLength": 320 },
+        "phone": { "type": "string", "maxLength": 32 },
         "notificationPreferences": {
           "type": "object",
           "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
@@ -76,7 +80,7 @@
         },
         "anonymousPartnerStatsOptIn": {
           "type": "boolean",
-          "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable."
+          "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable by direct Firestore write (Security Rules enforce boolean type)."
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
@@ -89,7 +93,7 @@
       "description": "Admin-facing user summary as exposed by backend list endpoints (mirrors packages/shared/src/users.ts UserSummary).",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/uid" },
-        "displayName": { "type": ["string", "null"] },
+        "displayName": { "type": ["string", "null"], "maxLength": 120 },
         "email": { "type": ["string", "null"] },
         "role": { "$ref": "common.schema.json#/$defs/userRole" },
         "status": { "$ref": "common.schema.json#/$defs/userStatus" },
