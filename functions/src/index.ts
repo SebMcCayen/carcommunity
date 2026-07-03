@@ -16,6 +16,9 @@ import { onUserCreate } from './auth/onUserCreate';
 import { restoreAccess } from './admin/restoreAccess';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
+import { cancel, complete, publish } from './events/eventLifecycle';
+import { create, update } from './events/manageEvent';
+import { onRsvpWrite } from './events/onRsvpWrite';
 
 /**
  * GET /health
@@ -62,4 +65,24 @@ export const admin = {
   setAdminRole,
   suspendUser,
   restoreAccess,
+};
+
+/**
+ * Events domain (grouped export → deployed as `events-create`,
+ * `events-update`, `events-publish`, `events-cancel`, `events-complete`,
+ * and the `events-onRsvpWrite` Firestore trigger).
+ *
+ * Admin-only lifecycle callables (contracts/functions/functions.json:
+ * events.create/update/publish/cancel/complete) writing the teaser doc
+ * `events/{eventId}` + member-gated `events/{eventId}/details/private`
+ * split, plus the RSVP counter aggregation trigger. Member RSVPs are direct
+ * Security-Rules-gated writes to events/{eventId}/rsvps/{uid} — no callable.
+ */
+export const events = {
+  create,
+  update,
+  publish,
+  cancel,
+  complete,
+  onRsvpWrite,
 };

@@ -415,6 +415,172 @@ describe('Firestore – userPrivate field validation (Phase 9a)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: events – teaser/detail split and RSVPs (Phase 9b)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – events (Phase 9b)', () => {
+  const PUBLISHED = 'event-published';
+  const DRAFT = 'event-draft';
+  const MEMBER = 'events-member';
+  const NON_MEMBER = 'events-non-member';
+
+  const memberCtx = () => testEnv.authenticatedContext(MEMBER, { activeMember: true });
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      for (const [id, status] of [
+        [PUBLISHED, 'published'],
+        [DRAFT, 'draft'],
+      ] as const) {
+        await setDoc(doc(firestore, 'events', id), {
+          title: 'Test event',
+          approximateArea: 'Stockholm area',
+          status,
+          rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
+        });
+        await setDoc(doc(firestore, 'events', id, 'details', 'private'), {
+          locationName: 'Exact spot',
+          latitude: 59.3,
+          longitude: 18.0,
+        });
+      }
+    });
+  });
+
+  it('any authenticated user can read a published event teaser', async () => {
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', PUBLISHED)));
+  });
+
+  it('non-admin users cannot read draft events', async () => {
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', DRAFT)));
+  });
+
+  it('an admin can read draft events', async () => {
+    const ctx = testEnv.authenticatedContext('events-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', DRAFT)));
+  });
+
+  it('unauthenticated users cannot read any event', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', PUBLISHED)));
+  });
+
+  it('non-members cannot read the member-gated detail document', async () => {
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'private')));
+  });
+
+  it('active members can read the detail document of a published event', async () => {
+    await assertSucceeds(
+      getDoc(doc(memberCtx().firestore(), 'events', PUBLISHED, 'details', 'private')),
+    );
+  });
+
+  it('members cannot read the detail document of a draft event', async () => {
+    await assertFails(
+      getDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'details', 'private')),
+    );
+  });
+
+  it('a suspended member loses detail access (suspension overrides entitlement)', async () => {
+    const ctx = testEnv.authenticatedContext('events-suspended', {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'private')));
+  });
+
+  it('no client can write event documents — not even admins (callables only)', async () => {
+    const adminCtx = testEnv.authenticatedContext('events-admin', { admin: true });
+    await assertFails(
+      updateDoc(doc(adminCtx.firestore(), 'events', PUBLISHED), { title: 'Edited' }),
+    );
+    await assertFails(
+      updateDoc(doc(memberCtx().firestore(), 'events', PUBLISHED), { status: 'cancelled' }),
+    );
+  });
+
+  it('an active member can create and change their own RSVP', async () => {
+    const rsvpRef = doc(memberCtx().firestore(), 'events', PUBLISHED, 'rsvps', MEMBER);
+    await assertSucceeds(setDoc(rsvpRef, { status: 'going', updatedAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(rsvpRef, { status: 'not_going', updatedAt: serverTimestamp() }));
+  });
+
+  it('rejects RSVPs with an invalid status or extra fields', async () => {
+    const firestore = memberCtx().firestore();
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), { status: 'attending' }),
+    );
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), {
+        status: 'going',
+        plusOnes: 4,
+      }),
+    );
+  });
+
+  it('rejects RSVPs without a server-timestamp updatedAt', async () => {
+    const firestore = memberCtx().firestore();
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), { status: 'going' }),
+    );
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), {
+        status: 'going',
+        updatedAt: new Date('2020-01-01T00:00:00Z'),
+      }),
+    );
+  });
+
+  it('members cannot read other documents under details/ (only private)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'internal-notes'), {
+        note: 'staff only',
+      });
+    });
+    await assertFails(
+      getDoc(doc(memberCtx().firestore(), 'events', PUBLISHED, 'details', 'internal-notes')),
+    );
+  });
+
+  it('members cannot RSVP to a draft event', async () => {
+    await assertFails(
+      setDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'rsvps', MEMBER), {
+        status: 'going',
+      }),
+    );
+  });
+
+  it('non-members cannot RSVP', async () => {
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'rsvps', NON_MEMBER), {
+        status: 'going',
+      }),
+    );
+  });
+
+  it("members cannot write another user's RSVP or read it", async () => {
+    const firestore = memberCtx().firestore();
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', 'someone-else'), {
+        status: 'going',
+      }),
+    );
+    await assertFails(getDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', 'someone-else')));
+  });
+
+  it('members cannot delete their RSVP (answers change instead)', async () => {
+    await assertFails(
+      deleteDoc(doc(memberCtx().firestore(), 'events', PUBLISHED, 'rsvps', MEMBER)),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: vehicle ownership
 // ---------------------------------------------------------------------------
 

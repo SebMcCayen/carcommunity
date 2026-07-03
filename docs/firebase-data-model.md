@@ -146,21 +146,47 @@ Composite indexes: `receiverId ASC, status ASC, createdAt DESC` and `senderId AS
 
 ### `events` — community calendar
 
-Document ID: auto-generated.
+Document ID: auto-generated. Split-document model (Phase 9b): the exact
+location and long description are member-only in the legacy API, so they live
+in a separate member-gated document under `details/private` while
+`events/{eventId}` carries only teaser-safe and operational fields
+(contracts/schemas/events.schema.json `eventTeaser` vs `eventDetail`).
 
-| Field         | Type         | Notes                                       |
-| ------------- | ------------ | ------------------------------------------- |
-| `title`       | `string`     |                                             |
-| `description` | `string?`    |                                             |
-| `location`    | `map?`       | `{ name, lat, lng }`                        |
-| `startsAt`    | `Timestamp`  |                                             |
-| `endsAt`      | `Timestamp?` |                                             |
-| `status`      | `string`     | `'draft'` \| `'published'` \| `'cancelled'` |
-| `createdBy`   | `string`     | Admin UID                                   |
-| `createdAt`   | `Timestamp`  | Server timestamp                            |
-| `updatedAt`   | `Timestamp`  | Server timestamp                            |
+| Field             | Type         | Notes                                                              |
+| ----------------- | ------------ | ------------------------------------------------------------------ |
+| `title`           | `string`     | ≤200 chars                                                         |
+| `summary`         | `string?`    | ≤2000 chars, teaser-safe                                           |
+| `startsAt`        | `Timestamp`  |                                                                    |
+| `endsAt`          | `Timestamp?` |                                                                    |
+| `approximateArea` | `string`     | Coarse area shown to non-members, ≤200 chars                       |
+| `isOfficial`      | `boolean`    |                                                                    |
+| `status`          | `string`     | `'draft'` \| `'published'` \| `'cancelled'` \| `'completed'`       |
+| `cancelledAt`     | `Timestamp?` | Set by `events.cancel`                                             |
+| `rsvpCounts`      | `map`        | `{ going, maybe, not_going }` — maintained by `events-onRsvpWrite` |
+| `createdByUserId` | `string`     | Admin UID                                                          |
+| `createdAt`       | `Timestamp`  | Server timestamp                                                   |
+| `updatedAt`       | `Timestamp`  | Server timestamp                                                   |
 
-Security: any authenticated user can read; admin-only write.
+#### `events/{eventId}/details/private` — member-gated detail
+
+| Field          | Type      | Notes           |
+| -------------- | --------- | --------------- |
+| `description`  | `string?` | ≤10000 chars    |
+| `locationName` | `string?` | ≤200 chars      |
+| `address`      | `string?` | ≤400 chars      |
+| `latitude`     | `number?` | Paired with lng |
+| `longitude`    | `number?` | Paired with lat |
+
+#### `events/{eventId}/rsvps/{uid}` — member RSVPs
+
+Document ID = responding user's UID. `{ status: 'going' | 'maybe' |
+'not_going', updatedAt }` — direct Security-Rules-gated member writes;
+`events-onRsvpWrite` maintains the parent `rsvpCounts`.
+
+Security: authenticated users read published `events/{eventId}` (teaser);
+active members additionally read `details/private` of published events and
+write their own RSVP; admins read everything. All mutations go through the
+audited `events.*` admin callables — no client writes, including admins.
 
 Composite index: `status ASC, startsAt ASC` (upcoming events list, paginated).
 

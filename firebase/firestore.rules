@@ -102,6 +102,18 @@ service cloud.firestore {
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
+    // ---- events/{eventId}/rsvps/{uid} validation (Phase 9b) ------------------
+    // Validates the RESULTING document (covers create and update uniformly):
+    // exactly a status from the contract enum plus a server-timestamp
+    // updatedAt (contracts/schemas/events.schema.json eventRsvpStatus).
+    function validRsvpDocument() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['status', 'updatedAt'])
+        && data.keys().hasAll(['status', 'updatedAt'])
+        && data.status in ['going', 'maybe', 'not_going']
+        && isServerTimestamp(data.updatedAt);
+    }
+
     // No owner create (backend provisioning only — see users note above).
     function validUserPrivateUpdate() {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
@@ -150,6 +162,44 @@ service cloud.firestore {
       // (Phase 9a); consent timestamps are excluded from the whitelist.
       allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
+    }
+
+    // -------------------------------------------------------------------------
+    // events – community calendar (Phase 9b)
+    // Split-document model: events/{eventId} holds teaser-safe + operational
+    // fields (title, approximateArea, status, rsvpCounts, ...); the exact
+    // location and long description are member-only and live in
+    // events/{eventId}/details/private. All mutations go through the audited
+    // events.* admin callables (Admin SDK) — no client writes, including
+    // admins, so every lifecycle change carries an adminAuditEvents record.
+    // -------------------------------------------------------------------------
+    match /events/{eventId} {
+      // Only published events are visible to non-admin users
+      // (contracts/schemas/events.schema.json eventStatus).
+      allow read: if (isAuthenticated() && resource.data.status == 'published') || isAdmin();
+      // No client writes: events.create/update/publish/cancel/complete only.
+
+      // Member-gated detail document (exact location, description). The
+      // match is pinned to the single `private` document so nothing else
+      // ever added under details/ inherits member read access.
+      match /details/private {
+        allow read: if isAdmin()
+          || (isActiveMember()
+            && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
+        // No client writes: managed by the events.* callables.
+      }
+
+      // RSVPs — active members write their own answer directly; the
+      // events-onRsvpWrite trigger maintains events/{eventId}.rsvpCounts.
+      // Document ID == responding user's UID. Legacy has no RSVP deletion;
+      // members change their answer instead (going/maybe/not_going).
+      match /rsvps/{userId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update: if isOwner(userId) && isActiveMember()
+          && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published'
+          && validRsvpDocument();
+        // No client deletes.
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -211,13 +261,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // -------------------------------------------------------------------------
-    // events – community calendar
-    // -------------------------------------------------------------------------
-    match /events/{eventId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
+    // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
     // companies – partner companies
