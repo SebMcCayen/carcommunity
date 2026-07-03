@@ -80,27 +80,38 @@ export const adminAdjust = onCall(CALLABLE_OPTS, async (request): Promise<Points
     ? `Adminjustering (kredit): ${reason}`
     : `Adminjustering (debet): ${reason}`;
   const mutate = isCredit ? creditPoints : debitPoints;
-  const result = await mutate({
-    targetUid,
-    amount,
-    transactionType: type,
-    source: 'admin_adjustment',
-    description,
-    createdByUserId: actor.uid,
-  });
-
-  await db.collection('adminAuditEvents').add(
-    buildAdminAuditEvent(
-      {
-        adminId: actor.uid,
-        action: 'points.adminAdjust',
-        targetType: 'user',
-        targetId: targetUid,
-        reason,
-        details: { type, amount, entryId: result.entryId, balanceAfter: result.balanceAfter },
-      },
-      () => FieldValue.serverTimestamp(),
-    ),
+  // The audit record commits ATOMICALLY with the balance/entry write — a
+  // points change can never exist without its audit trail.
+  const result = await mutate(
+    {
+      targetUid,
+      amount,
+      transactionType: type,
+      source: 'admin_adjustment',
+      description,
+      createdByUserId: actor.uid,
+    },
+    (tx, mutation) => {
+      tx.set(
+        db.collection('adminAuditEvents').doc(),
+        buildAdminAuditEvent(
+          {
+            adminId: actor.uid,
+            action: 'points.adminAdjust',
+            targetType: 'user',
+            targetId: targetUid,
+            reason,
+            details: {
+              type,
+              amount,
+              entryId: mutation.entryId,
+              balanceAfter: mutation.balanceAfter,
+            },
+          },
+          () => FieldValue.serverTimestamp(),
+        ),
+      );
+    },
   );
 
   return { targetUid, ...result };
@@ -144,7 +155,15 @@ export const adminReverse = onCall(CALLABLE_OPTS, async (request): Promise<Point
       };
     }
 
-    const reversalAmount = -(original.amount as number);
+    const originalAmount = original.amount;
+    if (typeof originalAmount !== 'number' || !Number.isSafeInteger(originalAmount)) {
+      // A corrupted entry must fail loudly rather than write NaN balances.
+      throw new HttpsError(
+        'failed-precondition',
+        'Original entry has a corrupted amount and cannot be reversed.',
+      );
+    }
+    const reversalAmount = -originalAmount;
     const currentBalance = toStoredBalance(ledgerSnap.data()?.balance);
     const check = applyDelta(currentBalance, reversalAmount);
     if (!check.ok) {

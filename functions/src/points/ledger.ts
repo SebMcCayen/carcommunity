@@ -23,6 +23,7 @@ import { isRestricted, toUserAccessState } from '../shared/access';
 import {
   applyDelta,
   buildLedgerEntry,
+  isFirestoreSafeId,
   toStoredBalance,
   type PointsTransactionSource,
   type PointsTransactionType,
@@ -49,6 +50,16 @@ export interface PointsMutationResult {
   alreadyApplied: boolean;
 }
 
+/**
+ * Extra writes committed ATOMICALLY with the mutation (e.g. the admin audit
+ * record) — runs inside the transaction, only when a new entry is written
+ * (idempotent replays add nothing).
+ */
+export type AtomicExtraWrites = (
+  tx: FirebaseFirestore.Transaction,
+  result: PointsMutationResult,
+) => void;
+
 async function assertTargetCanTransact(targetUid: string): Promise<void> {
   const snap = await db.collection('users').doc(targetUid).get();
   if (!snap.exists) {
@@ -67,9 +78,15 @@ async function assertTargetCanTransact(targetUid: string): Promise<void> {
 async function mutatePoints(
   params: PointsMutationParams,
   signedAmount: number,
+  extraWrites?: AtomicExtraWrites,
 ): Promise<PointsMutationResult> {
   if (!Number.isInteger(params.amount) || params.amount <= 0) {
     throw new HttpsError('invalid-argument', 'Amount must be a positive integer.');
+  }
+  // The idempotencyKey becomes a document ID — reject anything that is not
+  // Firestore-safe before building a path from it.
+  if (params.idempotencyKey && !isFirestoreSafeId(params.idempotencyKey)) {
+    throw new HttpsError('invalid-argument', 'idempotencyKey is not a valid document ID.');
   }
   await assertTargetCanTransact(params.targetUid);
 
@@ -123,21 +140,29 @@ async function mutatePoints(
       { merge: true },
     );
 
-    return {
+    const result: PointsMutationResult = {
       entryId: entryRef.id,
       amount: signedAmount,
       balanceAfter: check.balanceAfter,
       alreadyApplied: false,
     };
+    extraWrites?.(tx, result);
+    return result;
   });
 }
 
 /** Awards points (positive entry). Internal — never client-invoked directly. */
-export function creditPoints(params: PointsMutationParams): Promise<PointsMutationResult> {
-  return mutatePoints(params, params.amount);
+export function creditPoints(
+  params: PointsMutationParams,
+  extraWrites?: AtomicExtraWrites,
+): Promise<PointsMutationResult> {
+  return mutatePoints(params, params.amount, extraWrites);
 }
 
 /** Spends points (negative entry); never allows overdraft. Internal. */
-export function debitPoints(params: PointsMutationParams): Promise<PointsMutationResult> {
-  return mutatePoints(params, -params.amount);
+export function debitPoints(
+  params: PointsMutationParams,
+  extraWrites?: AtomicExtraWrites,
+): Promise<PointsMutationResult> {
+  return mutatePoints(params, -params.amount, extraWrites);
 }

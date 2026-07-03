@@ -9,6 +9,7 @@ import {
   POINTS_TRANSACTION_SOURCES,
   applyDelta,
   buildLedgerEntry,
+  isFirestoreSafeId,
   parseAdminAdjustInput,
   parseAdminReverseInput,
   reversalDescription,
@@ -51,11 +52,24 @@ describe('points-core balance math', () => {
     expect(applyDelta(0, 25)).toEqual({ ok: true, balanceAfter: 25 });
   });
 
-  it('reads stored balances defensively', () => {
+  it('reads stored balances defensively (non-negative safe integers only)', () => {
     expect(toStoredBalance(42)).toBe(42);
+    expect(toStoredBalance(0)).toBe(0);
     expect(toStoredBalance('42')).toBe(0);
     expect(toStoredBalance(undefined)).toBe(0);
     expect(toStoredBalance(Number.NaN)).toBe(0);
+    // Corrupted negatives and fractions never poison future math.
+    expect(toStoredBalance(-50)).toBe(0);
+    expect(toStoredBalance(12.5)).toBe(0);
+  });
+
+  it('rejects Firestore-unsafe idempotency keys', () => {
+    expect(isFirestoreSafeId('claim-abc.2026')).toBe(true);
+    expect(isFirestoreSafeId('a/b')).toBe(false);
+    expect(isFirestoreSafeId('.')).toBe(false);
+    expect(isFirestoreSafeId('..')).toBe(false);
+    expect(isFirestoreSafeId('')).toBe(false);
+    expect(isFirestoreSafeId('x'.repeat(301))).toBe(false);
   });
 });
 

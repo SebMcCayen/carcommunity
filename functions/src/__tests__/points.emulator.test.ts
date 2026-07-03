@@ -177,6 +177,15 @@ describe('points-adminAdjust', () => {
     expect(entries.size).toBe(2);
     const amounts = entries.docs.map((d) => d.data().amount).sort((a, b) => a - b);
     expect(amounts).toEqual([-30, 100]);
+
+    // The audit record commits atomically with the mutation.
+    const audits = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'points.adminAdjust')
+      .where('targetId', '==', member.uid)
+      .get();
+    expect(audits.size).toBe(2);
+    expect(audits.docs.every((d) => typeof d.data().details.entryId === 'string')).toBe(true);
   });
 
   it('rejects overdrafting debits (failed-precondition)', async () => {

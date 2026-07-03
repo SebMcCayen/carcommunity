@@ -119,9 +119,25 @@ export function parseAdminReverseInput(data: unknown): ParseResult<AdminReverseI
 // Balance math
 // ---------------------------------------------------------------------------
 
-/** Reads a stored balance defensively (same guard as badgeProgress). */
+/**
+ * Reads a stored balance defensively: only a non-negative safe integer is
+ * trusted (the contract requires integer balances >= 0). Anything else —
+ * negative, fractional, NaN, string — falls back to 0 so a corrupted value
+ * can neither block future credits nor leak fractional balances.
+ */
 export function toStoredBalance(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+/** Firestore-safe document ID (shared with drives/garage ID rules). */
+export function isFirestoreSafeId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 300 &&
+    /^[A-Za-z0-9._-]+$/.test(value) &&
+    value !== '.' &&
+    value !== '..'
+  );
 }
 
 export type BalanceCheck =
