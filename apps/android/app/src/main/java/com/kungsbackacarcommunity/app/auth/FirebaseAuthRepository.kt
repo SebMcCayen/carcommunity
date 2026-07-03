@@ -21,6 +21,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * Construction is guarded: [createIfAvailable] returns null when Firebase is
  * not configured in this build (no google-services.json), so the app renders
  * an unauthenticated shell instead of crashing.
+ *
+ * A single instance is cached in [createIfAvailable]: the auth-state listener
+ * registered in `init` lives for the process lifetime by design, and caching
+ * prevents listener accumulation across Activity recreations.
  */
 class FirebaseAuthRepository private constructor(
     private val firebaseAuth: FirebaseAuth,
@@ -40,6 +44,10 @@ class FirebaseAuthRepository private constructor(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         suspendCancellableCoroutine { continuation ->
             firebaseAuth.signInWithCredential(credential).addOnCompleteListener { task ->
+                // The task may complete after the caller was cancelled (e.g. the
+                // user left the screen) — resuming a cancelled continuation throws,
+                // so guard with isActive.
+                if (!continuation.isActive) return@addOnCompleteListener
                 if (task.isSuccessful) {
                     continuation.resume(Unit)
                 } else {
@@ -56,14 +64,19 @@ class FirebaseAuthRepository private constructor(
     }
 
     companion object {
+        @Volatile
+        private var cached: FirebaseAuthRepository? = null
+
         /**
-         * Returns a repository when Firebase is configured for this build,
-         * or null when google-services.json is absent (CI, local validation
-         * builds — see apps/android/README.md).
+         * Returns the process-wide repository when Firebase is configured for
+         * this build, or null when google-services.json is absent (CI, local
+         * validation builds — see apps/android/README.md).
          */
         fun createIfAvailable(context: Context): AuthRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseAuthRepository(FirebaseAuth.getInstance())
+            return cached ?: synchronized(this) {
+                cached ?: FirebaseAuthRepository(FirebaseAuth.getInstance()).also { cached = it }
+            }
         }
     }
 }

@@ -34,13 +34,21 @@ export async function provisionUserDocuments(
   const serverTimestamp = () => FieldValue.serverTimestamp();
 
   return firestore.runTransaction(async (tx) => {
-    const profileSnap = await tx.get(profileRef);
+    const [profileSnap, privateSnap] = await Promise.all([
+      tx.get(profileRef),
+      tx.get(privateRef),
+    ]);
     if (profileSnap.exists) {
       return false;
     }
     tx.set(profileRef, buildUserProfileDocument(input, serverTimestamp));
-    // Merge so a concurrent completeOnboarding call can never be overwritten.
-    tx.set(privateRef, buildUserPrivateDocument(input, serverTimestamp), { merge: true });
+    if (privateSnap.exists) {
+      // The owner may legally create userPrivate/{uid} before this trigger
+      // runs — never clobber their fields; only refresh updatedAt.
+      tx.update(privateRef, { updatedAt: serverTimestamp() });
+    } else {
+      tx.set(privateRef, buildUserPrivateDocument(input, serverTimestamp));
+    }
     return true;
   });
 }
