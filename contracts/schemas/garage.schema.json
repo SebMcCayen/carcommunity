@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/garage.schema.json",
+  "title": "Garage contract",
+  "description": "Language-neutral garage/vehicle shapes shared by iOS, Android, backend, and admin. vehicle mirrors the Firestore `vehicles/{vehicleId}` document (docs/firebase-data-model.md), which is authenticated-readable by design — registration numbers, VIN, insurance data, and vehicle location are therefore unrepresentable in these schemas and must never be added. Garage features are member-only; each user may have at most 5 vehicles. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "vehiclePowertrain": {
+      "type": "string",
+      "enum": ["petrol", "diesel", "hybrid", "plug_in_hybrid", "electric", "other"],
+      "description": "Powertrain type (packages/shared/src/garage.ts VEHICLE_POWERTRAINS)."
+    },
+    "vehicle": {
+      "type": "object",
+      "description": "Firestore `vehicles/{vehicleId}`. Any authenticated user can read; all writes go through the member-only garage.* callables.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "modelYear": {
+          "type": "integer",
+          "minimum": 1886,
+          "description": "Upper bound is currentYear + 2, validated server-side."
+        },
+        "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
+        "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
+        "description": { "type": ["string", "null"], "maxLength": 500 },
+        "color": { "type": ["string", "null"], "maxLength": 80 },
+        "imagePath": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "Cloud Storage path under vehicleImages/{uid}/{vehicleId}/; null until an image is uploaded."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "userId",
+        "make",
+        "model",
+        "modelYear",
+        "powertrain",
+        "engineDescription",
+        "description",
+        "color",
+        "imagePath",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "addVehicleRequest": {
+      "type": "object",
+      "description": "Input for garage.addVehicle (member-only; max 5 vehicles per user).",
+      "properties": {
+        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "modelYear": { "type": "integer", "minimum": 1886 },
+        "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
+        "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
+        "description": { "type": ["string", "null"], "maxLength": 500 },
+        "color": { "type": ["string", "null"], "maxLength": 80 }
+      },
+      "required": ["make", "model", "modelYear", "powertrain"],
+      "additionalProperties": false
+    },
+    "updateVehicleRequest": {
+      "type": "object",
+      "description": "Input for garage.updateVehicle. imagePath must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (or null to clear).",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "modelYear": { "type": "integer", "minimum": 1886 },
+        "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
+        "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
+        "description": { "type": ["string", "null"], "maxLength": 500 },
+        "color": { "type": ["string", "null"], "maxLength": 80 },
+        "imagePath": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["vehicleId"],
+      "additionalProperties": false
+    },
+    "deleteVehicleRequest": {
+      "type": "object",
+      "description": "Input for garage.deleteVehicle. Removes the vehicleImages/{uid}/{vehicleId}/ storage prefix together with the document.",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        }
+      },
+      "required": ["vehicleId"],
+      "additionalProperties": false
+    }
+  }
+}

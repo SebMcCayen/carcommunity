@@ -80,7 +80,7 @@ Document ID: auto-generated.
 | `createdAt` | `Timestamp` | Server timestamp                                         |
 | `updatedAt` | `Timestamp` | Server timestamp                                         |
 
-Security: any authenticated user can read; owner can create/update/delete.
+Security (Phase 9e): any authenticated user can read; all writes go through the member-only `garage.addVehicle` / `garage.updateVehicle` / `garage.deleteVehicle` callables (per-user cap of 5, strict schemas, storage cleanup on delete). `powertrain`, `engineDescription`, and `description` complete the field list above; `imagePath` follows `vehicleImages/{uid}/{vehicleId}/{imageId}`.
 
 > **Note:** Registration plate numbers must **not** be stored on the shared `vehicles` document, as it is readable by any authenticated user. If the feature requires storing a plate, it must be written to the owner's `userPrivate` document (owner-only access) and never exposed on the publicly readable `vehicles` record.
 
