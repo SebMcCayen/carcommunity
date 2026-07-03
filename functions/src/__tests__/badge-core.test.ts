@@ -10,7 +10,9 @@ import {
   BADGE_KEYS,
   buildBadgeDocument,
   parseAwardHelpfulMemberInput,
+  parseEarlyMemberCutoff,
   qualifiedEventBadges,
+  qualifiesAsEarlyMember,
 } from '../badges/badge-core';
 
 describe('badge catalog (ported from legacy badge-catalog.ts)', () => {
@@ -60,5 +62,24 @@ describe('badge-core inputs and builders', () => {
     expect(qualifiedEventBadges(4)).toEqual(['first_event']);
     expect(qualifiedEventBadges(5)).toEqual(['first_event', 'five_events']);
     expect(qualifiedEventBadges(50)).toEqual(['first_event', 'five_events']);
+  });
+});
+
+describe('early_member cutoff (legacy evaluateEarlyMember)', () => {
+  it('treats an unset or invalid cutoff as never-award (safe default)', () => {
+    expect(parseEarlyMemberCutoff(undefined)).toBeNull();
+    expect(parseEarlyMemberCutoff('')).toBeNull();
+    expect(parseEarlyMemberCutoff('   ')).toBeNull();
+    expect(parseEarlyMemberCutoff('not-a-date')).toBeNull();
+    expect(parseEarlyMemberCutoff('2026-01-01T00:00:00Z')).toEqual(
+      new Date('2026-01-01T00:00:00Z'),
+    );
+  });
+
+  it('qualifies accounts created strictly before the cutoff', () => {
+    const cutoff = new Date('2026-01-01T00:00:00Z');
+    expect(qualifiesAsEarlyMember(new Date('2025-12-31T23:59:59Z'), cutoff)).toBe(true);
+    expect(qualifiesAsEarlyMember(cutoff, cutoff)).toBe(false);
+    expect(qualifiesAsEarlyMember(new Date('2026-06-01T00:00:00Z'), cutoff)).toBe(false);
   });
 });

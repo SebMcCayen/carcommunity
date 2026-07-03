@@ -15,7 +15,7 @@
  * so callers cannot probe whether another user's vehicle exists.
  *
  * garage_created badge evaluation runs after each verified vehicle
- * creation (Phase 9f) and never blocks the response.
+ * creation (Phase 9f); a badge failure never fails the add itself.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -76,7 +76,9 @@ export const addVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehicle
   });
 
   // Legacy parity: garage_created is evaluated after every verified vehicle
-  // creation and never blocks the response (Phase 9f badges domain).
+  // creation. Awaited (Cloud Functions cannot safely fire-and-forget), but a
+  // badge failure never FAILS the response — errors are logged and swallowed
+  // (Phase 9f badges domain).
   await tryAutomaticAward(actor.uid, 'garage_created', 'garage.addVehicle');
 
   return { vehicleId: vehicleRef.id };

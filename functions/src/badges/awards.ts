@@ -10,11 +10,17 @@
  * assertEligibleForAward); a badge is never revoked here.
  */
 
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { isRestricted, toUserAccessState } from '../shared/access';
-import { buildBadgeDocument, qualifiedEventBadges, type BadgeKey } from './badge-core';
+import {
+  buildBadgeDocument,
+  parseEarlyMemberCutoff,
+  qualifiedEventBadges,
+  qualifiesAsEarlyMember,
+  type BadgeKey,
+} from './badge-core';
 
 export interface AwardResult {
   badgeKey: BadgeKey;
@@ -70,7 +76,10 @@ export async function recordEventAttendance(targetUid: string): Promise<void> {
   const progressRef = db.collection('badgeProgress').doc(targetUid);
   const attendanceCount = await db.runTransaction(async (tx) => {
     const snap = await tx.get(progressRef);
-    const current = (snap.data()?.completedEventsAttended as number | undefined) ?? 0;
+    const stored = snap.data()?.completedEventsAttended;
+    // Guard against a corrupted counter (e.g. a string) — '3' + 1 would
+    // concatenate and permanently break the thresholds.
+    const current = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0;
     const next = current + 1;
     tx.set(
       progressRef,
@@ -83,6 +92,28 @@ export async function recordEventAttendance(targetUid: string): Promise<void> {
   for (const badgeKey of qualifiedEventBadges(attendanceCount)) {
     await awardBadge({ targetUid, badgeKey, source: 'automatic' });
   }
+}
+
+/**
+ * Evaluates the early_member badge (legacy evaluateEarlyMember): awarded to
+ * accounts created strictly before the EARLY_MEMBER_CUTOFF_DATE
+ * configuration value. Unset/invalid cutoff → never awarded (safe default).
+ * Called from auth.completeOnboarding; bounded to one document read.
+ */
+export async function evaluateEarlyMember(targetUid: string): Promise<void> {
+  const cutoff = parseEarlyMemberCutoff(process.env.EARLY_MEMBER_CUTOFF_DATE);
+  if (!cutoff) {
+    return;
+  }
+  const userSnap = await db.collection('users').doc(targetUid).get();
+  const createdAt = userSnap.data()?.createdAt;
+  if (!(createdAt instanceof Timestamp)) {
+    return;
+  }
+  if (!qualifiesAsEarlyMember(createdAt.toDate(), cutoff)) {
+    return;
+  }
+  await awardBadge({ targetUid, badgeKey: 'early_member', source: 'automatic' });
 }
 
 /**

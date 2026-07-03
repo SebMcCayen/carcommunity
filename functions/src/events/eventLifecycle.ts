@@ -186,9 +186,21 @@ export const complete = onCall(CALLABLE_OPTS, async (request): Promise<EventIdRe
       .collection('rsvps')
       .where('status', '==', 'going')
       .get();
-    for (const rsvp of goingRsvps.docs) {
-      await recordEventAttendance(rsvp.id);
-    }
+    // Parallel per-attendee writes (independent per-user documents) keep a
+    // large attendee list well inside the callable timeout; individual
+    // failures log per user and never fail the completion.
+    const results = await Promise.allSettled(
+      goingRsvps.docs.map((rsvp) => recordEventAttendance(rsvp.id)),
+    );
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.error('Attendance credit failed for attendee', {
+          eventId,
+          uid: goingRsvps.docs[index]?.id,
+          error: String(result.reason),
+        });
+      }
+    });
   } catch (error) {
     logger.error('Event badge attendance recording failed', {
       eventId,

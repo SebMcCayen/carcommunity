@@ -146,6 +146,28 @@ export function buildBadgeDocument(
   };
 }
 
+// ---------------------------------------------------------------------------
+// early_member (legacy evaluateEarlyMember)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses the EARLY_MEMBER_CUTOFF_DATE configuration value. Returns null when
+ * unset or invalid — the legacy safe default: no cutoff configured means the
+ * badge is never awarded.
+ */
+export function parseEarlyMemberCutoff(raw: string | undefined): Date | null {
+  if (!raw || !raw.trim()) {
+    return null;
+  }
+  const parsed = new Date(raw.trim());
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Accounts created strictly before the cutoff qualify (legacy rule). */
+export function qualifiesAsEarlyMember(createdAt: Date, cutoff: Date): boolean {
+  return createdAt.getTime() < cutoff.getTime();
+}
+
 /** Which event badges an attendance count qualifies for. */
 export function qualifiedEventBadges(attendanceCount: number): BadgeKey[] {
   const keys: BadgeKey[] = [];

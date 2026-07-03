@@ -174,7 +174,7 @@ describe('Firestore – badges (Phase 9f)', () => {
     });
   });
 
-  it('owner can read their own badges; others cannot', async () => {
+  it('owner can read their own badges; others cannot — not even admin clients', async () => {
     const ownerCtx = testEnv.authenticatedContext(OWNER);
     await assertSucceeds(
       getDoc(doc(ownerCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
@@ -182,6 +182,12 @@ describe('Firestore – badges (Phase 9f)', () => {
     const otherCtx = testEnv.authenticatedContext(OTHER);
     await assertFails(
       getDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    );
+    // Strictly owner-only: admin workflows go through the Admin SDK, and a
+    // compromised admin client must not browse users' badges.
+    const adminCtx = testEnv.authenticatedContext('badge-admin', { admin: true });
+    await assertFails(
+      getDoc(doc(adminCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
     );
   });
 

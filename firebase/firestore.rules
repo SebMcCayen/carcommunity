@@ -147,10 +147,12 @@ service cloud.firestore {
 
       // Badges (Phase 9f) — users/{uid}/badges/{badgeKey}. Awarded by the
       // backend only (automatic evaluators + badges.awardHelpfulMember);
-      // owner-only read, matching the legacy API which never exposes other
-      // users' badges.
+      // strictly owner-only read, matching the legacy API which never
+      // exposes other users' badges. Admin workflows use the Admin SDK /
+      // callables — no privileged client-side read (same rule as
+      // userPrivate).
       match /badges/{badgeKey} {
-        allow read: if isOwner(userId) || isAdmin();
+        allow read: if isOwner(userId);
         // No client writes: awards are backend-only and never revoked here.
       }
     }
