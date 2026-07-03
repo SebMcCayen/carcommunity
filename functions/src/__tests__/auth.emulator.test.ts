@@ -65,7 +65,9 @@ afterAll(async () => {
 
 async function pollUntil<T>(
   read: () => Promise<T | undefined>,
-  timeoutMs = 15_000,
+  // Generous default: the first trigger execution pays the Functions
+  // emulator's runtime cold-start cost, which can be slow on CI runners.
+  timeoutMs = 30_000,
   intervalMs = 250,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;

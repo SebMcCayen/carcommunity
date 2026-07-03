@@ -140,7 +140,8 @@ service cloud.firestore {
         (resource.data.userId == request.auth.uid || resource.data.friendId == request.auth.uid);
       allow create: if isAuthenticated() && isNotSuspended()
         && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -157,7 +158,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && isNotSuspended()
         && resource.data.receiverId == request.auth.uid;
       // Sender may cancel.
-      allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.senderId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -211,8 +213,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       // Only active members may post; the message must carry the poster's UID.
       allow create: if isActiveMember() && request.resource.data.userId == request.auth.uid;
-      // Sender may delete their own message.
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Sender may delete their own message. Suspension blocks all content
+      // writes, deletes included.
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 

@@ -513,6 +513,23 @@ describe('Firestore – suspension enforcement', () => {
       await setDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED), {
         email: 'suspended@example.com',
       });
+      await setDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship'), {
+        userId: SUSPENDED,
+        friendId: 'some-friend',
+      });
+      await setDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request'), {
+        senderId: SUSPENDED,
+        receiverId: 'some-friend',
+      });
+      await setDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg'), {
+        userId: SUSPENDED,
+        text: 'posted before suspension',
+      });
+      await setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle'), {
+        userId: SUSPENDED,
+        make: 'Volvo',
+        model: '240',
+      });
     });
   });
 
@@ -548,6 +565,14 @@ describe('Firestore – suspension enforcement', () => {
         text: 'hello',
       }),
     );
+  });
+
+  it('suspension blocks deletes too (friends, friend requests, own messages, vehicles)', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
   });
 
   it('suspended user retains read access to their own data', async () => {
