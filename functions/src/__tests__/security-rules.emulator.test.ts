@@ -735,36 +735,33 @@ describe('Firestore – vehicle ownership', () => {
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'vehicles', 'v-read-test')));
   });
 
-  it('owner can delete their own vehicle', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-delete-test')));
+  it('unauthenticated users cannot read vehicles', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'vehicles', 'v-read-test')));
   });
 
-  it("another user cannot delete someone else's vehicle", async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-no-delete')));
-  });
-
-  it('owner can create a vehicle with their own userId', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(
+  it('no client writes at all — even the member owner (garage.* callables only)', async () => {
+    // Phase 9e: direct writes would bypass the per-user cap, the strict
+    // no-plate/no-VIN validation, and storage cleanup on delete.
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'vehicles', 'v-new'), {
         userId: OWNER,
         make: 'Ford',
         model: 'Mustang',
       }),
     );
-  });
-
-  it('user cannot create a vehicle for another user', async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'vehicles', 'v-spoof'), {
-        userId: OWNER,
-        make: 'Fake',
-        model: 'Spoof',
+      updateDoc(doc(ctx.firestore(), 'vehicles', 'v-read-test'), {
+        registrationPlate: 'ABC123',
       }),
     );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-delete-test')));
+  });
+
+  it("another user cannot delete someone else's vehicle", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'v-no-delete')));
   });
 });
 
@@ -1345,28 +1342,44 @@ describe('Cloud Storage – vehicle images', () => {
   const OWNER = 'vehicle-img-owner';
   const OTHER = 'vehicle-img-other';
 
-  it('owner can upload a vehicle image to their own path', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
+  it('member owner can upload a vehicle image under the vehicleId segment', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car.jpg`);
     await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
   });
 
-  it("another user cannot upload to someone else's vehicle image path", async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
+  it('non-member owner cannot upload a vehicle image (garage is member-only)', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car2.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it('the old two-segment vehicle image path is closed', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/legacy-flat.jpg`);
+    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  it("another user cannot upload to someone else's vehicle image path", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER, { activeMember: true });
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/spoof.jpg`);
     await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
   });
 
   it('authenticated user can read a vehicle image', async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
-    await assertSucceeds(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`)));
+    await assertSucceeds(
+      getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car.jpg`)),
+    );
   });
 
   it('unauthenticated user cannot read a vehicle image', async () => {
     const ctx = testEnv.unauthenticatedContext();
-    await assertFails(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/car.jpg`)));
+    await assertFails(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car.jpg`)));
   });
 });
 

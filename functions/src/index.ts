@@ -23,6 +23,7 @@ import { removeChatMessage } from './events/removeChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
+import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -108,4 +109,19 @@ export const events = {
 export const drives = {
   save: saveDrive,
   delete: deleteDrive,
+};
+
+/**
+ * Garage domain (grouped export → deployed as `garage-addVehicle`,
+ * `garage-updateVehicle`, `garage-deleteVehicle`).
+ *
+ * Member-only vehicle management (contracts/functions/functions.json:
+ * garage.addVehicle/updateVehicle/deleteVehicle). Vehicles are
+ * authenticated-readable; all writes go through these callables (per-user
+ * cap, strict no-plate/no-VIN schemas, storage cleanup on delete).
+ */
+export const garage = {
+  addVehicle,
+  updateVehicle,
+  deleteVehicle,
 };

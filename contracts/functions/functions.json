@@ -161,6 +161,33 @@
       "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
     },
     {
+      "name": "garage.addVehicle",
+      "domain": "garage",
+      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Strict schema: make/model/modelYear/powertrain/engineDescription/description/color only — registration numbers, VIN, insurance, and location are unrepresentable because vehicles/{vehicleId} is authenticated-readable. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
+      "name": "garage.updateVehicle",
+      "domain": "garage",
+      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
+      "name": "garage.deleteVehicle",
+      "domain": "garage",
+      "description": "Deletes an owned vehicle: removes the vehicleImages/{uid}/{vehicleId}/ storage prefix first, then the document. Deployed via grouped export as garage-deleteVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",

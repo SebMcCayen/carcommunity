@@ -55,12 +55,15 @@ service firebase.storage {
     }
 
     // -------------------------------------------------------------------------
-    // Vehicle images:  vehicleImages/{userId}/{imageId}
-    // Owner may upload images up to 10 MB. Any authenticated user may read.
+    // Vehicle images:  vehicleImages/{userId}/{vehicleId}/{imageId}  (Phase 9e)
+    // Path per docs/migration/backend-domain-mapping.md — the vehicleId
+    // segment lets garage.deleteVehicle remove exactly one vehicle's images.
+    // Member owner may upload images up to 10 MB (garage is member-only);
+    // any authenticated user may read (vehicle docs are public-readable).
     // -------------------------------------------------------------------------
-    match /vehicleImages/{userId}/{imageId} {
+    match /vehicleImages/{userId}/{vehicleId}/{imageId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isImage() && isUnderMB(10);
+      allow write: if isOwner(userId) && isActiveMember() && isImage() && isUnderMB(10);
       allow write: if isAdmin();
     }
 
