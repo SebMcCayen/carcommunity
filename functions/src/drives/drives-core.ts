@@ -65,7 +65,19 @@ const saveDriveInputSchema = z
   })
   .strict();
 
-const deleteDriveInputSchema = z.object({ rideId: z.string().trim().min(1) }).strict();
+// Firestore-safe document ID: no path separators or exotic characters, so a
+// bad value fails as invalid-argument instead of throwing inside doc().
+// Dots are allowed (sourceSessionId permits them and deterministic ride IDs
+// embed it), but the reserved '.'/'..' IDs are rejected.
+const rideIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .refine((id) => id !== '.' && id !== '..');
+
+const deleteDriveInputSchema = z.object({ rideId: rideIdSchema }).strict();
 
 export type RoutePointInput = z.infer<typeof routePointSchema>;
 export type SaveDriveInput = z.infer<typeof saveDriveInputSchema>;
@@ -108,7 +120,12 @@ export function guardDriveTimes(startedAt: string, endedAt: string): GuardResult
   return { ok: true };
 }
 
-/** Route points must be ordered by timestamp and lie within the drive window. */
+/**
+ * Route points must be ordered by timestampMs. Points are NOT required to
+ * fall inside the startedAt..endedAt window — the distance calculation
+ * already discards implausible segments, and GPS clocks can straddle the
+ * user-visible start/stop moments slightly.
+ */
 export function guardRoutePoints(
   points: readonly RoutePointInput[] | undefined,
 ): GuardResult {

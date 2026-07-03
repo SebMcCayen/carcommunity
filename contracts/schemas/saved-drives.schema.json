@@ -118,7 +118,13 @@
       "type": "object",
       "description": "Input for drives.delete (any active owner; membership not required).",
       "properties": {
-        "rideId": { "type": "string", "minLength": 1 }
+        "rideId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$",
+          "description": "Firestore-safe document ID — no path separators."
+        }
       },
       "required": ["rideId"],
       "additionalProperties": false

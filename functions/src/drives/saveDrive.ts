@@ -67,38 +67,41 @@ export const saveDrive = onCall(
     }
 
     const ridesRef = db.collection('rides');
-
-    // Idempotency: a retry with the same sourceSessionId returns the drive
-    // that was already saved for this recording.
-    if (input.sourceSessionId) {
-      const existing = await ridesRef
-        .where('userId', '==', actor.uid)
-        .where('sourceSessionId', '==', input.sourceSessionId)
-        .limit(1)
-        .get();
-      const docSnap = existing.docs[0];
-      if (docSnap) {
-        const data = docSnap.data();
-        return {
-          rideId: docSnap.id,
-          durationSeconds: data.durationSeconds as number,
-          distanceMeters: (data.distanceMeters as number | null) ?? null,
-          averageSpeedMetersPerSecond:
-            (data.averageSpeedMetersPerSecond as number | null) ?? null,
-          routePath: data.routePath as string,
-          previewImagePath: data.previewImagePath as string,
-          alreadySaved: true,
-        };
-      }
-    }
-
     const stats = computeDriveStats(input);
-    const rideRef = ridesRef.doc();
-    await rideRef.set(
-      buildRideDocument(input, { userId: actor.uid, rideId: rideRef.id, stats }, () =>
-        FieldValue.serverTimestamp(),
-      ),
-    );
+
+    // Idempotency: a sourceSessionId maps to a DETERMINISTIC document ID, and
+    // the create runs in a transaction — concurrent retries serialize on the
+    // same document instead of racing a query-then-create into duplicates.
+    const rideRef = input.sourceSessionId
+      ? ridesRef.doc(`${actor.uid}_${input.sourceSessionId}`)
+      : ridesRef.doc();
+
+    const alreadySaved = await db.runTransaction(async (tx) => {
+      const existing = await tx.get(rideRef);
+      if (existing.exists) {
+        return true;
+      }
+      tx.set(
+        rideRef,
+        buildRideDocument(input, { userId: actor.uid, rideId: rideRef.id, stats }, () =>
+          FieldValue.serverTimestamp(),
+        ),
+      );
+      return false;
+    });
+
+    if (alreadySaved) {
+      const data = (await rideRef.get()).data()!;
+      return {
+        rideId: rideRef.id,
+        durationSeconds: data.durationSeconds as number,
+        distanceMeters: (data.distanceMeters as number | null) ?? null,
+        averageSpeedMetersPerSecond: (data.averageSpeedMetersPerSecond as number | null) ?? null,
+        routePath: data.routePath as string,
+        previewImagePath: data.previewImagePath as string,
+        alreadySaved: true,
+      };
+    }
 
     return {
       rideId: rideRef.id,

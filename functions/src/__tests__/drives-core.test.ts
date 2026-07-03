@@ -76,6 +76,10 @@ describe('drives-core input parsing and guards', () => {
     expect(parseSaveDriveInput({ ...validSave, sourceSessionId: 'has spaces' }).ok).toBe(false);
     expect(parseDeleteDriveInput({ rideId: 'r1' }).ok).toBe(true);
     expect(parseDeleteDriveInput({}).ok).toBe(false);
+    // Firestore-unsafe IDs fail as invalid-argument instead of throwing in doc().
+    expect(parseDeleteDriveInput({ rideId: 'rides/other' }).ok).toBe(false);
+    expect(parseDeleteDriveInput({ rideId: '..' }).ok).toBe(false);
+    expect(parseDeleteDriveInput({ rideId: 'uid_session.2026-07-04' }).ok).toBe(true);
   });
 
   it('rejects out-of-range coordinates and unordered points', () => {

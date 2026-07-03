@@ -21,7 +21,8 @@ service firebase.storage {
     // Mirrors the Firestore rules helpers: suspension is a server-managed
     // custom claim and always overrides feature access.
     function isNotSuspended() {
-      return !('suspended' in request.auth.token) || request.auth.token.suspended != true;
+      return request.auth != null
+        && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
     }
 
     function isActiveMember() {
@@ -74,11 +75,15 @@ service firebase.storage {
     // previews reveal the private route shape.
     // Max 50 MB per file. drives.delete removes this prefix with the drive.
     // -------------------------------------------------------------------------
-    match /rideRoutes/{userId}/{rideId}/{filename} {
+    match /rideRoutes/{userId}/{rideId}/{fileName} {
       allow read: if isOwner(userId) && isActiveMember();
+      // Only the two canonical files may exist under the prefix — anything
+      // else would be unmetered private storage and would make drives.delete
+      // cleanup unbounded.
       allow write: if isOwner(userId) && isActiveMember() && isUnderMB(50) &&
-        (request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)')
-          || isImage());
+        ((fileName == 'route.bin'
+            && request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)'))
+          || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
       allow read, write: if isAdmin();
     }
 

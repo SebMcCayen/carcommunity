@@ -1319,6 +1319,22 @@ describe('Cloud Storage – ownership validation', () => {
     const ref = storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/preview.png`);
     await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/png' }));
   });
+
+  it('only the canonical route.bin and preview.png filenames are writable', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    const data = new Uint8Array([0x00, 0x01]);
+    await assertFails(
+      uploadBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/extra.bin`), data, {
+        contentType: 'application/octet-stream',
+      }),
+    );
+    // Wrong content type for the canonical name is rejected too.
+    await assertFails(
+      uploadBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`), data, {
+        contentType: 'image/png',
+      }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
