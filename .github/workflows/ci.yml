@@ -111,7 +111,8 @@ jobs:
             -s contracts/schemas/auth.schema.json \
             -s contracts/schemas/user-profile.schema.json \
             -s contracts/schemas/live-location.schema.json \
-            -s contracts/schemas/events.schema.json
+            -s contracts/schemas/events.schema.json \
+            -s contracts/schemas/moderation.schema.json
 
       - name: Validate error codes registry
         run: |

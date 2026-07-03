@@ -42,7 +42,8 @@ npx ajv compile --spec=draft2020 -c ajv-formats \
   -s contracts/schemas/auth.schema.json \
   -s contracts/schemas/user-profile.schema.json \
   -s contracts/schemas/live-location.schema.json \
-  -s contracts/schemas/events.schema.json
+  -s contracts/schemas/events.schema.json \
+  -s contracts/schemas/moderation.schema.json
 npx ajv validate --spec=draft2020 -c ajv-formats \
   -s contracts/errors/errors.schema.json -d contracts/errors/errors.json
 npx ajv validate --spec=draft2020 -c ajv-formats \

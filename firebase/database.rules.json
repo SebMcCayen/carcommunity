@@ -4,8 +4,8 @@
     ".write": false,
     "liveLocations": {
       "$uid": {
-        ".read": "auth != null && auth.token.activeMember == true",
-        ".write": "auth != null && auth.uid == $uid",
+        ".read": "auth != null && auth.token.activeMember == true && auth.token.suspended != true",
+        ".write": "auth != null && auth.uid == $uid && auth.token.suspended != true",
         ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp'])",
         "lat": { ".validate": "newData.isNumber()" },
         "lng": { ".validate": "newData.isNumber()" },

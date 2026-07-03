@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/moderation.schema.json",
+  "title": "Moderation and admin authorization contract",
+  "description": "Request/response shapes for the admin-domain callables (admin.setAdminRole, admin.suspendUser, admin.restoreAccess) and the serialized forms of the backend-written moderationActions/{actionId} and adminAuditEvents/{eventId} Firestore records. All records are written exclusively by the Admin SDK — Security Rules deny every client write, including from admins, so audit history can never be forged, altered, or deleted from a client. Custom claims (admin, suspended, activeMember) are set exclusively by these callables and propagate to clients on the next ID-token refresh (up to 1 hour; the backend revokes refresh tokens on suspension and admin revocation).",
+  "$defs": {
+    "moderationReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Human-readable justification recorded on every moderation and role-change action. Required — audit records must always carry a reason."
+    },
+    "moderationActionType": {
+      "type": "string",
+      "enum": [
+        "warning",
+        "temporary_suspension",
+        "permanent_suspension",
+        "restriction",
+        "restore_access"
+      ],
+      "description": "Moderation action vocabulary carried over from packages/shared/src/users.ts. Phase 8 emits permanent_suspension (admin.suspendUser) and restore_access (admin.restoreAccess); the remaining values are reserved for later moderation features."
+    },
+    "setAdminRoleRequest": {
+      "type": "object",
+      "description": "Input for admin.setAdminRole. Callers can never target themselves, and owner accounts are never modified by this callable.",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "admin": {
+          "type": "boolean",
+          "description": "true grants the admin custom claim and sets users/{uid}.role to 'admin'; false revokes the claim and sets the role to 'user'."
+        },
+        "reason": { "$ref": "#/$defs/moderationReason" }
+      },
+      "required": ["targetUid", "admin", "reason"],
+      "additionalProperties": false
+    },
+    "setAdminRoleResponse": {
+      "type": "object",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "role": { "$ref": "common.schema.json#/$defs/userRole" },
+        "admin": { "type": "boolean" }
+      },
+      "required": ["targetUid", "role", "admin"],
+      "additionalProperties": false
+    },
+    "moderationRequest": {
+      "type": "object",
+      "description": "Input for admin.suspendUser and admin.restoreAccess. Actors can never moderate themselves; admins cannot moderate owner accounts (only owners can).",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "reason": { "$ref": "#/$defs/moderationReason" }
+      },
+      "required": ["targetUid", "reason"],
+      "additionalProperties": false
+    },
+    "moderationStatusResponse": {
+      "type": "object",
+      "description": "Response of admin.suspendUser / admin.restoreAccess reflecting the new backend-managed suspension state.",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "suspended": { "type": "boolean" }
+      },
+      "required": ["targetUid", "suspended"],
+      "additionalProperties": false
+    },
+    "moderationActionRecord": {
+      "type": "object",
+      "description": "Serialized form of moderationActions/{actionId} — an immutable, backend-written moderation record. Admin-only read; no client writes.",
+      "properties": {
+        "targetUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "actorUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "actionType": { "$ref": "#/$defs/moderationActionType" },
+        "reason": { "$ref": "#/$defs/moderationReason" },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Reserved for temporary suspensions; always null in Phase 8 (no automatic expiry — access is restored explicitly via admin.restoreAccess)."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["targetUserId", "actorUserId", "actionType", "reason", "expiresAt", "createdAt"],
+      "additionalProperties": false
+    },
+    "adminAuditEventRecord": {
+      "type": "object",
+      "description": "Serialized form of adminAuditEvents/{eventId} — an immutable, backend-written audit record for every admin action (docs/firebase-data-model.md). Admin-only read; no client writes.",
+      "properties": {
+        "adminId": { "$ref": "common.schema.json#/$defs/uid" },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dotted action identifier, e.g. 'user.setAdminRole', 'user.suspend', 'user.restoreAccess'."
+        },
+        "targetType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Entity type affected, e.g. 'user'."
+        },
+        "targetId": { "$ref": "common.schema.json#/$defs/uid" },
+        "reason": { "$ref": "#/$defs/moderationReason" },
+        "details": {
+          "type": "object",
+          "description": "Optional safe summary of the change (never tokens, credentials, or PII)."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["adminId", "action", "targetType", "targetId", "reason", "createdAt"],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable must verify authentication context and App Check in production, and return error codes from contracts/errors/errors.json. No callable has been implemented yet — status tracks migration progress.",
+  "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable must verify authentication context and App Check in production, and return error codes from contracts/errors/errors.json. The status field tracks migration progress (planned vs implemented).",
   "accessLevels": {
     "authenticated": "Any signed-in, non-suspended, non-deleted user.",
     "member": "Requires active member_monthly entitlement; suspension always overrides entitlement.",
@@ -82,11 +82,20 @@
     {
       "name": "admin.suspendUser",
       "domain": "admin",
-      "description": "Suspends a user (moderation). Must write an immutable audit log entry with actor, target, reason, and server timestamp.",
+      "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",
       "access": "admin",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "admin.restoreAccess",
+      "domain": "admin",
+      "description": "Restores a suspended user: clears the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records. Deployed via grouped export as admin-restoreAccess (functions/src/admin/restoreAccess.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/native-firebase-migration-plan.md (Phase 8 expected output)"
     },
     {
       "name": "admin.setFeatureFlag",
@@ -100,10 +109,10 @@
     {
       "name": "admin.setAdminRole",
       "domain": "admin",
-      "description": "Grants or revokes the admin custom claim and mirrors it to users/{uid}.role. No client self-elevation.",
+      "description": "Grants or revokes the admin custom claim and mirrors it to users/{uid}.role. No client self-elevation: callers can never change their own role, and owner accounts are never modified. Writes an immutable adminAuditEvents record. Deployed via grouped export as admin-setAdminRole (functions/src/admin/setAdminRole.ts).",
       "access": "admin",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
     }
   ]
