@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/badges.schema.json",
+  "title": "Badges contract",
+  "description": "Language-neutral badge shapes shared by iOS, Android, backend, and admin. awardedBadge mirrors the Firestore `users/{uid}/badges/{badgeKey}` document (document ID = badge key; catalog definition denormalized). The catalog itself lives in functions/src/badges/badge-core.ts (single source of truth, ported from the legacy badge-catalog): wording stays positive and non-competitive, no speed/distance/racing badges, all user-facing text in Swedish. Badges are backend-awarded only and never revoked. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "badgeKey": {
+      "type": "string",
+      "enum": ["first_event", "five_events", "helpful_member", "early_member", "garage_created"],
+      "description": "Canonical badge keys. helpful_member is the only manually awardable key; the rest are automatic."
+    },
+    "badgeSource": {
+      "type": "string",
+      "enum": ["automatic", "admin_manual"]
+    },
+    "awardedBadge": {
+      "type": "object",
+      "description": "Firestore `users/{uid}/badges/{badgeKey}`. Owner-only read; backend-only writes.",
+      "properties": {
+        "badgeKey": { "$ref": "#/$defs/badgeKey" },
+        "name": { "type": "string", "description": "Denormalized catalog name (Swedish)." },
+        "description": {
+          "type": "string",
+          "description": "Denormalized catalog description (Swedish)."
+        },
+        "iconIdentifier": {
+          "type": "string",
+          "description": "Opaque icon reference for the client UI."
+        },
+        "source": { "$ref": "#/$defs/badgeSource" },
+        "awardedByUserId": {
+          "type": ["string", "null"],
+          "description": "Awarding admin UID for admin_manual awards; null for automatic."
+        },
+        "awardedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "badgeKey",
+        "name",
+        "description",
+        "iconIdentifier",
+        "source",
+        "awardedByUserId",
+        "awardedAt"
+      ],
+      "additionalProperties": false
+    },
+    "awardHelpfulMemberRequest": {
+      "type": "object",
+      "description": "Input for badges.awardHelpfulMember (admin-only). The reason is required and lands in the adminAuditEvents record, never on the badge document.",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": ["targetUid", "reason"],
+      "additionalProperties": false
+    }
+  }
+}

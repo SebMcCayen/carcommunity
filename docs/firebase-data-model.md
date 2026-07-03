@@ -65,6 +65,23 @@ Security: owner-only read and write. No other users may access this collection. 
 
 ---
 
+### `users/{uid}/badges/{badgeKey}` — awarded badges (Phase 9f)
+
+Document ID = badge key (contracts/schemas/badges.schema.json), which makes
+awards naturally idempotent. The catalog definition (name, description,
+iconIdentifier — Swedish, positive, non-competitive wording) is denormalized
+onto the document. `{ badgeKey, name, description, iconIdentifier, source:
+'automatic' | 'admin_manual', awardedByUserId, awardedAt }`.
+
+Security: owner-only read (the legacy API never exposes other users'
+badges); all writes are backend-only — automatic evaluators
+(garage.addVehicle → `garage_created`; events.complete → `first_event` /
+`five_events` via the backend-only `badgeProgress/{uid}` attendance
+counters) and the admin-only `badges.awardHelpfulMember` callable. Badges
+are never revoked.
+
+---
+
 ### `vehicles` — user's garage
 
 Document ID: auto-generated.

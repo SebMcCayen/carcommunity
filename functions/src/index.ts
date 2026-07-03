@@ -24,6 +24,7 @@ import { reportChatMessage } from './events/reportChatMessage';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
+import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -124,4 +125,18 @@ export const garage = {
   addVehicle,
   updateVehicle,
   deleteVehicle,
+};
+
+/**
+ * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`).
+ *
+ * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
+ * writes). Automatic badges are evaluated inline by their source domains
+ * (garage.addVehicle → garage_created; events.complete → first_event /
+ * five_events via badgeProgress counters); helpful_member is the only
+ * manually awardable badge (contracts/functions/functions.json:
+ * badges.awardHelpfulMember).
+ */
+export const badges = {
+  awardHelpfulMember,
 };

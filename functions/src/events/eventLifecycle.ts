@@ -12,9 +12,8 @@
  *   in the past.
  * - cancel: draft or published; requires a reason; sets cancelledAt; never
  *   hard-deletes.
- * - complete: published only. Legacy also evaluated event badges
- *   (first_event / five_events) for 'going' attendees — badge evaluation
- *   migrates with the badges domain (Phase 9, domain 6) and hooks in here.
+ * - complete: published only; going-RSVP attendees receive badge
+ *   attendance credit (first_event / five_events, Phase 9f).
  *
  * Each transition writes an immutable adminAuditEvents record in the same
  * transaction that changes the status.
@@ -24,6 +23,8 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
+import { recordEventAttendance } from '../badges/awards';
+import { logger } from 'firebase-functions';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import {
   guardCancellable,
@@ -172,6 +173,28 @@ export const complete = onCall(CALLABLE_OPTS, async (request): Promise<EventIdRe
     guard: (event) => guardCompletable(event.status),
     statusUpdate: (serverTimestamp) => ({ status: 'completed', updatedAt: serverTimestamp() }),
   });
+
+  // Badge attendance (Phase 9f, legacy parity): each going-RSVP attendee of
+  // the completed event gets one attendance credit, feeding first_event /
+  // five_events. The completed transition is single-shot (guardCompletable),
+  // so an event can never double-credit. Failures log and never fail the
+  // completion itself.
+  try {
+    const goingRsvps = await db
+      .collection('events')
+      .doc(eventId)
+      .collection('rsvps')
+      .where('status', '==', 'going')
+      .get();
+    for (const rsvp of goingRsvps.docs) {
+      await recordEventAttendance(rsvp.id);
+    }
+  } catch (error) {
+    logger.error('Event badge attendance recording failed', {
+      eventId,
+      error: String(error),
+    });
+  }
 
   return { eventId, status };
 });

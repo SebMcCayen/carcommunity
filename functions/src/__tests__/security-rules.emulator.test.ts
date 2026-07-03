@@ -154,6 +154,60 @@ describe('Firestore – user profile', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: badges (Phase 9f)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – badges (Phase 9f)', () => {
+  const OWNER = 'badge-owner';
+  const OTHER = 'badge-other';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'garage_created'), {
+        badgeKey: 'garage_created',
+        name: 'Garageprofil skapad',
+        source: 'automatic',
+      });
+      await setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), {
+        completedEventsAttended: 3,
+      });
+    });
+  });
+
+  it('owner can read their own badges; others cannot', async () => {
+    const ownerCtx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      getDoc(doc(ownerCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    );
+    const otherCtx = testEnv.authenticatedContext(OTHER);
+    await assertFails(
+      getDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    );
+  });
+
+  it('no client can write badges — not even the owner', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'helpful_member'), {
+        badgeKey: 'helpful_member',
+        source: 'admin_manual',
+      }),
+    );
+    await assertFails(
+      deleteDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    );
+  });
+
+  it('badgeProgress counters are fully backend-only', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(getDoc(doc(ctx.firestore(), 'badgeProgress', OWNER)));
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), { completedEventsAttended: 999 }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 
