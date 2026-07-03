@@ -3,7 +3,9 @@
  * (contracts/functions/functions.json).
  *
  * Deployed via the `events` export group as `events-publish`,
- * `events-cancel`, and `events-complete`. Admin- or owner-only.
+ * `events-cancel`, and `events-complete`. Requires an active admin via requireAdminActor: the server-managed
+ * `admin` custom claim plus a non-suspended, non-deleted Firestore
+ * `users/{uid}` state with role admin or owner.
  *
  * Status transitions mirror the legacy event-service:
  * - publish: draft only; requires title + approximateArea; start must not be

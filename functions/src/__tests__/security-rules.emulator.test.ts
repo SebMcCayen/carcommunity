@@ -522,6 +522,30 @@ describe('Firestore – events (Phase 9b)', () => {
     );
   });
 
+  it('rejects RSVPs without a server-timestamp updatedAt', async () => {
+    const firestore = memberCtx().firestore();
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), { status: 'going' }),
+    );
+    await assertFails(
+      setDoc(doc(firestore, 'events', PUBLISHED, 'rsvps', MEMBER), {
+        status: 'going',
+        updatedAt: new Date('2020-01-01T00:00:00Z'),
+      }),
+    );
+  });
+
+  it('members cannot read other documents under details/ (only private)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'internal-notes'), {
+        note: 'staff only',
+      });
+    });
+    await assertFails(
+      getDoc(doc(memberCtx().firestore(), 'events', PUBLISHED, 'details', 'internal-notes')),
+    );
+  });
+
   it('members cannot RSVP to a draft event', async () => {
     await assertFails(
       setDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'rsvps', MEMBER), {

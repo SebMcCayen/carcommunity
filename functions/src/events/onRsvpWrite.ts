@@ -41,9 +41,16 @@ export const onRsvpWrite = onDocumentWritten(
         'rsvpCounts.not_going': FieldValue.increment(deltas.not_going),
       });
     } catch (error) {
-      // The parent event may have been deleted between the RSVP write and
-      // this trigger; log and move on rather than retry forever.
-      logger.warn('rsvpCounts update skipped', { eventId, uid, error: String(error) });
+      // Swallow ONLY the parent-missing case (event deleted between the
+      // RSVP write and this trigger) — retrying that can never succeed.
+      // Everything else (transient Firestore failures etc.) rethrows so the
+      // trigger retries instead of silently desynchronizing rsvpCounts.
+      const code = (error as { code?: number | string }).code;
+      if (code === 5 || code === 'not-found') {
+        logger.warn('rsvpCounts update skipped: parent event missing', { eventId, uid });
+        return;
+      }
+      throw error;
     }
   },
 );

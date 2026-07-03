@@ -109,9 +109,9 @@ service cloud.firestore {
     function validRsvpDocument() {
       let data = request.resource.data;
       return data.keys().hasOnly(['status', 'updatedAt'])
-        && data.keys().hasAll(['status'])
+        && data.keys().hasAll(['status', 'updatedAt'])
         && data.status in ['going', 'maybe', 'not_going']
-        && (!data.keys().hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
+        && isServerTimestamp(data.updatedAt);
     }
 
     // No owner create (backend provisioning only — see users note above).
@@ -179,8 +179,10 @@ service cloud.firestore {
       allow read: if (isAuthenticated() && resource.data.status == 'published') || isAdmin();
       // No client writes: events.create/update/publish/cancel/complete only.
 
-      // Member-gated detail document (exact location, description).
-      match /details/{detailId} {
+      // Member-gated detail document (exact location, description). The
+      // match is pinned to the single `private` document so nothing else
+      // ever added under details/ inherits member read access.
+      match /details/private {
         allow read: if isAdmin()
           || (isActiveMember()
             && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');

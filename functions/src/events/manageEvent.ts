@@ -3,7 +3,9 @@
  * (contracts/functions/functions.json).
  *
  * Deployed via the `events` export group as `events-create` and
- * `events-update`. Admin- or owner-only (requireAdminActor).
+ * `events-update`. Requires an active admin via requireAdminActor: the server-managed
+ * `admin` custom claim plus a non-suspended, non-deleted Firestore
+ * `users/{uid}` state with role admin or owner.
  *
  * Every event is stored as two documents (see events-core.ts): the
  * teaser-safe `events/{eventId}` and the member-gated
