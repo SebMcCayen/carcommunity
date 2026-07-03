@@ -63,6 +63,11 @@ describe('garage-core image path validation', () => {
     expect(vehicleImagePrefix('u1', 'v1')).toBe('vehicleImages/u1/v1/');
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/photo.jpg', 'u1', 'v1')).toBe(true);
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/', 'u1', 'v1')).toBe(false);
+    // Exactly one segment below the prefix — storage rules cannot serve
+    // nested paths (vehicleImages/{userId}/{vehicleId}/{imageId}).
+    expect(isValidVehicleImagePath('vehicleImages/u1/v1/subdir/photo.jpg', 'u1', 'v1')).toBe(
+      false,
+    );
     expect(isValidVehicleImagePath('vehicleImages/u2/v1/photo.jpg', 'u1', 'v1')).toBe(false);
     expect(isValidVehicleImagePath('vehicleImages/u1/v2/photo.jpg', 'u1', 'v1')).toBe(false);
     expect(isValidVehicleImagePath('profileImages/u1/photo.jpg', 'u1', 'v1')).toBe(false);

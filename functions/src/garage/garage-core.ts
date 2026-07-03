@@ -159,14 +159,23 @@ export function vehicleImagePrefix(uid: string, vehicleId: string): string {
   return `vehicleImages/${uid}/${vehicleId}/`;
 }
 
-/** imagePath must point into the caller's own prefix for this vehicle. */
+/**
+ * imagePath must point into the caller's own prefix for this vehicle AND be
+ * exactly one path segment below it — storage rules match precisely
+ * vehicleImages/{userId}/{vehicleId}/{imageId}, so a nested path could be
+ * persisted here but never written or read.
+ */
 export function isValidVehicleImagePath(
   imagePath: string,
   uid: string,
   vehicleId: string,
 ): boolean {
   const prefix = vehicleImagePrefix(uid, vehicleId);
-  return imagePath.startsWith(prefix) && imagePath.length > prefix.length;
+  if (!imagePath.startsWith(prefix)) {
+    return false;
+  }
+  const imageId = imagePath.slice(prefix.length);
+  return imageId.length > 0 && !imageId.includes('/');
 }
 
 // ---------------------------------------------------------------------------
