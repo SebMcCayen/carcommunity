@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/event-chat.schema.json",
+  "title": "Event chat contract",
+  "description": "Language-neutral event chat shapes shared by iOS, Android, backend, and admin. chatMessage mirrors the Firestore `events/{eventId}/messages/{messageId}` document (docs/firebase-data-model.md); messages are written only via the events.postChatMessage callable and moderated via events.removeChatMessage. Removed messages keep moderationState 'removed' with an empty body — clients render a neutral placeholder and the original text lives only in the admin audit record. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "chatMessageModerationState": {
+      "type": "string",
+      "enum": ["visible", "removed"],
+      "description": "Moderation state. Removed messages have an empty body; clients show a placeholder."
+    },
+    "chatMessageReportReason": {
+      "type": "string",
+      "enum": ["harassment", "hate_or_abuse", "spam", "unsafe_driving", "privacy", "other"],
+      "description": "Report reason (packages/shared/src/event-chat.ts CHAT_MESSAGE_REPORT_REASONS)."
+    },
+    "chatMessageReportStatus": {
+      "type": "string",
+      "enum": ["new", "under_review", "resolved", "dismissed"],
+      "description": "Moderation queue state for a report. events.removeChatMessage resolves open reports."
+    },
+    "chatMessage": {
+      "type": "object",
+      "description": "Firestore `events/{eventId}/messages/{messageId}`. Readable by active members with a going/maybe RSVP while the event is published; written only by the backend.",
+      "properties": {
+        "authorUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "authorDisplayName": {
+          "type": "string",
+          "description": "Denormalized at post time — avoids a users/{uid} read per rendered message."
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Plain text. Empty string when moderationState is 'removed'."
+        },
+        "moderationState": { "$ref": "#/$defs/chatMessageModerationState" },
+        "removedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "removedByUserId": {
+          "type": ["string", "null"],
+          "description": "Moderating admin UID, null while visible."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "authorUserId",
+        "authorDisplayName",
+        "message",
+        "moderationState",
+        "removedAt",
+        "removedByUserId",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "chatMessageReport": {
+      "type": "object",
+      "description": "Firestore `events/{eventId}/messageReports/{reportId}`. Never client-readable; reporter identities stay private. Document ID is deterministic per (message, reporter, reason) so repeat reports upsert silently.",
+      "properties": {
+        "messageId": { "type": "string" },
+        "reporterUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "reason": { "$ref": "#/$defs/chatMessageReportReason" },
+        "details": { "type": ["string", "null"], "maxLength": 500 },
+        "status": { "$ref": "#/$defs/chatMessageReportStatus" },
+        "reviewedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "reviewedByUserId": { "type": ["string", "null"] },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "messageId",
+        "reporterUserId",
+        "reason",
+        "details",
+        "status",
+        "reviewedAt",
+        "reviewedByUserId",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "postChatMessageRequest": {
+      "type": "object",
+      "description": "Input for events.postChatMessage. Rate limited to ~5 messages per 30 seconds per user.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      },
+      "required": ["eventId", "message"],
+      "additionalProperties": false
+    },
+    "reportChatMessageRequest": {
+      "type": "object",
+      "description": "Input for events.reportChatMessage. Own messages cannot be reported.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "messageId": { "type": "string", "minLength": 1 },
+        "reason": { "$ref": "#/$defs/chatMessageReportReason" },
+        "details": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["eventId", "messageId", "reason"],
+      "additionalProperties": false
+    },
+    "removeChatMessageRequest": {
+      "type": "object",
+      "description": "Input for events.removeChatMessage (admin). Reason is required and lives in the audit record only — never in the member-readable message document.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "messageId": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": ["eventId", "messageId", "reason"],
+      "additionalProperties": false
+    }
+  }
+}

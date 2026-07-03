@@ -125,6 +125,33 @@
       "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/complete)"
     },
     {
+      "name": "events.postChatMessage",
+      "domain": "events",
+      "description": "Posts a plain-text message (<=1000 chars) to a published event chat. Requires an active member with a going/maybe RSVP; enforces ~5 messages/30s per user. Writes events/{eventId}/messages with denormalized author display name. Deployed via grouped export as events-postChatMessage (functions/src/events/postChatMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
+    },
+    {
+      "name": "events.reportChatMessage",
+      "domain": "events",
+      "description": "Reports a chat message (reason enum + optional details <=500 chars). Deduplicates per message+reporter+reason; own messages cannot be reported; reporter identities are never client-readable. Writes events/{eventId}/messageReports. Deployed via grouped export as events-reportChatMessage (functions/src/events/reportChatMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
+    },
+    {
+      "name": "events.removeChatMessage",
+      "domain": "events",
+      "description": "Soft-removes a chat message (moderation): blanks the member-visible body, sets moderationState removed, resolves open reports, and preserves the original text in an adminAuditEvents record. Never hard-deletes. Deployed via grouped export as events-removeChatMessage (functions/src/events/removeChatMessage.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",

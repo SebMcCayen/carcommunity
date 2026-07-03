@@ -267,20 +267,39 @@ Composite index: `type ASC, createdAt DESC`.
 
 ---
 
-### `communityMessages` — event and community chat
+### `events/{eventId}/messages/{messageId}` — event chat (Phase 9c)
 
-Document ID: auto-generated.
+Document ID: auto-generated. Replaces the retired `communityMessages`
+scaffold collection — legacy chat is event-scoped
+(docs/migration/backend-domain-mapping.md "Chat → Firestore with bounded
+queries"; contracts/schemas/event-chat.schema.json).
 
-| Field       | Type        | Notes                                      |
-| ----------- | ----------- | ------------------------------------------ |
-| `userId`    | `string`    | Sender Firebase UID                        |
-| `eventId`   | `string?`   | If message belongs to an event chat thread |
-| `body`      | `string`    | Sanitized message text                     |
-| `createdAt` | `Timestamp` | Server timestamp                           |
+| Field               | Type         | Notes                                                        |
+| ------------------- | ------------ | ------------------------------------------------------------ |
+| `authorUserId`      | `string`     | Sender Firebase UID                                          |
+| `authorDisplayName` | `string`     | Denormalized at post time                                    |
+| `message`           | `string`     | Plain text ≤1000 chars; empty string once removed            |
+| `moderationState`   | `string`     | `'visible'` \| `'removed'` — soft-remove, never hard-deleted |
+| `removedAt`         | `Timestamp?` | Set by `events.removeChatMessage`                            |
+| `removedByUserId`   | `string?`    | Moderating admin UID                                         |
+| `createdAt`         | `Timestamp`  | Server timestamp                                             |
 
-Security: any authenticated user can read; active members can create (sender UID must match); sender or admin can delete.
+Security: active members with a `going`/`maybe` RSVP read while the event is
+published; admins read always. All writes go through callables:
+`events.postChatMessage` (member, ~5 msgs/30 s rate limit) and
+`events.removeChatMessage` (admin soft-removal; original text preserved in
+the adminAuditEvents record).
 
-Composite index: `eventId ASC, createdAt ASC` (paginated chat thread).
+#### `events/{eventId}/messageReports/{reportId}` — chat moderation queue
+
+Document ID: deterministic `messageId_reporterUid_reason` (repeat reports
+upsert silently). `{ messageId, reporterUserId, reason, details, status,
+reviewedAt, reviewedByUserId, createdAt }`. Written via
+`events.reportChatMessage`; never client-readable — reporter identities stay
+private.
+
+Composite index (collection group `messages`): `authorUserId ASC, createdAt
+ASC` (rate-limit window query; admin cross-event listing).
 
 ---
 

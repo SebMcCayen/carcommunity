@@ -200,6 +200,27 @@ service cloud.firestore {
           && validRsvpDocument();
         // No client deletes.
       }
+
+      // Chat messages (Phase 9c) — read requires chat eligibility: active
+      // member + published event + a going/maybe RSVP (legacy
+      // canReadEventChat). Removed messages stay readable but their body is
+      // blanked by events.removeChatMessage, so no removed text can leak.
+      // All writes go through the events.postChatMessage /
+      // events.removeChatMessage callables — no client writes.
+      match /messages/{messageId} {
+        allow read: if isAdmin()
+          || (isActiveMember()
+            && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published'
+            && get(/databases/$(database)/documents/events/$(eventId)/rsvps/$(request.auth.uid))
+              .data.status in ['going', 'maybe']);
+      }
+
+      // Message reports — moderation queue, backend/admin-only. Written via
+      // events.reportChatMessage (reporter identities stay private); no
+      // client reads or writes at all (admin app uses callables/Admin SDK).
+      match /messageReports/{reportId} {
+        allow read, write: if false;
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -298,19 +319,8 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // -------------------------------------------------------------------------
-    // communityMessages – event and community chat messages
-    // -------------------------------------------------------------------------
-    match /communityMessages/{messageId} {
-      allow read: if isAuthenticated();
-      // Only active members may post; the message must carry the poster's UID.
-      allow create: if isActiveMember() && request.resource.data.userId == request.auth.uid;
-      // Sender may delete their own message. Suspension blocks all content
-      // writes, deletes included.
-      allow delete: if isAuthenticated() && isNotSuspended()
-        && resource.data.userId == request.auth.uid;
-      allow read, write: if isAdmin();
-    }
+    // (event chat rules live in the Phase 9c messages/messageReports blocks
+    // above — the old communityMessages scaffold collection is retired.)
 
     // -------------------------------------------------------------------------
     // moderationReports – abuse and content reports
