@@ -14,16 +14,27 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // Admin role is granted via server-managed Firebase custom claims only.
-    // Clients must never set or modify this claim.
+    // Suspension is a server-managed custom claim set by admin.suspendUser
+    // (cleared by admin.restoreAccess). Suspension always overrides feature
+    // access; an absent claim means not suspended (the `in` guard is required
+    // because reading a missing token property is an error, not undefined).
+    function isNotSuspended() {
+      return !('suspended' in request.auth.token) || request.auth.token.suspended != true;
+    }
+
+    // Admin role is granted via server-managed Firebase custom claims only
+    // (admin.setAdminRole callable). Clients must never set or modify this
+    // claim. A suspended admin loses admin access (suspension overrides all
+    // feature access, per packages/shared canAccessAdminFeatures).
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.admin == true;
+      return isAuthenticated() && request.auth.token.admin == true && isNotSuspended();
     }
 
     // Active member: subscription entitlement verified by backend and stored
     // as a custom claim. Clients must not self-elevate this claim.
+    // Suspension always overrides entitlement (canAccessMemberFeatures).
     function isActiveMember() {
-      return isAuthenticated() && request.auth.token.activeMember == true;
+      return isAuthenticated() && request.auth.token.activeMember == true && isNotSuspended();
     }
 
     // Returns true when the incoming write does not touch any field that
@@ -68,9 +79,11 @@ service cloud.firestore {
       // Any authenticated user may read the public profile.
       allow read: if isAuthenticated();
       // Owner may create their own profile without setting protected fields.
-      allow create: if isOwner(userId) && noProtectedUserFieldsSet();
+      allow create: if isOwner(userId) && isNotSuspended() && noProtectedUserFieldsSet();
       // Owner may update display fields but must not touch protected fields.
-      allow update: if isOwner(userId) && noProtectedUserFieldsChanged();
+      // Suspended users may not edit their profile (suspension overrides
+      // feature access); they retain read access to their own data.
+      allow update: if isOwner(userId) && isNotSuspended() && noProtectedUserFieldsChanged();
       // Admins have unrestricted access.
       allow read, write: if isAdmin();
     }
@@ -97,8 +110,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /vehicles/{vehicleId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isNotSuspended()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -109,8 +124,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /rides/{rideId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isNotSuspended()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -121,8 +138,10 @@ service cloud.firestore {
     match /friends/{friendId} {
       allow read: if isAuthenticated() &&
         (resource.data.userId == request.auth.uid || resource.data.friendId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && isNotSuspended()
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -133,11 +152,14 @@ service cloud.firestore {
     match /friendRequests/{requestId} {
       allow read: if isAuthenticated() &&
         (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow create: if isAuthenticated() && isNotSuspended()
+        && request.resource.data.senderId == request.auth.uid;
       // Receiver may accept or decline.
-      allow update: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
+      allow update: if isAuthenticated() && isNotSuspended()
+        && resource.data.receiverId == request.auth.uid;
       // Sender may cancel.
-      allow delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.senderId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -178,7 +200,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /hazards/{hazardId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
+      allow create: if isAuthenticated() && isNotSuspended()
+        && request.resource.data.reportedBy == request.auth.uid;
       // Only admins may modify or remove hazard records.
       allow update, delete: if isAdmin();
     }
@@ -190,8 +213,10 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       // Only active members may post; the message must carry the poster's UID.
       allow create: if isActiveMember() && request.resource.data.userId == request.auth.uid;
-      // Sender may delete their own message.
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Sender may delete their own message. Suspension blocks all content
+      // writes, deletes included.
+      allow delete: if isAuthenticated() && isNotSuspended()
+        && resource.data.userId == request.auth.uid;
       allow read, write: if isAdmin();
     }
 
@@ -214,7 +239,9 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // adminAuditEvents – backend-written audit log
-    // Clients must never write to this collection. Backend uses Admin SDK.
+    // Immutable records written exclusively by the Admin SDK (admin callables).
+    // No client writes — not even by admins — so audit entries can never be
+    // forged, altered, or deleted from a client.
     // -------------------------------------------------------------------------
     match /adminAuditEvents/{eventId} {
       allow read: if isAdmin();
@@ -222,8 +249,23 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // moderationActions – backend-written moderation records
+    // Immutable records written exclusively by the Admin SDK
+    // (admin.suspendUser / admin.restoreAccess). Admin-only read; no client
+    // writes — not even by admins.
+    // -------------------------------------------------------------------------
+    match /moderationActions/{actionId} {
+      allow read: if isAdmin();
+      // No client writes allowed.
+    }
+
+    // -------------------------------------------------------------------------
     // accountDeletionRequests – user-initiated account deletion
     // Document ID == Firebase UID of the requesting user.
+    // Deliberately NOT gated on suspension: suspended users retain access to
+    // support and account-deletion paths (migration plan, Phase 8 definition
+    // of done). The same applies to userPrivate, moderationReports, and
+    // errorReports above.
     // -------------------------------------------------------------------------
     match /accountDeletionRequests/{requestId} {
       allow create: if isOwner(requestId);

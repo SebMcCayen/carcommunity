@@ -13,6 +13,9 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { handleHealth } from './health';
 import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
+import { restoreAccess } from './admin/restoreAccess';
+import { setAdminRole } from './admin/setAdminRole';
+import { suspendUser } from './admin/suspendUser';
 
 /**
  * GET /health
@@ -44,4 +47,19 @@ export const health = onRequest(
 export const auth = {
   completeOnboarding,
   onUserCreate,
+};
+
+/**
+ * Admin domain (grouped export → deployed as `admin-setAdminRole`,
+ * `admin-suspendUser`, and `admin-restoreAccess`).
+ *
+ * Authorization, moderation status, and custom-claim management
+ * (contracts/functions/functions.json: admin.setAdminRole,
+ * admin.suspendUser, admin.restoreAccess). Custom claims are set exclusively
+ * here via the Admin SDK — clients can never set or modify them.
+ */
+export const admin = {
+  setAdminRole,
+  suspendUser,
+  restoreAccess,
 };

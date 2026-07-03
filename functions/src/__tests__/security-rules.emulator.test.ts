@@ -425,6 +425,193 @@ describe('Firestore – admin audit events', () => {
       }),
     );
   });
+
+  it('audit events are immutable even for admins (no client update/delete)', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'adminAuditEvents', 'audit-1'), { action: 'tampered' }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'adminAuditEvents', 'audit-1')));
+  });
+
+  it('admin cannot forge new audit events from a client', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'adminAuditEvents', 'forged-event'), {
+        action: 'user.suspend',
+        adminId: 'someone-else',
+      }),
+    );
+  });
+
+  it('suspended admin cannot read audit events (suspension overrides admin)', async () => {
+    const ctx = testEnv.authenticatedContext('suspended-admin', { admin: true, suspended: true });
+    await assertFails(getDoc(doc(ctx.firestore(), 'adminAuditEvents', 'audit-1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Firestore: moderationActions (backend-only writes, admin-only reads)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – moderation actions', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'moderationActions', 'action-1'), {
+        targetUserId: 'some-user',
+        actorUserId: 'admin-uid',
+        actionType: 'permanent_suspension',
+        reason: 'ToS violation',
+      });
+    });
+  });
+
+  it('admin can read moderation actions', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'moderationActions', 'action-1')));
+  });
+
+  it('regular user cannot read moderation actions (not even about themselves)', async () => {
+    const ctx = testEnv.authenticatedContext('some-user');
+    await assertFails(getDoc(doc(ctx.firestore(), 'moderationActions', 'action-1')));
+  });
+
+  it('no client can write moderation actions — not even admins', async () => {
+    const userCtx = testEnv.authenticatedContext('some-user');
+    await assertFails(
+      setDoc(doc(userCtx.firestore(), 'moderationActions', 'fake-action'), {
+        targetUserId: 'enemy',
+        actionType: 'permanent_suspension',
+      }),
+    );
+    const adminCtx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertFails(
+      updateDoc(doc(adminCtx.firestore(), 'moderationActions', 'action-1'), {
+        reason: 'tampered',
+      }),
+    );
+    await assertFails(deleteDoc(doc(adminCtx.firestore(), 'moderationActions', 'action-1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Firestore: suspension enforcement (suspended custom claim)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – suspension enforcement', () => {
+  const SUSPENDED = 'suspended-user';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', SUSPENDED), {
+        displayName: 'Suspended User',
+        role: 'user',
+        activeMember: true,
+        suspended: true,
+        deleted: false,
+      });
+      await setDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED), {
+        email: 'suspended@example.com',
+      });
+      await setDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship'), {
+        userId: SUSPENDED,
+        friendId: 'some-friend',
+      });
+      await setDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request'), {
+        senderId: SUSPENDED,
+        receiverId: 'some-friend',
+      });
+      await setDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg'), {
+        userId: SUSPENDED,
+        text: 'posted before suspension',
+      });
+      await setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle'), {
+        userId: SUSPENDED,
+        make: 'Volvo',
+        model: '240',
+      });
+    });
+  });
+
+  it('suspended user cannot update their own profile', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', SUSPENDED), { displayName: 'Rebrand' }),
+    );
+  });
+
+  it('suspended user cannot create content (vehicles, hazards)', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-vehicle'), {
+        userId: SUSPENDED,
+        make: 'Koenigsegg',
+        model: 'Jesko',
+      }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'hazards', 'suspended-hazard'), {
+        reportedBy: SUSPENDED,
+        kind: 'pothole',
+      }),
+    );
+  });
+
+  it('suspension overrides the activeMember entitlement for chat posts', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-msg'), {
+        userId: SUSPENDED,
+        text: 'hello',
+      }),
+    );
+  });
+
+  it('suspension blocks deletes too (friends, friend requests, own messages, vehicles)', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
+  });
+
+  it('suspended user retains read access to their own data', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'users', SUSPENDED)));
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED)));
+  });
+
+  it('suspended user retains access to the account deletion path', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'accountDeletionRequests', SUSPENDED), {
+        userId: SUSPENDED,
+        reason: 'Please delete my account',
+        status: 'pending',
+      }),
+    );
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'accountDeletionRequests', SUSPENDED)));
+  });
+
+  it('suspended user retains access to support paths (reports, settings)', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'moderationReports', 'suspended-report'), {
+        reportedBy: SUSPENDED,
+        subject: 'appeal',
+      }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED), {
+        notificationPreferences: { push: false },
+      }),
+    );
+  });
+
+  it('a client can never set the suspended flag itself', async () => {
+    const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', SUSPENDED), { suspended: false }));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -487,6 +674,25 @@ describe('Realtime Database – liveLocations', () => {
   it('unauthenticated user cannot read live locations', async () => {
     const ctx = testEnv.unauthenticatedContext();
     await assertFails(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
+  });
+
+  it('suspended member cannot read live locations (suspension overrides entitlement)', async () => {
+    const ctx = testEnv.authenticatedContext('loc-suspended-member', {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
+  });
+
+  it('suspended user cannot share their own live location', async () => {
+    const ctx = testEnv.authenticatedContext('loc-suspended-sharer', { suspended: true });
+    await assertFails(
+      dbSet(dbRef(ctx.database(), 'liveLocations/loc-suspended-sharer'), {
+        lat: 57.5,
+        lng: 12.0,
+        timestamp: Date.now(),
+      }),
+    );
   });
 });
 
