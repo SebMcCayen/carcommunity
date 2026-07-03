@@ -80,6 +80,51 @@
       "source": "docs/migration/backend-domain-mapping.md (documented as submitCrownHuntClaim)"
     },
     {
+      "name": "events.create",
+      "domain": "events",
+      "description": "Creates a draft event. Writes the teaser-safe events/{eventId} document and the member-gated events/{eventId}/details/private document (exact location, description) atomically, plus an adminAuditEvents record. Deployed via grouped export as events-create (functions/src/events/manageEvent.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Event and RSVP data)"
+    },
+    {
+      "name": "events.update",
+      "domain": "events",
+      "description": "Partially updates a draft or published event across both event documents; cancelled/completed events are immutable. Writes an adminAuditEvents record with changedFields. Deployed via grouped export as events-update (functions/src/events/manageEvent.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Event and RSVP data)"
+    },
+    {
+      "name": "events.publish",
+      "domain": "events",
+      "description": "Publishes a draft event after validating title, approximateArea, and a future start time. Deployed via grouped export as events-publish (functions/src/events/eventLifecycle.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/publish)"
+    },
+    {
+      "name": "events.cancel",
+      "domain": "events",
+      "description": "Cancels a draft or published event with a required reason; sets cancelledAt, never hard-deletes. Deployed via grouped export as events-cancel (functions/src/events/eventLifecycle.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/cancel)"
+    },
+    {
+      "name": "events.complete",
+      "domain": "events",
+      "description": "Marks a published event completed. Badge evaluation for going attendees migrates with the badges domain (Phase 9, domain 6). Deployed via grouped export as events-complete (functions/src/events/eventLifecycle.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/complete)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",
