@@ -334,4 +334,28 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       ),
     ).toBe('functions/failed-precondition');
   });
+
+  it('re-reporting after resolution refreshes details but never reopens the report', async () => {
+    await signInAs(memberGoing);
+    await call('events-reportChatMessage', {
+      eventId,
+      messageId: reportedMessageId,
+      reason: 'spam',
+      details: 'third — filed after moderation resolved it',
+    });
+
+    const reports = await adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('messageReports')
+      .where('messageId', '==', reportedMessageId)
+      .get();
+    expect(reports.size).toBe(1);
+    const report = reports.docs[0].data();
+    expect(report.details).toBe('third — filed after moderation resolved it');
+    // Review metadata survives the repeat report.
+    expect(report.status).toBe('resolved');
+    expect(report.reviewedByUserId).toBe(adminUser.uid);
+    expect(report.reviewedAt).not.toBeNull();
+  });
 });

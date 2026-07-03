@@ -149,7 +149,7 @@ export function guardChatParticipant(input: {
     return {
       ok: false,
       code: 'permission-denied',
-      message: 'Du behöver svara Kommer eller Kanske för att delta i chatten.',
+      message: 'A going or maybe RSVP is required to join the event chat.',
     };
   }
   return { ok: true };

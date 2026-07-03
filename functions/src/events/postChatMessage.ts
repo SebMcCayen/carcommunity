@@ -53,6 +53,10 @@ export const postChatMessage = onCall(
 
     // Legacy rate limit (~5 per 30s per user, all events). Collection-group
     // query on the composite index (authorUserId ASC, createdAt ASC).
+    // Best-effort by design, matching the legacy fastify limiter (per-process
+    // memory): concurrent invocations may briefly overshoot the cap. This is
+    // an anti-spam knob, not a security invariant — no data integrity
+    // depends on the exact count.
     const windowStart = Timestamp.fromMillis(Date.now() - CHAT_RATE_LIMIT_WINDOW_MS);
     const recent = await db
       .collectionGroup('messages')

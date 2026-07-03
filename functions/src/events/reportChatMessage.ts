@@ -16,6 +16,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import {
+  CHAT_REPORT_DETAILS_MAX_LENGTH,
   buildChatReportDocument,
   chatReportDocId,
   parseReportChatMessageInput,
@@ -51,10 +52,24 @@ export const reportChatMessage = onCall(
       throw new HttpsError('invalid-argument', 'You cannot report your own message.');
     }
 
-    await eventRef
+    const reportRef = eventRef
       .collection('messageReports')
-      .doc(chatReportDocId(input.messageId, participant.uid, input.reason))
-      .set(
+      .doc(chatReportDocId(input.messageId, participant.uid, input.reason));
+
+    // Legacy upsert parity: a repeat report only refreshes details — it must
+    // never reset a report the moderation team already moved to
+    // under_review/resolved/dismissed, and never clears review metadata.
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(reportRef);
+      if (existing.exists) {
+        const details = input.details?.trim()
+          ? input.details.trim().slice(0, CHAT_REPORT_DETAILS_MAX_LENGTH)
+          : null;
+        tx.update(reportRef, { details });
+        return;
+      }
+      tx.set(
+        reportRef,
         buildChatReportDocument(
           {
             messageId: input.messageId,
@@ -65,6 +80,7 @@ export const reportChatMessage = onCall(
           () => FieldValue.serverTimestamp(),
         ),
       );
+    });
 
     return { reported: true };
   },
