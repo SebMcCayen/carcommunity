@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/saved-drives.schema.json",
+  "title": "Saved drives contract",
+  "description": "Language-neutral saved-drive shapes shared by iOS, Android, backend, and admin. ride mirrors the Firestore `rides/{rideId}` document (docs/firebase-data-model.md). Stats are computed server-side by drives.save from the submitted recording; route GPS data lives only in Cloud Storage under the member-gated rideRoutes/{uid}/{rideId}/ prefix — never in Firestore. No top-speed field exists anywhere. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "ride": {
+      "type": "object",
+      "description": "Firestore `rides/{rideId}`. Owner-only read (membership not required — drives saved during a previous membership stay listable); all writes go through drives.save / drives.delete.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "title": { "type": ["string", "null"], "maxLength": 200 },
+        "distanceMeters": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Server-computed; null for summary-only saves (no route points)."
+        },
+        "durationSeconds": { "type": "integer", "minimum": 0 },
+        "averageSpeedMetersPerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "startedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "routePath": {
+          "type": "string",
+          "pattern": "^rideRoutes/",
+          "description": "Canonical Cloud Storage path (rideRoutes/{uid}/{rideId}/route.bin); the file itself is member-gated."
+        },
+        "previewImagePath": {
+          "type": "string",
+          "pattern": "^rideRoutes/",
+          "description": "Canonical Cloud Storage path (rideRoutes/{uid}/{rideId}/preview.png); member-gated like the route."
+        },
+        "sourceSessionId": {
+          "type": ["string", "null"],
+          "maxLength": 128,
+          "description": "Client recording identifier used for idempotent save retries."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "userId",
+        "title",
+        "distanceMeters",
+        "durationSeconds",
+        "averageSpeedMetersPerSecond",
+        "startedAt",
+        "endedAt",
+        "routePath",
+        "previewImagePath",
+        "sourceSessionId",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "routePoint": {
+      "type": "object",
+      "description": "A single recorded GPS point submitted to drives.save. Points must be ordered by timestampMs.",
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "timestampMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Unix timestamp in milliseconds."
+        }
+      },
+      "required": ["latitude", "longitude", "timestampMs"],
+      "additionalProperties": false
+    },
+    "saveDriveRequest": {
+      "type": "object",
+      "description": "Input for drives.save (member-only). Distance/duration/average speed are computed server-side; implausible GPS jumps (>200 km/h implied speed) are excluded from distance.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "startedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "routePoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/routePoint" },
+          "maxItems": 20000
+        },
+        "sourceSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      },
+      "required": ["startedAt", "endedAt"],
+      "additionalProperties": false
+    },
+    "saveDriveResponse": {
+      "type": "object",
+      "description": "Result of drives.save, including the canonical Cloud Storage paths the client uploads the route file and preview image to.",
+      "properties": {
+        "rideId": { "type": "string" },
+        "durationSeconds": { "type": "integer", "minimum": 0 },
+        "distanceMeters": { "type": ["number", "null"], "minimum": 0 },
+        "averageSpeedMetersPerSecond": { "type": ["number", "null"], "minimum": 0 },
+        "routePath": { "type": "string", "pattern": "^rideRoutes/" },
+        "previewImagePath": { "type": "string", "pattern": "^rideRoutes/" },
+        "alreadySaved": {
+          "type": "boolean",
+          "description": "True when an idempotent retry returned the existing drive."
+        }
+      },
+      "required": [
+        "rideId",
+        "durationSeconds",
+        "distanceMeters",
+        "averageSpeedMetersPerSecond",
+        "routePath",
+        "previewImagePath",
+        "alreadySaved"
+      ],
+      "additionalProperties": false
+    },
+    "deleteDriveRequest": {
+      "type": "object",
+      "description": "Input for drives.delete (any active owner; membership not required).",
+      "properties": {
+        "rideId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$",
+          "description": "Firestore-safe document ID — no path separators."
+        }
+      },
+      "required": ["rideId"],
+      "additionalProperties": false
+    }
+  }
+}

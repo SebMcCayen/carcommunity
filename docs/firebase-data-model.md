@@ -104,9 +104,9 @@ Document ID: auto-generated.
 | `previewImagePath` | `string?`   | Cloud Storage path to static map preview                                           |
 | `createdAt`        | `Timestamp` | Server timestamp                                                                   |
 
-**Route GPS points are never stored in Firestore.** They are encoded, compressed, and stored as a single file in Cloud Storage.
+**Route GPS points are never stored in Firestore.** They are encoded, compressed, and stored as a single file in Cloud Storage under `rideRoutes/{uid}/{rideId}/` (route.bin + preview.png — both member-gated; route visuals are withheld from non-members, matching the legacy member-only routeOverview).
 
-Security: owner-only read, create, update, delete.
+Security (Phase 9d): owner-only read — membership NOT required, so drives saved during a previous membership stay listable. All writes go through callables: `drives.save` computes the stats server-side (client writes could forge distance/duration) and `drives.delete` removes the Cloud Storage files together with the document. `averageSpeedMetersPerSecond` and a nullable `sourceSessionId` (idempotent save retries) complete the field list above. No top-speed field is ever stored.
 
 Composite index: `userId ASC, createdAt DESC` (user's ride history, paginated).
 

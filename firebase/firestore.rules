@@ -237,17 +237,19 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // rides – saved drive history
+    // rides – saved drive history (Phase 9d)
     // Each document carries a `userId` field. Route GPS data lives in Cloud
-    // Storage; only the storage path is recorded here, not GPS coordinates.
+    // Storage (rideRoutes/{uid}/{rideId}/, member-gated); only the storage
+    // path is recorded here, never GPS coordinates. All writes go through
+    // callables: drives.save computes the stats server-side (a client write
+    // could forge distance/duration) and drives.delete removes the storage
+    // files with the document. Owner list/read works without membership —
+    // drives saved during a previous membership stay accessible.
     // -------------------------------------------------------------------------
     match /rides/{rideId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && isNotSuspended()
-        && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && isNotSuspended()
-        && resource.data.userId == request.auth.uid;
-      allow read, write: if isAdmin();
+      // No client writes: drives.save / drives.delete callables only.
+      allow read: if isAdmin();
     }
 
     // -------------------------------------------------------------------------

@@ -18,6 +18,17 @@ service firebase.storage {
       return isAuthenticated() && request.auth.token.admin == true;
     }
 
+    // Mirrors the Firestore rules helpers: suspension is a server-managed
+    // custom claim and always overrides feature access.
+    function isNotSuspended() {
+      return request.auth != null
+        && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
+    }
+
+    function isActiveMember() {
+      return isAuthenticated() && request.auth.token.activeMember == true && isNotSuspended();
+    }
+
     function isImage() {
       return request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
     }
@@ -54,26 +65,26 @@ service firebase.storage {
     }
 
     // -------------------------------------------------------------------------
-    // Compressed ride routes:  rideRoutes/{userId}/{rideId}/{filename}
-    // Only the owner may read or write. Routes are binary (polyline-encoded and
-    // optionally gzip-compressed); only binary content types are accepted.
-    // Max 50 MB per file.
+    // Ride route data:  rideRoutes/{userId}/{rideId}/{filename}   (Phase 9d)
+    // route.bin (binary, polyline-encoded + optionally gzipped) and
+    // preview.png (static map image) both live under this owner+member-gated
+    // prefix — route visuals are member-only (legacy parity: routeOverview is
+    // withheld from non-members; drives saved during a previous membership
+    // keep their Firestore metadata readable, but route files stay gated).
+    // The former world-readable ridePreviewImages/ prefix is retired: ride
+    // previews reveal the private route shape.
+    // Max 50 MB per file. drives.delete removes this prefix with the drive.
     // -------------------------------------------------------------------------
-    match /rideRoutes/{userId}/{rideId}/{filename} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId) && isUnderMB(50) &&
-        request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)');
+    match /rideRoutes/{userId}/{rideId}/{fileName} {
+      allow read: if isOwner(userId) && isActiveMember();
+      // Only the two canonical files may exist under the prefix — anything
+      // else would be unmetered private storage and would make drives.delete
+      // cleanup unbounded.
+      allow write: if isOwner(userId) && isActiveMember() && isUnderMB(50) &&
+        ((fileName == 'route.bin'
+            && request.resource.contentType.matches('application/(octet-stream|gzip|x-gzip)'))
+          || (fileName == 'preview.png' && request.resource.contentType == 'image/png'));
       allow read, write: if isAdmin();
-    }
-
-    // -------------------------------------------------------------------------
-    // Ride preview images:  ridePreviewImages/{userId}/{rideId}/{filename}
-    // Owner may upload images up to 5 MB. Any authenticated user may read.
-    // -------------------------------------------------------------------------
-    match /ridePreviewImages/{userId}/{rideId}/{filename} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isImage() && isUnderMB(5);
-      allow write: if isAdmin();
     }
 
     // -------------------------------------------------------------------------
