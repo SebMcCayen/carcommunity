@@ -174,6 +174,37 @@ export function computeUpdatedClaims(
   return next;
 }
 
+/**
+ * Orders the two writes of a privilege change fail-safe.
+ *
+ * Security Rules enforce on custom claims, so a partial failure must never
+ * leave a user with MORE effective privilege than intended:
+ *
+ * - Privilege-DECREASING ops (suspend, revoke admin): write the enforcement
+ *   claim first. If the record commit then fails, the user is already locked
+ *   down and a retry converges the records.
+ * - Privilege-INCREASING ops (grant admin, restore access): commit the
+ *   authoritative records + audit entry first. If the claim write then
+ *   fails, the user simply has not gained access yet and a retry converges
+ *   the claim.
+ *
+ * Both writes are idempotent, so retrying after a partial failure is always
+ * safe in either direction.
+ */
+export async function applyPrivilegeChange(input: {
+  decreasesPrivilege: boolean;
+  writeClaims: () => Promise<void>;
+  commitRecords: () => Promise<void>;
+}): Promise<void> {
+  if (input.decreasesPrivilege) {
+    await input.writeClaims();
+    await input.commitRecords();
+  } else {
+    await input.commitRecords();
+    await input.writeClaims();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Record builders (adminAuditEvents / moderationActions)
 // ---------------------------------------------------------------------------

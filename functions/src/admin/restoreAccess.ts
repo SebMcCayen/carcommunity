@@ -17,6 +17,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { requireAdminActor } from './actorContext';
 import {
+  applyPrivilegeChange,
   buildAdminAuditEvent,
   buildModerationAction,
   computeUpdatedClaims,
@@ -61,44 +62,54 @@ export const restoreAccess = onCall(
       throw new HttpsError(guard.code, guard.message);
     }
 
+    // Fail-safe ordering (see applyPrivilegeChange): restoring access
+    // increases privileges, so the records + audit entry commit BEFORE the
+    // claim is cleared — a partial failure never restores access without an
+    // audit trail.
     const serverTimestamp = () => FieldValue.serverTimestamp();
-    const batch = db.batch();
-    batch.set(
-      targetRef,
-      { suspended: false, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-    batch.set(
-      db.collection('moderationActions').doc(),
-      buildModerationAction(
-        {
-          targetUserId: targetUid,
-          actorUserId: actor.uid,
-          actionType: 'restore_access',
-          reason,
-        },
-        serverTimestamp,
-      ),
-    );
-    batch.set(
-      db.collection('adminAuditEvents').doc(),
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'user.restoreAccess',
-          targetType: 'user',
-          targetId: targetUid,
-          reason,
-        },
-        serverTimestamp,
-      ),
-    );
-    await batch.commit();
-
-    await adminAuth.setCustomUserClaims(
-      targetUid,
-      computeUpdatedClaims(targetUser.customClaims, { suspended: false }),
-    );
+    await applyPrivilegeChange({
+      decreasesPrivilege: false,
+      writeClaims: async () => {
+        await adminAuth.setCustomUserClaims(
+          targetUid,
+          computeUpdatedClaims(targetUser.customClaims, { suspended: false }),
+        );
+      },
+      commitRecords: async () => {
+        const batch = db.batch();
+        batch.set(
+          targetRef,
+          { suspended: false, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+        batch.set(
+          db.collection('moderationActions').doc(),
+          buildModerationAction(
+            {
+              targetUserId: targetUid,
+              actorUserId: actor.uid,
+              actionType: 'restore_access',
+              reason,
+            },
+            serverTimestamp,
+          ),
+        );
+        batch.set(
+          db.collection('adminAuditEvents').doc(),
+          buildAdminAuditEvent(
+            {
+              adminId: actor.uid,
+              action: 'user.restoreAccess',
+              targetType: 'user',
+              targetId: targetUid,
+              reason,
+            },
+            serverTimestamp,
+          ),
+        );
+        await batch.commit();
+      },
+    });
 
     return { targetUid, suspended: false };
   },

@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  applyPrivilegeChange,
   buildAdminAuditEvent,
   buildModerationAction,
   computeUpdatedClaims,
@@ -163,6 +164,67 @@ describe('computeUpdatedClaims', () => {
 
   it('handles a missing existing-claims object', () => {
     expect(computeUpdatedClaims(undefined, { suspended: true })).toEqual({ suspended: true });
+  });
+});
+
+describe('applyPrivilegeChange', () => {
+  function tracker() {
+    const order: string[] = [];
+    return {
+      order,
+      writeClaims: async () => {
+        order.push('claims');
+      },
+      commitRecords: async () => {
+        order.push('records');
+      },
+    };
+  }
+
+  it('privilege-decreasing ops write the enforcement claim BEFORE the records', async () => {
+    const t = tracker();
+    await applyPrivilegeChange({ decreasesPrivilege: true, ...t });
+    expect(t.order).toEqual(['claims', 'records']);
+  });
+
+  it('privilege-increasing ops commit the records BEFORE the claim', async () => {
+    const t = tracker();
+    await applyPrivilegeChange({ decreasesPrivilege: false, ...t });
+    expect(t.order).toEqual(['records', 'claims']);
+  });
+
+  it('a failing claim write on a decrease never commits records (fail-locked)', async () => {
+    const order: string[] = [];
+    await expect(
+      applyPrivilegeChange({
+        decreasesPrivilege: true,
+        writeClaims: async () => {
+          order.push('claims');
+          throw new Error('auth backend unavailable');
+        },
+        commitRecords: async () => {
+          order.push('records');
+        },
+      }),
+    ).rejects.toThrow('auth backend unavailable');
+    expect(order).toEqual(['claims']);
+  });
+
+  it('a failing record commit on an increase never writes the claim (fail-closed)', async () => {
+    const order: string[] = [];
+    await expect(
+      applyPrivilegeChange({
+        decreasesPrivilege: false,
+        writeClaims: async () => {
+          order.push('claims');
+        },
+        commitRecords: async () => {
+          order.push('records');
+          throw new Error('firestore unavailable');
+        },
+      }),
+    ).rejects.toThrow('firestore unavailable');
+    expect(order).toEqual(['records']);
   });
 });
 

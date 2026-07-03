@@ -21,6 +21,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { requireAdminActor } from './actorContext';
 import {
+  applyPrivilegeChange,
   buildAdminAuditEvent,
   buildModerationAction,
   computeUpdatedClaims,
@@ -69,48 +70,57 @@ export const suspendUser = onCall(
       throw new HttpsError(guard.code, guard.message);
     }
 
-    // 1) Authoritative status + immutable records first (single batch)…
+    // Fail-safe ordering (see applyPrivilegeChange): suspension reduces
+    // privileges, so the enforcement claim is set (and refresh tokens
+    // revoked) BEFORE the records commit — a partial failure locks the user
+    // down rather than leaving them unsuspended in the rules' eyes.
     const serverTimestamp = () => FieldValue.serverTimestamp();
-    const batch = db.batch();
-    batch.set(
-      targetRef,
-      { suspended: true, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-    batch.set(
-      db.collection('moderationActions').doc(),
-      buildModerationAction(
-        {
-          targetUserId: targetUid,
-          actorUserId: actor.uid,
-          actionType: 'permanent_suspension',
-          reason,
-        },
-        serverTimestamp,
-      ),
-    );
-    batch.set(
-      db.collection('adminAuditEvents').doc(),
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'user.suspend',
-          targetType: 'user',
-          targetId: targetUid,
-          reason,
-        },
-        serverTimestamp,
-      ),
-    );
-    await batch.commit();
-
-    // 2) …then the enforcement claim (idempotent on retry), and revoke
-    // refresh tokens so the claim cannot be dodged by silent token renewal.
-    await adminAuth.setCustomUserClaims(
-      targetUid,
-      computeUpdatedClaims(targetUser.customClaims, { suspended: true }),
-    );
-    await adminAuth.revokeRefreshTokens(targetUid);
+    await applyPrivilegeChange({
+      decreasesPrivilege: true,
+      writeClaims: async () => {
+        await adminAuth.setCustomUserClaims(
+          targetUid,
+          computeUpdatedClaims(targetUser.customClaims, { suspended: true }),
+        );
+        // Revoke refresh tokens so the claim cannot be dodged by silent
+        // token renewal.
+        await adminAuth.revokeRefreshTokens(targetUid);
+      },
+      commitRecords: async () => {
+        const batch = db.batch();
+        batch.set(
+          targetRef,
+          { suspended: true, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+        batch.set(
+          db.collection('moderationActions').doc(),
+          buildModerationAction(
+            {
+              targetUserId: targetUid,
+              actorUserId: actor.uid,
+              actionType: 'permanent_suspension',
+              reason,
+            },
+            serverTimestamp,
+          ),
+        );
+        batch.set(
+          db.collection('adminAuditEvents').doc(),
+          buildAdminAuditEvent(
+            {
+              adminId: actor.uid,
+              action: 'user.suspend',
+              targetType: 'user',
+              targetId: targetUid,
+              reason,
+            },
+            serverTimestamp,
+          ),
+        );
+        await batch.commit();
+      },
+    });
 
     return { targetUid, suspended: true };
   },

@@ -21,6 +21,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminAuth, db } from '../firebase';
 import { requireAdminActor } from './actorContext';
 import {
+  applyPrivilegeChange,
   buildAdminAuditEvent,
   computeUpdatedClaims,
   guardSetAdminRole,
@@ -74,41 +75,48 @@ export const setAdminRole = onCall(
 
     const nextRole = grantAdmin ? 'admin' : 'user';
 
-    // 1) Authoritative record + immutable audit entry first (single batch)…
-    const batch = db.batch();
-    batch.set(
-      targetRef,
-      { role: nextRole, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-    batch.set(
-      db.collection('adminAuditEvents').doc(),
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'user.setAdminRole',
-          targetType: 'user',
-          targetId: targetUid,
-          reason,
-          details: { admin: grantAdmin, role: nextRole },
-        },
-        () => FieldValue.serverTimestamp(),
-      ),
-    );
-    await batch.commit();
-
-    // 2) …then the custom claim (idempotent; a retry after a partial failure
-    // converges both sides).
-    await adminAuth.setCustomUserClaims(
-      targetUid,
-      computeUpdatedClaims(targetUser.customClaims, { admin: grantAdmin }),
-    );
-
-    // Revoking admin is security-sensitive: invalidate refresh tokens so the
-    // stale admin claim cannot outlive the current ID token (≤ 1 hour).
-    if (!grantAdmin) {
-      await adminAuth.revokeRefreshTokens(targetUid);
-    }
+    // Fail-safe ordering (see applyPrivilegeChange): on revocation the
+    // enforcement claim is removed (and refresh tokens revoked) BEFORE the
+    // records commit, so a partial failure can never leave claim-based admin
+    // access behind; on grant the records commit first, so a partial failure
+    // never grants access without an audit trail.
+    await applyPrivilegeChange({
+      decreasesPrivilege: !grantAdmin,
+      writeClaims: async () => {
+        await adminAuth.setCustomUserClaims(
+          targetUid,
+          computeUpdatedClaims(targetUser.customClaims, { admin: grantAdmin }),
+        );
+        // Revoking admin is security-sensitive: invalidate refresh tokens so
+        // the stale admin claim cannot outlive the current ID token (≤ 1 h).
+        if (!grantAdmin) {
+          await adminAuth.revokeRefreshTokens(targetUid);
+        }
+      },
+      commitRecords: async () => {
+        const batch = db.batch();
+        batch.set(
+          targetRef,
+          { role: nextRole, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+        batch.set(
+          db.collection('adminAuditEvents').doc(),
+          buildAdminAuditEvent(
+            {
+              adminId: actor.uid,
+              action: 'user.setAdminRole',
+              targetType: 'user',
+              targetId: targetUid,
+              reason,
+              details: { admin: grantAdmin, role: nextRole },
+            },
+            () => FieldValue.serverTimestamp(),
+          ),
+        );
+        await batch.commit();
+      },
+    });
 
     return { targetUid, role: nextRole, admin: grantAdmin };
   },
