@@ -22,6 +22,8 @@ import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
 import { onRsvpWrite } from './events/onRsvpWrite';
+import { deleteDrive } from './drives/deleteDrive';
+import { saveDrive } from './drives/saveDrive';
 
 /**
  * GET /health
@@ -92,4 +94,18 @@ export const events = {
   postChatMessage,
   reportChatMessage,
   removeChatMessage,
+};
+
+/**
+ * Drives domain (grouped export → deployed as `drives-save` and
+ * `drives-delete`).
+ *
+ * Saved drives (contracts/functions/functions.json: drives.save,
+ * drives.delete). Stats are computed server-side; route GPS data lives in
+ * Cloud Storage under rideRoutes/{uid}/{rideId}/ (member-gated), never in
+ * Firestore. Listing/detail are direct owner reads of rides/{rideId}.
+ */
+export const drives = {
+  save: saveDrive,
+  delete: deleteDrive,
 };

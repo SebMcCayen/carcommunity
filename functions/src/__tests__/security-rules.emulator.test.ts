@@ -811,6 +811,23 @@ describe('Firestore – ride ownership', () => {
       }),
     );
   });
+
+  it('no client writes at all — even the owner (drives.save/delete callables only)', async () => {
+    // A direct create/update could forge server-computed stats; deletes must
+    // clean the Cloud Storage prefix, which only drives.delete does (9d).
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'rides', 'r-direct'), {
+        userId: OWNER,
+        title: 'Direct',
+        distanceMeters: 999999,
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'rides', 'r-private'), { distanceMeters: 999999 }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'rides', 'r-private')));
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1251,32 +1268,56 @@ describe('Cloud Storage – ownership validation', () => {
     await assertFails(getBytes(storageRef(ctx.storage(), `profileImages/${OWNER}/avatar.jpg`)));
   });
 
-  it('owner can upload a ride route to their own path', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
+  it('member owner can upload a ride route to their own path', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     const data = new Uint8Array([0x1f, 0x8b, 0x08]); // gzip magic bytes
     const ref = storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`);
     await assertSucceeds(uploadBytes(ref, data, { contentType: 'application/octet-stream' }));
   });
 
-  it('owner can read their own ride route', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
+  it('member owner can read their own ride route', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     await assertSucceeds(
       getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
     );
   });
 
-  it("another user cannot read someone else's ride route", async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
+  it('non-member owner cannot read their route file (member-only route visuals)', async () => {
+    // Legacy parity: routeOverview is withheld from non-members even for
+    // their own drives; the Firestore metadata stays readable, the route
+    // file does not (Phase 9d).
+    const ctx = testEnv.authenticatedContext(OWNER);
     await assertFails(
       getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
     );
   });
 
-  it("another user cannot upload to someone else's ride route path", async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
+  it('suspension overrides membership for route files', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true, suspended: true });
+    await assertFails(
+      getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
+    );
+  });
+
+  it("another member cannot read someone else's ride route", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER, { activeMember: true });
+    await assertFails(
+      getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
+    );
+  });
+
+  it("another member cannot upload to someone else's ride route path", async () => {
+    const ctx = testEnv.authenticatedContext(OTHER, { activeMember: true });
     const data = new Uint8Array([0x00, 0x01, 0x02]);
     const ref = storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-spoof/route.bin`);
     await assertFails(uploadBytes(ref, data, { contentType: 'application/octet-stream' }));
+  });
+
+  it('member owner can upload a PNG map preview under the route prefix', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
+    const data = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+    const ref = storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/preview.png`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/png' }));
   });
 });
 
@@ -1317,35 +1358,23 @@ describe('Cloud Storage – vehicle images', () => {
 // Cloud Storage: ride preview images
 // ---------------------------------------------------------------------------
 
-describe('Cloud Storage – ride preview images', () => {
+describe('Cloud Storage – retired ridePreviewImages prefix (Phase 9d)', () => {
   const OWNER = 'ride-preview-owner';
-  const OTHER = 'ride-preview-other';
 
-  it('owner can upload a ride preview image to their own path', async () => {
-    const ctx = testEnv.authenticatedContext(OWNER);
+  it('the old world-readable preview prefix is fully closed', async () => {
+    // Ride previews reveal the private route shape; they now live under the
+    // member-gated rideRoutes/{uid}/{rideId}/ prefix instead.
+    const ownerCtx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const ref = storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`);
-    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
-  });
-
-  it("another user cannot upload to someone else's ride preview path", async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
-    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const ref = storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`);
-    await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
-  });
-
-  it('authenticated user can read a ride preview image', async () => {
-    const ctx = testEnv.authenticatedContext(OTHER);
-    await assertSucceeds(
-      getBytes(storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`)),
-    );
-  });
-
-  it('unauthenticated user cannot read a ride preview image', async () => {
-    const ctx = testEnv.unauthenticatedContext();
     await assertFails(
-      getBytes(storageRef(ctx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`)),
+      uploadBytes(
+        storageRef(ownerCtx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`),
+        data,
+        { contentType: 'image/jpeg' },
+      ),
+    );
+    await assertFails(
+      getBytes(storageRef(ownerCtx.storage(), `ridePreviewImages/${OWNER}/ride-abc/preview.jpg`)),
     );
   });
 });

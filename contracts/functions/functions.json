@@ -64,11 +64,20 @@
     {
       "name": "drives.save",
       "domain": "drives",
-      "description": "Saves a completed drive with computed distance/duration; route GPS data goes to Cloud Storage. Route overview in responses is member-only.",
+      "description": "Saves a completed drive: computes distanceMeters/durationSeconds/averageSpeed server-side from the submitted route points (implausible GPS jumps filtered), writes rides/{rideId}, and returns the canonical member-gated Cloud Storage paths (rideRoutes/{uid}/{rideId}/) for the client route/preview upload. Idempotent per sourceSessionId. No top-speed is ever stored. Deployed via grouped export as drives-save (functions/src/drives/saveDrive.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (documented as saveDrive)"
+    },
+    {
+      "name": "drives.delete",
+      "domain": "drives",
+      "description": "Deletes an owned drive: removes the rideRoutes/{uid}/{rideId}/ Cloud Storage files first, then the rides/{rideId} document. Available to any active owner — membership not required (legacy parity: free users can delete drives saved during a previous membership). Deployed via grouped export as drives-delete (functions/src/drives/deleteDrive.ts).",
       "access": "authenticated",
       "appCheck": true,
-      "status": "planned",
-      "source": "docs/migration/backend-domain-mapping.md (documented as saveDrive)"
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Saved drives -> Firestore + Cloud Storage)"
     },
     {
       "name": "crownHunt.submitClaim",
