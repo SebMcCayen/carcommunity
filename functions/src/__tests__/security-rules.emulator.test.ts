@@ -581,6 +581,128 @@ describe('Firestore – events (Phase 9b)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: event chat (Phase 9c)
+// Messages readable only by chat-eligible members (active member + published
+// event + going/maybe RSVP); all writes are callable-only. Reports are fully
+// backend-only.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – event chat (Phase 9c)', () => {
+  const EVENT = 'chat-event';
+  const DRAFT_EVENT = 'chat-draft-event';
+  const GOING = 'chat-member-going';
+  const MAYBE = 'chat-member-maybe';
+  const NOT_GOING = 'chat-member-notgoing';
+  const NO_RSVP = 'chat-member-norsvp';
+  const FREE_GOING = 'chat-free-going';
+
+  const memberCtx = (uid: string) => testEnv.authenticatedContext(uid, { activeMember: true });
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      for (const [id, status] of [
+        [EVENT, 'published'],
+        [DRAFT_EVENT, 'draft'],
+      ] as const) {
+        await setDoc(doc(firestore, 'events', id), {
+          title: 'Chat event',
+          approximateArea: 'Area',
+          status,
+        });
+        await setDoc(doc(firestore, 'events', id, 'messages', 'msg-1'), {
+          authorUserId: 'author-1',
+          authorDisplayName: 'Author One',
+          message: 'hello everyone',
+          moderationState: 'visible',
+        });
+      }
+      const rsvps: Array<[string, string]> = [
+        [GOING, 'going'],
+        [MAYBE, 'maybe'],
+        [NOT_GOING, 'not_going'],
+        [FREE_GOING, 'going'],
+      ];
+      for (const [uid, status] of rsvps) {
+        await setDoc(doc(firestore, 'events', EVENT, 'rsvps', uid), { status });
+        await setDoc(doc(firestore, 'events', DRAFT_EVENT, 'rsvps', uid), { status });
+      }
+      await setDoc(doc(firestore, 'events', EVENT, 'messageReports', 'report-1'), {
+        messageId: 'msg-1',
+        reporterUserId: 'someone',
+        reason: 'spam',
+        status: 'new',
+      });
+    });
+  });
+
+  it('members with a going or maybe RSVP can read chat messages', async () => {
+    await assertSucceeds(
+      getDoc(doc(memberCtx(GOING).firestore(), 'events', EVENT, 'messages', 'msg-1')),
+    );
+    await assertSucceeds(
+      getDoc(doc(memberCtx(MAYBE).firestore(), 'events', EVENT, 'messages', 'msg-1')),
+    );
+  });
+
+  it('members with not_going or no RSVP cannot read chat messages', async () => {
+    await assertFails(
+      getDoc(doc(memberCtx(NOT_GOING).firestore(), 'events', EVENT, 'messages', 'msg-1')),
+    );
+    await assertFails(
+      getDoc(doc(memberCtx(NO_RSVP).firestore(), 'events', EVENT, 'messages', 'msg-1')),
+    );
+  });
+
+  it('non-members cannot read chat even with a going RSVP', async () => {
+    const ctx = testEnv.authenticatedContext(FREE_GOING);
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', EVENT, 'messages', 'msg-1')));
+  });
+
+  it('chat of a draft event is unreadable even for eligible members', async () => {
+    await assertFails(
+      getDoc(doc(memberCtx(GOING).firestore(), 'events', DRAFT_EVENT, 'messages', 'msg-1')),
+    );
+  });
+
+  it('admins can read chat without an RSVP', async () => {
+    const ctx = testEnv.authenticatedContext('chat-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', EVENT, 'messages', 'msg-1')));
+  });
+
+  it('no client can write chat messages — posting goes through the callable', async () => {
+    const firestore = memberCtx(GOING).firestore();
+    await assertFails(
+      setDoc(doc(firestore, 'events', EVENT, 'messages', 'direct-msg'), {
+        authorUserId: GOING,
+        authorDisplayName: 'Going Member',
+        message: 'direct write',
+        moderationState: 'visible',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(firestore, 'events', EVENT, 'messages', 'msg-1'), { message: 'edited' }),
+    );
+    await assertFails(deleteDoc(doc(firestore, 'events', EVENT, 'messages', 'msg-1')));
+  });
+
+  it('message reports are fully backend-only (no reads, no writes)', async () => {
+    const memberFs = memberCtx(GOING).firestore();
+    await assertFails(getDoc(doc(memberFs, 'events', EVENT, 'messageReports', 'report-1')));
+    await assertFails(
+      setDoc(doc(memberFs, 'events', EVENT, 'messageReports', 'direct-report'), {
+        messageId: 'msg-1',
+        reporterUserId: GOING,
+        reason: 'spam',
+        status: 'new',
+      }),
+    );
+    const adminFs = testEnv.authenticatedContext('chat-admin', { admin: true }).firestore();
+    await assertFails(getDoc(doc(adminFs, 'events', EVENT, 'messageReports', 'report-1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: vehicle ownership
 // ---------------------------------------------------------------------------
 
@@ -858,15 +980,32 @@ describe('Firestore – suspension enforcement', () => {
         senderId: SUSPENDED,
         receiverId: 'some-friend',
       });
-      await setDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg'), {
-        userId: SUSPENDED,
-        text: 'posted before suspension',
-      });
       await setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle'), {
         userId: SUSPENDED,
         make: 'Volvo',
         model: '240',
       });
+      // Published event where the (now suspended) member had RSVP'd — chat
+      // read eligibility must still be revoked by suspension.
+      await setDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event'), {
+        title: 'Chat event',
+        approximateArea: 'Area',
+        status: 'published',
+        rsvpCounts: { going: 1, maybe: 0, not_going: 0 },
+      });
+      await setDoc(
+        doc(ctx.firestore(), 'events', 'suspended-chat-event', 'rsvps', SUSPENDED),
+        { status: 'going' },
+      );
+      await setDoc(
+        doc(ctx.firestore(), 'events', 'suspended-chat-event', 'messages', 'msg-1'),
+        {
+          authorUserId: 'someone',
+          authorDisplayName: 'Someone',
+          message: 'hello',
+          moderationState: 'visible',
+        },
+      );
     });
   });
 
@@ -894,21 +1033,17 @@ describe('Firestore – suspension enforcement', () => {
     );
   });
 
-  it('suspension overrides the activeMember entitlement for chat posts', async () => {
+  it('suspension overrides the activeMember entitlement for event chat reads', async () => {
     const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-msg'), {
-        userId: SUSPENDED,
-        text: 'hello',
-      }),
+      getDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event', 'messages', 'msg-1')),
     );
   });
 
-  it('suspension blocks deletes too (friends, friend requests, own messages, vehicles)', async () => {
+  it('suspension blocks deletes too (friends, friend requests, vehicles)', async () => {
     const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
     await assertFails(deleteDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship')));
     await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'communityMessages', 'suspended-own-msg')));
     await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
   });
 

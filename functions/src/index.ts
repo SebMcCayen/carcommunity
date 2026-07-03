@@ -18,6 +18,9 @@ import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { cancel, complete, publish } from './events/eventLifecycle';
 import { create, update } from './events/manageEvent';
+import { postChatMessage } from './events/postChatMessage';
+import { removeChatMessage } from './events/removeChatMessage';
+import { reportChatMessage } from './events/reportChatMessage';
 import { onRsvpWrite } from './events/onRsvpWrite';
 
 /**
@@ -85,4 +88,8 @@ export const events = {
   cancel,
   complete,
   onRsvpWrite,
+  // Chat (Phase 9c): member post/report callables + admin soft-removal.
+  postChatMessage,
+  reportChatMessage,
+  removeChatMessage,
 };
