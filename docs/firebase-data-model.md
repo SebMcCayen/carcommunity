@@ -28,17 +28,18 @@ For PostgreSQL data model (current `services/api` implementation) see [data-mode
 
 Document ID: Firebase UID.
 
-| Field          | Type        | Notes                                                    |
-| -------------- | ----------- | -------------------------------------------------------- |
-| `displayName`  | `string`    | Visible username                                         |
-| `avatarPath`   | `string?`   | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}` |
-| `bio`          | `string?`   | Short profile description                                |
-| `role`         | `string`    | `'user'` \| `'admin'` — **backend-managed only**         |
-| `activeMember` | `boolean`   | Subscription entitlement — **backend-managed only**      |
-| `suspended`    | `boolean`   | Moderation state — **backend-managed only**              |
-| `deleted`      | `boolean`   | Soft-delete flag — **backend-managed only**              |
-| `createdAt`    | `Timestamp` | Server timestamp                                         |
-| `updatedAt`    | `Timestamp` | Server timestamp                                         |
+| Field                   | Type         | Notes                                                                                |
+| ----------------------- | ------------ | ------------------------------------------------------------------------------------ |
+| `displayName`           | `string`     | Visible username                                                                     |
+| `avatarPath`            | `string?`    | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}`                             |
+| `bio`                   | `string?`    | Short profile description                                                            |
+| `role`                  | `string`     | `'user'` \| `'admin'` — **backend-managed only**                                     |
+| `activeMember`          | `boolean`    | Subscription entitlement — **backend-managed only**                                  |
+| `suspended`             | `boolean`    | Moderation state — **backend-managed only**                                          |
+| `deleted`               | `boolean`    | Soft-delete flag — **backend-managed only**                                          |
+| `onboardingCompletedAt` | `Timestamp?` | Written by `auth.completeOnboarding` — **backend-managed only**; null until complete |
+| `createdAt`             | `Timestamp`  | Server timestamp                                                                     |
+| `updatedAt`             | `Timestamp`  | Server timestamp                                                                     |
 
 Security: any authenticated user can read; owner can update non-protected fields; backend (Admin SDK) manages protected fields.
 
@@ -48,15 +49,19 @@ Security: any authenticated user can read; owner can update non-protected fields
 
 Document ID: Firebase UID.
 
-| Field                     | Type        | Notes                             |
-| ------------------------- | ----------- | --------------------------------- |
-| `email`                   | `string?`   | Contact channel, not identity key |
-| `phone`                   | `string?`   | Optional                          |
-| `notificationPreferences` | `map?`      | Push/email preferences            |
-| `createdAt`               | `Timestamp` | Server timestamp                  |
-| `updatedAt`               | `Timestamp` | Server timestamp                  |
+| Field                        | Type         | Notes                                                                  |
+| ---------------------------- | ------------ | ---------------------------------------------------------------------- |
+| `email`                      | `string?`    | Contact channel, not identity key                                      |
+| `phone`                      | `string?`    | Optional                                                               |
+| `notificationPreferences`    | `map?`       | Push/email preferences                                                 |
+| `ageConfirmedAt`             | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
+| `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
+| `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
+| `anonymousPartnerStatsOptIn` | `boolean`    | Privacy setting; defaults to `false` (explicit opt-in); owner-editable |
+| `createdAt`                  | `Timestamp`  | Server timestamp                                                       |
+| `updatedAt`                  | `Timestamp`  | Server timestamp                                                       |
 
-Security: owner-only read and write. No other users may access this collection.
+Security: owner-only read and write. No other users may access this collection. Consent timestamps are backend-written compliance records — clients cannot set, modify, or delete them, and the document itself cannot be deleted by clients (account deletion is a backend workflow).
 
 ---
 

@@ -34,6 +34,10 @@
           "type": "boolean",
           "description": "Soft-delete flag — backend-managed only."
         },
+        "onboardingCompletedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Written by auth.completeOnboarding with a server timestamp — backend-managed only; null until onboarding is complete."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
@@ -57,6 +61,22 @@
         "notificationPreferences": {
           "type": "object",
           "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
+        },
+        "ageConfirmedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Consent audit record written by auth.completeOnboarding — backend-managed only; clients cannot write it (Security Rules)."
+        },
+        "termsAcceptedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Consent audit record written by auth.completeOnboarding — backend-managed only; clients cannot write it (Security Rules)."
+        },
+        "privacyPolicyAcceptedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Consent audit record written by auth.completeOnboarding — backend-managed only; clients cannot write it (Security Rules)."
+        },
+        "anonymousPartnerStatsOptIn": {
+          "type": "boolean",
+          "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable."
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }

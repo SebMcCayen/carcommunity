@@ -71,8 +71,14 @@ dependencies {
     // Mapbox Maps
     implementation(libs.mapbox.maps)
 
+    // Credential Manager — Google Sign-In (docs/auth-mobile-requirements.md)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
+
     // Unit tests
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)

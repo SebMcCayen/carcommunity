@@ -28,15 +28,29 @@ service cloud.firestore {
 
     // Returns true when the incoming write does not touch any field that
     // must only be modified by backend (Cloud Functions / Admin SDK).
+    // onboardingCompletedAt is written by auth.completeOnboarding with a
+    // server timestamp — clients must not self-complete onboarding.
     function noProtectedUserFieldsChanged() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement']);
+        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement', 'onboardingCompletedAt']);
     }
 
     // Returns true when a create request does not set any protected field.
     function noProtectedUserFieldsSet() {
       return !request.resource.data.keys()
-        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement']);
+        .hasAny(['role', 'admin', 'activeMember', 'suspended', 'deleted', 'entitlement', 'onboardingCompletedAt']);
+    }
+
+    // Consent timestamps on userPrivate are backend-written audit records
+    // (auth.completeOnboarding); clients must never set or modify them.
+    function noConsentTimestampsChanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['ageConfirmedAt', 'termsAcceptedAt', 'privacyPolicyAcceptedAt']);
+    }
+
+    function noConsentTimestampsSet() {
+      return !request.resource.data.keys()
+        .hasAny(['ageConfirmedAt', 'termsAcceptedAt', 'privacyPolicyAcceptedAt']);
     }
 
     // -------------------------------------------------------------------------
@@ -66,9 +80,15 @@ service cloud.firestore {
     // Document ID == Firebase UID.
     // Owner-only. Admin access must use the Admin SDK (backend-only); no
     // privileged client-side read is permitted for this collection.
+    // Consent timestamps are backend-written compliance records — owner may
+    // not set, modify, or delete them (deletion is a backend account-deletion
+    // workflow, not a client write).
     // -------------------------------------------------------------------------
     match /userPrivate/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && noConsentTimestampsSet();
+      allow update: if isOwner(userId) && noConsentTimestampsChanged();
+      // No client deletes: account deletion is handled by backend functions.
     }
 
     // -------------------------------------------------------------------------

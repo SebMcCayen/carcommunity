@@ -4,7 +4,7 @@
   "private": true,
   "main": "lib/index.js",
   "engines": {
-    "node": ">=22"
+    "node": "22"
   },
   "scripts": {
     "build": "tsc",
@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
     "emulators:start": "firebase emulators:start --config ../firebase/firebase.json",
-    "emulators:test": "firebase emulators:exec --only auth,firestore,database,storage --project demo-test --config ../firebase/firebase.json 'pnpm test:emulator'"
+    "emulators:test": "pnpm build && firebase emulators:exec --only auth,functions,firestore,database,storage --project demo-test --config ../firebase/firebase.json 'pnpm test:emulator'"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

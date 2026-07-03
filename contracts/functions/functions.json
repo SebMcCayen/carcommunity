@@ -10,10 +10,10 @@
     {
       "name": "auth.completeOnboarding",
       "domain": "auth",
-      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps.",
+      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",
       "access": "authenticated",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {

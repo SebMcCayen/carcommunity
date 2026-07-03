@@ -11,6 +11,8 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { handleHealth } from './health';
+import { completeOnboarding } from './auth/completeOnboarding';
+import { onUserCreate } from './auth/onUserCreate';
 
 /**
  * GET /health
@@ -29,3 +31,17 @@ export const health = onRequest(
   },
   (req, res) => handleHealth(req, res),
 );
+
+/**
+ * Auth domain (grouped export → deployed as `auth-completeOnboarding` and
+ * `auth-onUserCreate`).
+ *
+ * - `auth-completeOnboarding`: callable `auth.completeOnboarding` from
+ *   contracts/functions/functions.json.
+ * - `auth-onUserCreate`: 1st-gen Firebase Auth onCreate trigger that
+ *   provisions `users/{uid}` and `userPrivate/{uid}` on first sign-in.
+ */
+export const auth = {
+  completeOnboarding,
+  onUserCreate,
+};
