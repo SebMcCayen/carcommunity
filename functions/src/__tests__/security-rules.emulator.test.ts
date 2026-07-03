@@ -218,19 +218,12 @@ describe('Firestore – userPrivate', () => {
     );
   });
 
-  it('owner cannot create their private doc with consent timestamps pre-set', async () => {
-    const ctx = testEnv.authenticatedContext('private-new-user');
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'userPrivate', 'private-new-user'), {
-        email: 'new@example.com',
-        termsAcceptedAt: new Date(),
-      }),
-    );
-  });
-
-  it('owner can create their private doc without consent timestamps', async () => {
+  it('owner cannot create their private doc directly (backend provisioning only)', async () => {
+    // Provisioned by the backend alongside users/{uid}; a client-created doc
+    // could lack createdAt/updatedAt forever (onUserCreate never clobbers an
+    // existing userPrivate doc).
     const ctx = testEnv.authenticatedContext('private-clean-user');
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'userPrivate', 'private-clean-user'), {
         email: 'clean@example.com',
       }),
@@ -345,32 +338,18 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
     );
   });
 
-  it('owner can create their profile with whitelisted validated fields', async () => {
+  it('owner cannot create their profile directly (backend provisioning only)', async () => {
+    // A client-created partial users/{uid} doc would make the idempotent
+    // onUserCreate trigger a permanent no-op and skip backend-managed
+    // defaults — creates are backend-only (trigger + completeOnboarding).
     const uid = 'validation-create-user';
     const ctx = testEnv.authenticatedContext(uid);
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'users', uid), {
         displayName: 'Fresh User',
         bio: 'Hello',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      }),
-    );
-  });
-
-  it('owner cannot create their profile without a display name', async () => {
-    const uid = 'validation-create-nameless';
-    const ctx = testEnv.authenticatedContext(uid);
-    await assertFails(setDoc(doc(ctx.firestore(), 'users', uid), { bio: 'No name' }));
-  });
-
-  it('owner cannot create their profile with a non-whitelisted field', async () => {
-    const uid = 'validation-create-junk';
-    const ctx = testEnv.authenticatedContext(uid);
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'users', uid), {
-        displayName: 'Junk User',
-        lastActiveAt: serverTimestamp(),
       }),
     );
   });

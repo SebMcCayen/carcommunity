@@ -74,19 +74,14 @@ service cloud.firestore {
       return (!keys.hasAny(['displayName']) || validDisplayName(data))
         && (!keys.hasAny(['avatarPath']) || validAvatarPath(data, uid))
         && (!keys.hasAny(['bio']) || validBio(data))
-        && (!keys.hasAny(['createdAt']) || isServerTimestamp(data.createdAt))
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
-    // Owner create: displayName is required; only whitelisted keys allowed.
-    function validUserProfileCreate(uid) {
-      let keys = request.resource.data.keys();
-      return keys.hasAll(['displayName'])
-        && keys.hasOnly(['displayName', 'avatarPath', 'bio', 'createdAt', 'updatedAt'])
-        && validUserProfileFields(keys, uid);
-    }
-
     // Owner update: only whitelisted keys may change; changed keys are validated.
+    // There is no owner create: users/{uid} is provisioned exclusively by the
+    // backend (onUserCreate trigger + auth.completeOnboarding fallback). A
+    // client-created partial doc would make the idempotent trigger a
+    // permanent no-op and skip backend-managed defaults.
     function validUserProfileUpdate(uid) {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['displayName', 'avatarPath', 'bio', 'updatedAt'])
@@ -104,17 +99,10 @@ service cloud.firestore {
         && (!keys.hasAny(['phone']) || (data.phone is string && data.phone.size() <= 32))
         && (!keys.hasAny(['notificationPreferences']) || data.notificationPreferences is map)
         && (!keys.hasAny(['anonymousPartnerStatsOptIn']) || data.anonymousPartnerStatsOptIn is bool)
-        && (!keys.hasAny(['createdAt']) || isServerTimestamp(data.createdAt))
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
-    function validUserPrivateCreate() {
-      let keys = request.resource.data.keys();
-      return keys.hasOnly(['email', 'phone', 'notificationPreferences',
-          'anonymousPartnerStatsOptIn', 'createdAt', 'updatedAt'])
-        && validUserPrivateFields(keys);
-    }
-
+    // No owner create (backend provisioning only — see users note above).
     function validUserPrivateUpdate() {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['email', 'phone', 'notificationPreferences',
@@ -136,9 +124,8 @@ service cloud.firestore {
     match /users/{userId} {
       // Any authenticated user may read the public profile.
       allow read: if isAuthenticated();
-      // Owner may create their own profile with whitelisted, validated fields
-      // only (displayName required; protected fields backend-managed).
-      allow create: if isOwner(userId) && isNotSuspended() && validUserProfileCreate(userId);
+      // No owner create: users/{uid} is provisioned exclusively by the
+      // backend (onUserCreate trigger + auth.completeOnboarding fallback).
       // Owner may update whitelisted display fields only, with field-level
       // validation (Phase 9a). Suspended users may not edit their profile
       // (suspension overrides feature access); they retain read access.
@@ -158,9 +145,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /userPrivate/{userId} {
       allow read: if isOwner(userId);
-      // Owner writes are whitelist-based with field-level validation
+      // No owner create: provisioned by backend alongside users/{uid}.
+      // Owner updates are whitelist-based with field-level validation
       // (Phase 9a); consent timestamps are excluded from the whitelist.
-      allow create: if isOwner(userId) && validUserPrivateCreate();
       allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
     }
