@@ -334,6 +334,23 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // pointsLedger – Kronpoäng balances and append-only ledger (Phase 9g)
+    // Owner-only read (wallet + history); ALL writes are backend transactions
+    // (creditPoints/debitPoints + the points.admin* callables) — clients
+    // never calculate or write balances, entries are never edited or
+    // deleted, and a balance can never go negative.
+    // -------------------------------------------------------------------------
+    match /pointsLedger/{userId} {
+      allow read: if isOwner(userId);
+      // No client writes.
+
+      match /entries/{entryId} {
+        allow read: if isOwner(userId);
+        // No client writes: append-only via backend transactions.
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // badgeProgress – backend-only attendance counters (Phase 9f)
     // Maintained by events.complete; feeds first_event / five_events.
     // -------------------------------------------------------------------------

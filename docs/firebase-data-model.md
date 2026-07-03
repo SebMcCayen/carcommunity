@@ -284,6 +284,29 @@ Composite index: `type ASC, createdAt DESC`.
 
 ---
 
+### `pointsLedger/{uid}` — Kronpoäng wallet (Phase 9g)
+
+`{ balance, updatedAt }` — denormalized total, updated atomically with every
+entry in one Firestore transaction (the mapping's read-balance → append-entry
+→ update-balance pattern; the Firestore equivalent of the legacy PostgreSQL
+advisory lock).
+
+#### `pointsLedger/{uid}/entries/{entryId}` — append-only ledger
+
+`{ transactionType: earn|spend|adjustment_credit|adjustment_debit|reversal,
+source, amount (signed), balanceAfter, description, idempotencyKey,
+relatedEntityType, relatedEntityId, createdByUserId, createdAt }`
+(contracts/schemas/points.schema.json). Entries are never updated or
+deleted; corrections are compensating entries. Idempotent automated awards
+use the idempotencyKey as the document ID. A balance can never go negative;
+suspended/deleted users earn and spend nothing.
+
+Security: owner-only read (wallet + history); all writes are backend
+transactions — the internal creditPoints/debitPoints primitives and the
+admin-only `points.adminAdjust` / `points.adminReverse` callables.
+
+---
+
 ### `events/{eventId}/messages/{messageId}` — event chat (Phase 9c)
 
 Document ID: auto-generated. Replaces the retired `communityMessages`
