@@ -334,6 +334,39 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // crownHuntPoints – Kronjakt reward points (Phase 9h)
+    // Members read ACTIVE points (map display); drafts/paused/ended are
+    // admin-territory via the Admin SDK. All writes go through the
+    // safety-gated crownHunt.* admin callables — activation requires an
+    // explicit safe-location confirmation and an audited approval note.
+    // -------------------------------------------------------------------------
+    match /crownHuntPoints/{pointId} {
+      allow read: if isActiveMember() && resource.data.status == 'active';
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownHuntClaims – every claim attempt (Phase 9h)
+    // Document ID = SHA-256-scoped idempotency key. Owner-only read (claim
+    // history); all writes go through crownHunt.submitClaim. Risk data is
+    // NOT here — see crownHuntClaimRisk below.
+    // -------------------------------------------------------------------------
+    match /crownHuntClaims/{claimId} {
+      allow read: if isActiveMember() && resource.data.userId == request.auth.uid;
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownHuntClaimRisk – anti-fraud scores and reasons (Phase 9h)
+    // Fully backend-only: risk thresholds and reasons must never reach
+    // mobile clients (legacy rule), so they live apart from the
+    // owner-readable claim records.
+    // -------------------------------------------------------------------------
+    match /crownHuntClaimRisk/{claimId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // pointsLedger – Kronpoäng balances and append-only ledger (Phase 9g)
     // Owner-only read (wallet + history); ALL writes are backend transactions
     // (creditPoints/debitPoints + the points.admin* callables) — clients

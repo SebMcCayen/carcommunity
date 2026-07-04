@@ -259,6 +259,78 @@ describe('Firestore – points ledger (Phase 9g)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: Kronjakt (Phase 9h)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – Kronjakt (Phase 9h)', () => {
+  const MEMBER = 'ch-rules-member';
+  const OTHER = 'ch-rules-other';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      await setDoc(doc(firestore, 'crownHuntPoints', 'p-active'), {
+        title: 'Aktiv krona',
+        latitude: 59.33,
+        longitude: 18.07,
+        geofenceRadiusMeters: 50,
+        rewardPoints: 25,
+        status: 'active',
+      });
+      await setDoc(doc(firestore, 'crownHuntPoints', 'p-draft'), {
+        title: 'Utkast',
+        latitude: 59.34,
+        longitude: 18.08,
+        geofenceRadiusMeters: 50,
+        rewardPoints: 25,
+        status: 'draft',
+      });
+      await setDoc(doc(firestore, 'crownHuntClaims', 'claim-1'), {
+        userId: MEMBER,
+        pointId: 'p-active',
+        result: 'awarded',
+      });
+      await setDoc(doc(firestore, 'crownHuntClaimRisk', 'claim-1'), {
+        userId: MEMBER,
+        riskScore: 10,
+        riskReasons: ['poor_gps_accuracy'],
+      });
+    });
+  });
+
+  it('members read active points; drafts and non-members are denied', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'crownHuntPoints', 'p-active')));
+    await assertFails(getDoc(doc(memberFs, 'crownHuntPoints', 'p-draft')));
+    const freeFs = testEnv.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'p-active')));
+  });
+
+  it('claims are owner-only member reads; risk data is fully backend-only', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'crownHuntClaims', 'claim-1')));
+    // Risk thresholds/reasons never reach clients — not even the claim owner.
+    await assertFails(getDoc(doc(memberFs, 'crownHuntClaimRisk', 'claim-1')));
+    const otherFs = testEnv.authenticatedContext(OTHER, { activeMember: true }).firestore();
+    await assertFails(getDoc(doc(otherFs, 'crownHuntClaims', 'claim-1')));
+  });
+
+  it('no client writes to points or claims', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertFails(
+      updateDoc(doc(memberFs, 'crownHuntPoints', 'p-active'), { rewardPoints: 1000 }),
+    );
+    await assertFails(
+      setDoc(doc(memberFs, 'crownHuntClaims', 'forged'), {
+        userId: MEMBER,
+        pointId: 'p-active',
+        result: 'awarded',
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 

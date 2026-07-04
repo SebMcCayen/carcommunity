@@ -82,11 +82,47 @@
     {
       "name": "crownHunt.submitClaim",
       "domain": "crownHunt",
-      "description": "Submits a Kronjakt point claim. Requires backend validation and anti-fraud checks (docs/product-decisions.md); final access gating confirmed when the domain migrates.",
-      "access": "authenticated",
+      "description": "Submits a Kronjakt point claim with the full ported anti-fraud chain: feature flag, entitlement, idempotent replay (SHA-256-scoped key = claim doc ID), point availability, server-side geofence with accuracy buffer, <=1.4 m/s stopped-speed check, position freshness (<=60 s), repeat rules (once/daily/weekly), 10/day limit, rate/velocity/jump risk scoring (>=60 -> risk_review, no points). Eligibility failures return result codes with Swedish messages, not errors. Awards commit atomically with the claim record via the Kronpoäng ledger transaction. Deployed via grouped export as crownHunt-submitClaim (functions/src/crownHunt/submitClaim.ts).",
+      "access": "member",
       "appCheck": true,
-      "status": "planned",
-      "source": "docs/migration/backend-domain-mapping.md (documented as submitCrownHuntClaim)"
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Kronjakt claims)"
+    },
+    {
+      "name": "crownHunt.createPoint",
+      "domain": "crownHunt",
+      "description": "Creates a draft Kronjakt point (title <=100, geofence 20-150 m, reward 1-1000 KP, repeat rule, optional availability window). Audited. Deployed via grouped export as crownHunt-createPoint (functions/src/crownHunt/managePoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/crown-hunt-service.ts (admin point management)"
+    },
+    {
+      "name": "crownHunt.updatePoint",
+      "domain": "crownHunt",
+      "description": "Edits a draft or paused point (active/ended points are immutable); merged fields re-validated. Audited with changedFields. Deployed via grouped export as crownHunt-updatePoint (functions/src/crownHunt/managePoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/crown-hunt-service.ts (admin point management)"
+    },
+    {
+      "name": "crownHunt.activatePoint",
+      "domain": "crownHunt",
+      "description": "Safety-gated activation: requires safeLocationConfirmed and an approval note (>=3 chars) recorded in the audit entry; stamps approvedAt/approvedByUserId. Ended points cannot be activated. Deployed via grouped export as crownHunt-activatePoint (functions/src/crownHunt/managePoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/crown-hunt-service.ts (admin point management)"
+    },
+    {
+      "name": "crownHunt.pausePoint",
+      "domain": "crownHunt",
+      "description": "Pauses a point (ended points cannot be paused). Audited. Deployed via grouped export as crownHunt-pausePoint (functions/src/crownHunt/managePoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/crown-hunt-service.ts (admin point management)"
     },
     {
       "name": "events.create",

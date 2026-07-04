@@ -284,6 +284,38 @@ Composite index: `type ASC, createdAt DESC`.
 
 ---
 
+### `crownHuntPoints/{pointId}` — Kronjakt reward points (Phase 9h)
+
+`{ title (≤100), description (≤500), latitude, longitude,
+geofenceRadiusMeters (20–150), rewardPoints (1–1000 KP), repeatRule:
+once|daily|weekly, status: draft|active|paused|ended, availableFrom?,
+availableUntil?, approvedAt?, approvedByUserId?, createdByUserId, createdAt,
+updatedAt }` (contracts/schemas/crown-hunt.schema.json).
+
+Security: active members read `status == 'active'` points (map display);
+all writes go through the admin `crownHunt.*` callables — activation is a
+safety gate requiring an explicit safe-location confirmation and an audited
+approval note. Composite index: `status ASC, createdAt DESC`.
+
+#### `crownHuntClaims/{claimId}` — every claim attempt
+
+Document ID = SHA-256(userId ':' idempotencyKey), making duplicate
+submissions replays. `{ userId, pointId, result (see contract enum),
+claimedAt, distanceMeters?, positionRecordedAt?,
+reportedSpeedMetersPerSecond?, pointsAwarded?, balanceAfter?,
+pointsLedgerEntryId?, createdAt }`. Owner-only member read (claim history);
+writes only via `crownHunt.submitClaim`. Awards commit atomically with the
+Kronpoäng ledger entry. Composite indexes: `(userId, createdAt)`,
+`(userId, result, claimedAt)`, `(userId, pointId, result, claimedAt)`.
+
+#### `crownHuntClaimRisk/{claimId}` — anti-fraud data (backend-only)
+
+`{ userId, pointId, riskScore (0–100), riskReasons[], createdAt }` — fully
+backend-only: risk thresholds and reasons must never reach mobile clients,
+so they live apart from the owner-readable claim records.
+
+---
+
 ### `pointsLedger/{uid}` — Kronpoäng wallet (Phase 9g)
 
 `{ balance, updatedAt }` — denormalized total, updated atomically with every
