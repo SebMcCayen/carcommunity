@@ -331,6 +331,125 @@ describe('Firestore – Kronjakt (Phase 9h)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: partners (Phase 9i)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – partners (Phase 9i)', () => {
+  const MEMBER = 'partner-rules-member';
+  const FREE = 'partner-rules-free';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      await setDoc(doc(firestore, 'companies', 'co-active'), {
+        name: 'Verkstan AB',
+        category: 'workshop',
+        status: 'active',
+      });
+      await setDoc(doc(firestore, 'companies', 'co-draft'), {
+        name: 'Utkast AB',
+        category: 'parts',
+        status: 'draft',
+      });
+      await setDoc(doc(firestore, 'offers', 'of-active'), {
+        companyId: 'co-active',
+        partnerCompanyName: 'Verkstan AB',
+        title: '10% rabatt',
+        teaserText: 'Medlemsrabatt',
+        offerType: 'percentage_discount',
+        status: 'active',
+      });
+      await setDoc(doc(firestore, 'offers', 'of-active', 'details', 'member'), {
+        description: 'Full detalj',
+        percentageDiscount: 10,
+      });
+      await setDoc(doc(firestore, 'offers', 'of-active', 'secret', 'code'), {
+        discountCode: 'HEMLIG10',
+      });
+      await setDoc(doc(firestore, 'offers', 'of-draft'), {
+        companyId: 'co-active',
+        partnerCompanyName: 'Verkstan AB',
+        title: 'Utkast',
+        teaserText: 'Ej publik',
+        offerType: 'other',
+        status: 'draft',
+      });
+      await setDoc(doc(firestore, 'partnerApplications', 'app-1'), {
+        companyName: 'Däckfirman',
+        contactEmail: 'anna@dack.se',
+        status: 'submitted',
+        submittedByUserId: MEMBER,
+      });
+    });
+  });
+
+  it('authenticated users read active companies and offer teasers; drafts hidden', async () => {
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertSucceeds(getDoc(doc(freeFs, 'companies', 'co-active')));
+    await assertFails(getDoc(doc(freeFs, 'companies', 'co-draft')));
+    await assertSucceeds(getDoc(doc(freeFs, 'offers', 'of-active')));
+    await assertFails(getDoc(doc(freeFs, 'offers', 'of-draft')));
+  });
+
+  it('member detail is member-gated; the secret code is unreadable by everyone', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertFails(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
+    // The discount code tier is closed even to members and admin clients.
+    await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'secret', 'code')));
+    const adminFs = testEnv.authenticatedContext('partner-admin', { admin: true }).firestore();
+    await assertFails(getDoc(doc(adminFs, 'offers', 'of-active', 'secret', 'code')));
+  });
+
+  it('applications are never client-readable — not even by the submitter', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertFails(getDoc(doc(memberFs, 'partnerApplications', 'app-1')));
+  });
+
+  it('saved offers: member bookmarks with validated shape; non-members denied', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertSucceeds(
+      setDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-active'), {
+        offerId: 'of-active',
+        savedAt: serverTimestamp(),
+      }),
+    );
+    // Doc ID must equal offerId; junk fields rejected; free users denied.
+    await assertFails(
+      setDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-active'), {
+        offerId: 'other-offer',
+        savedAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-draft'), {
+        offerId: 'of-draft',
+        savedAt: serverTimestamp(),
+        note: 'x',
+      }),
+    );
+    const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertFails(
+      setDoc(doc(freeFs, 'users', FREE, 'savedOffers', 'of-active'), {
+        offerId: 'of-active',
+        savedAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(
+      deleteDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-active')),
+    );
+  });
+
+  it('no client writes to companies or offers', async () => {
+    const adminFs = testEnv.authenticatedContext('partner-admin', { admin: true }).firestore();
+    await assertFails(updateDoc(doc(adminFs, 'companies', 'co-active'), { name: 'Hacked' }));
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertFails(updateDoc(doc(memberFs, 'offers', 'of-active'), { title: 'Hacked' }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 

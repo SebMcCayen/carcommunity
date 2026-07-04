@@ -155,6 +155,17 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         // No client writes: awards are backend-only and never revoked here.
       }
+
+      // Saved partner offers (Phase 9i) — a pure member bookmark. Document
+      // ID == the saved offerId; the doc carries only { offerId, savedAt }.
+      match /savedOffers/{offerId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isActiveMember()
+          && request.resource.data.keys().hasOnly(['offerId', 'savedAt'])
+          && request.resource.data.offerId == offerId
+          && isServerTimestamp(request.resource.data.savedAt);
+        allow delete: if isOwner(userId) && isActiveMember();
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -299,19 +310,46 @@ service cloud.firestore {
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
-    // companies – partner companies
+    // companies – partner companies (Phase 9i)
+    // Public while ACTIVE (list, detail, map markers); draft/paused/ended
+    // are admin territory via the Admin SDK. All writes go through the
+    // audited partners.* admin callables.
     // -------------------------------------------------------------------------
     match /companies/{companyId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // No client writes.
     }
 
     // -------------------------------------------------------------------------
-    // offers – partner offers and promotions
+    // offers – partner offers, THREE-TIER privacy (Phase 9i)
+    // Teaser document: all authenticated users while ACTIVE (title,
+    // teaserText, type — never the description, terms, or code).
+    // details/member: active members while the offer is active.
+    // secret/code: fully backend-only — the discount code is served
+    // exclusively by partners.showOfferCode and never readable directly.
     // -------------------------------------------------------------------------
     match /offers/{offerId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // No client writes.
+
+      match /details/member {
+        allow read: if isActiveMember()
+          && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active';
+        // No client writes.
+      }
+
+      match /secret/{secretId} {
+        allow read, write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // partnerApplications – contact data, never client-readable (Phase 9i)
+    // Written via partners.submitApplication; reviewed via
+    // partners.reviewApplication (admin). No client access at all.
+    // -------------------------------------------------------------------------
+    match /partnerApplications/{applicationId} {
+      allow read, write: if false;
     }
 
     // -------------------------------------------------------------------------

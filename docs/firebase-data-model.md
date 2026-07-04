@@ -209,42 +209,61 @@ Composite index: `status ASC, startsAt ASC` (upcoming events list, paginated).
 
 ---
 
-### `companies` — partner companies
+### `companies` — partner companies (Phase 9i)
 
-Document ID: auto-generated.
+Document ID: auto-generated. `{ name (≤150), category, description (≤1000),
+website, phone, address, latitude?, longitude? (map markers), logoPath
+(companyImages/{companyId}/…), status: draft|active|paused|ended,
+sourceApplicationId?, createdByUserId, createdAt, updatedAt }`
+(contracts/schemas/partners.schema.json).
 
-| Field         | Type        | Notes              |
-| ------------- | ----------- | ------------------ |
-| `name`        | `string`    |                    |
-| `description` | `string?`   |                    |
-| `website`     | `string?`   |                    |
-| `logoPath`    | `string?`   | Cloud Storage path |
-| `active`      | `boolean`   |                    |
-| `createdAt`   | `Timestamp` | Server timestamp   |
-| `updatedAt`   | `Timestamp` | Server timestamp   |
-
-Security: any authenticated user can read; admin-only write.
+Security: authenticated read while ACTIVE; all writes via the audited
+admin `partners.*` callables (lifecycle draft → active ⇄ paused → ended;
+ended is terminal; only draft/paused editable).
 
 ---
 
-### `offers` — partner offers and promotions
+### `offers` — partner offers, three-tier privacy (Phase 9i)
 
-Document ID: auto-generated.
+Document ID: auto-generated. The legacy API exposes offers in three tiers,
+and Firestore rules cannot redact fields per-read, so each tier is its own
+document (contracts/schemas/partners.schema.json):
 
-| Field         | Type         | Notes              |
-| ------------- | ------------ | ------------------ |
-| `companyId`   | `string`     |                    |
-| `title`       | `string`     |                    |
-| `description` | `string?`    |                    |
-| `imagePath`   | `string?`    | Cloud Storage path |
-| `active`      | `boolean`    |                    |
-| `expiresAt`   | `Timestamp?` |                    |
-| `createdAt`   | `Timestamp`  | Server timestamp   |
-| `updatedAt`   | `Timestamp`  | Server timestamp   |
+- `offers/{offerId}` — TEASER: `{ companyId, partnerCompanyName
+(denormalized), title (≤150), teaserText (≤250), offerType, status:
+draft|active|paused|ended|expired, availableFrom?, availableUntil?,
+createdAt, updatedAt }`. Authenticated read while active. Never contains
+  the description, terms, discount metadata, or code.
+- `offers/{offerId}/details/member` — member-gated while the offer is
+  active: description (≤2000), redemptionInstructions (≤1000), terms
+  (≤2000), percentageDiscount, fixedDiscountMinorUnits, currencyCode.
+  STILL no code.
+- `offers/{offerId}/secret/code` — fully backend-only: the discount code
+  (≤100) is served exclusively by `partners.showOfferCode` (member, active
+  offers only) and is never logged.
 
-Security: any authenticated user can read; admin-only write.
+All writes via the audited admin `partners.*` callables. Composite index:
+`companyId ASC, status ASC, createdAt DESC`.
 
-Composite index: `companyId ASC, active ASC, expiresAt ASC`.
+#### `users/{uid}/savedOffers/{offerId}` — saved offers
+
+Pure member bookmark, document ID == offerId, `{ offerId, savedAt }` —
+direct rules-gated writes (owner + active member).
+
+#### `partnerApplications/{applicationId}` — partner applications
+
+Contact data — never client-readable. `{ companyName, organizationNumber?,
+category, contactName, contactEmail, contactPhone?, websiteUrl?,
+proposedDescription?, proposedAddress?, message?, status:
+submitted|under_review|approved|rejected|withdrawn, submittedByUserId,
+reviewedByUserId?, reviewNote?, partnerCompanyId?, submittedAt, decidedAt?,
+updatedAt }`. Submitted via `partners.submitApplication` (duplicate-spam
+guard: one active application per user or contact email); reviewed via
+`partners.reviewApplication` — approval creates the draft company in the
+same transaction. Composite indexes: `(status, submittedAt)`,
+`(submittedByUserId, status)`, `(contactEmail, status)`.
+
+Composite index: `companyId ASC, status ASC, createdAt DESC` (see the offers section above).
 
 ---
 

@@ -28,6 +28,9 @@ import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminAdjust, adminReverse } from './points/adminPoints';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
+import { reviewApplication, submitApplication } from './partners/applications';
+import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
+import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -176,4 +179,26 @@ export const crownHunt = {
   updatePoint,
   activatePoint,
   pausePoint,
+};
+
+/**
+ * Partners domain (grouped export → deployed as `partners-…`).
+ *
+ * Partner companies, offers, and applications
+ * (contracts/functions/functions.json). Offers use a three-tier privacy
+ * split: teaser (authenticated read), member detail subdocument, and the
+ * backend-only discount code served exclusively by partners.showOfferCode.
+ * Applications are never client-readable. Saved offers are direct member
+ * bookmark writes under users/{uid}/savedOffers.
+ */
+export const partners = {
+  submitApplication,
+  reviewApplication,
+  createCompany,
+  updateCompany,
+  setCompanyStatus,
+  createOffer,
+  updateOffer,
+  setOfferStatus,
+  showOfferCode,
 };
