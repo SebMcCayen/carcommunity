@@ -112,7 +112,12 @@ export function isSpeedSafe(
   maxSpeedMps: number = MAX_CLAIM_SPEED_MPS,
 ): boolean {
   if (speedMps === null || speedMps === undefined) return true;
-  if (!Number.isFinite(speedMps) || speedMps < 0) return true; // treat invalid values as safe
+  // DELIBERATE deviation from the legacy port (which treated invalid values
+  // as safe): a negative or non-finite speed is client-controlled input and
+  // treating it as safe made the stopped-speed safety gate bypassable with
+  // e.g. speed = -1. Invalid values are now UNSAFE; the callable schema
+  // additionally rejects them as invalid-argument.
+  if (!Number.isFinite(speedMps) || speedMps < 0) return false;
   return speedMps <= maxSpeedMps;
 }
 

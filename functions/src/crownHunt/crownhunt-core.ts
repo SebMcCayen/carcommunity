@@ -132,7 +132,7 @@ const submitClaimInputSchema = z
     latitude: z.number(),
     longitude: z.number(),
     accuracyMeters: z.number().nonnegative().nullable().optional(),
-    speedMetersPerSecond: z.number().nullable().optional(),
+    speedMetersPerSecond: z.number().finite().nonnegative().nullable().optional(),
     recordedAt: z.string().datetime(),
     idempotencyKey: z.string().trim().min(1).max(128),
     /** Platform integrity placeholder — null until native integration. */

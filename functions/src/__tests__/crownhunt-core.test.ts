@@ -45,12 +45,16 @@ describe('crown-hunt-geo (verbatim legacy port)', () => {
     expect(isPositionFresh('not-a-date', nowMs)).toBe(false);
   });
 
-  it('allows claims only at walking pace; missing speed is safe', () => {
+  it('allows claims only at walking pace; missing speed is safe, invalid is NOT', () => {
     expect(isSpeedSafe(1.4)).toBe(true);
     expect(isSpeedSafe(1.5)).toBe(false);
     expect(isSpeedSafe(null)).toBe(true);
     expect(isSpeedSafe(undefined)).toBe(true);
-    expect(isSpeedSafe(-1)).toBe(true); // invalid values treated as safe
+    // Deliberate deviation from legacy: a negative/non-finite speed is
+    // client-controlled input and must not bypass the safety gate.
+    expect(isSpeedSafe(-1)).toBe(false);
+    expect(isSpeedSafe(Number.NaN)).toBe(false);
+    expect(isSpeedSafe(Number.POSITIVE_INFINITY)).toBe(false);
   });
 
   it('buffers the geofence conservatively by half the GPS accuracy', () => {
@@ -138,6 +142,10 @@ describe('crownhunt-core inputs and helpers', () => {
     expect(parseSubmitClaimInput({ ...validClaim, extra: 1 }).ok).toBe(false);
     expect(parseSubmitClaimInput({ ...validClaim, recordedAt: 'yesterday' }).ok).toBe(false);
     expect(parseSubmitClaimInput({ ...validClaim, pointId: 'a/b' }).ok).toBe(false);
+    // Negative speeds are rejected at the schema — the safety gate cannot be
+    // bypassed with invalid input.
+    expect(parseSubmitClaimInput({ ...validClaim, speedMetersPerSecond: -1 }).ok).toBe(false);
+    expect(parseSubmitClaimInput({ ...validClaim, speedMetersPerSecond: 0 }).ok).toBe(true);
   });
 
   it('validates point fields per the legacy limits', () => {
