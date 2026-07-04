@@ -34,11 +34,13 @@
         "callToActionType": {
           "anyOf": [{ "$ref": "#/$defs/billboardCtaType" }, { "type": "null" }]
         },
-        "callToActionValue": { "type": ["string", "null"], "maxLength": 500 },
+        "callToActionValue": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 },
         "safetyNote": { "type": ["string", "null"], "maxLength": 500 },
         "imagePath": {
           "type": ["string", "null"],
+          "minLength": 1,
           "maxLength": 500,
+          "pattern": "^billboardImages/[^/]+/[^/]+$",
           "description": "Cloud Storage path under billboardImages/{billboardId}/."
         },
         "status": { "$ref": "#/$defs/billboardStatus" },
