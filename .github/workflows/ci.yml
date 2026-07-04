@@ -112,7 +112,17 @@ jobs:
             -s contracts/schemas/user-profile.schema.json \
             -s contracts/schemas/live-location.schema.json \
             -s contracts/schemas/events.schema.json \
-            -s contracts/schemas/moderation.schema.json
+            -s contracts/schemas/event-chat.schema.json \
+            -s contracts/schemas/moderation.schema.json \
+            -s contracts/schemas/saved-drives.schema.json \
+            -s contracts/schemas/garage.schema.json \
+            -s contracts/schemas/badges.schema.json \
+            -s contracts/schemas/points.schema.json \
+            -s contracts/schemas/crown-hunt.schema.json \
+            -s contracts/schemas/partners.schema.json \
+            -s contracts/schemas/partner-insights.schema.json \
+            -s contracts/schemas/billboards.schema.json \
+            -s contracts/schemas/notifications.schema.json
 
       - name: Validate error codes registry
         run: |
