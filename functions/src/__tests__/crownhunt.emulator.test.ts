@@ -283,6 +283,52 @@ describe('crownHunt-submitClaim', () => {
     expect(balance).toBe(first.newBalance);
   });
 
+  it('rejects negative speeds as invalid input (safety gate not bypassable)', async () => {
+    const pointId = await createActivePoint();
+    await signInAs(member);
+    expect(
+      await callableErrorCode(
+        call('crownHunt-submitClaim', claimInput({ pointId, speedMetersPerSecond: -1 })),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('a same-key failure replay never overwrites an awarded claim record', async () => {
+    const pointId = await createActivePoint();
+    await signInAs(member);
+    const input = claimInput({ pointId });
+    expect(
+      ((await call('crownHunt-submitClaim', input)).data as { result: string }).result,
+    ).toBe('awarded');
+
+    // Same idempotency key, now from outside the geofence — must replay the
+    // stored awarded result WITH its award data, not record outside_geofence
+    // over it.
+    const replay = (
+      await call('crownHunt-submitClaim', { ...input, latitude: POINT_LAT + 0.01 })
+    ).data as { result: string; pointsAwarded: number | null; newBalance: number | null };
+    expect(replay.result).toBe('awarded');
+    expect(replay.pointsAwarded).toBe(25);
+    expect(replay.newBalance).not.toBeNull();
+
+    // Key reuse across a DIFFERENT point is a duplicate (legacy parity),
+    // never a leak of the other claim's result.
+    const otherPointId = await createActivePoint();
+    await signInAs(member);
+    const crossPoint = (
+      await call('crownHunt-submitClaim', { ...input, pointId: otherPointId })
+    ).data as { result: string };
+    expect(crossPoint.result).toBe('already_claimed');
+
+    const claims = await adminDb
+      .collection('crownHuntClaims')
+      .where('userId', '==', member.uid)
+      .where('pointId', '==', pointId)
+      .get();
+    expect(claims.size).toBe(1);
+    expect(claims.docs[0].data().result).toBe('awarded');
+  });
+
   it('enforces the once repeat rule on a fresh key', async () => {
     const pointId = await createActivePoint();
     await signInAs(member);
