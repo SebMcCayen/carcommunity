@@ -261,6 +261,38 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "partnerInsightsEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "partnerInsights",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "periodStart",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -31,6 +31,8 @@ import { submitClaim } from './crownHunt/submitClaim';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
+import { recordInteraction } from './partnerInsights/recordInteraction';
+import { aggregateDaily, cleanupExpired } from './partnerInsights/scheduled';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -201,4 +203,22 @@ export const partners = {
   updateOffer,
   setOfferStatus,
   showOfferCode,
+};
+
+/**
+ * Partner insights domain (grouped export → deployed as
+ * `partnerInsights-recordInteraction` plus the migration's first scheduled
+ * functions `partnerInsights-aggregateDaily` and
+ * `partnerInsights-cleanupExpired`).
+ *
+ * Privacy-critical (contracts/functions/functions.json): events carry only
+ * partner-scoped user hashes, anonymous_pass_by requires flag + explicit
+ * opt-in (silent opt-out), aggregates enforce the minimum-contributor
+ * threshold with zeroed below-threshold counts, and raw events expire
+ * after 7 days.
+ */
+export const partnerInsights = {
+  recordInteraction,
+  aggregateDaily,
+  cleanupExpired,
 };

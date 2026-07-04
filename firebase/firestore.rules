@@ -344,6 +344,22 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // partnerInsightsEvents / partnerInsights – privacy-critical (Phase 9j)
+    // Raw events hold partner-scoped user hashes and expire after 7 days;
+    // aggregates enforce the minimum-contributor threshold. NEITHER is ever
+    // client-readable — clients only write through the
+    // partnerInsights.recordInteraction callable, and partner-facing views
+    // arrive via the admin app (Admin SDK) in a later phase.
+    // -------------------------------------------------------------------------
+    match /partnerInsightsEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /partnerInsights/{aggregateId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // partnerApplications – contact data, never client-readable (Phase 9i)
     // Written via partners.submitApplication; reviewed via
     // partners.reviewApplication (admin). No client access at all.
