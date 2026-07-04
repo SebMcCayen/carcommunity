@@ -179,6 +179,8 @@ describe('live session lifecycle', () => {
     ).toBe('functions/failed-precondition');
 
     await call('live-startSession', { duration: '1h' });
+    // Restarting removed any previous marker immediately.
+    expect((await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).exists()).toBe(false);
     const stale = new Date(Date.now() - 90_000).toISOString();
     expect(
       await callableErrorCode(call('live-updatePosition', { coordinate: coordinate(stale) })),

@@ -137,12 +137,15 @@ export interface LiveSession {
   expiresAt: string;
   stoppedAt: string | null;
   stopReason?: LiveStopReason;
+  /** Denormalized at session start so position updates need no extra read. */
+  displayName: string | null;
 }
 
 export function buildSession(
   id: string,
   duration: LiveSessionDuration,
   now: Date,
+  displayName: string | null,
 ): LiveSession {
   const expires = new Date(
     now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000,
@@ -154,6 +157,7 @@ export function buildSession(
     startedAt: now.toISOString(),
     expiresAt: expires.toISOString(),
     stoppedAt: null,
+    displayName,
   };
 }
 
@@ -169,8 +173,7 @@ export function isSessionActive(
 /** liveLocation/{uid}/latest node — lean, marker-complete. */
 export function buildLatestNode(
   coordinate: LiveCoordinate,
-  session: Pick<LiveSession, 'id' | 'expiresAt'>,
-  displayName: string | null,
+  session: Pick<LiveSession, 'id' | 'expiresAt' | 'displayName'>,
 ): Record<string, unknown> {
   return {
     latitude: coordinate.latitude,
@@ -181,11 +184,20 @@ export function buildLatestNode(
     recordedAt: coordinate.recordedAt,
     sessionId: session.id,
     expiresAt: session.expiresAt,
-    displayName,
+    displayName: session.displayName,
   };
 }
 
-/** latest nodes with recordedAt before this instant are silent-stale. */
-export function latestStaleCutoff(now: Date): string {
-  return new Date(now.getTime() - LATEST_STALE_MINUTES * 60 * 1000).toISOString();
+/**
+ * Whether a marker's recordedAt is past the 15-minute silent-stale window.
+ * Numeric comparison (Date.parse) — ISO strings are not guaranteed to be
+ * canonical (offsets, missing milliseconds), so lexicographic ordering is
+ * not safe across producers.
+ */
+export function isLatestStale(recordedAt: string, now: Date): boolean {
+  const recorded = Date.parse(recordedAt);
+  return (
+    !Number.isNaN(recorded) &&
+    recorded < now.getTime() - LATEST_STALE_MINUTES * 60 * 1000
+  );
 }

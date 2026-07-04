@@ -62,14 +62,19 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
     throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
   }
 
+  const profile = await db.collection('users').doc(actor.uid).get();
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
+    (profile.data()?.displayName as string | undefined) ?? null,
   );
-  // Starting while a session is active RESTARTS it (fresh id + expiry);
-  // any previous marker is superseded on the next position update.
+  // Starting while a session is active RESTARTS it (fresh id + expiry).
+  // Any previous marker is removed immediately — it carries the OLD
+  // session's id/expiry and would render inconsistently until the first
+  // position update of the new session.
   await sessionRef(actor.uid).set(session);
+  await latestRef(actor.uid).remove();
 
   return { sessionId: session.id, status: 'active', expiresAt: session.expiresAt };
 });
@@ -98,10 +103,9 @@ export const updatePosition = onCall(
       throw new HttpsError('failed-precondition', 'No active live location session.');
     }
 
-    const profile = await db.collection('users').doc(actor.uid).get();
-    const displayName = (profile.data()?.displayName as string | undefined) ?? null;
-
-    await latestRef(actor.uid).set(buildLatestNode(parsed.input.coordinate, session!, displayName));
+    // displayName is denormalized on the session at start — no extra
+    // Firestore read on the (frequent) position-update hot path.
+    await latestRef(actor.uid).set(buildLatestNode(parsed.input.coordinate, session!));
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );

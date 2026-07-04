@@ -16,7 +16,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
 import { adminRtdb } from '../firebase';
-import { isSessionActive, latestStaleCutoff, type LiveSession } from './live-core';
+import { isLatestStale, isSessionActive, type LiveSession } from './live-core';
 
 interface LiveUserNode {
   session?: LiveSession;
@@ -28,7 +28,6 @@ export async function runLiveCleanup(
 ): Promise<{ expiredSessions: number; removedMarkers: number }> {
   const snapshot = await adminRtdb.ref('liveLocation').get();
   const users = (snapshot.val() ?? {}) as Record<string, LiveUserNode>;
-  const staleCutoff = latestStaleCutoff(now);
 
   let expiredSessions = 0;
   let removedMarkers = 0;
@@ -46,8 +45,8 @@ export async function runLiveCleanup(
       }
       continue;
     }
-    // ISO-8601 UTC strings compare chronologically.
-    if (node.latest?.recordedAt && node.latest.recordedAt < staleCutoff) {
+    // Numeric comparison — producers may emit non-canonical ISO strings.
+    if (node.latest?.recordedAt && isLatestStale(node.latest.recordedAt, now)) {
       updates[`${uid}/latest`] = null;
       removedMarkers += 1;
     }

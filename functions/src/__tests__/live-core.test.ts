@@ -8,8 +8,8 @@ import {
   buildLatestNode,
   buildSession,
   guardPositionFreshness,
+  isLatestStale,
   isSessionActive,
-  latestStaleCutoff,
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
@@ -56,7 +56,7 @@ describe('live-core freshness (contract 60s threshold)', () => {
 
 describe('live-core session lifecycle', () => {
   it('builds sessions with the chosen duration and detects expiry', () => {
-    const session = buildSession('s1', '2h', NOW);
+    const session = buildSession('s1', '2h', NOW, 'Seb');
     expect(session.status).toBe('active');
     expect(session.expiresAt).toBe('2026-07-05T14:00:00.000Z');
     expect(isSessionActive(session, NOW)).toBe(true);
@@ -66,11 +66,10 @@ describe('live-core session lifecycle', () => {
   });
 
   it('builds lean marker nodes with denormalized display data', () => {
-    const session = buildSession('s1', '1h', NOW);
+    const session = buildSession('s1', '1h', NOW, 'Seb');
     const node = buildLatestNode(
       { latitude: 59.33, longitude: 18.07, recordedAt: NOW.toISOString() },
       session,
-      'Seb',
     );
     expect(node).toEqual({
       latitude: 59.33,
@@ -85,7 +84,12 @@ describe('live-core session lifecycle', () => {
     });
   });
 
-  it('computes the 15-minute silent-stale cutoff', () => {
-    expect(latestStaleCutoff(NOW)).toBe('2026-07-05T11:45:00.000Z');
+  it('detects silent-stale markers numerically (non-canonical ISO safe)', () => {
+    expect(isLatestStale('2026-07-05T11:44:59.000Z', NOW)).toBe(true);
+    expect(isLatestStale('2026-07-05T11:45:01.000Z', NOW)).toBe(false);
+    // No milliseconds and offset forms still compare correctly.
+    expect(isLatestStale('2026-07-05T11:40:00Z', NOW)).toBe(true);
+    expect(isLatestStale('2026-07-05T13:40:00+02:00', NOW)).toBe(true);
+    expect(isLatestStale('garbage', NOW)).toBe(false);
   });
 });
