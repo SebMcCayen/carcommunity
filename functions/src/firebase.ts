@@ -12,6 +12,7 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import { getDatabase } from 'firebase-admin/database';
 
 if (getApps().length === 0) {
   initializeApp();
@@ -20,3 +21,4 @@ if (getApps().length === 0) {
 export const db = getFirestore();
 export const adminAuth = getAuth();
 export const adminStorage = getStorage();
+export const adminRtdb = getDatabase();

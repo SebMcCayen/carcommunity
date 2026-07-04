@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/crown-hunt.schema.json",
+  "title": "Kronjakt (Crown Hunt) contract",
+  "description": "Language-neutral Kronjakt shapes shared by iOS, Android, backend, and admin. crownHuntPoint mirrors `crownHuntPoints/{pointId}` and crownHuntClaim mirrors `crownHuntClaims/{claimId}` (docs/firebase-data-model.md). The backend is the sole authority for eligibility, claims, and Kronpoäng awards — clients never calculate or award points, claims are never automatic, and awards commit atomically with the claim record. Risk scores/reasons are backend-only and never appear in these client-facing shapes. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "crownHuntRepeatRule": {
+      "type": "string",
+      "enum": ["once", "daily", "weekly"]
+    },
+    "crownHuntPointStatus": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "ended"],
+      "description": "Only active points are visible to members. Activation is a safety-gated admin step."
+    },
+    "crownHuntClaimResult": {
+      "type": "string",
+      "enum": [
+        "awarded",
+        "already_claimed",
+        "outside_geofence",
+        "moving_too_fast",
+        "position_too_old",
+        "point_inactive",
+        "cooldown_active",
+        "daily_limit_reached",
+        "risk_review",
+        "feature_disabled",
+        "not_eligible"
+      ],
+      "description": "Eligibility failures are result codes with Swedish user messages, not errors (legacy parity)."
+    },
+    "crownHuntPoint": {
+      "type": "object",
+      "description": "Firestore `crownHuntPoints/{pointId}`. Active members read active points; all writes via admin crownHunt.* callables.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": ["string", "null"], "maxLength": 500 },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "geofenceRadiusMeters": { "type": "number", "minimum": 20, "maximum": 150 },
+        "rewardPoints": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "repeatRule": { "$ref": "#/$defs/crownHuntRepeatRule" },
+        "status": { "$ref": "#/$defs/crownHuntPointStatus" },
+        "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approvedByUserId": { "type": ["string", "null"] },
+        "createdByUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "title",
+        "description",
+        "latitude",
+        "longitude",
+        "geofenceRadiusMeters",
+        "rewardPoints",
+        "repeatRule",
+        "status",
+        "availableFrom",
+        "availableUntil",
+        "approvedAt",
+        "approvedByUserId",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "crownHuntClaim": {
+      "type": "object",
+      "description": "Firestore `crownHuntClaims/{claimId}` — every claim ATTEMPT. Document ID = SHA-256(userId ':' idempotencyKey). Owner-only member read; written only by crownHunt.submitClaim. Risk data lives in the backend-only crownHuntClaimRisk collection, never here.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "pointId": { "type": "string" },
+        "result": { "$ref": "#/$defs/crownHuntClaimResult" },
+        "claimedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "distanceMeters": { "type": ["number", "null"], "minimum": 0 },
+        "positionRecordedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "reportedSpeedMetersPerSecond": { "type": ["number", "null"] },
+        "pointsAwarded": { "type": ["integer", "null"], "minimum": 1 },
+        "balanceAfter": { "type": ["integer", "null"], "minimum": 0 },
+        "pointsLedgerEntryId": { "type": ["string", "null"] },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["userId", "pointId", "result", "claimedAt", "createdAt"],
+      "additionalProperties": false
+    },
+    "submitClaimRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.submitClaim (member-only). The position must be fresh (<=60 s) and the reported speed at or below walking pace (~1.4 m/s) — claiming requires being safely stopped. Distance is always computed server-side.",
+      "properties": {
+        "pointId": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "accuracyMeters": { "type": ["number", "null"], "minimum": 0 },
+        "speedMetersPerSecond": { "type": ["number", "null"] },
+        "recordedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Fresh per button press; retries of the same press reuse it and replay the stored result."
+        },
+        "platformIntegrityPassed": {
+          "type": ["boolean", "null"],
+          "description": "Play Integrity / App Attest placeholder — null until native integration."
+        }
+      },
+      "required": ["pointId", "latitude", "longitude", "recordedAt", "idempotencyKey"],
+      "additionalProperties": false
+    },
+    "submitClaimResponse": {
+      "type": "object",
+      "properties": {
+        "result": { "$ref": "#/$defs/crownHuntClaimResult" },
+        "pointsAwarded": { "type": ["integer", "null"] },
+        "newBalance": { "type": ["integer", "null"] },
+        "message": { "type": "string", "description": "Swedish user-facing message." }
+      },
+      "required": ["result", "pointsAwarded", "newBalance", "message"],
+      "additionalProperties": false
+    },
+    "createPointRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.createPoint (admin). Points are created as drafts.",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": ["string", "null"], "maxLength": 500 },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "geofenceRadiusMeters": { "type": "number", "minimum": 20, "maximum": 150 },
+        "rewardPoints": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "repeatRule": { "$ref": "#/$defs/crownHuntRepeatRule" },
+        "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": [
+        "title",
+        "latitude",
+        "longitude",
+        "geofenceRadiusMeters",
+        "rewardPoints",
+        "repeatRule"
+      ],
+      "additionalProperties": false
+    },
+    "activatePointRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.activatePoint (admin). Activation is a safety gate: the location must be explicitly confirmed safe and the approval note lands in the audit record.",
+      "properties": {
+        "pointId": { "type": "string", "minLength": 1 },
+        "safeLocationConfirmed": { "type": "boolean", "const": true },
+        "approvalNote": { "type": "string", "minLength": 3, "maxLength": 2000 }
+      },
+      "required": ["pointId", "safeLocationConfirmed", "approvalNote"],
+      "additionalProperties": false
+    }
+  }
+}

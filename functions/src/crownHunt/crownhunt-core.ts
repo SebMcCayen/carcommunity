@@ -1,0 +1,301 @@
+/**
+ * Kronjakt (Crown Hunt) domain — constants, pure logic, and builders
+ * (Phase 9h).
+ *
+ * Ports packages/shared/src/crown-hunt.ts constants and the pure parts of
+ * the legacy crown-hunt-service.ts to the Firestore model
+ * (docs/migration/backend-domain-mapping.md "Kronjakt claims → callable
+ * functions + Firestore transactions"):
+ *
+ * - `crownHuntPoints/{pointId}` — admin-managed reward points; members read
+ *   active points directly.
+ * - `crownHuntClaims/{claimId}` — every claim ATTEMPT is recorded; document
+ *   ID = the SHA-256-scoped idempotency key, so a duplicate submission is a
+ *   replay. Owner-readable history WITHOUT risk data.
+ * - `crownHuntClaimRisk/{claimId}` — risk score/reasons live in a separate
+ *   backend-only collection: rules cannot redact fields per-read, and risk
+ *   thresholds/reasons must never reach mobile clients (legacy rule).
+ * - Claims are never automatic; awards happen only when ALL validation
+ *   steps pass AND risk is acceptable, atomically with the claim record via
+ *   the 9g points-ledger transaction primitives.
+ *
+ * Pure module — no Firebase Admin SDK imports.
+ */
+
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
+import { isValidCoordinate } from './crown-hunt-geo';
+
+// ---------------------------------------------------------------------------
+// Constants (packages/shared/src/crown-hunt.ts + legacy service limits)
+// ---------------------------------------------------------------------------
+
+export const CROWN_HUNT_REPEAT_RULES = ['once', 'daily', 'weekly'] as const;
+export type CrownHuntRepeatRule = (typeof CROWN_HUNT_REPEAT_RULES)[number];
+
+export const CROWN_HUNT_POINT_STATUSES = ['draft', 'active', 'paused', 'ended'] as const;
+export type CrownHuntPointStatus = (typeof CROWN_HUNT_POINT_STATUSES)[number];
+
+export const CROWN_HUNT_CLAIM_RESULTS = [
+  'awarded',
+  'already_claimed',
+  'outside_geofence',
+  'moving_too_fast',
+  'position_too_old',
+  'point_inactive',
+  'cooldown_active',
+  'daily_limit_reached',
+  'risk_review',
+  'feature_disabled',
+  'not_eligible',
+] as const;
+export type CrownHuntClaimResult = (typeof CROWN_HUNT_CLAIM_RESULTS)[number];
+
+export const MIN_GEOFENCE_RADIUS_METERS = 20;
+export const MAX_GEOFENCE_RADIUS_METERS = 150;
+export const MIN_REWARD_POINTS = 1;
+export const MAX_REWARD_POINTS = 1_000;
+export const MAX_TITLE_LENGTH = 100;
+export const MAX_DESCRIPTION_LENGTH = 500;
+/** Walking pace (~5 km/h): claiming is only allowed when safely stopped. */
+export const MAX_CLAIM_SPEED_MPS = 1.4;
+export const MAX_POSITION_AGE_SECONDS = 60;
+
+/** Legacy service limits. */
+export const MAX_DAILY_SUCCESSFUL_CLAIMS = 10;
+
+/** Feature flag key + contract default (contracts/features/feature-flags.json). */
+export const CROWN_HUNT_FLAG_KEY = 'crownHunt';
+export const CROWN_HUNT_FLAG_DEFAULT = true;
+
+// ---------------------------------------------------------------------------
+// Swedish claim result messages (legacy getClaimMessage, verbatim)
+// ---------------------------------------------------------------------------
+
+export function getClaimMessage(result: CrownHuntClaimResult): string {
+  switch (result) {
+    case 'awarded':
+      return 'Belöningen har lagts till i ditt Kronpoäng-saldo.';
+    case 'already_claimed':
+      return 'Du har redan samlat in den här belöningen.';
+    case 'outside_geofence':
+      return 'Du är för långt från platsen.';
+    case 'moving_too_fast':
+      return 'Du rör dig för snabbt för att samla in. Stanna säkert innan du samlar in belöningen.';
+    case 'position_too_old':
+      return 'Din position är för gammal. Vänta en stund och försök igen.';
+    case 'point_inactive':
+      return 'Den här belöningspunkten är inte längre tillgänglig.';
+    case 'cooldown_active':
+      return 'Du behöver vänta lite innan du kan samla in igen.';
+    case 'daily_limit_reached':
+      return 'Du har nått dagens gräns för Kronjakt. Försök igen imorgon.';
+    case 'risk_review':
+      return 'Claimen behöver granskas och inga poäng har delats ut ännu.';
+    case 'feature_disabled':
+      return 'Kronjakt är för tillfället inte tillgängligt.';
+    case 'not_eligible':
+      return 'Du behöver ett aktivt Kronjakt-medlemskap för att delta.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency scoping (legacy scopeClaimIdempotencyKey, verbatim)
+// ---------------------------------------------------------------------------
+
+/**
+ * Scopes a client idempotency key to the user via SHA-256 — the hex digest
+ * is the crownHuntClaims document ID (Firestore-safe by construction).
+ */
+export function scopeClaimIdempotencyKey(userId: string, idempotencyKey: string): string {
+  return createHash('sha256').update(userId).update(':').update(idempotencyKey).digest('hex');
+}
+
+/** Ledger idempotency key for the claim's Kronpoäng award (Firestore-safe). */
+export function claimLedgerIdempotencyKey(scopedKey: string): string {
+  return `crown-hunt-claim_${scopedKey}`;
+}
+
+// ---------------------------------------------------------------------------
+// Inputs
+// ---------------------------------------------------------------------------
+
+const submitClaimInputSchema = z
+  .object({
+    pointId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .refine((id) => id !== '.' && id !== '..'),
+    latitude: z.number(),
+    longitude: z.number(),
+    accuracyMeters: z.number().nonnegative().nullable().optional(),
+    speedMetersPerSecond: z.number().nullable().optional(),
+    recordedAt: z.string().datetime(),
+    idempotencyKey: z.string().trim().min(1).max(128),
+    /** Platform integrity placeholder — null until native integration. */
+    platformIntegrityPassed: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+export type SubmitClaimInput = z.infer<typeof submitClaimInputSchema>;
+
+const pointFieldsSchema = z.object({
+  title: z.string().trim().min(1).max(MAX_TITLE_LENGTH),
+  description: z.string().max(MAX_DESCRIPTION_LENGTH).nullable().optional(),
+  latitude: z.number(),
+  longitude: z.number(),
+  geofenceRadiusMeters: z
+    .number()
+    .min(MIN_GEOFENCE_RADIUS_METERS)
+    .max(MAX_GEOFENCE_RADIUS_METERS),
+  rewardPoints: z.number().int().min(MIN_REWARD_POINTS).max(MAX_REWARD_POINTS),
+  repeatRule: z.enum(CROWN_HUNT_REPEAT_RULES),
+  availableFrom: z.string().datetime().nullable().optional(),
+  availableUntil: z.string().datetime().nullable().optional(),
+});
+
+const pointIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .refine((id) => id !== '.' && id !== '..');
+
+const createPointInputSchema = pointFieldsSchema.strict();
+
+const updatePointInputSchema = pointFieldsSchema
+  .partial()
+  .extend({ pointId: pointIdSchema })
+  .strict();
+
+const activatePointInputSchema = z
+  .object({
+    pointId: pointIdSchema,
+    /** Legacy safety gate: activation requires an explicit confirmation. */
+    safeLocationConfirmed: z.literal(true),
+    approvalNote: z.string().trim().min(3).max(2000),
+  })
+  .strict();
+
+const pausePointInputSchema = z
+  .object({
+    pointId: pointIdSchema,
+    reason: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
+export type CreatePointInput = z.infer<typeof createPointInputSchema>;
+export type UpdatePointInput = z.infer<typeof updatePointInputSchema>;
+export type ActivatePointInput = z.infer<typeof activatePointInputSchema>;
+export type PausePointInput = z.infer<typeof pausePointInputSchema>;
+
+export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
+
+function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
+  const result = schema.safeParse(data ?? {});
+  if (!result.success) {
+    return { ok: false, message: expected };
+  }
+  return { ok: true, input: result.data };
+}
+
+export function parseSubmitClaimInput(data: unknown): ParseResult<SubmitClaimInput> {
+  return parse(
+    submitClaimInputSchema,
+    data,
+    'Expected submitClaimRequest (contracts/schemas/crown-hunt.schema.json): { pointId, latitude, longitude, recordedAt, idempotencyKey, accuracyMeters?, speedMetersPerSecond?, platformIntegrityPassed? }.',
+  );
+}
+
+export function parseCreatePointInput(data: unknown): ParseResult<CreatePointInput> {
+  return parse(
+    createPointInputSchema,
+    data,
+    'Expected createPointRequest: { title, latitude, longitude, geofenceRadiusMeters (20-150), rewardPoints (1-1000), repeatRule, description?, availableFrom?, availableUntil? }.',
+  );
+}
+
+export function parseUpdatePointInput(data: unknown): ParseResult<UpdatePointInput> {
+  return parse(updatePointInputSchema, data, 'Expected { pointId } plus updatePointRequest fields.');
+}
+
+export function parseActivatePointInput(data: unknown): ParseResult<ActivatePointInput> {
+  return parse(
+    activatePointInputSchema,
+    data,
+    'Expected { pointId, safeLocationConfirmed: true, approvalNote (>=3 chars) }.',
+  );
+}
+
+export function parsePausePointInput(data: unknown): ParseResult<PausePointInput> {
+  return parse(pausePointInputSchema, data, 'Expected { pointId, reason? }.');
+}
+
+// ---------------------------------------------------------------------------
+// Guards (legacy validatePointFields extras + availability windows)
+// ---------------------------------------------------------------------------
+
+export type GuardResult =
+  | { ok: true }
+  | { ok: false; code: 'invalid-argument'; message: string };
+
+/** Coordinates + availability-window ordering (legacy validatePointFields). */
+export function guardPointFields(fields: {
+  latitude: number;
+  longitude: number;
+  availableFrom?: string | null;
+  availableUntil?: string | null;
+}): GuardResult {
+  if (!isValidCoordinate(fields.latitude, fields.longitude)) {
+    return {
+      ok: false,
+      code: 'invalid-argument',
+      message: 'Latitude must be between -90 and 90 and longitude between -180 and 180.',
+    };
+  }
+  if (fields.availableFrom && fields.availableUntil) {
+    if (new Date(fields.availableUntil) <= new Date(fields.availableFrom)) {
+      return {
+        ok: false,
+        code: 'invalid-argument',
+        message: 'availableUntil must be later than availableFrom.',
+      };
+    }
+  }
+  return { ok: true };
+}
+
+export function isPointCurrentlyAvailable(
+  point: { availableFrom?: Date | null; availableUntil?: Date | null },
+  now: Date,
+): boolean {
+  if (point.availableFrom && now < point.availableFrom) return false;
+  if (point.availableUntil && now > point.availableUntil) return false;
+  return true;
+}
+
+/** Start of the current UTC calendar day (legacy daily windows). */
+export function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+/** Start of the current UTC ISO week, Monday (legacy weekly windows). */
+export function startOfUtcWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setUTCDate(d.getUTCDate() + diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Window start for a repeat rule, or null when 'once' (all history counts). */
+export function repeatRuleWindowStart(rule: CrownHuntRepeatRule, now: Date): Date | null {
+  if (rule === 'daily') return startOfUtcDay(now);
+  if (rule === 'weekly') return startOfUtcWeek(now);
+  return null;
+}

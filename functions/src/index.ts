@@ -26,6 +26,8 @@ import { deleteDrive } from './drives/deleteDrive';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminAdjust, adminReverse } from './points/adminPoints';
+import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
+import { submitClaim } from './crownHunt/submitClaim';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -155,4 +157,23 @@ export const badges = {
 export const points = {
   adminAdjust,
   adminReverse,
+};
+
+/**
+ * Kronjakt domain (grouped export → deployed as `crownHunt-submitClaim`,
+ * `crownHunt-createPoint`, `crownHunt-updatePoint`, `crownHunt-activatePoint`,
+ * `crownHunt-pausePoint`).
+ *
+ * Crown Hunt geographic point hunt (contracts/functions/functions.json).
+ * submitClaim ports the full legacy anti-fraud validation chain; awards run
+ * atomically through the Kronpoäng ledger primitives. Point management is
+ * admin-only with a safety-gated activation step. Active points and own
+ * claim history are direct member reads.
+ */
+export const crownHunt = {
+  submitClaim,
+  createPoint,
+  updatePoint,
+  activatePoint,
+  pausePoint,
 };
