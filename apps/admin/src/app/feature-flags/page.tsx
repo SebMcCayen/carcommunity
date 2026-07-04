@@ -1,27 +1,68 @@
-import { getFeatureFlagRows } from '@/features/feature-flags';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  getFeatureFlagRows,
+  loadFeatureFlagRows,
+  setFeatureFlag,
+  type FeatureFlagRow,
+} from '@/features/feature-flags';
 import styles from './page.module.css';
 
 export default function FeatureFlagsPage() {
-  const rows = getFeatureFlagRows();
+  const [rows, setRows] = useState<FeatureFlagRow[]>(getFeatureFlagRows());
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setRows(await loadFeatureFlagRows());
+      setLoadError(null);
+    } catch (error) {
+      // Contract defaults stay on screen; flag the staleness.
+      setLoadError(error instanceof Error ? error.message : 'Kunde inte läsa flaggorna.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const toggle = useCallback(
+    async (row: FeatureFlagRow) => {
+      const reason = window.prompt(
+        `Ange orsak för att ${row.enabled ? 'stänga av' : 'aktivera'} "${row.key}" (audit-loggas):`,
+      );
+      if (reason === null) return; // cancelled
+      setBusyKey(row.key);
+      try {
+        await setFeatureFlag(row.key, !row.enabled, reason.trim() || undefined);
+        await refresh();
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'Ändringen misslyckades.');
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [refresh],
+  );
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Feature Flags</h1>
         <p className={styles.subtitle}>
-          Platform feature flags — values are currently static defaults served by the API.
+          Live values from <code>config/featureFlags</code>; unset flags show their contract
+          defaults. Every change is audit-logged server-side.
         </p>
       </div>
 
-      <div className={styles.notice} role="note">
-        <span aria-hidden="true">⚠</span>
-        <p>
-          <strong>Read-only view.</strong> Editing feature flags via the admin portal is not
-          implemented yet. Changes must be made in the API source until a management UI is added.
-          All flag values shown here are the static defaults returned by{' '}
-          <code>GET /v1/feature-flags</code>.
-        </p>
-      </div>
+      {loadError ? (
+        <div className={styles.notice} role="alert">
+          <span aria-hidden="true">⚠</span>
+          <p>
+            <strong>Kunde inte läsa/ändra flaggor:</strong> {loadError}
+          </p>
+        </div>
+      ) : null}
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Current flags</h2>
@@ -30,24 +71,36 @@ export default function FeatureFlagsPage() {
             <tr>
               <th scope="col">Flag key</th>
               <th scope="col">Status</th>
+              <th scope="col">Source</th>
               <th scope="col">Edit</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ key, enabled }) => (
-              <tr key={key}>
+            {rows.map((row) => (
+              <tr key={row.key}>
                 <td>
-                  <span className={styles.flagKey}>{key}</span>
+                  <span className={styles.flagKey}>{row.key}</span>
                 </td>
                 <td>
                   <span
-                    className={`${styles.badge} ${enabled ? styles.badgeEnabled : styles.badgeDisabled}`}
+                    className={`${styles.badge} ${row.enabled ? styles.badgeEnabled : styles.badgeDisabled}`}
                   >
-                    {enabled ? 'Enabled' : 'Disabled'}
+                    {row.enabled ? 'Enabled' : 'Disabled'}
                   </span>
                 </td>
+                <td>{row.overridden ? 'Firestore' : 'Contract default'}</td>
                 <td>
-                  <span className={styles.editNote}>Not available yet</span>
+                  <button
+                    type="button"
+                    onClick={() => void toggle(row)}
+                    disabled={busyKey !== null}
+                  >
+                    {busyKey === row.key
+                      ? 'Sparar…'
+                      : row.enabled
+                        ? 'Stäng av'
+                        : 'Aktivera'}
+                  </button>
                 </td>
               </tr>
             ))}
