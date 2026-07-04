@@ -9,8 +9,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Placeholder Compose UI test proving the instrumented test target is wired
- * (Phase 5). Runs on an emulator/device — not part of PR validation CI.
+ * Compose UI smoke test (Phase 5 scaffold; CI-enforced since Phase 17 via
+ * the instrumented-tests job in validate-android.yml, which runs
+ * connectedDebugAndroidTest on an emulator for every PR).
  */
 @RunWith(AndroidJUnit4::class)
 class AppRootTest {
