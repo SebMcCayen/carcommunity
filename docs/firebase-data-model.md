@@ -488,6 +488,21 @@ ASC` (rate-limit window query; admin cross-event listing).
 
 ---
 
+### `events/{eventId}/groupDriveParticipants/{uid}` — group drive roster (Phase 11)
+
+Document ID = participant UID. `{ displayName (denormalized), status:
+joined|on_the_way|arrived|left, joinedAt, leftAt?, updatedAt }`
+(contracts/schemas/group-drive.schema.json).
+
+Security: member-readable for published events (owner and admins always);
+ALL writes via the `groupDrive.*` callables — join requires a published,
+not-ended event and an RSVP of going|maybe (legacy
+canJoinEventGroupDrive); rejoin resets `joinedAt`; leave is idempotent
+and never stops the live location session. Participant map markers are
+the live-location domain (`/liveLocation/{uid}/latest`).
+
+---
+
 ### `moderationReports` — abuse and content reports
 
 Document ID: auto-generated.
@@ -604,11 +619,17 @@ Document ID: Firebase UID. **Written by Cloud Functions only after receipt verif
 | `userId`      | `string`     | Firebase UID                               |
 | `entitlement` | `string`     | Internal name, e.g. `'member_monthly'`     |
 | `status`      | `string`     | `'active'` \| `'expired'` \| `'cancelled'` |
-| `platform`    | `string`     | `'ios'` \| `'android'`                     |
+| `platform`    | `string`     | `'apple'` \| `'google'` \| `'manual'` (audited admin grant) |
+| `purchaseTokenHash` | `string?` | SHA-256 of the purchase token; raw tokens never stored |
 | `expiresAt`   | `Timestamp?` |                                            |
 | `updatedAt`   | `Timestamp`  | Server timestamp                           |
 
-Security: owner can read their own subscription; no client writes; admin-only full access.
+Security: owner can read their own subscription; NO client writes — not
+even admin clients (Phase 11 tightening): `subscription.verify` (fails
+closed until store credentials are configured at cutover) and the audited
+`admin.grantEntitlement` are the only writers, applying the record,
+`users/{uid}.activeMember`, and the `activeMember` claim with Phase 8
+fail-safe privilege ordering.
 
 ---
 

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/group-drive.schema.json",
+  "title": "Group driving contract",
+  "description": "Language-neutral group-drive shapes shared by iOS, Android, backend, and admin. groupDriveParticipant mirrors the Firestore `events/{eventId}/groupDriveParticipants/{uid}` document (document ID = participant UID): member-readable for published events, writes exclusively via the groupDrive.* callables (join requires a published, not-ended event and an RSVP of going or maybe). Leaving never stops the live location session; participant map markers are the live-location domain (`liveLocation/{uid}/latest`). Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "groupDriveParticipantStatus": {
+      "type": "string",
+      "enum": ["joined", "on_the_way", "arrived", "left"]
+    },
+    "groupDriveUpdatableStatus": {
+      "type": "string",
+      "enum": ["joined", "on_the_way", "arrived"],
+      "description": "left is set only by groupDrive.leave."
+    },
+    "groupDriveParticipant": {
+      "type": "object",
+      "description": "Firestore `events/{eventId}/groupDriveParticipants/{uid}`.",
+      "properties": {
+        "displayName": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/groupDriveParticipantStatus" },
+        "joinedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "leftAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["displayName", "status", "joinedAt", "leftAt", "updatedAt"],
+      "additionalProperties": false
+    },
+    "joinGroupDriveRequest": {
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["eventId"],
+      "additionalProperties": false
+    },
+    "updateDriveStatusRequest": {
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "status": { "$ref": "#/$defs/groupDriveUpdatableStatus" }
+      },
+      "required": ["eventId", "status"],
+      "additionalProperties": false
+    },
+    "leaveGroupDriveRequest": {
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["eventId"],
+      "additionalProperties": false
+    }
+  }
+}

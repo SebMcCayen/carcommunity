@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/subscription.schema.json",
+  "title": "Subscription contract",
+  "description": "Language-neutral subscription/entitlement shapes shared by iOS, Android, backend, and admin. subscriptionRecord mirrors the Firestore `subscriptions/{uid}` document: owner-readable, written by Cloud Functions ONLY after verification (or an audited admin manual grant) — no client writes, not even admin clients. Raw purchase tokens are never stored, logged, or returned; only the SHA-256 hash. Suspension and deletion always override entitlement. subscription.verify fails closed until store credentials are configured (end-of-MVP setup). Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "subscriptionPlatform": {
+      "type": "string",
+      "enum": ["apple", "google", "manual"],
+      "description": "manual = audited admin grant (admin.grantEntitlement), the operational path until store verification is wired."
+    },
+    "subscriptionStatus": {
+      "type": "string",
+      "enum": ["inactive", "active", "grace_period", "expired", "revoked", "cancelled"],
+      "description": "active and grace_period grant access (legacy isSubscriptionActiveStatus)."
+    },
+    "subscriptionEntitlement": {
+      "type": "string",
+      "enum": ["none", "member_monthly"]
+    },
+    "subscriptionRecord": {
+      "type": "object",
+      "description": "Firestore `subscriptions/{uid}`. Owner read; backend-only writes.",
+      "properties": {
+        "userId": { "$ref": "common.schema.json#/$defs/uid" },
+        "platform": { "$ref": "#/$defs/subscriptionPlatform" },
+        "status": { "$ref": "#/$defs/subscriptionStatus" },
+        "entitlement": { "$ref": "#/$defs/subscriptionEntitlement" },
+        "purchaseTokenHash": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 of the purchase token; null for manual grants. The raw token never exists in storage."
+        },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "userId",
+        "platform",
+        "status",
+        "entitlement",
+        "purchaseTokenHash",
+        "expiresAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "verifySubscriptionRequest": {
+      "type": "object",
+      "description": "Input for subscription.verify. Fails closed (failed-precondition) until the platform's provider is configured.",
+      "properties": {
+        "platform": { "type": "string", "enum": ["apple", "google"] },
+        "purchaseToken": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      },
+      "required": ["platform", "purchaseToken"],
+      "additionalProperties": false
+    },
+    "grantEntitlementRequest": {
+      "type": "object",
+      "description": "Input for admin.grantEntitlement (audited manual grant/revoke).",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "entitlement": { "$ref": "#/$defs/subscriptionEntitlement" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": ["targetUid", "entitlement", "reason"],
+      "additionalProperties": false
+    }
+  }
+}
