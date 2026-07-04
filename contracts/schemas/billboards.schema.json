@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/billboards.schema.json",
+  "title": "Digital billboards contract",
+  "description": "Language-neutral sponsored-billboard shapes shared by iOS, Android, backend, and admin. billboard mirrors the Firestore `billboards/{billboardId}` document (docs/firebase-data-model.md): authenticated-readable while active, admin-managed lifecycle, and an activation SAFETY GATE requiring all six safety confirmations plus an approval reason with an active sponsoring partner. Billboard taps map onto partner-insights interaction types and flow through the privacy pipeline (partner-scoped hashes, per-day dedupe, 7-day TTL). Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "billboardStatus": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "ended"]
+    },
+    "billboardPlacementType": {
+      "type": "string",
+      "enum": ["map_billboard", "event_area", "partner_area", "other_approved_location"]
+    },
+    "billboardInteractionType": {
+      "type": "string",
+      "enum": ["impression", "open", "navigate", "phone", "website", "offer_view"],
+      "description": "Mapped server-side onto partner-insights types (impression → map_view, open → profile_view, rest 1:1)."
+    },
+    "billboardCtaType": {
+      "type": "string",
+      "enum": ["navigate", "phone", "website", "offer_view", "partner_profile"]
+    },
+    "billboard": {
+      "type": "object",
+      "description": "Firestore `billboards/{billboardId}`. Authenticated read while active; all writes via admin billboards.* callables.",
+      "properties": {
+        "partnerCompanyId": { "type": "string" },
+        "headline": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "placementType": { "$ref": "#/$defs/billboardPlacementType" },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "callToActionType": {
+          "anyOf": [{ "$ref": "#/$defs/billboardCtaType" }, { "type": "null" }]
+        },
+        "callToActionValue": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 },
+        "safetyNote": { "type": ["string", "null"], "maxLength": 500 },
+        "imagePath": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^billboardImages/[^/]+/[^/]+$",
+          "description": "Cloud Storage path under billboardImages/{billboardId}/."
+        },
+        "status": { "$ref": "#/$defs/billboardStatus" },
+        "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approvedByUserId": { "type": ["string", "null"] },
+        "createdByUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "partnerCompanyId",
+        "headline",
+        "message",
+        "placementType",
+        "latitude",
+        "longitude",
+        "callToActionType",
+        "callToActionValue",
+        "safetyNote",
+        "imagePath",
+        "status",
+        "availableFrom",
+        "availableUntil",
+        "approvedAt",
+        "approvedByUserId",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "activateBillboardRequest": {
+      "type": "object",
+      "description": "Input for billboards.activate (admin). ALL six safety confirmations must be literally true, and the approval reason lands in the audit record.",
+      "properties": {
+        "billboardId": { "type": "string", "minLength": 1 },
+        "notBusinessLocationConfirmed": { "type": "boolean", "const": true },
+        "notRoadLaneConfirmed": { "type": "boolean", "const": true },
+        "notRoadSignConfirmed": { "type": "boolean", "const": true },
+        "notObstructingMapConfirmed": { "type": "boolean", "const": true },
+        "markedAsAdvertisingConfirmed": { "type": "boolean", "const": true },
+        "suitableForMapConfirmed": { "type": "boolean", "const": true },
+        "approvalReason": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": [
+        "billboardId",
+        "notBusinessLocationConfirmed",
+        "notRoadLaneConfirmed",
+        "notRoadSignConfirmed",
+        "notObstructingMapConfirmed",
+        "markedAsAdvertisingConfirmed",
+        "suitableForMapConfirmed",
+        "approvalReason"
+      ],
+      "additionalProperties": false
+    },
+    "recordBillboardInteractionRequest": {
+      "type": "object",
+      "description": "Input for billboards.recordInteraction (any active user; active billboards only; gated by the digitalBillboards flag). Analytics failure never blocks the action — recorded=false covers dedupes and failures alike.",
+      "properties": {
+        "billboardId": { "type": "string", "minLength": 1 },
+        "interactionType": { "$ref": "#/$defs/billboardInteractionType" }
+      },
+      "required": ["billboardId", "interactionType"],
+      "additionalProperties": false
+    }
+  }
+}

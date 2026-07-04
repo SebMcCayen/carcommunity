@@ -31,6 +31,7 @@ import {
   interactionEventId,
   parseRecordInteractionInput,
   startOfUtcDay,
+  type PartnerInteractionType,
 } from './insights-core';
 
 export interface RecordInteractionResponse {
@@ -78,55 +79,72 @@ export const recordInteraction = onCall(
       }
     }
 
-    // Partner must exist and be active (legacy parity).
-    const companySnap = await db.collection('companies').doc(input.companyId).get();
-    if (!companySnap.exists) {
-      throw new HttpsError('not-found', 'Partner company not found.');
-    }
-    if (companySnap.data()!.status !== 'active') {
-      throw new HttpsError('failed-precondition', 'Partner company is not active.');
-    }
-
-    // A related offer must belong to the same partner (legacy parity).
-    if (input.relatedOfferId) {
-      const offerSnap = await db.collection('offers').doc(input.relatedOfferId).get();
-      if (!offerSnap.exists) {
-        throw new HttpsError('not-found', 'Related offer not found.');
-      }
-      if (offerSnap.data()!.companyId !== input.companyId) {
-        throw new HttpsError(
-          'invalid-argument',
-          'Related offer does not belong to the selected partner.',
-        );
-      }
-    }
-
-    const now = new Date();
-    const aggregationDate = startOfUtcDay(now);
-    const userReferenceHash = buildScopedHash(input.companyId, actor.uid);
-    const eventRef = db
-      .collection('partnerInsightsEvents')
-      .doc(interactionEventId(input.companyId, input.interactionType, aggregationDate, userReferenceHash));
-
-    // Per-day dedupe: the deterministic ID makes the create transactional.
-    const recorded = await db.runTransaction(async (tx) => {
-      const existing = await tx.get(eventRef);
-      if (existing.exists) {
-        return false;
-      }
-      tx.set(eventRef, {
-        companyId: input.companyId,
-        interactionType: input.interactionType,
-        // Raw UID is never stored — scoped hash only.
-        userReferenceHash,
-        relatedOfferId: input.relatedOfferId ?? null,
-        occurredAt: Timestamp.fromDate(now),
-        aggregationDate: Timestamp.fromDate(aggregationDate),
-        expiresAt: Timestamp.fromDate(eventExpiry(now)),
-      });
-      return true;
-    });
-
-    return { recorded };
+    return { recorded: await writeInteractionEvent(actor.uid, input) };
   },
 );
+
+/**
+ * Validates the partner/offer and writes one deduped insight event.
+ * Shared with the billboards domain (billboards.recordInteraction maps
+ * billboard taps to partner interaction types). Gates that depend on the
+ * interaction origin (pass-by flag, opt-in) belong to the CALLERS — this
+ * writer enforces only origin-independent invariants: active partner,
+ * same-partner offer, scoped hash, per-day dedupe, TTL.
+ */
+export async function writeInteractionEvent(
+  uid: string,
+  input: {
+    companyId: string;
+    interactionType: PartnerInteractionType;
+    relatedOfferId?: string | null;
+  },
+): Promise<boolean> {
+  // Partner must exist and be active (legacy parity).
+  const companySnap = await db.collection('companies').doc(input.companyId).get();
+  if (!companySnap.exists) {
+    throw new HttpsError('not-found', 'Partner company not found.');
+  }
+  if (companySnap.data()!.status !== 'active') {
+    throw new HttpsError('failed-precondition', 'Partner company is not active.');
+  }
+
+  // A related offer must belong to the same partner (legacy parity).
+  if (input.relatedOfferId) {
+    const offerSnap = await db.collection('offers').doc(input.relatedOfferId).get();
+    if (!offerSnap.exists) {
+      throw new HttpsError('not-found', 'Related offer not found.');
+    }
+    if (offerSnap.data()!.companyId !== input.companyId) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Related offer does not belong to the selected partner.',
+      );
+    }
+  }
+
+  const now = new Date();
+  const aggregationDate = startOfUtcDay(now);
+  const userReferenceHash = buildScopedHash(input.companyId, uid);
+  const eventRef = db
+    .collection('partnerInsightsEvents')
+    .doc(interactionEventId(input.companyId, input.interactionType, aggregationDate, userReferenceHash));
+
+  // Per-day dedupe: the deterministic ID makes the create transactional.
+  return db.runTransaction(async (tx) => {
+    const existing = await tx.get(eventRef);
+    if (existing.exists) {
+      return false;
+    }
+    tx.set(eventRef, {
+      companyId: input.companyId,
+      interactionType: input.interactionType,
+      // Raw UID is never stored — scoped hash only.
+      userReferenceHash,
+      relatedOfferId: input.relatedOfferId ?? null,
+      occurredAt: Timestamp.fromDate(now),
+      aggregationDate: Timestamp.fromDate(aggregationDate),
+      expiresAt: Timestamp.fromDate(eventExpiry(now)),
+    });
+    return true;
+  });
+}
