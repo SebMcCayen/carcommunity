@@ -65,6 +65,31 @@ function respond(result: CrownHuntClaimResult): SubmitClaimResponse {
 }
 
 /**
+ * Replays a stored claim for the same idempotency key — the single source of
+ * truth for BOTH the step-4 duplicate guard and the recordAttempt race
+ * guard: a key reused across a different pointId is treated as a duplicate
+ * (legacy parity), and an awarded replay carries the stored award data.
+ */
+function replayStoredClaim(
+  existing: FirebaseFirestore.DocumentData,
+  requestedPointId: string,
+): SubmitClaimResponse {
+  if (existing.pointId !== requestedPointId) {
+    return respond('already_claimed');
+  }
+  const result = existing.result as CrownHuntClaimResult;
+  if (result === 'awarded') {
+    return {
+      result,
+      pointsAwarded: (existing.pointsAwarded as number | null) ?? null,
+      newBalance: (existing.balanceAfter as number | null) ?? null,
+      message: getClaimMessage(result),
+    };
+  }
+  return respond(result);
+}
+
+/**
  * Reads the crownHunt feature flag from the Firestore config document
  * (config/featureFlags — the feature-flags domain's target home), falling
  * back to the contract default when unset.
@@ -124,12 +149,12 @@ async function recordAttempt(
   scopedKey: string,
   data: Record<string, unknown>,
   riskData?: Record<string, unknown>,
-): Promise<CrownHuntClaimResult | null> {
+): Promise<FirebaseFirestore.DocumentData | null> {
   const claimRef = db.collection('crownHuntClaims').doc(scopedKey);
   return db.runTransaction(async (tx) => {
     const existing = await tx.get(claimRef);
     if (existing.exists) {
-      return existing.data()!.result as CrownHuntClaimResult;
+      return existing.data()!;
     }
     tx.set(claimRef, { ...data, createdAt: FieldValue.serverTimestamp() });
     if (riskData) {
@@ -180,21 +205,7 @@ export const submitClaim = onCall(
     // 4. Idempotency replay (duplicate submission guard).
     const existingClaim = await claimsRef.doc(scopedKey).get();
     if (existingClaim.exists) {
-      const existing = existingClaim.data()!;
-      if (existing.pointId !== input.pointId) {
-        // Key reuse across different points — treat as duplicate (legacy).
-        return respond('already_claimed');
-      }
-      const result = existing.result as CrownHuntClaimResult;
-      if (result === 'awarded') {
-        return {
-          result,
-          pointsAwarded: (existing.pointsAwarded as number | null) ?? null,
-          newBalance: (existing.balanceAfter as number | null) ?? null,
-          message: getClaimMessage(result),
-        };
-      }
-      return respond(result);
+      return replayStoredClaim(existingClaim.data()!, input.pointId);
     }
 
     // 5. Load the point; must be active and inside its availability window.
@@ -216,7 +227,7 @@ export const submitClaim = onCall(
         claimedAt: Timestamp.fromDate(now),
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('point_inactive');
     }
@@ -238,7 +249,7 @@ export const submitClaim = onCall(
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('position_too_old');
     }
@@ -263,7 +274,7 @@ export const submitClaim = onCall(
         reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('outside_geofence');
     }
@@ -280,7 +291,7 @@ export const submitClaim = onCall(
         reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('moving_too_fast');
     }
@@ -304,7 +315,7 @@ export const submitClaim = onCall(
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('already_claimed');
     }
@@ -326,7 +337,7 @@ export const submitClaim = onCall(
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
       });
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('daily_limit_reached');
     }
@@ -395,7 +406,7 @@ export const submitClaim = onCall(
         },
       );
       if (existing) {
-        return respond(existing);
+        return replayStoredClaim(existing, input.pointId);
       }
       return respond('risk_review');
     }

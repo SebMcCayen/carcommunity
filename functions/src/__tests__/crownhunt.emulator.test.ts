@@ -302,11 +302,23 @@ describe('crownHunt-submitClaim', () => {
     ).toBe('awarded');
 
     // Same idempotency key, now from outside the geofence — must replay the
-    // stored awarded result, not record outside_geofence over it.
+    // stored awarded result WITH its award data, not record outside_geofence
+    // over it.
     const replay = (
       await call('crownHunt-submitClaim', { ...input, latitude: POINT_LAT + 0.01 })
-    ).data as { result: string };
+    ).data as { result: string; pointsAwarded: number | null; newBalance: number | null };
     expect(replay.result).toBe('awarded');
+    expect(replay.pointsAwarded).toBe(25);
+    expect(replay.newBalance).not.toBeNull();
+
+    // Key reuse across a DIFFERENT point is a duplicate (legacy parity),
+    // never a leak of the other claim's result.
+    const otherPointId = await createActivePoint();
+    await signInAs(member);
+    const crossPoint = (
+      await call('crownHunt-submitClaim', { ...input, pointId: otherPointId })
+    ).data as { result: string };
+    expect(crossPoint.result).toBe('already_claimed');
 
     const claims = await adminDb
       .collection('crownHuntClaims')
