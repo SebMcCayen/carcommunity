@@ -263,7 +263,7 @@ guard: one active application per user or contact email); reviewed via
 same transaction. Composite indexes: `(status, submittedAt)`,
 `(submittedByUserId, status)`, `(contactEmail, status)`.
 
-Composite index: `companyId ASC, active ASC, expiresAt ASC`.
+Composite index: `companyId ASC, status ASC, createdAt DESC` (see the offers section above).
 
 ---
 

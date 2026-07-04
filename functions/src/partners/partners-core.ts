@@ -249,16 +249,30 @@ export type GuardResult =
   | { ok: true; nextStatus: PartnerCompanyStatus }
   | { ok: false; code: 'failed-precondition'; message: string };
 
-/** draft → active ⇄ paused → ended; ended is terminal (legacy parity). */
+/** Audit-friendly past tense for a status action ("end" → "ended"). */
+export function statusActionPastTense(action: StatusAction): string {
+  return action === 'end' ? 'ended' : `${action}d`;
+}
+
+const TRANSITIONABLE_STATUSES: ReadonlySet<string> = new Set(['draft', 'active', 'paused']);
+
+/**
+ * draft → active ⇄ paused → ended; ended/expired are terminal (legacy
+ * parity). Unknown/corrupted statuses are rejected too — a transition must
+ * never silently "heal" bad data into a live record.
+ */
 export function guardStatusTransition(
   current: string,
   action: StatusAction,
 ): GuardResult {
-  if (current === 'ended' || current === 'expired') {
+  if (!TRANSITIONABLE_STATUSES.has(current)) {
     return {
       ok: false,
       code: 'failed-precondition',
-      message: 'Ended or expired records cannot change status.',
+      message:
+        current === 'ended' || current === 'expired'
+          ? 'Ended or expired records cannot change status.'
+          : `Cannot change status of a record in unrecognized status "${current}".`,
     };
   }
   if (action === 'activate') return { ok: true, nextStatus: 'active' };

@@ -187,16 +187,26 @@
       "required": ["applicationId", "action"],
       "additionalProperties": false
     },
-    "setStatusRequest": {
+    "setCompanyStatusRequest": {
       "type": "object",
-      "description": "Input for partners.setCompanyStatus / partners.setOfferStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended/expired are terminal.",
+      "description": "Input for partners.setCompanyStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended is terminal.",
       "properties": {
-        "companyId": { "type": "string" },
-        "offerId": { "type": "string" },
+        "companyId": { "type": "string", "minLength": 1 },
         "action": { "type": "string", "enum": ["activate", "pause", "end"] },
         "reason": { "type": "string", "maxLength": 2000 }
       },
-      "required": ["action"],
+      "required": ["companyId", "action"],
+      "additionalProperties": false
+    },
+    "setOfferStatusRequest": {
+      "type": "object",
+      "description": "Input for partners.setOfferStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended/expired are terminal.",
+      "properties": {
+        "offerId": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "enum": ["activate", "pause", "end"] },
+        "reason": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["offerId", "action"],
       "additionalProperties": false
     }
   }

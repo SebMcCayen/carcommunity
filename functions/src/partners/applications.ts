@@ -54,30 +54,36 @@ export const submitApplication = onCall(
     const applicationsRef = db.collection('partnerApplications');
 
     // Duplicate-spam guard (legacy): one active application per user or
-    // contact email.
-    const [byUser, byEmail] = await Promise.all([
-      applicationsRef
-        .where('submittedByUserId', '==', actor.uid)
-        .where('status', 'in', ['submitted', 'under_review'])
-        .limit(1)
-        .get(),
-      applicationsRef
-        .where('contactEmail', '==', input.contactEmail.toLowerCase())
-        .where('status', 'in', ['submitted', 'under_review'])
-        .limit(1)
-        .get(),
-    ]);
-    if (!byUser.empty || !byEmail.empty) {
-      throw new HttpsError(
-        'already-exists',
-        'An application for this user or contact email is already under review.',
-      );
-    }
-
+    // contact email. Guard queries + write run in ONE transaction: a
+    // concurrent submission that would change either query result forces a
+    // retry, so two racing submitters cannot both pass the guard.
     const applicationRef = applicationsRef.doc();
-    await applicationRef.set(
-      buildApplicationDocument(input, actor.uid, () => FieldValue.serverTimestamp()),
-    );
+    await db.runTransaction(async (tx) => {
+      const [byUser, byEmail] = await Promise.all([
+        tx.get(
+          applicationsRef
+            .where('submittedByUserId', '==', actor.uid)
+            .where('status', 'in', ['submitted', 'under_review'])
+            .limit(1),
+        ),
+        tx.get(
+          applicationsRef
+            .where('contactEmail', '==', input.contactEmail.toLowerCase())
+            .where('status', 'in', ['submitted', 'under_review'])
+            .limit(1),
+        ),
+      ]);
+      if (!byUser.empty || !byEmail.empty) {
+        throw new HttpsError(
+          'already-exists',
+          'An application for this user or contact email is already under review.',
+        );
+      }
+      tx.set(
+        applicationRef,
+        buildApplicationDocument(input, actor.uid, () => FieldValue.serverTimestamp()),
+      );
+    });
 
     return { applicationId: applicationRef.id, status: 'submitted' };
   },

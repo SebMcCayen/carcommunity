@@ -11,6 +11,7 @@ import {
   guardAvailabilityWindow,
   guardEditableStatus,
   guardStatusTransition,
+  statusActionPastTense,
   parseCreateCompanyInput,
   parseCreateOfferInput,
   parseSubmitApplicationInput,
@@ -73,6 +74,15 @@ describe('partners-core lifecycle guards', () => {
     expect(guardStatusTransition('paused', 'end')).toEqual({ ok: true, nextStatus: 'ended' });
     expect(guardStatusTransition('ended', 'activate').ok).toBe(false);
     expect(guardStatusTransition('expired', 'activate').ok).toBe(false);
+    // Unknown/corrupted statuses never silently heal into live records.
+    expect(guardStatusTransition('foo', 'activate').ok).toBe(false);
+    expect(guardStatusTransition('', 'end').ok).toBe(false);
+  });
+
+  it('produces grammatical audit fallbacks ("end" → "ended")', () => {
+    expect(statusActionPastTense('activate')).toBe('activated');
+    expect(statusActionPastTense('pause')).toBe('paused');
+    expect(statusActionPastTense('end')).toBe('ended');
   });
 
   it('allows edits only in draft or paused', () => {
