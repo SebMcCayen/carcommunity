@@ -341,6 +341,51 @@
       "source": "docs/migration/backend-domain-mapping.md (Partner insights rows + scheduled jobs)"
     },
     {
+      "name": "billboards.create",
+      "domain": "billboards",
+      "description": "Creates a draft sponsored billboard for an existing partner (headline <=100, message <=300, placement enum, coordinates, optional CTA pair + safety note + image under billboardImages/{billboardId}/). Audited. Deployed via grouped export as billboards-create (functions/src/billboards/manageBillboard.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
+      "name": "billboards.update",
+      "domain": "billboards",
+      "description": "Edits a draft or paused billboard (active/ended immutable); merged CTA pair and availability window re-validated. Audited with changedFields. Deployed via grouped export as billboards-update (functions/src/billboards/manageBillboard.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
+      "name": "billboards.activate",
+      "domain": "billboards",
+      "description": "SAFETY GATE: requires ALL six safety confirmations (not a business location, not a road lane, not a road sign, not obstructing the map, marked as advertising, suitable for the map) plus an approval reason recorded in the audit entry; the sponsoring partner must be ACTIVE; stamps approvedAt/approvedByUserId. Deployed via grouped export as billboards-activate (functions/src/billboards/manageBillboard.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
+      "name": "billboards.setStatus",
+      "domain": "billboards",
+      "description": "Pauses or ends a billboard (ended is terminal). Audited. Deployed via grouped export as billboards-setStatus (functions/src/billboards/manageBillboard.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
+      "name": "billboards.recordInteraction",
+      "domain": "billboards",
+      "description": "Records a billboard tap (impression/open/navigate/phone/website/offer_view), mapped onto partner-insights interaction types and written through the 9j privacy pipeline (scoped hashes, per-day dedupe, 7-day TTL). Gated by the digitalBillboards flag; analytics failure never blocks the action. Deployed via grouped export as billboards-recordInteraction (functions/src/billboards/manageBillboard.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",

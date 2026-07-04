@@ -100,6 +100,16 @@ service firebase.storage {
     }
 
     // -------------------------------------------------------------------------
+    // Billboard images (admin-managed):  billboardImages/{billboardId}/{imageId}
+    // Any authenticated user may read (billboards are public while active).
+    // Only admins may write (Phase 9k).
+    // -------------------------------------------------------------------------
+    match /billboardImages/{billboardId}/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
     // Offer images (admin-managed):  offerImages/{companyId}/{imageId}
     // Any authenticated user may read. Only admins may write.
     // -------------------------------------------------------------------------

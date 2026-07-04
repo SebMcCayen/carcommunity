@@ -344,6 +344,17 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // billboards – sponsored map billboards (Phase 9k)
+    // Authenticated read while ACTIVE (map markers + detail); all writes go
+    // through the audited billboards.* admin callables — activation is a
+    // six-point safety gate and requires an active sponsoring partner.
+    // -------------------------------------------------------------------------
+    match /billboards/{billboardId} {
+      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
     // partnerInsightsEvents / partnerInsights – privacy-critical (Phase 9j)
     // Raw events hold partner-scoped user hashes and expire after 7 days;
     // aggregates enforce the minimum-contributor threshold. NEITHER is ever

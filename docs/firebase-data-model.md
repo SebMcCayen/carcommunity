@@ -335,6 +335,28 @@ so they live apart from the owner-readable claim records.
 
 ---
 
+### `billboards/{billboardId}` — sponsored map billboards (Phase 9k)
+
+Document ID: auto-generated. `{ partnerCompanyId, headline (≤100), message
+(≤300), placementType: map_billboard|event_area|partner_area|
+other_approved_location, latitude, longitude, callToActionType?,
+callToActionValue? (paired), safetyNote? (≤500), imagePath?
+(billboardImages/{billboardId}/…), status: draft|active|paused|ended,
+availableFrom?, availableUntil?, approvedAt?, approvedByUserId?,
+createdByUserId, createdAt, updatedAt }`
+(contracts/schemas/billboards.schema.json).
+
+Security: authenticated read while ACTIVE (map markers + detail); all
+writes via the audited admin `billboards.*` callables. Activation is a
+SIX-POINT safety gate (no business locations, road lanes, or road signs;
+not obstructing the map; marked as advertising; suitable for the map) with
+a mandatory approval reason, and the sponsoring partner must be active.
+Billboard taps are recorded via `billboards.recordInteraction`, mapped onto
+partner-insights types, and flow through the Phase 9j privacy pipeline.
+Composite index: `status ASC, createdAt ASC`.
+
+---
+
 ### `partnerInsightsEvents/{eventId}` — raw insight events (Phase 9j)
 
 PRIVACY-CRITICAL, fully backend-only. Document ID =

@@ -496,6 +496,59 @@ describe('Firestore – partner insights (Phase 9j)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore + Storage: digital billboards (Phase 9k)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – billboards (Phase 9k)', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'billboards', 'bb-active'), {
+        partnerCompanyId: 'co-1',
+        headline: 'Aktiv skylt',
+        message: 'Meddelande',
+        status: 'active',
+      });
+      await setDoc(doc(ctx.firestore(), 'billboards', 'bb-draft'), {
+        partnerCompanyId: 'co-1',
+        headline: 'Utkast',
+        message: 'Meddelande',
+        status: 'draft',
+      });
+    });
+  });
+
+  it('authenticated users read active billboards; drafts hidden; no client writes', async () => {
+    const ctx = testEnv.authenticatedContext('bb-rules-user');
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'billboards', 'bb-active')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'billboards', 'bb-draft')));
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'billboards', 'bb-active')));
+    const adminCtx = testEnv.authenticatedContext('bb-rules-admin', { admin: true });
+    await assertFails(
+      updateDoc(doc(adminCtx.firestore(), 'billboards', 'bb-active'), { headline: 'Hacked' }),
+    );
+  });
+
+  it('billboard images: authenticated read, admin-only write', async () => {
+    const adminCtx = testEnv.authenticatedContext('bb-img-admin', { admin: true });
+    const data = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    await assertSucceeds(
+      uploadBytes(storageRef(adminCtx.storage(), 'billboardImages/bb-1/hero.png'), data, {
+        contentType: 'image/png',
+      }),
+    );
+    const userCtx = testEnv.authenticatedContext('bb-img-user');
+    await assertSucceeds(
+      getBytes(storageRef(userCtx.storage(), 'billboardImages/bb-1/hero.png')),
+    );
+    await assertFails(
+      uploadBytes(storageRef(userCtx.storage(), 'billboardImages/bb-1/spoof.png'), data, {
+        contentType: 'image/png',
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 

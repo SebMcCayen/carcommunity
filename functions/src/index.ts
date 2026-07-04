@@ -33,6 +33,13 @@ import { createCompany, setCompanyStatus, updateCompany } from './partners/manag
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
 import { recordInteraction } from './partnerInsights/recordInteraction';
 import { aggregateDaily, cleanupExpired } from './partnerInsights/scheduled';
+import {
+  activate as activateBillboard,
+  create as createBillboard,
+  recordInteraction as recordBillboardInteraction,
+  setStatus as setBillboardStatus,
+  update as updateBillboard,
+} from './billboards/manageBillboard';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -221,4 +228,22 @@ export const partnerInsights = {
   recordInteraction,
   aggregateDaily,
   cleanupExpired,
+};
+
+/**
+ * Digital billboards domain (grouped export → deployed as
+ * `billboards-create`, `billboards-update`, `billboards-activate`,
+ * `billboards-setStatus`, `billboards-recordInteraction`).
+ *
+ * Sponsored map billboards (contracts/functions/functions.json). Public
+ * reads of active billboards; activation is a six-point safety gate with
+ * an audited approval reason and an active sponsoring partner; billboard
+ * taps flow into the partner-insights privacy pipeline.
+ */
+export const billboards = {
+  create: createBillboard,
+  update: updateBillboard,
+  activate: activateBillboard,
+  setStatus: setBillboardStatus,
+  recordInteraction: recordBillboardInteraction,
 };
