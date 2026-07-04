@@ -616,30 +616,30 @@ Security: owner can read their own subscription; no client writes; admin-only fu
 
 Use Realtime Database **only** for frequently changing ephemeral state. Do not store durable data or historical records here.
 
-### `/liveLocations/{uid}`
+### `/liveLocation/{uid}` — live sharing (Phase 10)
 
-Latest live location for an active location-sharing session.
+Backend-write-only (RTDB rules deny every client write; all mutations go
+through the `live.*` callables).
 
-```json
-{
-  "lat": 57.5,
-  "lng": 12.0,
-  "timestamp": 1700000000000
-}
-```
+`session` — `{ id, status: active|stopped|expired, duration: 1h|2h|4h,
+startedAt, expiresAt, stoppedAt, stopReason?: user_stop|hide_me_now|
+admin_stop }` (ISO-8601 strings; they sort chronologically). Owner-only
+read. Starting while active RESTARTS the session with a fresh id/expiry.
 
-| Field       | Type     | Notes                                                                              |
-| ----------- | -------- | ---------------------------------------------------------------------------------- |
-| `lat`       | `number` | Current latitude                                                                   |
-| `lng`       | `number` | Current longitude                                                                  |
-| `timestamp` | `number` | Unix milliseconds — clients must ignore records older than a short TTL (e.g. 60 s) |
+`latest` — the lean marker node: `{ latitude, longitude,
+accuracyMeters?, headingDegrees?, speedMetersPerSecond?, recordedAt,
+sessionId, expiresAt, displayName }`. Written by `live.updatePosition`
+(requires an ACTIVE session; the contract's 60-second staleness threshold
+is enforced server-side). Readable ONLY by non-suspended `activeMember`
+claims. Removed immediately by `live.stopSession` / `live.hideMeNow`
+(the latter works while suspended — privacy action).
 
-Rules:
-
-- Write: authenticated owner (`auth.uid == $uid`) only.
-- Read: authenticated active members (`auth.token.activeMember == true`) only.
-- Record is removed immediately when the sharing session ends ("Hide me now").
-- Do not store multiple records per user or build a location history here.
+TTL (`live-cleanupExpired`, every 5 minutes): sessions past `expiresAt`
+flip to `expired` and lose their marker; markers whose `recordedAt` went
+silent for 15 minutes are removed even under a nominally active session.
+Blocking enforcement is the blocking domain's follow-up (no blocks
+collection exists yet). Replaces the Phase 3 `liveLocations` (plural)
+scaffold. This path also feeds the Phase 9h Kronjakt jump detection.
 
 ### `/presence/{uid}`
 
