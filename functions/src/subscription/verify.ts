@@ -65,8 +65,10 @@ export const verify = onCall(
     if (!parsed.ok) {
       throw new HttpsError('invalid-argument', parsed.message);
     }
-    // Hash immediately; the raw token must not survive this scope.
-    const tokenHash = hashPurchaseToken(parsed.input.purchaseToken);
+    // Hash immediately; the raw token must not survive this scope. The
+    // hash is handed to the store adapter when one is wired — it is never
+    // stored or logged.
+    void hashPurchaseToken(parsed.input.purchaseToken);
 
     if (!(await isProviderEnabled(parsed.input.platform))) {
       // FAIL CLOSED: no store credentials → no entitlement, ever.
@@ -79,10 +81,10 @@ export const verify = onCall(
     // Real adapter lands with the store credentials (end-of-MVP console
     // setup). Reaching this branch with a provider enabled but no adapter
     // wired is a deployment error — fail closed rather than trust input.
+    // NOTE: no token-derived values in logs (matches the push-token rule).
     logger.error('Subscription provider enabled but no verification adapter is wired', {
       platform: parsed.input.platform,
       uid: actor.uid,
-      tokenHash,
     });
     throw new HttpsError('unimplemented', 'Receipt verification adapter not available.');
   },
