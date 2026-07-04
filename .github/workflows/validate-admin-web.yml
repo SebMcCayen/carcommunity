@@ -60,6 +60,7 @@ jobs:
           const config = require('./firebase/firebase.json');
           const hosting = config.hosting;
           const fail = (msg) => { console.error('FAIL: ' + msg); process.exit(1); };
+          if (hosting.target !== 'admin') fail('hosting.target must be admin (deploy targets the admin site)');
           if (hosting.public !== '../apps/admin/dist') fail('hosting.public must point at the admin dist');
           if (!hosting.rewrites?.some((r) => r.source === '**' && r.destination === '/index.html'))
             fail('SPA rewrite missing');
@@ -71,6 +72,9 @@ jobs:
           const assetHeaders = hosting.headers?.find((h) => h.source === '/assets/**')?.headers ?? [];
           if (!assetHeaders.some((h) => h.key === 'Cache-Control' && h.value.includes('immutable')))
             fail('immutable asset caching missing');
+          const indexHeaders = hosting.headers?.find((h) => h.source === '/index.html')?.headers ?? [];
+          if (!indexHeaders.some((h) => h.key === 'Cache-Control' && h.value.includes('no-store')))
+            fail('index.html must be no-store (stale SPA entrypoints after deploys otherwise)');
           console.log('hosting configuration OK');
           "
 
