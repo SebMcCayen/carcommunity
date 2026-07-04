@@ -20,11 +20,10 @@
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
-import { logger } from 'firebase-functions';
 import { db } from '../firebase';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { requireActiveActor } from '../shared/memberActor';
 import {
-  PASS_BY_FLAG_DEFAULT,
   PASS_BY_FLAG_KEY,
   buildScopedHash,
   eventExpiry,
@@ -38,17 +37,9 @@ export interface RecordInteractionResponse {
   recorded: boolean;
 }
 
+/** partnerInsightsPassBy flag via the shared reader (Phase 9m); default OFF. */
 async function isPassByEnabled(): Promise<boolean> {
-  try {
-    const snap = await db.collection('config').doc('featureFlags').get();
-    const value = snap.data()?.[PASS_BY_FLAG_KEY];
-    return typeof value === 'boolean' ? value : PASS_BY_FLAG_DEFAULT;
-  } catch (error) {
-    logger.warn('Pass-by flag read failed; using contract default (off)', {
-      error: String(error),
-    });
-    return PASS_BY_FLAG_DEFAULT;
-  }
+  return readFeatureFlag(PASS_BY_FLAG_KEY);
 }
 
 export const recordInteraction = onCall(

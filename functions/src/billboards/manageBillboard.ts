@@ -20,12 +20,12 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { requireActiveActor } from '../shared/memberActor';
 import { writeInteractionEvent } from '../partnerInsights/recordInteraction';
 import {
-  BILLBOARDS_FLAG_DEFAULT,
   BILLBOARDS_FLAG_KEY,
   BILLBOARD_TO_INSIGHTS_TYPE,
   buildBillboardDocument,
@@ -283,17 +283,9 @@ export interface RecordBillboardInteractionResponse {
   recorded: boolean;
 }
 
+/** digitalBillboards flag via the shared reader (Phase 9m). */
 async function isBillboardsEnabled(): Promise<boolean> {
-  try {
-    const snap = await db.collection('config').doc('featureFlags').get();
-    const value = snap.data()?.[BILLBOARDS_FLAG_KEY];
-    return typeof value === 'boolean' ? value : BILLBOARDS_FLAG_DEFAULT;
-  } catch (error) {
-    logger.warn('Billboards flag read failed; using contract default', {
-      error: String(error),
-    });
-    return BILLBOARDS_FLAG_DEFAULT;
-  }
+  return readFeatureFlag(BILLBOARDS_FLAG_KEY);
 }
 
 export const recordInteraction = onCall(

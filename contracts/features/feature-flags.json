@@ -46,6 +46,11 @@
       "key": "digitalBillboards",
       "default": true,
       "description": "Digital billboard content."
+    },
+    {
+      "key": "partnerInsightsPassBy",
+      "default": false,
+      "description": "Anonymous partner pass-by interaction recording (Phase 9j privacy gate). Default OFF; contributions additionally require the user's explicit anonymousPartnerStatsOptIn — the flag alone never enables recording."
     }
   ]
 }

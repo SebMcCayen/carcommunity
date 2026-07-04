@@ -22,11 +22,10 @@
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
-import { logger } from 'firebase-functions';
 import { db } from '../firebase';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { requireActiveActor } from '../shared/memberActor';
 import {
-  PUSH_NOTIFICATIONS_FLAG_DEFAULT,
   PUSH_NOTIFICATIONS_FLAG_KEY,
   buildPushTokenDocument,
   hashPushToken,
@@ -42,15 +41,9 @@ const CALLABLE_OPTS = {
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
 
+/** pushNotifications flag via the shared reader (Phase 9m). */
 async function isPushEnabled(): Promise<boolean> {
-  try {
-    const snap = await db.collection('config').doc('featureFlags').get();
-    const value = snap.data()?.[PUSH_NOTIFICATIONS_FLAG_KEY];
-    return typeof value === 'boolean' ? value : PUSH_NOTIFICATIONS_FLAG_DEFAULT;
-  } catch (error) {
-    logger.warn('Push flag read failed; using contract default', { error: String(error) });
-    return PUSH_NOTIFICATIONS_FLAG_DEFAULT;
-  }
+  return readFeatureFlag(PUSH_NOTIFICATIONS_FLAG_KEY);
 }
 
 export interface RegisterPushTokenResponse {
