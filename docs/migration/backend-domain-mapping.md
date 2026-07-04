@@ -123,7 +123,7 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 | In-app notifications           | `notifications/{uid}/items/{notificationId}`    | Subcollection; paginated by `createdAt DESC`                                 |
 | Feature flags                  | `config/featureFlags`                           | One flat document; boolean field per flag key                                |
 | Moderation actions             | `moderationActions/{actionId}`                  | Top-level; admin-only write; immutable records                               |
-| Audit logs                     | `auditLogs/{logId}`                             | Top-level; admin-only write; immutable records                               |
+| Audit logs                     | `adminAuditEvents/{eventId}`                    | Top-level; backend-only write; immutable records (implemented name)          |
 | Diagnostics reports            | `diagnosticsReports/{reportId}`                 | Top-level; admin-only read                                                   |
 | Organization config            | `config/organizations/{orgId}`                  | Single organization for MVP                                                  |
 

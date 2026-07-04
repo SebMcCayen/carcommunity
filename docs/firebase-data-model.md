@@ -502,7 +502,7 @@ Document ID: auto-generated.
 | `status`     | `string`    | `'pending'` \| `'reviewed'` \| `'dismissed'` |
 | `createdAt`  | `Timestamp` | Server timestamp                             |
 
-Security: any authenticated user can create (reporter's UID must match); admin-only read and update.
+Security: any authenticated user can create (Phase 9o field validation: reporter's UID pinned, whitelisted shape, `status` must start `pending`, server-timestamp `createdAt`; deliberately not suspension-gated — reporting is a support path); admin-only read and update; no deletes (review records are resolved via `status`, never removed).
 
 Composite index: `status ASC, createdAt DESC` (admin review queue).
 
