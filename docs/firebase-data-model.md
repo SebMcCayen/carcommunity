@@ -508,21 +508,26 @@ Composite index: `status ASC, createdAt DESC` (admin review queue).
 
 ---
 
-### `errorReports` — client error telemetry
+### `diagnosticsReports` — crash/error telemetry (Phase 9n)
 
-Document ID: auto-generated.
+Document ID: auto-generated. `{ userId (null for anonymous reports),
+severity: info|warning|error|critical, platform: ios|android|web|unknown,
+featureArea: auth|live_location|events|subscription|admin|map|network|
+unknown, safeMessage (≤2000, privacy-safe), appVersion?, buildNumber?,
+osVersion?, errorCode?, metadata? (sanitized), fingerprint (SHA-256-based
+dedup key, numbers/UUIDs normalized), createdAt }`
+(contracts/schemas/diagnostics.schema.json).
 
-| Field        | Type        | Notes                                                                  |
-| ------------ | ----------- | ---------------------------------------------------------------------- |
-| `userId`     | `string`    | Reporting user's Firebase UID                                          |
-| `platform`   | `string`    | `'ios'` \| `'android'` \| `'admin'`                                    |
-| `errorCode`  | `string`    |                                                                        |
-| `message`    | `string`    | Sanitized error message — must not contain tokens, credentials, or PII |
-| `stackTrace` | `string?`   | Sanitized                                                              |
-| `appVersion` | `string?`   |                                                                        |
-| `createdAt`  | `Timestamp` | Server timestamp                                                       |
-
-Security: any authenticated user can create; admin-only read.
+Security: admin-only read; ALL writes via the PUBLIC
+`diagnostics.submitReport` callable — unauthenticated reports are allowed
+(sign-in failures must be reportable; App Check applies in production) and
+every report passes server-side sanitization (auth tokens, credentials,
+cookies, coordinates, and stack-trace-like metadata keys stripped; only
+bounded scalars stored; stack traces and raw headers never stored).
+Retention: 90 days via the monthly scheduled
+`diagnostics-cleanupExpired`. Replaces the Phase 8 `errorReports` scaffold
+(retired — client-created, unsanitized, absent from the migration
+mapping).
 
 ---
 

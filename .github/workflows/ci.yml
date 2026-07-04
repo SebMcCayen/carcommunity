@@ -122,7 +122,8 @@ jobs:
             -s contracts/schemas/partners.schema.json \
             -s contracts/schemas/partner-insights.schema.json \
             -s contracts/schemas/billboards.schema.json \
-            -s contracts/schemas/notifications.schema.json
+            -s contracts/schemas/notifications.schema.json \
+            -s contracts/schemas/diagnostics.schema.json
 
       - name: Validate error codes registry
         run: |
