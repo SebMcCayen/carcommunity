@@ -1744,6 +1744,7 @@ describe('Firestore – suspension enforcement', () => {
         userId: SUSPENDED,
         reason: 'Please delete my account',
         status: 'pending',
+        createdAt: serverTimestamp(),
       }),
     );
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'accountDeletionRequests', SUSPENDED)));

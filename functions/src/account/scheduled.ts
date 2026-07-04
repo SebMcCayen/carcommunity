@@ -33,6 +33,10 @@ import {
 } from './deletion-core';
 
 const QUERY_BATCH_SIZE = 500;
+/** Upper bound of accounts purged per sweep — keeps a backlog from
+ * pushing the scheduled run past its timeout; the daily sweep drains
+ * any remainder on subsequent runs (oldest first). */
+const MAX_PURGES_PER_RUN = 25;
 
 async function deleteOwnedDocuments(collection: string, userField: string, uid: string) {
   for (;;) {
@@ -81,6 +85,8 @@ export async function runAccountPurge(
     .collection('accountDeletionRequests')
     .where('status', '==', 'pending')
     .where('createdAt', '<', Timestamp.fromDate(deletionRetentionCutoff(now)))
+    .orderBy('createdAt', 'asc')
+    .limit(MAX_PURGES_PER_RUN)
     .get();
 
   const purgedUids: string[] = [];

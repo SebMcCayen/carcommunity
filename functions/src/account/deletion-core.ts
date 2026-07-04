@@ -14,7 +14,7 @@
  *   status pending → processed once the purge has run.
  *
  * Two stages:
- * 1. auth.deleteAccount (signedIn — works while suspended; deletion is a
+ * 1. account.deleteAccount (signedIn — works while suspended; deletion is
  *    support path): immediate soft delete. Auth user disabled, refresh
  *    tokens revoked, `users/{uid}.deleted: true`, request record written.
  *    Idempotent.
