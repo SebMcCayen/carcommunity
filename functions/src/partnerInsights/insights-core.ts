@@ -160,6 +160,15 @@ export function eventExpiry(now: Date): Date {
   return addUtcDays(now, INTERACTION_EVENT_TTL_DAYS);
 }
 
+/**
+ * The previous UTC calendar day (start-of-day). Proper date arithmetic —
+ * subtracting 24h in milliseconds can land on the wrong calendar day
+ * around clock shifts.
+ */
+export function previousUtcDay(now: Date): Date {
+  return addUtcDays(startOfUtcDay(now), -1);
+}
+
 // ---------------------------------------------------------------------------
 // Deterministic IDs (create-if-absent dedupe, established pattern)
 // ---------------------------------------------------------------------------

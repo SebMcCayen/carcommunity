@@ -27,6 +27,7 @@ import {
   aggregateId,
   computeAggregateMetric,
   effectiveThreshold,
+  previousUtcDay,
   resolvePeriodBounds,
   type AggregationPeriod,
   type PartnerInteractionType,
@@ -167,8 +168,7 @@ const SCHEDULE_OPTS = {
 export const aggregateDaily = onSchedule(
   { ...SCHEDULE_OPTS, schedule: '0 3 * * *' },
   async () => {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    await runInsightsAggregation(yesterday);
+    await runInsightsAggregation(previousUtcDay(new Date()));
   },
 );
 

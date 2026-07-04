@@ -13,6 +13,7 @@ import {
   eventExpiry,
   interactionEventId,
   parseRecordInteractionInput,
+  previousUtcDay,
   resolvePeriodBounds,
 } from '../partnerInsights/insights-core';
 
@@ -87,6 +88,19 @@ describe('insights-core periods and identifiers', () => {
     );
     expect(eventExpiry(new Date('2026-07-04T12:00:00Z'))).toEqual(
       new Date('2026-07-11T12:00:00Z'),
+    );
+  });
+
+  it('computes the previous UTC day with real date arithmetic', () => {
+    expect(previousUtcDay(new Date('2026-07-04T03:00:00+02:00'))).toEqual(
+      new Date('2026-07-03T00:00:00Z'),
+    );
+    // Month and year boundaries.
+    expect(previousUtcDay(new Date('2026-07-01T00:30:00Z'))).toEqual(
+      new Date('2026-06-30T00:00:00Z'),
+    );
+    expect(previousUtcDay(new Date('2026-01-01T12:00:00Z'))).toEqual(
+      new Date('2025-12-31T00:00:00Z'),
     );
   });
 

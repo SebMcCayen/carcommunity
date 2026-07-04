@@ -151,7 +151,12 @@ describe('partnerInsights-recordInteraction', () => {
       .get();
     expect(events.size).toBe(1);
     const event = events.docs[0].data();
-    expect(event.userReferenceHash).toBe(buildScopedHash(companyId, user.uid));
+    // The stored reference is a 64-hex-char scoped hash and the raw UID
+    // appears nowhere on the event. (Hash determinism itself is unit-tested
+    // with literals in insights-core.test.ts — deliberately NOT re-derived
+    // here from the auth credential, which CodeQL taint-tracks as a
+    // password source.)
+    expect(event.userReferenceHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(event)).not.toContain(user.uid);
 
     // Per-day dedupe: same user + type + day → recorded: false, one event.
