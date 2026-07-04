@@ -558,6 +558,25 @@ Security: owner can create and read their own request; admin-only write and full
 
 ---
 
+### `config/featureFlags` — feature flags (Phase 9m)
+
+ONE flat document: a camelCase boolean field per flag key. The canonical
+key list, defaults, and descriptions are
+contracts/features/feature-flags.json (kept in sync with the backend's
+`FEATURE_FLAG_DEFAULTS` table by a unit test). Clients fetch on
+launch/resume and fall back to the contract defaults when the document or
+a field is absent — flags degrade to their documented defaults, never to
+"off". `partnerInsightsPassBy` (default OFF) is the Phase 9j privacy gate
+and additionally requires the user's explicit opt-in.
+
+Security: any authenticated user can read; all writes via the audited
+`admin.setFeatureFlag` callable (closed key namespace — unknown keys are
+rejected, so typos can never create phantom flags). Every OTHER document
+under `config/` (e.g. `config/partnerInsights`, the insights
+minimum-contributor threshold) is backend-only: no client read or write.
+
+---
+
 ### `subscriptions` — subscription entitlement records
 
 Document ID: Firebase UID. **Written by Cloud Functions only after receipt verification. No client writes.**

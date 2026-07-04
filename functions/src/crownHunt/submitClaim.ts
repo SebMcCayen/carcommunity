@@ -26,6 +26,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
 import { creditPoints } from '../points/ledger';
 import {
@@ -38,7 +39,6 @@ import {
 } from './crown-hunt-geo';
 import { HIGH_VELOCITY_WINDOW_SECONDS, evaluateClaimRisk } from './crown-hunt-risk';
 import {
-  CROWN_HUNT_FLAG_DEFAULT,
   CROWN_HUNT_FLAG_KEY,
   MAX_CLAIM_SPEED_MPS,
   MAX_DAILY_SUCCESSFUL_CLAIMS,
@@ -89,20 +89,9 @@ function replayStoredClaim(
   return respond(result);
 }
 
-/**
- * Reads the crownHunt feature flag from the Firestore config document
- * (config/featureFlags — the feature-flags domain's target home), falling
- * back to the contract default when unset.
- */
+/** crownHunt feature flag via the shared reader (Phase 9m). */
 async function isCrownHuntEnabled(): Promise<boolean> {
-  try {
-    const snap = await db.collection('config').doc('featureFlags').get();
-    const value = snap.data()?.[CROWN_HUNT_FLAG_KEY];
-    return typeof value === 'boolean' ? value : CROWN_HUNT_FLAG_DEFAULT;
-  } catch (error) {
-    logger.warn('Feature flag read failed; using contract default', { error: String(error) });
-    return CROWN_HUNT_FLAG_DEFAULT;
-  }
+  return readFeatureFlag(CROWN_HUNT_FLAG_KEY);
 }
 
 /** Latest trusted position from RTDB for jump detection; null when absent. */

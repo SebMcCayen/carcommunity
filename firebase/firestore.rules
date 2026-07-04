@@ -212,6 +212,23 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // config – backend-controlled configuration (Phase 9m)
+    // config/featureFlags is ONE flat document of camelCase boolean fields
+    // (contracts/features/feature-flags.json is the canonical key list and
+    // defaults). Any authenticated user may read it — clients fetch flag
+    // state on launch/resume and fall back to contract defaults when the
+    // document or a field is absent. All writes go through the audited
+    // admin.setFeatureFlag callable (closed key namespace).
+    // Every OTHER document under config/ (e.g. config/partnerInsights, the
+    // privacy threshold) is deliberately NOT matched here and stays
+    // backend-only.
+    // -------------------------------------------------------------------------
+    match /config/featureFlags {
+      allow read: if isAuthenticated();
+      // No client writes: admin.setFeatureFlag only.
+    }
+
+    // -------------------------------------------------------------------------
     // events – community calendar (Phase 9b)
     // Split-document model: events/{eventId} holds teaser-safe + operational
     // fields (title, approximateArea, status, rsvpCounts, ...); the exact

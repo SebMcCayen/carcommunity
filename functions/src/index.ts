@@ -14,6 +14,7 @@ import { handleHealth } from './health';
 import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
 import { restoreAccess } from './admin/restoreAccess';
+import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { cancel, complete, publish } from './events/eventLifecycle';
@@ -90,6 +91,8 @@ export const admin = {
   setAdminRole,
   suspendUser,
   restoreAccess,
+  // Phase 9m: audited, key-whitelisted writes to config/featureFlags.
+  setFeatureFlag,
 };
 
 /**

@@ -718,6 +718,57 @@ describe('Firestore – notifications (Phase 9l)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: config / feature flags (Phase 9m)
+// config/featureFlags: authenticated read, admin.setFeatureFlag-only writes.
+// Every other config document (e.g. config/partnerInsights) stays
+// backend-only.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – config / feature flags (Phase 9m)', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      // Only contract-default values: the emulator database is shared with
+      // the functions test suites, so seeding a flipped flag (or a raised
+      // insights threshold) would leak into their behavior.
+      await setDoc(doc(ctx.firestore(), 'config/featureFlags'), { chat: true }, { merge: true });
+      await setDoc(doc(ctx.firestore(), 'config/partnerInsights'), { minThreshold: 10 });
+    });
+  });
+
+  afterAll(async () => {
+    // Remove the threshold config so the insights aggregation tests see
+    // their expected floor-default state.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'config/partnerInsights'));
+    });
+  });
+
+  it('any authenticated user can read the feature flags document', async () => {
+    const ctx = testEnv.authenticatedContext('ff-reader');
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'config/featureFlags')));
+  });
+
+  it('unauthenticated clients cannot read feature flags', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'config/featureFlags')));
+  });
+
+  it('clients can never write feature flags (admin.setFeatureFlag only)', async () => {
+    const ctx = testEnv.authenticatedContext('ff-writer');
+    await assertFails(updateDoc(doc(ctx.firestore(), 'config/featureFlags'), { chat: false }));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'config/featureFlags')));
+  });
+
+  it('other config documents stay backend-only (privacy threshold)', async () => {
+    const ctx = testEnv.authenticatedContext('ff-reader');
+    await assertFails(getDoc(doc(ctx.firestore(), 'config/partnerInsights')));
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'config/partnerInsights'), { minThreshold: 1 }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: user profile field validation (Phase 9a)
 // Owner writes are whitelist-based with per-field validation; shapes follow
 // contracts/schemas/user-profile.schema.json.

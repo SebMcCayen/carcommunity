@@ -443,10 +443,10 @@
     {
       "name": "admin.setFeatureFlag",
       "domain": "admin",
-      "description": "Sets a feature flag value. Flag keys are defined in contracts/features/feature-flags.json.",
+      "description": "Sets one boolean flag on the flat config/featureFlags document (merge-set; other flags untouched). The key must be in the canonical list in contracts/features/feature-flags.json — the namespace is closed, unknown keys are invalid-argument. The write commits atomically with an adminAuditEvents record. Clients read the document directly (authenticated, rules-gated) and fall back to contract defaults. Deployed via grouped export as admin-setFeatureFlag (functions/src/admin/setFeatureFlag.ts).",
       "access": "admin",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {

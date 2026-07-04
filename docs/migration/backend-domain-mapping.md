@@ -121,7 +121,7 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 | Sponsored billboards           | `billboards/{billboardId}`                      | Top-level; admin-approved                                                    |
 | Push tokens                    | `userPrivate/{uid}/pushTokens/{tokenId}`        | Subcollection; encrypted token                                               |
 | In-app notifications           | `notifications/{uid}/items/{notificationId}`    | Subcollection; paginated by `createdAt DESC`                                 |
-| Feature flags                  | `config/featureFlags/{key}`                     | Nested under `config` document group                                         |
+| Feature flags                  | `config/featureFlags`                           | One flat document; boolean field per flag key                                |
 | Moderation actions             | `moderationActions/{actionId}`                  | Top-level; admin-only write; immutable records                               |
 | Audit logs                     | `auditLogs/{logId}`                             | Top-level; admin-only write; immutable records                               |
 | Diagnostics reports            | `diagnosticsReports/{reportId}`                 | Top-level; admin-only read                                                   |
@@ -298,13 +298,11 @@ runTransaction:
 
 ## Feature flags → backend-controlled Firestore configuration
 
-**Path:** `config/featureFlags/{key}`
+**Path:** `config/featureFlags` — ONE flat document with a camelCase boolean field per flag key (a per-key document path like `config/featureFlags/{key}` would be an invalid odd-segment document path; the flat document is also what every flag-gated domain has read since Phase 9h). Key names, defaults, and descriptions live in contracts/features/feature-flags.json — the canonical registry.
 
-**Document fields:** `key`, `name`, `description`, `enabled` (boolean), `updatedAt`.
+**Read pattern:** Direct SDK read (authenticated, rules-gated); client fetches flag state on app launch and on focus return and falls back to the contract defaults when the document or a field is absent. No realtime listener needed for MVP (poll on resume is sufficient).
 
-**Read pattern:** Callable function or direct SDK read; client fetches flag state on app launch and on focus return. No realtime listener needed for MVP (poll on resume is sufficient).
-
-**Write pattern:** Admin-only callable function `setFeatureFlag`; logged to `auditLogs/`.
+**Write pattern:** Admin-only callable `admin.setFeatureFlag` (merge-set, closed key namespace — unknown keys rejected); each change commits atomically with an `adminAuditEvents` record.
 
 **Security-rule requirements:** Any authenticated user can read; admin-only write.
 
