@@ -9,10 +9,7 @@
  */
 
 import { doc, getDoc } from 'firebase/firestore';
-import {
-  DEFAULT_FEATURE_FLAGS as LEGACY_DEFAULT_FEATURE_FLAGS,
-  type FeatureFlags,
-} from '@carcommunity/shared/feature-flags';
+import { DEFAULT_FEATURE_FLAGS as LEGACY_DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import { getAdminFirestore } from '../../lib/firestore';
 import { callAdmin } from '../../lib/callables';
 
@@ -27,7 +24,8 @@ export const DEFAULT_FEATURE_FLAGS = {
 } as const;
 
 export type FeatureFlagKey = keyof typeof DEFAULT_FEATURE_FLAGS;
-export type { FeatureFlags };
+/** Full flag map, including keys the frozen legacy shared type lacks. */
+export type FeatureFlags = Record<FeatureFlagKey, boolean>;
 
 export interface FeatureFlagRow {
   key: FeatureFlagKey;

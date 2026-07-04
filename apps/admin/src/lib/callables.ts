@@ -48,7 +48,10 @@ const CODE_TO_STATUS: Record<string, number> = {
   'permission-denied': 403,
   'not-found': 404,
   'already-exists': 409,
-  'failed-precondition': 412,
+  // Legacy pages treat business-rule rejections (e.g. points overdraft)
+  // as 400 validation errors — the backend signals them as
+  // failed-precondition, so keep the legacy mapping.
+  'failed-precondition': 400,
   'resource-exhausted': 429,
   unimplemented: 501,
 };
