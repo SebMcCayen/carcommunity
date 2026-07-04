@@ -332,6 +332,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
     },
     {
+      "name": "partnerInsights.recordInteraction",
+      "domain": "partnerInsights",
+      "description": "Records one partner interaction event with a PARTNER-SCOPED user hash (raw UIDs never stored), deduped to one event per company+type+UTC-day+user via a deterministic document ID. anonymous_pass_by requires the partnerInsightsPassBy flag (contract default OFF) AND the caller's anonymousPartnerStatsOptIn — non-opted-in contributions return { recorded: false } silently so opting out is unobservable. Events expire after 7 days; the scheduled partnerInsights-aggregateDaily writes threshold-enforced aggregates (min 10 unique contributors for pass-by, config can only raise) and partnerInsights-cleanupExpired removes expired raw events. Deployed via grouped export as partnerInsights-recordInteraction (functions/src/partnerInsights/recordInteraction.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner insights rows + scheduled jobs)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",

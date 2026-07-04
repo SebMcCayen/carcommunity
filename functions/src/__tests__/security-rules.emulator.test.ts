@@ -450,6 +450,52 @@ describe('Firestore – partners (Phase 9i)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: partner insights (Phase 9j)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – partner insights (Phase 9j)', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'partnerInsightsEvents', 'pi-ev-1'), {
+        companyId: 'co-1',
+        interactionType: 'profile_view',
+        userReferenceHash: 'a'.repeat(64),
+      });
+      await setDoc(doc(ctx.firestore(), 'partnerInsights', 'co-1_profile_view_day_2026-07-01'), {
+        companyId: 'co-1',
+        totalCount: 5,
+        resultStatus: 'available',
+      });
+    });
+  });
+
+  it('raw events and aggregates are closed to ALL clients — member and admin alike', async () => {
+    const memberFs = testEnv
+      .authenticatedContext('pi-rules-member', { activeMember: true })
+      .firestore();
+    const adminFs = testEnv.authenticatedContext('pi-rules-admin', { admin: true }).firestore();
+    for (const firestore of [memberFs, adminFs]) {
+      await assertFails(getDoc(doc(firestore, 'partnerInsightsEvents', 'pi-ev-1')));
+      await assertFails(
+        getDoc(doc(firestore, 'partnerInsights', 'co-1_profile_view_day_2026-07-01')),
+      );
+      await assertFails(
+        setDoc(doc(firestore, 'partnerInsightsEvents', 'forged'), {
+          companyId: 'co-1',
+          interactionType: 'anonymous_pass_by',
+          userReferenceHash: 'b'.repeat(64),
+        }),
+      );
+      await assertFails(
+        updateDoc(doc(firestore, 'partnerInsights', 'co-1_profile_view_day_2026-07-01'), {
+          totalCount: 999,
+        }),
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 

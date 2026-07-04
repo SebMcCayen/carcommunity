@@ -335,6 +335,36 @@ so they live apart from the owner-readable claim records.
 
 ---
 
+### `partnerInsightsEvents/{eventId}` — raw insight events (Phase 9j)
+
+PRIVACY-CRITICAL, fully backend-only. Document ID =
+`{companyId}_{type}_{utcDay}_{scopedHash}` (one event per company + type +
+UTC day + user). `{ companyId, interactionType, userReferenceHash
+(SHA-256('kcc-pi:{companyId}:{uid}') — raw UIDs never stored, hashes are
+partner-scoped so cross-partner correlation is impossible), relatedOfferId?,
+occurredAt, aggregationDate, expiresAt (+7 days) }`
+(contracts/schemas/partner-insights.schema.json).
+
+Written only by `partnerInsights.recordInteraction`; `anonymous_pass_by`
+additionally requires the `partnerInsightsPassBy` flag (default OFF) plus
+the caller's `anonymousPartnerStatsOptIn`, and a non-opted-in contribution
+returns `recorded: false` silently — opting out is unobservable. The
+`partnerInsights-cleanupExpired` scheduled function (daily) deletes expired
+events. Composite index: `companyId ASC, occurredAt ASC`.
+
+#### `partnerInsights/{aggregateId}` — threshold-enforced aggregates
+
+Backend-only. Document ID = `{companyId}_{type}_{periodType}_{periodStart}`
+— the `partnerInsights-aggregateDaily` scheduled function (daily, per
+day/week/month periods) overwrites idempotently. For `anonymous_pass_by`,
+periods with fewer unique contributors than the threshold (floor 10;
+`config/partnerInsights.minThreshold` can only RAISE it) persist with
+**zeroed counts** and status `insufficient_data` — the true counts never
+exist anywhere readable. Composite index: `companyId ASC, periodType ASC,
+periodStart DESC`.
+
+---
+
 ### `pointsLedger/{uid}` — Kronpoäng wallet (Phase 9g)
 
 `{ balance, updatedAt }` — denormalized total, updated atomically with every
