@@ -197,6 +197,24 @@
       "source": "services/api/src/lib/badge-service.ts (awardHelpfulMemberByAdmin)"
     },
     {
+      "name": "points.adminAdjust",
+      "domain": "points",
+      "description": "Admin Kronpoäng adjustment (credit or debit): positive integer amount, mandatory reason (<=500), debits never overdraft, only an owner may adjust another owner. Runs through the internal transaction primitives and writes an adminAuditEvents record. Deployed via grouped export as points-adminAdjust (functions/src/points/adminPoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Points ledger -> Firestore transactions)"
+    },
+    {
+      "name": "points.adminReverse",
+      "domain": "points",
+      "description": "Reverses a ledger entry with a compensating reversal entry (deterministic ID: one reversal per original, replay-safe). Reversals cannot be reversed; an overdrafting reversal is rejected; writes an adminAuditEvents record in the same transaction. Deployed via grouped export as points-adminReverse (functions/src/points/adminPoints.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Points ledger -> Firestore transactions)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",

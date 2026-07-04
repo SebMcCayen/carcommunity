@@ -25,6 +25,7 @@ import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
+import { adminAdjust, adminReverse } from './points/adminPoints';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -139,4 +140,19 @@ export const garage = {
  */
 export const badges = {
   awardHelpfulMember,
+};
+
+/**
+ * Points domain (grouped export → deployed as `points-adminAdjust` and
+ * `points-adminReverse`).
+ *
+ * Kronpoäng ledger (contracts/functions/functions.json). All balance
+ * mutations run through the internal creditPoints/debitPoints transaction
+ * primitives (functions/src/points/ledger.ts) — never exposed as generic
+ * endpoints. Wallet/ledger reads are direct owner reads of
+ * pointsLedger/{uid} and its entries subcollection.
+ */
+export const points = {
+  adminAdjust,
+  adminReverse,
 };

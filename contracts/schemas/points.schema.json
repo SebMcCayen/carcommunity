@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/points.schema.json",
+  "title": "Kronpoäng points contract",
+  "description": "Language-neutral Kronpoäng (KP) ledger shapes shared by iOS, Android, backend, and admin. pointsWallet mirrors `pointsLedger/{uid}` and ledgerEntry mirrors `pointsLedger/{uid}/entries/{entryId}` (docs/migration/backend-domain-mapping.md 'Points ledger → Firestore transactions'). The backend is the sole balance authority: every mutation is a Firestore transaction, entries are append-only (corrections are compensating adjustment/reversal entries), a balance can never go negative, and clients never submit amounts outside the admin callables. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "pointsTransactionType": {
+      "type": "string",
+      "enum": ["earn", "spend", "adjustment_credit", "adjustment_debit", "reversal"]
+    },
+    "pointsTransactionSource": {
+      "type": "string",
+      "enum": [
+        "badge",
+        "event",
+        "garage",
+        "admin_adjustment",
+        "system",
+        "crown_hunt",
+        "future_crown_hunt"
+      ],
+      "description": "future_crown_hunt is retained for legacy ledger data only and must not be used for new entries."
+    },
+    "pointsWallet": {
+      "type": "object",
+      "description": "Firestore `pointsLedger/{uid}` — denormalized balance, updated atomically with each entry. Owner-only read; backend-only writes.",
+      "properties": {
+        "balance": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["balance", "updatedAt"],
+      "additionalProperties": false
+    },
+    "ledgerEntry": {
+      "type": "object",
+      "description": "Firestore `pointsLedger/{uid}/entries/{entryId}` — append-only; never updated or deleted. For idempotent automated awards the idempotencyKey doubles as the document ID.",
+      "properties": {
+        "transactionType": { "$ref": "#/$defs/pointsTransactionType" },
+        "source": { "$ref": "#/$defs/pointsTransactionSource" },
+        "amount": {
+          "type": "integer",
+          "description": "Signed: positive = credit, negative = debit."
+        },
+        "balanceAfter": { "type": "integer", "minimum": 0 },
+        "description": { "type": "string", "maxLength": 500 },
+        "idempotencyKey": { "type": ["string", "null"], "maxLength": 300 },
+        "relatedEntityType": { "type": ["string", "null"] },
+        "relatedEntityId": { "type": ["string", "null"] },
+        "createdByUserId": {
+          "type": ["string", "null"],
+          "description": "Acting admin UID for admin operations; null for automated entries."
+        },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "transactionType",
+        "source",
+        "amount",
+        "balanceAfter",
+        "description",
+        "idempotencyKey",
+        "relatedEntityType",
+        "relatedEntityId",
+        "createdByUserId",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "adminAdjustPointsRequest": {
+      "type": "object",
+      "description": "Input for points.adminAdjust (admin-only). Debits never overdraft; only an owner may adjust another owner's points.",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "type": { "type": "string", "enum": ["adjustment_credit", "adjustment_debit"] },
+        "amount": { "type": "integer", "minimum": 1 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["targetUid", "type", "amount", "reason"],
+      "additionalProperties": false
+    },
+    "adminReversePointsRequest": {
+      "type": "object",
+      "description": "Input for points.adminReverse (admin-only). Negates the original entry exactly once; reversals cannot be reversed; overdrafting reversals are rejected.",
+      "properties": {
+        "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
+        "entryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["targetUid", "entryId", "reason"],
+      "additionalProperties": false
+    }
+  }
+}

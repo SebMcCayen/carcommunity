@@ -214,6 +214,51 @@ describe('Firestore – badges (Phase 9f)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: points ledger (Phase 9g)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – points ledger (Phase 9g)', () => {
+  const OWNER = 'points-rules-owner';
+  const OTHER = 'points-rules-other';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'pointsLedger', OWNER), { balance: 120 });
+      await setDoc(doc(ctx.firestore(), 'pointsLedger', OWNER, 'entries', 'e-1'), {
+        transactionType: 'earn',
+        source: 'crown_hunt',
+        amount: 120,
+        balanceAfter: 120,
+      });
+    });
+  });
+
+  it('owner can read their wallet and ledger entries; others cannot', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(getDoc(doc(ownerFs, 'pointsLedger', OWNER)));
+    await assertSucceeds(getDoc(doc(ownerFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
+
+    const otherFs = testEnv.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(otherFs, 'pointsLedger', OWNER)));
+    await assertFails(getDoc(doc(otherFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
+  });
+
+  it('no client can write balances or entries — not even the owner', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER, { activeMember: true }).firestore();
+    await assertFails(updateDoc(doc(ownerFs, 'pointsLedger', OWNER), { balance: 999999 }));
+    await assertFails(
+      setDoc(doc(ownerFs, 'pointsLedger', OWNER, 'entries', 'forged'), {
+        transactionType: 'earn',
+        source: 'system',
+        amount: 999999,
+        balanceAfter: 999999,
+      }),
+    );
+    await assertFails(deleteDoc(doc(ownerFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: private user data
 // ---------------------------------------------------------------------------
 
