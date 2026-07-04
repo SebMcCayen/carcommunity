@@ -40,6 +40,9 @@ import {
   setStatus as setBillboardStatus,
   update as updateBillboard,
 } from './billboards/manageBillboard';
+import { markAllRead, markRead } from './notifications/manageNotifications';
+import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
+import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -246,4 +249,25 @@ export const billboards = {
   activate: activateBillboard,
   setStatus: setBillboardStatus,
   recordInteraction: recordBillboardInteraction,
+};
+
+/**
+ * Notifications domain (grouped export → deployed as
+ * `notifications-markRead`, `notifications-markAllRead`,
+ * `notifications-registerPushToken`, `notifications-unregisterPushToken`,
+ * and the scheduled `notifications-cleanupExpired`).
+ *
+ * Durable in-app inbox (contracts/functions/functions.json): owner-only
+ * reads of `notifications/{uid}/items/`, backend-only writes (delivery via
+ * writeInAppNotification, read-state via the mark callables), push token
+ * registrations stored as SHA-256 hashes only, and the daily retention
+ * sweep (unread 30 days, read 7 days). FCM delivery itself ships with the
+ * end-of-MVP Firebase console setup.
+ */
+export const notifications = {
+  markRead,
+  markAllRead,
+  registerPushToken,
+  unregisterPushToken,
+  cleanupExpired: cleanupExpiredNotifications,
 };

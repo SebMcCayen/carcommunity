@@ -2,6 +2,7 @@
   "version": "1.0.0",
   "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable must verify authentication context and App Check in production, and return error codes from contracts/errors/errors.json. The status field tracks migration progress (planned vs implemented).",
   "accessLevels": {
+    "signedIn": "Any signed-in user, including suspended — reserved for cleanup paths that must work under suspension (e.g. push token unregistration).",
     "authenticated": "Any signed-in, non-suspended, non-deleted user.",
     "member": "Requires active member_monthly entitlement; suspension always overrides entitlement.",
     "admin": "Requires admin or owner role; does not require member subscription."
@@ -384,6 +385,42 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (Sponsored billboards)"
+    },
+    {
+      "name": "notifications.markRead",
+      "domain": "notifications",
+      "description": "Marks one in-app notification as read. The inbox (notifications/{uid}/items) is backend-write-only, so read-state changes go through this callable; ownership is structural (only the caller's own inbox is touched — another user's notification ID is not-found). Idempotent: replays return marked=false. Deployed via grouped export as notifications-markRead (functions/src/notifications/manageNotifications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
+      "name": "notifications.markAllRead",
+      "domain": "notifications",
+      "description": "Marks all of the caller's unread notifications as read (batched) and returns markedCount. Idempotent. Deployed via grouped export as notifications-markAllRead (functions/src/notifications/manageNotifications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
+      "name": "notifications.registerPushToken",
+      "domain": "notifications",
+      "description": "Registers a push device token. Only the SHA-256 hash of the FCM token is stored (as the userPrivate/{uid}/pushTokens document ID — registration is idempotent, re-registers bump lastSeenAt); the raw token never appears in documents, logs, or responses. Gated by the pushNotifications feature flag. FCM delivery itself (sendPushNotification) ships with the end-of-MVP Firebase console setup. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
+      "name": "notifications.unregisterPushToken",
+      "domain": "notifications",
+      "description": "Deletes a push token registration by tokenId. Requires authentication only — suspended users may clean up their devices (legacy parity). Idempotent: returns removed=false when the registration does not exist. Deployed via grouped export as notifications-unregisterPushToken (functions/src/notifications/pushTokens.ts).",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
     },
     {
       "name": "admin.suspendUser",

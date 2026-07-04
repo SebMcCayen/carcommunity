@@ -184,6 +184,31 @@ service cloud.firestore {
       // (Phase 9a); consent timestamps are excluded from the whitelist.
       allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
+
+      // Push token registrations (Phase 9l). Documents contain only the
+      // SHA-256 token hash (as the document ID), platform, and app
+      // metadata — never the raw FCM token. All writes go through the
+      // notifications.registerPushToken / unregisterPushToken callables so
+      // hashing and lastSeenAt maintenance stay backend-controlled.
+      match /pushTokens/{tokenId} {
+        allow read: if isOwner(userId);
+        // No client writes.
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // notifications/{uid}/items – durable in-app notification inbox
+    // (Phase 9l). Owner-only read; deliberately NOT gated on suspension so
+    // suspended users can still see the essential account notices that are
+    // delivered to them (the backend writer enforces that suspended users
+    // receive ONLY those categories). Backend-only writes: delivery goes
+    // through writeInAppNotification and read-state through
+    // notifications.markRead / markAllRead, keeping the backend the sole
+    // authority for notification content and eligibility.
+    // -------------------------------------------------------------------------
+    match /notifications/{userId}/items/{notificationId} {
+      allow read: if isOwner(userId);
+      // No client writes.
     }
 
     // -------------------------------------------------------------------------

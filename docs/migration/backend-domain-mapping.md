@@ -321,9 +321,9 @@ runTransaction:
 | In-app notifications | `user_notifications` table                          | `notifications/{uid}/items/{notificationId}`                                |
 | Preference storage   | `notification_preferences` table                    | `userPrivate/{uid}.notificationPreferences` map                             |
 
-**FCM send pattern:** Callable function sends FCM via `admin.messaging().send()`; does not store tokens in plaintext.
+**FCM send pattern:** Callable function sends FCM via `admin.messaging().send()`; does not store tokens in plaintext. Token registration (Phase 9l) stores the SHA-256 hash only, as the `pushTokens` document ID; `sendPushNotification` delivery ships with the end-of-MVP Firebase console/FCM setup.
 
-**In-app notification path:** `notifications/{uid}/items/{notificationId}` — `title`, `body`, `type`, `read`, `createdAt`. Owner-only read; backend-only write.
+**In-app notification path:** `notifications/{uid}/items/{notificationId}` — `category`, `title`, `previewText`, `body?`, `actionType`, `relatedEntityId?`, `batchId?`, `read`, `readAt?`, `createdAt` (the legacy contract shape; contracts/schemas/notifications.schema.json). Owner-only read; backend-only write — delivery via the `writeInAppNotification` writer (deleted users receive nothing, suspended users only the essential account notices, per-category opt-outs honored except essential categories), read-state via `notifications.markRead` / `markAllRead`.
 
 **Security-rule requirements:** `notifications/{uid}/items/` — owner read; no client write.
 

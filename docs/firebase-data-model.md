@@ -53,7 +53,7 @@ Document ID: Firebase UID.
 | ---------------------------- | ------------ | ---------------------------------------------------------------------- |
 | `email`                      | `string?`    | Contact channel, not identity key                                      |
 | `phone`                      | `string?`    | Optional                                                               |
-| `notificationPreferences`    | `map?`       | Push/email preferences                                                 |
+| `notificationPreferences`    | `map?`       | Per-category `{ inApp?, push? }`; essential categories enforced at delivery |
 | `ageConfirmedAt`             | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
@@ -62,6 +62,48 @@ Document ID: Firebase UID.
 | `updatedAt`                  | `Timestamp`  | Server timestamp                                                       |
 
 Security: owner-only read and write. No other users may access this collection. Consent timestamps are backend-written compliance records — clients cannot set, modify, or delete them, and the document itself cannot be deleted by clients (account deletion is a backend workflow).
+
+---
+
+### `userPrivate/{uid}/pushTokens/{tokenId}` — push token registrations (Phase 9l)
+
+Document ID: SHA-256 hex of the raw FCM token — the ONLY representation
+ever stored (the raw token never appears in documents, logs, or
+responses), and it makes registration naturally idempotent.
+`{ platform: android|ios, appVersion?, buildNumber?, createdAt,
+lastSeenAt }` (contracts/schemas/notifications.schema.json).
+
+Security: owner-only read; all writes via
+`notifications.registerPushToken` (active users, gated by the
+`pushNotifications` flag) and `notifications.unregisterPushToken`
+(any signed-in user — suspended users may clean up their devices). FCM
+delivery itself (`sendPushNotification`) ships with the end-of-MVP
+Firebase console setup.
+
+---
+
+### `notifications/{uid}/items/{notificationId}` — in-app inbox (Phase 9l)
+
+Durable in-app notifications. `{ category: event_reminder|event_updated|
+event_cancelled|admin_message|account_warning|account_suspension|
+subscription_status|system_notice, title (≤100), previewText (≤200),
+body? (≤1000), actionType, relatedEntityId?, batchId?, read, readAt?,
+createdAt }` (contracts/schemas/notifications.schema.json). Plain text
+only. List newest-first by `createdAt`; unread count via an aggregate
+count query on `read == false`.
+
+Security: owner-only read (deliberately not gated on suspension —
+suspended users still see the essential account notices delivered to
+them); backend-only writes. Delivery goes through the
+`writeInAppNotification` backend writer, which enforces eligibility:
+deleted users receive nothing, suspended users receive only the essential
+categories (`account_warning`, `account_suspension`), and per-category
+opt-outs in `userPrivate/{uid}.notificationPreferences` are honored except
+for those essential categories. Read-state changes go through
+`notifications.markRead` / `markAllRead`. Retention (scheduled
+`notifications-cleanupExpired`, 05:00 Europe/Stockholm): unread items are
+kept 30 days, read items 7 days. Collection-group composite indexes:
+`read ASC, readAt ASC` and `read ASC, createdAt ASC` (cleanup queries).
 
 ---
 

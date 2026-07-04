@@ -632,6 +632,92 @@ describe('Firestore – userPrivate', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: notifications (Phase 9l)
+// In-app inbox: owner-only read, backend-only writes (delivery via the
+// backend writer, read-state via notifications.markRead / markAllRead).
+// Push tokens: owner-only read of hash-only documents, callable-only writes.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – notifications (Phase 9l)', () => {
+  const OWNER = 'notif-owner';
+  const OTHER = 'notif-other';
+  const ITEM = `notifications/${OWNER}/items/n1`;
+  const TOKEN = `userPrivate/${OWNER}/pushTokens/${'a'.repeat(64)}`;
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), ITEM), {
+        category: 'system_notice',
+        title: 'Nyheter i appen',
+        previewText: 'Vi har uppdaterat kartan.',
+        body: null,
+        actionType: 'none',
+        relatedEntityId: null,
+        batchId: null,
+        read: false,
+        readAt: null,
+        createdAt: serverTimestamp(),
+      });
+      await setDoc(doc(ctx.firestore(), TOKEN), {
+        platform: 'android',
+        appVersion: null,
+        buildNumber: null,
+        createdAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp(),
+      });
+    });
+  });
+
+  it('owner can read their own notifications', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(getDoc(doc(ctx.firestore(), ITEM)));
+  });
+
+  it('another user cannot read someone else’s notifications', async () => {
+    const ctx = testEnv.authenticatedContext(OTHER);
+    await assertFails(getDoc(doc(ctx.firestore(), ITEM)));
+  });
+
+  it('unauthenticated users cannot read notifications', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), ITEM)));
+  });
+
+  it('the owner cannot author, edit, or delete notifications (backend-only writes)', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `notifications/${OWNER}/items/self-made`), {
+        category: 'admin_message',
+        title: 'Falskt meddelande',
+        previewText: 'x',
+        read: false,
+      }),
+    );
+    // Even the read flag goes through notifications.markRead, never directly.
+    await assertFails(updateDoc(doc(ctx.firestore(), ITEM), { read: true }));
+    await assertFails(deleteDoc(doc(ctx.firestore(), ITEM)));
+  });
+
+  it('owner can read their own push token registrations, others cannot', async () => {
+    const owner = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(getDoc(doc(owner.firestore(), TOKEN)));
+    const other = testEnv.authenticatedContext(OTHER);
+    await assertFails(getDoc(doc(other.firestore(), TOKEN)));
+  });
+
+  it('push token writes are callable-only', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `userPrivate/${OWNER}/pushTokens/${'b'.repeat(64)}`), {
+        platform: 'android',
+      }),
+    );
+    await assertFails(updateDoc(doc(ctx.firestore(), TOKEN), { platform: 'ios' }));
+    await assertFails(deleteDoc(doc(ctx.firestore(), TOKEN)));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: user profile field validation (Phase 9a)
 // Owner writes are whitelist-based with per-field validation; shapes follow
 // contracts/schemas/user-profile.schema.json.

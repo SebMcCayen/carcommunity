@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/notifications.schema.json",
+  "title": "Notifications contract",
+  "description": "Language-neutral notification shapes shared by iOS, Android, backend, and admin. notification mirrors the Firestore `notifications/{uid}/items/{notificationId}` document: owner-only read, backend-only write (delivery via the backend writer, read-state via notifications.markRead / markAllRead). Push token registrations store ONLY the SHA-256 hash of the FCM token (the hash is the document ID); the raw token never appears in documents, logs, or responses. Retention (scheduled cleanup): unread items 30 days, read items 7 days. Preferences live in the owner-writable `userPrivate/{uid}.notificationPreferences` map; the essential account-notice categories (account_warning, account_suspension) cannot be disabled — enforced at delivery time by the backend writer, which is the sole inbox author. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "notificationCategory": {
+      "type": "string",
+      "enum": [
+        "event_reminder",
+        "event_updated",
+        "event_cancelled",
+        "admin_message",
+        "account_warning",
+        "account_suspension",
+        "subscription_status",
+        "system_notice"
+      ],
+      "description": "Active categories only. The legacy contract's future categories (partner_offer, event_chat, nearby_event) must not be sent without product and security review and are deliberately excluded."
+    },
+    "notificationActionType": {
+      "type": "string",
+      "enum": [
+        "open_notifications",
+        "open_event",
+        "open_profile",
+        "open_subscription",
+        "open_settings",
+        "none"
+      ]
+    },
+    "pushTokenPlatform": {
+      "type": "string",
+      "enum": ["android", "ios"]
+    },
+    "notification": {
+      "type": "object",
+      "description": "Firestore `notifications/{uid}/items/{notificationId}`. Owner-only read; no client writes. Plain text only — no HTML. List newest-first by createdAt; unread count via an aggregate count query on read == false.",
+      "properties": {
+        "category": { "$ref": "#/$defs/notificationCategory" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "previewText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Swedish preview text. Must not contain protected details."
+        },
+        "body": { "type": ["string", "null"], "minLength": 1, "maxLength": 1000 },
+        "actionType": { "$ref": "#/$defs/notificationActionType" },
+        "relatedEntityId": {
+          "type": ["string", "null"],
+          "description": "Opaque related entity ID (e.g. eventId)."
+        },
+        "batchId": {
+          "type": ["string", "null"],
+          "description": "Producer batch/idempotency marker for grouped sends."
+        },
+        "read": { "type": "boolean" },
+        "readAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "category",
+        "title",
+        "previewText",
+        "body",
+        "actionType",
+        "relatedEntityId",
+        "batchId",
+        "read",
+        "readAt",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "notificationPreferenceEntry": {
+      "type": "object",
+      "description": "Per-category entry in `userPrivate/{uid}.notificationPreferences` (owner-writable map, category → entry). Missing entries default to enabled. The essential categories ignore inApp=false at delivery time.",
+      "properties": {
+        "inApp": { "type": "boolean" },
+        "push": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "markNotificationReadRequest": {
+      "type": "object",
+      "description": "Input for notifications.markRead. Ownership is structural — the callable only touches the caller's own inbox, so another user's notification ID is not-found. Idempotent.",
+      "properties": {
+        "notificationId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["notificationId"],
+      "additionalProperties": false
+    },
+    "markNotificationReadResponse": {
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string" },
+        "marked": {
+          "type": "boolean",
+          "description": "False when the notification was already read (idempotent replay)."
+        }
+      },
+      "required": ["notificationId", "marked"],
+      "additionalProperties": false
+    },
+    "markAllNotificationsReadResponse": {
+      "type": "object",
+      "properties": {
+        "markedCount": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["markedCount"],
+      "additionalProperties": false
+    },
+    "registerPushTokenRequest": {
+      "type": "object",
+      "description": "Input for notifications.registerPushToken (active users; gated by the pushNotifications flag). The raw token is hashed server-side and never stored.",
+      "properties": {
+        "token": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "platform": { "$ref": "#/$defs/pushTokenPlatform" },
+        "appVersion": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "buildNumber": { "type": "string", "minLength": 1, "maxLength": 50 }
+      },
+      "required": ["token", "platform"],
+      "additionalProperties": false
+    },
+    "registerPushTokenResponse": {
+      "type": "object",
+      "properties": {
+        "tokenId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex of the token — also the pushTokens document ID. Re-registering the same token returns the same tokenId (idempotent)."
+        },
+        "platform": { "$ref": "#/$defs/pushTokenPlatform" }
+      },
+      "required": ["tokenId", "platform"],
+      "additionalProperties": false
+    },
+    "unregisterPushTokenRequest": {
+      "type": "object",
+      "description": "Input for notifications.unregisterPushToken. Requires authentication only — suspended users may clean up their devices. Idempotent.",
+      "properties": {
+        "tokenId": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "required": ["tokenId"],
+      "additionalProperties": false
+    },
+    "unregisterPushTokenResponse": {
+      "type": "object",
+      "properties": {
+        "removed": { "type": "boolean" }
+      },
+      "required": ["removed"],
+      "additionalProperties": false
+    },
+    "pushTokenRegistration": {
+      "type": "object",
+      "description": "Firestore `userPrivate/{uid}/pushTokens/{tokenId}` where tokenId is the SHA-256 hex of the raw FCM token. Owner-only read; all writes via the register/unregister callables.",
+      "properties": {
+        "platform": { "$ref": "#/$defs/pushTokenPlatform" },
+        "appVersion": { "type": ["string", "null"], "minLength": 1, "maxLength": 50 },
+        "buildNumber": { "type": ["string", "null"], "minLength": 1, "maxLength": 50 },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "lastSeenAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["platform", "appVersion", "buildNumber", "createdAt", "lastSeenAt"],
+      "additionalProperties": false
+    }
+  }
+}
