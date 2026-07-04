@@ -23,14 +23,25 @@ function walk(dir: string): string[] {
 }
 
 describe('App Check enforcement (Phase 15d)', () => {
-  it('every onCall callable sets the production enforcement pattern', () => {
+  it('every onCall invocation uses enforcing options (per-call, not per-file)', () => {
     const offenders: string[] = [];
     for (const file of walk(SRC)) {
       const source = readFileSync(file, 'utf8');
-      const onCallCount = (source.match(/onCall\(/g) ?? []).length;
-      if (onCallCount === 0) continue;
-      if (!source.includes(ENFORCE_PATTERN)) {
-        offenders.push(file);
+      const fileHasEnforcingOpts =
+        source.includes('const CALLABLE_OPTS') && source.includes(ENFORCE_PATTERN);
+      // Examine EACH onCall call site: it must either pass the file's
+      // enforcing CALLABLE_OPTS object, or inline options containing the
+      // enforcement pattern within the argument window. A second callable
+      // added to an already-protected file cannot slip through.
+      const siteRegex = /onCall\(\s*([^,)]*)/g;
+      for (const match of source.matchAll(siteRegex)) {
+        const firstArg = (match[1] ?? '').trim();
+        const window = source.slice(match.index ?? 0, (match.index ?? 0) + 600);
+        const usesSharedOpts = firstArg.startsWith('CALLABLE_OPTS') && fileHasEnforcingOpts;
+        const usesInlinePattern = window.includes('enforceAppCheck');
+        if (!usesSharedOpts && !usesInlinePattern) {
+          offenders.push(`${file} @ ${firstArg.slice(0, 40)}`);
+        }
       }
     }
     expect(offenders).toEqual([]);

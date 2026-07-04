@@ -62,6 +62,9 @@ function registerAppCheck(app: FirebaseApp): void {
 export function getFirebaseApp(): FirebaseApp {
   const existing = getApps();
   if (existing.length > 0) {
+    // App Check registration is idempotent (guarded by appCheckInstance):
+    // register even when someone else initialized the app first.
+    registerAppCheck(existing[0]!);
     return existing[0]!;
   }
   const app = initializeApp(firebaseConfig);
