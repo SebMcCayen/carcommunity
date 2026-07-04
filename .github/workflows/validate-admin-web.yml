@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/admin/**'
       - 'packages/shared/**'
+      - 'firebase/firebase.json'
       - '.github/workflows/validate-admin-web.yml'
   pull_request:
     # phase-* lets CI run on stacked PRs (base = previous phase branch),
@@ -14,6 +15,7 @@ on:
     paths:
       - 'apps/admin/**'
       - 'packages/shared/**'
+      - 'firebase/firebase.json'
       - '.github/workflows/validate-admin-web.yml'
 
 permissions:
@@ -51,3 +53,29 @@ jobs:
 
       - name: Build
         run: npm run build --workspace apps/admin
+
+      - name: Validate hosting configuration (Phase 14)
+        run: |
+          node -e "
+          const config = require('./firebase/firebase.json');
+          const hosting = config.hosting;
+          const fail = (msg) => { console.error('FAIL: ' + msg); process.exit(1); };
+          if (hosting.public !== '../apps/admin/dist') fail('hosting.public must point at the admin dist');
+          if (!hosting.rewrites?.some((r) => r.source === '**' && r.destination === '/index.html'))
+            fail('SPA rewrite missing');
+          const globalHeaders = hosting.headers?.find((h) => h.source === '**')?.headers ?? [];
+          for (const required of ['Strict-Transport-Security', 'Content-Security-Policy',
+                                  'X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy']) {
+            if (!globalHeaders.some((h) => h.key === required)) fail('missing header: ' + required);
+          }
+          const assetHeaders = hosting.headers?.find((h) => h.source === '/assets/**')?.headers ?? [];
+          if (!assetHeaders.some((h) => h.key === 'Cache-Control' && h.value.includes('immutable')))
+            fail('immutable asset caching missing');
+          console.log('hosting configuration OK');
+          "
+
+      - name: Assert build output shape
+        run: |
+          test -f apps/admin/dist/index.html || { echo 'FAIL: dist/index.html missing'; exit 1; }
+          ls apps/admin/dist/assets/*.js >/dev/null 2>&1 || { echo 'FAIL: hashed assets missing'; exit 1; }
+          echo 'build output OK'
