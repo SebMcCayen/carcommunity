@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/partners.schema.json",
+  "title": "Partner contract",
+  "description": "Language-neutral partner shapes (companies, offers, applications) shared by iOS, Android, backend, and admin. Offers use a THREE-TIER privacy model: partnerOffer (teaser, authenticated read while active) never contains the description, terms, or discount code; partnerOfferMemberDetail (member-gated subdocument) adds everything except the code; the code itself is backend-only and served exclusively by partners.showOfferCode — it is never logged and never stored client-readably. Partner applications carry contact data and are never client-readable. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "partnerCategory": {
+      "type": "string",
+      "enum": [
+        "workshop",
+        "car_care",
+        "parts",
+        "tires",
+        "charging",
+        "restaurant",
+        "retail",
+        "other"
+      ]
+    },
+    "partnerCompanyStatus": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "ended"]
+    },
+    "partnerOfferStatus": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "ended", "expired"]
+    },
+    "partnerOfferType": {
+      "type": "string",
+      "enum": [
+        "discount_code",
+        "percentage_discount",
+        "fixed_discount",
+        "member_benefit",
+        "special_offer",
+        "other"
+      ]
+    },
+    "partnerApplicationStatus": {
+      "type": "string",
+      "enum": ["submitted", "under_review", "approved", "rejected", "withdrawn"]
+    },
+    "partnerCompany": {
+      "type": "object",
+      "description": "Firestore `companies/{companyId}`. Authenticated read while active; writes via admin partners.* callables only.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "category": { "$ref": "#/$defs/partnerCategory" },
+        "description": { "type": ["string", "null"], "maxLength": 1000 },
+        "website": { "type": ["string", "null"], "maxLength": 500 },
+        "phone": { "type": ["string", "null"], "maxLength": 30 },
+        "address": { "type": ["string", "null"], "maxLength": 300 },
+        "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
+        "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
+        "logoPath": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "Cloud Storage path under companyImages/{companyId}/."
+        },
+        "status": { "$ref": "#/$defs/partnerCompanyStatus" },
+        "sourceApplicationId": { "type": ["string", "null"] },
+        "createdByUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "name",
+        "category",
+        "description",
+        "website",
+        "phone",
+        "address",
+        "latitude",
+        "longitude",
+        "logoPath",
+        "status",
+        "sourceApplicationId",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "partnerOffer": {
+      "type": "object",
+      "description": "Firestore `offers/{offerId}` — the TEASER tier: safe for all authenticated users while active. No description, redemption instructions, terms, discount metadata, or code.",
+      "properties": {
+        "companyId": { "type": "string" },
+        "partnerCompanyName": {
+          "type": "string",
+          "description": "Denormalized company name for list rendering."
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "teaserText": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "offerType": { "$ref": "#/$defs/partnerOfferType" },
+        "status": { "$ref": "#/$defs/partnerOfferStatus" },
+        "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "companyId",
+        "partnerCompanyName",
+        "title",
+        "teaserText",
+        "offerType",
+        "status",
+        "availableFrom",
+        "availableUntil",
+        "createdAt",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "partnerOfferMemberDetail": {
+      "type": "object",
+      "description": "Firestore `offers/{offerId}/details/member` — member-gated while the offer is active. STILL no discount code (partners.showOfferCode only).",
+      "properties": {
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "redemptionInstructions": { "type": ["string", "null"], "maxLength": 1000 },
+        "terms": { "type": ["string", "null"], "maxLength": 2000 },
+        "percentageDiscount": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+        "fixedDiscountMinorUnits": { "type": ["integer", "null"], "minimum": 1 },
+        "currencyCode": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "description",
+        "redemptionInstructions",
+        "terms",
+        "percentageDiscount",
+        "fixedDiscountMinorUnits",
+        "currencyCode",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "savedOffer": {
+      "type": "object",
+      "description": "Firestore `users/{uid}/savedOffers/{offerId}` — a pure member bookmark (document ID == offerId). Direct rules-gated writes.",
+      "properties": {
+        "offerId": { "type": "string" },
+        "savedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["offerId", "savedAt"],
+      "additionalProperties": false
+    },
+    "showOfferCodeResponse": {
+      "type": "object",
+      "description": "Response of partners.showOfferCode (member-only, active offers only). The only place the discount code ever appears.",
+      "properties": {
+        "offerId": { "type": "string" },
+        "code": { "type": ["string", "null"], "maxLength": 100 },
+        "redemptionInstructions": { "type": ["string", "null"] },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": ["offerId", "code", "redemptionInstructions", "expiresAt"],
+      "additionalProperties": false
+    },
+    "submitApplicationRequest": {
+      "type": "object",
+      "description": "Input for partners.submitApplication (any active user). One active application per user or contact email.",
+      "properties": {
+        "companyName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "organizationNumber": { "type": ["string", "null"], "maxLength": 20 },
+        "category": { "$ref": "#/$defs/partnerCategory" },
+        "contactName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "contactEmail": { "type": "string", "format": "email", "maxLength": 254 },
+        "contactPhone": { "type": ["string", "null"], "maxLength": 30 },
+        "websiteUrl": { "type": ["string", "null"], "maxLength": 500 },
+        "proposedDescription": { "type": ["string", "null"], "maxLength": 1000 },
+        "proposedAddress": { "type": ["string", "null"], "maxLength": 300 },
+        "message": { "type": ["string", "null"], "maxLength": 2000 }
+      },
+      "required": ["companyName", "category", "contactName", "contactEmail"],
+      "additionalProperties": false
+    },
+    "reviewApplicationRequest": {
+      "type": "object",
+      "description": "Input for partners.reviewApplication (admin). Approval creates the draft company atomically; rejection requires a note.",
+      "properties": {
+        "applicationId": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "enum": ["start_review", "approve", "reject"] },
+        "note": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["applicationId", "action"],
+      "additionalProperties": false
+    },
+    "setStatusRequest": {
+      "type": "object",
+      "description": "Input for partners.setCompanyStatus / partners.setOfferStatus (admin). Lifecycle: draft → active ⇄ paused → ended; ended/expired are terminal.",
+      "properties": {
+        "companyId": { "type": "string" },
+        "offerId": { "type": "string" },
+        "action": { "type": "string", "enum": ["activate", "pause", "end"] },
+        "reason": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    }
+  }
+}

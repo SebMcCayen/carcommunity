@@ -43,24 +43,6 @@
       ]
     },
     {
-      "collectionGroup": "offers",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "companyId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "expiresAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "hazards",
       "queryScope": "COLLECTION",
       "fields": [
@@ -216,6 +198,66 @@
         },
         {
           "fieldPath": "claimedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "offers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "partnerApplications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "partnerApplications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "submittedByUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "partnerApplications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "contactEmail",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
           "order": "ASCENDING"
         }
       ]

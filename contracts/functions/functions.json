@@ -251,6 +251,87 @@
       "source": "docs/migration/backend-domain-mapping.md (Points ledger -> Firestore transactions)"
     },
     {
+      "name": "partners.submitApplication",
+      "domain": "partners",
+      "description": "Submits a partner application (contact data, never client-readable). Duplicate-spam guard: one active application per user or contact email. Deployed via grouped export as partners-submitApplication (functions/src/partners/applications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.reviewApplication",
+      "domain": "partners",
+      "description": "Admin review flow: start_review, approve (creates the draft company in the same transaction, idempotent), or reject (note required). Every step audited. Deployed via grouped export as partners-reviewApplication (functions/src/partners/applications.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.createCompany",
+      "domain": "partners",
+      "description": "Creates a draft partner company (legacy field limits; logoPath under companyImages/{companyId}/). Audited. Deployed via grouped export as partners-createCompany (functions/src/partners/manageCompany.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.updateCompany",
+      "domain": "partners",
+      "description": "Edits a draft or paused company (active/ended are immutable). Audited with changedFields. Deployed via grouped export as partners-updateCompany (functions/src/partners/manageCompany.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.setCompanyStatus",
+      "domain": "partners",
+      "description": "Company lifecycle transitions: activate | pause | end (ended is terminal). Audited. Deployed via grouped export as partners-setCompanyStatus (functions/src/partners/manageCompany.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.createOffer",
+      "domain": "partners",
+      "description": "Creates a draft offer with the three-tier privacy split: teaser document, member detail subdocument, and the backend-only discount code. Audited (the code value never appears in audit details). Deployed via grouped export as partners-createOffer (functions/src/partners/manageOffer.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.updateOffer",
+      "domain": "partners",
+      "description": "Edits a draft or paused offer across the three documents; merged availability window re-validated. Audited with changedFields (names only). Deployed via grouped export as partners-updateOffer (functions/src/partners/manageOffer.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.setOfferStatus",
+      "domain": "partners",
+      "description": "Offer lifecycle transitions: activate | pause | end (ended/expired are terminal). Audited. Deployed via grouped export as partners-setOfferStatus (functions/src/partners/manageOffer.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
+      "name": "partners.showOfferCode",
+      "domain": "partners",
+      "description": "Reveals an active offer's discount code to an active member — the ONLY place the code ever appears; never logged (legacy rule). Deployed via grouped export as partners-showOfferCode (functions/src/partners/manageOffer.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner collections)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",
