@@ -526,7 +526,12 @@ service cloud.firestore {
 
     match /moderationReports/{reportId} {
       allow create: if isAuthenticated() && validModerationReport();
-      allow read, update: if isAdmin();
+      allow read: if isAdmin();
+      // Admin review updates may ONLY move the status through the review
+      // vocabulary — reporter identity, target, and reason are immutable.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['pending', 'reviewed', 'dismissed'];
       // No deletes: reports are review records (admins resolve via status).
     }
 

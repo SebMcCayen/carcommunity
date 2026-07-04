@@ -888,6 +888,17 @@ describe('Firestore – moderation reports validation (Phase 9o)', () => {
     await assertSucceeds(
       updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), { status: 'reviewed' }),
     );
+    // Admin review updates are status-only: immutable fields stay immutable
+    // and the status vocabulary is closed.
+    await assertFails(
+      updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), {
+        status: 'reviewed',
+        reason: 'rewritten',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), { status: 'archived' }),
+    );
     // Even admins cannot delete review records.
     await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/valid-1')));
   });
