@@ -9,6 +9,11 @@
  */
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import {
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+  type AppCheck,
+} from 'firebase/app-check';
 import { getAuth, type Auth } from 'firebase/auth';
 
 function requireEnv(name: keyof ImportMetaEnv): string {
@@ -28,12 +33,40 @@ const firebaseConfig = {
   appId: requireEnv('VITE_FIREBASE_APP_ID'),
 };
 
+let appCheckInstance: AppCheck | null = null;
+
+/**
+ * Registers Firebase App Check (Phase 15c) with the reCAPTCHA v3
+ * provider. Registration is a no-op until VITE_APPCHECK_SITE_KEY is
+ * configured (console provisioning at cutover) — clients degrade
+ * gracefully while enforcement is off server-side per docs/app-check.md.
+ * In non-production builds VITE_APPCHECK_DEBUG_TOKEN feeds the debug
+ * provider for emulator/CI runs.
+ */
+function registerAppCheck(app: FirebaseApp): void {
+  if (appCheckInstance) return;
+  const siteKey = import.meta.env.VITE_APPCHECK_SITE_KEY as string | undefined;
+  if (!siteKey) return;
+  if (!import.meta.env.PROD) {
+    const debugToken = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN as string | undefined;
+    if (debugToken) {
+      (globalThis as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN = debugToken;
+    }
+  }
+  appCheckInstance = initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(siteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
+
 export function getFirebaseApp(): FirebaseApp {
   const existing = getApps();
   if (existing.length > 0) {
     return existing[0]!;
   }
-  return initializeApp(firebaseConfig);
+  const app = initializeApp(firebaseConfig);
+  registerAppCheck(app);
+  return app;
 }
 
 export function getFirebaseAuth(): Auth {
