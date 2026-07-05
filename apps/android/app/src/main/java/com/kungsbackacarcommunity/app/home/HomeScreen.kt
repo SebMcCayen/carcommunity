@@ -71,6 +71,8 @@ fun HomeScreen(
     onOpenBillboards: (() -> Unit)? = null,
     // Phase 12 slice 25: opens account deletion; null hides the entry.
     onOpenAccountDeletion: (() -> Unit)? = null,
+    // Phase 12 slice 19: opens partner-stats opt-in; null hides the entry.
+    onOpenPartnerStats: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -154,6 +156,11 @@ fun HomeScreen(
             if (onOpenBillboards != null) {
                 OutlinedButton(onClick = onOpenBillboards, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.billboard_advertisingFrom))
+                }
+            }
+            if (onOpenPartnerStats != null) {
+                OutlinedButton(onClick = onOpenPartnerStats, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.privacySettings_title))
                 }
             }
             if (onOpenAccountDeletion != null) {

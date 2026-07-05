@@ -30,6 +30,8 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.points.FirebasePointsRepository
+import com.kungsbackacarcommunity.app.privacy.FirebasePartnerStatsRepository
+import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.partners.FirebasePartnerApplicationRepository
 import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
@@ -98,6 +100,9 @@ class MainActivity : ComponentActivity() {
         val accountDeletionCoordinator =
             FirebaseAccountDeletionRepository.createIfAvailable(applicationContext)
                 ?.let { AccountDeletionCoordinator(it) }
+        val partnerStatsRepository =
+            FirebasePartnerStatsRepository.createIfAvailable(applicationContext)
+        val partnerStatsCoordinator = partnerStatsRepository?.let { PartnerStatsCoordinator(it) }
 
         setContent {
             val authState =
@@ -145,6 +150,8 @@ class MainActivity : ComponentActivity() {
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
                         accountDeletionCoordinator = accountDeletionCoordinator,
+                        partnerStatsRepository = partnerStatsRepository,
+                        partnerStatsCoordinator = partnerStatsCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
