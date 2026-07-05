@@ -10,14 +10,19 @@ import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
+import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
+import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
+import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
+import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Guarded Firebase wiring: null when google-services.json is absent
-        // (CI/local validation builds) — the app renders without auth.
+        // Guarded Firebase wiring: each createIfAvailable returns null when
+        // google-services.json is absent (CI/local validation builds), so the
+        // app renders an unauthenticated shell instead of crashing.
         val authRepository = FirebaseAuthRepository.createIfAvailable(applicationContext)
         val signInCoordinator =
             authRepository?.let {
@@ -26,6 +31,11 @@ class MainActivity : ComponentActivity() {
                     repository = it,
                 )
             }
+        val profileRepository = FirebaseProfileRepository.createIfAvailable(applicationContext)
+        val onboardingCoordinator =
+            FirebaseOnboardingRepository.createIfAvailable(applicationContext)
+                ?.let { OnboardingCoordinator(it) }
+        val profileEditCoordinator = profileRepository?.let { ProfileEditCoordinator(it) }
 
         setContent {
             val authState =
@@ -44,6 +54,16 @@ class MainActivity : ComponentActivity() {
                 // signOut flips Firebase auth state; the authState listener
                 // re-renders AppRoot back to the sign-in screen reactively.
                 onSignOutClick = { authRepository?.signOut() },
+                signedInContent = { uid, displayName ->
+                    AuthenticatedApp(
+                        uid = uid,
+                        authDisplayName = displayName,
+                        profileRepository = profileRepository,
+                        onboardingCoordinator = onboardingCoordinator,
+                        profileEditCoordinator = profileEditCoordinator,
+                        onSignOut = { authRepository?.signOut() },
+                    )
+                },
             )
         }
     }

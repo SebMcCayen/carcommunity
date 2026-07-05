@@ -146,7 +146,18 @@
     "badges": "Awards",
     "openSettings": "Open settings",
     "openAbout": "Open about app",
-    "points": "Kronpoäng"
+    "points": "Kronpoäng",
+    "displayNameLabel": "Display name",
+    "bioLabel": "Bio",
+    "saveButton": "Save",
+    "editButton": "Edit",
+    "cancelButton": "Cancel",
+    "back": "Back",
+    "saved": "Saved",
+    "errorNameRequired": "Enter a display name.",
+    "errorTooLong": "That text is too long.",
+    "loadError": "Couldn’t load your profile.",
+    "saveError": "Couldn’t save. Please try again."
   },
   "map": {
     "title": "Map",

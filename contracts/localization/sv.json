@@ -146,7 +146,18 @@
     "badges": "Utmärkelser",
     "openSettings": "Öppna inställningar",
     "openAbout": "Öppna om appen",
-    "points": "Kronpoäng"
+    "points": "Kronpoäng",
+    "displayNameLabel": "Visningsnamn",
+    "bioLabel": "Presentation",
+    "saveButton": "Spara",
+    "editButton": "Redigera",
+    "cancelButton": "Avbryt",
+    "back": "Tillbaka",
+    "saved": "Sparat",
+    "errorNameRequired": "Ange ett visningsnamn.",
+    "errorTooLong": "Texten är för lång.",
+    "loadError": "Kunde inte ladda profilen.",
+    "saveError": "Kunde inte spara. Försök igen."
   },
   "map": {
     "title": "Karta",

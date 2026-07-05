@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +42,7 @@ fun HomeScreen(
     displayName: String?,
     onSignOut: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onOpenProfile: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -81,6 +83,12 @@ fun HomeScreen(
                 title = stringResource(R.string.home_nextEventTitle),
                 body = stringResource(R.string.home_nextEventBody),
             )
+
+            if (onOpenProfile != null) {
+                Button(onClick = onOpenProfile, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.navigation_profile))
+                }
+            }
 
             if (onSignOut != null) {
                 Spacer(modifier = Modifier.height(8.dp))
