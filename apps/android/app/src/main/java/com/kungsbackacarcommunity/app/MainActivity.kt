@@ -19,6 +19,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
+import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity() {
         val chatCoordinator = chatRepository?.let { ChatCoordinator(it) }
         val crownHuntRepository = FirebaseCrownHuntRepository.createIfAvailable(applicationContext)
         val crownHuntCoordinator = crownHuntRepository?.let { CrownHuntCoordinator(it) }
+        val partnersRepository = FirebasePartnersRepository.createIfAvailable(applicationContext)
+        val offerCodeCoordinator = partnersRepository?.let { OfferCodeCoordinator(it) }
 
         setContent {
             val authState =
@@ -98,6 +102,8 @@ class MainActivity : ComponentActivity() {
                         chatCoordinator = chatCoordinator,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
+                        partnersRepository = partnersRepository,
+                        offerCodeCoordinator = offerCodeCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
