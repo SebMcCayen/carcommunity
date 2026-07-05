@@ -60,8 +60,10 @@ class FirebaseCrownHuntRepository private constructor(
                 .addOnCompleteListener { task ->
                     if (!continuation.isActive) return@addOnCompleteListener
                     if (task.isSuccessful) {
+                        // HttpsCallableResult exposes getData(); the `data`
+                        // field itself is private, so call the accessor.
                         @Suppress("UNCHECKED_CAST")
-                        val result = task.result?.data as? Map<String, Any?>
+                        val result = task.result?.getData() as? Map<String, Any?>
                         val outcome = result?.toClaimOutcome()
                         if (outcome != null) {
                             continuation.resume(outcome)
