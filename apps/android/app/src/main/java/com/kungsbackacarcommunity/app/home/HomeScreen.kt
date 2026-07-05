@@ -63,6 +63,8 @@ fun HomeScreen(
     onOpenGarage: (() -> Unit)? = null,
     // Phase 12 slice 14: opens badges; null hides the entry.
     onOpenBadges: (() -> Unit)? = null,
+    // Phase 12 slice 15: opens the points wallet; null hides the entry.
+    onOpenPoints: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -131,6 +133,11 @@ fun HomeScreen(
             if (onOpenBadges != null) {
                 Button(onClick = onOpenBadges, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.badges_screenTitle))
+                }
+            }
+            if (onOpenPoints != null) {
+                Button(onClick = onOpenPoints, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.points_screenTitle))
                 }
             }
 
