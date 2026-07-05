@@ -1,0 +1,290 @@
+package com.kungsbackacarcommunity.app.live
+
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccTheme
+
+/**
+ * Live-location session control surface (Phase 12 slice 5).
+ *
+ * Drives the caller's own session: choose a duration and start sharing, stop
+ * sharing, or "hide me now" (a privacy stop that is always available). Whether
+ * the user is currently sharing is derived from the observed [session]; this
+ * screen is otherwise stateless apart from the pending duration selection.
+ *
+ * Sharing is gated on [canShare] (liveLocation flag AND active membership),
+ * mirroring the backend live.startSession member check. "Hide me now" is never
+ * gated — removing your own position must always work.
+ *
+ * @param nowMillis current wall-clock millis, injected so the sharing check is
+ *   deterministic under test.
+ */
+@Composable
+fun LiveLocationScreen(
+    session: LiveSessionInfo?,
+    nowMillis: Long,
+    actionStatus: LiveActionStatus,
+    canShare: Boolean,
+    onStart: (LiveSessionDuration) -> Unit,
+    onStop: () -> Unit,
+    onHideMeNow: () -> Unit,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+) {
+    val sharing = LiveLocation.isSharing(session, nowMillis)
+    val busy = actionStatus == LiveActionStatus.Working
+    var selectedDuration by rememberSaveable { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
+
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.liveLocation_screenTitle),
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+
+            // Safety first: never interact with the app while driving.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+            ) {
+                Text(
+                    text = stringResource(R.string.liveLocation_safeDrivingWarning),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+
+            // Current sharing status.
+            Text(
+                text =
+                    stringResource(
+                        if (sharing) {
+                            R.string.liveLocation_statusSharing
+                        } else {
+                            R.string.liveLocation_statusNotSharing
+                        },
+                    ),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            if (sharing) {
+                Text(
+                    text = stringResource(R.string.liveLocation_sessionAutoExpires),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (canShare) {
+                if (sharing) {
+                    Button(
+                        onClick = onStop,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.liveLocation_stop))
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.liveLocation_durationLabel),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    DurationPicker(
+                        selected = selectedDuration,
+                        enabled = !busy,
+                        onSelect = { selectedDuration = it },
+                    )
+                    Button(
+                        onClick = { onStart(selectedDuration) },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.liveLocation_start))
+                    }
+                }
+            } else {
+                // Membership gate — mirrors the backend member check on
+                // live.startSession. Sharing controls are withheld; "hide me
+                // now" below stays available.
+                InfoCard(
+                    title = stringResource(R.string.subscription_teaserTitle),
+                    body = stringResource(R.string.subscription_memberRequiredBody),
+                )
+            }
+
+            // Privacy action — never gated, always offered.
+            OutlinedButton(
+                onClick = onHideMeNow,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.liveLocation_hideNow))
+            }
+
+            if (actionStatus == LiveActionStatus.Failed) {
+                Text(
+                    text = stringResource(R.string.liveLocation_error),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            InfoCard(
+                title = stringResource(R.string.liveLocation_whoCanSeeTitle),
+                body = stringResource(R.string.liveLocation_whoCanSeeBody),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.liveLocation_privacyOptional),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.liveLocation_privacyTimeLimited),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.liveLocation_privacyStopAnytime),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (onBack != null) {
+                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.profile_back))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DurationPicker(
+    selected: LiveSessionDuration,
+    enabled: Boolean,
+    onSelect: (LiveSessionDuration) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DurationOption(R.string.liveLocation_duration1h, LiveSessionDuration.ONE_HOUR, selected, enabled, onSelect)
+        DurationOption(R.string.liveLocation_duration2h, LiveSessionDuration.TWO_HOURS, selected, enabled, onSelect)
+        DurationOption(R.string.liveLocation_duration4h, LiveSessionDuration.FOUR_HOURS, selected, enabled, onSelect)
+    }
+}
+
+@Composable
+private fun RowScope.DurationOption(
+    labelRes: Int,
+    duration: LiveSessionDuration,
+    selected: LiveSessionDuration,
+    enabled: Boolean,
+    onSelect: (LiveSessionDuration) -> Unit,
+) {
+    val label = stringResource(labelRes)
+    if (duration == selected) {
+        Button(onClick = { onSelect(duration) }, enabled = enabled, modifier = Modifier.weight(1f)) {
+            Text(text = label, textAlign = TextAlign.Center)
+        }
+    } else {
+        OutlinedButton(onClick = { onSelect(duration) }, enabled = enabled, modifier = Modifier.weight(1f)) {
+            Text(text = label, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
+private fun InfoCard(title: String, body: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Preview(name = "Live location – member, not sharing", showBackground = true)
+@Composable
+private fun LiveLocationPreview() {
+    KccTheme {
+        LiveLocationScreen(
+            session = null,
+            nowMillis = 0L,
+            actionStatus = LiveActionStatus.Idle,
+            canShare = true,
+            onStart = {},
+            onStop = {},
+            onHideMeNow = {},
+        )
+    }
+}
+
+@Preview(name = "Live location – gated", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun LiveLocationGatedPreview() {
+    KccTheme {
+        LiveLocationScreen(
+            session = null,
+            nowMillis = 0L,
+            actionStatus = LiveActionStatus.Idle,
+            canShare = false,
+            onStart = {},
+            onStop = {},
+            onHideMeNow = {},
+        )
+    }
+}

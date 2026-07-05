@@ -19,6 +19,10 @@ import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.home.HomeScreen
+import com.kungsbackacarcommunity.app.live.LiveActionStatus
+import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
+import com.kungsbackacarcommunity.app.live.LiveLocationRepository
+import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -49,8 +53,11 @@ fun AuthenticatedApp(
     profileRepository: ProfileRepository?,
     onboardingCoordinator: OnboardingCoordinator?,
     profileEditCoordinator: ProfileEditCoordinator?,
+    liveLocationRepository: LiveLocationRepository?,
+    liveLocationCoordinator: LiveLocationCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
+    nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     val scope = rememberCoroutineScope()
     val profileFlow =
@@ -76,51 +83,106 @@ fun AuthenticatedApp(
 
         AuthedDestination.Main -> {
             val profile = (profileState as? ProfileState.Loaded)?.profile
-            val saveStatus by
-                (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
-                    .collectAsState(initial = ProfileEditStatus.Idle)
-            var showProfile by rememberSaveable { mutableStateOf(false) }
+            var destination by rememberSaveable { mutableStateOf(MainDestination.Home) }
 
-            if (showProfile) {
-                ProfileScreen(
-                    profile = profile,
-                    saveStatus = saveStatus,
-                    onSave = { name, bio ->
-                        profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
-                    },
-                    onBack = {
-                        showProfile = false
-                        profileEditCoordinator?.reset()
-                    },
-                    onSignOut = onSignOut,
+            // Flag-gated (not member-gated): reaching the live-location screen.
+            // Sharing itself is member-gated inside the screen (backend parity).
+            val liveLocationEnabled =
+                FeatureGate.isAvailable(
+                    flags = flags,
+                    flag = FeatureFlag.LIVE_LOCATION,
+                    memberGated = false,
+                    isActiveMember = profile?.activeMember == true,
                 )
-            } else {
-                HomeScreen(
-                    displayName = profile?.displayName ?: authDisplayName,
-                    onSignOut = onSignOut,
-                    // Only offer the Profile screen when editing is actually
-                    // available (Firebase configured); otherwise Save is a no-op.
-                    onOpenProfile =
-                        if (profileEditCoordinator != null) {
-                            { showProfile = true }
-                        } else {
-                            null
+
+            when (destination) {
+                MainDestination.Profile -> {
+                    val saveStatus by
+                        (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
+                            .collectAsState(initial = ProfileEditStatus.Idle)
+                    ProfileScreen(
+                        profile = profile,
+                        saveStatus = saveStatus,
+                        onSave = { name, bio ->
+                            profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
                         },
-                    // Flag-gated teaser (not member-gated): the liveLocation flag.
-                    showLiveLocationTeaser =
-                        FeatureGate.isAvailable(
-                            flags = flags,
-                            flag = FeatureFlag.LIVE_LOCATION,
-                            memberGated = false,
-                            isActiveMember = profile?.activeMember == true,
-                        ),
-                    // Entitlement-gated (as documented): active membership only.
-                    showMemberValue = profile?.activeMember == true,
-                )
+                        onBack = {
+                            destination = MainDestination.Home
+                            profileEditCoordinator?.reset()
+                        },
+                        onSignOut = onSignOut,
+                    )
+                }
+
+                MainDestination.LiveLocation -> {
+                    val session by
+                        remember(uid, liveLocationRepository) {
+                            liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
+                        }
+                            .collectAsState(initial = null)
+                    val actionStatus by
+                        (liveLocationCoordinator?.status ?: flowOf(LiveActionStatus.Idle))
+                            .collectAsState(initial = LiveActionStatus.Idle)
+                    LiveLocationScreen(
+                        session = session,
+                        nowMillis = nowMillis(),
+                        actionStatus = actionStatus,
+                        // Sharing requires membership (backend live.startSession
+                        // is member-gated); the screen still offers hide-me-now.
+                        canShare =
+                            FeatureGate.isAvailable(
+                                flags = flags,
+                                flag = FeatureFlag.LIVE_LOCATION,
+                                memberGated = true,
+                                isActiveMember = profile?.activeMember == true,
+                            ),
+                        onStart = { d ->
+                            liveLocationCoordinator?.let { c -> scope.launch { c.start(d) } }
+                        },
+                        onStop = {
+                            liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
+                        },
+                        onHideMeNow = {
+                            liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
+                        },
+                        onBack = {
+                            destination = MainDestination.Home
+                            liveLocationCoordinator?.reset()
+                        },
+                    )
+                }
+
+                MainDestination.Home -> {
+                    HomeScreen(
+                        displayName = profile?.displayName ?: authDisplayName,
+                        onSignOut = onSignOut,
+                        // Only offer the Profile screen when editing is actually
+                        // available (Firebase configured); otherwise Save is a no-op.
+                        onOpenProfile =
+                            if (profileEditCoordinator != null) {
+                                { destination = MainDestination.Profile }
+                            } else {
+                                null
+                            },
+                        showLiveLocationTeaser = liveLocationEnabled,
+                        // Entitlement-gated (as documented): active membership only.
+                        showMemberValue = profile?.activeMember == true,
+                        // Reachable when the flag is on and Firebase is configured.
+                        onOpenLiveLocation =
+                            if (liveLocationEnabled && liveLocationRepository != null) {
+                                { destination = MainDestination.LiveLocation }
+                            } else {
+                                null
+                            },
+                    )
+                }
             }
         }
     }
 }
+
+/** In-app destinations within the authenticated Main shell (no NavHost yet). */
+private enum class MainDestination { Home, Profile, LiveLocation }
 
 @Composable
 private fun LoadingScreen() {

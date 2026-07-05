@@ -48,6 +48,9 @@ fun HomeScreen(
     // holds an active member entitlement (see FeatureGate).
     showLiveLocationTeaser: Boolean = false,
     showMemberValue: Boolean = false,
+    // Phase 12 slice 5: opens the live-location screen; null hides the entry
+    // point (flag off or no Firebase session).
+    onOpenLiveLocation: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -94,6 +97,11 @@ fun HomeScreen(
                     title = stringResource(R.string.home_liveLocationSectionTitle),
                     body = stringResource(R.string.home_liveLocationDisclaimer),
                 )
+                if (onOpenLiveLocation != null) {
+                    Button(onClick = onOpenLiveLocation, modifier = Modifier.fillMaxWidth()) {
+                        Text(text = stringResource(R.string.home_liveLocationButton))
+                    }
+                }
             }
             if (showMemberValue) {
                 StatusCard(
