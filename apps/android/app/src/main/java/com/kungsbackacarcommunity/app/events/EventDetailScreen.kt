@@ -48,6 +48,7 @@ fun EventDetailScreen(
     // True until the first Firestore snapshot arrives, so a null event reads
     // as "loading" rather than "error" on the very first composition.
     isLoading: Boolean = false,
+    onOpenChat: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -152,6 +153,14 @@ fun EventDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+            }
+
+            // Event chat — offered only when eligible (decided by the caller:
+            // chat flag + member + published + going/maybe RSVP).
+            if (onOpenChat != null) {
+                OutlinedButton(onClick = onOpenChat, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.chat_eventChatTitle))
                 }
             }
 

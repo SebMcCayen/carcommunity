@@ -223,7 +223,15 @@
     "unknownAuthor": "Okänd",
     "safeDrivingWarning": "Använd inte chatten medan du kör.",
     "drivingDisabled": "Chatten är avstängd medan du kör.",
-    "drivingStopFirst": "Stanna säkert innan du använder chatten."
+    "drivingStopFirst": "Stanna säkert innan du använder chatten.",
+    "reportReasonHarassment": "Trakasserier",
+    "reportReasonHateOrAbuse": "Hat eller kränkningar",
+    "reportReasonSpam": "Skräppost",
+    "reportReasonUnsafeDriving": "Osäker körning",
+    "reportReasonPrivacy": "Integritet",
+    "reportReasonOther": "Annat",
+    "reportSubmitted": "Tack för din rapport.",
+    "reportError": "Kunde inte rapportera. Försök igen."
   },
   "common": {
     "placeholder": "Kommer snart"

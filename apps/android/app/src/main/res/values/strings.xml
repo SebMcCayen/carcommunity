@@ -201,6 +201,14 @@
     <string name="chat_safeDrivingWarning">Använd inte chatten medan du kör.</string>
     <string name="chat_drivingDisabled">Chatten är avstängd medan du kör.</string>
     <string name="chat_drivingStopFirst">Stanna säkert innan du använder chatten.</string>
+    <string name="chat_reportReasonHarassment">Trakasserier</string>
+    <string name="chat_reportReasonHateOrAbuse">Hat eller kränkningar</string>
+    <string name="chat_reportReasonSpam">Skräppost</string>
+    <string name="chat_reportReasonUnsafeDriving">Osäker körning</string>
+    <string name="chat_reportReasonPrivacy">Integritet</string>
+    <string name="chat_reportReasonOther">Annat</string>
+    <string name="chat_reportSubmitted">Tack för din rapport.</string>
+    <string name="chat_reportError">Kunde inte rapportera. Försök igen.</string>
     <string name="common_placeholder">Kommer snart</string>
     <string name="auth_loginTitle">Logga in</string>
     <string name="auth_loginSubtitle">Logga in för att använda appen.</string>

@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.chat.ChatCoordinator
+import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.events.EventsRepository
@@ -60,6 +62,8 @@ fun AuthenticatedApp(
     liveLocationCoordinator: LiveLocationCoordinator?,
     eventsRepository: EventsRepository?,
     rsvpCoordinator: RsvpCoordinator?,
+    chatRepository: EventChatRepository?,
+    chatCoordinator: ChatCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -164,6 +168,17 @@ fun AuthenticatedApp(
                             rsvpCoordinator = rsvpCoordinator,
                             uid = uid,
                             isActiveMember = profile?.activeMember == true,
+                            chatRepository = chatRepository,
+                            chatCoordinator = chatCoordinator,
+                            // Chat is flag-gated; member/RSVP eligibility is
+                            // decided per-event inside the route.
+                            chatEnabled =
+                                FeatureGate.isAvailable(
+                                    flags = flags,
+                                    flag = FeatureFlag.CHAT,
+                                    memberGated = false,
+                                    isActiveMember = profile?.activeMember == true,
+                                ),
                             onBack = { destination = MainDestination.Home },
                         )
                     } else {

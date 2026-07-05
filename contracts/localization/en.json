@@ -223,7 +223,15 @@
     "unknownAuthor": "Unknown",
     "safeDrivingWarning": "Do not use chat while driving.",
     "drivingDisabled": "Chat is disabled while driving.",
-    "drivingStopFirst": "Stop safely before using chat."
+    "drivingStopFirst": "Stop safely before using chat.",
+    "reportReasonHarassment": "Harassment",
+    "reportReasonHateOrAbuse": "Hate or abuse",
+    "reportReasonSpam": "Spam",
+    "reportReasonUnsafeDriving": "Unsafe driving",
+    "reportReasonPrivacy": "Privacy",
+    "reportReasonOther": "Other",
+    "reportSubmitted": "Thanks for your report.",
+    "reportError": "Could not report. Please try again."
   },
   "common": {
     "placeholder": "Coming soon"
