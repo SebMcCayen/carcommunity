@@ -55,6 +55,8 @@ The migration from `apps/mobile` to separate native applications is a separate m
 
 Both target applications must provide equivalent functionality. Mobile platform parity remains mandatory.
 
+> **Amendment (2026-07-02):** For the MVP, iOS is descoped and parked on the Future Ideas board — the MVP ships Android + admin web + backend only. Parity remains the target for any future iOS app, and the language-neutral contracts stay iOS-ready so parity can be restored without rework, but iOS delivery is not part of the MVP. Phase 12 (native feature port) is therefore Android-only for the MVP.
+
 React Native, Flutter, Kotlin Multiplatform, and other shared mobile runtimes are not introduced in the target native architecture.
 
 ### Budget
