@@ -94,7 +94,14 @@ fun AuthenticatedApp(
                 HomeScreen(
                     displayName = profile?.displayName ?: authDisplayName,
                     onSignOut = onSignOut,
-                    onOpenProfile = { showProfile = true },
+                    // Only offer the Profile screen when editing is actually
+                    // available (Firebase configured); otherwise Save is a no-op.
+                    onOpenProfile =
+                        if (profileEditCoordinator != null) {
+                            { showProfile = true }
+                        } else {
+                            null
+                        },
                 )
             }
         }

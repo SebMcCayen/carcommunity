@@ -15,6 +15,11 @@ class AuthedDestinationTest {
     }
 
     @Test
+    fun `a read error renders the main shell rather than staying stuck`() {
+        assertEquals(AuthedDestination.Main, authedDestination(ProfileState.Error))
+    }
+
+    @Test
     fun `missing or incomplete profile requires onboarding`() {
         assertEquals(AuthedDestination.Onboarding, authedDestination(ProfileState.Loaded(null)))
         assertEquals(

@@ -53,7 +53,10 @@ fun OnboardingScreen(
     var displayName by remember { mutableStateOf("") }
 
     val submitting = status == OnboardingStatus.Submitting
-    val canSubmit = OnboardingForm.canSubmit(age, terms, privacy) && !submitting
+    val canSubmit =
+        OnboardingForm.canSubmit(age, terms, privacy) &&
+            !OnboardingForm.isDisplayNameTooLong(displayName) &&
+            !submitting
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(

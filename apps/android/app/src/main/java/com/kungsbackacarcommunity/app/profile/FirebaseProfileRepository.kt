@@ -28,7 +28,9 @@ class FirebaseProfileRepository private constructor(
         val registration =
             firestore.collection(USERS).document(uid).addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Transient listener errors keep the last state; do not crash.
+                    // Surface an error state so the UI shows the shell (not an
+                    // infinite spinner); a later successful snapshot self-corrects.
+                    trySend(ProfileState.Error)
                     return@addSnapshotListener
                 }
                 val profile =

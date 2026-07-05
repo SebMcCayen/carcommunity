@@ -21,6 +21,9 @@ sealed interface ProfileState {
 
     /** Snapshot resolved; [profile] is null when the document does not exist yet. */
     data class Loaded(val profile: UserProfile?) : ProfileState
+
+    /** The snapshot listener reported an error (permission/offline/misconfig). */
+    data object Error : ProfileState
 }
 
 /** Top-level authenticated destination derived from [ProfileState]. */
@@ -36,6 +39,9 @@ fun authedDestination(state: ProfileState): AuthedDestination =
     when (state) {
         ProfileState.Loading -> AuthedDestination.Loading
         ProfileState.Unavailable -> AuthedDestination.Main
+        // A read error renders the main shell (never an infinite spinner);
+        // the listener self-corrects to Loaded on a later successful snapshot.
+        ProfileState.Error -> AuthedDestination.Main
         is ProfileState.Loaded ->
             if (state.profile?.onboardingComplete == true) {
                 AuthedDestination.Main
