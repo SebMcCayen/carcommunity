@@ -67,6 +67,8 @@ fun HomeScreen(
     onOpenPoints: (() -> Unit)? = null,
     // Phase 12 slice 18: opens the partner application; null hides the entry.
     onOpenPartnerApplication: (() -> Unit)? = null,
+    // Phase 12 slice 20: opens digital billboards; null hides the entry.
+    onOpenBillboards: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -145,6 +147,11 @@ fun HomeScreen(
             if (onOpenPartnerApplication != null) {
                 OutlinedButton(onClick = onOpenPartnerApplication, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.partners_applicationTitle))
+                }
+            }
+            if (onOpenBillboards != null) {
+                OutlinedButton(onClick = onOpenBillboards, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.billboard_sponsoredLabel))
                 }
             }
 

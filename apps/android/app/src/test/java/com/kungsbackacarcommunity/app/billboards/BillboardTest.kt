@@ -1,0 +1,15 @@
+package com.kungsbackacarcommunity.app.billboards
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class BillboardTest {
+
+    @Test
+    fun `interaction types expose the backend wire values`() {
+        assertEquals("impression", BillboardInteractionType.IMPRESSION.wire)
+        assertEquals("open", BillboardInteractionType.OPEN.wire)
+        assertEquals("offer_view", BillboardInteractionType.OFFER_VIEW.wire)
+        assertEquals(6, BillboardInteractionType.values().size)
+    }
+}
