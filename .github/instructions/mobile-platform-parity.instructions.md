@@ -13,6 +13,8 @@ Despite using separate codebases, both applications must provide equivalent user
 
 Functional parity between iOS and Android is a mandatory project requirement.
 
+> **MVP amendment (2026-07-02):** iOS is descoped from the MVP and parked on the Future Ideas board; the MVP ships **Android + admin web + backend** only (see `docs/migration/carcommunity-mvp-scope` decision, and ADR-001 amendment). The parity requirement above remains the target for any future iOS app and continues to govern the language-neutral contracts (which stay iOS-ready), but it does not gate MVP delivery, which is Android-only. Reviewers should not treat "Android-only" statements in MVP work as parity violations.
+
 ## Project structure
 
 The mobile applications are expected to live in:

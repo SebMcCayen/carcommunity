@@ -658,7 +658,10 @@ One PR per domain (subscription, group drive, Kronjakt, notifications, partner i
 
 ## Phase 12 — Port each mobile feature to both native applications
 
-**Objective:** Implement every product feature on iOS and Android using the Firebase SDK, callable functions, and language-neutral contracts. Follow the vertical-slice order below.
+**Objective:** Implement every product feature on iOS and Android using the Firebase SDK, callable functions, and language-neutral contracts. Follow the vertical-slice order below. (iOS is descoped to the future-ideas board as of 2026-07-02, so slices are Android-only for the MVP.)
+
+**Status:** In progress, one vertical slice per PR.
+- Slice 1 (app shell + Google Sign-In) — 🟡 in progress: auth-state-driven top-level navigation (SignInScreen ⇄ HomeScreen), an authenticated home shell with placeholder community/next-event cards, and sign-out wired through the Firebase auth-state listener; builds on the Phase 5–7 scaffold. In-app navigation between feature destinations is deferred until a second authenticated destination exists (slice 2+). Tested via JVM unit tests (`HomeContentTest`) and Compose UI tests (`AppRootTest`, `HomeScreenTest`) — the latter run in the non-blocking instrumented-tests emulator job.
 
 ### Files affected
 
