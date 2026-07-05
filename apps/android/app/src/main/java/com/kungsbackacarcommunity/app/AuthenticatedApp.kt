@@ -38,6 +38,8 @@ import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
+import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
+import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
 import com.kungsbackacarcommunity.app.points.PointsRepository
@@ -94,6 +96,7 @@ fun AuthenticatedApp(
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
     pointsRepository: PointsRepository?,
+    partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -298,6 +301,17 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.PartnerApplication -> {
+                    if (partnerApplicationCoordinator != null) {
+                        PartnerApplicationRoute(
+                            coordinator = partnerApplicationCoordinator,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -388,6 +402,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Partner application: any authenticated user may apply.
+                        onOpenPartnerApplication =
+                            if (partnerApplicationCoordinator != null) {
+                                { destination = MainDestination.PartnerApplication }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -407,6 +428,7 @@ private enum class MainDestination {
     Garage,
     Badges,
     Points,
+    PartnerApplication,
 }
 
 @Composable

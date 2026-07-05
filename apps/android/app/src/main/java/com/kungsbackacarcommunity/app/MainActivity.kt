@@ -27,8 +27,10 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.points.FirebasePointsRepository
+import com.kungsbackacarcommunity.app.partners.FirebasePartnerApplicationRepository
 import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
+import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
@@ -86,6 +88,9 @@ class MainActivity : ComponentActivity() {
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
+        val partnerApplicationCoordinator =
+            FirebasePartnerApplicationRepository.createIfAvailable(applicationContext)
+                ?.let { PartnerApplicationCoordinator(it) }
 
         setContent {
             val authState =
@@ -130,6 +135,7 @@ class MainActivity : ComponentActivity() {
                         garageCoordinator = garageCoordinator,
                         badgesRepository = badgesRepository,
                         pointsRepository = pointsRepository,
+                        partnerApplicationCoordinator = partnerApplicationCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
