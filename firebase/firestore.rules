@@ -257,6 +257,17 @@ service cloud.firestore {
       // events-onRsvpWrite trigger maintains events/{eventId}.rsvpCounts.
       // Document ID == responding user's UID. Legacy has no RSVP deletion;
       // members change their answer instead (going/maybe/not_going).
+      // Group drive roster (Phase 11). Member-readable for published
+      // events (owner may always read their own record); ALL writes via
+      // the groupDrive.* callables so join preconditions (published +
+      // RSVP going|maybe + not ended) are enforced server-side.
+      match /groupDriveParticipants/{userId} {
+        allow read: if isAdmin() || isOwner(userId)
+          || (isActiveMember()
+            && get(/databases/$(database)/documents/events/$(eventId)).data.status == 'published');
+        // No client writes: groupDrive.join / updateStatus / leave only.
+      }
+
       match /rsvps/{userId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create, update: if isOwner(userId) && isActiveMember()
@@ -609,8 +620,11 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /subscriptions/{userId} {
       allow read: if isOwner(userId);
-      allow read, write: if isAdmin();
-      // No client writes allowed.
+      allow read: if isAdmin();
+      // No client writes — not even admin clients (Phase 11 tightening,
+      // matching the data model's "written by Cloud Functions only after
+      // receipt verification"): subscription.verify /
+      // admin.grantEntitlement are the only writers.
     }
   }
 }

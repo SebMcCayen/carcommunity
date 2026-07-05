@@ -21,10 +21,10 @@
     {
       "name": "subscription.verify",
       "domain": "subscription",
-      "description": "Verifies the caller's store subscription receipt and updates the backend-managed entitlement.",
+      "description": "Receipt-verification entry point (authenticated). FAILS CLOSED with failed-precondition until config/subscriptionProviders.{apple|google}.enabled is set with real store credentials (end-of-MVP console setup; the legacy endpoint was itself a placeholder) - no code path grants entitlement from an unverified receipt. Raw purchase tokens are hashed (SHA-256) immediately and never stored, logged, or returned. Deployed via grouped export as subscription-verify (functions/src/subscription/verify.ts).",
       "access": "authenticated",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {
@@ -440,6 +440,42 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (users — account deletion)"
+    },
+    {
+      "name": "admin.grantEntitlement",
+      "domain": "subscription",
+      "description": "Audited manual entitlement grant/revoke (platform manual, reserved by the legacy enum) - the operational path until store receipt verification is wired. Applies the full chain with Phase 8 fail-safe privilege ordering: subscriptions/{uid} record, users/{uid}.activeMember, and the activeMember custom claim (revokes also revoke refresh tokens). Deployed via grouped export as subscription-grantEntitlement (functions/src/subscription/verify.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Subscription and entitlement)"
+    },
+    {
+      "name": "groupDrive.join",
+      "domain": "groupDrive",
+      "description": "Joins the caller to an event group drive roster (events/{eventId}/groupDriveParticipants/{uid}). Requires a published, not-ended event and an RSVP of going or maybe (legacy canJoinEventGroupDrive). Idempotent; a left participant rejoins with joinedAt reset. displayName denormalized for the roster. Deployed via grouped export as groupDrive-join (functions/src/groupDrive/participants.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Group driving)"
+    },
+    {
+      "name": "groupDrive.updateStatus",
+      "domain": "groupDrive",
+      "description": "Updates the caller's group drive status (joined|on_the_way|arrived - never left; leave is its own operation). Requires an active participation. Deployed via grouped export as groupDrive-updateStatus (functions/src/groupDrive/participants.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Group driving)"
+    },
+    {
+      "name": "groupDrive.leave",
+      "domain": "groupDrive",
+      "description": "Marks the caller as left on the roster (idempotent; leaving when absent succeeds quietly). Does NOT stop the live location session (legacy parity). Works with lapsed entitlement (authenticated, not member). Deployed via grouped export as groupDrive-leave (functions/src/groupDrive/participants.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Group driving)"
     },
     {
       "name": "admin.suspendUser",

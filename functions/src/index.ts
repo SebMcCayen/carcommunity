@@ -47,6 +47,8 @@ import { registerPushToken, unregisterPushToken } from './notifications/pushToke
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
 import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
+import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
+import { join as joinGroupDrive, leave as leaveGroupDrive, updateStatus as updateDriveStatus } from './groupDrive/participants';
 import { deleteAccount } from './account/deleteAccount';
 import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
@@ -338,4 +340,38 @@ export const live = {
   stopSession,
   hideMeNow,
   cleanupExpired: cleanupExpiredLive,
+};
+
+/**
+ * Subscription domain (grouped export → deployed as `subscription-verify`
+ * and `subscription-grantEntitlement`) — Phase 11.
+ *
+ * subscription.verify FAILS CLOSED until store credentials are
+ * configured (end-of-MVP console setup; the legacy endpoint was itself a
+ * placeholder). admin manual grants (admin.grantEntitlement in the
+ * registry) drive the fully-implemented entitlement chain:
+ * subscriptions/{uid} record + users/{uid}.activeMember + the
+ * activeMember custom claim, with Phase 8 fail-safe privilege ordering.
+ * Raw purchase tokens are hashed immediately and never stored.
+ */
+export const subscription = {
+  verify: verifySubscription,
+  grantEntitlement,
+};
+
+/**
+ * Group driving domain (grouped export → deployed as `groupDrive-join`,
+ * `groupDrive-updateStatus`, `groupDrive-leave`) — Phase 11.
+ *
+ * Roster at events/{eventId}/groupDriveParticipants/{uid}
+ * (member-readable for published events; callable-only writes). Join
+ * requires published event + RSVP going|maybe + not ended (legacy
+ * canJoinEventGroupDrive); rejoin resets; leave is idempotent and never
+ * stops the live location session. Markers remain the live-location
+ * domain.
+ */
+export const groupDrive = {
+  join: joinGroupDrive,
+  updateStatus: updateDriveStatus,
+  leave: leaveGroupDrive,
 };
