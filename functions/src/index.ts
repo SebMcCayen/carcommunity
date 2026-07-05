@@ -348,7 +348,7 @@ export const live = {
  *
  * subscription.verify FAILS CLOSED until store credentials are
  * configured (end-of-MVP console setup; the legacy endpoint was itself a
- * placeholder). admin manual grants (admin.grantEntitlement in the
+ * placeholder). admin manual grants (subscription.grantEntitlement in the
  * registry) drive the fully-implemented entitlement chain:
  * subscriptions/{uid} record + users/{uid}.activeMember + the
  * activeMember custom claim, with Phase 8 fail-safe privilege ordering.

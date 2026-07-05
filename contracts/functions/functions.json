@@ -442,7 +442,7 @@
       "source": "docs/migration/backend-domain-mapping.md (users — account deletion)"
     },
     {
-      "name": "admin.grantEntitlement",
+      "name": "subscription.grantEntitlement",
       "domain": "subscription",
       "description": "Audited manual entitlement grant/revoke (platform manual, reserved by the legacy enum) - the operational path until store receipt verification is wired. Applies the full chain with Phase 8 fail-safe privilege ordering: subscriptions/{uid} record, users/{uid}.activeMember, and the activeMember custom claim (revokes also revoke refresh tokens). Deployed via grouped export as subscription-grantEntitlement (functions/src/subscription/verify.ts).",
       "access": "admin",
