@@ -84,7 +84,15 @@ export const warnUser = onCall(CALLABLE_OPTS, async (request): Promise<WarnUserR
   batch.set(
     db.collection('adminAuditEvents').doc(),
     buildAdminAuditEvent(
-      { adminId: actor.uid, action: 'user.warn', targetType: 'user', targetId: targetUid, reason },
+      {
+        adminId: actor.uid,
+        action: 'user.warn',
+        targetType: 'user',
+        targetId: targetUid,
+        reason,
+        // Stable link to the moderationActions record (avoids createdAt-proximity guesswork).
+        details: { moderationActionId: actionRef.id },
+      },
       serverTimestamp,
     ),
   );

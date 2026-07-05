@@ -828,6 +828,17 @@ describe('Firestore – moderation reports validation (Phase 9o)', () => {
     status: 'pending',
   };
 
+  // A dedicated, pre-seeded report for the admin-review assertions below,
+  // so that test does not depend on the create test having run first.
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'moderationReports/review-target'), {
+        ...validReport,
+        createdAt: serverTimestamp(),
+      });
+    });
+  });
+
   it('accepts a valid report from its own reporter', async () => {
     const ctx = testEnv.authenticatedContext(REPORTER);
     await assertSucceeds(
@@ -878,29 +889,29 @@ describe('Firestore – moderation reports validation (Phase 9o)', () => {
 
   it('reporters cannot read, update, or delete their reports (admin-only review)', async () => {
     const ctx = testEnv.authenticatedContext(REPORTER);
-    await assertFails(getDoc(doc(ctx.firestore(), 'moderationReports/valid-1')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
     await assertFails(
-      updateDoc(doc(ctx.firestore(), 'moderationReports/valid-1'), { status: 'reviewed' }),
+      updateDoc(doc(ctx.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
     );
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'moderationReports/valid-1')));
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
     const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
-    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationReports/valid-1')));
+    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationReports/review-target')));
     await assertSucceeds(
-      updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), { status: 'reviewed' }),
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
     );
     // Admin review updates are status-only: immutable fields stay immutable
     // and the status vocabulary is closed.
     await assertFails(
-      updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), {
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
         status: 'reviewed',
         reason: 'rewritten',
       }),
     );
     await assertFails(
-      updateDoc(doc(admin.firestore(), 'moderationReports/valid-1'), { status: 'archived' }),
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'archived' }),
     );
     // Even admins cannot delete review records.
-    await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/valid-1')));
+    await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/review-target')));
   });
 });
 });
