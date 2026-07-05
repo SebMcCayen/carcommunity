@@ -511,11 +511,17 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // errorReports – client error telemetry
+    // diagnosticsReports – crash/error telemetry (Phase 9n)
+    // Admin-only read. ALL writes go through the diagnostics.submitReport
+    // callable so the privacy sanitization (tokens/credentials/coordinates/
+    // stack traces stripped) runs server-side on every report — a direct
+    // client create would bypass it. Replaces the Phase 8 errorReports
+    // scaffold (retired: unsanitized client creates, absent from the
+    // migration mapping).
     // -------------------------------------------------------------------------
-    match /errorReports/{reportId} {
-      allow create: if isAuthenticated();
-      allow read, write: if isAdmin();
+    match /diagnosticsReports/{reportId} {
+      allow read: if isAdmin();
+      // No client writes: diagnostics.submitReport only.
     }
 
     // -------------------------------------------------------------------------
@@ -545,8 +551,8 @@ service cloud.firestore {
     // Document ID == Firebase UID of the requesting user.
     // Deliberately NOT gated on suspension: suspended users retain access to
     // support and account-deletion paths (migration plan, Phase 8 definition
-    // of done). The same applies to userPrivate, moderationReports, and
-    // errorReports above.
+    // of done). The same applies to userPrivate and moderationReports above.
+    // (Diagnostics submission is a public callable, unauthenticated allowed.)
     // -------------------------------------------------------------------------
     match /accountDeletionRequests/{requestId} {
       allow create: if isOwner(requestId);

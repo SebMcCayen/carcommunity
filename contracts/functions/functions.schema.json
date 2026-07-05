@@ -27,7 +27,7 @@
           "description": { "type": "string", "minLength": 1 },
           "access": {
             "type": "string",
-            "enum": ["signedIn", "authenticated", "member", "admin"]
+            "enum": ["public", "signedIn", "authenticated", "member", "admin"]
           },
           "appCheck": { "type": "boolean" },
           "status": {

@@ -44,6 +44,8 @@ import {
 import { markAllRead, markRead } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
+import { submitReport } from './diagnostics/submitReport';
+import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -273,4 +275,22 @@ export const notifications = {
   registerPushToken,
   unregisterPushToken,
   cleanupExpired: cleanupExpiredNotifications,
+};
+
+/**
+ * Diagnostics domain (grouped export → deployed as
+ * `diagnostics-submitReport` and the scheduled
+ * `diagnostics-cleanupExpired`).
+ *
+ * Crash/error telemetry (contracts/functions/functions.json): the only
+ * PUBLIC callable (anonymous reports allowed — sign-in failures must be
+ * reportable; App Check still applies in production), with all privacy
+ * sanitization server-side (tokens/credentials/coordinates/stack traces
+ * stripped, bounded scalars only, dedup fingerprints). Admin-only
+ * Firestore reads; 90-day retention swept monthly. Replaces the Phase 8
+ * errorReports scaffold.
+ */
+export const diagnostics = {
+  submitReport,
+  cleanupExpired: cleanupExpiredDiagnostics,
 };

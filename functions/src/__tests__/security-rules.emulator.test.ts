@@ -766,6 +766,52 @@ describe('Firestore – config / feature flags (Phase 9m)', () => {
       updateDoc(doc(ctx.firestore(), 'config/partnerInsights'), { minThreshold: 1 }),
     );
   });
+
+// ---------------------------------------------------------------------------
+// Firestore: diagnostics reports (Phase 9n)
+// Admin-only read; callable-only writes (server-side sanitization).
+// ---------------------------------------------------------------------------
+
+describe('Firestore – diagnostics reports (Phase 9n)', () => {
+  const REPORT = 'diagnosticsReports/report-1';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), REPORT), {
+        userId: null,
+        severity: 'error',
+        platform: 'android',
+        featureArea: 'auth',
+        safeMessage: 'seed',
+        fingerprint: 'f'.repeat(64),
+        createdAt: serverTimestamp(),
+      });
+    });
+  });
+
+  it('admins can read reports', async () => {
+    const ctx = testEnv.authenticatedContext('diag-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), REPORT)));
+  });
+
+  it('regular users cannot read reports (not even their own)', async () => {
+    const ctx = testEnv.authenticatedContext('diag-user');
+    await assertFails(getDoc(doc(ctx.firestore(), REPORT)));
+  });
+
+  it('clients can never write reports directly (sanitization bypass)', async () => {
+    const ctx = testEnv.authenticatedContext('diag-user');
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'diagnosticsReports/self-made'), {
+        severity: 'error',
+        safeMessage: 'raw',
+        metadata: { idToken: 'leaked' },
+      }),
+    );
+    const admin = testEnv.authenticatedContext('diag-admin', { admin: true });
+    await assertFails(deleteDoc(doc(admin.firestore(), REPORT)));
+  });
+});
 });
 
 // ---------------------------------------------------------------------------

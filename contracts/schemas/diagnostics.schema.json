@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/diagnostics.schema.json",
+  "title": "Diagnostics contract",
+  "description": "Language-neutral crash/error telemetry shapes shared by iOS, Android, backend, and admin. diagnosticsReport mirrors the Firestore `diagnosticsReports/{reportId}` document: admin-only read, writes exclusively via the PUBLIC diagnostics.submitReport callable (anonymous reports allowed — sign-in failures must be reportable; App Check applies in production). Privacy guarantees enforced server-side: metadata is sanitized (auth tokens, credentials, cookies, coordinates, and stack-trace-like keys stripped; only bounded scalar values stored), stack traces and raw headers are never stored, and safeMessage must already be privacy-safe on the client. Reports carry a SHA-256-based dedup fingerprint (numbers/UUIDs normalized out of the message) and are deleted after 90 days by the monthly scheduled cleanup. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "$defs": {
+    "diagnosticsSeverity": {
+      "type": "string",
+      "enum": ["info", "warning", "error", "critical"]
+    },
+    "diagnosticsPlatform": {
+      "type": "string",
+      "enum": ["ios", "android", "web", "unknown"]
+    },
+    "diagnosticsFeatureArea": {
+      "type": "string",
+      "enum": ["auth", "live_location", "events", "subscription", "admin", "map", "network", "unknown"]
+    },
+    "submitDiagnosticsReportRequest": {
+      "type": "object",
+      "description": "Input for diagnostics.submitReport. safeMessage must be privacy-safe (no tokens, no personal data, no coordinates); the backend additionally sanitizes metadata and never stores stack traces.",
+      "properties": {
+        "severity": { "$ref": "#/$defs/diagnosticsSeverity" },
+        "platform": { "$ref": "#/$defs/diagnosticsPlatform" },
+        "featureArea": { "$ref": "#/$defs/diagnosticsFeatureArea" },
+        "safeMessage": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "appVersion": { "type": "string", "maxLength": 50 },
+        "buildNumber": { "type": "string", "maxLength": 50 },
+        "osVersion": { "type": "string", "maxLength": 100 },
+        "errorCode": { "type": "string", "maxLength": 100 },
+        "metadata": {
+          "type": "object",
+          "description": "Optional context. Sanitized server-side: max 20 keys, scalar values only (strings truncated to 500 chars), token/credential/coordinate/stack-like keys stripped."
+        }
+      },
+      "required": ["severity", "platform", "featureArea", "safeMessage"],
+      "additionalProperties": false
+    },
+    "submitDiagnosticsReportResponse": {
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string" },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Dedup/grouping fingerprint over the stable attributes."
+        }
+      },
+      "required": ["reportId", "fingerprint"],
+      "additionalProperties": false
+    },
+    "diagnosticsReport": {
+      "type": "object",
+      "description": "Firestore `diagnosticsReports/{reportId}`. Admin-only read; no client writes.",
+      "properties": {
+        "userId": {
+          "type": ["string", "null"],
+          "description": "Null for anonymous reports (unauthenticated submission is allowed)."
+        },
+        "severity": { "$ref": "#/$defs/diagnosticsSeverity" },
+        "platform": { "$ref": "#/$defs/diagnosticsPlatform" },
+        "featureArea": { "$ref": "#/$defs/diagnosticsFeatureArea" },
+        "safeMessage": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "appVersion": { "type": ["string", "null"], "maxLength": 50 },
+        "buildNumber": { "type": ["string", "null"], "maxLength": 50 },
+        "osVersion": { "type": ["string", "null"], "maxLength": 100 },
+        "errorCode": { "type": ["string", "null"], "maxLength": 100 },
+        "metadata": {
+          "type": ["object", "null"],
+          "description": "Sanitized metadata; null when nothing safe remained."
+        },
+        "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "userId",
+        "severity",
+        "platform",
+        "featureArea",
+        "safeMessage",
+        "appVersion",
+        "buildNumber",
+        "osVersion",
+        "errorCode",
+        "metadata",
+        "fingerprint",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
