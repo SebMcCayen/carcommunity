@@ -580,10 +580,25 @@ service cloud.firestore {
     // (Diagnostics submission is a public callable, unauthenticated allowed.)
     // -------------------------------------------------------------------------
     match /accountDeletionRequests/{requestId} {
-      allow create: if isOwner(requestId);
+      // Owner create remains as the low-tech fallback path; the canonical
+      // entry point is the account.deleteAccount callable (Phase 9p),
+      // which also disables the Auth user immediately. Shape-validated so
+      // a client can never pre-mark a request processed.
+      allow create: if isOwner(requestId)
+        && request.resource.data.keys().hasOnly(['userId', 'reason', 'status', 'createdAt'])
+        && request.resource.data.keys().hasAll(['userId', 'status', 'createdAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        // Server timestamp only: a client can neither backdate the request
+        // (skipping the 30-day retention window) nor omit createdAt (which
+        // would hide the request from the purge query forever).
+        && isServerTimestamp(request.resource.data.createdAt)
+        && (!request.resource.data.keys().hasAny(['reason'])
+            || (request.resource.data.reason is string
+                && request.resource.data.reason.size() <= 500));
       allow read: if isOwner(requestId);
       // Admins may read all requests and update status (e.g. mark as processed).
-      // Account deletion itself is handled by backend Cloud Functions.
+      // The hard purge is handled by the scheduled account-purgeDeleted.
       allow read, update: if isAdmin();
     }
 

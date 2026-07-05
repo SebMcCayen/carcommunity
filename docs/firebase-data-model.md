@@ -558,8 +558,21 @@ Document ID: Firebase UID of the requesting user.
 | `reason`    | `string?`   | Optional stated reason       |
 | `status`    | `string`    | `'pending'` \| `'processed'` |
 | `createdAt` | `Timestamp` | Server timestamp             |
+| `processedAt` | `Timestamp?` | Stamped by the purge worker  |
 
-Security: owner can create and read their own request; admin-only write and full read.
+Security: owner can create and read their own request (Phase 9p:
+shape-validated — a client can never pre-mark a request `processed`);
+admin-only write and full read. The canonical entry point is the
+`account.deleteAccount` callable (immediate soft delete: Auth user
+disabled, refresh tokens revoked, `users/{uid}.deleted: true`). The daily
+scheduled `account-purgeDeleted` hard-deletes data for pending requests
+older than 30 days (Firestore trees incl. subcollections, owned
+vehicles/rides, storage prefixes, the Auth user) and flips the request to
+`processed` — the record is retained as the proof of deletion.
+Deliberately retained: moderation/audit history, hashed partner-insight
+events (7-day TTL, no raw UIDs), Kronjakt claim audit keys, and
+community-context chat/RSVPs (scrubbing is the blocking domain's listed
+follow-up). Composite index: `status ASC, createdAt ASC` (purge query).
 
 ---
 

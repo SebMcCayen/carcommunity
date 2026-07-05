@@ -45,6 +45,8 @@ import {
 import { markAllRead, markRead } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
+import { deleteAccount } from './account/deleteAccount';
+import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
@@ -296,4 +298,21 @@ export const notifications = {
 export const diagnostics = {
   submitReport,
   cleanupExpired: cleanupExpiredDiagnostics,
+};
+
+/**
+ * Account deletion domain (grouped export → deployed as
+ * `account-deleteAccount` and the scheduled `account-purgeDeleted`).
+ *
+ * Two-stage deletion (contracts/functions/functions.json): immediate
+ * soft delete (Auth user disabled, tokens revoked, users/{uid}.deleted,
+ * accountDeletionRequests record) and the daily hard purge after the
+ * 30-day retention window (Firestore trees, owned documents, storage
+ * prefixes, the Auth user; the request record is retained as the
+ * proof-of-deletion). Retained data is documented in
+ * functions/src/account/deletion-core.ts.
+ */
+export const account = {
+  deleteAccount,
+  purgeDeleted,
 };

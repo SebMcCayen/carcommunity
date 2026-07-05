@@ -433,6 +433,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Diagnostics reports)"
     },
     {
+      "name": "account.deleteAccount",
+      "domain": "account",
+      "description": "Immediate soft delete (stage 1 of the two-stage deletion workflow): disables the Firebase Auth user and revokes refresh tokens FIRST (fail-safe ordering), then writes accountDeletionRequests/{uid} (status pending) and users/{uid}.deleted=true atomically. Idempotent — repeat calls return the pending request. signedIn access: works while suspended (deletion is a support path). The hard purge runs after the 30-day retention window via the scheduled account-purgeDeleted (Firestore trees, owned vehicles/rides, storage prefixes, the Auth user; moderation/audit history is deliberately retained and the request record becomes the proof-of-deletion). Deployed via grouped export as account-deleteAccount (functions/src/account/deleteAccount.ts).",
+      "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (users — account deletion)"
+    },
+    {
       "name": "admin.suspendUser",
       "domain": "admin",
       "description": "Suspends a user (moderation): sets the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records with actor, target, reason, and server timestamp. Deployed via grouped export as admin-suspendUser (functions/src/admin/suspendUser.ts).",
