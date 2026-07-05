@@ -90,10 +90,13 @@ export const warnUser = onCall(CALLABLE_OPTS, async (request): Promise<WarnUserR
   );
   await batch.commit();
 
-  // Essential account notice (9l): delivered even to suspended users,
-  // cannot be opted out of. Deterministic ID (the moderation action's) so
-  // a retried callable never duplicates the notice. Best-effort — the
-  // moderation record is already committed and is the source of truth.
+  // Essential account notice (9l): delivered even to suspended users and
+  // cannot be opted out of. Best-effort and NON-BLOCKING — the moderation
+  // record is already committed and is the source of truth, so a delivery
+  // failure never fails the callable. The notice ID is derived from this
+  // invocation's moderation-action ID (one notice per action record); it
+  // is NOT idempotent across separate retries, which would each create a
+  // fresh action record + notice (admin-initiated, low-frequency action).
   try {
     await writeInAppNotification(
       targetUid,

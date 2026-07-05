@@ -444,7 +444,7 @@
     {
       "name": "admin.warnUser",
       "domain": "admin",
-      "description": "Issues a formal warning: immutable moderationActions record (type warning) + user.warn adminAuditEvents record committed atomically, and an essential account_warning in-app notification delivered via the notifications writer (idempotent producer ID; delivered even to suspended users). Deliberate deviation from legacy: no users/{uid} status change — the target model has no warned access state and a warning never restricts access. Owner accounts can only be moderated by owners. Deployed via grouped export as admin-warnUser (functions/src/admin/warnUser.ts).",
+      "description": "Issues a formal warning: immutable moderationActions record (type warning) + user.warn adminAuditEvents record committed atomically, and a best-effort essential account_warning in-app notification attempted via the notifications writer (non-blocking — a delivery failure never fails the callable; delivered even to suspended users). Not idempotent across retries: each call writes a fresh moderation action + notice. Deliberate deviation from legacy: no users/{uid} status change — the target model has no warned access state and a warning never restricts access. Owner accounts can only be moderated by owners. Deployed via grouped export as admin-warnUser (functions/src/admin/warnUser.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
