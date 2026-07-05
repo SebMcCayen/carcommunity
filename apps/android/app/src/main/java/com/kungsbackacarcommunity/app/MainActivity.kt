@@ -13,6 +13,7 @@ import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
+import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -82,6 +83,7 @@ class MainActivity : ComponentActivity() {
             notificationsRepository?.let { NotificationsCoordinator(it) }
         val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
+        val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
 
         setContent {
             val authState =
@@ -124,6 +126,7 @@ class MainActivity : ComponentActivity() {
                         notificationsCoordinator = notificationsCoordinator,
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
+                        badgesRepository = badgesRepository,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
