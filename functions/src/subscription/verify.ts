@@ -1,6 +1,6 @@
 /**
  * subscription.verify — authenticated callable, and
- * admin.grantEntitlement — admin callable
+ * subscription.grantEntitlement — admin callable
  * (contracts/functions/functions.json), Phase 11.
  *
  * subscription.verify: the receipt-verification entry point. The legacy
@@ -12,7 +12,7 @@
  * entitlement from an unverified receipt. The raw purchase token is
  * hashed immediately and never stored, logged, or returned.
  *
- * admin.grantEntitlement: the manual platform (reserved by the legacy
+ * subscription.grantEntitlement: the manual platform (reserved by the legacy
  * enum) — audited admin grant/revoke of member_monthly. This is the
  * operational path until store verification is wired, and the test path
  * for the whole entitlement chain (record + users flag + claim).

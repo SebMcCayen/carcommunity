@@ -138,6 +138,38 @@ afterAll(async () => {
   await deleteApp(app);
 });
 
+describe('partners-updateCompany (Phase 16 coverage audit)', () => {
+  it('edits draft companies, rejects active ones, and denies non-admins', async () => {
+    await signInAs(adminUser);
+    const created = (
+      await call('partners-createCompany', { name: 'Redigera AB', category: 'parts' })
+    ).data as { companyId: string };
+
+    await call('partners-updateCompany', {
+      companyId: created.companyId,
+      name: 'Redigerad AB',
+    });
+    expect(
+      (await adminDb.collection('companies').doc(created.companyId).get()).data()!.name,
+    ).toBe('Redigerad AB');
+
+    // Active companies are edit-locked (shared lifecycle).
+    await call('partners-setCompanyStatus', { companyId: created.companyId, action: 'activate' });
+    expect(
+      await callableErrorCode(
+        call('partners-updateCompany', { companyId: created.companyId, name: 'Nyare AB' }),
+      ),
+    ).toBe('functions/failed-precondition');
+
+    await signInAs(member);
+    expect(
+      await callableErrorCode(
+        call('partners-updateCompany', { companyId: created.companyId, name: 'Hacker AB' }),
+      ),
+    ).toBe('functions/permission-denied');
+  });
+});
+
 describe('partner applications', () => {
   it('submits once per user, and approval creates the draft company atomically', async () => {
     await signInAs(freeUser);

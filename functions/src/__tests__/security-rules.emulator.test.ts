@@ -1787,6 +1787,80 @@ describe('Firestore – suspension enforcement', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: group drive roster + announcements (Phase 16 coverage audit)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – group drive roster (Phase 11 rules)', () => {
+  const EVENT = 'gd-event';
+  const PARTICIPANT = 'gd-participant';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `events/${EVENT}`), {
+        title: 'Roster test',
+        status: 'published',
+      });
+      await setDoc(
+        doc(ctx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`),
+        {
+          displayName: 'Deltagare',
+          status: 'joined',
+          joinedAt: serverTimestamp(),
+          leftAt: null,
+          updatedAt: serverTimestamp(),
+        },
+      );
+    });
+  });
+
+  it('members read the roster of published events; owners always', async () => {
+    const memberCtx = testEnv.authenticatedContext('gd-member', { activeMember: true });
+    await assertSucceeds(
+      getDoc(doc(memberCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
+    );
+    const ownerCtx = testEnv.authenticatedContext(PARTICIPANT);
+    await assertSucceeds(
+      getDoc(doc(ownerCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
+    );
+  });
+
+  it('non-members cannot read; nobody writes directly', async () => {
+    const freeCtx = testEnv.authenticatedContext('gd-free');
+    await assertFails(
+      getDoc(doc(freeCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
+    );
+    const memberCtx = testEnv.authenticatedContext('gd-member', { activeMember: true });
+    await assertFails(
+      setDoc(doc(memberCtx.firestore(), `events/${EVENT}/groupDriveParticipants/gd-member`), {
+        displayName: 'Direkt',
+        status: 'joined',
+      }),
+    );
+  });
+});
+
+describe('Firestore – announcements (pre-migration scaffold coverage)', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'announcements/a1'), {
+        title: 'Info',
+        body: 'Hej!',
+      });
+    });
+  });
+
+  it('authenticated users read; regular users cannot write', async () => {
+    const userCtx = testEnv.authenticatedContext('ann-user');
+    await assertSucceeds(getDoc(doc(userCtx.firestore(), 'announcements/a1')));
+    await assertFails(
+      setDoc(doc(userCtx.firestore(), 'announcements/a2'), { title: 'Spam' }),
+    );
+    const unauth = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(unauth.firestore(), 'announcements/a1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Realtime Database security rules – unauthenticated access
 // ---------------------------------------------------------------------------
 
