@@ -15,6 +15,8 @@ import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
@@ -60,6 +62,8 @@ class MainActivity : ComponentActivity() {
         val rsvpCoordinator = eventsRepository?.let { RsvpCoordinator(it) }
         val chatRepository = FirebaseEventChatRepository.createIfAvailable(applicationContext)
         val chatCoordinator = chatRepository?.let { ChatCoordinator(it) }
+        val crownHuntRepository = FirebaseCrownHuntRepository.createIfAvailable(applicationContext)
+        val crownHuntCoordinator = crownHuntRepository?.let { CrownHuntCoordinator(it) }
 
         setContent {
             val authState =
@@ -92,6 +96,8 @@ class MainActivity : ComponentActivity() {
                         rsvpCoordinator = rsvpCoordinator,
                         chatRepository = chatRepository,
                         chatCoordinator = chatCoordinator,
+                        crownHuntRepository = crownHuntRepository,
+                        crownHuntCoordinator = crownHuntCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
