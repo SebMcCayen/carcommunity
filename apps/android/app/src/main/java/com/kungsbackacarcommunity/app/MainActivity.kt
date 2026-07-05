@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch { coordinator.signIn() }
                     }
                 },
+                // signOut flips Firebase auth state; the authState listener
+                // re-renders AppRoot back to the sign-in screen reactively.
+                onSignOutClick = { authRepository?.signOut() },
             )
         }
     }
