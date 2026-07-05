@@ -15,6 +15,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.config.FeatureFlags
+import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.home.HomeScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -46,6 +49,7 @@ fun AuthenticatedApp(
     profileRepository: ProfileRepository?,
     onboardingCoordinator: OnboardingCoordinator?,
     profileEditCoordinator: ProfileEditCoordinator?,
+    flags: FeatureFlags,
     onSignOut: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -102,6 +106,16 @@ fun AuthenticatedApp(
                         } else {
                             null
                         },
+                    // Flag-gated teaser (not member-gated): the liveLocation flag.
+                    showLiveLocationTeaser =
+                        FeatureGate.isAvailable(
+                            flags = flags,
+                            flag = FeatureFlag.LIVE_LOCATION,
+                            memberGated = false,
+                            isActiveMember = profile?.activeMember == true,
+                        ),
+                    // Entitlement-gated (as documented): active membership only.
+                    showMemberValue = profile?.activeMember == true,
                 )
             }
         }

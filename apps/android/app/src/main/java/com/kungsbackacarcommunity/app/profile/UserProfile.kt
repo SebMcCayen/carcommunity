@@ -9,6 +9,11 @@ data class UserProfile(
     val bio: String?,
     /** True once auth.completeOnboarding has stamped onboardingCompletedAt. */
     val onboardingComplete: Boolean,
+    /**
+     * Backend-managed member entitlement (users/{uid}.activeMember). Drives
+     * the client-side member-feature gate; the backend still enforces it.
+     */
+    val activeMember: Boolean = false,
 )
 
 /** Observed state of the profile document. */
