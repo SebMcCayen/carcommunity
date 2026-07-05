@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.account
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -39,9 +40,10 @@ class AccountDeletionScreenTest {
             }
         }
         // First delete button opens the confirm dialog; the dialog's confirm
-        // (same label) triggers the callback.
-        composeTestRule.onNodeWithText(str(R.string.settings_deleteAccount)).performScrollTo().performClick()
-        composeTestRule.onAllNodesWithText(str(R.string.settings_deleteAccount))[1].performClick()
+        // (same label, rendered last in the tree) triggers the callback.
+        composeTestRule.onAllNodesWithText(str(R.string.settings_deleteAccount)).onLast()
+            .performScrollTo().performClick()
+        composeTestRule.onAllNodesWithText(str(R.string.settings_deleteAccount)).onLast().performClick()
         assertEquals(1, deletes)
     }
 
