@@ -19,6 +19,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.garage.FirebaseGarageRepository
+import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.FirebaseGroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
@@ -78,6 +80,8 @@ class MainActivity : ComponentActivity() {
             FirebaseNotificationsRepository.createIfAvailable(applicationContext)
         val notificationsCoordinator =
             notificationsRepository?.let { NotificationsCoordinator(it) }
+        val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
+        val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
 
         setContent {
             val authState =
@@ -118,6 +122,8 @@ class MainActivity : ComponentActivity() {
                         offerCodeCoordinator = offerCodeCoordinator,
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
+                        garageRepository = garageRepository,
+                        garageCoordinator = garageCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
