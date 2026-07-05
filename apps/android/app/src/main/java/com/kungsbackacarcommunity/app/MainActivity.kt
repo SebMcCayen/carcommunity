@@ -9,6 +9,8 @@ import androidx.lifecycle.lifecycleScope
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
+import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
+import com.kungsbackacarcommunity.app.account.FirebaseAccountDeletionRepository
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
@@ -93,6 +95,9 @@ class MainActivity : ComponentActivity() {
             FirebasePartnerApplicationRepository.createIfAvailable(applicationContext)
                 ?.let { PartnerApplicationCoordinator(it) }
         val billboardsRepository = FirebaseBillboardsRepository.createIfAvailable(applicationContext)
+        val accountDeletionCoordinator =
+            FirebaseAccountDeletionRepository.createIfAvailable(applicationContext)
+                ?.let { AccountDeletionCoordinator(it) }
 
         setContent {
             val authState =
@@ -139,6 +144,7 @@ class MainActivity : ComponentActivity() {
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
+                        accountDeletionCoordinator = accountDeletionCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
