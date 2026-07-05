@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.config
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,9 @@ class FeatureFlagsStore(
         val repo = repository ?: return
         try {
             state.value = repo.fetch()
+        } catch (cancellation: CancellationException) {
+            // Never swallow coroutine cancellation (matches the coordinators).
+            throw cancellation
         } catch (failure: Exception) {
             // Keep the last good flags (or defaults). Flags never fail "off".
         }
