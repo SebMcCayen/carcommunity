@@ -43,6 +43,11 @@ fun HomeScreen(
     onSignOut: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onOpenProfile: (() -> Unit)? = null,
+    // Phase 12 slice 3 gates: the live-location teaser is shown when the
+    // liveLocation feature flag is on; the member-value card when the user
+    // holds an active member entitlement (see FeatureGate).
+    showLiveLocationTeaser: Boolean = false,
+    showMemberValue: Boolean = false,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -83,6 +88,19 @@ fun HomeScreen(
                 title = stringResource(R.string.home_nextEventTitle),
                 body = stringResource(R.string.home_nextEventBody),
             )
+
+            if (showLiveLocationTeaser) {
+                StatusCard(
+                    title = stringResource(R.string.home_liveLocationSectionTitle),
+                    body = stringResource(R.string.home_liveLocationDisclaimer),
+                )
+            }
+            if (showMemberValue) {
+                StatusCard(
+                    title = stringResource(R.string.home_memberValueTitle),
+                    body = stringResource(R.string.home_memberValueBody),
+                )
+            }
 
             if (onOpenProfile != null) {
                 Button(onClick = onOpenProfile, modifier = Modifier.fillMaxWidth()) {

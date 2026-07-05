@@ -39,6 +39,7 @@ class FirebaseProfileRepository private constructor(
                             displayName = snapshot.getString("displayName"),
                             bio = snapshot.getString("bio"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
+                            activeMember = snapshot.getBoolean("activeMember") ?: false,
                         )
                     } else {
                         null

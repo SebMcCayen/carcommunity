@@ -4,12 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
+import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
+import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
@@ -17,6 +20,13 @@ import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    // Feature flags are refreshed on launch and every resume (mapping:
+    // poll-on-focus is enough for MVP); the store starts at contract defaults.
+    private val featureFlagsStore by lazy {
+        FeatureFlagsStore(FirebaseFeatureFlagsRepository.createIfAvailable(applicationContext))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -42,6 +52,7 @@ class MainActivity : ComponentActivity() {
                 authRepository?.authState?.collectAsState()?.value ?: AuthState.Unavailable
             val signInStatus =
                 signInCoordinator?.status?.collectAsState()?.value ?: SignInStatus.Idle
+            val flags by featureFlagsStore.flags.collectAsState()
 
             AppRoot(
                 authState = authState,
@@ -61,10 +72,16 @@ class MainActivity : ComponentActivity() {
                         profileRepository = profileRepository,
                         onboardingCoordinator = onboardingCoordinator,
                         profileEditCoordinator = profileEditCoordinator,
+                        flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
                 },
             )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { featureFlagsStore.refresh() }
     }
 }

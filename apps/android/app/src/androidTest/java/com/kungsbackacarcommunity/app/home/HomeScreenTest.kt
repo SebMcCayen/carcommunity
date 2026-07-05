@@ -43,4 +43,36 @@ class HomeScreenTest {
         composeTestRule.onNodeWithText(str(R.string.home_communityStatusTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.auth_signOut)).assertDoesNotExist()
     }
+
+    @Test
+    fun gatedCardsShowWhenEnabled() {
+        composeTestRule.setContent {
+            KccTheme {
+                HomeScreen(
+                    displayName = "Sebbe",
+                    onSignOut = {},
+                    showLiveLocationTeaser = true,
+                    showMemberValue = true,
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.home_liveLocationSectionTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.home_memberValueTitle)).assertIsDisplayed()
+    }
+
+    @Test
+    fun gatedCardsHiddenWhenDisabled() {
+        composeTestRule.setContent {
+            KccTheme {
+                HomeScreen(
+                    displayName = "Sebbe",
+                    onSignOut = {},
+                    showLiveLocationTeaser = false,
+                    showMemberValue = false,
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.home_liveLocationSectionTitle)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.home_memberValueTitle)).assertDoesNotExist()
+    }
 }
