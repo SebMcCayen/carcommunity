@@ -46,6 +46,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Phase 15: App Check init reads BuildConfig.DEBUG to pick the provider.
+        buildConfig = true
     }
 }
 
@@ -66,7 +68,9 @@ dependencies {
     implementation(libs.firebase.database)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.appcheck.playintegrity)
-    debugImplementation(libs.firebase.appcheck.debug)
+    // Available to all variants so KccApplication compiles for release; the
+    // debug provider is only INSTALLED when BuildConfig.DEBUG is true.
+    implementation(libs.firebase.appcheck.debug)
 
     // Mapbox Maps
     implementation(libs.mapbox.maps)
