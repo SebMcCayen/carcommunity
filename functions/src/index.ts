@@ -45,6 +45,8 @@ import {
 import { markAllRead, markRead } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
+import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
+import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { deleteAccount } from './account/deleteAccount';
 import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
@@ -315,4 +317,25 @@ export const diagnostics = {
 export const account = {
   deleteAccount,
   purgeDeleted,
+};
+
+/**
+ * Live location domain (grouped export → deployed as `live-startSession`,
+ * `live-updatePosition`, `live-stopSession`, `live-hideMeNow`, and the
+ * scheduled `live-cleanupExpired`) — Phase 10, the first RTDB domain.
+ *
+ * All liveLocation/ writes are backend-only (RTDB rules deny every
+ * client write); entitled members (activeMember claim, non-suspended)
+ * read liveLocation/{uid}/latest markers via RTDB listeners. Sessions
+ * expire per their 1h/2h/4h duration; the 5-minute sweep also removes
+ * markers whose positions went silent for 15 minutes. hideMeNow works
+ * while suspended (privacy action). Also completes the Phase 9h Kronjakt
+ * jump-detection seam, which reads liveLocation/{uid}/latest.
+ */
+export const live = {
+  startSession,
+  updatePosition,
+  stopSession,
+  hideMeNow,
+  cleanupExpired: cleanupExpiredLive,
 };

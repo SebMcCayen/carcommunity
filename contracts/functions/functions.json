@@ -30,37 +30,37 @@
     {
       "name": "live.startSession",
       "domain": "live",
-      "description": "Starts a live location sharing session with a chosen duration (see contracts/schemas/live-location.schema.json liveLocationStartRequest).",
-      "access": "authenticated",
+      "description": "Starts (or RESTARTS with a fresh id/expiry) the caller's live location session with a chosen duration (1h|2h|4h). Member-only; gated by the liveLocation flag. Session state lives at RTDB liveLocation/{uid}/session - backend-only writes; owner-only read. Deployed via grouped export as live-startSession (functions/src/live/session.ts).",
+      "access": "member",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {
       "name": "live.updatePosition",
       "domain": "live",
-      "description": "Writes the caller's latest position (liveLocationUpdateRequest). Target storage is RTDB liveLocation/{uid}/latest.",
-      "access": "authenticated",
+      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry). Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by non-suspended activeMember claims only. Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
+      "access": "member",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as updateLivePosition)"
     },
     {
       "name": "live.stopSession",
       "domain": "live",
-      "description": "Stops the caller's active session (liveLocationStopRequest).",
+      "description": "Stops the caller's session (status stopped, stopReason) and removes the latest marker immediately. Deployed via grouped export as live-stopSession (functions/src/live/session.ts).",
       "access": "authenticated",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {
       "name": "live.hideMeNow",
       "domain": "live",
-      "description": "Immediately stops all of the caller's sessions and removes the latest position.",
-      "access": "authenticated",
+      "description": "Immediately stops the caller's session (reason hide_me_now) and removes the latest marker. signedIn access: works while SUSPENDED — removing your own position is a privacy action that must always be available. Deployed via grouped export as live-hideMeNow (functions/src/live/session.ts).",
+      "access": "signedIn",
       "appCheck": true,
-      "status": "planned",
+      "status": "implemented",
       "source": "docs/api-guidelines.md"
     },
     {

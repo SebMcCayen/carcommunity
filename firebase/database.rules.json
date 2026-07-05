@@ -2,15 +2,14 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "liveLocations": {
+    "liveLocation": {
       "$uid": {
-        ".read": "auth != null && auth.token.activeMember == true && auth.token.suspended != true",
-        ".write": "auth != null && auth.uid == $uid && auth.token.suspended != true",
-        ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp'])",
-        "lat": { ".validate": "newData.isNumber()" },
-        "lng": { ".validate": "newData.isNumber()" },
-        "timestamp": { ".validate": "newData.isNumber()" },
-        "$other": { ".validate": false }
+        "session": {
+          ".read": "auth != null && auth.uid == $uid"
+        },
+        "latest": {
+          ".read": "auth != null && auth.token.activeMember == true && auth.token.suspended != true"
+        }
       }
     },
     "presence": {

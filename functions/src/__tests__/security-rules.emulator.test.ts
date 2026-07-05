@@ -1803,68 +1803,72 @@ describe('Realtime Database security rules – unauthenticated access', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Realtime Database: liveLocations
+// Realtime Database: liveLocation (Phase 10)
+// Backend-write-only; markers readable by entitled members; sessions
+// owner-readable. (Retires the Phase 3 `liveLocations` plural scaffold.)
 // ---------------------------------------------------------------------------
 
-describe('Realtime Database – liveLocations', () => {
+describe('Realtime Database – liveLocation (Phase 10)', () => {
   const SHARER = 'loc-sharer';
   const MEMBER = 'loc-member';
   const NON_MEMBER = 'loc-non-member';
 
-  it('owner can write their own live location', async () => {
-    const ctx = testEnv.authenticatedContext(SHARER);
-    await assertSucceeds(
-      dbSet(dbRef(ctx.database(), `liveLocations/${SHARER}`), {
-        lat: 57.5,
-        lng: 12.0,
-        timestamp: Date.now(),
-      }),
-    );
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await dbSet(dbRef(ctx.database(), `liveLocation/${SHARER}`), {
+        session: {
+          id: 's1',
+          status: 'active',
+          duration: '1h',
+          startedAt: '2026-07-05T12:00:00.000Z',
+          expiresAt: '2026-07-05T13:00:00.000Z',
+          stoppedAt: null,
+        },
+        latest: {
+          latitude: 59.33,
+          longitude: 18.07,
+          recordedAt: '2026-07-05T12:00:00.000Z',
+          sessionId: 's1',
+          displayName: 'Sharer',
+        },
+      });
+    });
   });
 
-  it("owner cannot write to another user's live location", async () => {
-    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+  it('no client can write positions or sessions — not even the owner', async () => {
+    const ctx = testEnv.authenticatedContext(SHARER, { activeMember: true });
     await assertFails(
-      dbSet(dbRef(ctx.database(), `liveLocations/${SHARER}`), {
-        lat: 57.5,
-        lng: 12.0,
-        timestamp: Date.now(),
+      dbSet(dbRef(ctx.database(), `liveLocation/${SHARER}/latest`), {
+        latitude: 1,
+        longitude: 1,
+        recordedAt: '2026-07-05T12:01:00.000Z',
       }),
+    );
+    await assertFails(
+      dbSet(dbRef(ctx.database(), `liveLocation/${SHARER}/session/status`), 'stopped'),
     );
   });
 
-  it('active member can read live locations', async () => {
-    const ctx = testEnv.authenticatedContext(MEMBER, { activeMember: true });
-    await assertSucceeds(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
+  it('entitled members read markers; owners read their own session', async () => {
+    const memberCtx = testEnv.authenticatedContext(MEMBER, { activeMember: true });
+    await assertSucceeds(dbGet(dbRef(memberCtx.database(), `liveLocation/${SHARER}/latest`)));
+    const ownerCtx = testEnv.authenticatedContext(SHARER);
+    await assertSucceeds(dbGet(dbRef(ownerCtx.database(), `liveLocation/${SHARER}/session`)));
   });
 
-  it('non-member cannot read live locations', async () => {
-    const ctx = testEnv.authenticatedContext(NON_MEMBER);
-    await assertFails(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
-  });
-
-  it('unauthenticated user cannot read live locations', async () => {
-    const ctx = testEnv.unauthenticatedContext();
-    await assertFails(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
-  });
-
-  it('suspended member cannot read live locations (suspension overrides entitlement)', async () => {
-    const ctx = testEnv.authenticatedContext('loc-suspended-member', {
+  it('non-members, suspended members, and strangers cannot read', async () => {
+    const nonMember = testEnv.authenticatedContext(NON_MEMBER);
+    await assertFails(dbGet(dbRef(nonMember.database(), `liveLocation/${SHARER}/latest`)));
+    const suspended = testEnv.authenticatedContext('loc-suspended', {
       activeMember: true,
       suspended: true,
     });
-    await assertFails(dbGet(dbRef(ctx.database(), `liveLocations/${SHARER}`)));
-  });
-
-  it('suspended user cannot share their own live location', async () => {
-    const ctx = testEnv.authenticatedContext('loc-suspended-sharer', { suspended: true });
-    await assertFails(
-      dbSet(dbRef(ctx.database(), 'liveLocations/loc-suspended-sharer'), {
-        lat: 57.5,
-        lng: 12.0,
-        timestamp: Date.now(),
-      }),
-    );
+    await assertFails(dbGet(dbRef(suspended.database(), `liveLocation/${SHARER}/latest`)));
+    const unauth = testEnv.unauthenticatedContext();
+    await assertFails(dbGet(dbRef(unauth.database(), `liveLocation/${SHARER}/latest`)));
+    // Sessions are private to their owner.
+    const member = testEnv.authenticatedContext(MEMBER, { activeMember: true });
+    await assertFails(dbGet(dbRef(member.database(), `liveLocation/${SHARER}/session`)));
   });
 });
 
