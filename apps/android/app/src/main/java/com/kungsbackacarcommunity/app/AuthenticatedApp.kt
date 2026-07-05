@@ -27,6 +27,9 @@ import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.home.HomeScreen
+import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
+import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
+import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
@@ -74,6 +77,8 @@ fun AuthenticatedApp(
     crownHuntCoordinator: CrownHuntCoordinator?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
+    notificationsRepository: NotificationsRepository?,
+    notificationsCoordinator: NotificationsCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -225,6 +230,19 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Notifications -> {
+                    if (notificationsRepository != null) {
+                        NotificationsRoute(
+                            repository = notificationsRepository,
+                            coordinator = notificationsCoordinator,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -285,6 +303,14 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Notification inbox is core (no flag); reachable when
+                        // Firebase is configured.
+                        onOpenNotifications =
+                            if (notificationsRepository != null) {
+                                { destination = MainDestination.Notifications }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -293,7 +319,15 @@ fun AuthenticatedApp(
 }
 
 /** In-app destinations within the authenticated Main shell (no NavHost yet). */
-private enum class MainDestination { Home, Profile, LiveLocation, Events, CrownHunt, Partners }
+private enum class MainDestination {
+    Home,
+    Profile,
+    LiveLocation,
+    Events,
+    CrownHunt,
+    Partners,
+    Notifications,
+}
 
 @Composable
 private fun LoadingScreen() {
