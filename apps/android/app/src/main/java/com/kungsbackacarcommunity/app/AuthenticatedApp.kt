@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.events.EventsRepository
+import com.kungsbackacarcommunity.app.events.EventsRoute
+import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.home.HomeScreen
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
@@ -55,6 +58,8 @@ fun AuthenticatedApp(
     profileEditCoordinator: ProfileEditCoordinator?,
     liveLocationRepository: LiveLocationRepository?,
     liveLocationCoordinator: LiveLocationCoordinator?,
+    eventsRepository: EventsRepository?,
+    rsvpCoordinator: RsvpCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -152,6 +157,22 @@ fun AuthenticatedApp(
                     )
                 }
 
+                MainDestination.Events -> {
+                    if (eventsRepository != null) {
+                        EventsRoute(
+                            repository = eventsRepository,
+                            rsvpCoordinator = rsvpCoordinator,
+                            uid = uid,
+                            isActiveMember = profile?.activeMember == true,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        // Unreachable: the Home entry is gated on eventsRepository
+                        // != null. Render the shell rather than mutate state here.
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -174,6 +195,14 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Events are core (no feature flag); reachable when
+                        // Firebase is configured.
+                        onOpenEvents =
+                            if (eventsRepository != null) {
+                                { destination = MainDestination.Events }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -182,7 +211,7 @@ fun AuthenticatedApp(
 }
 
 /** In-app destinations within the authenticated Main shell (no NavHost yet). */
-private enum class MainDestination { Home, Profile, LiveLocation }
+private enum class MainDestination { Home, Profile, LiveLocation, Events }
 
 @Composable
 private fun LoadingScreen() {
