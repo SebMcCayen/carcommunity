@@ -1,34 +1,40 @@
 /**
- * Points feature module for the admin portal.
+ * Points feature module for the admin portal (Phase 13 vertical).
  *
- * Provides API client functions for the Kronpoäng (KP) points admin area.
- * Pages in src/app/users/[id]/ import from here for points operations.
+ * Reads come straight from Firestore (admin rules-gated since Phase 9g):
+ * pointsLedger/{uid} for the balance and its `entries` subcollection for
+ * the ledger. The adjustment mutation goes through the audited
+ * `points-adminAdjust` callable. Exported signatures and response
+ * envelope types are unchanged, so pages keep working — this module is
+ * the adapter layer.
  *
- * Security notes:
- *  - All operations are validated server-side. Client-side role checks are
- *    UX only and are NOT security boundaries.
- *  - Backend is the sole authority for point balances and ledger entries.
- *  - Clients must never calculate or set an absolute balance.
- *  - Only positive integer amounts are accepted for adjustments.
- *  - A reason is required for every admin adjustment and is audited server-side.
- *  - Debits that would produce a negative balance are rejected by the backend.
- *  - Existing ledger entries cannot be edited or deleted through any API.
- *  - No transfer, purchase, withdrawal, or cash-value operations are exposed.
- *  - No public leaderboards or other users' balances are exposed.
- *  - Do not include personal data beyond the userId in requests.
+ * Security notes (unchanged):
+ *  - Backend is the sole authority for balances and ledger entries.
+ *  - Clients never calculate or set an absolute balance.
+ *  - A reason is required for every adjustment and is audited server-side.
  */
 
 import {
-  buildAdminPointsAdjustPath,
-  buildAdminUserPointsBalancePath,
-  buildAdminUserPointsLedgerPath,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  type Timestamp,
+} from 'firebase/firestore';
+import {
   type PointsBalanceResponse,
   type PaginatedPointsLedgerResponse,
   type AdminPointsAdjustmentRequest,
   type AdminPointsAdjustmentResponse,
+  type PointsTransactionSummary,
 } from '@carcommunity/shared/points';
 
-import { ApiError, apiRequest } from '../../lib/api';
+import { ApiError } from '../../lib/api';
+import { callAdmin } from '../../lib/callables';
+import { getAdminFirestore } from '../../lib/firestore';
 
 export type {
   PointsBalanceResponse,
@@ -38,58 +44,116 @@ export type {
 };
 export { ApiError };
 
-// ---------------------------------------------------------------------------
-// API client helpers
-// ---------------------------------------------------------------------------
+const LEDGER_PAGE_SIZE = 20;
+
+interface LedgerEntryDoc {
+  transactionType: PointsTransactionSummary['transactionType'];
+  source: PointsTransactionSummary['source'];
+  amount: number;
+  balanceAfter: number;
+  description: string;
+  createdAt: Timestamp;
+}
 
 /**
- * Returns the current Kronpoäng balance for a user.
- * Requires admin or owner role (enforced server-side).
- *
- * NOTE: The balance is read from the backend and must not be modified
- * or recalculated on the client.
+ * Returns the current Kronpoäng balance for a user (direct Firestore
+ * read of pointsLedger/{uid}; a missing wallet is a zero balance).
  */
 export async function getAdminUserPointsBalance(
   userId: string,
-  token?: string,
+  _token?: string,
 ): Promise<PointsBalanceResponse> {
-  return apiRequest<PointsBalanceResponse>(buildAdminUserPointsBalancePath(userId), { token });
+  const snapshot = await getDoc(doc(getAdminFirestore(), 'pointsLedger', userId));
+  const balance = (snapshot.data()?.balance as number | undefined) ?? 0;
+  return {
+    ok: true,
+    data: { balance, displayName: 'Kronpoäng', shortForm: 'KP' },
+  };
 }
 
 /**
- * Returns a paginated ledger for a user.
- * Requires admin or owner role (enforced server-side).
+ * Returns the most recent ledger entries for a user, newest first.
+ * Firestore cursor pagination replaces the legacy page numbers; this
+ * adapter serves the first page (deeper history lands with the full
+ * admin ledger view in the Phase 13 checklist).
  */
 export async function getAdminUserPointsLedger(
   userId: string,
-  page?: number,
-  token?: string,
+  _page?: number,
+  _token?: string,
 ): Promise<PaginatedPointsLedgerResponse> {
-  const url = page
-    ? `${buildAdminUserPointsLedgerPath(userId)}?page=${page}`
-    : buildAdminUserPointsLedgerPath(userId);
-  return apiRequest<PaginatedPointsLedgerResponse>(url, { token });
+  const db = getAdminFirestore();
+  const [walletSnap, entriesSnap] = await Promise.all([
+    getDoc(doc(db, 'pointsLedger', userId)),
+    getDocs(
+      query(
+        collection(db, 'pointsLedger', userId, 'entries'),
+        orderBy('createdAt', 'desc'),
+        limit(LEDGER_PAGE_SIZE),
+      ),
+    ),
+  ]);
+
+  const transactions: PointsTransactionSummary[] = entriesSnap.docs.map((entry) => {
+    const data = entry.data() as LedgerEntryDoc;
+    return {
+      transactionId: entry.id,
+      transactionType: data.transactionType,
+      source: data.source,
+      amount: data.amount,
+      balanceAfter: data.balanceAfter,
+      description: data.description,
+      createdAt: data.createdAt.toDate().toISOString(),
+    };
+  });
+
+  return {
+    ok: true,
+    data: {
+      balance: (walletSnap.data()?.balance as number | undefined) ?? 0,
+      transactions,
+    },
+    meta: {
+      page: 1,
+      pageSize: LEDGER_PAGE_SIZE,
+      total: transactions.length,
+      hasNext: transactions.length === LEDGER_PAGE_SIZE,
+    },
+  };
+}
+
+interface PointsAdminCallableResponse {
+  targetUid: string;
+  entryId: string;
+  amount: number;
+  balanceAfter: number;
+  alreadyApplied: boolean;
 }
 
 /**
- * Applies an admin adjustment (credit or debit) to a user's Kronpoäng balance.
- * Requires admin or owner role (enforced server-side).
- *
- * Constraints (all enforced server-side):
- *  - amount must be a positive integer (1 – 100 000).
- *  - reason is required.
- *  - debits that would produce a negative balance are rejected.
- *  - the resulting balance is calculated by the backend — never the client.
- *  - the action is written to the audit log server-side.
+ * Applies an admin adjustment via the audited points-adminAdjust
+ * callable (positive integer amounts; debits that would overdraw are
+ * rejected server-side).
  */
 export async function applyAdminPointsAdjustment(
   userId: string,
   request: AdminPointsAdjustmentRequest,
-  token?: string,
+  _token?: string,
 ): Promise<AdminPointsAdjustmentResponse> {
-  return apiRequest<AdminPointsAdjustmentResponse>(buildAdminPointsAdjustPath(userId), {
-    method: 'POST',
-    body: request,
-    token,
+  const result = await callAdmin<PointsAdminCallableResponse>('points-adminAdjust', {
+    targetUid: userId,
+    type: request.type,
+    amount: request.amount,
+    reason: request.reason,
   });
+  return {
+    ok: true,
+    data: {
+      transactionId: result.entryId,
+      transactionType: request.type,
+      amount: result.amount,
+      balanceAfter: result.balanceAfter,
+      createdAt: new Date().toISOString(),
+    },
+  };
 }

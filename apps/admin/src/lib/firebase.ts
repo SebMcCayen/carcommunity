@@ -28,7 +28,7 @@ const firebaseConfig = {
   appId: requireEnv('VITE_FIREBASE_APP_ID'),
 };
 
-function getFirebaseApp(): FirebaseApp {
+export function getFirebaseApp(): FirebaseApp {
   const existing = getApps();
   if (existing.length > 0) {
     return existing[0]!;
