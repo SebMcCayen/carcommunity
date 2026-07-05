@@ -132,6 +132,17 @@
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>
     <string name="profile_points">Kronpoäng</string>
+    <string name="profile_displayNameLabel">Display name</string>
+    <string name="profile_bioLabel">Bio</string>
+    <string name="profile_saveButton">Save</string>
+    <string name="profile_editButton">Edit</string>
+    <string name="profile_cancelButton">Cancel</string>
+    <string name="profile_back">Back</string>
+    <string name="profile_saved">Saved</string>
+    <string name="profile_errorNameRequired">Enter a display name.</string>
+    <string name="profile_errorTooLong">That text is too long.</string>
+    <string name="profile_loadError">Couldn’t load your profile.</string>
+    <string name="profile_saveError">Couldn’t save. Please try again.</string>
     <string name="map_title">Map</string>
     <string name="map_placeholder">Map view coming soon.</string>
     <string name="map_noOtherMarkersTitle">No other members are currently sharing their live location.</string>

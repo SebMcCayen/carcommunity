@@ -132,6 +132,17 @@
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
     <string name="profile_points">Kronpoäng</string>
+    <string name="profile_displayNameLabel">Visningsnamn</string>
+    <string name="profile_bioLabel">Presentation</string>
+    <string name="profile_saveButton">Spara</string>
+    <string name="profile_editButton">Redigera</string>
+    <string name="profile_cancelButton">Avbryt</string>
+    <string name="profile_back">Tillbaka</string>
+    <string name="profile_saved">Sparat</string>
+    <string name="profile_errorNameRequired">Ange ett visningsnamn.</string>
+    <string name="profile_errorTooLong">Texten är för lång.</string>
+    <string name="profile_loadError">Kunde inte ladda profilen.</string>
+    <string name="profile_saveError">Kunde inte spara. Försök igen.</string>
     <string name="map_title">Karta</string>
     <string name="map_placeholder">Kartvyn kommer snart.</string>
     <string name="map_noOtherMarkersTitle">Inga andra medlemmar delar sin liveposition just nu.</string>

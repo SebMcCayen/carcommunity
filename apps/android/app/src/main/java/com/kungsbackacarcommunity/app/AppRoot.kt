@@ -28,6 +28,11 @@ fun AppRoot(
     signInStatus: SignInStatus = SignInStatus.Idle,
     onSignInClick: () -> Unit = {},
     onSignOutClick: () -> Unit = {},
+    // The signed-in experience is injected by MainActivity (onboarding gate +
+    // Home/Profile). The default renders the home shell directly so previews
+    // and pure UI tests need no repositories.
+    signedInContent: @Composable (uid: String, displayName: String?) -> Unit =
+        { _, displayName -> HomeScreen(displayName = displayName, onSignOut = onSignOutClick) },
 ) {
     KccTheme {
         when (authState) {
@@ -35,7 +40,7 @@ fun AppRoot(
                 SignInScreen(status = signInStatus, onSignInClick = onSignInClick)
 
             is AuthState.SignedIn ->
-                HomeScreen(displayName = authState.displayName, onSignOut = onSignOutClick)
+                signedInContent(authState.uid, authState.displayName)
 
             AuthState.Unavailable ->
                 HomeScreen(displayName = null, onSignOut = null)
