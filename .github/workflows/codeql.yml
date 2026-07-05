@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # phase-* lets CI run on stacked PRs (base = previous phase branch),
+    # not only on PRs targeting main.
+    branches: [main, 'phase-*']
   schedule:
     - cron: '30 6 * * 1'
 

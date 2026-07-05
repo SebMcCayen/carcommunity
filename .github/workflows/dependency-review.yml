@@ -2,7 +2,9 @@ name: Dependency Review
 
 on:
   pull_request:
-    branches: [main]
+    # phase-* lets CI run on stacked PRs (base = previous phase branch),
+    # not only on PRs targeting main.
+    branches: [main, 'phase-*']
 
 permissions:
   contents: read

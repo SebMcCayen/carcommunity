@@ -503,11 +503,36 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // moderationReports – abuse and content reports
-    // Any authenticated user may submit a report; only admins may read them.
+    // Any authenticated user may submit a report (Phase 9o: field-level
+    // validation — reporter identity pinned, whitelisted shape, status
+    // always starts pending); only admins may read and update them.
+    // Deliberately NOT suspension-gated: reporting abuse is a support path.
     // -------------------------------------------------------------------------
+    function validModerationReport() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['reportedBy', 'targetType', 'targetId', 'reason',
+                                  'details', 'status', 'createdAt'])
+        && data.keys().hasAll(['reportedBy', 'targetType', 'targetId', 'reason',
+                               'status', 'createdAt'])
+        && data.reportedBy == request.auth.uid
+        && data.targetType in ['user', 'message', 'event']
+        && data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 300
+        && data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 100
+        && (!data.keys().hasAny(['details'])
+            || (data.details is string && data.details.size() <= 2000))
+        && data.status == 'pending'
+        && isServerTimestamp(data.createdAt);
+    }
+
     match /moderationReports/{reportId} {
-      allow create: if isAuthenticated() && request.resource.data.reportedBy == request.auth.uid;
-      allow read, write: if isAdmin();
+      allow create: if isAuthenticated() && validModerationReport();
+      allow read: if isAdmin();
+      // Admin review updates may ONLY move the status through the review
+      // vocabulary — reporter identity, target, and reason are immutable.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['pending', 'reviewed', 'dismissed'];
+      // No deletes: reports are review records (admins resolve via status).
     }
 
     // -------------------------------------------------------------------------

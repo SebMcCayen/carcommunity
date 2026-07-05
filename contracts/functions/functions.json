@@ -442,6 +442,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "admin.warnUser",
+      "domain": "admin",
+      "description": "Issues a formal warning: immutable moderationActions record (type warning) + user.warn adminAuditEvents record committed atomically, and a best-effort essential account_warning in-app notification attempted via the notifications writer (non-blocking — a delivery failure never fails the callable; delivered even to suspended users). Not idempotent across retries: each call writes a fresh moderation action + notice. Deliberate deviation from legacy: no users/{uid} status change — the target model has no warned access state and a warning never restricts access. Owner accounts can only be moderated by owners. Deployed via grouped export as admin-warnUser (functions/src/admin/warnUser.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Admin moderation actions)"
+    },
+    {
       "name": "admin.restoreAccess",
       "domain": "admin",
       "description": "Restores a suspended user: clears the suspended custom claim, mirrors users/{uid}.suspended, and writes immutable moderationActions and adminAuditEvents records. Deployed via grouped export as admin-restoreAccess (functions/src/admin/restoreAccess.ts).",

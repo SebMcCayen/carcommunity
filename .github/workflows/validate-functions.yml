@@ -8,7 +8,9 @@ on:
       - 'firebase/firebase.json'
       - '.github/workflows/validate-functions.yml'
   pull_request:
-    branches: [main]
+    # phase-* lets CI run on stacked PRs (base = previous phase branch),
+    # not only on PRs targeting main.
+    branches: [main, 'phase-*']
     paths:
       - 'functions/**'
       - 'firebase/firebase.json'

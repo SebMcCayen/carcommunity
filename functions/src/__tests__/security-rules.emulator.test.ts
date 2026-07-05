@@ -811,6 +811,109 @@ describe('Firestore – diagnostics reports (Phase 9n)', () => {
     const admin = testEnv.authenticatedContext('diag-admin', { admin: true });
     await assertFails(deleteDoc(doc(admin.firestore(), REPORT)));
   });
+
+// ---------------------------------------------------------------------------
+// Firestore: moderation reports field validation (Phase 9o)
+// Reporter identity pinned, whitelisted shape, status starts pending.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – moderation reports validation (Phase 9o)', () => {
+  const REPORTER = 'mod-reporter';
+  const validReport = {
+    reportedBy: REPORTER,
+    targetType: 'user',
+    targetId: 'bad-actor',
+    reason: 'harassment',
+    details: 'Upprepade otrevliga meddelanden.',
+    status: 'pending',
+  };
+
+  // A dedicated, pre-seeded report for the admin-review assertions below,
+  // so that test does not depend on the create test having run first.
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'moderationReports/review-target'), {
+        ...validReport,
+        createdAt: serverTimestamp(),
+      });
+    });
+  });
+
+  it('accepts a valid report from its own reporter', async () => {
+    const ctx = testEnv.authenticatedContext(REPORTER);
+    await assertSucceeds(
+      setDoc(doc(ctx.firestore(), 'moderationReports/valid-1'), {
+        ...validReport,
+        createdAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('rejects spoofed reporters, bad shapes, and non-pending status', async () => {
+    const ctx = testEnv.authenticatedContext(REPORTER);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'moderationReports/spoof'), {
+        ...validReport,
+        reportedBy: 'someone-else',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'moderationReports/extra'), {
+        ...validReport,
+        extraField: 'x',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'moderationReports/badtype'), {
+        ...validReport,
+        targetType: 'vehicle',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'moderationReports/resolved'), {
+        ...validReport,
+        status: 'reviewed',
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'moderationReports/clientts'), {
+        ...validReport,
+        createdAt: new Date(),
+      }),
+    );
+  });
+
+  it('reporters cannot read, update, or delete their reports (admin-only review)', async () => {
+    const ctx = testEnv.authenticatedContext(REPORTER);
+    await assertFails(getDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
+    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationReports/review-target')));
+    await assertSucceeds(
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
+    );
+    // Admin review updates are status-only: immutable fields stay immutable
+    // and the status vocabulary is closed.
+    await assertFails(
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
+        status: 'reviewed',
+        reason: 'rewritten',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'archived' }),
+    );
+    // Even admins cannot delete review records.
+    await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/review-target')));
+  });
+});
 });
 });
 
@@ -1662,7 +1765,11 @@ describe('Firestore – suspension enforcement', () => {
     await assertSucceeds(
       setDoc(doc(ctx.firestore(), 'moderationReports', 'suspended-report'), {
         reportedBy: SUSPENDED,
-        subject: 'appeal',
+        targetType: 'user',
+        targetId: 'someone',
+        reason: 'appeal',
+        status: 'pending',
+        createdAt: serverTimestamp(),
       }),
     );
     await assertSucceeds(

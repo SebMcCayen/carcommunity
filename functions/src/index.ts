@@ -17,6 +17,7 @@ import { restoreAccess } from './admin/restoreAccess';
 import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
+import { warnUser } from './admin/warnUser';
 import { cancel, complete, publish } from './events/eventLifecycle';
 import { create, update } from './events/manageEvent';
 import { postChatMessage } from './events/postChatMessage';
@@ -93,6 +94,8 @@ export const admin = {
   setAdminRole,
   suspendUser,
   restoreAccess,
+  // Phase 9o: warning record + audit + essential in-app notice; no access change.
+  warnUser,
   // Phase 9m: audited, key-whitelisted writes to config/featureFlags.
   setFeatureFlag,
 };
