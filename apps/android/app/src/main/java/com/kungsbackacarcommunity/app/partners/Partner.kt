@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.partners
 
+import java.util.Locale
+
 /**
  * Partners domain model + enums (Phase 12 slice 17).
  *
@@ -72,5 +74,5 @@ data class OfferMemberDetail(
 object Partners {
     /** Offers belonging to a company, in stable order (by title). */
     fun offersForCompany(offers: List<PartnerOffer>, companyId: String): List<PartnerOffer> =
-        offers.filter { it.companyId == companyId }.sortedBy { it.title.lowercase() }
+        offers.filter { it.companyId == companyId }.sortedBy { it.title.lowercase(Locale.ROOT) }
 }

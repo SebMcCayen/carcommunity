@@ -501,6 +501,7 @@
     "howToRedeem": "How to redeem",
     "drivingSafetyWarning": "Park safely before using an offer.",
     "codeVisible": "Code",
+    "codeUnavailable": "No code is needed for this offer.",
     "codeAlertTitle": "Discount code",
     "codeAlertClose": "Close",
     "loadError": "Could not load offers.",

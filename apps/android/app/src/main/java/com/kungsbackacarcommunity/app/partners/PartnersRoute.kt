@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -55,7 +56,7 @@ fun PartnersRoute(
     val company = (companiesState as? CompaniesState.Loaded)?.companies?.firstOrNull { it.id == companyId }
     val companyOffers = Partners.offersForCompany(offers, companyId)
     val expandedDetail by
-        remember(expandedOfferId, isActiveMember) {
+        remember(expandedOfferId, isActiveMember, repository) {
             val id = expandedOfferId
             if (id != null && isActiveMember) repository.observeOfferDetail(id) else flowOf(null)
         }
@@ -77,7 +78,16 @@ fun PartnersRoute(
             offerCodeCoordinator?.let { c -> scope.launch { c.reveal(offerId) } }
         },
         onToggleSave = { offerId, saved ->
-            scope.launch { runCatching { repository.setSaved(uid, offerId, saved) } }
+            scope.launch {
+                try {
+                    repository.setSaved(uid, offerId, saved)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Bookmark toggles are best-effort; a failed write is a no-op
+                    // for the UI (the live savedOfferIds flow stays authoritative).
+                }
+            }
         },
         onBack = {
             selectedCompanyId = null

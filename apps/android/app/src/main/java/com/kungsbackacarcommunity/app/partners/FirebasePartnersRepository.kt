@@ -6,6 +6,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
@@ -34,7 +35,8 @@ class FirebasePartnersRepository private constructor(
                         return@addSnapshotListener
                     }
                     val companies = snapshot?.documents?.mapNotNull { it.toCompany() } ?: emptyList()
-                    trySend(CompaniesState.Loaded(companies.sortedBy { it.name.lowercase() }))
+                    // Locale.ROOT: stable, device-locale-independent ordering.
+                    trySend(CompaniesState.Loaded(companies.sortedBy { it.name.lowercase(Locale.ROOT) }))
                 }
         awaitClose { registration.remove() }
     }
@@ -46,7 +48,8 @@ class FirebasePartnersRepository private constructor(
                 .whereEqualTo("status", "active")
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(emptyList())
+                        // Keep the last known offers on a transient listener error
+                        // rather than flickering to an empty ("no offers") list.
                         return@addSnapshotListener
                     }
                     trySend(snapshot?.documents?.mapNotNull { it.toOffer() } ?: emptyList())

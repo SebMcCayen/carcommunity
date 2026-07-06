@@ -452,6 +452,7 @@
     <string name="partnerOffers_howToRedeem">Så här löser du in</string>
     <string name="partnerOffers_drivingSafetyWarning">Stanna säkert innan du använder ett erbjudande.</string>
     <string name="partnerOffers_codeVisible">Kod</string>
+    <string name="partnerOffers_codeUnavailable">Ingen kod behövs för det här erbjudandet.</string>
     <string name="partnerOffers_codeAlertTitle">Rabattkod</string>
     <string name="partnerOffers_codeAlertClose">Stäng</string>
     <string name="partnerOffers_loadError">Kunde inte hämta erbjudanden.</string>

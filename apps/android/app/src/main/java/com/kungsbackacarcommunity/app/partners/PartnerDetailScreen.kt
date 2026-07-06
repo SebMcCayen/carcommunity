@@ -191,6 +191,13 @@ private fun OfferCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                detail?.redemptionInstructions?.takeIf { it.isNotBlank() }?.let { instructions ->
+                    Text(
+                        text = instructions,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 detail?.terms?.takeIf { it.isNotBlank() }?.let { terms ->
                     Text(
                         text = "${stringResource(R.string.partnerOffers_terms)}: $terms",
@@ -228,8 +235,16 @@ private fun CodeArea(offerId: String, codeStatus: OfferCodeStatus) {
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         ),
                 ) {
+                    val code = codeStatus.code?.takeIf { it.isNotBlank() }
                     Text(
-                        text = "${stringResource(R.string.partnerOffers_codeVisible)}: ${codeStatus.code ?: ""}",
+                        text =
+                            if (code != null) {
+                                "${stringResource(R.string.partnerOffers_codeVisible)}: $code"
+                            } else {
+                                // Callable succeeded but returned no code — show a
+                                // clear message rather than a blank/broken-looking code.
+                                stringResource(R.string.partnerOffers_codeUnavailable)
+                            },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(16.dp),

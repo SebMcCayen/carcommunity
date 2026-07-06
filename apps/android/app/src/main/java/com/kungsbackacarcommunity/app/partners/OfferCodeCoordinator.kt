@@ -28,20 +28,29 @@ class OfferCodeCoordinator(
 
     suspend fun reveal(offerId: String) {
         val current = state.value
-        if (current is OfferCodeStatus.Loading) return
+        // Only dedupe an in-flight reveal for the *same* offer; a switch to a
+        // different offer must be able to start its own reveal.
+        if (current is OfferCodeStatus.Loading && current.offerId == offerId) return
         state.value = OfferCodeStatus.Loading(offerId)
         try {
             val code = repository.showOfferCode(offerId)
-            state.value = OfferCodeStatus.Shown(offerId, code)
+            // Publish only if we're still loading this offer — a reset() or a
+            // switch to another offer while the callable was in flight wins.
+            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Shown(offerId, code)
         } catch (cancellation: CancellationException) {
-            state.value = OfferCodeStatus.Idle
+            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Idle
             throw cancellation
         } catch (failure: Exception) {
-            state.value = OfferCodeStatus.Failed(offerId)
+            if (isLoadingOffer(offerId)) state.value = OfferCodeStatus.Failed(offerId)
         }
     }
 
     fun reset() {
         state.value = OfferCodeStatus.Idle
+    }
+
+    private fun isLoadingOffer(offerId: String): Boolean {
+        val s = state.value
+        return s is OfferCodeStatus.Loading && s.offerId == offerId
     }
 }

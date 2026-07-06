@@ -42,6 +42,27 @@ class OfferCodeCoordinatorTest {
     }
 
     @Test
+    fun `reveal with no code is Shown with a null code`() = runTest {
+        // The callable can legitimately return no code; the coordinator surfaces
+        // Shown(null) and the screen renders the "no code needed" placeholder.
+        val coordinator = OfferCodeCoordinator(FakeRepo().apply { code = null })
+        coordinator.reveal("o1")
+        val status = coordinator.status.value
+        assertTrue(status is OfferCodeStatus.Shown)
+        assertEquals(null, (status as OfferCodeStatus.Shown).code)
+    }
+
+    @Test
+    fun `reveal for a different offer proceeds after a prior reveal`() = runTest {
+        val coordinator = OfferCodeCoordinator(FakeRepo())
+        coordinator.reveal("o1")
+        coordinator.reveal("o2")
+        val status = coordinator.status.value
+        assertTrue(status is OfferCodeStatus.Shown)
+        assertEquals("o2", (status as OfferCodeStatus.Shown).offerId)
+    }
+
+    @Test
     fun `a failed reveal is scoped Failed`() = runTest {
         val coordinator = OfferCodeCoordinator(FakeRepo().apply { failWith = IllegalStateException("x") })
         coordinator.reveal("o9")
