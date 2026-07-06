@@ -48,6 +48,9 @@ import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
 import com.kungsbackacarcommunity.app.points.PointsRepository
 import com.kungsbackacarcommunity.app.points.PointsRoute
+import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
+import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
+import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -103,6 +106,8 @@ fun AuthenticatedApp(
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
     accountDeletionCoordinator: AccountDeletionCoordinator?,
+    partnerStatsRepository: PartnerStatsRepository?,
+    partnerStatsCoordinator: PartnerStatsCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -341,6 +346,19 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.PartnerStats -> {
+                    if (partnerStatsRepository != null) {
+                        PartnerStatsRoute(
+                            repository = partnerStatsRepository,
+                            coordinator = partnerStatsCoordinator,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -459,6 +477,20 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Partner-stats opt-in: behind the partnerStats flag.
+                        onOpenPartnerStats =
+                            if (partnerStatsRepository != null &&
+                                FeatureGate.isAvailable(
+                                    flags = flags,
+                                    flag = FeatureFlag.PARTNER_STATS,
+                                    memberGated = false,
+                                    isActiveMember = profile?.activeMember == true,
+                                )
+                            ) {
+                                { destination = MainDestination.PartnerStats }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -481,6 +513,7 @@ private enum class MainDestination {
     PartnerApplication,
     Billboards,
     AccountDeletion,
+    PartnerStats,
 }
 
 @Composable
