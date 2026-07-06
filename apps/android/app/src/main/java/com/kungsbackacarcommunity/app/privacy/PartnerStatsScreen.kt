@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 
@@ -37,8 +41,17 @@ fun PartnerStatsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Seed the pending toggle from the observed value once.
-    var pending by rememberSaveable(currentOptIn) { mutableStateOf(currentOptIn ?: false) }
+    // Seed the pending toggle from the observed value ONCE — decoupled from
+    // later Firestore emissions so a live update doesn't overwrite an edit the
+    // user is in the middle of making.
+    var pending by rememberSaveable { mutableStateOf(currentOptIn ?: false) }
+    var seeded by rememberSaveable { mutableStateOf(currentOptIn != null) }
+    LaunchedEffect(currentOptIn) {
+        if (!seeded && currentOptIn != null) {
+            pending = currentOptIn
+            seeded = true
+        }
+    }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -70,8 +83,18 @@ fun PartnerStatsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // The whole row is the toggle target with merged semantics, so
+            // TalkBack reads the description as the switch's label (Role.Switch).
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = pending,
+                            role = Role.Switch,
+                            onValueChange = { pending = it },
+                        )
+                        .semantics(mergeDescendants = true) {},
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -81,7 +104,8 @@ fun PartnerStatsScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
                 )
-                Switch(checked = pending, onCheckedChange = { pending = it })
+                // Null callback — the row's toggleable owns the interaction.
+                Switch(checked = pending, onCheckedChange = null)
             }
             Text(
                 text = stringResource(R.string.privacySettings_partnerStatsNote),
