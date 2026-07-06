@@ -8,7 +8,7 @@ package com.kungsbackacarcommunity.app.diagnostics
  *
  * Privacy: the backend independently sanitizes metadata, but the CLIENT is
  * responsible for keeping `safeMessage` free of PII. [DiagnosticsReports]
- * therefore strips emails, UUIDs, long digit runs, and file paths from any
+ * therefore strips emails, UUIDs, file paths, and digit runs from any
  * throwable message before it ever leaves the device. No coordinates, tokens,
  * user identifiers, or raw stack traces are ever included.
  */

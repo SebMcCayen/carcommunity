@@ -48,6 +48,9 @@ class CrashReporter internal constructor(
             osVersion: String?,
         ) {
             val previous = Thread.getDefaultUncaughtExceptionHandler()
+            // Idempotent: if a CrashReporter is already the default handler,
+            // don't chain another (which would report the same crash twice).
+            if (previous is CrashReporter) return
             Thread.setDefaultUncaughtExceptionHandler(
                 CrashReporter(reporter, appVersion, buildNumber, osVersion, previous),
             )

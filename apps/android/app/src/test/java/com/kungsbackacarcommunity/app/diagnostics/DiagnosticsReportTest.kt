@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.diagnostics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -104,6 +105,21 @@ class DiagnosticsReportTest {
         reporter.uncaughtException(Thread.currentThread(), RuntimeException("boom"))
 
         assertTrue("delegate runs despite sink failure", delegated)
+    }
+
+    @Test
+    fun `install is idempotent — a second call does not re-wrap the handler`() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            CrashReporter.install(NoopDiagnosticsReporter, null, null, null)
+            val first = Thread.getDefaultUncaughtExceptionHandler()
+            CrashReporter.install(NoopDiagnosticsReporter, null, null, null)
+            val second = Thread.getDefaultUncaughtExceptionHandler()
+            assertTrue(first is CrashReporter)
+            assertSame(first, second)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
     }
 
     @Test
