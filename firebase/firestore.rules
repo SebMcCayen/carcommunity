@@ -403,7 +403,11 @@ service cloud.firestore {
     // six-point safety gate and requires an active sponsoring partner.
     // -------------------------------------------------------------------------
     match /billboards/{billboardId} {
-      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // Authenticated users see ACTIVE billboards (map markers + detail);
+      // admins additionally see drafts/paused/ended for the admin portal
+      // (Phase 13d). All writes still go through the audited billboards.*
+      // callables.
+      allow read: if (isAuthenticated() && resource.data.status == 'active') || isAdmin();
       // No client writes.
     }
 

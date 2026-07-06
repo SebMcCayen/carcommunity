@@ -44,6 +44,11 @@ import {
   updateAdminEvent,
 } from '../features/events';
 import { loadAdminGroupDriveSummary } from '../features/group-drive';
+import {
+  adminCreateBillboard,
+  adminListBillboards,
+  adminPauseBillboard,
+} from '../features/digital-billboards';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -358,5 +363,86 @@ describe('group-drive module', () => {
   it('returns null when there is no active group drive', async () => {
     getCountMock.mockResolvedValue({ data: () => ({ count: 0 }) });
     expect(await loadAdminGroupDriveSummary('e1')).toBeNull();
+  });
+});
+
+describe('digital-billboards module', () => {
+  const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+  const billboardData = (overrides: Record<string, unknown> = {}) => ({
+    partnerCompanyId: 'c1',
+    headline: 'Sommarrea',
+    message: 'Boka nu',
+    placementType: 'map_billboard',
+    latitude: 57.48,
+    longitude: 12.07,
+    status: 'draft',
+    availableFrom: null,
+    availableUntil: null,
+    callToActionType: 'website',
+    callToActionValue: 'https://example.com',
+    approvedAt: null,
+    approvedByUserId: null,
+    safetyNote: null,
+    createdByUserId: 'admin1',
+    createdAt: ts('2026-07-01T10:00:00Z'),
+    updatedAt: ts('2026-07-02T10:00:00Z'),
+    ...overrides,
+  });
+
+  it('maps billboard docs and resolves the sponsoring company name', async () => {
+    getDocsMock.mockResolvedValue({ docs: [{ id: 'b1', data: () => billboardData() }] });
+    getDocMock.mockResolvedValue({ data: () => ({ name: 'Acme AB' }) });
+
+    const response = await adminListBillboards();
+    expect(response.data.billboards[0]).toMatchObject({
+      billboardId: 'b1',
+      partnerId: 'c1',
+      partnerCompanyName: 'Acme AB',
+      status: 'draft',
+      activatedAt: null,
+      pausedAt: null,
+      endedAt: null,
+    });
+    expect(response.meta.page).toBe(1);
+  });
+
+  it('falls back to the company id when the company is not readable', async () => {
+    getDocsMock.mockResolvedValue({ docs: [{ id: 'b1', data: () => billboardData() }] });
+    getDocMock.mockRejectedValue(new Error('permission-denied'));
+    const response = await adminListBillboards();
+    expect(response.data.billboards[0]!.partnerCompanyName).toBe('c1');
+  });
+
+  it('creates through billboards-create then re-reads', async () => {
+    callAdminMock.mockResolvedValue({ billboardId: 'b9', status: 'draft' });
+    getDocMock
+      .mockResolvedValueOnce({ exists: () => true, id: 'b9', data: () => billboardData() })
+      .mockResolvedValueOnce({ data: () => ({ name: 'Acme AB' }) });
+
+    const request = {
+      partnerCompanyId: 'c1',
+      headline: 'Sommarrea',
+      message: 'Boka nu',
+      placementType: 'map_billboard' as const,
+      latitude: 57.48,
+      longitude: 12.07,
+    };
+    const response = await adminCreateBillboard(request);
+    expect(callAdminMock).toHaveBeenCalledWith('billboards-create', request);
+    expect(response.data.billboardId).toBe('b9');
+  });
+
+  it('pauses through billboards-setStatus with action pause', async () => {
+    callAdminMock.mockResolvedValue({ billboardId: 'b1', status: 'paused' });
+    getDocMock
+      .mockResolvedValueOnce({ exists: () => true, id: 'b1', data: () => billboardData({ status: 'paused' }) })
+      .mockResolvedValueOnce({ data: () => ({ name: 'Acme AB' }) });
+
+    await adminPauseBillboard('b1', 'Kampanj slut');
+    expect(callAdminMock).toHaveBeenCalledWith('billboards-setStatus', {
+      billboardId: 'b1',
+      action: 'pause',
+      reason: 'Kampanj slut',
+    });
   });
 });
