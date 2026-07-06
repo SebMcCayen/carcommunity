@@ -27,7 +27,9 @@ import com.kungsbackacarcommunity.app.garage.FirebaseGarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.FirebaseGroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
+import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationSettingsRepository
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
+import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.points.FirebasePointsRepository
 import com.kungsbackacarcommunity.app.privacy.FirebasePartnerStatsRepository
@@ -89,6 +91,10 @@ class MainActivity : ComponentActivity() {
             FirebaseNotificationsRepository.createIfAvailable(applicationContext)
         val notificationsCoordinator =
             notificationsRepository?.let { NotificationsCoordinator(it) }
+        val notificationSettingsRepository =
+            FirebaseNotificationSettingsRepository.createIfAvailable(applicationContext)
+        val notificationSettingsCoordinator =
+            notificationSettingsRepository?.let { NotificationSettingsCoordinator(it) }
         val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
@@ -143,6 +149,8 @@ class MainActivity : ComponentActivity() {
                         offerCodeCoordinator = offerCodeCoordinator,
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
+                        notificationSettingsRepository = notificationSettingsRepository,
+                        notificationSettingsCoordinator = notificationSettingsCoordinator,
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
                         badgesRepository = badgesRepository,

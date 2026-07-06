@@ -59,6 +59,8 @@ fun HomeScreen(
     onOpenPartners: (() -> Unit)? = null,
     // Phase 12 slice 21: opens the notification inbox; null hides the entry.
     onOpenNotifications: (() -> Unit)? = null,
+    // Notification preferences: opens the settings screen; null hides the entry.
+    onOpenNotificationSettings: (() -> Unit)? = null,
     // Phase 12 slice 13: opens the garage (member); null hides the entry.
     onOpenGarage: (() -> Unit)? = null,
     // Phase 12 slice 14: opens badges; null hides the entry.
@@ -131,6 +133,11 @@ fun HomeScreen(
             if (onOpenNotifications != null) {
                 Button(onClick = onOpenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.notifications_title))
+                }
+            }
+            if (onOpenNotificationSettings != null) {
+                Button(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.notifications_settingsTitle))
                 }
             }
             if (onOpenGarage != null) {
