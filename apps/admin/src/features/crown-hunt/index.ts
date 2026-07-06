@@ -193,18 +193,22 @@ export async function adminListCrownHuntClaims(
     ),
   );
 
+  // Filter the fetched page BEFORE resolving point titles, so we don't issue
+  // title reads for claims that are discarded. hasNext is based on the
+  // unfiltered fetch size — otherwise a result filter could wrongly report
+  // no further pages (e.g. 20 fetched, 2 match).
+  const pageDocs = filterResult
+    ? snapshot.docs.filter((d) => (d.data().result as CrownHuntClaimResult) === filterResult)
+    : snapshot.docs;
+
   const cache = new Map<string, string>();
-  let claims = await Promise.all(
-    snapshot.docs.map(async (d) => {
+  const claims = await Promise.all(
+    pageDocs.map(async (d) => {
       const data = d.data();
       const title = await resolvePointTitle(db, (data.pointId as string | undefined) ?? '', cache);
       return toAdminClaimSummary(d.id, data, title);
     }),
   );
-
-  if (filterResult) {
-    claims = claims.filter((c) => c.result === filterResult);
-  }
 
   return {
     ok: true,
@@ -213,7 +217,7 @@ export async function adminListCrownHuntClaims(
       page: 1,
       pageSize: DEFAULT_PAGE_SIZE,
       total: claims.length,
-      hasNext: claims.length === DEFAULT_PAGE_SIZE,
+      hasNext: snapshot.docs.length === DEFAULT_PAGE_SIZE,
     },
   };
 }

@@ -525,6 +525,11 @@ describe('crown-hunt module', () => {
       result: 'risk_review',
       riskReasonCategories: [],
     });
+    // Titles are resolved only for the matching claim, not the filtered-out one.
+    expect(getDocMock).toHaveBeenCalledTimes(1);
+    // hasNext is based on the unfiltered fetch (2 docs < page size), not the
+    // filtered count.
+    expect(response.meta.hasNext).toBe(false);
   });
 
   it('activates through crownHunt-activatePoint with the safety confirmation', async () => {
