@@ -376,7 +376,10 @@
     "validationModelYearRequired": "Årsmodell är obligatoriskt.",
     "validationModelYearInvalid": "Ange en giltig årsmodell (t.ex. 2010).",
     "validationPowertrainRequired": "Välj drivlina.",
-    "retryButton": "Försök igen"
+    "retryButton": "Försök igen",
+    "validationMakeTooLong": "Märket är för långt (max 80 tecken).",
+    "validationModelTooLong": "Modellen är för lång (max 80 tecken).",
+    "validationEngineDescriptionTooLong": "Motorbeskrivningen är för lång (max 120 tecken)."
   },
   "badges": {
     "screenTitle": "Utmärkelser",

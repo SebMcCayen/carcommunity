@@ -376,7 +376,10 @@
     "validationModelYearRequired": "Year is required.",
     "validationModelYearInvalid": "Enter a valid model year (e.g. 2010).",
     "validationPowertrainRequired": "Please select a powertrain.",
-    "retryButton": "Try again"
+    "retryButton": "Try again",
+    "validationMakeTooLong": "Make is too long (max 80 characters).",
+    "validationModelTooLong": "Model is too long (max 80 characters).",
+    "validationEngineDescriptionTooLong": "Engine description is too long (max 120 characters)."
   },
   "badges": {
     "screenTitle": "Awards",

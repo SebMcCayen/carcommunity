@@ -340,6 +340,9 @@
     <string name="garage_validationModelYearInvalid">Ange en giltig årsmodell (t.ex. 2010).</string>
     <string name="garage_validationPowertrainRequired">Välj drivlina.</string>
     <string name="garage_retryButton">Försök igen</string>
+    <string name="garage_validationMakeTooLong">Märket är för långt (max 80 tecken).</string>
+    <string name="garage_validationModelTooLong">Modellen är för lång (max 80 tecken).</string>
+    <string name="garage_validationEngineDescriptionTooLong">Motorbeskrivningen är för lång (max 120 tecken).</string>
     <string name="badges_screenTitle">Utmärkelser</string>
     <string name="badges_loading">Laddar utmärkelser...</string>
     <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>

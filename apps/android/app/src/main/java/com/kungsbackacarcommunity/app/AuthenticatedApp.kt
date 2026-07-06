@@ -26,6 +26,9 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.garage.GarageCoordinator
+import com.kungsbackacarcommunity.app.garage.GarageRepository
+import com.kungsbackacarcommunity.app.garage.GarageRoute
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.home.HomeScreen
@@ -83,6 +86,8 @@ fun AuthenticatedApp(
     offerCodeCoordinator: OfferCodeCoordinator?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
+    garageRepository: GarageRepository?,
+    garageCoordinator: GarageCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -249,6 +254,20 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Garage -> {
+                    if (garageRepository != null) {
+                        GarageRoute(
+                            repository = garageRepository,
+                            coordinator = garageCoordinator,
+                            uid = uid,
+                            isActiveMember = profile?.activeMember == true,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -317,6 +336,14 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Garage is a member feature (add/edit/delete are
+                        // member-gated callables); entry requires membership.
+                        onOpenGarage =
+                            if (garageRepository != null && profile?.activeMember == true) {
+                                { destination = MainDestination.Garage }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -333,6 +360,7 @@ private enum class MainDestination {
     CrownHunt,
     Partners,
     Notifications,
+    Garage,
 }
 
 @Composable

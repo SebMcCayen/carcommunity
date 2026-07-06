@@ -59,6 +59,8 @@ fun HomeScreen(
     onOpenPartners: (() -> Unit)? = null,
     // Phase 12 slice 21: opens the notification inbox; null hides the entry.
     onOpenNotifications: (() -> Unit)? = null,
+    // Phase 12 slice 13: opens the garage (member); null hides the entry.
+    onOpenGarage: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -117,6 +119,11 @@ fun HomeScreen(
             if (onOpenNotifications != null) {
                 Button(onClick = onOpenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.notifications_title))
+                }
+            }
+            if (onOpenGarage != null) {
+                Button(onClick = onOpenGarage, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.garage_screenTitle))
                 }
             }
 
