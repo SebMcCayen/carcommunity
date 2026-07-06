@@ -20,6 +20,8 @@ import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
+import com.kungsbackacarcommunity.app.drives.DrivesRepository
+import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
 import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
@@ -102,6 +104,7 @@ fun AuthenticatedApp(
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
+    drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
@@ -300,6 +303,18 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.SavedDrives -> {
+                    if (drivesRepository != null) {
+                        DrivesRoute(
+                            repository = drivesRepository,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Points -> {
                     if (pointsRepository != null) {
                         PointsRoute(
@@ -442,6 +457,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Saved drives: owner-read history; reachable when configured.
+                        onOpenSavedDrives =
+                            if (drivesRepository != null) {
+                                { destination = MainDestination.SavedDrives }
+                            } else {
+                                null
+                            },
                         // Points wallet: owner-read; reachable when configured.
                         onOpenPoints =
                             if (pointsRepository != null) {
@@ -509,6 +531,7 @@ private enum class MainDestination {
     Notifications,
     Garage,
     Badges,
+    SavedDrives,
     Points,
     PartnerApplication,
     Billboards,

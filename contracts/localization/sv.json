@@ -311,6 +311,7 @@
   },
   "savedDrives": {
     "screenTitle": "Mina körningar",
+    "loading": "Laddar körningar...",
     "detailTitle": "Körningsdetaljer",
     "empty": "Inga sparade körningar ännu.",
     "error": "Kunde inte hämta körningar. Försök igen.",

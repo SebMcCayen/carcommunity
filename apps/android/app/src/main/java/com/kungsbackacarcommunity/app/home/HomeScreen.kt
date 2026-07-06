@@ -63,6 +63,8 @@ fun HomeScreen(
     onOpenGarage: (() -> Unit)? = null,
     // Phase 12 slice 14: opens badges; null hides the entry.
     onOpenBadges: (() -> Unit)? = null,
+    // Phase 12 slice 12: opens saved drives; null hides the entry.
+    onOpenSavedDrives: (() -> Unit)? = null,
     // Phase 12 slice 15: opens the points wallet; null hides the entry.
     onOpenPoints: (() -> Unit)? = null,
     // Phase 12 slice 18: opens the partner application; null hides the entry.
@@ -141,6 +143,11 @@ fun HomeScreen(
             if (onOpenBadges != null) {
                 Button(onClick = onOpenBadges, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.badges_screenTitle))
+                }
+            }
+            if (onOpenSavedDrives != null) {
+                Button(onClick = onOpenSavedDrives, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.savedDrives_screenTitle))
                 }
             }
             if (onOpenPoints != null) {
