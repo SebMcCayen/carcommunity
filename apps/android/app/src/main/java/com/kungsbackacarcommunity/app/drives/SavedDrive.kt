@@ -5,8 +5,9 @@ import kotlin.math.roundToInt
 
 /**
  * Saved drives domain (Phase 12 slice 12, read side). Backend computes all
- * stats server-side (`drives.save`); the client only reads owner-scoped
- * `rides/{rideId}` documents and deletes via `drives.delete`. Route GPS data
+ * stats server-side (the `drives-save` callable); the client only reads
+ * owner-scoped `rides/{rideId}` documents and deletes via the `drives-delete`
+ * callable. Route GPS data
  * lives in member-gated Cloud Storage and is intentionally NOT read here — the
  * detail view shows a placeholder until the Mapbox route overview lands. Pure
  * Kotlin for testability.

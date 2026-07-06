@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -37,45 +39,53 @@ fun DrivesListScreen(
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
+        // LazyColumn so an unbounded drive history only composes visible rows
+        // (mirrors NotificationsScreen for durable lists).
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(R.string.savedDrives_screenTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            item {
+                Text(
+                    text = stringResource(R.string.savedDrives_screenTitle),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
 
             when (state) {
                 DrivesState.Loading ->
-                    Text(
-                        text = stringResource(R.string.savedDrives_loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    item {
+                        Text(
+                            text = stringResource(R.string.savedDrives_loading),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
                 DrivesState.Error ->
-                    Text(
-                        text = stringResource(R.string.savedDrives_error),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    item {
+                        Text(
+                            text = stringResource(R.string.savedDrives_error),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
 
                 is DrivesState.Loaded ->
                     if (state.drives.isEmpty()) {
-                        EmptyDrives()
+                        item { EmptyDrives() }
                     } else {
-                        state.drives.forEach { drive -> DriveCard(drive, onSelect) }
+                        items(state.drives, key = { it.rideId }) { drive ->
+                            DriveCard(drive, onSelect)
+                        }
                     }
             }
 
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_back))
+            item {
+                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.profile_back))
+                }
             }
         }
     }
