@@ -4,10 +4,11 @@
  * Reads come straight from Firestore (admin rules-gated since Phase 9b):
  * the teaser-safe events/{eventId} document plus its member-gated
  * events/{eventId}/details/private subdocument (both admin-readable). All
- * lifecycle mutations go through the audited events.* callables
- * (create/update/publish/cancel/complete). Exported signatures and the
- * shared response envelope types are unchanged, so pages keep working —
- * this module is the adapter layer.
+ * lifecycle mutations exposed here go through the audited events.*
+ * callables (create/update/publish/cancel); the events-complete callable
+ * exists but has no admin-UI action, so it is intentionally not wrapped.
+ * Exported signatures and the shared response envelope types are unchanged,
+ * so pages keep working — this module is the adapter layer.
  *
  * Security notes (unchanged):
  *  - The backend is the sole authority for status transitions and audit

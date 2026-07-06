@@ -37,6 +37,8 @@ import {
   createAdminEvent,
   loadAdminEvent,
   loadAdminEvents,
+  publishAdminEvent,
+  updateAdminEvent,
 } from '../features/events';
 
 beforeEach(() => {
@@ -277,5 +279,55 @@ describe('events module', () => {
 
     await cancelAdminEvent('e1', { reason: 'Väder' });
     expect(callAdminMock).toHaveBeenCalledWith('events-cancel', { eventId: 'e1', reason: 'Väder' });
+  });
+
+  it('updates via events-update with { eventId, ...data } then re-reads', async () => {
+    callAdminMock.mockResolvedValue({ eventId: 'e1', status: 'draft' });
+    getDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'e1',
+        data: () => ({
+          title: 'Uppdaterad',
+          status: 'draft',
+          startsAt: ts('2026-08-01T18:00:00Z'),
+          approximateArea: 'Onsala',
+          rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
+          createdAt: ts('2026-07-01T10:00:00Z'),
+          updatedAt: ts('2026-07-06T10:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({}) });
+
+    const response = await updateAdminEvent('e1', { title: 'Uppdaterad', approximateArea: 'Onsala' });
+    expect(callAdminMock).toHaveBeenCalledWith('events-update', {
+      eventId: 'e1',
+      title: 'Uppdaterad',
+      approximateArea: 'Onsala',
+    });
+    expect(response.data.event.title).toBe('Uppdaterad');
+  });
+
+  it('publishes via events-publish with { eventId } then re-reads', async () => {
+    callAdminMock.mockResolvedValue({ eventId: 'e1', status: 'published' });
+    getDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'e1',
+        data: () => ({
+          title: 'Träff',
+          status: 'published',
+          startsAt: ts('2026-08-01T18:00:00Z'),
+          approximateArea: 'Kungsbacka',
+          rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
+          createdAt: ts('2026-07-01T10:00:00Z'),
+          updatedAt: ts('2026-07-06T10:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({}) });
+
+    const response = await publishAdminEvent('e1');
+    expect(callAdminMock).toHaveBeenCalledWith('events-publish', { eventId: 'e1' });
+    expect(response.data.event.status).toBe('published');
   });
 });
