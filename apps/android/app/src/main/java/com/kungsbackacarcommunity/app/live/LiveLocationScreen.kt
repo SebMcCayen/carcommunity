@@ -114,41 +114,44 @@ fun LiveLocationScreen(
                 )
             }
 
-            if (canShare) {
-                if (sharing) {
-                    Button(
-                        onClick = onStop,
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.liveLocation_stop))
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.liveLocation_durationLabel),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    DurationPicker(
-                        selected = selectedDuration,
-                        enabled = !busy,
-                        onSelect = { selectedDuration = it },
-                    )
-                    Button(
-                        onClick = { onStart(selectedDuration) },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.liveLocation_start))
-                    }
+            if (sharing) {
+                // Stopping an active session is authenticated-gated (not
+                // member-gated) on the backend, so ALWAYS offer Stop while
+                // sharing — even if membership/flag state has lapsed since the
+                // session started. Membership only gates STARTING (below).
+                Button(
+                    onClick = onStop,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.liveLocation_stop))
+                }
+            } else if (canShare) {
+                Text(
+                    text = stringResource(R.string.liveLocation_durationLabel),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                DurationPicker(
+                    selected = selectedDuration,
+                    enabled = !busy,
+                    onSelect = { selectedDuration = it },
+                )
+                Button(
+                    onClick = { onStart(selectedDuration) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.liveLocation_start))
                 }
             } else {
-                // Membership gate — mirrors the backend member check on
-                // live.startSession. Sharing controls are withheld; "hide me
-                // now" below stays available.
+                // Membership gate for STARTING — mirrors the backend member
+                // check on live.startSession. Copy is specific to sharing your
+                // own position; "hide me now" below stays available, and Stop
+                // above stays available whenever a session is active.
                 InfoCard(
                     title = stringResource(R.string.subscription_teaserTitle),
-                    body = stringResource(R.string.subscription_memberRequiredBody),
+                    body = stringResource(R.string.liveLocation_memberRequiredToShare),
                 )
             }
 

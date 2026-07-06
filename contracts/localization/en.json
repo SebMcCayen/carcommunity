@@ -99,7 +99,8 @@
     "backgroundNotificationBody": "Your location is shared during the active, time-limited session.",
     "accessLimitedByModeration": "Your access may be limited if you are suspended or break the rules.",
     "shareOwnFree": "You can share your own position for free.",
-    "viewOthersMemberOnly": "An active membership is required to view other members' live locations."
+    "viewOthersMemberOnly": "An active membership is required to view other members' live locations.",
+    "memberRequiredToShare": "An active membership is required to share your live location. You can always stop sharing."
   },
   "onboarding": {
     "title": "Welcome",

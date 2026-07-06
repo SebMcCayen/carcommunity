@@ -99,7 +99,8 @@
     "sessionAutoExpires": "Sessionen avslutas automatiskt",
     "backgroundPermissionDenied": "Bakgrundsposition nekad. Delning pausas när appen stängs.",
     "backgroundNotificationTitle": "KCC liveposition är aktiv",
-    "backgroundNotificationBody": "Din position delas under den aktiva, tidsbegränsade sessionen."
+    "backgroundNotificationBody": "Din position delas under den aktiva, tidsbegränsade sessionen.",
+    "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning."
   },
   "onboarding": {
     "title": "Välkommen",

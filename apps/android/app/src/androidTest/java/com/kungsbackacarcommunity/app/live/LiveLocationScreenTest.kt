@@ -79,6 +79,29 @@ class LiveLocationScreenTest {
     }
 
     @Test
+    fun lapsedMember_stillSharing_canStop() {
+        // canShare=false (membership/flag lapsed) but a session is active:
+        // Stop must still be offered; the membership gate must NOT replace it.
+        var stopped = 0
+        composeTestRule.setContent {
+            KccTheme {
+                LiveLocationScreen(
+                    session = activeSession(),
+                    nowMillis = 0L,
+                    actionStatus = LiveActionStatus.Idle,
+                    canShare = false,
+                    onStart = {},
+                    onStop = { stopped++ },
+                    onHideMeNow = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_memberRequiredToShare)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_stop)).performScrollTo().performClick()
+        assertEquals(1, stopped)
+    }
+
+    @Test
     fun nonMember_isGated_butHideMeNowStillWorks() {
         var hidden = 0
         var started: LiveSessionDuration? = null
@@ -96,7 +119,7 @@ class LiveLocationScreenTest {
             }
         }
         // The membership gate is shown and Start is withheld...
-        composeTestRule.onNodeWithText(str(R.string.subscription_memberRequiredBody)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_memberRequiredToShare)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.liveLocation_start)).assertDoesNotExist()
         // ...but the privacy stop is always available.
         composeTestRule.onNodeWithText(str(R.string.liveLocation_hideNow)).performScrollTo().performClick()
