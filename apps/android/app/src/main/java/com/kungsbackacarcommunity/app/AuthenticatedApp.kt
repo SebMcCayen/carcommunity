@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.badges.BadgesRepository
+import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
@@ -88,6 +90,7 @@ fun AuthenticatedApp(
     notificationsCoordinator: NotificationsCoordinator?,
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
+    badgesRepository: BadgesRepository?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -268,6 +271,18 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Badges -> {
+                    if (badgesRepository != null) {
+                        BadgesRoute(
+                            repository = badgesRepository,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -344,6 +359,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Badges: owner-read; reachable when Firebase is configured.
+                        onOpenBadges =
+                            if (badgesRepository != null) {
+                                { destination = MainDestination.Badges }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -361,6 +383,7 @@ private enum class MainDestination {
     Partners,
     Notifications,
     Garage,
+    Badges,
 }
 
 @Composable
