@@ -31,6 +31,16 @@ class PartnerApplicationCoordinatorTest {
     }
 
     @Test
+    fun `reset clears Done so the form can be reused`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = PartnerApplicationCoordinator(repo)
+        coordinator.submit(input)
+        assertEquals(PartnerApplicationStatus.Done, coordinator.status.value)
+        coordinator.reset()
+        assertEquals(PartnerApplicationStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
     fun `a failed submit surfaces Failed and can reset`() = runTest {
         val repo = FakeRepo().apply { failWith = IllegalStateException("dup") }
         val coordinator = PartnerApplicationCoordinator(repo)

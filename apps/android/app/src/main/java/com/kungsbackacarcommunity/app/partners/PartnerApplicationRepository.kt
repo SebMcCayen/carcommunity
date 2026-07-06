@@ -51,8 +51,11 @@ class PartnerApplicationCoordinator(
         }
     }
 
+    /** Clears a terminal status (Done or Failed) so the form is fresh again. */
     fun reset() {
-        if (state.value == PartnerApplicationStatus.Failed) state.value = PartnerApplicationStatus.Idle
+        if (state.value != PartnerApplicationStatus.Submitting) {
+            state.value = PartnerApplicationStatus.Idle
+        }
     }
 }
 

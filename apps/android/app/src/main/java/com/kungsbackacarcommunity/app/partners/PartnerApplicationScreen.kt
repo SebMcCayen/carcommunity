@@ -101,7 +101,14 @@ fun PartnerApplicationScreen(
             Field(contactEmail, R.string.partners_contactEmailLabel) { contactEmail = it }
             Field(contactPhone, R.string.partners_contactPhoneLabel) { contactPhone = it }
             Field(website, R.string.partners_websiteLabel) { website = it }
-            Field(message, R.string.partners_messageLabel) { message = it }
+            // Free-form optional message — allow multiple lines.
+            OutlinedTextField(
+                value = message,
+                onValueChange = { message = it },
+                label = { Text(text = stringResource(R.string.partners_messageLabel)) },
+                singleLine = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             if (showError && PartnerApplications.validate(form) != null) {
                 Text(
