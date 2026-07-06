@@ -201,6 +201,14 @@
     <string name="chat_safeDrivingWarning">Do not use chat while driving.</string>
     <string name="chat_drivingDisabled">Chat is disabled while driving.</string>
     <string name="chat_drivingStopFirst">Stop safely before using chat.</string>
+    <string name="chat_reportReasonHarassment">Harassment</string>
+    <string name="chat_reportReasonHateOrAbuse">Hate or abuse</string>
+    <string name="chat_reportReasonSpam">Spam</string>
+    <string name="chat_reportReasonUnsafeDriving">Unsafe driving</string>
+    <string name="chat_reportReasonPrivacy">Privacy</string>
+    <string name="chat_reportReasonOther">Other</string>
+    <string name="chat_reportSubmitted">Thanks for your report.</string>
+    <string name="chat_reportError">Could not report. Please try again.</string>
     <string name="common_placeholder">Coming soon</string>
     <string name="auth_loginTitle">Sign in</string>
     <string name="auth_loginSubtitle">Sign in to use the app.</string>
