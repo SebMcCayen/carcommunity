@@ -40,6 +40,8 @@ import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
+import com.kungsbackacarcommunity.app.points.PointsRepository
+import com.kungsbackacarcommunity.app.points.PointsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -91,6 +93,7 @@ fun AuthenticatedApp(
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
+    pointsRepository: PointsRepository?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -283,6 +286,18 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Points -> {
+                    if (pointsRepository != null) {
+                        PointsRoute(
+                            repository = pointsRepository,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -366,6 +381,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Points wallet: owner-read; reachable when configured.
+                        onOpenPoints =
+                            if (pointsRepository != null) {
+                                { destination = MainDestination.Points }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -384,6 +406,7 @@ private enum class MainDestination {
     Notifications,
     Garage,
     Badges,
+    Points,
 }
 
 @Composable

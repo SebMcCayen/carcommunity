@@ -26,6 +26,7 @@ import com.kungsbackacarcommunity.app.groupdrive.FirebaseGroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
+import com.kungsbackacarcommunity.app.points.FirebasePointsRepository
 import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
         val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
+        val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
 
         setContent {
             val authState =
@@ -127,6 +129,7 @@ class MainActivity : ComponentActivity() {
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
                         badgesRepository = badgesRepository,
+                        pointsRepository = pointsRepository,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
