@@ -28,6 +28,7 @@ import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
+import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
 import { adminAdjust, adminReverse } from './points/adminPoints';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
@@ -187,6 +188,7 @@ export const garage = {
  */
 export const badges = {
   awardHelpfulMember,
+  adminSummary: badgesAdminSummary,
 };
 
 /**

@@ -252,3 +252,44 @@ describe('badges-awardHelpfulMember', () => {
     expect(audits.docs[0].data().reason).toBe('Organiserade träffen');
   });
 });
+
+describe('badges-adminSummary', () => {
+  it('rejects non-admin callers', async () => {
+    await signInAs(member);
+    expect(await callableErrorCode(call('badges-adminSummary', {}))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('returns aggregate per-key counts for admins (no user data)', async () => {
+    await signInAs(adminUser);
+    // Guarantee at least one helpful_member award exists (idempotent).
+    await call('badges-awardHelpfulMember', { targetUid: member.uid, reason: 'Summary fixture' });
+
+    const result = await call('badges-adminSummary', {});
+    const summary = (
+      result.data as {
+        summary: Array<{ key: string; name: string; totalCount: number; recentCount: number }>;
+      }
+    ).summary;
+
+    expect(summary.map((s) => s.key)).toEqual([
+      'first_event',
+      'five_events',
+      'helpful_member',
+      'early_member',
+      'garage_created',
+    ]);
+    for (const item of summary) {
+      expect(typeof item.name).toBe('string');
+      expect(item.name.length).toBeGreaterThan(0);
+      expect(item.totalCount).toBeGreaterThanOrEqual(item.recentCount);
+      expect(item.recentCount).toBeGreaterThanOrEqual(0);
+    }
+    const helpful = summary.find((s) => s.key === 'helpful_member')!;
+    expect(helpful.totalCount).toBeGreaterThanOrEqual(1);
+    expect(helpful.recentCount).toBeGreaterThanOrEqual(1);
+    // Aggregate only — never a per-user leaderboard.
+    expect(result.data).not.toHaveProperty('users');
+  });
+});
