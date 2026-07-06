@@ -22,9 +22,15 @@
  * - No live map view in admin.
  */
 
-import { collection, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  getCountFromServer,
+  query,
+  where,
+  type Query,
+} from 'firebase/firestore';
 
-import { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/api';
 import { getAdminFirestore } from '../../lib/firestore';
 
 export type { ApiError };
@@ -48,36 +54,36 @@ export interface AdminGroupDriveSummary {
 // Read helpers (direct Firestore, admin rules-gated)
 // ---------------------------------------------------------------------------
 
+/** Server-side count of roster docs in one status bucket (no doc data leaves the server). */
+async function countByStatus(roster: Query, status: string): Promise<number> {
+  const snap = await getCountFromServer(query(roster, where('status', '==', status)));
+  return snap.data().count;
+}
+
 /**
  * Load aggregate group drive stats for an event.
  * Returns null when no active group drive exists (no non-`left`
  * participants) — the legacy 404 case — so the caller hides the panel.
  *
- * Counts are derived directly from the admin-readable
- * events/{eventId}/groupDriveParticipants roster. Participants with status
- * `left` are excluded, mirroring the backend aggregate; the callables
- * enforce member eligibility on every write, so the roster is the
- * authoritative source for the active buckets.
+ * Counts are computed with Firestore server-side aggregation
+ * (getCountFromServer) over the admin-readable
+ * events/{eventId}/groupDriveParticipants roster, one query per active
+ * status bucket. Only the counts cross the wire — participant documents
+ * (which carry displayName) are never downloaded, preserving the
+ * aggregate-only contract. Status `left` is excluded, mirroring the backend
+ * aggregate; the callables enforce member eligibility on every write.
  */
 export async function loadAdminGroupDriveSummary(
   eventId: string,
   _token?: string,
 ): Promise<AdminGroupDriveSummary | null> {
-  const snapshot = await getDocs(
-    collection(getAdminFirestore(), 'events', eventId, 'groupDriveParticipants'),
-  );
+  const roster = collection(getAdminFirestore(), 'events', eventId, 'groupDriveParticipants');
 
-  let joinedCount = 0;
-  let onTheWayCount = 0;
-  let arrivedCount = 0;
-
-  for (const participant of snapshot.docs) {
-    const status = participant.data().status as string | undefined;
-    if (status === 'joined') joinedCount += 1;
-    else if (status === 'on_the_way') onTheWayCount += 1;
-    else if (status === 'arrived') arrivedCount += 1;
-    // 'left' (and any unknown status) is excluded from the active buckets.
-  }
+  const [joinedCount, onTheWayCount, arrivedCount] = await Promise.all([
+    countByStatus(roster, 'joined'),
+    countByStatus(roster, 'on_the_way'),
+    countByStatus(roster, 'arrived'),
+  ]);
 
   const totalActive = joinedCount + onTheWayCount + arrivedCount;
   if (totalActive === 0) {

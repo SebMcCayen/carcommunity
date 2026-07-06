@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getDocMock = vi.fn();
 const getDocsMock = vi.fn();
+const getCountMock = vi.fn();
 const callAdminMock = vi.fn();
 
 vi.mock('../lib/firestore', () => ({ getAdminFirestore: () => ({}) }));
@@ -18,8 +19,10 @@ vi.mock('firebase/firestore', () => ({
   query: (target: unknown) => target,
   orderBy: () => undefined,
   limit: () => undefined,
+  where: () => undefined,
   getDoc: (...args: unknown[]) => getDocMock(...args),
   getDocs: (...args: unknown[]) => getDocsMock(...args),
+  getCountFromServer: (...args: unknown[]) => getCountMock(...args),
 }));
 
 import {
@@ -45,6 +48,7 @@ import { loadAdminGroupDriveSummary } from '../features/group-drive';
 beforeEach(() => {
   getDocMock.mockReset();
   getDocsMock.mockReset();
+  getCountMock.mockReset();
   callAdminMock.mockReset();
 });
 
@@ -334,16 +338,12 @@ describe('events module', () => {
 });
 
 describe('group-drive module', () => {
-  it('derives the active buckets from the roster, excluding left', async () => {
-    getDocsMock.mockResolvedValue({
-      docs: [
-        { data: () => ({ status: 'joined' }) },
-        { data: () => ({ status: 'joined' }) },
-        { data: () => ({ status: 'on_the_way' }) },
-        { data: () => ({ status: 'arrived' }) },
-        { data: () => ({ status: 'left' }) },
-      ],
-    });
+  it('derives the active buckets from server-side counts (no roster download)', async () => {
+    // countByStatus is called in order: joined, on_the_way, arrived.
+    getCountMock
+      .mockResolvedValueOnce({ data: () => ({ count: 2 }) })
+      .mockResolvedValueOnce({ data: () => ({ count: 1 }) })
+      .mockResolvedValueOnce({ data: () => ({ count: 1 }) });
     const summary = await loadAdminGroupDriveSummary('e1');
     expect(summary).toEqual({
       totalActive: 4,
@@ -351,10 +351,12 @@ describe('group-drive module', () => {
       onTheWayCount: 1,
       arrivedCount: 1,
     });
+    // Roster documents are never fetched — only aggregate counts cross the wire.
+    expect(getDocsMock).not.toHaveBeenCalled();
   });
 
   it('returns null when there is no active group drive', async () => {
-    getDocsMock.mockResolvedValue({ docs: [{ data: () => ({ status: 'left' }) }] });
+    getCountMock.mockResolvedValue({ data: () => ({ count: 0 }) });
     expect(await loadAdminGroupDriveSummary('e1')).toBeNull();
   });
 });
