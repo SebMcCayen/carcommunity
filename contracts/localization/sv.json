@@ -438,7 +438,8 @@
     "resultDailyLimit": "Du har nått dagens gräns för insamlingar.",
     "resultRiskReview": "Claimen behöver granskas och inga poäng har delats ut ännu.",
     "resultFeatureDisabled": "Kronjakt är inte tillgängligt just nu.",
-    "resultNotEligible": "Du är inte behörig att samla in just nu."
+    "resultNotEligible": "Du är inte behörig att samla in just nu.",
+    "locationUnavailable": "Ingen aktuell GPS-position tillgänglig ännu. Vänta en stund och försök igen."
   },
   "partners": {
     "screenTitle": "KCC Företagspartner",

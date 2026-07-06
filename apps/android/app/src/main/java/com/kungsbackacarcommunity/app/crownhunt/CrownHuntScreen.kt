@@ -104,7 +104,7 @@ private fun ClaimStatusBanner(status: CrownHuntClaimStatus) {
             CrownHuntClaimStatus.Idle -> null
             CrownHuntClaimStatus.Claiming -> stringResource(R.string.crownHunt_claiming)
             CrownHuntClaimStatus.NeedsLocation ->
-                stringResource(R.string.crownHunt_errorLocationPermission)
+                stringResource(R.string.crownHunt_locationUnavailable)
             CrownHuntClaimStatus.Failed -> stringResource(R.string.crownHunt_errorClaim)
             is CrownHuntClaimStatus.Done -> claimResultMessage(status.outcome.result)
         }
@@ -161,7 +161,11 @@ private fun PointCard(point: CrownHuntPoint, collectEnabled: Boolean, onCollect:
                 )
             }
             Text(
-                text = "${stringResource(R.string.crownHunt_rewardLabel)}: ${point.rewardPoints}",
+                // crownHunt_rewardLabel carries a {points} placeholder
+                // ("Reward: {points} KP") — substitute it, don't append.
+                text =
+                    stringResource(R.string.crownHunt_rewardLabel)
+                        .replace("{points}", point.rewardPoints.toString()),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )

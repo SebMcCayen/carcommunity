@@ -99,11 +99,14 @@ class FirebaseCrownHuntRepository private constructor(
 private fun DocumentSnapshot.toPoint(): CrownHuntPoint? {
     if (!exists()) return null
     val title = getString("title") ?: return null
+    // rewardPoints is required — skip a malformed doc rather than silently
+    // rendering a "0 KP" reward (schema drift stays visible).
+    val rewardPoints = (get("rewardPoints") as? Number)?.toInt() ?: return null
     return CrownHuntPoint(
         id = id,
         title = title,
         description = getString("description"),
-        rewardPoints = (get("rewardPoints") as? Number)?.toInt() ?: 0,
+        rewardPoints = rewardPoints,
         latitude = getDouble("latitude"),
         longitude = getDouble("longitude"),
         geofenceRadiusMeters = getDouble("geofenceRadiusMeters"),

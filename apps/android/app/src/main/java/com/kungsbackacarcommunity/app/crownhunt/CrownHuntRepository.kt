@@ -16,7 +16,7 @@ sealed interface CrownHuntPointsState {
  * screen/coordinator logic is unit-testable with fakes.
  *
  * Active points are a rules-gated Firestore read (member + active). Submitting
- * a claim is the crownHunt.submitClaim callable, which returns a result CODE
+ * a claim is the crownHunt-submitClaim callable (grouped export of crownHunt.submitClaim), which returns a result CODE
  * (eligibility failures are results, not errors) — the caller maps it to a
  * localized message.
  */
@@ -24,7 +24,7 @@ interface CrownHuntRepository {
     /** Active reward points; Loading until the first snapshot. */
     fun observeActivePoints(): Flow<CrownHuntPointsState>
 
-    /** crownHunt.submitClaim — returns the claim outcome for the given point. */
+    /** crownHunt-submitClaim — returns the claim outcome for the given point. */
     suspend fun submitClaim(
         pointId: String,
         coordinate: ClaimCoordinate,
