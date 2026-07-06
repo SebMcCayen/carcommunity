@@ -53,6 +53,8 @@ fun HomeScreen(
     onOpenLiveLocation: (() -> Unit)? = null,
     // Phase 12 slice 9: opens the events list; null hides the entry point.
     onOpenEvents: (() -> Unit)? = null,
+    // Phase 12 slice 16: opens Kronjakt; null hides the entry point.
+    onOpenCrownHunt: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -96,6 +98,11 @@ fun HomeScreen(
             if (onOpenEvents != null) {
                 Button(onClick = onOpenEvents, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.events_title))
+                }
+            }
+            if (onOpenCrownHunt != null) {
+                Button(onClick = onOpenCrownHunt, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.crownHunt_screenTitle))
                 }
             }
 

@@ -394,6 +394,7 @@
     <string name="crownHunt_resultRiskReview">Claimen behöver granskas och inga poäng har delats ut ännu.</string>
     <string name="crownHunt_resultFeatureDisabled">Kronjakt är inte tillgängligt just nu.</string>
     <string name="crownHunt_resultNotEligible">Du är inte behörig att samla in just nu.</string>
+    <string name="crownHunt_locationUnavailable">Ingen aktuell GPS-position tillgänglig ännu. Vänta en stund och försök igen.</string>
     <string name="partners_screenTitle">KCC Företagspartner</string>
     <string name="partners_statusLabel">Samarbetspartner</string>
     <string name="partners_markerLabel">Samarbetspartner</string>

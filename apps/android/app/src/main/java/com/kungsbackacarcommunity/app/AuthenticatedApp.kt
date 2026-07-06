@@ -20,6 +20,9 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
@@ -64,6 +67,8 @@ fun AuthenticatedApp(
     rsvpCoordinator: RsvpCoordinator?,
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
+    crownHuntRepository: CrownHuntRepository?,
+    crownHuntCoordinator: CrownHuntCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -188,6 +193,19 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.CrownHunt -> {
+                    if (crownHuntRepository != null) {
+                        CrownHuntRoute(
+                            repository = crownHuntRepository,
+                            coordinator = crownHuntCoordinator,
+                            isActiveMember = profile?.activeMember == true,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -218,6 +236,21 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Kronjakt: behind the crownHunt flag; membership is
+                        // enforced inside the screen and by the rules.
+                        onOpenCrownHunt =
+                            if (crownHuntRepository != null &&
+                                FeatureGate.isAvailable(
+                                    flags = flags,
+                                    flag = FeatureFlag.CROWN_HUNT,
+                                    memberGated = false,
+                                    isActiveMember = profile?.activeMember == true,
+                                )
+                            ) {
+                                { destination = MainDestination.CrownHunt }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -226,7 +259,7 @@ fun AuthenticatedApp(
 }
 
 /** In-app destinations within the authenticated Main shell (no NavHost yet). */
-private enum class MainDestination { Home, Profile, LiveLocation, Events }
+private enum class MainDestination { Home, Profile, LiveLocation, Events, CrownHunt }
 
 @Composable
 private fun LoadingScreen() {

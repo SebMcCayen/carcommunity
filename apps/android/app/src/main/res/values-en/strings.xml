@@ -394,6 +394,7 @@
     <string name="crownHunt_resultRiskReview">The claim needs review and no points have been awarded yet.</string>
     <string name="crownHunt_resultFeatureDisabled">Crown Hunt is not available right now.</string>
     <string name="crownHunt_resultNotEligible">You are not eligible to collect right now.</string>
+    <string name="crownHunt_locationUnavailable">No current GPS position available yet. Wait a moment and try again.</string>
     <string name="partners_screenTitle">KCC Business Partners</string>
     <string name="partners_statusLabel">Partner</string>
     <string name="partners_markerLabel">Partner</string>
