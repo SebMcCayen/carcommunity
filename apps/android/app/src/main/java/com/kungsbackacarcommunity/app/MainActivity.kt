@@ -13,6 +13,8 @@ import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
+import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
+import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
             FirebaseLiveLocationRepository.createIfAvailable(applicationContext)
         val liveLocationCoordinator =
             liveLocationRepository?.let { LiveLocationCoordinator(it) }
+        val eventsRepository = FirebaseEventsRepository.createIfAvailable(applicationContext)
+        val rsvpCoordinator = eventsRepository?.let { RsvpCoordinator(it) }
 
         setContent {
             val authState =
@@ -80,6 +84,8 @@ class MainActivity : ComponentActivity() {
                         profileEditCoordinator = profileEditCoordinator,
                         liveLocationRepository = liveLocationRepository,
                         liveLocationCoordinator = liveLocationCoordinator,
+                        eventsRepository = eventsRepository,
+                        rsvpCoordinator = rsvpCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )

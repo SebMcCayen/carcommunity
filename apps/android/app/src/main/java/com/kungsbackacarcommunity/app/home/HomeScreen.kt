@@ -51,6 +51,8 @@ fun HomeScreen(
     // Phase 12 slice 5: opens the live-location screen; null hides the entry
     // point (flag off or no Firebase session).
     onOpenLiveLocation: (() -> Unit)? = null,
+    // Phase 12 slice 9: opens the events list; null hides the entry point.
+    onOpenEvents: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -91,6 +93,11 @@ fun HomeScreen(
                 title = stringResource(R.string.home_nextEventTitle),
                 body = stringResource(R.string.home_nextEventBody),
             )
+            if (onOpenEvents != null) {
+                Button(onClick = onOpenEvents, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.events_title))
+                }
+            }
 
             if (showLiveLocationTeaser) {
                 StatusCard(
