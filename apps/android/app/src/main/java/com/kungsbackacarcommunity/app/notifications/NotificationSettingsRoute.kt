@@ -36,11 +36,15 @@ fun NotificationSettingsRoute(
         pushPermission = pushPermission,
         saveStatus = saveStatus,
         onToggle = { category, channel, enabled ->
-            val current =
-                (state as? NotificationSettingsState.Loaded)?.preferences
-                    ?: NotificationPreferences.ALL_ENABLED
-            val updated = current.withToggle(category, channel, enabled)
-            coordinator?.let { c -> scope.launch { c.save(uid, updated) } }
+            // Only act on a loaded snapshot and when no save is in flight —
+            // otherwise a toggle during Loading would persist ALL_ENABLED over
+            // the user's real preferences, and a toggle during Saving is a
+            // no-op the coordinator would drop anyway.
+            val loaded = state as? NotificationSettingsState.Loaded
+            if (loaded != null && saveStatus != NotificationSettingsSaveStatus.Saving) {
+                val updated = loaded.preferences.withToggle(category, channel, enabled)
+                coordinator?.let { c -> scope.launch { c.save(uid, updated) } }
+            }
         },
         onOpenSystemSettings = onOpenSystemSettings,
         onBack = {

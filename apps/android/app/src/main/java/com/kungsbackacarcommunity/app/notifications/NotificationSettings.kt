@@ -25,7 +25,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * testability; matches packages/shared/src/notifications.ts.
  */
 object NotificationCategories {
-    /** Active categories the user can tune (mirrors ACTIVE_NOTIFICATION_CATEGORIES, delivery order). */
+    /**
+     * All active notification categories, in delivery order (mirrors
+     * ACTIVE_NOTIFICATION_CATEGORIES). Most are user-tunable; the [ESSENTIAL]
+     * account notices are included but rendered locked-on in the UI.
+     */
     val ACTIVE: List<String> =
         listOf(
             "event_reminder",
@@ -97,8 +101,13 @@ data class NotificationPreferences(private val byCategory: Map<String, CategoryP
     }
 }
 
-/** Runtime push-notification permission state (Android 13+ POST_NOTIFICATIONS). */
-enum class PushPermissionStatus { GRANTED, DENIED, UNDETERMINED }
+/**
+ * Runtime push-notification permission state (Android 13+ POST_NOTIFICATIONS).
+ * Only GRANTED / DENIED are surfaced: without an in-app permission-request
+ * flow the client can't reliably distinguish "never asked" from "denied", so
+ * it doesn't claim an undetermined state it can't verify.
+ */
+enum class PushPermissionStatus { GRANTED, DENIED }
 
 // ---------------------------------------------------------------------------
 // Repository + coordinator

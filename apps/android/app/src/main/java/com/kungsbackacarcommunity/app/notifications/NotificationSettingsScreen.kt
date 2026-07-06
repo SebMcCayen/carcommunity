@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 
@@ -95,7 +98,6 @@ private fun PushPermissionCard(status: PushPermissionStatus, onOpenSystemSetting
                 when (status) {
                     PushPermissionStatus.GRANTED -> R.string.notifications_settingsPushGrantedBody
                     PushPermissionStatus.DENIED -> R.string.notifications_settingsPushDeniedBody
-                    PushPermissionStatus.UNDETERMINED -> R.string.notifications_settingsPushUndeterminedBody
                 }
             Text(
                 text = stringResource(body),
@@ -158,8 +160,20 @@ private fun ChannelToggle(
     enabled: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
+    // Whole row is the toggle target with merged semantics so TalkBack reads
+    // the label as the switch's accessible name (Role.Switch); the Switch's own
+    // callback is null — the row owns the interaction.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = checked,
+                    enabled = enabled,
+                    role = Role.Switch,
+                    onValueChange = onCheckedChange,
+                )
+                .semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -167,8 +181,9 @@ private fun ChannelToggle(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 
