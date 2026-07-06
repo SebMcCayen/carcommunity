@@ -96,6 +96,7 @@ fun EventsRoute(
     val chatEligible =
         chatEnabled &&
             chatRepository != null &&
+            chatCoordinator != null &&
             EventChat.canParticipate(isActiveMember, event?.status, myRsvp)
 
     EventDetailScreen(

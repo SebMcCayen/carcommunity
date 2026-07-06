@@ -26,18 +26,23 @@ class FirebaseEventChatRepository private constructor(
 ) : EventChatRepository {
 
     override fun observeMessages(eventId: String): Flow<ChatMessagesState> = callbackFlow {
+        // Bound the read to the most recent messages (backend-domain-mapping
+        // note): newest-first with a limit, then reverse to chronological for
+        // display, so the listener cost stays flat as a chat grows.
         val registration =
             firestore
                 .collection(EVENTS)
                 .document(eventId)
                 .collection(MESSAGES)
-                .orderBy("createdAt", Query.Direction.ASCENDING)
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(MESSAGE_PAGE_SIZE)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(ChatMessagesState.Error)
                         return@addSnapshotListener
                     }
-                    val messages = snapshot?.documents?.mapNotNull { it.toChatMessage() } ?: emptyList()
+                    val messages =
+                        snapshot?.documents?.mapNotNull { it.toChatMessage() }?.asReversed() ?: emptyList()
                     trySend(ChatMessagesState.Loaded(messages))
                 }
         awaitClose { registration.remove() }
@@ -86,6 +91,9 @@ class FirebaseEventChatRepository private constructor(
         private const val MESSAGES = "messages"
         private const val POST_MESSAGE = "events-postChatMessage"
         private const val REPORT_MESSAGE = "events-reportChatMessage"
+
+        /** Cap the live chat read to the most recent messages. */
+        private const val MESSAGE_PAGE_SIZE = 50L
 
         fun createIfAvailable(context: Context): EventChatRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chat
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,6 +29,14 @@ fun EventChatRoute(
 ) {
     val scope = rememberCoroutineScope()
     val canParticipate = EventChat.canParticipate(isActiveMember, eventStatus, myRsvp)
+
+    // The ChatCoordinator is shared across events; clear any prior send/report
+    // status when the event changes so a stale message doesn't leak into a
+    // different event's chat.
+    LaunchedEffect(eventId) {
+        coordinator?.resetSend()
+        coordinator?.resetReport()
+    }
 
     val messagesState by
         remember(repository, eventId, canParticipate) {
