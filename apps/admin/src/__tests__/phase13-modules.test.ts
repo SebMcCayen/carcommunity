@@ -54,6 +54,13 @@ import {
   adminListCrownHuntClaims,
   adminListCrownHuntPoints,
 } from '../features/crown-hunt';
+import {
+  adminApproveApplication,
+  adminCreatePartnerCompany,
+  adminGetPartnerOffer,
+  adminListPartnerCompanies,
+  adminPausePartnerOffer,
+} from '../features/partners';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -558,5 +565,150 @@ describe('crown-hunt module', () => {
       approvalNote: 'Säker plats bekräftad',
     });
     expect(response.data.status).toBe('active');
+  });
+});
+
+describe('partners module', () => {
+  const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+
+  it('maps company docs (name→companyName, etc.) into the summary', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'co1',
+          data: () => ({
+            name: 'Acme AB',
+            category: 'workshop',
+            status: 'active',
+            address: 'Storgatan 1',
+            latitude: 57.48,
+            longitude: 12.07,
+            createdAt: ts('2026-07-01T10:00:00Z'),
+            updatedAt: ts('2026-07-02T10:00:00Z'),
+          }),
+        },
+      ],
+    });
+    const response = await adminListPartnerCompanies();
+    expect(response.data.partners[0]).toMatchObject({
+      partnerId: 'co1',
+      companyName: 'Acme AB',
+      category: 'workshop',
+      status: 'active',
+      activatedAt: null,
+    });
+  });
+
+  it('merges the offer teaser doc with details/member (no discount code)', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'of1',
+        data: () => ({
+          companyId: 'co1',
+          partnerCompanyName: 'Acme AB',
+          title: 'Rabatt',
+          teaserText: '10% rabatt',
+          offerType: 'percentage_discount',
+          status: 'active',
+          availableFrom: null,
+          availableUntil: null,
+          createdAt: ts('2026-07-01T10:00:00Z'),
+          updatedAt: ts('2026-07-02T10:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({
+        data: () => ({
+          description: 'Full beskrivning',
+          terms: 'Gäller ej helgdagar',
+          percentageDiscount: 10,
+        }),
+      });
+
+    const detail = await adminGetPartnerOffer('of1');
+    expect(detail).toMatchObject({
+      offerId: 'of1',
+      partnerId: 'co1',
+      description: 'Full beskrivning',
+      terms: 'Gäller ej helgdagar',
+      percentageDiscount: 10,
+    });
+    expect('discountCode' in detail).toBe(false);
+  });
+
+  it('maps the create-company request onto the strict callable payload', async () => {
+    callAdminMock.mockResolvedValue({ companyId: 'co9' });
+    getDocMock.mockResolvedValue({
+      exists: () => true,
+      id: 'co9',
+      data: () => ({
+        name: 'Nyföretag',
+        category: 'retail',
+        status: 'draft',
+        createdByUserId: 'admin1',
+        createdAt: ts('2026-07-06T10:00:00Z'),
+        updatedAt: ts('2026-07-06T10:00:00Z'),
+      }),
+    });
+
+    const detail = await adminCreatePartnerCompany({
+      companyName: 'Nyföretag',
+      category: 'retail',
+      publicDescription: 'Beskrivning',
+      address: 'Storgatan 2',
+      latitude: 57.5,
+      longitude: 12.1,
+      publicPhone: '0300-123',
+      publicWebsiteUrl: 'https://ex.se',
+    });
+    expect(callAdminMock).toHaveBeenCalledWith('partners-createCompany', {
+      name: 'Nyföretag',
+      category: 'retail',
+      description: 'Beskrivning',
+      address: 'Storgatan 2',
+      latitude: 57.5,
+      longitude: 12.1,
+      phone: '0300-123',
+      website: 'https://ex.se',
+    });
+    expect(detail.partnerId).toBe('co9');
+  });
+
+  it('approves an application through partners-reviewApplication', async () => {
+    callAdminMock.mockResolvedValue({
+      applicationId: 'ap1',
+      status: 'approved',
+      partnerCompanyId: 'co5',
+    });
+    const result = await adminApproveApplication('ap1');
+    expect(callAdminMock).toHaveBeenCalledWith('partners-reviewApplication', {
+      applicationId: 'ap1',
+      action: 'approve',
+    });
+    expect(result).toEqual({ partnerCompanyId: 'co5' });
+  });
+
+  it('pauses an offer through partners-setOfferStatus with a reason', async () => {
+    callAdminMock.mockResolvedValue({ offerId: 'of1', status: 'paused' });
+    getDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'of1',
+        data: () => ({
+          companyId: 'co1',
+          status: 'paused',
+          offerType: 'percentage_discount',
+          createdAt: ts('2026-07-01T10:00:00Z'),
+          updatedAt: ts('2026-07-06T10:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({}) });
+
+    await adminPausePartnerOffer('of1', 'Kampanj pausad');
+    expect(callAdminMock).toHaveBeenCalledWith('partners-setOfferStatus', {
+      offerId: 'of1',
+      action: 'pause',
+      reason: 'Kampanj pausad',
+    });
   });
 });

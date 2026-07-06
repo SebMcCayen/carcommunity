@@ -369,7 +369,10 @@ service cloud.firestore {
     // audited partners.* admin callables.
     // -------------------------------------------------------------------------
     match /companies/{companyId} {
-      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // Public while ACTIVE; admins additionally read draft/paused/ended for
+      // the admin portal (Phase 13f). All writes via the audited partners.*
+      // admin callables.
+      allow read: if (isAuthenticated() && resource.data.status == 'active') || isAdmin();
       // No client writes.
     }
 
@@ -382,12 +385,19 @@ service cloud.firestore {
     // exclusively by partners.showOfferCode and never readable directly.
     // -------------------------------------------------------------------------
     match /offers/{offerId} {
-      allow read: if isAuthenticated() && resource.data.status == 'active';
+      // Teaser: authenticated while ACTIVE; admins additionally read
+      // draft/paused/ended/expired for the admin portal (Phase 13f).
+      allow read: if (isAuthenticated() && resource.data.status == 'active') || isAdmin();
       // No client writes.
 
       match /details/member {
-        allow read: if isActiveMember()
-          && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active';
+        // Active members while the offer is active; admins read it for the
+        // admin offer-detail view (Phase 13f) — this holds description/terms/
+        // discount fields, but NEVER the discount code (secret/code below
+        // stays fully backend-only).
+        allow read: if isAdmin()
+          || (isActiveMember()
+            && get(/databases/$(database)/documents/offers/$(offerId)).data.status == 'active');
         // No client writes.
       }
 
@@ -433,7 +443,11 @@ service cloud.firestore {
     // partners.reviewApplication (admin). No client access at all.
     // -------------------------------------------------------------------------
     match /partnerApplications/{applicationId} {
-      allow read, write: if false;
+      // Contact data — admins read it for the application review queue
+      // (Phase 13f); written via partners.submitApplication and reviewed via
+      // partners.reviewApplication. No non-admin client access.
+      allow read: if isAdmin();
+      // No client writes.
     }
 
     // -------------------------------------------------------------------------
