@@ -47,6 +47,8 @@
     <string name="settings_about">Om appen</string>
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blockerade användare</string>
+    <string name="settings_accountDeletionWarning">Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.</string>
+    <string name="settings_accountDeletionError">Kunde inte radera ditt konto. Försök igen.</string>
     <string name="about_title">Om appen</string>
     <string name="about_appName">Appnamn</string>
     <string name="about_version">Version</string>

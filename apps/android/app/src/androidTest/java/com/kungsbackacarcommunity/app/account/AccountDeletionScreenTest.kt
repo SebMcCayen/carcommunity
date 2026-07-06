@@ -58,6 +58,6 @@ class AccountDeletionScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.auth_errorGeneric)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.settings_accountDeletionError)).assertIsDisplayed()
     }
 }

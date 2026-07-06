@@ -59,7 +59,7 @@ fun AccountDeletionScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             ) {
                 Text(
-                    text = stringResource(R.string.accountStatus_accountDeletionPlaceholder),
+                    text = stringResource(R.string.settings_accountDeletionWarning),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.padding(16.dp),
@@ -68,7 +68,7 @@ fun AccountDeletionScreen(
 
             if (status == AccountDeletionStatus.Failed) {
                 Text(
-                    text = stringResource(R.string.auth_errorGeneric),
+                    text = stringResource(R.string.settings_accountDeletionError),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -93,7 +93,7 @@ fun AccountDeletionScreen(
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text(text = stringResource(R.string.settings_deleteAccount)) },
-            text = { Text(text = stringResource(R.string.accountStatus_accountDeletionPlaceholder)) },
+            text = { Text(text = stringResource(R.string.settings_accountDeletionWarning)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirming = false
