@@ -40,6 +40,7 @@ import {
   publishAdminEvent,
   updateAdminEvent,
 } from '../features/events';
+import { loadAdminGroupDriveSummary } from '../features/group-drive';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -329,5 +330,31 @@ describe('events module', () => {
     const response = await publishAdminEvent('e1');
     expect(callAdminMock).toHaveBeenCalledWith('events-publish', { eventId: 'e1' });
     expect(response.data.event.status).toBe('published');
+  });
+});
+
+describe('group-drive module', () => {
+  it('derives the active buckets from the roster, excluding left', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        { data: () => ({ status: 'joined' }) },
+        { data: () => ({ status: 'joined' }) },
+        { data: () => ({ status: 'on_the_way' }) },
+        { data: () => ({ status: 'arrived' }) },
+        { data: () => ({ status: 'left' }) },
+      ],
+    });
+    const summary = await loadAdminGroupDriveSummary('e1');
+    expect(summary).toEqual({
+      totalActive: 4,
+      joinedCount: 2,
+      onTheWayCount: 1,
+      arrivedCount: 1,
+    });
+  });
+
+  it('returns null when there is no active group drive', async () => {
+    getDocsMock.mockResolvedValue({ docs: [{ data: () => ({ status: 'left' }) }] });
+    expect(await loadAdminGroupDriveSummary('e1')).toBeNull();
   });
 });
