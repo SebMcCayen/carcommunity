@@ -49,6 +49,11 @@ import {
   adminListBillboards,
   adminPauseBillboard,
 } from '../features/digital-billboards';
+import {
+  adminActivateCrownHuntPoint,
+  adminListCrownHuntClaims,
+  adminListCrownHuntPoints,
+} from '../features/crown-hunt';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -444,5 +449,114 @@ describe('digital-billboards module', () => {
       action: 'pause',
       reason: 'Kampanj slut',
     });
+  });
+});
+
+describe('crown-hunt module', () => {
+  const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+
+  it('maps point docs into the admin point summary', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'p1',
+          data: () => ({
+            title: 'Torget',
+            description: null,
+            latitude: 57.48,
+            longitude: 12.07,
+            geofenceRadiusMeters: 50,
+            rewardPoints: 100,
+            status: 'draft',
+            repeatRule: 'once',
+            availableFrom: null,
+            availableUntil: null,
+            approvedAt: null,
+            approvedByUserId: null,
+            createdByUserId: 'admin1',
+            createdAt: ts('2026-07-01T10:00:00Z'),
+            updatedAt: ts('2026-07-02T10:00:00Z'),
+          }),
+        },
+      ],
+    });
+    const response = await adminListCrownHuntPoints();
+    expect(response.data.points[0]).toMatchObject({
+      pointId: 'p1',
+      rewardPoints: 100,
+      status: 'draft',
+      repeatRule: 'once',
+      totalClaims: 0,
+    });
+  });
+
+  it('maps claims, joins point titles, and filters by result over the page', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'cl1',
+          data: () => ({
+            pointId: 'p1',
+            userId: 'u1',
+            result: 'risk_review',
+            distanceMeters: 12,
+            claimedAt: ts('2026-07-05T10:00:00Z'),
+          }),
+        },
+        {
+          id: 'cl2',
+          data: () => ({
+            pointId: 'p1',
+            userId: 'u2',
+            result: 'awarded',
+            distanceMeters: 3,
+            claimedAt: ts('2026-07-04T10:00:00Z'),
+          }),
+        },
+      ],
+    });
+    getDocMock.mockResolvedValue({ data: () => ({ title: 'Torget' }) });
+
+    const response = await adminListCrownHuntClaims(1, 'risk_review');
+    expect(response.data.claims).toHaveLength(1);
+    expect(response.data.claims[0]).toMatchObject({
+      claimId: 'cl1',
+      pointTitle: 'Torget',
+      result: 'risk_review',
+      riskReasonCategories: [],
+    });
+    // Titles are resolved only for the matching claim, not the filtered-out one.
+    expect(getDocMock).toHaveBeenCalledTimes(1);
+    // hasNext is based on the unfiltered fetch (2 docs < page size), not the
+    // filtered count.
+    expect(response.meta.hasNext).toBe(false);
+  });
+
+  it('activates through crownHunt-activatePoint with the safety confirmation', async () => {
+    callAdminMock.mockResolvedValue({ pointId: 'p1', status: 'active' });
+    getDocMock.mockResolvedValue({
+      exists: () => true,
+      id: 'p1',
+      data: () => ({
+        title: 'Torget',
+        latitude: 57.48,
+        longitude: 12.07,
+        geofenceRadiusMeters: 50,
+        rewardPoints: 100,
+        status: 'active',
+        repeatRule: 'once',
+        createdByUserId: 'admin1',
+        createdAt: ts('2026-07-01T10:00:00Z'),
+        updatedAt: ts('2026-07-06T10:00:00Z'),
+      }),
+    });
+
+    const response = await adminActivateCrownHuntPoint('p1', 'Säker plats bekräftad');
+    expect(callAdminMock).toHaveBeenCalledWith('crownHunt-activatePoint', {
+      pointId: 'p1',
+      safeLocationConfirmed: true,
+      approvalNote: 'Säker plats bekräftad',
+    });
+    expect(response.data.status).toBe('active');
   });
 });
