@@ -49,7 +49,9 @@
     "reportBug": "Rapportera en bugg",
     "about": "Om appen",
     "github": "GitHub / Open Source",
-    "blockedUsers": "Blockerade användare"
+    "blockedUsers": "Blockerade användare",
+    "accountDeletionWarning": "Om du raderar ditt konto tas din profil och dina data bort. Detta kan inte ångras.",
+    "accountDeletionError": "Kunde inte radera ditt konto. Försök igen."
   },
   "about": {
     "title": "Om appen",

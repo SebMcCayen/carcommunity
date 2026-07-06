@@ -49,7 +49,9 @@
     "reportBug": "Report a bug",
     "about": "About app",
     "github": "GitHub / Open Source",
-    "blockedUsers": "Blocked users"
+    "blockedUsers": "Blocked users",
+    "accountDeletionWarning": "Deleting your account removes your profile and data. This cannot be undone.",
+    "accountDeletionError": "Could not delete your account. Please try again."
   },
   "about": {
     "title": "About app",

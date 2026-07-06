@@ -47,6 +47,8 @@
     <string name="settings_about">About app</string>
     <string name="settings_github">GitHub / Open Source</string>
     <string name="settings_blockedUsers">Blocked users</string>
+    <string name="settings_accountDeletionWarning">Deleting your account removes your profile and data. This cannot be undone.</string>
+    <string name="settings_accountDeletionError">Could not delete your account. Please try again.</string>
     <string name="about_title">About app</string>
     <string name="about_appName">App name</string>
     <string name="about_version">Version</string>

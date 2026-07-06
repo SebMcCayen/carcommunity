@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
+import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
@@ -100,6 +102,7 @@ fun AuthenticatedApp(
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
+    accountDeletionCoordinator: AccountDeletionCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -326,6 +329,18 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.AccountDeletion -> {
+                    if (accountDeletionCoordinator != null) {
+                        AccountDeletionRoute(
+                            coordinator = accountDeletionCoordinator,
+                            onDeleted = onSignOut,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -437,6 +452,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Account deletion: signedIn (works while suspended).
+                        onOpenAccountDeletion =
+                            if (accountDeletionCoordinator != null) {
+                                { destination = MainDestination.AccountDeletion }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -458,6 +480,7 @@ private enum class MainDestination {
     Points,
     PartnerApplication,
     Billboards,
+    AccountDeletion,
 }
 
 @Composable
