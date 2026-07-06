@@ -85,7 +85,7 @@ class CrownHuntScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_errorLocationPermission)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_locationUnavailable)).assertIsDisplayed()
     }
 
     @Test
