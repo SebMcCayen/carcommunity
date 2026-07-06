@@ -1,25 +1,39 @@
 /**
  * Group drive feature module for the admin portal (Phase 13 vertical).
  *
- * Migrated from the legacy `apiRequest` REST client to a direct rules-gated
- * Firestore read (13a pattern). The roster lives at
- * `events/{eventId}/groupDriveParticipants/{uid}` and is admin-readable
- * (`isAdmin()` in firebase/firestore.rules); the admin view exposes only
- * aggregate counts computed client-side from participant `status` — never
- * individual positions, identities, or blocking relationships.
+ * Provides aggregate operational data for group drives attached to events.
+ * Exposes only aggregate counts — no individual participant positions,
+ * no blocking relationships, no personal location data.
  *
- * Security / privacy notes (unchanged):
- * - Aggregate counts only — no participant identification, no live map.
- * - Never expose exact positions or blocking relationships.
- * - Backend/rules remain the authority; this is a read-only adapter.
+ * Reads come straight from Firestore (admin rules-gated since Phase 11):
+ * the roster lives at events/{eventId}/groupDriveParticipants and the
+ * status buckets are derived client-side, mirroring the backend aggregate.
+ * This module is read-only — there are no admin groupDrive mutations
+ * (join/updateStatus/leave are member/owner callables).
+ *
+ * Security notes:
+ * - Never expose exact participant positions to admin views (positions are
+ *   not stored on the roster document — only a coarse status).
+ * - Never expose individual blocking relationships.
+ * - Backend role validation (isAdmin() in firestore.rules) gates the read.
+ *
+ * Privacy notes:
+ * - Aggregate counts only — no participant identification is returned.
+ * - No live map view in admin.
  */
 
-import { collection, getDocs, type DocumentData } from 'firebase/firestore';
+import {
+  collection,
+  getCountFromServer,
+  query,
+  where,
+  type Query,
+} from 'firebase/firestore';
 
-import { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/api';
 import { getAdminFirestore } from '../../lib/firestore';
 
-export { ApiError };
+export type { ApiError };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,41 +51,44 @@ export interface AdminGroupDriveSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Read (direct Firestore)
+// Read helpers (direct Firestore, admin rules-gated)
 // ---------------------------------------------------------------------------
 
+/** Server-side count of roster docs in one status bucket (no doc data leaves the server). */
+async function countByStatus(roster: Query, status: string): Promise<number> {
+  const snap = await getCountFromServer(query(roster, where('status', '==', status)));
+  return snap.data().count;
+}
+
 /**
- * Loads aggregate group-drive stats for an event from the participant roster.
- * `left` participants are excluded from every count (totalActive is everyone
- * currently joined/on_the_way/arrived). Returns null when no one has ever
- * joined (empty roster), matching the legacy "no active group drive" result.
+ * Load aggregate group drive stats for an event.
+ * Returns null when no active group drive exists (no non-`left`
+ * participants) — the legacy 404 case — so the caller hides the panel.
+ *
+ * Counts are computed with Firestore server-side aggregation
+ * (getCountFromServer) over the admin-readable
+ * events/{eventId}/groupDriveParticipants roster, one query per active
+ * status bucket. Only the counts cross the wire — participant documents
+ * (which carry displayName) are never downloaded, preserving the
+ * aggregate-only contract. Status `left` is excluded, mirroring the backend
+ * aggregate; the callables enforce member eligibility on every write.
  */
 export async function loadAdminGroupDriveSummary(
   eventId: string,
   _token?: string,
 ): Promise<AdminGroupDriveSummary | null> {
-  const snapshot = await getDocs(
-    collection(getAdminFirestore(), 'events', eventId, 'groupDriveParticipants'),
-  );
-  if (snapshot.empty) {
+  const roster = collection(getAdminFirestore(), 'events', eventId, 'groupDriveParticipants');
+
+  const [joinedCount, onTheWayCount, arrivedCount] = await Promise.all([
+    countByStatus(roster, 'joined'),
+    countByStatus(roster, 'on_the_way'),
+    countByStatus(roster, 'arrived'),
+  ]);
+
+  const totalActive = joinedCount + onTheWayCount + arrivedCount;
+  if (totalActive === 0) {
     return null;
   }
 
-  let joinedCount = 0;
-  let onTheWayCount = 0;
-  let arrivedCount = 0;
-  for (const participant of snapshot.docs) {
-    const status = (participant.data() as DocumentData).status as string | undefined;
-    if (status === 'joined') joinedCount += 1;
-    else if (status === 'on_the_way') onTheWayCount += 1;
-    else if (status === 'arrived') arrivedCount += 1;
-    // `left` (or any unknown status) is not counted as active.
-  }
-
-  return {
-    totalActive: joinedCount + onTheWayCount + arrivedCount,
-    joinedCount,
-    onTheWayCount,
-    arrivedCount,
-  };
+  return { totalActive, joinedCount, onTheWayCount, arrivedCount };
 }
