@@ -295,7 +295,17 @@ export async function adminApproveApplication(
     applicationId,
     action: 'approve',
   });
-  return { partnerCompanyId: result.partnerCompanyId ?? '' };
+  // The approve action always creates a draft company server-side; a missing
+  // id means an unexpected response shape — surface it instead of propagating
+  // an empty id into the post-approve navigation.
+  if (!result.partnerCompanyId) {
+    throw new ApiError(
+      500,
+      'invalid-response',
+      'Approval succeeded but no partner company id was returned.',
+    );
+  }
+  return { partnerCompanyId: result.partnerCompanyId };
 }
 
 /** Rejects a partner application. A non-empty reason is required. Audited. */

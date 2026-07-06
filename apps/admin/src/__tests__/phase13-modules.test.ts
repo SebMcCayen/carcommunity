@@ -688,6 +688,11 @@ describe('partners module', () => {
     expect(result).toEqual({ partnerCompanyId: 'co5' });
   });
 
+  it('throws when approve returns no partner company id', async () => {
+    callAdminMock.mockResolvedValue({ applicationId: 'ap1', status: 'approved', partnerCompanyId: null });
+    await expect(adminApproveApplication('ap1')).rejects.toMatchObject({ statusCode: 500 });
+  });
+
   it('pauses an offer through partners-setOfferStatus with a reason', async () => {
     callAdminMock.mockResolvedValue({ offerId: 'of1', status: 'paused' });
     getDocMock
