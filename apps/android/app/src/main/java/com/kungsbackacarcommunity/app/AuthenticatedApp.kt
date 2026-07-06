@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
+import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
+import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
@@ -97,6 +99,7 @@ fun AuthenticatedApp(
     badgesRepository: BadgesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
+    billboardsRepository: BillboardsRepository?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -312,6 +315,17 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Billboards -> {
+                    if (billboardsRepository != null) {
+                        BillboardsRoute(
+                            repository = billboardsRepository,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -409,6 +423,20 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Digital billboards: behind the digitalBillboards flag.
+                        onOpenBillboards =
+                            if (billboardsRepository != null &&
+                                FeatureGate.isAvailable(
+                                    flags = flags,
+                                    flag = FeatureFlag.DIGITAL_BILLBOARDS,
+                                    memberGated = false,
+                                    isActiveMember = profile?.activeMember == true,
+                                )
+                            ) {
+                                { destination = MainDestination.Billboards }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -429,6 +457,7 @@ private enum class MainDestination {
     Badges,
     Points,
     PartnerApplication,
+    Billboards,
 }
 
 @Composable
