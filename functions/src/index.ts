@@ -46,6 +46,7 @@ import {
 } from './billboards/manageBillboard';
 import { markAllRead, markRead } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
+import { adminSend as notificationsAdminSend } from './notifications/adminSend';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
 import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
@@ -301,6 +302,7 @@ export const notifications = {
   markAllRead,
   registerPushToken,
   unregisterPushToken,
+  adminSend: notificationsAdminSend,
   cleanupExpired: cleanupExpiredNotifications,
 };
 
