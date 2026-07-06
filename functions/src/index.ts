@@ -25,6 +25,7 @@ import { removeChatMessage } from './events/removeChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
+import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminAdjust, adminReverse } from './points/adminPoints';
@@ -142,6 +143,21 @@ export const events = {
 export const drives = {
   save: saveDrive,
   delete: deleteDrive,
+};
+
+/**
+ * Blocking domain (grouped export → deployed as `blocking-block` and
+ * `blocking-unblock`).
+ *
+ * Directional, idempotent user blocking backed by
+ * userBlocks/{uid}/blocked/{targetUid} (owner-readable; backend-only writes).
+ * Ports services/api blocking-service.ts. The blocked list is a direct owner
+ * read of the subcollection; cross-feature visibility enforcement (live
+ * location / chat) is tracked separately in the parity matrix.
+ */
+export const blocking = {
+  block: blockUser,
+  unblock: unblockUser,
 };
 
 /**

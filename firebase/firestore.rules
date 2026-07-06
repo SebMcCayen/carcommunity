@@ -360,6 +360,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // -------------------------------------------------------------------------
+    // userBlocks – directional user blocking (blocking.block / blocking.unblock)
+    // userBlocks/{blockerUid}/blocked/{blockedUid}: the owner reads their own
+    // blocked list (never who has blocked them — that would leak private
+    // blocking decisions). All writes go through the blocking.* callables so
+    // the denormalized displayName, idempotency, and self-block/not-found rules
+    // stay backend-enforced. Admin does NOT read blocks (no surveillance).
+    // -------------------------------------------------------------------------
+    match /userBlocks/{blockerId}/blocked/{blockedId} {
+      allow read: if isOwner(blockerId);
+      // No client writes: blocking.block / blocking.unblock callables only.
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
