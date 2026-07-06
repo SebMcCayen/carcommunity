@@ -1,30 +1,25 @@
 /**
- * Group drive feature module for the admin portal.
+ * Group drive feature module for the admin portal (Phase 13 vertical).
  *
- * Provides aggregate operational data for group drives attached to events.
- * Exposes only aggregate counts — no individual participant positions,
- * no blocking relationships, no personal location data.
+ * Migrated from the legacy `apiRequest` REST client to a direct rules-gated
+ * Firestore read (13a pattern). The roster lives at
+ * `events/{eventId}/groupDriveParticipants/{uid}` and is admin-readable
+ * (`isAdmin()` in firebase/firestore.rules); the admin view exposes only
+ * aggregate counts computed client-side from participant `status` — never
+ * individual positions, identities, or blocking relationships.
  *
- * Security notes:
- * - Never expose exact participant positions to admin views.
- * - Never expose individual blocking relationships.
- * - Backend role validation is always required.
- * - TODO: Add safety/moderation operations if required (e.g., end a group drive
- *   attached to a cancelled event, or review participant counts for safety concerns).
- *
- * Privacy notes:
- * - Aggregate counts only — no participant identification.
- * - No live map view in admin.
+ * Security / privacy notes (unchanged):
+ * - Aggregate counts only — no participant identification, no live map.
+ * - Never expose exact positions or blocking relationships.
+ * - Backend/rules remain the authority; this is a read-only adapter.
  */
 
-import {
-  buildAdminGroupDriveSummaryPath,
-  type AdminGroupDriveSummaryResponse,
-} from '@carcommunity/shared/group-drive';
+import { collection, getDocs, type DocumentData } from 'firebase/firestore';
 
-import { ApiError, apiRequest } from '../../lib/api';
+import { ApiError } from '../../lib/api';
+import { getAdminFirestore } from '../../lib/firestore';
 
-export type { ApiError };
+export { ApiError };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,35 +37,41 @@ export interface AdminGroupDriveSummary {
 }
 
 // ---------------------------------------------------------------------------
-// API helpers
+// Read (direct Firestore)
 // ---------------------------------------------------------------------------
 
 /**
- * Load aggregate group drive stats for an event.
- * Returns null if no active group drive exists for the event.
- *
- * Uses the admin-only GET /v1/admin/events/:eventId/group-drive/summary endpoint
- * which returns aggregate counts only and is protected by admin role checks.
+ * Loads aggregate group-drive stats for an event from the participant roster.
+ * `left` participants are excluded from every count (totalActive is everyone
+ * currently joined/on_the_way/arrived). Returns null when no one has ever
+ * joined (empty roster), matching the legacy "no active group drive" result.
  */
 export async function loadAdminGroupDriveSummary(
   eventId: string,
-  token?: string,
+  _token?: string,
 ): Promise<AdminGroupDriveSummary | null> {
-  try {
-    const result = await apiRequest<AdminGroupDriveSummaryResponse>(
-      buildAdminGroupDriveSummaryPath(eventId),
-      { token },
-    );
-    return {
-      totalActive: result.data.totalActive,
-      joinedCount: result.data.joinedCount,
-      onTheWayCount: result.data.onTheWayCount,
-      arrivedCount: result.data.arrivedCount,
-    };
-  } catch (err) {
-    if (err instanceof ApiError && err.statusCode === 404) {
-      return null;
-    }
-    throw err;
+  const snapshot = await getDocs(
+    collection(getAdminFirestore(), 'events', eventId, 'groupDriveParticipants'),
+  );
+  if (snapshot.empty) {
+    return null;
   }
+
+  let joinedCount = 0;
+  let onTheWayCount = 0;
+  let arrivedCount = 0;
+  for (const participant of snapshot.docs) {
+    const status = (participant.data() as DocumentData).status as string | undefined;
+    if (status === 'joined') joinedCount += 1;
+    else if (status === 'on_the_way') onTheWayCount += 1;
+    else if (status === 'arrived') arrivedCount += 1;
+    // `left` (or any unknown status) is not counted as active.
+  }
+
+  return {
+    totalActive: joinedCount + onTheWayCount + arrivedCount,
+    joinedCount,
+    onTheWayCount,
+    arrivedCount,
+  };
 }
