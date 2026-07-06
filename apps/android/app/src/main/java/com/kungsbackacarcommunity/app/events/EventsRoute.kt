@@ -9,7 +9,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+/** Loading vs loaded (null = missing/unreadable) for a single event's teaser. */
+private sealed interface EventLoad {
+    data object Loading : EventLoad
+
+    data class Loaded(val event: EventSummary?) : EventLoad
+}
 
 /**
  * Events integration route (Phase 12 slice 9): owns the list↔detail selection
@@ -39,8 +47,15 @@ fun EventsRoute(
             onBack = onBack,
         )
     } else {
-        val event by
-            remember(selected) { repository.observeEvent(selected) }.collectAsState(initial = null)
+        // Track the first snapshot so a null event reads as "loading" (not
+        // "error") on the initial composition.
+        val eventLoad by
+            remember(selected) {
+                repository.observeEvent(selected).map<EventSummary?, EventLoad> { EventLoad.Loaded(it) }
+            }
+                .collectAsState(initial = EventLoad.Loading)
+        val event = (eventLoad as? EventLoad.Loaded)?.event
+        val eventLoading = eventLoad is EventLoad.Loading
         val detail by
             remember(selected, isActiveMember) {
                 if (isActiveMember) repository.observeEventDetail(selected) else flowOf(null)
@@ -59,6 +74,7 @@ fun EventsRoute(
             myRsvp = myRsvp,
             isActiveMember = isActiveMember,
             rsvpStatus = rsvpStatus,
+            isLoading = eventLoading,
             onRsvp = { answer ->
                 rsvpCoordinator?.let { c -> scope.launch { c.submit(selected, uid, answer) } }
             },

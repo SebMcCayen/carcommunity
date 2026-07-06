@@ -101,4 +101,44 @@ class EventsScreensTest {
         composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.events_rsvpGoing)).assertDoesNotExist()
     }
+
+    @Test
+    fun detail_nullEvent_whileLoading_showsLoadingNotError() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = null,
+                    detail = null,
+                    myRsvp = null,
+                    isActiveMember = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    isLoading = true,
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_loadingDetail)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_errorDetail)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detail_member_cancelledEvent_showsNoDetailPlaceholderOrGate() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(status = EventStatus.CANCELLED),
+                    detail = null,
+                    myRsvp = null,
+                    isActiveMember = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_memberDetailPlaceholder)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.events_cancelledNotice)).assertIsDisplayed()
+    }
 }

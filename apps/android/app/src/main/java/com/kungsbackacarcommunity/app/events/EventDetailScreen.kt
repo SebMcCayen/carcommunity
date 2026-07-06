@@ -45,6 +45,9 @@ fun EventDetailScreen(
     onRsvp: (RsvpStatus) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // True until the first Firestore snapshot arrives, so a null event reads
+    // as "loading" rather than "error" on the very first composition.
+    isLoading: Boolean = false,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -57,9 +60,17 @@ fun EventDetailScreen(
         ) {
             if (event == null) {
                 Text(
-                    text = stringResource(R.string.events_errorDetail),
+                    text =
+                        stringResource(
+                            if (isLoading) R.string.events_loadingDetail else R.string.events_errorDetail,
+                        ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    color =
+                        if (isLoading) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
                 )
                 TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.profile_back))
@@ -107,9 +118,13 @@ fun EventDetailScreen(
             }
 
             // Member-gated detail: exact location + full description, or a gate.
-            if (isActiveMember) {
+            // Detail (exact location/description) only when the rules would
+            // actually serve it: active member AND published. Non-members see
+            // the membership gate; a member on a non-published event sees
+            // neither (the cancelled notice above already explains the state).
+            if (Events.canSeeDetails(isActiveMember, event.status)) {
                 DetailCard(detail)
-            } else {
+            } else if (!isActiveMember) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
                     body = stringResource(R.string.events_memberRequiredBody),
