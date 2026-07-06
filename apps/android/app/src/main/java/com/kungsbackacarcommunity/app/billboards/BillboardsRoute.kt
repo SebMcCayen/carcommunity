@@ -5,6 +5,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
@@ -25,7 +26,15 @@ fun BillboardsRoute(
     BillboardsScreen(
         state = state,
         onOpen = { id ->
-            scope.launch { runCatching { repository.recordInteraction(id, BillboardInteractionType.OPEN) } }
+            scope.launch {
+                try {
+                    repository.recordInteraction(id, BillboardInteractionType.OPEN)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation // never swallow coroutine cancellation
+                } catch (failure: Exception) {
+                    // Fire-and-forget analytics — a failed write never blocks the user.
+                }
+            }
         },
         onBack = onBack,
     )

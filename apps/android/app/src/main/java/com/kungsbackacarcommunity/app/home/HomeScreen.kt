@@ -151,7 +151,7 @@ fun HomeScreen(
             }
             if (onOpenBillboards != null) {
                 OutlinedButton(onClick = onOpenBillboards, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.billboard_sponsoredLabel))
+                    Text(text = stringResource(R.string.billboard_advertisingFrom))
                 }
             }
 
