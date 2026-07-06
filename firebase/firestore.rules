@@ -463,7 +463,10 @@ service cloud.firestore {
     // explicit safe-location confirmation and an audited approval note.
     // -------------------------------------------------------------------------
     match /crownHuntPoints/{pointId} {
-      allow read: if isActiveMember() && resource.data.status == 'active';
+      // Members read ACTIVE points (map display); admins additionally read
+      // drafts/paused/ended for the admin portal (Phase 13e). All writes go
+      // through the safety-gated crownHunt.* admin callables.
+      allow read: if (isActiveMember() && resource.data.status == 'active') || isAdmin();
       // No client writes.
     }
 
@@ -474,7 +477,10 @@ service cloud.firestore {
     // NOT here — see crownHuntClaimRisk below.
     // -------------------------------------------------------------------------
     match /crownHuntClaims/{claimId} {
-      allow read: if isActiveMember() && resource.data.userId == request.auth.uid;
+      // Owner reads their own claim history; admins read every claim for the
+      // review queue (Phase 13e). Anti-fraud risk data stays backend-only in
+      // crownHuntClaimRisk (below) — this grant does not expose it.
+      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
       // No client writes.
     }
 
