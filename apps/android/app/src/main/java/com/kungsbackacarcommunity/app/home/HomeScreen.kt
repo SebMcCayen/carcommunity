@@ -65,6 +65,8 @@ fun HomeScreen(
     onOpenBadges: (() -> Unit)? = null,
     // Phase 12 slice 15: opens the points wallet; null hides the entry.
     onOpenPoints: (() -> Unit)? = null,
+    // Phase 12 slice 18: opens the partner application; null hides the entry.
+    onOpenPartnerApplication: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -138,6 +140,11 @@ fun HomeScreen(
             if (onOpenPoints != null) {
                 Button(onClick = onOpenPoints, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.points_screenTitle))
+                }
+            }
+            if (onOpenPartnerApplication != null) {
+                OutlinedButton(onClick = onOpenPartnerApplication, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.partners_applicationTitle))
                 }
             }
 
