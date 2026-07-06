@@ -14,7 +14,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [GroupDriveRepository] backed by a Firestore listener on the roster plus the
- * groupDrive-join / updateStatus / leave callables (europe-west1), Phase 12
+ * groupDrive-join / groupDrive-updateStatus / groupDrive-leave callables (europe-west1), Phase 12
  * slice 11. Guarded ([createIfAvailable]).
  */
 class FirebaseGroupDriveRepository private constructor(
