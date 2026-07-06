@@ -340,6 +340,9 @@
     <string name="garage_validationModelYearInvalid">Enter a valid model year (e.g. 2010).</string>
     <string name="garage_validationPowertrainRequired">Please select a powertrain.</string>
     <string name="garage_retryButton">Try again</string>
+    <string name="garage_validationMakeTooLong">Make is too long (max 80 characters).</string>
+    <string name="garage_validationModelTooLong">Model is too long (max 80 characters).</string>
+    <string name="garage_validationEngineDescriptionTooLong">Engine description is too long (max 120 characters).</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>

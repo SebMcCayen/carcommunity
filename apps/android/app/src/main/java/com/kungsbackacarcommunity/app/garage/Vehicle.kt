@@ -55,10 +55,13 @@ data class VehicleInput(
 /** First validation problem, or null when valid. */
 enum class VehicleFieldError {
     MAKE_REQUIRED,
+    MAKE_TOO_LONG,
     MODEL_REQUIRED,
+    MODEL_TOO_LONG,
     MODEL_YEAR_REQUIRED,
     MODEL_YEAR_INVALID,
     POWERTRAIN_REQUIRED,
+    ENGINE_DESCRIPTION_TOO_LONG,
 }
 
 object VehicleValidation {
@@ -66,12 +69,18 @@ object VehicleValidation {
 
     fun maxModelYear(currentYear: Int): Int = currentYear + 2
 
+    /** Backend bounds (garage-core): make/model ≤80, engineDescription ≤120. */
     const val MAKE_MODEL_MAX_LENGTH = 80
+    const val ENGINE_DESCRIPTION_MAX_LENGTH = 120
 
     /** Returns the first validation error, or null when the form is valid. */
     fun validate(form: VehicleForm, currentYear: Int): VehicleFieldError? {
-        if (form.make.trim().isEmpty()) return VehicleFieldError.MAKE_REQUIRED
-        if (form.model.trim().isEmpty()) return VehicleFieldError.MODEL_REQUIRED
+        val make = form.make.trim()
+        if (make.isEmpty()) return VehicleFieldError.MAKE_REQUIRED
+        if (make.length > MAKE_MODEL_MAX_LENGTH) return VehicleFieldError.MAKE_TOO_LONG
+        val model = form.model.trim()
+        if (model.isEmpty()) return VehicleFieldError.MODEL_REQUIRED
+        if (model.length > MAKE_MODEL_MAX_LENGTH) return VehicleFieldError.MODEL_TOO_LONG
         val yearText = form.modelYear.trim()
         if (yearText.isEmpty()) return VehicleFieldError.MODEL_YEAR_REQUIRED
         val year = yearText.toIntOrNull() ?: return VehicleFieldError.MODEL_YEAR_INVALID
@@ -79,6 +88,9 @@ object VehicleValidation {
             return VehicleFieldError.MODEL_YEAR_INVALID
         }
         if (form.powertrain == null) return VehicleFieldError.POWERTRAIN_REQUIRED
+        if (form.engineDescription.trim().length > ENGINE_DESCRIPTION_MAX_LENGTH) {
+            return VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG
+        }
         return null
     }
 

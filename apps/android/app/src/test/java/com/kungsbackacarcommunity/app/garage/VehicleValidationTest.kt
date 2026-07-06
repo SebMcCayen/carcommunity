@@ -47,6 +47,20 @@ class VehicleValidationTest {
     }
 
     @Test
+    fun `over-length make, model and engine description are rejected`() {
+        val longName = "x".repeat(VehicleValidation.MAKE_MODEL_MAX_LENGTH + 1)
+        assertEquals(VehicleFieldError.MAKE_TOO_LONG, VehicleValidation.validate(valid().copy(make = longName), year))
+        assertEquals(VehicleFieldError.MODEL_TOO_LONG, VehicleValidation.validate(valid().copy(model = longName), year))
+        val longEngine = "x".repeat(VehicleValidation.ENGINE_DESCRIPTION_MAX_LENGTH + 1)
+        assertEquals(
+            VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG,
+            VehicleValidation.validate(valid().copy(engineDescription = longEngine), year),
+        )
+        // Exactly at the bound is fine.
+        assertNull(VehicleValidation.validate(valid().copy(make = "x".repeat(VehicleValidation.MAKE_MODEL_MAX_LENGTH)), year))
+    }
+
+    @Test
     fun `blank engine description maps to null`() {
         val input = VehicleValidation.toInput(valid().copy(engineDescription = "   "), year)
         assertNull(input!!.engineDescription)

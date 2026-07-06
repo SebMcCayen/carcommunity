@@ -47,10 +47,10 @@ class FirebaseGarageRepository private constructor(
     }
 
     override suspend fun deleteVehicle(vehicleId: String) {
-        call(DELETE_VEHICLE, mapOf("vehicleId" to vehicleId))
+        call(DELETE_VEHICLE, mapOf<String, Any?>("vehicleId" to vehicleId))
     }
 
-    private suspend fun call(name: String, data: Map<String, Any>): Unit =
+    private suspend fun call(name: String, data: Map<String, Any?>): Unit =
         suspendCancellableCoroutine { continuation ->
             functions
                 .getHttpsCallable(name)
@@ -84,15 +84,16 @@ class FirebaseGarageRepository private constructor(
     }
 }
 
-private fun VehicleInput.toData(): Map<String, Any> =
-    buildMap {
-        put("make", make)
-        put("model", model)
-        put("modelYear", modelYear)
-        put("powertrain", powertrain.wire)
-        // Optional in the contract; omit when absent (partial-update semantics).
-        engineDescription?.let { put("engineDescription", it) }
-    }
+private fun VehicleInput.toData(): Map<String, Any?> =
+    mapOf(
+        "make" to make,
+        "model" to model,
+        "modelYear" to modelYear,
+        "powertrain" to powertrain.wire,
+        // Always sent (possibly null) so an edit can CLEAR the description —
+        // the backend accepts explicit null for engineDescription.
+        "engineDescription" to engineDescription,
+    )
 
 private fun DocumentSnapshot.toVehicle(): Vehicle? {
     if (!exists()) return null

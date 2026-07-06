@@ -10,6 +10,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import java.time.Year
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -83,7 +84,17 @@ fun GarageRoute(
                 showForm = true
             },
             onDelete = { id ->
-                coordinator?.let { c -> scope.launch { runCatching { c.delete(id) } } }
+                coordinator?.let { c ->
+                    scope.launch {
+                        try {
+                            c.delete(id)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation // never swallow coroutine cancellation
+                        } catch (failure: Exception) {
+                            // Fire-and-forget: the list observer reflects the result.
+                        }
+                    }
+                }
             },
             onBack = onBack,
         )
