@@ -26,6 +26,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
+import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.home.HomeScreen
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
@@ -73,6 +75,8 @@ fun AuthenticatedApp(
     rsvpCoordinator: RsvpCoordinator?,
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
+    groupDriveRepository: GroupDriveRepository?,
+    groupDriveCoordinator: GroupDriveCoordinator?,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
     partnersRepository: PartnersRepository?,
@@ -194,6 +198,8 @@ fun AuthenticatedApp(
                                     memberGated = false,
                                     isActiveMember = profile?.activeMember == true,
                                 ),
+                            groupDriveRepository = groupDriveRepository,
+                            groupDriveCoordinator = groupDriveCoordinator,
                             onBack = { destination = MainDestination.Home },
                         )
                     } else {

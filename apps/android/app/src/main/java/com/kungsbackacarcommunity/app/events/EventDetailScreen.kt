@@ -49,6 +49,7 @@ fun EventDetailScreen(
     // as "loading" rather than "error" on the very first composition.
     isLoading: Boolean = false,
     onOpenChat: (() -> Unit)? = null,
+    onOpenGroupDrive: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -161,6 +162,13 @@ fun EventDetailScreen(
             if (onOpenChat != null) {
                 OutlinedButton(onClick = onOpenChat, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.chat_eventChatTitle))
+                }
+            }
+            // Group drive — offered when eligible (member + published +
+            // going/maybe RSVP).
+            if (onOpenGroupDrive != null) {
+                OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.groupDrive_screenTitle))
                 }
             }
 

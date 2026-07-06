@@ -12,6 +12,10 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChat
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRoute
+import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
+import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
+import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
+import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRoute
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -38,11 +42,14 @@ fun EventsRoute(
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
     chatEnabled: Boolean,
+    groupDriveRepository: GroupDriveRepository?,
+    groupDriveCoordinator: GroupDriveCoordinator?,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
     var showChat by rememberSaveable { mutableStateOf(false) }
+    var showGroupDrive by rememberSaveable { mutableStateOf(false) }
     val selected = selectedEventId
 
     if (selected == null) {
@@ -84,6 +91,20 @@ fun EventsRoute(
         return
     }
 
+    if (showGroupDrive && groupDriveRepository != null) {
+        GroupDriveRoute(
+            repository = groupDriveRepository,
+            coordinator = groupDriveCoordinator,
+            eventId = selected,
+            uid = uid,
+            isActiveMember = isActiveMember,
+            eventStatus = event?.status,
+            myRsvp = myRsvp,
+            onBack = { showGroupDrive = false },
+        )
+        return
+    }
+
     val detail by
         remember(selected, isActiveMember) {
             if (isActiveMember) repository.observeEventDetail(selected) else flowOf(null)
@@ -98,6 +119,9 @@ fun EventsRoute(
             chatRepository != null &&
             chatCoordinator != null &&
             EventChat.canParticipate(isActiveMember, event?.status, myRsvp)
+    val groupDriveEligible =
+        groupDriveRepository != null &&
+            GroupDrive.canJoin(isActiveMember, event?.status, myRsvp)
 
     EventDetailScreen(
         event = event,
@@ -114,5 +138,6 @@ fun EventsRoute(
             rsvpCoordinator?.reset()
         },
         onOpenChat = if (chatEligible) { { showChat = true } } else null,
+        onOpenGroupDrive = if (groupDriveEligible) { { showGroupDrive = true } } else null,
     )
 }
