@@ -38,6 +38,7 @@ import { createCompany, setCompanyStatus, updateCompany } from './partners/manag
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
 import { recordInteraction } from './partnerInsights/recordInteraction';
 import { aggregateDaily, cleanupExpired } from './partnerInsights/scheduled';
+import { adminSummary as partnerInsightsAdminSummary } from './partnerInsights/adminSummary';
 import {
   activate as activateBillboard,
   create as createBillboard,
@@ -266,6 +267,7 @@ export const partners = {
  */
 export const partnerInsights = {
   recordInteraction,
+  adminSummary: partnerInsightsAdminSummary,
   aggregateDaily,
   cleanupExpired,
 };
