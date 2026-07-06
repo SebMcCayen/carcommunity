@@ -27,6 +27,9 @@ import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.home.HomeScreen
+import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
+import com.kungsbackacarcommunity.app.partners.PartnersRepository
+import com.kungsbackacarcommunity.app.partners.PartnersRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -69,6 +72,8 @@ fun AuthenticatedApp(
     chatCoordinator: ChatCoordinator?,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
+    partnersRepository: PartnersRepository?,
+    offerCodeCoordinator: OfferCodeCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -206,6 +211,20 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Partners -> {
+                    if (partnersRepository != null) {
+                        PartnersRoute(
+                            repository = partnersRepository,
+                            offerCodeCoordinator = offerCodeCoordinator,
+                            uid = uid,
+                            isActiveMember = profile?.activeMember == true,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -251,6 +270,21 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Partners: behind the partners flag; offers are member-
+                        // gated inside the screen.
+                        onOpenPartners =
+                            if (partnersRepository != null &&
+                                FeatureGate.isAvailable(
+                                    flags = flags,
+                                    flag = FeatureFlag.PARTNERS,
+                                    memberGated = false,
+                                    isActiveMember = profile?.activeMember == true,
+                                )
+                            ) {
+                                { destination = MainDestination.Partners }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -259,7 +293,7 @@ fun AuthenticatedApp(
 }
 
 /** In-app destinations within the authenticated Main shell (no NavHost yet). */
-private enum class MainDestination { Home, Profile, LiveLocation, Events, CrownHunt }
+private enum class MainDestination { Home, Profile, LiveLocation, Events, CrownHunt, Partners }
 
 @Composable
 private fun LoadingScreen() {

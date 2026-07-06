@@ -501,6 +501,7 @@
     "howToRedeem": "Så här löser du in",
     "drivingSafetyWarning": "Stanna säkert innan du använder ett erbjudande.",
     "codeVisible": "Kod",
+    "codeUnavailable": "Ingen kod behövs för det här erbjudandet.",
     "codeAlertTitle": "Rabattkod",
     "codeAlertClose": "Stäng",
     "loadError": "Kunde inte hämta erbjudanden.",
