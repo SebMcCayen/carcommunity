@@ -19,6 +19,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
+import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
@@ -68,6 +70,10 @@ class MainActivity : ComponentActivity() {
         val crownHuntCoordinator = crownHuntRepository?.let { CrownHuntCoordinator(it) }
         val partnersRepository = FirebasePartnersRepository.createIfAvailable(applicationContext)
         val offerCodeCoordinator = partnersRepository?.let { OfferCodeCoordinator(it) }
+        val notificationsRepository =
+            FirebaseNotificationsRepository.createIfAvailable(applicationContext)
+        val notificationsCoordinator =
+            notificationsRepository?.let { NotificationsCoordinator(it) }
 
         setContent {
             val authState =
@@ -104,6 +110,8 @@ class MainActivity : ComponentActivity() {
                         crownHuntCoordinator = crownHuntCoordinator,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
+                        notificationsRepository = notificationsRepository,
+                        notificationsCoordinator = notificationsCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )

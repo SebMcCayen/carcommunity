@@ -57,6 +57,8 @@ fun HomeScreen(
     onOpenCrownHunt: (() -> Unit)? = null,
     // Phase 12 slice 17: opens partners; null hides the entry point.
     onOpenPartners: (() -> Unit)? = null,
+    // Phase 12 slice 21: opens the notification inbox; null hides the entry.
+    onOpenNotifications: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -110,6 +112,11 @@ fun HomeScreen(
             if (onOpenPartners != null) {
                 Button(onClick = onOpenPartners, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.partners_screenTitle))
+                }
+            }
+            if (onOpenNotifications != null) {
+                Button(onClick = onOpenNotifications, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.notifications_title))
                 }
             }
 
