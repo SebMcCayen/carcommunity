@@ -93,6 +93,7 @@
     <string name="liveLocation_accessLimitedByModeration">Your access may be limited if you are suspended or break the rules.</string>
     <string name="liveLocation_shareOwnFree">You can share your own position for free.</string>
     <string name="liveLocation_viewOthersMemberOnly">An active membership is required to view other members\' live locations.</string>
+    <string name="liveLocation_memberRequiredToShare">An active membership is required to share your live location. You can always stop sharing.</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
     <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>

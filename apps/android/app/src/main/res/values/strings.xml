@@ -93,6 +93,7 @@
     <string name="liveLocation_backgroundPermissionDenied">Bakgrundsposition nekad. Delning pausas när appen stängs.</string>
     <string name="liveLocation_backgroundNotificationTitle">KCC liveposition är aktiv</string>
     <string name="liveLocation_backgroundNotificationBody">Din position delas under den aktiva, tidsbegränsade sessionen.</string>
+    <string name="liveLocation_memberRequiredToShare">Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning.</string>
     <string name="onboarding_title">Välkommen</string>
     <string name="onboarding_subtitle">Bekräfta innan du fortsätter.</string>
     <string name="onboarding_ageConfirm">Bekräfta att du är 18 år eller äldre.</string>
