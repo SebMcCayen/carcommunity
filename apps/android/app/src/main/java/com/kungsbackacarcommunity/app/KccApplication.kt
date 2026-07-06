@@ -1,10 +1,13 @@
 package com.kungsbackacarcommunity.app
 
 import android.app.Application
+import android.os.Build
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 
 /**
  * Application entry point (Phase 15b): registers Firebase App Check as
@@ -19,6 +22,10 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
  * and App Check registration is skipped — the app still renders.
  * Production ENFORCEMENT is a console-side switch flipped at cutover per
  * docs/app-check.md; client registration is safe to ship ahead of it.
+ *
+ * Phase 12 slice 22: once Firebase is available, install the diagnostics
+ * crash reporter so uncaught exceptions submit a PII-safe report via the
+ * public `diagnostics-submitReport` callable before the default handler runs.
  */
 class KccApplication : Application() {
     override fun onCreate() {
@@ -36,6 +43,15 @@ class KccApplication : Application() {
         } else {
             appCheck.installAppCheckProviderFactory(
                 PlayIntegrityAppCheckProviderFactory.getInstance(),
+            )
+        }
+
+        FirebaseDiagnosticsReporter.createIfAvailable(this)?.let { reporter ->
+            CrashReporter.install(
+                reporter = reporter,
+                appVersion = BuildConfig.VERSION_NAME,
+                buildNumber = BuildConfig.VERSION_CODE.toString(),
+                osVersion = Build.VERSION.RELEASE,
             )
         }
     }
