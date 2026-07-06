@@ -217,6 +217,24 @@
       "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
     },
     {
+      "name": "events.listChatReports",
+      "domain": "events",
+      "description": "Admin chat-report moderation queue. events/{eventId}/messageReports is backend-only (rules read/write:false), so this Admin-SDK collectionGroup scan is the only admin read path. Returns reports newest-first, ordered by the messageReports/createdAt DESC collectionGroup index over a bounded scan (single window, optional status refinement, pageSize<=100 — no page cursor yet), each including eventId + reporterUserId (surfaced to admins only). Deployed via grouped export as events-listChatReports (functions/src/events/moderateReports.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/routes/moderation.ts + event-chat-service.ts (admin reports)"
+    },
+    {
+      "name": "events.resolveChatReport",
+      "domain": "events",
+      "description": "Transitions one chat report to under_review/resolved/dismissed, stamping reviewedByUserId + reviewedAt and writing an adminAuditEvents record. not-found when the report is absent. Removing the offending message is the separate events.removeChatMessage callable (which also auto-resolves open reports). Deployed via grouped export as events-resolveChatReport (functions/src/events/moderateReports.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/event-chat-service.ts (report review/resolve)"
+    },
+    {
       "name": "garage.addVehicle",
       "domain": "garage",
       "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Strict schema: make/model/modelYear/powertrain/engineDescription/description/color only — registration numbers, VIN, insurance, and location are unrepresentable because vehicles/{vehicleId} is authenticated-readable. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
