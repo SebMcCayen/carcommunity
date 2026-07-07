@@ -26,12 +26,22 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Mapbox runtime access token: a secret NOT committed and NOT
+            // present in CI, so it DEFAULTS to empty. The Map slice sets
+            // MapboxOptions.accessToken only when non-blank; an empty value
+            // still renders the MapView (empty style) so the config-less
+            // build and launch stay green. The real token is provisioned at
+            // cutover (override this resValue or inject from a secret).
+            resValue("string", "mapbox_access_token", "")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            resValue("string", "mapbox_access_token", "")
         }
     }
 

@@ -51,6 +51,9 @@ fun HomeScreen(
     // Phase 12 slice 5: opens the live-location screen; null hides the entry
     // point (flag off or no Firebase session).
     onOpenLiveLocation: (() -> Unit)? = null,
+    // Phase 12 slice 7: opens the map (own live view); null hides the entry
+    // point (LIVE_LOCATION flag off).
+    onOpenMap: (() -> Unit)? = null,
     // Phase 12 slice 9: opens the events list; null hides the entry point.
     onOpenEvents: (() -> Unit)? = null,
     // Phase 12 slice 16: opens Kronjakt; null hides the entry point.
@@ -198,6 +201,11 @@ fun HomeScreen(
                 if (onOpenLiveLocation != null) {
                     Button(onClick = onOpenLiveLocation, modifier = Modifier.fillMaxWidth()) {
                         Text(text = stringResource(R.string.home_liveLocationButton))
+                    }
+                }
+                if (onOpenMap != null) {
+                    OutlinedButton(onClick = onOpenMap, modifier = Modifier.fillMaxWidth()) {
+                        Text(text = stringResource(R.string.map_title))
                     }
                 }
             }

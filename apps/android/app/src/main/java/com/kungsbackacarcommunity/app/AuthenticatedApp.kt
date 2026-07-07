@@ -66,6 +66,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
+import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -234,6 +235,13 @@ fun AuthenticatedApp(
                             BackgroundLocationController.stop(liveLocationContext)
                         },
                     )
+                }
+
+                MainDestination.Map -> {
+                    // Flag-gated (not member-gated) like the live-location
+                    // entry; the map itself needs no repository. The Mapbox
+                    // token guard lives in MapRoute.
+                    MapRoute(onBack = { destination = MainDestination.Home })
                 }
 
                 MainDestination.Events -> {
@@ -452,6 +460,16 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Map: behind the same LIVE_LOCATION flag (flag-gated,
+                        // not member-gated). Needs no Firebase repository — the
+                        // map renders the caller's own view; the Mapbox token
+                        // guard is in MapRoute.
+                        onOpenMap =
+                            if (liveLocationEnabled) {
+                                { destination = MainDestination.Map }
+                            } else {
+                                null
+                            },
                         // Events are core (no feature flag); reachable when
                         // Firebase is configured.
                         onOpenEvents =
@@ -595,6 +613,7 @@ private enum class MainDestination {
     Home,
     Profile,
     LiveLocation,
+    Map,
     Events,
     CrownHunt,
     Partners,
