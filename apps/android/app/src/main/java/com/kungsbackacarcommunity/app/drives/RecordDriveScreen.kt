@@ -72,18 +72,24 @@ fun RecordDriveScreen(
 
     fun beginRecording() {
         permissionDenied = false
-        coordinator.start()
         val controller = locationController
         if (controller == null) {
             // Location unavailable (config-less build / no device). Recording
             // still runs; no fixes arrive, so a summary-only save results.
+            coordinator.start()
             return
         }
         val started =
             controller.start { latitude, longitude, timestampMs ->
                 coordinator.addFix(latitude, longitude, timestampMs)
             }
-        if (!started) permissionDenied = true
+        if (started) {
+            // Only enter the Recording state once GPS updates are actually
+            // flowing; otherwise the permission-denied UI (start button) shows.
+            coordinator.start()
+        } else {
+            permissionDenied = true
+        }
     }
 
     val permissionLauncher =

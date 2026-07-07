@@ -113,17 +113,19 @@ class DriveRecorder(
      * is trimmed and capped at [DRIVE_TITLE_MAX_LENGTH]. `sourceSessionId` is
      * always included for idempotency.
      *
-     * @param endedAtMillis the stop moment; defaults to the last fix so a
-     *   summary-only save (no fixes) still produces endedAt > startedAt when
-     *   the caller passes an explicit later value.
+     * @param endedAtMillis the stop moment; clamped to at least the last fix's
+     *   timestamp so clock skew (route points use Location.time, the stop
+     *   moment uses System.currentTimeMillis) can never make endedAt precede
+     *   the last accepted point.
      */
     fun buildSaveRequest(
         title: String?,
         endedAtMillis: Long,
     ): Map<String, Any?> {
+        val endedAt = endedAtMillis.coerceAtLeast(lastPointMillis)
         val request = LinkedHashMap<String, Any?>()
         request["startedAt"] = Instant.ofEpochMilli(startedAtMillis).toString()
-        request["endedAt"] = Instant.ofEpochMilli(endedAtMillis).toString()
+        request["endedAt"] = Instant.ofEpochMilli(endedAt).toString()
 
         val trimmed = title?.trim().orEmpty()
         if (trimmed.isNotEmpty()) {

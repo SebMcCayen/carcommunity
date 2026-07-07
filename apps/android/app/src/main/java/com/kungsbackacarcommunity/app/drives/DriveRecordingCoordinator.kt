@@ -74,12 +74,16 @@ class DriveRecordingCoordinator(
         stateFlow.value = RecordingState.Saving
         try {
             repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            // Release the recorder (and its up-to-20k points) now that the save
+            // succeeded; the UI renders the terminal state from RecordingState.
+            this.recorder = null
             stateFlow.value = RecordingState.Saved
         } catch (cancellation: CancellationException) {
-            // Preserve cooperative cancellation; restore the prompt so a retry
-            // is possible after the scope survives.
+            // Cancellation (navigation away / scope cancellation) is not a save
+            // failure; restore the prompt so a retry is possible if the scope
+            // survives, then rethrow to preserve cooperative cancellation.
             stateFlow.value =
-                RecordingState.Failed(
+                RecordingState.PromptSave(
                     pointCount = recorder.pointCount,
                     elapsedMillis = recorder.elapsedMillis(endedAt),
                 )
