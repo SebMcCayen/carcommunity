@@ -50,5 +50,6 @@ jobs:
         run: pnpm run build
 
       - name: Deploy Cloud Functions
-        working-directory: functions
-        run: pnpm exec firebase deploy --only functions --config ../firebase/firebase.json --project kungsbacka-car-community --non-interactive
+        # Run from the repo root so firebase-tools auto-discovers ./firebase.json,
+        # whose functions source ("functions") sits inside the project directory.
+        run: ./functions/node_modules/.bin/firebase deploy --only functions --project kungsbacka-car-community --non-interactive

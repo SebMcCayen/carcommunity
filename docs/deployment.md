@@ -54,7 +54,7 @@ CI runs on every push and pull request targeting `main`. Path filters ensure tha
 | Workflow                  | Trigger paths                                                                | What it validates                                                    |
 | ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `ci.yml`                  | All paths                                                                    | API, mobile, admin, shared lint/typecheck/test/build                 |
-| `validate-functions.yml`  | `functions/**`, `firebase/firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
+| `validate-functions.yml`  | `functions/**`, `firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
 | `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
 | `validate-admin-web.yml`  | `apps/admin/**`, `packages/shared/**`                                        | Admin web lint, typecheck, tests, build                              |
 | `codeql.yml`              | All paths                                                                    | CodeQL security analysis (JS/TS)                                     |

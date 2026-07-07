@@ -81,5 +81,5 @@ jobs:
           npm run build --workspace apps/admin
 
       - name: Deploy Firebase Hosting
-        working-directory: functions
-        run: pnpm exec firebase deploy --only hosting --config ../firebase/firebase.json --project kungsbacka-car-community --non-interactive
+        # Run from the repo root so firebase-tools auto-discovers ./firebase.json.
+        run: ./functions/node_modules/.bin/firebase deploy --only hosting --project kungsbacka-car-community --non-interactive
