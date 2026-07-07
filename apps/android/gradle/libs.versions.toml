@@ -14,6 +14,7 @@ googleServices = "4.4.2"
 credentials = "1.5.0"
 googleid = "1.1.1"
 playServicesLocation = "21.3.0"
+billing = "7.1.1"
 coroutinesTest = "1.9.0"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
@@ -50,6 +51,9 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+
+# Google Play Billing (subscriptions)
+billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

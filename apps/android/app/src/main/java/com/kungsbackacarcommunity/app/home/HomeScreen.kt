@@ -71,6 +71,8 @@ fun HomeScreen(
     onOpenSavedDrives: (() -> Unit)? = null,
     // Phase 12 slice 15: opens the points wallet; null hides the entry.
     onOpenPoints: (() -> Unit)? = null,
+    // Phase 12 slice 24: opens the subscription/membership purchase; null hides.
+    onOpenSubscription: (() -> Unit)? = null,
     // Phase 12 slice 18: opens the partner application; null hides the entry.
     onOpenPartnerApplication: (() -> Unit)? = null,
     // Phase 12 slice 20: opens digital billboards; null hides the entry.
@@ -167,6 +169,11 @@ fun HomeScreen(
             if (onOpenPoints != null) {
                 Button(onClick = onOpenPoints, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.points_screenTitle))
+                }
+            }
+            if (onOpenSubscription != null) {
+                Button(onClick = onOpenSubscription, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.subscription_screenTitle))
                 }
             }
             if (onOpenPartnerApplication != null) {

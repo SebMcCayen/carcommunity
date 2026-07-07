@@ -46,6 +46,8 @@ import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
+import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
+import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -113,6 +115,11 @@ class MainActivity : ComponentActivity() {
         val partnerStatsRepository =
             FirebasePartnerStatsRepository.createIfAvailable(applicationContext)
         val partnerStatsCoordinator = partnerStatsRepository?.let { PartnerStatsCoordinator(it) }
+        // Play Billing needs no google-services.json (public Maven, no Firebase);
+        // the verifier is guarded like the other callables.
+        val billingRepository = PlayBillingRepository.createIfAvailable(applicationContext)
+        val subscriptionVerifier =
+            FirebaseSubscriptionVerifier.createIfAvailable(applicationContext)
 
         setContent {
             val authState =
@@ -166,6 +173,8 @@ class MainActivity : ComponentActivity() {
                         accountDeletionCoordinator = accountDeletionCoordinator,
                         partnerStatsRepository = partnerStatsRepository,
                         partnerStatsCoordinator = partnerStatsCoordinator,
+                        billingRepository = billingRepository,
+                        subscriptionVerifier = subscriptionVerifier,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )
