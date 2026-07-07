@@ -65,6 +65,7 @@ import com.kungsbackacarcommunity.app.live.LiveActionStatus
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
+import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -182,6 +183,11 @@ fun AuthenticatedApp(
                 }
 
                 MainDestination.LiveLocation -> {
+                    // Foreground background-location service is started/stopped
+                    // alongside the session so GPS streams via live.updatePosition
+                    // (Phase 12 slice 6). The service self-stops when Firebase is
+                    // unavailable or the location permission is absent.
+                    val liveLocationContext = LocalContext.current
                     val session by
                         remember(uid, liveLocationRepository) {
                             liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
@@ -204,17 +210,28 @@ fun AuthenticatedApp(
                                 isActiveMember = profile?.activeMember == true,
                             ),
                         onStart = { d ->
-                            liveLocationCoordinator?.let { c -> scope.launch { c.start(d) } }
+                            // Only start the foreground service when live-location
+                            // sharing is actually wired (coordinator present). In a
+                            // config-less / Firebase-unavailable build the coordinator
+                            // is null and the service would only start to immediately
+                            // self-stop, churning a foreground notification.
+                            liveLocationCoordinator?.let { c ->
+                                scope.launch { c.start(d) }
+                                BackgroundLocationController.start(liveLocationContext)
+                            }
                         },
                         onStop = {
                             liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
+                            BackgroundLocationController.stop(liveLocationContext)
                         },
                         onHideMeNow = {
                             liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
+                            BackgroundLocationController.stop(liveLocationContext)
                         },
                         onBack = {
                             destination = MainDestination.Home
                             liveLocationCoordinator?.reset()
+                            BackgroundLocationController.stop(liveLocationContext)
                         },
                     )
                 }
