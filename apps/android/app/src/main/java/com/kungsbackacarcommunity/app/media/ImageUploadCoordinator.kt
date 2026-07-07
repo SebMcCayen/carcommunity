@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 
 /** A picked image ready to upload (bytes + its content type + size). */
 data class PickedImage(
@@ -52,42 +53,51 @@ class ImageUploadCoordinator(
     private val state = MutableStateFlow<ImageUploadStatus>(ImageUploadStatus.Idle)
     val status: StateFlow<ImageUploadStatus> = state.asStateFlow()
 
+    // Atomic check-and-set guard: only the coroutine that wins tryLock() runs an
+    // upload; a concurrent second call fails the lock and is a no-op. Held for
+    // the whole upload+persist and always released in finally.
+    private val uploadLock = Mutex()
+
     /**
      * Pre-checks [picked] against the shared rules, uploads to [path], then runs
      * [persist] (the domain write that records the path — a Firestore avatar
      * write or the garage-updateVehicle callable). Re-entrant calls while an
-     * upload is in flight are ignored.
+     * upload is in flight are rejected atomically (a concurrent call is a no-op).
      */
     suspend fun upload(
         picked: PickedImage,
         path: String,
         persist: suspend (storedPath: String) -> Unit,
     ) {
-        if (state.value == ImageUploadStatus.Uploading) return
-
-        when (MediaUpload.precheck(picked.contentType, picked.sizeBytes, maxBytes)) {
-            MediaUpload.PrecheckError.TOO_LARGE -> {
-                state.value = ImageUploadStatus.TooLarge
-                return
-            }
-            MediaUpload.PrecheckError.NOT_AN_IMAGE -> {
-                state.value = ImageUploadStatus.Failed
-                return
-            }
-            null -> Unit
-        }
-
-        state.value = ImageUploadStatus.Uploading
+        // Atomic guard: if another upload already holds the lock, do nothing.
+        if (!uploadLock.tryLock()) return
         try {
-            // contentType is guaranteed non-null by the pre-check above.
-            val stored = uploader.upload(path, picked.bytes, picked.contentType!!)
-            persist(stored)
-            state.value = ImageUploadStatus.Uploaded
-        } catch (cancellation: CancellationException) {
-            state.value = ImageUploadStatus.Idle
-            throw cancellation
-        } catch (failure: Exception) {
-            state.value = ImageUploadStatus.Failed
+            when (MediaUpload.precheck(picked.contentType, picked.sizeBytes, maxBytes)) {
+                MediaUpload.PrecheckError.TOO_LARGE -> {
+                    state.value = ImageUploadStatus.TooLarge
+                    return
+                }
+                MediaUpload.PrecheckError.NOT_AN_IMAGE -> {
+                    state.value = ImageUploadStatus.Failed
+                    return
+                }
+                null -> Unit
+            }
+
+            state.value = ImageUploadStatus.Uploading
+            try {
+                // contentType is guaranteed non-null by the pre-check above.
+                val stored = uploader.upload(path, picked.bytes, picked.contentType!!)
+                persist(stored)
+                state.value = ImageUploadStatus.Uploaded
+            } catch (cancellation: CancellationException) {
+                state.value = ImageUploadStatus.Idle
+                throw cancellation
+            } catch (failure: Exception) {
+                state.value = ImageUploadStatus.Failed
+            }
+        } finally {
+            uploadLock.unlock()
         }
     }
 

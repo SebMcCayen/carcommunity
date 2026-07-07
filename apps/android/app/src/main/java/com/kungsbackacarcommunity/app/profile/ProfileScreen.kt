@@ -193,7 +193,7 @@ private fun AvatarSection(
                 // resolves — a config-less build never crashes on rendering.
                 AsyncImage(
                     model = avatarUrl,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.profile_avatarAlt),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )

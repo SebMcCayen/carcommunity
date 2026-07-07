@@ -158,6 +158,7 @@
     <string name="profile_errorTooLong">That text is too long.</string>
     <string name="profile_loadError">Couldn’t load your profile.</string>
     <string name="profile_saveError">Couldn’t save. Please try again.</string>
+    <string name="profile_avatarAlt">Profile picture</string>
     <string name="profile_avatarChange">Change picture</string>
     <string name="profile_avatarUploading">Uploading…</string>
     <string name="profile_avatarUploadError">Couldn’t upload the image. Please try again.</string>
@@ -362,6 +363,7 @@
     <string name="garage_validationMakeTooLong">Make is too long (max 80 characters).</string>
     <string name="garage_validationModelTooLong">Model is too long (max 80 characters).</string>
     <string name="garage_validationEngineDescriptionTooLong">Engine description is too long (max 120 characters).</string>
+    <string name="garage_photoAlt">Vehicle photo</string>
     <string name="garage_photoAdd">Add photo</string>
     <string name="garage_photoChange">Change photo</string>
     <string name="garage_photoUploading">Uploading…</string>

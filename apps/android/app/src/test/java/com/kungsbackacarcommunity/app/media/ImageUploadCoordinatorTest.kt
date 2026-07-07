@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.media
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -102,6 +104,47 @@ class ImageUploadCoordinatorTest {
 
         assertTrue(rethrown)
         assertEquals(ImageUploadStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `a concurrent second upload is a no-op while one is in flight`() = runTest {
+        // Uploader that blocks until released, so two coroutines race the guard.
+        val gate = CompletableDeferred<Unit>()
+        val started = mutableListOf<String>()
+        val blockingUploader =
+            object : MediaUploader {
+                override suspend fun upload(
+                    path: String,
+                    bytes: ByteArray,
+                    contentType: String,
+                ): String {
+                    started += path
+                    gate.await()
+                    return path
+                }
+            }
+        val coordinator = ImageUploadCoordinator(blockingUploader, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+        var firstPersists = 0
+        var secondPersists = 0
+
+        // First upload grabs the lock and parks inside the uploader.
+        val first = launch { coordinator.upload(image, "p/first.jpg") { firstPersists++ } }
+        // Let the first upload reach the blocking uploader.
+        testScheduler.advanceUntilIdle()
+        assertEquals(ImageUploadStatus.Uploading, coordinator.status.value)
+
+        // Second concurrent call must be rejected atomically (no-op).
+        coordinator.upload(image, "p/second.jpg") { secondPersists++ }
+        assertEquals(listOf("p/first.jpg"), started)
+        assertEquals(0, secondPersists)
+
+        // Release the first upload and let it finish.
+        gate.complete(Unit)
+        first.join()
+        assertEquals(1, firstPersists)
+        assertEquals(0, secondPersists)
+        assertEquals(listOf("p/first.jpg"), started)
+        assertEquals(ImageUploadStatus.Uploaded, coordinator.status.value)
     }
 
     @Test

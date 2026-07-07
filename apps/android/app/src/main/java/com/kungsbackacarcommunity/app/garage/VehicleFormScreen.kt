@@ -201,7 +201,7 @@ private fun VehiclePhotoSection(
             // Coil renders nothing (keeps the placeholder) when no URL resolves.
             AsyncImage(
                 model = photoUrl,
-                contentDescription = null,
+                contentDescription = stringResource(R.string.garage_photoAlt),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().height(180.dp),
             )

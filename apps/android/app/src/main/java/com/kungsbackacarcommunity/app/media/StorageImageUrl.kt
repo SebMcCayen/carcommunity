@@ -16,8 +16,13 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Resolves a Cloud Storage object path (e.g. `profileImages/{uid}/{id}`) to a
- * download URL for Coil to load. The app stores paths, not URLs; the URL is a
- * short-lived, authenticated handle resolved at render time.
+ * download URL for Coil to load. The app stores paths, not URLs, and resolves
+ * the URL at render time via `getDownloadUrl()`.
+ *
+ * The returned URL is a long-lived, tokenized download link: it embeds the
+ * object's download token and stays valid until that token is rotated or
+ * revoked (e.g. from the Firebase console). It is NOT a short-lived / expiring
+ * signed URL — do not persist or cache it as if it will expire on its own.
  *
  * Returns null (Coil renders nothing) when Firebase is unavailable, the path is
  * blank, or resolution fails — a config-less build never crashes on rendering.

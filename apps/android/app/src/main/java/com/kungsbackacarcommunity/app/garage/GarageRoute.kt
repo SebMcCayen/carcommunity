@@ -80,7 +80,9 @@ fun GarageRoute(
                 .collectAsState(initial = ImageUploadStatus.Idle)
         val photoUrl = rememberStorageImageUrl(photoContext, vehicle?.imagePath)
         val photoPicker =
-            rememberImagePickLauncher { picked ->
+            rememberImagePickLauncher(
+                maxBytes = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
+            ) { picked ->
                 if (picked != null && photoCoordinator != null && editingId != null) {
                     val imageId = MediaUpload.newImageId(picked.contentType)
                     val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)

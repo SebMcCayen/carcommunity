@@ -199,7 +199,9 @@ fun AuthenticatedApp(
                             .collectAsState(initial = ImageUploadStatus.Idle)
                     val avatarUrl = rememberStorageImageUrl(avatarContext, profile?.avatarPath)
                     val avatarPicker =
-                        rememberImagePickLauncher { picked ->
+                        rememberImagePickLauncher(
+                            maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                        ) { picked ->
                             val repo = profileRepository
                             if (picked != null && avatarCoordinator != null && repo != null) {
                                 val imageId = MediaUpload.newImageId(picked.contentType)
