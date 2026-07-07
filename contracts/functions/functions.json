@@ -388,6 +388,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Partner insights rows + scheduled jobs)"
     },
     {
+      "name": "partnerInsights.adminSummary",
+      "domain": "partnerInsights",
+      "description": "The only read path for partner insights (partnerInsights and partnerInsightsEvents are backend-only, read/write:false, even for admins). Returns the threshold-enforced per-interaction-type aggregates for one company + period (day/week/month, defaulting to the last aggregated day). Looks up aggregates by deterministic id via getAll (no index); re-applies the minimum-unique-contributor floor at read time as defense in depth (an available anonymous_pass_by row below the floor is re-zeroed to insufficient_data). No user-level data is ever returned. Deployed via grouped export as partnerInsights-adminSummary (functions/src/partnerInsights/adminSummary.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/partner-insights-service.ts (admin/partner summary)"
+    },
+    {
       "name": "billboards.create",
       "domain": "billboards",
       "description": "Creates a draft sponsored billboard for an existing partner (headline <=100, message <=300, placement enum, coordinates, optional CTA pair + safety note + image under billboardImages/{billboardId}/). Audited. Deployed via grouped export as billboards-create (functions/src/billboards/manageBillboard.ts).",

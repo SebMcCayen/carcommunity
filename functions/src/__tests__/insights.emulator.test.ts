@@ -244,6 +244,10 @@ describe('partnerInsights-recordInteraction', () => {
 
 describe('runInsightsAggregation — threshold enforcement', () => {
   it('zeroes below-threshold pass-by aggregates and keeps regular metrics available', async () => {
+    // Pin the effective threshold to the floor (10) explicitly — the config doc
+    // is shared across the emulator suite, so other tests may have raised it.
+    await adminDb.collection('config').doc('partnerInsights').set({ minThreshold: 10 }, { merge: true });
+
     // Seed a dedicated company with 9 pass-by contributors (below the floor
     // of 10) and 2 profile views, directly via the Admin SDK.
     const seededCompany = 'pi-threshold-co';
