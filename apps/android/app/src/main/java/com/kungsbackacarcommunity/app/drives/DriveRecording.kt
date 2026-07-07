@@ -130,7 +130,13 @@ class DriveRecorder(
         // wall clock. Either way clamp to the last fix so endedAt never precedes
         // the last accepted point.
         val basis = if (points.isNotEmpty()) lastPointMillis else endedAtMillis
-        val endedAt = basis.coerceAtLeast(lastPointMillis)
+        // Guarantee endedAt is STRICTLY after startedAt: the backend guard
+        // (functions/src/drives/drives-core.ts) rejects endedAt <= startedAt.
+        // An instant stop (same-millisecond clock) or a stale first-fix
+        // timestamp that never advances lastPointMillis would otherwise land on
+        // startedAtMillis, so floor the result at startedAtMillis + 1 as well as
+        // at the last accepted fix.
+        val endedAt = maxOf(basis, lastPointMillis, startedAtMillis + 1)
         val request = LinkedHashMap<String, Any?>()
         request["startedAt"] = Instant.ofEpochMilli(startedAtMillis).toString()
         request["endedAt"] = Instant.ofEpochMilli(endedAt).toString()

@@ -110,6 +110,32 @@ class DriveRecordingTest {
     }
 
     @Test
+    fun `buildSaveRequest yields endedAt strictly after startedAt on an instant stop`() {
+        // User stops in the same millisecond the recording started (no points):
+        // endedAt would equal startedAt, which the backend guard rejects
+        // (endedAt <= startedAt). It must be floored to startedAt + 1ms.
+        val recorder = DriveRecorder(sourceSessionId = "sess-instant", startedAtMillis = 1_000L)
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 1_000L)
+        assertFalse(request.containsKey("routePoints"))
+        assertEquals("1970-01-01T00:00:01Z", request["startedAt"])
+        // startedAt + 1ms — sub-second precision so the ISO string carries millis.
+        assertEquals("1970-01-01T00:00:01.001Z", request["endedAt"])
+    }
+
+    @Test
+    fun `buildSaveRequest yields endedAt after startedAt when the first fix timestamp is stale`() {
+        // The first accepted fix carries a timestamp at/behind startedAt (clock
+        // skew), so lastPointMillis never advances past startedAtMillis. Deriving
+        // endedAt from the last fix alone would produce endedAt <= startedAt; the
+        // startedAt + 1ms floor keeps it strictly after.
+        val recorder = DriveRecorder(sourceSessionId = "sess-stale", startedAtMillis = 5_000L)
+        recorder.addPoint(RecordedPoint(57.0, 12.0, 5_000L)) // same millis as start
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 5_000L)
+        assertEquals("1970-01-01T00:00:05Z", request["startedAt"])
+        assertEquals("1970-01-01T00:00:05.001Z", request["endedAt"])
+    }
+
+    @Test
     fun `buildSaveRequest caps the title at the backend max length`() {
         val recorder = DriveRecorder(sourceSessionId = "sess-3", startedAtMillis = 0L)
         val long = "x".repeat(DriveRecorder.DRIVE_TITLE_MAX_LENGTH + 25)
