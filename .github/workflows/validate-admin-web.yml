@@ -61,7 +61,7 @@ jobs:
           const hosting = config.hosting;
           const fail = (msg) => { console.error('FAIL: ' + msg); process.exit(1); };
           if (hosting.target !== 'admin') fail('hosting.target must be admin (deploy targets the admin site)');
-          if (hosting.public !== '../apps/admin/dist') fail('hosting.public must point at the admin dist');
+          if (hosting.public !== 'apps/admin/dist') fail('hosting.public must point at the admin dist');
           if (!hosting.rewrites?.some((r) => r.source === '**' && r.destination === '/index.html'))
             fail('SPA rewrite missing');
           const globalHeaders = hosting.headers?.find((h) => h.source === '**')?.headers ?? [];
