@@ -5,12 +5,16 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionInfo
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -106,15 +110,23 @@ class MapMarkerFeedTest {
     }
 
     @Test
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
     fun `updates propagate when a member starts sharing`() = runTest {
         val repo = FakeRepo()
         repo.flowFor("me").value = marker("me", 12.0, 57.0)
+        // Collect both emissions in ONE collection so the second is genuinely
+        // the propagated update (a fresh first() would re-collect from the start
+        // and never prove propagation). Launch the collector, then push "a".
         val emissions =
-            feed(repo, "me", listOf("a"))
-                .map { list -> list.map { it.uid } }
-        // Before: only self. Push "a" then read latest.
-        assertEquals(listOf("me"), emissions.first())
+            async {
+                feed(repo, "me", listOf("a"))
+                    .map { list -> list.map { it.uid } }
+                    .take(2)
+                    .toList()
+            }
+        runCurrent()
         repo.flowFor("a").value = marker("a", 13.0, 58.0)
-        assertEquals(listOf("me", "a"), emissions.first())
+        // Before: only self. After "a" shares: self + a, from the same stream.
+        assertEquals(listOf(listOf("me"), listOf("me", "a")), emissions.await())
     }
 }

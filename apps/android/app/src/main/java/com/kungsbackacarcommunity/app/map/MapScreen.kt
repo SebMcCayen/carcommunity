@@ -25,6 +25,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotation
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
@@ -109,13 +110,16 @@ private fun MapboxMapView(
     otherColor: Int,
 ) {
     // Holds the annotation manager created after the style loads, so the update
-    // lambda can clear/recreate the markers when [markers] change.
+    // lambda can diff the markers when [markers] change.
     val managerHolder = remember { arrayOfNulls<CircleAnnotationManager>(1) }
+    // Live annotations keyed by marker identity, so [drawMarkers] can reuse and
+    // move existing circles instead of deleting/recreating every one on each
+    // live-location update (avoids churn/flicker with many participants).
+    val annotationsHolder = remember { mutableMapOf<String, CircleAnnotation>() }
     // Latest markers + colours, kept current by the update lambda. loadStyle runs
     // asynchronously, so its callback must NOT capture the factory-time values —
     // it draws from these holders instead, so markers that changed before the
     // style finished loading are rendered correctly (not the stale initial value).
-    @Suppress("UNCHECKED_CAST")
     val markersHolder = remember { arrayOfNulls<List<MapMarker>>(1) }
     val ownColorHolder = remember { intArrayOf(0) }
     val otherColorHolder = remember { intArrayOf(0) }
@@ -143,6 +147,7 @@ private fun MapboxMapView(
                     managerHolder[0] = annotations.createCircleAnnotationManager()
                     drawMarkers(
                         managerHolder[0],
+                        annotationsHolder,
                         markersHolder[0].orEmpty(),
                         ownColorHolder[0],
                         otherColorHolder[0],
@@ -162,36 +167,68 @@ private fun MapboxMapView(
             )
             // Redraw when [markers] change; a no-op until the style has loaded
             // and the manager exists.
-            drawMarkers(managerHolder[0], markers, ownColor, otherColor)
+            drawMarkers(managerHolder[0], annotationsHolder, markers, ownColor, otherColor)
         },
         onRelease = { mapView ->
             managerHolder[0] = null
+            annotationsHolder.clear()
             mapView.onDestroy()
         },
     )
 }
 
 /**
- * Clears any existing annotations and draws a fresh circle for every marker,
- * colouring own vs other by [MapMarker.kind]. No-op until [manager] is
- * available (i.e. the style has finished loading).
+ * Reconciles the on-map circles with [markers], keyed by marker identity so
+ * frequent live-location updates reuse existing annotations instead of clearing
+ * and recreating them all (which caused churn/flicker with many participants).
+ *
+ * For each marker: an existing circle is moved/recoloured in place via
+ * [CircleAnnotationManager.update]; a new one is created; circles whose marker
+ * has gone (stopped sharing) are deleted. [live] is the caller-owned map of the
+ * currently drawn annotations, mutated in place to match [markers]. No-op until
+ * [manager] is available (i.e. the style has finished loading).
+ *
+ * The key is the marker uid, falling back to the marker kind for the (single)
+ * own marker that may lack a uid — there is at most one own marker and every
+ * other member carries a uid, so keys never collide.
  */
 private fun drawMarkers(
     manager: CircleAnnotationManager?,
+    live: MutableMap<String, CircleAnnotation>,
     markers: List<MapMarker>,
     ownColor: Int,
     otherColor: Int,
 ) {
     manager ?: return
-    manager.deleteAll()
+    val seen = HashSet<String>(markers.size)
     markers.forEach { marker ->
+        val key = marker.uid ?: marker.kind.name
+        seen += key
         val color = if (marker.kind == MapMarkerKind.OWN) ownColor else otherColor
-        manager.create(
-            CircleAnnotationOptions()
-                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                .withCircleRadius(8.0)
-                .withCircleColor(color),
-        )
+        val point = Point.fromLngLat(marker.longitude, marker.latitude)
+        val existing = live[key]
+        if (existing != null) {
+            existing.point = point
+            existing.circleColorInt = color
+            manager.update(existing)
+        } else {
+            live[key] =
+                manager.create(
+                    CircleAnnotationOptions()
+                        .withPoint(point)
+                        .withCircleRadius(8.0)
+                        .withCircleColor(color),
+                )
+        }
+    }
+    // Remove circles for markers that are no longer present.
+    val iterator = live.entries.iterator()
+    while (iterator.hasNext()) {
+        val entry = iterator.next()
+        if (entry.key !in seen) {
+            manager.delete(entry.value)
+            iterator.remove()
+        }
     }
 }
 
