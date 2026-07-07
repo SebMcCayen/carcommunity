@@ -1,33 +1,41 @@
 /**
- * Event chat moderation feature module for the admin portal.
+ * Event chat moderation feature module for the admin portal
+ * (Phase 13h — Firebase migration).
  *
- * Provides types, API helpers, and display utilities for the event chat
- * moderation views. All operations are validated by the backend.
+ * Migrated from the legacy `apiRequest` REST client to the Firebase callable
+ * client (`callAdmin`), targeting the merged backend:
+ *  - events-listChatReports   → the cross-event report moderation queue
+ *  - events-resolveChatReport → transition a report (under_review/resolved/dismissed)
+ *  - events-removeChatMessage → soft-remove the offending message (auto-resolves reports)
+ *
+ * Design decision (documented): the legacy admin "all messages" browser
+ * (loadAdminChatMessages) is intentionally NOT carried over. Event chat messages
+ * are participant-only by design (member + going/maybe RSVP), and the migrated
+ * backend deliberately exposes no admin cross-event message read — only the
+ * reports queue. Moderation is therefore reports-driven: every report carries
+ * its eventId + messageId, which is all an admin needs to resolve the report or
+ * remove the message. This keeps messages private and matches the backend's
+ * privacy model.
  *
  * Security notes:
- * - Never render chat message content as raw HTML.
- * - Backend verifies admin role for all moderation endpoints.
- * - Reporter identities are not exposed in admin message lists.
- * - Removal evidence is never hard-deleted.
+ * - The admin never receives message bodies here — moderation acts on the
+ *   report, not the text (nothing is rendered as HTML).
+ * - Backend verifies the admin role for all moderation operations.
+ * - Reporter identities are surfaced to admins only (admin-gated callable).
+ * - Removal is a soft-delete; the original text is preserved in the audit log.
  */
 
 import {
-  EVENT_CHAT_ROUTE_PATHS,
-  buildAdminEventChatRemovePath,
-  type AdminEventChatMessageSummary,
-  type AdminEventChatMessagesResponse,
   type AdminEventChatReportSummary,
-  type AdminEventChatReportsResponse,
-  type AdminRemoveChatMessageResponse,
   type ChatMessageModerationState,
   type ChatMessageReportReason,
   type ChatMessageReportStatus,
 } from '@carcommunity/shared/event-chat';
 
-import { ApiError, apiRequest } from '../../lib/api';
+import type { ApiError } from '../../lib/api';
+import { callAdmin } from '../../lib/callables';
 
 export type {
-  AdminEventChatMessageSummary,
   AdminEventChatReportSummary,
   ChatMessageModerationState,
   ChatMessageReportReason,
@@ -74,69 +82,115 @@ export function formatModerationState(state: ChatMessageModerationState): string
 }
 
 // ---------------------------------------------------------------------------
-// API helpers
+// Report row — the backend report enriched with the eventId + reporter uid the
+// moderation actions need (both returned by events-listChatReports).
 // ---------------------------------------------------------------------------
 
-export interface LoadAdminChatMessagesParams {
-  eventId?: string;
-  removed?: boolean;
-  page?: number;
-  pageSize?: number;
-  token?: string;
+export interface AdminEventChatReportRow extends AdminEventChatReportSummary {
+  /** Event the reported message belongs to — required to resolve/remove. */
+  eventId: string;
+  /** Reporter uid — surfaced to admins only. */
+  reporterUserId: string | null;
 }
 
-export async function loadAdminChatMessages(
-  params: LoadAdminChatMessagesParams = {},
-): Promise<AdminEventChatMessagesResponse> {
-  const query = new URLSearchParams();
-  if (params.eventId) query.set('eventId', params.eventId);
-  if (params.removed !== undefined) query.set('removed', String(params.removed));
-  if (params.page !== undefined) query.set('page', String(params.page));
-  if (params.pageSize !== undefined) query.set('pageSize', String(params.pageSize));
-  const qs = query.toString();
-  return apiRequest<AdminEventChatMessagesResponse>(
-    `${EVENT_CHAT_ROUTE_PATHS.adminMessages}${qs ? `?${qs}` : ''}`,
-    { token: params.token },
-  );
-}
+/** Report statuses that can still be acted on (open reports). */
+export const OPEN_REPORT_STATUSES: readonly ChatMessageReportStatus[] = ['new', 'under_review'];
+
+/**
+ * Statuses a report can be transitioned to via the resolve callable. Excludes
+ * `'new'` (the initial state) — resolution only moves a report forward.
+ */
+export type ResolvableReportStatus = 'under_review' | 'resolved' | 'dismissed';
+
+// ---------------------------------------------------------------------------
+// Callable-backed data layer
+// ---------------------------------------------------------------------------
 
 export interface LoadAdminChatReportsParams {
-  messageId?: string;
-  eventId?: string;
   status?: ChatMessageReportStatus;
-  page?: number;
   pageSize?: number;
-  token?: string;
 }
 
-export async function loadAdminChatReports(
-  params: LoadAdminChatReportsParams = {},
-): Promise<AdminEventChatReportsResponse> {
-  const query = new URLSearchParams();
-  if (params.messageId) query.set('messageId', params.messageId);
-  if (params.eventId) query.set('eventId', params.eventId);
-  if (params.status) query.set('status', params.status);
-  if (params.page !== undefined) query.set('page', String(params.page));
-  if (params.pageSize !== undefined) query.set('pageSize', String(params.pageSize));
-  const qs = query.toString();
-  return apiRequest<AdminEventChatReportsResponse>(
-    `${EVENT_CHAT_ROUTE_PATHS.adminReports}${qs ? `?${qs}` : ''}`,
-    { token: params.token },
-  );
+export interface AdminEventChatReportRowsResponse {
+  ok: true;
+  data: { reports: AdminEventChatReportRow[] };
+  meta: { page: number; pageSize: number; total: number; hasNext: boolean };
 }
 
 /**
- * Soft-remove a chat message with a required reason.
- * The message is preserved for audit; only removedAt is set.
+ * Maps a raw backend report into a typed row. The merged backend always
+ * populates the identifying fields (id/eventId/messageId/createdAt); the
+ * `?? ''` here is only a defensive last resort against a malformed payload.
+ * Rows with an empty `id` are dropped in `loadAdminChatReports` so a broken
+ * report can never render.
  */
-export async function removeAdminChatMessage(
+function toReportRow(report: Record<string, unknown>): AdminEventChatReportRow {
+  return {
+    id: String(report.id ?? ''),
+    eventId: String(report.eventId ?? ''),
+    messageId: String(report.messageId ?? ''),
+    reporterUserId: (report.reporterUserId as string | null | undefined) ?? null,
+    reason: (report.reason as ChatMessageReportReason | undefined) ?? 'other',
+    details: (report.details as string | null | undefined) ?? null,
+    status: (report.status as ChatMessageReportStatus | undefined) ?? 'new',
+    createdAt: String(report.createdAt ?? ''),
+    reviewedAt: (report.reviewedAt as string | null | undefined) ?? null,
+    reviewedByUserId: (report.reviewedByUserId as string | null | undefined) ?? null,
+  };
+}
+
+/**
+ * Loads the chat-report moderation queue (newest-first) via the
+ * `events-listChatReports` callable. Optional status filter; bounded pageSize.
+ */
+export async function loadAdminChatReports(
+  params: LoadAdminChatReportsParams = {},
+): Promise<AdminEventChatReportRowsResponse> {
+  const payload: Record<string, unknown> = {};
+  if (params.status) payload.status = params.status;
+  if (params.pageSize !== undefined) payload.pageSize = params.pageSize;
+
+  const result = await callAdmin<{
+    reports: Record<string, unknown>[];
+    meta: { page: number; pageSize: number; total: number; hasNext: boolean };
+  }>('events-listChatReports', payload);
+
+  return {
+    ok: true,
+    // Drop any malformed row missing its identifying `id` so it never renders.
+    data: { reports: result.reports.map(toReportRow).filter((row) => row.id !== '') },
+    meta: result.meta,
+  };
+}
+
+/**
+ * Transitions a chat report to under_review / resolved / dismissed via the
+ * `events-resolveChatReport` callable. Stamps reviewer + audit server-side.
+ */
+export async function resolveAdminChatReport(
+  eventId: string,
+  reportId: string,
+  status: ResolvableReportStatus,
+): Promise<{ reportId: string; status: ResolvableReportStatus }> {
+  return callAdmin<{ reportId: string; status: ResolvableReportStatus }>('events-resolveChatReport', {
+    eventId,
+    reportId,
+    status,
+  });
+}
+
+/**
+ * Soft-removes the offending message (blanks the body, flips moderationState to
+ * removed, auto-resolves its open reports) via `events-removeChatMessage`.
+ * Acts on a report's eventId + messageId — the admin never reads the body.
+ */
+export async function removeAdminChatMessageFromReport(
+  eventId: string,
   messageId: string,
   reason: string,
-  token?: string,
-): Promise<AdminRemoveChatMessageResponse> {
-  return apiRequest<AdminRemoveChatMessageResponse>(buildAdminEventChatRemovePath(messageId), {
-    method: 'POST',
-    body: { reason },
-    token,
-  });
+): Promise<{ eventId: string; messageId: string; moderationState: 'removed' }> {
+  return callAdmin<{ eventId: string; messageId: string; moderationState: 'removed' }>(
+    'events-removeChatMessage',
+    { eventId, messageId, reason },
+  );
 }
