@@ -495,5 +495,73 @@
     "confirmationRequiredNote": "Sending to all users requires confirmation.",
     "loading": "Loading...",
     "saving": "Sending..."
+  },
+  "users": {
+    "title": "Users",
+    "subtitle": "Search and moderate users. Actions are logged and verified on the backend.",
+    "searchLabel": "Search users",
+    "searchPlaceholder": "Search by name or user ID…",
+    "loading": "Loading users…",
+    "loadError": "Could not load users.",
+    "empty": "No users found.",
+    "emptyFiltered": "No users match the search.",
+    "unnamed": "(unnamed)",
+    "columns": {
+      "name": "Name",
+      "role": "Role",
+      "member": "Member",
+      "status": "Status",
+      "created": "Created"
+    },
+    "role": {
+      "user": "User",
+      "admin": "Admin",
+      "owner": "Owner"
+    },
+    "member": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "status": {
+      "active": "Active",
+      "suspended": "Suspended",
+      "deleted": "Deleted"
+    },
+    "detail": {
+      "back": "← Back to users",
+      "loading": "Loading user…",
+      "loadError": "Could not load the user.",
+      "notFound": "User not found.",
+      "profileTitle": "Profile",
+      "roleLabel": "Role",
+      "memberLabel": "Member",
+      "statusLabel": "Status",
+      "bioLabel": "Bio",
+      "createdLabel": "Created",
+      "updatedLabel": "Updated",
+      "subscriptionLink": "Manage subscription",
+      "actionTitle": "Moderation",
+      "ownerNote": "Owner accounts cannot be moderated here.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Enter a reason (logged)…",
+      "warn": "Warn",
+      "suspend": "Suspend",
+      "restore": "Restore",
+      "grantAdmin": "Grant admin",
+      "revokeAdmin": "Revoke admin",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "confirmSuspend": "Are you sure you want to suspend this user?",
+      "confirmGrantAdmin": "Are you sure you want to grant this user admin privileges?",
+      "confirmRevokeAdmin": "Are you sure you want to revoke this user’s admin privileges?",
+      "suspendedBanner": "This user is suspended.",
+      "deletedBanner": "This user is deleted.",
+      "warnSuccess": "Warning issued.",
+      "suspendSuccess": "User suspended.",
+      "restoreSuccess": "Access restored.",
+      "grantAdminSuccess": "Admin privileges granted.",
+      "revokeAdminSuccess": "Admin privileges revoked.",
+      "actionError": "The action failed."
+    }
   }
 }
