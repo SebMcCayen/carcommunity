@@ -207,8 +207,15 @@ fun AuthenticatedApp(
                                 isActiveMember = profile?.activeMember == true,
                             ),
                         onStart = { d ->
-                            liveLocationCoordinator?.let { c -> scope.launch { c.start(d) } }
-                            BackgroundLocationController.start(liveLocationContext)
+                            // Only start the foreground service when live-location
+                            // sharing is actually wired (coordinator present). In a
+                            // config-less / Firebase-unavailable build the coordinator
+                            // is null and the service would only start to immediately
+                            // self-stop, churning a foreground notification.
+                            liveLocationCoordinator?.let { c ->
+                                scope.launch { c.start(d) }
+                                BackgroundLocationController.start(liveLocationContext)
+                            }
                         },
                         onStop = {
                             liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }

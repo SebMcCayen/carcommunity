@@ -19,6 +19,7 @@ import com.google.android.gms.location.Priority
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,7 +45,7 @@ import kotlinx.coroutines.launch
  */
 class LocationSharingService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var repository: LiveLocationRepository? = null
     private var fusedClient: FusedLocationProviderClient? = null
@@ -66,6 +67,9 @@ class LocationSharingService : Service() {
                 scope.launch {
                     try {
                         repo.updatePosition(coordinate)
+                    } catch (c: CancellationException) {
+                        // Preserve cooperative cancellation — never swallow.
+                        throw c
                     } catch (_: Exception) {
                         // A single failed publish must not tear down sharing; the
                         // next fix retries. Details may reference the payload —
@@ -83,16 +87,17 @@ class LocationSharingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundNotification()
-
         val repo = FirebaseLiveLocationRepository.createIfAvailable(applicationContext)
         if (repo == null) {
             // Firebase not configured (e.g. CI / config-less build). Nothing to
-            // publish to, so do not hold a foreground service.
+            // publish to, so do not hold a foreground service — stop BEFORE
+            // showing any foreground notification.
             stopSelf()
             return START_NOT_STICKY
         }
         repository = repo
+
+        startForegroundNotification()
 
         val client = LocationServices.getFusedLocationProviderClient(applicationContext)
         fusedClient = client
