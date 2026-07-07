@@ -106,10 +106,18 @@ private fun MapboxMapView(
     // Holds the annotation manager created after the style loads, so the update
     // lambda can clear/recreate the own marker when [ownMarker] changes.
     val managerHolder = remember { arrayOfNulls<CircleAnnotationManager>(1) }
+    // Latest marker + color, kept current by the update lambda. loadStyle runs
+    // asynchronously, so its callback must NOT capture the factory-time values —
+    // it draws from these holders instead, so a marker that changed before the
+    // style finished loading is rendered correctly (not the stale initial value).
+    val markerHolder = remember { arrayOfNulls<MapMarker>(1) }
+    val colorHolder = remember { intArrayOf(0) }
 
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
+            markerHolder[0] = ownMarker
+            colorHolder[0] = markerColor
             MapView(context).apply {
                 mapboxMap.setCamera(
                     cameraOptions {
@@ -120,15 +128,18 @@ private fun MapboxMapView(
                 // Create the circle-annotation manager once a style is present.
                 // No image asset needed (a circle annotation), so this never
                 // fails on a missing drawable and stays crash-free even when
-                // tiles cannot load (no token). The marker itself is drawn from
-                // the update lambda so it tracks [ownMarker] changes.
+                // tiles cannot load (no token). Drawn from the holders so it
+                // reflects the current [ownMarker], even if it changed while the
+                // style was still loading.
                 mapboxMap.loadStyle(Style.STANDARD) {
                     managerHolder[0] = annotations.createCircleAnnotationManager()
-                    drawOwnMarker(managerHolder[0], ownMarker, markerColor)
+                    drawOwnMarker(managerHolder[0], markerHolder[0], colorHolder[0])
                 }
             }
         },
         update = { mapView ->
+            markerHolder[0] = ownMarker
+            colorHolder[0] = markerColor
             mapView.mapboxMap.setCamera(
                 cameraOptions {
                     center(Point.fromLngLat(camera.longitude, camera.latitude))
