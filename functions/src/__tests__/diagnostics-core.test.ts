@@ -118,19 +118,24 @@ describe('diagnostics-core input and builder', () => {
 });
 
 describe('diagnostics rate-limit helpers', () => {
-  it('extracts IP from X-Forwarded-For header (leftmost address is the client)', () => {
+  it('prefers req.ip over X-Forwarded-For and falls back to rightmost XFF entry', () => {
     const makeReq = (headers: Record<string, string>, ip?: string) =>
       ({ headers, ip } as unknown as Parameters<typeof extractClientIp>[0]);
 
-    expect(extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1, 10.0.0.2' }))).toBe(
-      '1.2.3.4',
-    );
+    // req.ip takes priority over X-Forwarded-For when both are present.
+    expect(
+      extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1' }, '5.6.7.8')),
+    ).toBe('5.6.7.8');
+    // Falls back to rightmost (most recently proxy-appended) XFF entry.
+    expect(
+      extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1, 10.0.0.2' })),
+    ).toBe('10.0.0.2');
     expect(extractClientIp(makeReq({ 'x-forwarded-for': '::1' }))).toBe('::1');
-    // Falls back to req.ip when the header is absent
+    // Falls back to req.ip when the header is absent.
     expect(extractClientIp(makeReq({}, '5.6.7.8'))).toBe('5.6.7.8');
-    // Strips port number
+    // Strips port number from IPv4.
     expect(extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4:9999' }))).toBe('1.2.3.4');
-    // Returns 'unknown' when no info is available
+    // Returns 'unknown' when no info is available.
     expect(extractClientIp(makeReq({}))).toBe('unknown');
   });
 

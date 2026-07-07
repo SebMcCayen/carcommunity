@@ -278,24 +278,50 @@ export const DIAGNOSTICS_RATE_LIMIT_MAX = 20;
 /** Rate-limit window duration in milliseconds (1 minute). */
 export const DIAGNOSTICS_RATE_LIMIT_WINDOW_MS = 60_000;
 
+/** Strips optional port from an IPv4 address (e.g. "1.2.3.4:5678" → "1.2.3.4"). IPv6 is left unchanged. */
+function stripPort(addr: string): string {
+  return addr.trim().replace(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/, '$1');
+}
+
 /**
  * Extracts the client IP from the Express-compatible request object.
- * Reads the leftmost address in `X-Forwarded-For` (populated by Google
- * Cloud's load balancer), falling back to `req.ip`. Port numbers are
- * stripped; an absent or empty value falls back to `'unknown'`.
+ *
+ * Priority:
+ * 1. `req.ip` — set by Express directly from the socket connection; in
+ *    Cloud Functions this reflects the trusted load-balancer value and
+ *    cannot be injected by the client.
+ * 2. The **rightmost** non-empty entry in `X-Forwarded-For` — the entry
+ *    most recently appended by the platform proxy, and therefore much
+ *    harder to spoof than the leftmost entry which the client controls.
+ *
+ * Port numbers are stripped from IPv4 addresses; an absent or empty value
+ * falls back to `'unknown'`.
  */
 export function extractClientIp(req: {
   headers: Record<string, string | string[] | undefined>;
   ip?: string;
 }): string {
+  // Prefer req.ip (platform-set, not spoofable by the client).
+  if (req.ip) {
+    const ip = stripPort(req.ip);
+    if (ip) return ip;
+  }
+
+  // Fall back to the rightmost non-empty X-Forwarded-For entry. The
+  // rightmost entry was most recently appended by the platform proxy and is
+  // therefore much harder for a client to spoof.
   const forwarded = req.headers['x-forwarded-for'];
-  const raw =
-    (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined) ??
-    req.ip ??
-    'unknown';
-  // Strip optional port from IPv4 (e.g. "1.2.3.4:5678" → "1.2.3.4").
-  // IPv6 addresses contain multiple colons and must not be altered.
-  return raw.trim().replace(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/, '$1') || 'unknown';
+  if (typeof forwarded === 'string') {
+    const entries = forwarded.split(',');
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const raw = entries[i];
+      if (raw === undefined) continue;
+      const entry = stripPort(raw);
+      if (entry) return entry;
+    }
+  }
+
+  return 'unknown';
 }
 
 /**

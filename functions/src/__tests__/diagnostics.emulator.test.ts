@@ -31,6 +31,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runDiagnosticsCleanup } from '../diagnostics/scheduled';
+import { DIAGNOSTICS_RATE_LIMIT_MAX } from '../diagnostics/diagnostics-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -185,5 +186,24 @@ describe('diagnostics retention cleanup', () => {
     expect((await adminDb.collection('diagnosticsReports').doc('diag-recent').get()).exists).toBe(
       true,
     );
+  });
+});
+
+describe('diagnostics rate limiting', () => {
+  it('blocks requests after the per-IP limit is reached within the window', async () => {
+    // Clear all rate-limit counters so the test starts from a known state
+    // regardless of requests made by other tests in this run.
+    const existing = await adminDb.collection('diagnosticsRateLimits').get();
+    await Promise.all(existing.docs.map((d) => d.ref.delete()));
+
+    // Submit exactly DIAGNOSTICS_RATE_LIMIT_MAX reports — all should succeed.
+    for (let i = 0; i < DIAGNOSTICS_RATE_LIMIT_MAX; i++) {
+      await call('diagnostics-submitReport', validReport);
+    }
+
+    // The next request from the same IP must be rejected.
+    expect(
+      await callableErrorCode(call('diagnostics-submitReport', validReport)),
+    ).toBe('functions/resource-exhausted');
   });
 });

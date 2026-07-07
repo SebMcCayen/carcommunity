@@ -13,8 +13,9 @@
  * stripped, bounded scalars only), no raw headers, dedup fingerprint.
  *
  * Rate limiting: 20 requests per 60 s per client IP. The counter is stored
- * in `diagnosticsRateLimits/{hashedIp_bucket}` and cleaned up by the
- * monthly scheduled cleanup (runs on the 1st of each month).
+ * in `diagnosticsRateLimits/{hashedIp_bucket}` and cleaned up by the hourly
+ * scheduled sweep (diagnostics-cleanupRateLimits) and the monthly report
+ * cleanup (diagnostics-cleanupExpired).
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';

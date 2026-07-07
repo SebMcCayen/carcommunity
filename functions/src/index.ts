@@ -57,7 +57,7 @@ import { join as joinGroupDrive, leave as leaveGroupDrive, updateStatus as updat
 import { deleteAccount } from './account/deleteAccount';
 import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
-import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
+import { cleanupExpired as cleanupExpiredDiagnostics, cleanupRateLimits as cleanupDiagnosticsRateLimits } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 
 /**
@@ -314,20 +314,22 @@ export const notifications = {
 
 /**
  * Diagnostics domain (grouped export → deployed as
- * `diagnostics-submitReport` and the scheduled
- * `diagnostics-cleanupExpired`).
+ * `diagnostics-submitReport`, the scheduled `diagnostics-cleanupExpired`,
+ * and the hourly `diagnostics-cleanupRateLimits`).
  *
  * Crash/error telemetry (contracts/functions/functions.json): the only
  * PUBLIC callable (anonymous reports allowed — sign-in failures must be
  * reportable; App Check still applies in production), with all privacy
  * sanitization server-side (tokens/credentials/coordinates/stack traces
  * stripped, bounded scalars only, dedup fingerprints). Admin-only
- * Firestore reads; 90-day retention swept monthly. Replaces the Phase 8
+ * Firestore reads; 90-day retention swept monthly. Rate-limit counters
+ * swept hourly to keep diagnosticsRateLimits bounded. Replaces the Phase 8
  * errorReports scaffold.
  */
 export const diagnostics = {
   submitReport,
   cleanupExpired: cleanupExpiredDiagnostics,
+  cleanupRateLimits: cleanupDiagnosticsRateLimits,
 };
 
 /**
