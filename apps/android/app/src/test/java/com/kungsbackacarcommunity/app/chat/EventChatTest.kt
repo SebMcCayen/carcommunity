@@ -81,10 +81,22 @@ class EventChatTest {
     }
 
     @Test
-    fun `filterBlocked never drops the callers own messages`() {
+    fun `filterBlocked is a pure filter that drops any author in the set, including the caller`() {
         val messages = listOf(message("1", "me"), message("2", "other"))
-        // Even if "me" somehow appears in the set, own messages are addressed by
-        // canBlock (no self-block); this documents that a set without "me" keeps them.
-        assertEquals(listOf("1", "2"), EventChat.filterBlocked(messages, setOf("nobody")).map { it.id })
+        // filterBlocked has no notion of the caller: if "me" is in the set it is
+        // dropped like any other author. Caller-exclusion is the call site's job
+        // (EventChatRoute removes currentUid from the set before filtering), which
+        // is exercised by the next test.
+        assertEquals(listOf("2"), EventChat.filterBlocked(messages, setOf("me")).map { it.id })
+    }
+
+    @Test
+    fun `caller uid removed from the set keeps the callers own messages`() {
+        // Mirrors the call-site invariant: subtracting currentUid ("me") from the
+        // blocked set before filtering guarantees the caller's messages survive
+        // even if the blocked mirror ever contains their own uid.
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        val blocked = setOf("me", "other") - "me"
+        assertEquals(listOf("1"), EventChat.filterBlocked(messages, blocked).map { it.id })
     }
 }

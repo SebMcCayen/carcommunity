@@ -75,12 +75,16 @@ object EventChat {
         message.authorUserId != currentUid
 
     /**
-     * Client-side display filter (Phase 12): drops messages whose author uid is
-     * in the caller's blocked set. This is display-only — server-side
-     * enforcement is a separate parity row — and directional: it hides authors
-     * the caller has blocked without revealing anything to those authors. An
-     * empty set returns the list unchanged; the caller's own messages are never
-     * filtered (you cannot block yourself).
+     * Client-side display filter (Phase 12): drops every message whose
+     * [ChatMessage.authorUserId] is in [blockedUids]. This is display-only —
+     * server-side enforcement is a separate parity row — and directional: it
+     * hides authors the caller has blocked without revealing anything to those
+     * authors. An empty set returns the list unchanged.
+     *
+     * Pure function: it has no notion of the caller. If the caller's own uid is
+     * present in [blockedUids] their messages WILL be dropped, so excluding the
+     * caller (you cannot block yourself) is the caller's responsibility and is
+     * enforced at the call site in EventChatRoute.
      */
     fun filterBlocked(messages: List<ChatMessage>, blockedUids: Set<String>): List<ChatMessage> {
         if (blockedUids.isEmpty()) return messages

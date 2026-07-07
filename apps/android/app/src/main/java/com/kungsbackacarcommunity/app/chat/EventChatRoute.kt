@@ -73,7 +73,8 @@ fun EventChatRoute(
                 if (canParticipate) repository.observeMessages(eventId) else flowOf(ChatMessagesState.Loaded(emptyList()))
             combine(messages, blockedFlow) { state, blocked ->
                 val blockedUids =
-                    (blocked as? BlockedUsersState.Loaded)?.users?.map { it.userId }?.toSet() ?: emptySet()
+                    ((blocked as? BlockedUsersState.Loaded)?.users?.map { it.userId }?.toSet() ?: emptySet()) -
+                        currentUid
                 when (state) {
                     is ChatMessagesState.Loaded ->
                         ChatMessagesState.Loaded(EventChat.filterBlocked(state.messages, blockedUids))
@@ -108,10 +109,12 @@ fun EventChatRoute(
         onBlock = { authorUserId ->
             blockingCoordinator?.let { c ->
                 scope.launch {
-                    // Clear any prior terminal status before the new block so the
-                    // Done/Failed banner reflects this action; the blocked-list
-                    // observer then hides the author's messages live on success.
-                    c.reset()
+                    // Do NOT reset before block: BlockingCoordinator.block guards
+                    // against concurrent/duplicate requests via its in-flight
+                    // (Working) state, and a pre-block reset to Idle would defeat
+                    // that guard on rapid taps. On success the blocked-list observer
+                    // hides the author's messages live; a stale terminal banner is
+                    // cleared on re-entry (LaunchedEffect above) and via onBlockDismiss.
                     c.block(authorUserId)
                 }
             }
