@@ -966,5 +966,18 @@ describe('partner-insights module', () => {
     const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
     expect(payload.periodType).toBe('month');
     expect(typeof payload.date).toBe('string');
+
+    // The sent date must fall within the PREVIOUS calendar month relative to now.
+    const now = new Date();
+    // Compute the expected previous month, borrowing across the year boundary.
+    let expectedYear = now.getUTCFullYear();
+    let expectedMonth = now.getUTCMonth() - 1;
+    if (expectedMonth < 0) {
+      expectedMonth = 11;
+      expectedYear -= 1;
+    }
+    const sent = new Date(payload.date as string);
+    expect(sent.getUTCFullYear()).toBe(expectedYear);
+    expect(sent.getUTCMonth()).toBe(expectedMonth);
   });
 });

@@ -60,7 +60,8 @@ interface BackendSummary {
  */
 export function periodToBucket(period: AdminInsightsPeriod): {
   periodType: BackendPeriodType;
-  date?: string;
+  // Every branch below sets an explicit reference date, so `date` is required.
+  date: string;
 } {
   switch (period) {
     // Always pass an explicit reference date. Without one the backend defaults
@@ -91,8 +92,8 @@ export async function adminGetPartnerInsightsSummary(
   _token?: string,
 ): Promise<PartnerInsightsSummary> {
   const { periodType, date } = periodToBucket(period);
-  const payload: Record<string, unknown> = { companyId: partnerId, periodType };
-  if (date) payload.date = date;
+  // `date` is always set by periodToBucket, so forward it unconditionally.
+  const payload: Record<string, unknown> = { companyId: partnerId, periodType, date };
 
   const result = await callAdmin<BackendSummary>('partnerInsights-adminSummary', payload);
 
