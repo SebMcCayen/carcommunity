@@ -9,7 +9,7 @@ class SubscriptionFlowTest {
 
     @Test
     fun `product id is member_monthly`() {
-        assertEquals("member_monthly", SubscriptionProduct)
+        assertEquals("member_monthly", SUBSCRIPTION_PRODUCT)
     }
 
     @Test

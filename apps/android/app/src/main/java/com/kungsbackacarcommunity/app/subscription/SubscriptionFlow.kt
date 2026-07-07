@@ -8,10 +8,10 @@ package com.kungsbackacarcommunity.app.subscription
  */
 
 /** The Play Console product id for the monthly membership subscription. */
-const val SubscriptionProduct: String = "member_monthly"
+const val SUBSCRIPTION_PRODUCT: String = "member_monthly"
 
 /** The platform tag sent to the `subscription-verify` callable from Android. */
-const val VerifyPlatformGoogle: String = "google"
+const val VERIFY_PLATFORM_GOOGLE: String = "google"
 
 /**
  * Builds the payload for the `subscription-verify` callable. Mirrors the
@@ -20,7 +20,7 @@ const val VerifyPlatformGoogle: String = "google"
  */
 fun buildVerifyPayload(purchaseToken: String): Map<String, Any?> =
     mapOf(
-        "platform" to VerifyPlatformGoogle,
+        "platform" to VERIFY_PLATFORM_GOOGLE,
         "purchaseToken" to purchaseToken,
     )
 

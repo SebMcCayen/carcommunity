@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class SubscriptionCoordinatorTest {
@@ -74,7 +74,20 @@ class SubscriptionCoordinatorTest {
             PurchaseFlowStatus.Failed(PurchaseFailureReason.Unavailable),
             coordinator.status.value,
         )
-        assertTrue(!billing.connectCalled)
+        assertFalse(billing.connectCalled)
+    }
+
+    @Test
+    fun `canceled purchase leaves Purchasing and returns to Idle`() = runTest {
+        val billing = FakeBilling()
+        val verifier = FakeVerifier(shouldFail = false)
+        val coordinator = SubscriptionCoordinator(billing, verifier)
+
+        val job = launch { coordinator.subscribe { billing.emitCanceled() } }
+        job.join()
+
+        assertEquals(PurchaseFlowStatus.Idle, coordinator.status.value)
+        assertEquals(null, verifier.verifiedToken)
     }
 }
 
@@ -89,7 +102,11 @@ private class FakeBilling(
     override val purchases: Flow<PurchaseResult> = events
 
     fun emitPurchase(token: String) {
-        events.tryEmit(PurchaseResult(token))
+        events.tryEmit(PurchaseResult.Purchased(token))
+    }
+
+    fun emitCanceled() {
+        events.tryEmit(PurchaseResult.Canceled)
     }
 
     override suspend fun connect(): BillingConnectionResult {

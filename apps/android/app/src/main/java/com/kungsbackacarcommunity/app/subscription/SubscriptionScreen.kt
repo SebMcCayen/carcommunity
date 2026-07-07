@@ -105,7 +105,12 @@ fun SubscriptionScreen(
                 )
             }
 
-            if (!canSubscribe) {
+            // Explain why subscribing is disabled, unless the status text above
+            // already carries the unavailable copy (Failed(Unavailable)), to
+            // avoid rendering the same message twice.
+            val statusAlreadyUnavailable =
+                status == PurchaseFlowStatus.Failed(PurchaseFailureReason.Unavailable)
+            if (!canSubscribe && !statusAlreadyUnavailable) {
                 Text(
                     text = stringResource(R.string.subscription_statusUnavailable),
                     style = MaterialTheme.typography.bodySmall,

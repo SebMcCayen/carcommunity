@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.subscription
 
 import android.app.Activity
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -16,7 +15,11 @@ import kotlinx.coroutines.launch
  *
  * Launching Play Billing needs an [Activity]; we resolve it from the local
  * context and disable the subscribe button when it is null (or when billing is
- * unavailable on this build). The billing connection is released on dispose.
+ * unavailable on this build). The billing repository is a single shared instance
+ * created in MainActivity and reused across screen openings, so this route does
+ * NOT close it on dispose — endConnection here would leave the reused client
+ * unusable on re-entry. Its lifecycle is owned by the Activity/app; the
+ * coordinator (re)connects on demand.
  */
 @Composable
 fun SubscriptionRoute(
@@ -29,10 +32,6 @@ fun SubscriptionRoute(
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val scope = rememberCoroutineScope()
-
-    DisposableEffect(billing) {
-        onDispose { billing.close() }
-    }
 
     SubscriptionScreen(
         isActiveMember = isActiveMember,

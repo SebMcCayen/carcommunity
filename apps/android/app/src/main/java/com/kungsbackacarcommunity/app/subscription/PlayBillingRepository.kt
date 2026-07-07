@@ -50,8 +50,13 @@ class PlayBillingRepository private constructor(
 
     private val purchasesListener =
         PurchasesUpdatedListener { result, purchases ->
+            // On OK with purchases, surface each. On any other outcome
+            // (USER_CANCELED, other failure codes, or a null list on OK) emit a
+            // Canceled signal so a coordinator awaiting the flow always completes.
             if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
                 purchases.forEach { handlePurchase(it) }
+            } else {
+                purchaseEvents.tryEmit(PurchaseResult.Canceled)
             }
         }
 
@@ -89,7 +94,7 @@ class PlayBillingRepository private constructor(
                     .setProductList(
                         listOf(
                             QueryProductDetailsParams.Product.newBuilder()
-                                .setProductId(SubscriptionProduct)
+                                .setProductId(SUBSCRIPTION_PRODUCT)
                                 .setProductType(BillingClient.ProductType.SUBS)
                                 .build(),
                         ),
@@ -126,9 +131,15 @@ class PlayBillingRepository private constructor(
     }
 
     private fun handlePurchase(purchase: Purchase) {
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
+        // A non-PURCHASED state (e.g. PENDING) grants no entitlement; treat it as
+        // a Canceled outcome so an awaiting coordinator leaves its purchasing
+        // state instead of hanging for a token that will not arrive here.
+        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) {
+            purchaseEvents.tryEmit(PurchaseResult.Canceled)
+            return
+        }
         if (purchase.isAcknowledged) {
-            purchaseEvents.tryEmit(PurchaseResult(purchase.purchaseToken))
+            purchaseEvents.tryEmit(PurchaseResult.Purchased(purchase.purchaseToken))
             return
         }
         val ackParams =
@@ -138,7 +149,7 @@ class PlayBillingRepository private constructor(
         billingClient.acknowledgePurchase(ackParams) {
             // Surface the token regardless of ack result — verification is the
             // source of truth for entitlement; ack just prevents auto-refund.
-            purchaseEvents.tryEmit(PurchaseResult(purchase.purchaseToken))
+            purchaseEvents.tryEmit(PurchaseResult.Purchased(purchase.purchaseToken))
         }
     }
 

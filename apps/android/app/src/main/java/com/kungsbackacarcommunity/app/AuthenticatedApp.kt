@@ -436,7 +436,7 @@ fun AuthenticatedApp(
                 }
 
                 MainDestination.Subscription -> {
-                    if (billingRepository != null) {
+                    if (billingRepository != null && subscriptionVerifier != null) {
                         SubscriptionRoute(
                             billing = billingRepository,
                             verifier = subscriptionVerifier,
@@ -559,10 +559,12 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
-                        // Subscriptions: the member purchase path; reachable when
-                        // billing is available (Play Billing needs no Firebase).
+                        // Subscriptions: the member purchase path; reachable only
+                        // when BOTH billing (Play) and the verifier (Firebase) are
+                        // available — a config-less build has billing but no
+                        // verifier, so the entry would otherwise be a dead end.
                         onOpenSubscription =
-                            if (billingRepository != null) {
+                            if (billingRepository != null && subscriptionVerifier != null) {
                                 { destination = MainDestination.Subscription }
                             } else {
                                 null

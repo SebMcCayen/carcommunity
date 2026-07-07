@@ -51,12 +51,17 @@ class SubscriptionCoordinator(
 
             state.value = PurchaseFlowStatus.Purchasing
             launchPurchase()
-            // Await the first acknowledged purchase token from the billing layer.
-            val purchase = billing.purchases.first()
-
-            state.value = PurchaseFlowStatus.Verifying
-            verifier.verify(purchase.purchaseToken)
-            state.value = PurchaseFlowStatus.Success
+            // Await the first purchase outcome. A cancellation (user dismissed
+            // the Play dialog, or the purchase failed) leaves the Purchasing
+            // state back to Idle instead of hanging forever.
+            when (val outcome = billing.purchases.first()) {
+                is PurchaseResult.Purchased -> {
+                    state.value = PurchaseFlowStatus.Verifying
+                    verifier.verify(outcome.purchaseToken)
+                    state.value = PurchaseFlowStatus.Success
+                }
+                PurchaseResult.Canceled -> state.value = PurchaseFlowStatus.Idle
+            }
         } catch (cancellation: CancellationException) {
             state.value = PurchaseFlowStatus.Idle
             throw cancellation

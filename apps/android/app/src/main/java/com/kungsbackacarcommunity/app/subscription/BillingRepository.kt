@@ -3,8 +3,19 @@ package com.kungsbackacarcommunity.app.subscription
 import android.app.Activity
 import kotlinx.coroutines.flow.Flow
 
-/** A completed, acknowledged purchase surfaced by the billing layer. */
-data class PurchaseResult(val purchaseToken: String)
+/**
+ * Outcome surfaced by the billing layer after a purchase attempt. Either a
+ * completed, acknowledged [Purchased] (carrying its verifiable purchaseToken) or
+ * a [Canceled] signal (user dismissed the Play dialog or the purchase failed) so
+ * the coordinator never hangs awaiting a token that will never arrive.
+ */
+sealed interface PurchaseResult {
+    /** A completed, acknowledged purchase with its verifiable token. */
+    data class Purchased(val purchaseToken: String) : PurchaseResult
+
+    /** The purchase was canceled or failed; no token is available. */
+    data object Canceled : PurchaseResult
+}
 
 /** Outcome of connecting the billing client. */
 enum class BillingConnectionResult {
@@ -38,7 +49,11 @@ interface BillingRepository {
      */
     fun launchPurchase(activity: Activity)
 
-    /** Emits each acknowledged purchase (its verifiable purchaseToken). */
+    /**
+     * Emits the outcome of a launched purchase: [PurchaseResult.Purchased] with
+     * a verifiable token, or [PurchaseResult.Canceled] when the user dismisses
+     * the Play dialog / the purchase fails, so awaiters always complete.
+     */
     val purchases: Flow<PurchaseResult>
 
     /** Releases the underlying billing connection. */
