@@ -747,10 +747,12 @@ describe('badges module', () => {
     });
     expect(response.data.alreadyAwarded).toBe(false);
     expect(response.data.badge).toMatchObject({ key: 'helpful_member', name: 'Hjälpsam medlem' });
-    expect(typeof response.data.badge.awardedAt).toBe('string');
+    // A fresh award carries a real ISO timestamp (client-now ≈ server time).
+    expect(response.data.badge.awardedAt).not.toBe('');
+    expect(Number.isNaN(Date.parse(response.data.badge.awardedAt))).toBe(false);
   });
 
-  it('reports an idempotent repeat award', async () => {
+  it('reports an idempotent repeat award without fabricating an awardedAt', async () => {
     callAdminMock.mockResolvedValue({
       targetUid: 'user1',
       badgeKey: 'helpful_member',
@@ -758,5 +760,7 @@ describe('badges module', () => {
     });
     const response = await awardHelpfulMemberBadge('user1', { reason: 'Igen' });
     expect(response.data.alreadyAwarded).toBe(true);
+    // No fabricated "new award" time for an idempotent repeat.
+    expect(response.data.badge.awardedAt).toBe('');
   });
 });

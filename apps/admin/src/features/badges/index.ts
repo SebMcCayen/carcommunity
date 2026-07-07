@@ -17,9 +17,9 @@
  */
 
 import {
+  HELPFUL_MEMBER_BADGE,
   type AdminBadgeAggregateItem,
   type AdminBadgeSummaryResponse,
-  type AwardedBadge,
   type AwardHelpfulMemberRequest,
   type AwardHelpfulMemberResponse,
   type BadgeKey,
@@ -50,26 +50,17 @@ export async function loadAdminBadgeSummary(_token?: string): Promise<AdminBadge
 }
 
 /**
- * Static `helpful_member` catalog values — mirrors the backend badge catalog
- * (functions/src/badges/badge-core.ts). Badges are an owner-only subcollection,
- * so the admin client cannot read the award document back; the fields below are
- * the canonical definition used to shape the response.
- */
-const HELPFUL_MEMBER_DEFINITION: Omit<AwardedBadge, 'awardedAt'> = {
-  key: 'helpful_member',
-  name: 'Hjälpsam medlem',
-  description: 'Har bidragit positivt och hjälpsamt i communityn.',
-  iconIdentifier: 'badge_helpful_member',
-};
-
-/**
  * Manually awards the `helpful_member` badge to a user via the
  * `badges-awardHelpfulMember` callable. Requires a reason (audited by the
  * backend). Idempotent: a repeat award returns `alreadyAwarded: true`.
  *
  * The callable returns only `{ alreadyAwarded }` (never the award document,
- * which is owner-only), so on a fresh award the returned `AwardedBadge` is
- * synthesized from the static catalog with the current timestamp.
+ * which is owner-only). The award definition comes from the shared
+ * `HELPFUL_MEMBER_BADGE` constant (no local mirror of backend values). The
+ * `awardedAt` timestamp is only meaningful for a FRESH award, where client-now
+ * approximates the just-created server timestamp; for an idempotent repeat we
+ * do NOT fabricate a "new award" time — it is left empty (the original award
+ * time is not returned by the callable and badges are owner-only).
  */
 export async function awardHelpfulMemberBadge(
   userId: string,
@@ -85,7 +76,13 @@ export async function awardHelpfulMemberBadge(
   return {
     ok: true,
     data: {
-      badge: { ...HELPFUL_MEMBER_DEFINITION, awardedAt: new Date().toISOString() },
+      badge: {
+        key: HELPFUL_MEMBER_BADGE.key,
+        name: HELPFUL_MEMBER_BADGE.name,
+        description: HELPFUL_MEMBER_BADGE.description,
+        iconIdentifier: HELPFUL_MEMBER_BADGE.iconIdentifier,
+        awardedAt: result.alreadyAwarded ? '' : new Date().toISOString(),
+      },
       alreadyAwarded: result.alreadyAwarded,
     },
   };
