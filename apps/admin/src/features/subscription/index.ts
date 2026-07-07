@@ -52,9 +52,25 @@ interface GrantEntitlementResult {
   entitlement: SubscriptionEntitlement;
 }
 
+/**
+ * Normalizes a stored timestamp field to an ISO string. Permissive by design —
+ * this module expects old/partial/hand-edited docs, so it accepts a Firestore
+ * Timestamp (toDate()), a native Date, or an already-serialized date string,
+ * and returns null only when the value is absent or unparseable.
+ */
 function toIso(value: unknown): string | null {
-  const ts = value as { toDate?: () => Date } | null | undefined;
-  return ts && typeof ts.toDate === 'function' ? ts.toDate().toISOString() : null;
+  if (value == null) return null;
+  if (typeof (value as { toDate?: unknown }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
 }
 
 /**
