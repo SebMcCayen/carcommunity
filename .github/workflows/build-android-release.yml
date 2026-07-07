@@ -1,0 +1,91 @@
+name: Build Android Release
+
+# Produces the Android release App Bundle (AAB), wiring the real Firebase
+# project via google-services.json pulled from the production environment
+# secret (never committed to the repo — see apps/android/README.md).
+#
+# Security model:
+#  - Manual dispatch only. There is deliberately NO pull_request/push trigger,
+#    so an untrusted branch or fork PR can never run this workflow and pull the
+#    secret into an attacker-controlled build.
+#  - The secret is an ENVIRONMENT secret in `production`; the job opts into that
+#    environment, so it also inherits the environment's protection + deployment
+#    branch rules (e.g. main-only, required reviewers).
+#  - Least-privilege GITHUB_TOKEN (contents: read only); no checkout credential
+#    persistence; the decoded file is removed after the build.
+#
+# The release buildType has no signingConfig yet, so this produces an UNSIGNED
+# AAB — enough to verify the release variant compiles against the real Firebase
+# config. Signing (upload keystore secret + a signingConfig in build.gradle.kts)
+# is a Google Play follow-up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you cutting this build? (logged only)'
+        required: false
+        default: 'manual release build'
+
+# Least privilege: only read the repo and upload an artifact.
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: build-android-release
+    runs-on: ubuntu-latest
+    # Scopes ANDROID_GOOGLE_SERVICES_JSON to this job and applies the
+    # production environment's protection + branch rules. Because there is no
+    # PR trigger, the secret is never exposed to untrusted workflow runs.
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Materialize google-services.json from the production secret
+        env:
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON_B64" ]; then
+            echo "::error::ANDROID_GOOGLE_SERVICES_JSON is not set in the production environment."
+            exit 1
+          fi
+          # Decode to file — never echo the contents. base64 -d tolerates line wrapping.
+          printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 -d > apps/android/app/google-services.json
+          # Guard against a wrong/corrupt secret without printing the file (jq -e sets exit code).
+          jq -e '.client[0].client_info.android_client_info.package_name == "com.kungsbackacarcommunity.app"' \
+            apps/android/app/google-services.json > /dev/null \
+            || { echo "::error::Decoded google-services.json is not valid for com.kungsbackacarcommunity.app."; exit 1; }
+          echo "google-services.json materialized and validated."
+
+      - name: Build release bundle (AAB)
+        working-directory: apps/android
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: Remove google-services.json
+        if: always()
+        run: rm -f apps/android/app/google-services.json
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-release-aab
+          path: apps/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+          if-no-files-found: error
