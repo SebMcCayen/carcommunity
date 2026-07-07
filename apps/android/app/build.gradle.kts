@@ -75,6 +75,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
     implementation(libs.firebase.functions)
     implementation(libs.firebase.database)
     implementation(libs.firebase.messaging)
@@ -96,6 +97,9 @@ dependencies {
 
     // Google Play Billing — subscriptions (Phase 12 slice 24)
     implementation(libs.billing)
+
+    // Coil — Compose image loading (avatar + vehicle photos)
+    implementation(libs.coil.compose)
 
     // Unit tests
     testImplementation(libs.junit)

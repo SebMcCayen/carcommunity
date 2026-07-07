@@ -28,6 +28,10 @@ class GarageCoordinatorTest {
             updated += vehicleId to input
         }
 
+        override suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String) {
+            failWith?.let { throw it }
+        }
+
         override suspend fun deleteVehicle(vehicleId: String) {
             failWith?.let { throw it }
             deleted += vehicleId

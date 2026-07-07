@@ -19,6 +19,10 @@ class ProfileEditCoordinatorTest {
             failWith?.let { throw it }
             updates += Triple(uid, displayName, bio)
         }
+
+        override suspend fun updateAvatarPath(uid: String, avatarPath: String) {
+            failWith?.let { throw it }
+        }
     }
 
     @Test

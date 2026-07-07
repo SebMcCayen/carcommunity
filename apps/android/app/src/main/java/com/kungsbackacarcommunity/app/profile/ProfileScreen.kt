@@ -23,12 +23,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 
 /**
  * Profile view/edit screen (Phase 12 slice 2).
@@ -47,6 +56,12 @@ fun ProfileScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
+    // Avatar: the resolved current-avatar URL (null renders a placeholder), the
+    // in-flight upload status, and the change-picture action. All optional so a
+    // config-less build (no uploader) hides the change button gracefully.
+    avatarUrl: String? = null,
+    avatarUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
+    onChangeAvatar: (() -> Unit)? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -67,6 +82,12 @@ fun ProfileScreen(
                 text = stringResource(R.string.profile_title),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
+            )
+
+            AvatarSection(
+                avatarUrl = avatarUrl,
+                uploadStatus = avatarUploadStatus,
+                onChangeAvatar = onChangeAvatar,
             )
 
             if (editing) {
@@ -148,6 +169,69 @@ fun ProfileScreen(
                     Text(stringResource(R.string.profile_back))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AvatarSection(
+    avatarUrl: String?,
+    uploadStatus: ImageUploadStatus,
+    onChangeAvatar: (() -> Unit)?,
+) {
+    val uploading = uploadStatus == ImageUploadStatus.Uploading
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            modifier = Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (avatarUrl != null) {
+                // Coil renders nothing (keeps the placeholder tint) when no URL
+                // resolves — a config-less build never crashes on rendering.
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = "?",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (uploading) {
+                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            }
+        }
+
+        if (onChangeAvatar != null) {
+            OutlinedButton(onClick = onChangeAvatar, enabled = !uploading) {
+                Text(
+                    text = stringResource(
+                        if (uploading) R.string.profile_avatarUploading else R.string.profile_avatarChange,
+                    ),
+                )
+            }
+        }
+        when (uploadStatus) {
+            ImageUploadStatus.TooLarge ->
+                Text(
+                    text = stringResource(R.string.profile_avatarTooLarge),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            ImageUploadStatus.Failed ->
+                Text(
+                    text = stringResource(R.string.profile_avatarUploadError),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            else -> Unit
         }
     }
 }

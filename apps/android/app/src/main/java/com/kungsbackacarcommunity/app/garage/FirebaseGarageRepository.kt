@@ -46,6 +46,12 @@ class FirebaseGarageRepository private constructor(
         call(UPDATE_VEHICLE, input.toData() + ("vehicleId" to vehicleId))
     }
 
+    override suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String) {
+        // Partial update: only vehicleId + imagePath. The backend's
+        // buildVehicleUpdate accepts an imagePath-only change.
+        call(UPDATE_VEHICLE, mapOf("vehicleId" to vehicleId, "imagePath" to imagePath))
+    }
+
     override suspend fun deleteVehicle(vehicleId: String) {
         call(DELETE_VEHICLE, mapOf<String, Any?>("vehicleId" to vehicleId))
     }
@@ -108,5 +114,6 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         modelYear = modelYear,
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),
+        imagePath = getString("imagePath"),
     )
 }

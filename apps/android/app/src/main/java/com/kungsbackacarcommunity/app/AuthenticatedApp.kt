@@ -67,6 +67,12 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
+import com.kungsbackacarcommunity.app.media.ImageUploadStatus
+import com.kungsbackacarcommunity.app.media.MediaUpload
+import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -118,6 +124,7 @@ fun AuthenticatedApp(
     notificationSettingsCoordinator: NotificationSettingsCoordinator?,
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
+    mediaUploader: MediaUploader?,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     drivesRepository: DrivesRepository?,
@@ -174,6 +181,35 @@ fun AuthenticatedApp(
                     val saveStatus by
                         (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
                             .collectAsState(initial = ProfileEditStatus.Idle)
+
+                    // Avatar upload: an ImageUploadCoordinator (5 MB cap) uploads
+                    // to profileImages/{uid}/{imageId}, then persists avatarPath
+                    // through the rules-validated profile write. Wired only when
+                    // BOTH the uploader and profile repo are available (config-less
+                    // builds hide the change-picture button).
+                    val avatarContext = LocalContext.current
+                    val avatarCoordinator =
+                        remember(mediaUploader) {
+                            mediaUploader?.let {
+                                ImageUploadCoordinator(it, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+                            }
+                        }
+                    val avatarStatus by
+                        (avatarCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
+                            .collectAsState(initial = ImageUploadStatus.Idle)
+                    val avatarUrl = rememberStorageImageUrl(avatarContext, profile?.avatarPath)
+                    val avatarPicker =
+                        rememberImagePickLauncher { picked ->
+                            val repo = profileRepository
+                            if (picked != null && avatarCoordinator != null && repo != null) {
+                                val imageId = MediaUpload.newImageId(picked.contentType)
+                                val path = MediaUpload.profileImagePath(uid, imageId)
+                                avatarCoordinator.upload(picked, path) { storedPath ->
+                                    repo.updateAvatarPath(uid, storedPath)
+                                }
+                            }
+                        }
+
                     ProfileScreen(
                         profile = profile,
                         saveStatus = saveStatus,
@@ -183,8 +219,20 @@ fun AuthenticatedApp(
                         onBack = {
                             destination = MainDestination.Home
                             profileEditCoordinator?.reset()
+                            avatarCoordinator?.reset()
                         },
                         onSignOut = onSignOut,
+                        avatarUrl = avatarUrl,
+                        avatarUploadStatus = avatarStatus,
+                        onChangeAvatar =
+                            if (avatarCoordinator != null && profileRepository != null) {
+                                {
+                                    avatarCoordinator.reset()
+                                    avatarPicker.pickImage()
+                                }
+                            } else {
+                                null
+                            },
                     )
                 }
 
@@ -342,6 +390,7 @@ fun AuthenticatedApp(
                             uid = uid,
                             isActiveMember = profile?.activeMember == true,
                             onBack = { destination = MainDestination.Home },
+                            mediaUploader = mediaUploader,
                         )
                     } else {
                         LoadingScreen()

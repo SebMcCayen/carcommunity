@@ -38,6 +38,7 @@ class FirebaseProfileRepository private constructor(
                         UserProfile(
                             displayName = snapshot.getString("displayName"),
                             bio = snapshot.getString("bio"),
+                            avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
                         )
@@ -50,12 +51,28 @@ class FirebaseProfileRepository private constructor(
     }
 
     override suspend fun updateProfile(uid: String, displayName: String, bio: String) {
-        val update =
+        writeUser(
+            uid,
             mapOf(
                 "displayName" to displayName.trim(),
                 "bio" to bio.trim(),
                 "updatedAt" to FieldValue.serverTimestamp(),
-            )
+            ),
+        )
+    }
+
+    override suspend fun updateAvatarPath(uid: String, avatarPath: String) {
+        writeUser(
+            uid,
+            mapOf(
+                "avatarPath" to avatarPath,
+                "updatedAt" to FieldValue.serverTimestamp(),
+            ),
+        )
+    }
+
+    /** Owner update of a whitelisted subset of users/{uid} fields. */
+    private suspend fun writeUser(uid: String, update: Map<String, Any>) {
         suspendCancellableCoroutine { continuation ->
             firestore
                 .collection(USERS)

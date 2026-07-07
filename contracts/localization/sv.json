@@ -172,7 +172,11 @@
     "errorNameRequired": "Ange ett visningsnamn.",
     "errorTooLong": "Texten är för lång.",
     "loadError": "Kunde inte ladda profilen.",
-    "saveError": "Kunde inte spara. Försök igen."
+    "saveError": "Kunde inte spara. Försök igen.",
+    "avatarChange": "Byt profilbild",
+    "avatarUploading": "Laddar upp…",
+    "avatarUploadError": "Kunde inte ladda upp bilden. Försök igen.",
+    "avatarTooLarge": "Bilden är för stor."
   },
   "map": {
     "title": "Karta",
@@ -394,7 +398,12 @@
     "retryButton": "Försök igen",
     "validationMakeTooLong": "Märket är för långt (max 80 tecken).",
     "validationModelTooLong": "Modellen är för lång (max 80 tecken).",
-    "validationEngineDescriptionTooLong": "Motorbeskrivningen är för lång (max 120 tecken)."
+    "validationEngineDescriptionTooLong": "Motorbeskrivningen är för lång (max 120 tecken).",
+    "photoAdd": "Lägg till bild",
+    "photoChange": "Byt bild",
+    "photoUploading": "Laddar upp…",
+    "photoUploadError": "Kunde inte ladda upp bilden. Försök igen.",
+    "photoTooLarge": "Bilden är för stor."
   },
   "badges": {
     "screenTitle": "Utmärkelser",
