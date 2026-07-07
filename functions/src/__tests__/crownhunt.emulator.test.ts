@@ -28,8 +28,10 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { EXCESSIVE_ATTEMPTS_PER_MINUTE_THRESHOLD } from '../crownHunt/crown-hunt-risk';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -39,6 +41,7 @@ const adminApp =
   getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'crownhunt-emulator-tests');
 const adminAuth = getAdminAuth(adminApp);
 const adminDb = getAdminFirestore(adminApp);
+const adminRtdb = getAdminDatabase(adminApp);
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -100,6 +103,8 @@ let freeUser: TestUser;
 // The point placed at Sergels torg; claims report positions relative to it.
 const POINT_LAT = 59.3326;
 const POINT_LON = 18.0649;
+// 10° creates an obviously impossible jump over a near-zero elapsed window.
+const IMPOSSIBLE_JUMP_OFFSET_DEGREES = 10;
 
 let keyCounter = 0;
 function claimInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -377,37 +382,45 @@ describe('crownHunt-submitClaim', () => {
   it('flags high-risk claims for review without awarding, risk data backend-only', async () => {
     const pointId = await createActivePoint();
     await signInAs(member);
-    // Platform integrity failure (40) + poor accuracy (10) + accuracy>50 → 50…
-    // add stale? No — combine integrity failure with poor accuracy AND
-    // excessive-attempt signals is racy; use integrity failure + impossible?
-    // Simplest deterministic high-risk: integrity failed + poor accuracy +
-    // stale position would return position_too_old first. Use accuracy 60
-    // (poor_gps_accuracy, 10) + platformIntegrityPassed false (40) = 50 — not
-    // enough. Geofence buffer keeps accuracy 60 inside (50 + 30 = 80 m). Add
-    // a large accuracy AND integrity failure AND 4 rapid attempts (25) → 75.
-    for (let i = 0; i < 3; i += 1) {
-      await call(
-        'crownHunt-submitClaim',
-        claimInput({ pointId, latitude: POINT_LAT + 0.01 }), // failed attempts
-      );
-    }
-    const risky = (
-      await call(
-        'crownHunt-submitClaim',
-        claimInput({ pointId, accuracyMeters: 60, platformIntegrityPassed: false }),
-      )
-    ).data as { result: string; pointsAwarded: number | null };
-    expect(risky.result).toBe('risk_review');
-    expect(risky.pointsAwarded).toBeNull();
+    // Client-supplied platform integrity is ignored server-side. Create a
+    // deterministic high-risk combination from trusted signals:
+    // impossible_jump (40) + poor_gps_accuracy (10) + excessive_attempts (25).
+    await adminRtdb.ref(`liveLocation/${member.uid}/latest`).set({
+      latitude: POINT_LAT + IMPOSSIBLE_JUMP_OFFSET_DEGREES,
+      longitude: POINT_LON + IMPOSSIBLE_JUMP_OFFSET_DEGREES,
+      recordedAt: new Date().toISOString(),
+    });
 
-    const riskDocs = await adminDb
-      .collection('crownHuntClaimRisk')
-      .where('userId', '==', member.uid)
-      .where('pointId', '==', pointId)
-      .get();
-    expect(riskDocs.size).toBe(1);
-    expect(riskDocs.docs[0].data().riskScore).toBeGreaterThanOrEqual(60);
-    expect(riskDocs.docs[0].data().riskReasons).toContain('platform_integrity_failed');
+    try {
+      // submitClaim counts attempts in the trailing minute and adds the
+      // excessive-attempts signal at the shared threshold.
+      const failedAttemptsToTriggerExcessiveSignal = EXCESSIVE_ATTEMPTS_PER_MINUTE_THRESHOLD;
+      for (let i = 0; i < failedAttemptsToTriggerExcessiveSignal; i += 1) {
+        await call(
+          'crownHunt-submitClaim',
+          claimInput({ pointId, latitude: POINT_LAT + 0.01 }), // failed attempts
+        );
+      }
+      const risky = (
+        await call(
+          'crownHunt-submitClaim',
+          claimInput({ pointId, accuracyMeters: 60 }),
+        )
+      ).data as { result: string; pointsAwarded: number | null };
+      expect(risky.result).toBe('risk_review');
+      expect(risky.pointsAwarded).toBeNull();
+
+      const riskDocs = await adminDb
+        .collection('crownHuntClaimRisk')
+        .where('userId', '==', member.uid)
+        .where('pointId', '==', pointId)
+        .get();
+      expect(riskDocs.size).toBe(1);
+      expect(riskDocs.docs[0].data().riskScore).toBeGreaterThanOrEqual(60);
+      expect(riskDocs.docs[0].data().riskReasons).toContain('impossible_jump');
+    } finally {
+      await adminRtdb.ref(`liveLocation/${member.uid}/latest`).remove();
+    }
   });
 
   it('honors the feature flag from config/featureFlags', async () => {
