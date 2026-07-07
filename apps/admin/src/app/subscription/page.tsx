@@ -117,13 +117,16 @@ export default function SubscriptionPage() {
       try {
         if (action === 'grant') {
           await adminGrantMembership(summary.userId, trimmedReason);
-          setSuccessMessage(t('subscription.grantSuccess'));
         } else {
           await adminRevokeMembership(summary.userId, trimmedReason);
-          setSuccessMessage(t('subscription.revokeSuccess'));
         }
         setReason('');
+        // Refresh first — load() clears successMessage at its start — then set
+        // the banner so it stays visible after the refresh completes.
         await load(summary.userId);
+        setSuccessMessage(
+          t(action === 'grant' ? 'subscription.grantSuccess' : 'subscription.revokeSuccess'),
+        );
       } catch (err) {
         setActionError((err as ApiError)?.message ?? t('subscription.actionError'));
       } finally {
