@@ -28,13 +28,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
   AdminSendNotificationRequest,
-  AdminNotificationBatchSummary,
   NotificationCategory,
   AdminNotificationAudience,
 } from '@/features/notifications';
 import {
   adminSendNotification,
-  adminListNotifications,
   ACTIVE_NOTIFICATION_CATEGORIES,
   ADMIN_NOTIFICATION_AUDIENCES,
   ApiError,
@@ -49,16 +47,6 @@ const t = (key: string) => translate('sv', key);
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('sv-SE', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function audienceLabel(audience: string): string {
   switch (audience) {
@@ -122,32 +110,11 @@ const NotificationPreview = ({ title, previewText, category }: NotificationPrevi
 );
 
 // ---------------------------------------------------------------------------
-// History row
-// ---------------------------------------------------------------------------
-
-interface BatchRowProps {
-  batch: AdminNotificationBatchSummary;
-}
-
-const BatchRow = ({ batch }: BatchRowProps) => (
-  <tr>
-    <td className={styles.td}>{formatDate(batch.createdAt)}</td>
-    <td className={styles.td}>{batch.category}</td>
-    <td className={styles.td}>{audienceLabel(batch.audience)}</td>
-    <td className={styles.td}>{batch.title}</td>
-    <td className={styles.td}>{batch.recipientCount}</td>
-    <td className={styles.td}>{batch.reason}</td>
-  </tr>
-);
-
-// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 export default function AdminNotificationsPage() {
   const [form, setForm] = useState<SendFormState>(emptyForm());
-  const [batches, setBatches] = useState<AdminNotificationBatchSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -159,22 +126,6 @@ export default function AdminNotificationsPage() {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const res = await adminListNotifications();
-      if (!mountedRef.current) return;
-      setBatches(res.data.batches);
-    } catch {
-      // Non-fatal — show empty history.
-    } finally {
-      if (mountedRef.current) setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
 
   const handleFieldChange = (field: keyof SendFormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -236,7 +187,6 @@ export default function AdminNotificationsPage() {
       // Reset form with a new idempotency key to prevent accidental resend.
       setForm(emptyForm());
       setShowPreview(false);
-      await loadHistory();
     } catch (err) {
       if (!mountedRef.current) return;
       const message = err instanceof ApiError ? err.message : 'Okänt fel.';
@@ -423,37 +373,6 @@ export default function AdminNotificationsPage() {
         )}
         {errorMessage && (
           <p className={styles.error} role="alert">{errorMessage}</p>
-        )}
-      </section>
-
-      {/* Send history */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionHeading}>{t('notifications.historyTitle')}</h2>
-
-        {isLoading ? (
-          <p className={styles.loading}>{t('notifications.loading')}</p>
-        ) : batches.length === 0 ? (
-          <p className={styles.empty}>{t('notifications.noHistory')}</p>
-        ) : (
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th className={styles.th}>{t('notifications.createdAt')}</th>
-                  <th className={styles.th}>{t('notifications.categoryLabel')}</th>
-                  <th className={styles.th}>{t('notifications.audienceLabel')}</th>
-                  <th className={styles.th}>{t('notifications.titleLabel')}</th>
-                  <th className={styles.th}>{t('notifications.recipientCount')}</th>
-                  <th className={styles.th}>{t('notifications.reasonLabel')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((batch) => (
-                  <BatchRow key={batch.batchId} batch={batch} />
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </section>
     </main>

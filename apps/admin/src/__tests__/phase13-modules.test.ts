@@ -67,6 +67,7 @@ import {
   removeAdminChatMessageFromReport,
   resolveAdminChatReport,
 } from '../features/event-chat';
+import { adminSendNotification } from '../features/notifications';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -838,5 +839,61 @@ describe('event-chat module', () => {
       reason: 'Regelbrott',
     });
     expect(result.moderationState).toBe('removed');
+  });
+});
+
+describe('notifications module', () => {
+  it('sends via notifications-adminSend and wraps the result in the envelope', async () => {
+    callAdminMock.mockResolvedValue({
+      batchId: 'b1',
+      audience: 'members',
+      recipientCount: 42,
+      createdAt: '2026-07-06T10:00:00.000Z',
+    });
+    const response = await adminSendNotification({
+      category: 'admin_message',
+      audience: 'members',
+      title: 'Hej',
+      previewText: 'Kort',
+      body: 'Meddelande',
+      reason: 'Informationsutskick',
+      idempotencyKey: 'key-1',
+    });
+    expect(callAdminMock).toHaveBeenCalledWith('notifications-adminSend', {
+      category: 'admin_message',
+      audience: 'members',
+      title: 'Hej',
+      previewText: 'Kort',
+      body: 'Meddelande',
+      reason: 'Informationsutskick',
+      idempotencyKey: 'key-1',
+    });
+    expect(response).toEqual({
+      ok: true,
+      data: { batchId: 'b1', audience: 'members', recipientCount: 42, createdAt: '2026-07-06T10:00:00.000Z' },
+    });
+  });
+
+  it('drops undefined optionals and forwards the confirmation flag', async () => {
+    callAdminMock.mockResolvedValue({
+      batchId: 'b2',
+      audience: 'all_users',
+      recipientCount: 3,
+      createdAt: '2026-07-06T11:00:00.000Z',
+    });
+    await adminSendNotification({
+      category: 'admin_message',
+      audience: 'all_users',
+      title: 'Alla',
+      previewText: 'Kort',
+      body: 'Text',
+      reason: 'Viktigt',
+      idempotencyKey: 'key-2',
+      eventId: undefined,
+      confirmed: true,
+    });
+    const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect('eventId' in payload).toBe(false);
+    expect(payload.confirmed).toBe(true);
   });
 });
