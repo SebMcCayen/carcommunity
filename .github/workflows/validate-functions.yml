@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'functions/**'
-      - 'firebase/firebase.json'
+      - 'firebase.json'
       - '.github/workflows/validate-functions.yml'
   pull_request:
     # phase-* lets CI run on stacked PRs (base = previous phase branch),
@@ -13,7 +13,7 @@ on:
     branches: [main, 'phase-*']
     paths:
       - 'functions/**'
-      - 'firebase/firebase.json'
+      - 'firebase.json'
       - '.github/workflows/validate-functions.yml'
 
 permissions:

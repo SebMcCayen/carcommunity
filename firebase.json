@@ -1,24 +1,24 @@
 {
   "functions": [
     {
-      "source": "../functions",
+      "source": "functions",
       "codebase": "default",
       "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
     }
   ],
   "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "rules": "firebase/firestore.rules",
+    "indexes": "firebase/firestore.indexes.json"
   },
   "database": {
-    "rules": "database.rules.json"
+    "rules": "firebase/database.rules.json"
   },
   "storage": {
-    "rules": "storage.rules"
+    "rules": "firebase/storage.rules"
   },
   "hosting": {
     "target": "admin",
-    "public": "../apps/admin/dist",
+    "public": "apps/admin/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
