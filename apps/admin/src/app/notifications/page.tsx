@@ -24,7 +24,7 @@
  *  - Not included in audit: push tokens, full recipient lists, exact locations.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   AdminSendNotificationRequest,
