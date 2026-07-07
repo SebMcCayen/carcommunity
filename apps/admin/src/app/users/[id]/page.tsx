@@ -166,7 +166,7 @@ export default function UserDetailPage() {
           {t('users.detail.back')}
         </Link>
         <h1 className={styles.title}>
-          {detail?.displayName || t('users.unnamed')}
+          {detail?.displayName || (loading ? id : t('users.unnamed'))}
         </h1>
         <p className={styles.uid}>{id}</p>
       </header>

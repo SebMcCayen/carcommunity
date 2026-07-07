@@ -1,7 +1,8 @@
 /**
  * Admin users feature module (Phase 13l — Firebase migration).
  *
- * Replaces the last placeholder in the admin nav. Backed by Firebase:
+ * Replaces the last two placeholders in the admin nav (users list + detail).
+ * Backed by Firebase:
  *  - List/detail READS are direct rules-gated SDK reads on `users/{uid}`
  *    (`isAdmin()` in firestore.rules; the 13a precedent). Only the
  *    backend-managed, admin-safe fields are surfaced.
@@ -103,7 +104,8 @@ export interface SetAdminRoleResult {
 function toIso(value: unknown): string | null {
   if (value == null) return null;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().toISOString();
+    const date = (value as { toDate: () => Date }).toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
   }
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
