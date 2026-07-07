@@ -1,7 +1,7 @@
 package com.kungsbackacarcommunity.app.map
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.R
 import com.mapbox.common.MapboxOptions
@@ -33,14 +33,17 @@ fun MapRoute(
 ) {
     val context = LocalContext.current
 
-    // Read once per composition entry; empty by default (no token in CI).
-    remember(context) {
+    // Apply the access token as a one-shot side effect; empty by default (no
+    // token in CI), in which case the global token is left untouched.
+    LaunchedEffect(Unit) {
         val token = context.getString(R.string.mapbox_access_token)
         if (token.isNotBlank()) {
             MapboxOptions.accessToken = token
         }
-        token
     }
 
-    MapScreen(ownMarker = MapMarkers.ownMarker(longitude = null, latitude = null), onBack = onBack)
+    // No live own-position coordinate is exposed by the live seam yet, so pass a
+    // null marker directly. MapMarkers.ownMarker is used once a real coordinate
+    // is available.
+    MapScreen(ownMarker = null, onBack = onBack)
 }

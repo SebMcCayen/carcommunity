@@ -11,7 +11,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -23,6 +25,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
 
@@ -64,7 +67,11 @@ fun MapScreen(
             )
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                MapboxMapView(camera = camera, ownMarker = ownMarker)
+                MapboxMapView(
+                    camera = camera,
+                    ownMarker = ownMarker,
+                    markerColor = MaterialTheme.colorScheme.primary.toArgb(),
+                )
             }
 
             if (onBack != null) {
@@ -79,11 +86,27 @@ fun MapScreen(
 /**
  * The Mapbox [MapView] itself, bridged into Compose. Loads the standard style,
  * applies the camera, and (best-effort) draws the own marker once the style is
- * ready. The view's start/stop/destroy lifecycle is driven from a
- * [DisposableEffect] so the native map is torn down with the composition.
+ * ready.
+ *
+ * MapView v11 self-observes the host lifecycle via its lifecycle plugin, so no
+ * [androidx.compose.runtime.DisposableEffect] is needed to start/stop it; the
+ * [AndroidView] `onRelease` callback explicitly calls `onDestroy()` to tear the
+ * native map down when the composition leaves, so nothing leaks if the plugin
+ * is not attached.
+ *
+ * @param markerColor ARGB color for the own-marker circle, sourced from the
+ * theme so it stays consistent with the app's palette.
  */
 @Composable
-private fun MapboxMapView(camera: MapCameraPosition, ownMarker: MapMarker?) {
+private fun MapboxMapView(
+    camera: MapCameraPosition,
+    ownMarker: MapMarker?,
+    markerColor: Int,
+) {
+    // Holds the annotation manager created after the style loads, so the update
+    // lambda can clear/recreate the own marker when [ownMarker] changes.
+    val managerHolder = remember { arrayOfNulls<CircleAnnotationManager>(1) }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -94,20 +117,14 @@ private fun MapboxMapView(camera: MapCameraPosition, ownMarker: MapMarker?) {
                         zoom(camera.zoom)
                     },
                 )
+                // Create the circle-annotation manager once a style is present.
+                // No image asset needed (a circle annotation), so this never
+                // fails on a missing drawable and stays crash-free even when
+                // tiles cannot load (no token). The marker itself is drawn from
+                // the update lambda so it tracks [ownMarker] changes.
                 mapboxMap.loadStyle(Style.STANDARD) {
-                    // Draw the caller's own marker once a style is present. No
-                    // image asset needed (a circle annotation), so this never
-                    // fails on a missing drawable and stays crash-free even
-                    // when tiles cannot load (no token).
-                    ownMarker?.let { marker ->
-                        val manager = annotations.createCircleAnnotationManager()
-                        manager.create(
-                            CircleAnnotationOptions()
-                                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                                .withCircleRadius(8.0)
-                                .withCircleColor("#1E88E5"),
-                        )
-                    }
+                    managerHolder[0] = annotations.createCircleAnnotationManager()
+                    drawOwnMarker(managerHolder[0], ownMarker, markerColor)
                 }
             }
         },
@@ -118,12 +135,37 @@ private fun MapboxMapView(camera: MapCameraPosition, ownMarker: MapMarker?) {
                     zoom(camera.zoom)
                 },
             )
+            // Redraw when [ownMarker] (or its coordinate) changes; a no-op until
+            // the style has loaded and the manager exists.
+            drawOwnMarker(managerHolder[0], ownMarker, markerColor)
         },
-        // MapView v11 self-observes the host lifecycle via its lifecycle plugin;
-        // onRelease still explicitly tears the native map down when the
-        // composition leaves, so nothing leaks if the plugin is not attached.
-        onRelease = { mapView -> mapView.onDestroy() },
+        onRelease = { mapView ->
+            managerHolder[0] = null
+            mapView.onDestroy()
+        },
     )
+}
+
+/**
+ * Clears any existing own-marker annotation and, when [ownMarker] is non-null,
+ * draws a fresh circle for it. No-op until [manager] is available (i.e. the
+ * style has finished loading).
+ */
+private fun drawOwnMarker(
+    manager: CircleAnnotationManager?,
+    ownMarker: MapMarker?,
+    markerColor: Int,
+) {
+    manager ?: return
+    manager.deleteAll()
+    ownMarker?.let { marker ->
+        manager.create(
+            CircleAnnotationOptions()
+                .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                .withCircleRadius(8.0)
+                .withCircleColor(markerColor),
+        )
+    }
 }
 
 @Preview(name = "Map – no fix", showBackground = true)
