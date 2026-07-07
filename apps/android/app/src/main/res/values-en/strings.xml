@@ -319,6 +319,17 @@
     <string name="savedDrives_saveSuccess">Drive saved.</string>
     <string name="savedDrives_closeButton">Close</string>
     <string name="savedDrives_memberRequired">An active membership is required to save drives.</string>
+    <string name="savedDrives_recordAction">Record drive</string>
+    <string name="savedDrives_recordTitle">Record drive</string>
+    <string name="savedDrives_recordStart">Start recording</string>
+    <string name="savedDrives_recordStop">Stop recording</string>
+    <string name="savedDrives_recordElapsed">Time</string>
+    <string name="savedDrives_recordPoints">Points</string>
+    <string name="savedDrives_recordTitleLabel">Title (optional)</string>
+    <string name="savedDrives_recordPermissionRationale">Location access is required to record a drive.</string>
+    <string name="savedDrives_recordPermissionDenied">Location access was denied. Allow location to record a drive.</string>
+    <string name="savedDrives_recordLocationUnavailable">Location is not available on this device.</string>
+    <string name="savedDrives_recordBack">Back</string>
     <string name="garage_screenTitle">My Garage</string>
     <string name="garage_detailTitle">Vehicle info</string>
     <string name="garage_formTitleCreate">Add vehicle</string>

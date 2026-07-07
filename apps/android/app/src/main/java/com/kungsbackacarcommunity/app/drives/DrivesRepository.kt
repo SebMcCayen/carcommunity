@@ -12,12 +12,21 @@ sealed interface DrivesState {
 }
 
 /**
- * Saved-drives access (Phase 12 slice 12, read side). Firebase-free for
- * testability. Reads are owner-scoped (`rides.userId == uid`, rules-gated);
- * the only mutation is delete via the `drives-delete` callable.
+ * Saved-drives access (Phase 12 slice 12). Firebase-free for testability.
+ * Reads are owner-scoped (`rides.userId == uid`, rules-gated); mutations are
+ * save (via the member-gated `drives-save` callable) and delete (via
+ * `drives-delete`).
  */
 interface DrivesRepository {
     fun observeDrives(uid: String): Flow<DrivesState>
+
+    /**
+     * Saves a recorded drive via the `drives-save` callable. The [request] is
+     * the exact callable payload produced by
+     * [DriveRecorder.buildSaveRequest]; the backend computes all stats and is
+     * idempotent per `sourceSessionId`.
+     */
+    suspend fun saveDrive(request: Map<String, Any?>)
 
     suspend fun deleteDrive(rideId: String)
 }

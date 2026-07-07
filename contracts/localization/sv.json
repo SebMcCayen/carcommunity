@@ -353,7 +353,18 @@
     "noDriveSaved": "Ingen körning sparades.",
     "saveSuccess": "Körningen har sparats.",
     "closeButton": "Stäng",
-    "memberRequired": "Aktivt medlemskap krävs för att spara körningar."
+    "memberRequired": "Aktivt medlemskap krävs för att spara körningar.",
+    "recordAction": "Spela in körning",
+    "recordTitle": "Spela in körning",
+    "recordStart": "Starta inspelning",
+    "recordStop": "Stoppa inspelning",
+    "recordElapsed": "Tid",
+    "recordPoints": "Punkter",
+    "recordTitleLabel": "Titel (valfritt)",
+    "recordPermissionRationale": "Platsåtkomst krävs för att spela in en körning.",
+    "recordPermissionDenied": "Platsåtkomst nekades. Tillåt plats för att spela in en körning.",
+    "recordLocationUnavailable": "Plats är inte tillgänglig på den här enheten.",
+    "recordBack": "Tillbaka"
   },
   "garage": {
     "screenTitle": "Mitt garage",

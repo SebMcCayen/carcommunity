@@ -38,6 +38,23 @@ class FirebaseDrivesRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override suspend fun saveDrive(request: Map<String, Any?>): Unit =
+        suspendCancellableCoroutine { continuation ->
+            functions
+                .getHttpsCallable(SAVE_DRIVE)
+                .call(request)
+                .addOnCompleteListener { task ->
+                    if (!continuation.isActive) return@addOnCompleteListener
+                    if (task.isSuccessful) {
+                        continuation.resume(Unit)
+                    } else {
+                        continuation.resumeWithException(
+                            task.exception ?: IllegalStateException("$SAVE_DRIVE failed without a cause"),
+                        )
+                    }
+                }
+        }
+
     override suspend fun deleteDrive(rideId: String): Unit =
         suspendCancellableCoroutine { continuation ->
             functions
@@ -59,6 +76,7 @@ class FirebaseDrivesRepository private constructor(
         private const val REGION = "europe-west1"
         private const val RIDES = "rides"
         private const val FIELD_USER_ID = "userId"
+        private const val SAVE_DRIVE = "drives-save"
         private const val DELETE_DRIVE = "drives-delete"
 
         fun createIfAvailable(context: Context): DrivesRepository? {
