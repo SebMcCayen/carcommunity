@@ -29,8 +29,11 @@ fun BlockingRoute(
         actionStatus = actionStatus,
         onUnblock = { targetUserId ->
             scope.launch {
-                coordinator.unblock(targetUserId)
+                // Clear any prior terminal status before starting a new action, then
+                // let this action's Done/Failed status persist so the screen can
+                // surface failures. The list observer reflects a successful removal.
                 coordinator.reset()
+                coordinator.unblock(targetUserId)
             }
         },
         onBack = onBack,

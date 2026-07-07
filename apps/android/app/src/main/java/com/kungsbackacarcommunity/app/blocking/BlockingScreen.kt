@@ -51,11 +51,33 @@ fun BlockingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onBack) {
+                        Text(stringResource(R.string.profile_back))
+                    }
+                }
+            }
+
+            item {
                 Text(
                     text = stringResource(R.string.blocking_blockedUsersTitle),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
+            }
+
+            if (actionStatus == BlockActionStatus.Failed) {
+                item {
+                    Text(
+                        text = stringResource(R.string.blocking_errorGeneric),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
             when (state) {
