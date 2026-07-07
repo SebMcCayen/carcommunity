@@ -179,3 +179,48 @@ export function qualifiedEventBadges(attendanceCount: number): BadgeKey[] {
   }
   return keys;
 }
+
+// ---------------------------------------------------------------------------
+// Admin aggregate summary (Phase 18b)
+// ---------------------------------------------------------------------------
+
+/** Recent-window for the admin badge summary (legacy RECENT_BADGE_WINDOW_DAYS). */
+export const RECENT_BADGE_WINDOW_DAYS = 30;
+
+/** One row of the admin badge summary — aggregate counts only, no user data. */
+export interface AdminBadgeAggregateItem {
+  key: BadgeKey;
+  name: string;
+  totalCount: number;
+  recentCount: number;
+}
+
+/**
+ * Pure aggregation of badge awards into per-key totals + recent (last 30 days)
+ * counts, ordered by the catalog. Mirrors the legacy SQL groupBy
+ * (badge-service.getAdminBadgeSummary) over the Firestore collectionGroup.
+ * Unknown/legacy keys are ignored (only catalog keys are reported).
+ */
+export function buildAdminBadgeSummary(
+  awards: ReadonlyArray<{ badgeKey: string; awardedAtMillis: number | null }>,
+  nowMillis: number,
+): AdminBadgeAggregateItem[] {
+  const cutoff = nowMillis - RECENT_BADGE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const catalogKeys = new Set<string>(BADGE_CATALOG_ORDER);
+  const total = new Map<string, number>();
+  const recent = new Map<string, number>();
+  for (const award of awards) {
+    // Ignore unknown/legacy keys (matches the docstring; keeps the maps small).
+    if (!catalogKeys.has(award.badgeKey)) continue;
+    total.set(award.badgeKey, (total.get(award.badgeKey) ?? 0) + 1);
+    if (award.awardedAtMillis != null && award.awardedAtMillis >= cutoff) {
+      recent.set(award.badgeKey, (recent.get(award.badgeKey) ?? 0) + 1);
+    }
+  }
+  return BADGE_CATALOG_ORDER.map((key) => ({
+    key,
+    name: BADGE_CATALOG[key].name,
+    totalCount: total.get(key) ?? 0,
+    recentCount: recent.get(key) ?? 0,
+  }));
+}

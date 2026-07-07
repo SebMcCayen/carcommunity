@@ -253,6 +253,15 @@
       "source": "services/api/src/lib/badge-service.ts (awardHelpfulMemberByAdmin)"
     },
     {
+      "name": "badges.adminSummary",
+      "domain": "badges",
+      "description": "Returns aggregate badge award counts per catalog key (totalCount + last-30-day recentCount), ordered by the catalog. Aggregate-only — no leaderboard or individual user data. Badges live at users/{uid}/badges/{badgeKey} (owner-only, NOT admin-readable via rules), so the summary is computed with the Admin SDK over a collectionGroup scan. Ports the legacy SQL groupBy. Deployed via grouped export as badges-adminSummary (functions/src/badges/adminSummary.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/badge-service.ts (getAdminBadgeSummary)"
+    },
+    {
       "name": "points.adminAdjust",
       "domain": "points",
       "description": "Admin Kronpoäng adjustment (credit or debit): positive integer amount, mandatory reason (<=500), debits never overdraft, only an owner may adjust another owner. Runs through the internal transaction primitives and writes an adminAuditEvents record. Deployed via grouped export as points-adminAdjust (functions/src/points/adminPoints.ts).",
