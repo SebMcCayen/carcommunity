@@ -202,6 +202,8 @@ export default function SubscriptionPage() {
             id="sub-reason"
             className={styles.input}
             type="text"
+            required
+            autoComplete="off"
             maxLength={500}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
