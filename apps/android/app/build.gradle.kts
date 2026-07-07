@@ -84,6 +84,9 @@ dependencies {
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)
 
+    // Google Play Billing — subscriptions (Phase 12 slice 24)
+    implementation(libs.billing)
+
     // Unit tests
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

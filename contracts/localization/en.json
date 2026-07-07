@@ -142,7 +142,19 @@
     "purchaseHandledExternally": "Purchases are handled via the App Store or Google Play in a later version.",
     "accessLimitedBySuspension": "Your access may be restricted in the event of suspension or violations.",
     "currentEntitlementMember": "You have an active membership.",
-    "currentEntitlementFree": "No active membership."
+    "currentEntitlementFree": "No active membership.",
+    "screenTitle": "Membership",
+    "subscribeAction": "Subscribe to monthly membership",
+    "statusConnecting": "Connecting to the store…",
+    "statusReady": "Ready to subscribe.",
+    "statusPurchasing": "Completing purchase…",
+    "statusVerifying": "Verifying your purchase…",
+    "statusSuccess": "Purchase verified. Membership is active.",
+    "statusUnavailable": "Subscriptions are unavailable on this device.",
+    "errorConnection": "Could not connect to the store. Try again later.",
+    "errorProductUnavailable": "This membership product is not available right now.",
+    "errorPurchase": "The purchase could not be completed.",
+    "errorVerification": "We could not verify your purchase. It has not been charged for membership yet."
   },
   "profile": {
     "title": "Profile",

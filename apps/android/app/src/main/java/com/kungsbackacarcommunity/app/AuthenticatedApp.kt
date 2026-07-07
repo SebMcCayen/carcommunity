@@ -76,6 +76,9 @@ import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
+import com.kungsbackacarcommunity.app.subscription.BillingRepository
+import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
+import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -123,6 +126,8 @@ fun AuthenticatedApp(
     accountDeletionCoordinator: AccountDeletionCoordinator?,
     partnerStatsRepository: PartnerStatsRepository?,
     partnerStatsCoordinator: PartnerStatsCoordinator?,
+    billingRepository: BillingRepository?,
+    subscriptionVerifier: SubscriptionVerifier?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -430,6 +435,19 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Subscription -> {
+                    if (billingRepository != null) {
+                        SubscriptionRoute(
+                            billing = billingRepository,
+                            verifier = subscriptionVerifier,
+                            isActiveMember = profile?.activeMember == true,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Home -> {
                     HomeScreen(
                         displayName = profile?.displayName ?: authDisplayName,
@@ -541,6 +559,14 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Subscriptions: the member purchase path; reachable when
+                        // billing is available (Play Billing needs no Firebase).
+                        onOpenSubscription =
+                            if (billingRepository != null) {
+                                { destination = MainDestination.Subscription }
+                            } else {
+                                null
+                            },
                         // Partner application: any authenticated user may apply.
                         onOpenPartnerApplication =
                             if (partnerApplicationCoordinator != null) {
@@ -609,6 +635,7 @@ private enum class MainDestination {
     Billboards,
     AccountDeletion,
     PartnerStats,
+    Subscription,
 }
 
 @Composable

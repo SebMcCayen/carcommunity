@@ -142,7 +142,19 @@
     "purchaseHandledExternally": "Köp hanteras via App Store eller Google Play i en senare version.",
     "accessLimitedBySuspension": "Din åtkomst kan begränsas vid avstängning eller regelbrott.",
     "currentEntitlementMember": "Du har ett aktivt medlemskap.",
-    "currentEntitlementFree": "Inget aktivt medlemskap."
+    "currentEntitlementFree": "Inget aktivt medlemskap.",
+    "screenTitle": "Medlemskap",
+    "subscribeAction": "Teckna månadsmedlemskap",
+    "statusConnecting": "Ansluter till butiken…",
+    "statusReady": "Redo att teckna medlemskap.",
+    "statusPurchasing": "Slutför köpet…",
+    "statusVerifying": "Verifierar ditt köp…",
+    "statusSuccess": "Köpet är verifierat. Medlemskapet är aktivt.",
+    "statusUnavailable": "Prenumerationer är inte tillgängliga på den här enheten.",
+    "errorConnection": "Kunde inte ansluta till butiken. Försök igen senare.",
+    "errorProductUnavailable": "Den här medlemskapsprodukten är inte tillgänglig just nu.",
+    "errorPurchase": "Köpet kunde inte slutföras.",
+    "errorVerification": "Vi kunde inte verifiera ditt köp. Det har ännu inte debiterats för medlemskap."
   },
   "profile": {
     "title": "Profil",
