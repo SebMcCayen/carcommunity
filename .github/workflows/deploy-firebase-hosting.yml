@@ -22,6 +22,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Ensure WIF secrets are configured
+        # Fail loudly with the actual cause — google-github-actions/auth's own
+        # error ("must specify exactly one of ...") reads like a workflow bug
+        # when the real problem is the missing one-time WIF provisioning.
+        env:
+          WIF_PROVIDER: ${{ secrets.WIF_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$WIF_PROVIDER" ] || [ -z "$WIF_SERVICE_ACCOUNT" ]; then
+            echo "::error::WIF_PROVIDER / WIF_SERVICE_ACCOUNT are not set in the 'production' environment. Run scripts/setup-wif.sh (one-time GCP provisioning) and store both secrets — see docs/deployment.md."
+            exit 1
+          fi
+
       - name: Authenticate to Google Cloud via Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
