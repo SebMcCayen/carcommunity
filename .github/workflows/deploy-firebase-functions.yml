@@ -34,6 +34,14 @@ jobs:
             echo "::error::WIF_PROVIDER / WIF_SERVICE_ACCOUNT are not set in the 'production' environment. Run scripts/setup-wif.sh (one-time GCP provisioning) and store both secrets — see docs/deployment.md."
             exit 1
           fi
+          # The WIF provider only exchanges tokens for refs/heads/main
+          # (scripts/setup-wif.sh attribute condition) — a workflow_dispatch
+          # from any other ref would fail at auth with an opaque permissions
+          # error, so mirror that restriction here.
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Production deploys only run from main (WIF token exchange is restricted to refs/heads/main); got $GITHUB_REF."
+            exit 1
+          fi
 
       - name: Authenticate to Google Cloud via Workload Identity Federation
         uses: google-github-actions/auth@v3
