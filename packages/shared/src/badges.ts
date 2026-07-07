@@ -62,6 +62,21 @@ export interface BadgeSummary {
   isAutomatic: boolean;
 }
 
+/**
+ * The `helpful_member` badge definition — the frontend source of truth
+ * (mirrors the backend catalog in functions/src/badges/badge-core.ts). It is
+ * the only manually awardable badge; the admin award callable returns just
+ * `{ alreadyAwarded }` (badges are owner-only, so no award document is read
+ * back), so frontends shape the award response from this constant.
+ */
+export const HELPFUL_MEMBER_BADGE: BadgeSummary = {
+  key: 'helpful_member',
+  name: 'Hjälpsam medlem',
+  description: 'Har bidragit positivt och hjälpsamt i communityn.',
+  iconIdentifier: 'badge_helpful_member',
+  isAutomatic: false,
+};
+
 // ---------------------------------------------------------------------------
 // Awarded badge (returned to the user)
 // ---------------------------------------------------------------------------
