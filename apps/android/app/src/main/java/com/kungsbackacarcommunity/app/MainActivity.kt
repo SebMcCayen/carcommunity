@@ -16,6 +16,7 @@ import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
+import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
         val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
+        val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
             FirebasePartnerApplicationRepository.createIfAvailable(applicationContext)
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
                         badgesRepository = badgesRepository,
+                        drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,

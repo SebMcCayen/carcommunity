@@ -311,6 +311,7 @@
   },
   "savedDrives": {
     "screenTitle": "My drives",
+    "loading": "Loading drives...",
     "detailTitle": "Drive details",
     "empty": "No saved drives yet.",
     "error": "Could not load drives. Please try again.",
