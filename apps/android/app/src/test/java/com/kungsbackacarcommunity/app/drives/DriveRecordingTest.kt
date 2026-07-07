@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,6 +75,38 @@ class DriveRecordingTest {
         assertFalse(request.containsKey("title"))
         assertFalse(request.containsKey("routePoints"))
         assertEquals("sess-2", request["sourceSessionId"])
+    }
+
+    @Test
+    fun `buildSaveRequest uses the last fix time as endedAt when points exist`() {
+        val recorder = DriveRecorder(sourceSessionId = "sess-end", startedAtMillis = 0L)
+        recorder.addPoint(RecordedPoint(57.0, 12.0, 0L))
+        recorder.addPoint(RecordedPoint(57.5, 12.5, 60_000L))
+
+        // Wall clock runs ahead of the last GPS fix (Location.time vs
+        // System.currentTimeMillis skew); endedAt must follow the last fix.
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 95_000L)
+        assertEquals("1970-01-01T00:01:00Z", request["endedAt"])
+    }
+
+    @Test
+    fun `buildSaveRequest clamps endedAt up to the last fix when the wall clock lags`() {
+        val recorder = DriveRecorder(sourceSessionId = "sess-clamp", startedAtMillis = 0L)
+        recorder.addPoint(RecordedPoint(57.0, 12.0, 60_000L))
+
+        // Even if the caller passes an earlier stop moment, endedAt never
+        // precedes the last accepted point.
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 10_000L)
+        assertEquals("1970-01-01T00:01:00Z", request["endedAt"])
+    }
+
+    @Test
+    fun `buildSaveRequest falls back to the wall clock for summary-only saves`() {
+        val recorder = DriveRecorder(sourceSessionId = "sess-summary", startedAtMillis = 0L)
+        // No points accumulated — endedAt comes straight from the wall clock.
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 42_000L)
+        assertFalse(request.containsKey("routePoints"))
+        assertEquals("1970-01-01T00:00:42Z", request["endedAt"])
     }
 
     @Test
@@ -160,6 +193,62 @@ class DriveRecordingTest {
         c.discard()
         assertNull(repo.lastRequest)
     }
+
+    @Test
+    fun `save on cancellation restores the prompt and rethrows`() = runTest {
+        val repo = CancellingFakeRepository()
+        val c = DriveRecordingCoordinator(repo, "sess")
+        c.start()
+        c.stop()
+        var rethrown = false
+        try {
+            c.save(title = "Trip")
+        } catch (cancellation: CancellationException) {
+            rethrown = true
+        }
+        assertTrue("CancellationException must propagate", rethrown)
+        // Cancellation is not a save failure: the prompt is restored, not Failed.
+        assertTrue(c.state.value is RecordingState.PromptSave)
+    }
+
+    @Test
+    fun `successful save releases the recorder so a repeat save is a no-op`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        val c = DriveRecordingCoordinator(repo, "sess")
+        c.start()
+        c.addFix(57.0, 12.0, 1_000L)
+        c.stop()
+        c.save(title = "Trip")
+        assertEquals(RecordingState.Saved, c.state.value)
+
+        // Recorder was released on success; a second save can't run and the
+        // terminal state is preserved for the UI.
+        repo.lastRequest = null
+        c.save(title = "Again")
+        assertNull(repo.lastRequest)
+        assertEquals(RecordingState.Saved, c.state.value)
+    }
+
+    @Test
+    fun `discard releases the recorder so a subsequent save is a no-op`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        val c = DriveRecordingCoordinator(repo, "sess")
+        c.start()
+        c.stop()
+        c.discard()
+        c.save(title = "Trip")
+        assertNull(repo.lastRequest)
+        assertEquals(RecordingState.Discarded, c.state.value)
+    }
+}
+
+private class CancellingFakeRepository : DrivesRepository {
+    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+    override suspend fun saveDrive(request: Map<String, Any?>): Unit =
+        throw CancellationException("scope cancelled")
+
+    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
 }
 
 private class RecordingFakeRepository(private val shouldFail: Boolean) : DrivesRepository {

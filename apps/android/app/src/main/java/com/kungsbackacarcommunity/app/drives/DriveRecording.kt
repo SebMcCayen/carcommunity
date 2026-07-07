@@ -113,16 +113,24 @@ class DriveRecorder(
      * is trimmed and capped at [DRIVE_TITLE_MAX_LENGTH]. `sourceSessionId` is
      * always included for idempotency.
      *
-     * @param endedAtMillis the stop moment; clamped to at least the last fix's
-     *   timestamp so clock skew (route points use Location.time, the stop
-     *   moment uses System.currentTimeMillis) can never make endedAt precede
-     *   the last accepted point.
+     * @param endedAtMillis the wall-clock stop moment, used verbatim only for
+     *   summary-only saves (no route points). When points exist the end time is
+     *   taken from the last accepted fix's timestamp instead, so `endedAt` stays
+     *   consistent with the last route point: route points use `Location.time`
+     *   while the stop moment uses `System.currentTimeMillis`, and the two
+     *   clocks can disagree. As a floor the value is still clamped to at least
+     *   the last fix so it can never precede the last accepted point.
      */
     fun buildSaveRequest(
         title: String?,
         endedAtMillis: Long,
     ): Map<String, Any?> {
-        val endedAt = endedAtMillis.coerceAtLeast(lastPointMillis)
+        // With route points, the last fix's timestamp is the authoritative end
+        // time (same clock as the points). Without points, fall back to the
+        // wall clock. Either way clamp to the last fix so endedAt never precedes
+        // the last accepted point.
+        val basis = if (points.isNotEmpty()) lastPointMillis else endedAtMillis
+        val endedAt = basis.coerceAtLeast(lastPointMillis)
         val request = LinkedHashMap<String, Any?>()
         request["startedAt"] = Instant.ofEpochMilli(startedAtMillis).toString()
         request["endedAt"] = Instant.ofEpochMilli(endedAt).toString()
