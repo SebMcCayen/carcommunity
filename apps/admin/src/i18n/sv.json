@@ -201,6 +201,11 @@
       "revoked": "Återkallad",
       "cancelled": "Avbruten"
     },
+    "platform": {
+      "manual": "Manuell",
+      "apple": "Apple",
+      "google": "Google"
+    },
     "actionTitle": "Åtgärd",
     "reasonLabel": "Orsak",
     "reasonPlaceholder": "Ange orsak (loggas)…",

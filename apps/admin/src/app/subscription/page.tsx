@@ -42,6 +42,12 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'subscription.status.cancelled',
 };
 
+const PLATFORM_LABELS: Record<string, string> = {
+  manual: 'subscription.platform.manual',
+  apple: 'subscription.platform.apple',
+  google: 'subscription.platform.google',
+};
+
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString('sv-SE') : '–';
 }
@@ -54,6 +60,11 @@ function entitlementLabel(entitlement: string): string {
 function statusLabel(status: string): string {
   const key = STATUS_LABELS[status];
   return key ? t(key) : status;
+}
+
+function platformLabel(platform: string): string {
+  const key = PLATFORM_LABELS[platform];
+  return key ? t(key) : platform;
 }
 
 export default function SubscriptionPage() {
@@ -87,6 +98,9 @@ export default function SubscriptionPage() {
 
   const handleLookup = (e: React.FormEvent) => {
     e.preventDefault();
+    // Block a lookup while a grant/revoke is in flight — otherwise its refresh
+    // (load after the action) can race/overwrite the manual lookup.
+    if (actingRef.current) return;
     const uid = userId.trim();
     if (uid) void load(uid);
   };
@@ -140,7 +154,11 @@ export default function SubscriptionPage() {
             onChange={(e) => setUserId(e.target.value)}
             placeholder={t('subscription.userIdPlaceholder')}
           />
-          <button type="submit" className={styles.primaryButton} disabled={!userId.trim() || loading}>
+          <button
+            type="submit"
+            className={styles.primaryButton}
+            disabled={!userId.trim() || loading || acting}
+          >
             {loading ? t('subscription.lookupLoading') : t('subscription.lookup')}
           </button>
         </div>
@@ -168,7 +186,7 @@ export default function SubscriptionPage() {
               {summary.subscription ? statusLabel(summary.subscription.status) : '–'}
             </dd>
             <dt>{t('subscription.platformLabel')}</dt>
-            <dd>{summary.subscription?.platform ?? '–'}</dd>
+            <dd>{summary.subscription ? platformLabel(summary.subscription.platform) : '–'}</dd>
             <dt>{t('subscription.expiresLabel')}</dt>
             <dd>{formatDate(summary.subscription?.expiresAt ?? null)}</dd>
           </dl>

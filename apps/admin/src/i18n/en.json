@@ -201,6 +201,11 @@
       "revoked": "Revoked",
       "cancelled": "Cancelled"
     },
+    "platform": {
+      "manual": "Manual",
+      "apple": "Apple",
+      "google": "Google"
+    },
     "actionTitle": "Action",
     "reasonLabel": "Reason",
     "reasonPlaceholder": "Enter a reason (logged)…",
