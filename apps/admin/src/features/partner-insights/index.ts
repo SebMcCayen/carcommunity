@@ -47,7 +47,7 @@ interface BackendMetric {
 
 interface BackendSummary {
   companyId: string;
-  periodType: string;
+  periodType: BackendPeriodType;
   periodStart: string;
   metrics: BackendMetric[];
 }

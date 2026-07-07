@@ -962,22 +962,30 @@ describe('partner-insights module', () => {
       periodStart: '2026-06-01',
       metrics: [],
     });
+    // Capture the clock in a window around the call: periodToBucket reads its
+    // own `new Date()` internally, so at a UTC month boundary the reference
+    // month could be `before`'s or `after`'s. Accepting either avoids a flaky
+    // failure if the month rolls over mid-test.
+    const before = new Date();
     await adminGetPartnerInsightsSummary('co1', 'previous_month');
+    const after = new Date();
     const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
     expect(payload.periodType).toBe('month');
     expect(typeof payload.date).toBe('string');
 
-    // The sent date must fall within the PREVIOUS calendar month relative to now.
-    const now = new Date();
-    // Compute the expected previous month, borrowing across the year boundary.
-    let expectedYear = now.getUTCFullYear();
-    let expectedMonth = now.getUTCMonth() - 1;
-    if (expectedMonth < 0) {
-      expectedMonth = 11;
-      expectedYear -= 1;
-    }
+    const prevMonthOf = (d: Date) => {
+      let year = d.getUTCFullYear();
+      let month = d.getUTCMonth() - 1;
+      if (month < 0) {
+        month = 11;
+        year -= 1;
+      }
+      return { year, month };
+    };
     const sent = new Date(payload.date as string);
-    expect(sent.getUTCFullYear()).toBe(expectedYear);
-    expect(sent.getUTCMonth()).toBe(expectedMonth);
+    const candidates = [prevMonthOf(before), prevMonthOf(after)];
+    expect(
+      candidates.some((c) => sent.getUTCFullYear() === c.year && sent.getUTCMonth() === c.month),
+    ).toBe(true);
   });
 });
