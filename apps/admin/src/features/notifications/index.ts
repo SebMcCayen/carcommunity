@@ -61,7 +61,6 @@ export { ApiError, ACTIVE_NOTIFICATION_CATEGORIES, ADMIN_NOTIFICATION_AUDIENCES,
  */
 export async function adminSendNotification(
   request: AdminSendNotificationRequest,
-  _token?: string,
 ): Promise<AdminSendNotificationResponse> {
   // Drop undefined optionals so the backend's strict schema never sees them.
   const payload = Object.fromEntries(

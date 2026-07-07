@@ -4,12 +4,15 @@
  * Admin Notifications management page.
  *
  * Allows admins to:
- *  - View notification send history
  *  - Create a new admin notification
  *  - Select a supported audience
  *  - Preview mobile appearance before sending
  *  - Enter required reason (audit-logged)
  *  - Confirm sending (required for all_users/free_users)
+ *
+ * This is a send-only page. The notification send-history view was
+ * intentionally removed because the underlying `adminNotificationBatches`
+ * collection is backend-only and not exposed to the admin client.
  *
  * Security and privacy rules:
  *  - Backend validates all recipient eligibility and access control.
