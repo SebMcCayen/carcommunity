@@ -82,6 +82,24 @@
       "source": "docs/migration/backend-domain-mapping.md (Saved drives -> Firestore + Cloud Storage)"
     },
     {
+      "name": "blocking.block",
+      "domain": "blocking",
+      "description": "Blocks a target user for the caller. Directional and idempotent: re-blocking keeps the original createdAt; self-blocking is invalid-argument; blocking a missing/deleted user is not-found (never permission-denied, so deletion can't be probed). Writes userBlocks/{callerUid}/blocked/{targetUid} with the denormalized displayName. Returns the block summary plus shouldRefreshMarkers. Ports services/api/src/lib/blocking-service.ts. Deployed via grouped export as blocking-block (functions/src/blocking/manageBlocks.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/blocking-service.ts (blockUser)"
+    },
+    {
+      "name": "blocking.unblock",
+      "domain": "blocking",
+      "description": "Removes the caller's block against a target user. Idempotent: unblocking a non-existent block returns { unblocked: false } rather than erroring; self is always { unblocked: false }. Deletes userBlocks/{callerUid}/blocked/{targetUid}. Ports services/api/src/lib/blocking-service.ts. Deployed via grouped export as blocking-unblock (functions/src/blocking/manageBlocks.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/blocking-service.ts (unblockUser)"
+    },
+    {
       "name": "crownHunt.submitClaim",
       "domain": "crownHunt",
       "description": "Submits a Kronjakt point claim with the full ported anti-fraud chain: feature flag, entitlement, idempotent replay (SHA-256-scoped key = claim doc ID), point availability, server-side geofence with accuracy buffer, <=1.4 m/s stopped-speed check, position freshness (<=60 s), repeat rules (once/daily/weekly), 10/day limit, rate/velocity/jump risk scoring (>=60 -> risk_review, no points). Eligibility failures return result codes with Swedish messages, not errors. Awards commit atomically with the claim record via the Kronpoäng ledger transaction. Deployed via grouped export as crownHunt-submitClaim (functions/src/crownHunt/submitClaim.ts).",
