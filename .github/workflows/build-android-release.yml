@@ -69,7 +69,9 @@ jobs:
           # Decode to file — never echo the contents. base64 -d tolerates line wrapping.
           printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 -d > apps/android/app/google-services.json
           # Guard against a wrong/corrupt secret without printing the file (jq -e sets exit code).
-          jq -e '.client[0].client_info.android_client_info.package_name == "com.kungsbackacarcommunity.app"' \
+          # `client` may hold multiple entries in any order, so match ANY Android
+          # client with the expected package name rather than assuming index 0.
+          jq -e 'any(.client[]?; .client_info.android_client_info.package_name == "com.kungsbackacarcommunity.app")' \
             apps/android/app/google-services.json > /dev/null \
             || { echo "::error::Decoded google-services.json is not valid for com.kungsbackacarcommunity.app."; exit 1; }
           echo "google-services.json materialized and validated."
