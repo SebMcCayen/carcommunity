@@ -55,9 +55,11 @@ export { ApiError, ACTIVE_NOTIFICATION_CATEGORIES, ADMIN_NOTIFICATION_AUDIENCES,
  * Requires admin or owner (verified server-side). Reason + idempotencyKey are
  * mandatory; all_users/free_users require `confirmed: true`.
  *
- * The callable's strict schema rejects unknown keys, so only defined request
- * fields are forwarded. The raw `{ batchId, audience, recipientCount, createdAt }`
- * result is wrapped in the REST envelope the page consumes.
+ * Before forwarding, the client strips `undefined` optional fields from the
+ * request (the backend's `.strict()` schema rejects unknown keys, so a key
+ * carrying an `undefined` value must not be sent). The raw
+ * `{ batchId, audience, recipientCount, createdAt }` result is wrapped in the
+ * REST envelope the page consumes.
  */
 export async function adminSendNotification(
   request: AdminSendNotificationRequest,
