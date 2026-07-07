@@ -76,6 +76,9 @@ dependencies {
     // Mapbox Maps
     implementation(libs.mapbox.maps)
 
+    // Google Play Services — fused location provider (Phase 12 slice 6)
+    implementation(libs.play.services.location)
+
     // Credential Manager — Google Sign-In (docs/auth-mobile-requirements.md)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)

@@ -13,6 +13,7 @@ mapbox = "11.8.0"
 googleServices = "4.4.2"
 credentials = "1.5.0"
 googleid = "1.1.1"
+playServicesLocation = "21.3.0"
 coroutinesTest = "1.9.0"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
@@ -41,6 +42,9 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 
 # Mapbox
 mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapbox" }
+
+# Google Play Services — fused location provider (Phase 12 slice 6)
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 # Credential Manager (Google Sign-In)
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
