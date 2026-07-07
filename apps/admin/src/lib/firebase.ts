@@ -41,8 +41,9 @@ let appCheckInstance: AppCheck | null = null;
  * the Web app must be registered under reCAPTCHA Enterprise in the Firebase
  * App Check console). Registration is a no-op until the key is configured —
  * clients degrade gracefully while enforcement is off server-side per
- * docs/app-check.md. In non-production builds VITE_APPCHECK_DEBUG_TOKEN feeds
- * the debug provider for emulator/CI runs.
+ * docs/app-check.md. In non-production builds VITE_APPCHECK_DEBUG_TOKEN sets
+ * FIREBASE_APPCHECK_DEBUG_TOKEN, enabling App Check debug mode (still the
+ * reCAPTCHA provider) for emulator/CI runs.
  */
 function registerAppCheck(app: FirebaseApp): void {
   if (appCheckInstance) return;
