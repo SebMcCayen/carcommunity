@@ -42,7 +42,8 @@ async function checkDiagnosticsRateLimit(ip: string): Promise<boolean> {
 
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const count: number = snap.exists ? (snap.data()!.count as number) : 0;
+    const rawCount = snap.exists ? snap.data()!.count : 0;
+    const count: number = typeof rawCount === 'number' ? rawCount : 0;
     if (count >= DIAGNOSTICS_RATE_LIMIT_MAX) {
       return false;
     }
@@ -79,7 +80,7 @@ export const submitReport = onCall(
     if (!allowed) {
       throw new HttpsError(
         'resource-exhausted',
-        'Too many diagnostics reports. Please wait before submitting again.',
+        'Too many diagnostics reports. Please wait 60 seconds before submitting again.',
       );
     }
 
