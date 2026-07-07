@@ -1041,6 +1041,25 @@ describe('subscription module', () => {
     expect(summary.subscription).toBeNull();
   });
 
+  it('coerces malformed stored status/platform/entitlement to safe defaults', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'bogus_platform',
+          status: 'not_a_status',
+          entitlement: 'weird_entitlement',
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.entitlement).toBe('none');
+    expect(summary.subscription).toMatchObject({
+      platform: 'manual',
+      status: 'inactive',
+      entitlement: 'none',
+    });
+  });
+
   it('grants and revokes membership via subscription-grantEntitlement', async () => {
     callAdminMock.mockResolvedValue({ targetUid: 'u1', entitlement: 'member_monthly' });
     await adminGrantMembership('u1', 'Kampanj');

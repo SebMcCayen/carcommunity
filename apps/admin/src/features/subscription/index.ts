@@ -22,6 +22,8 @@ import { doc, getDoc } from 'firebase/firestore';
 
 import {
   isSubscriptionActiveStatus,
+  SUBSCRIPTION_PLATFORMS,
+  SUBSCRIPTION_STATUSES,
   type AdminUserSubscriptionSummary,
   type SubscriptionPlatform,
   type SubscriptionSourceSummary,
@@ -56,6 +58,29 @@ function toIso(value: unknown): string | null {
 }
 
 /**
+ * Coercion helpers. Firestore documents may be old, partial, or manually
+ * edited, so each enum-typed field is validated against its known set before
+ * use and falls back to a safe default when the stored value is unexpected.
+ */
+function coerceStatus(raw: unknown): SubscriptionStatus {
+  return (SUBSCRIPTION_STATUSES as readonly string[]).includes(raw as string)
+    ? (raw as SubscriptionStatus)
+    : 'inactive';
+}
+
+function coercePlatform(raw: unknown): SubscriptionPlatform {
+  return (SUBSCRIPTION_PLATFORMS as readonly string[]).includes(raw as string)
+    ? (raw as SubscriptionPlatform)
+    : 'manual';
+}
+
+function coerceEntitlement(raw: unknown): SubscriptionEntitlement {
+  return (SUBSCRIPTION_ENTITLEMENTS as readonly string[]).includes(raw as string)
+    ? (raw as SubscriptionEntitlement)
+    : 'none';
+}
+
+/**
  * Reads a user's subscription entitlement summary. `subscriptions/{uid}` is
  * admin-readable; `users/{uid}` supplies the suspended flag so the "suspended
  * with an active subscription" warning can be surfaced. A missing subscription
@@ -74,9 +99,9 @@ export async function adminGetUserSubscription(
 
   const subscription: SubscriptionSourceSummary | null = sub
     ? {
-        platform: (sub.platform as SubscriptionPlatform) ?? 'manual',
-        status: (sub.status as SubscriptionStatus) ?? 'inactive',
-        entitlement: (sub.entitlement as SubscriptionEntitlement) ?? 'none',
+        platform: coercePlatform(sub.platform),
+        status: coerceStatus(sub.status),
+        entitlement: coerceEntitlement(sub.entitlement),
         startsAt: toIso(sub.startsAt),
         expiresAt: toIso(sub.expiresAt),
       }

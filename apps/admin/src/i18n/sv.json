@@ -176,6 +176,41 @@
       "error": "Kunde inte tilldela utmärkelsen. Försök igen."
     }
   },
+  "subscription": {
+    "title": "Prenumeration",
+    "subtitle": "Slå upp en användares medlemskap och bevilja eller återkalla det manuellt.",
+    "userIdLabel": "Användar-ID",
+    "userIdPlaceholder": "uid",
+    "lookup": "Slå upp",
+    "lookupLoading": "Hämtar…",
+    "lookupError": "Kunde inte hämta prenumerationen.",
+    "currentStatusTitle": "Nuvarande status",
+    "entitlementLabel": "Berättigande",
+    "statusLabel": "Status",
+    "platformLabel": "Plattform",
+    "expiresLabel": "Utgår",
+    "entitlement": {
+      "none": "Ingen",
+      "member_monthly": "Medlem (månad)"
+    },
+    "status": {
+      "inactive": "Inaktiv",
+      "active": "Aktiv",
+      "grace_period": "Respitperiod",
+      "expired": "Utgången",
+      "revoked": "Återkallad",
+      "cancelled": "Avbruten"
+    },
+    "actionTitle": "Åtgärd",
+    "reasonLabel": "Orsak",
+    "reasonPlaceholder": "Ange orsak (loggas)…",
+    "grant": "Bevilja medlemskap",
+    "revoke": "Återkalla",
+    "suspendedWarning": "Varning: användaren är avstängd men har fortfarande en aktiv prenumeration.",
+    "grantSuccess": "Medlemskap beviljat.",
+    "revokeSuccess": "Medlemskap återkallat.",
+    "actionError": "Åtgärden misslyckades."
+  },
   "points": {
     "pageTitle": "Kronpoäng",
     "loading": "Laddar Kronpoäng...",

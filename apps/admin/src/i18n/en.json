@@ -176,6 +176,41 @@
       "error": "Could not award the badge. Please try again."
     }
   },
+  "subscription": {
+    "title": "Subscription",
+    "subtitle": "Look up a user's membership and grant or revoke it manually.",
+    "userIdLabel": "User ID",
+    "userIdPlaceholder": "uid",
+    "lookup": "Look up",
+    "lookupLoading": "Loading…",
+    "lookupError": "Could not load the subscription.",
+    "currentStatusTitle": "Current status",
+    "entitlementLabel": "Entitlement",
+    "statusLabel": "Status",
+    "platformLabel": "Platform",
+    "expiresLabel": "Expires",
+    "entitlement": {
+      "none": "None",
+      "member_monthly": "Member (monthly)"
+    },
+    "status": {
+      "inactive": "Inactive",
+      "active": "Active",
+      "grace_period": "Grace period",
+      "expired": "Expired",
+      "revoked": "Revoked",
+      "cancelled": "Cancelled"
+    },
+    "actionTitle": "Action",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Enter a reason (logged)…",
+    "grant": "Grant membership",
+    "revoke": "Revoke",
+    "suspendedWarning": "Warning: the user is suspended but still holds an active subscription.",
+    "grantSuccess": "Membership granted.",
+    "revokeSuccess": "Membership revoked.",
+    "actionError": "The action failed."
+  },
   "points": {
     "pageTitle": "Kronpoäng",
     "loading": "Loading Kronpoäng...",
