@@ -68,6 +68,10 @@ import {
   resolveAdminChatReport,
 } from '../features/event-chat';
 import { adminSendNotification } from '../features/notifications';
+import {
+  adminGetPartnerInsightsSummary,
+  periodToBucket,
+} from '../features/partner-insights';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -895,5 +899,93 @@ describe('notifications module', () => {
     const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
     expect('eventId' in payload).toBe(false);
     expect(payload.confirmed).toBe(true);
+  });
+});
+
+describe('partner-insights module', () => {
+  it('maps admin period options onto backend calendar buckets with an explicit date', () => {
+    // Every option pins an explicit reference date so the backend never falls
+    // back to its "yesterday" default (which would drift on boundary days).
+    for (const [period, expectedType] of [
+      ['last_7_days', 'week'],
+      ['last_30_days', 'month'],
+      ['current_month', 'month'],
+      ['previous_month', 'month'],
+    ] as const) {
+      const bucket = periodToBucket(period);
+      expect(bucket.periodType).toBe(expectedType);
+      expect(typeof bucket.date).toBe('string');
+      expect(Number.isNaN(Date.parse(bucket.date!))).toBe(false);
+    }
+  });
+
+  it('summarizes via partnerInsights-adminSummary and adapts the metrics', async () => {
+    callAdminMock.mockResolvedValue({
+      companyId: 'co1',
+      periodType: 'month',
+      periodStart: '2026-07-01',
+      metrics: [
+        { interactionType: 'map_view', totalCount: 42, uniqueContributorCount: null, status: 'available' },
+        {
+          interactionType: 'anonymous_pass_by',
+          totalCount: 0,
+          uniqueContributorCount: null,
+          status: 'insufficient_data',
+        },
+      ],
+    });
+    const summary = await adminGetPartnerInsightsSummary('co1', 'last_30_days');
+    expect(callAdminMock).toHaveBeenCalledWith(
+      'partnerInsights-adminSummary',
+      expect.objectContaining({ companyId: 'co1', periodType: 'month' }),
+    );
+    // An explicit reference date is always sent (avoids the backend's yesterday default).
+    const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(typeof payload.date).toBe('string');
+    expect(summary.partnerId).toBe('co1');
+    expect(summary.period).toBe('last_30_days');
+    expect(summary.metrics[0]).toMatchObject({
+      interactionType: 'map_view',
+      totalCount: 42,
+      status: 'available',
+      periodStart: '2026-07-01',
+    });
+    // uniqueContributorCount omitted when null.
+    expect('uniqueContributorCount' in summary.metrics[0]!).toBe(false);
+    expect(summary.metrics[1]).toMatchObject({ status: 'insufficient_data', totalCount: 0 });
+  });
+
+  it('passes a reference date for the previous_month option', async () => {
+    callAdminMock.mockResolvedValue({
+      companyId: 'co1',
+      periodType: 'month',
+      periodStart: '2026-06-01',
+      metrics: [],
+    });
+    // Capture the clock in a window around the call: periodToBucket reads its
+    // own `new Date()` internally, so at a UTC month boundary the reference
+    // month could be `before`'s or `after`'s. Accepting either avoids a flaky
+    // failure if the month rolls over mid-test.
+    const before = new Date();
+    await adminGetPartnerInsightsSummary('co1', 'previous_month');
+    const after = new Date();
+    const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.periodType).toBe('month');
+    expect(typeof payload.date).toBe('string');
+
+    const prevMonthOf = (d: Date) => {
+      let year = d.getUTCFullYear();
+      let month = d.getUTCMonth() - 1;
+      if (month < 0) {
+        month = 11;
+        year -= 1;
+      }
+      return { year, month };
+    };
+    const sent = new Date(payload.date as string);
+    const candidates = [prevMonthOf(before), prevMonthOf(after)];
+    expect(
+      candidates.some((c) => sent.getUTCFullYear() === c.year && sent.getUTCMonth() === c.month),
+    ).toBe(true);
   });
 });
