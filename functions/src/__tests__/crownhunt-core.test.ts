@@ -126,6 +126,18 @@ describe('crown-hunt-risk (verbatim legacy port)', () => {
     expect(failed.riskScore).toBe(50);
     expect(failed.riskReasons).toContain('platform_integrity_failed');
   });
+
+  it('does not reward a client-supplied platformIntegrityPassed:true (null is equivalent)', () => {
+    // submitClaim always passes null — a compromised client cannot gain an
+    // advantage by setting platformIntegrityPassed:true. Verify that null
+    // and true are both treated as "no signal" (score stays at 0).
+    const withTrue = evaluateClaimRisk({ ...baseSignals, platformIntegrityPassed: true });
+    const withNull = evaluateClaimRisk({ ...baseSignals, platformIntegrityPassed: null });
+    expect(withTrue.riskScore).toBe(0);
+    expect(withNull.riskScore).toBe(0);
+    expect(withTrue.riskReasons).not.toContain('platform_integrity_failed');
+    expect(withNull.riskReasons).not.toContain('platform_integrity_failed');
+  });
 });
 
 describe('crownhunt-core inputs and helpers', () => {

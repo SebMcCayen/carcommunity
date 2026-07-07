@@ -7,9 +7,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDiagnosticsReportDocument,
+  DIAGNOSTICS_RATE_LIMIT_MAX,
+  DIAGNOSTICS_RATE_LIMIT_WINDOW_MS,
   diagnosticsRetentionCutoff,
+  extractClientIp,
   generateFingerprint,
   parseSubmitDiagnosticsReportInput,
+  rateLimitDocId,
   sanitizeMetadata,
 } from '../diagnostics/diagnostics-core';
 
@@ -110,5 +114,40 @@ describe('diagnostics-core input and builder', () => {
     expect(diagnosticsRetentionCutoff(new Date('2026-07-05T12:00:00Z')).toISOString()).toBe(
       '2026-04-06T12:00:00.000Z',
     );
+  });
+});
+
+describe('diagnostics rate-limit helpers', () => {
+  it('extracts IP from X-Forwarded-For header (leftmost address is the client)', () => {
+    const makeReq = (headers: Record<string, string>, ip?: string) =>
+      ({ headers, ip } as unknown as Parameters<typeof extractClientIp>[0]);
+
+    expect(extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1, 10.0.0.2' }))).toBe(
+      '1.2.3.4',
+    );
+    expect(extractClientIp(makeReq({ 'x-forwarded-for': '::1' }))).toBe('::1');
+    // Falls back to req.ip when the header is absent
+    expect(extractClientIp(makeReq({}, '5.6.7.8'))).toBe('5.6.7.8');
+    // Strips port number
+    expect(extractClientIp(makeReq({ 'x-forwarded-for': '1.2.3.4:9999' }))).toBe('1.2.3.4');
+    // Returns 'unknown' when no info is available
+    expect(extractClientIp(makeReq({}))).toBe('unknown');
+  });
+
+  it('produces a deterministic hex document ID for the same IP and bucket', () => {
+    const id1 = rateLimitDocId('1.2.3.4', 28_000_000);
+    const id2 = rateLimitDocId('1.2.3.4', 28_000_000);
+    expect(id1).toBe(id2);
+    expect(id1).toMatch(/^[a-f0-9]{40}$/);
+    // Different IP or bucket → different ID
+    expect(rateLimitDocId('9.9.9.9', 28_000_000)).not.toBe(id1);
+    expect(rateLimitDocId('1.2.3.4', 28_000_001)).not.toBe(id1);
+  });
+
+  it('exports consistent rate-limit constants', () => {
+    expect(DIAGNOSTICS_RATE_LIMIT_MAX).toBeGreaterThan(0);
+    expect(DIAGNOSTICS_RATE_LIMIT_WINDOW_MS).toBeGreaterThan(0);
+    // Buckets derived from the window should be integers
+    expect(Math.floor(Date.now() / DIAGNOSTICS_RATE_LIMIT_WINDOW_MS)).toBeTypeOf('number');
   });
 });

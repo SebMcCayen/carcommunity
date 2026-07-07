@@ -372,7 +372,10 @@ export const submitClaim = onCall(
       successfulClaimsInVelocityWindow: successesSnap.data().count,
       geofenceEdgeAttempts: 0, // legacy TODO: geofence-edge counting
       accuracyMeters: input.accuracyMeters ?? null,
-      platformIntegrityPassed: input.platformIntegrityPassed ?? null,
+      // Never trust the client-supplied value: a compromised client would
+      // simply send `true`. Always pass null until App Attest / Play
+      // Integrity are verified server-side.
+      platformIntegrityPassed: null,
     });
 
     if (riskEval.isHighRisk) {

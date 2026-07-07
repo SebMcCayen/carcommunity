@@ -268,3 +268,41 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function diagnosticsRetentionCutoff(now: Date): Date {
   return new Date(now.getTime() - DIAGNOSTICS_RETENTION_DAYS * DAY_MS);
 }
+
+// ---------------------------------------------------------------------------
+// Rate limiting (pure helpers — Firestore interaction stays in submitReport.ts)
+// ---------------------------------------------------------------------------
+
+/** Maximum diagnostics submissions allowed per IP within one window. */
+export const DIAGNOSTICS_RATE_LIMIT_MAX = 20;
+/** Rate-limit window duration in milliseconds (1 minute). */
+export const DIAGNOSTICS_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Extracts the client IP from the Express-compatible request object.
+ * Reads the leftmost address in `X-Forwarded-For` (populated by Google
+ * Cloud's load balancer), falling back to `req.ip`. Port numbers are
+ * stripped; an absent or empty value falls back to `'unknown'`.
+ */
+export function extractClientIp(req: {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+}): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const raw =
+    (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined) ??
+    req.ip ??
+    'unknown';
+  // Strip optional port from IPv4 (e.g. "1.2.3.4:5678" → "1.2.3.4").
+  // IPv6 addresses contain multiple colons and must not be altered.
+  return raw.trim().replace(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/, '$1') || 'unknown';
+}
+
+/**
+ * Builds the Firestore document ID for the per-IP rate-limit counter for
+ * the given 1-minute window bucket. The IP is hashed so raw addresses are
+ * never persisted in document IDs.
+ */
+export function rateLimitDocId(ip: string, windowBucket: number): string {
+  return createHash('sha256').update(`diag:${ip}:${windowBucket}`).digest('hex').slice(0, 40);
+}
