@@ -32,6 +32,7 @@ import {
   OPEN_REPORT_STATUSES,
   type AdminEventChatReportRow,
   type ApiError,
+  type ResolvableReportStatus,
 } from '@/features/event-chat';
 
 // ---------------------------------------------------------------------------
@@ -133,8 +134,13 @@ export default function EventChatModerationPage() {
     void fetchReports();
   }, [fetchReports]);
 
+  // Any moderation action in flight (resolve transition or message removal).
+  // While true, every row's action buttons are disabled to prevent concurrent
+  // actions racing against the queue refresh.
+  const anyActionInFlight = pendingReportId !== null || isRemoving;
+
   const handleResolve = useCallback(
-    async (report: AdminEventChatReportRow, status: 'under_review' | 'resolved' | 'dismissed') => {
+    async (report: AdminEventChatReportRow, status: ResolvableReportStatus) => {
       setPendingReportId(report.id);
       setActionError(null);
       try {
@@ -204,7 +210,10 @@ export default function EventChatModerationPage() {
             <tbody>
               {reports.map((report) => {
                 const isOpen = OPEN_REPORT_STATUSES.includes(report.status);
-                const isPending = pendingReportId === report.id;
+                // Disable this row's actions whenever ANY action is in flight,
+                // not just when this specific row is transitioning — prevents
+                // concurrent moderation actions across rows.
+                const disableActions = anyActionInFlight;
                 return (
                   <tr key={report.id}>
                     <td className={styles.idCell} title={report.eventId}>
@@ -228,7 +237,7 @@ export default function EventChatModerationPage() {
                               type="button"
                               className={styles.actionButton}
                               onClick={() => void handleResolve(report, 'under_review')}
-                              disabled={isPending}
+                              disabled={disableActions}
                             >
                               Granska
                             </button>
@@ -237,7 +246,7 @@ export default function EventChatModerationPage() {
                             type="button"
                             className={styles.actionButton}
                             onClick={() => void handleResolve(report, 'resolved')}
-                            disabled={isPending}
+                            disabled={disableActions}
                           >
                             Lös
                           </button>
@@ -245,7 +254,7 @@ export default function EventChatModerationPage() {
                             type="button"
                             className={styles.actionButton}
                             onClick={() => void handleResolve(report, 'dismissed')}
-                            disabled={isPending}
+                            disabled={disableActions}
                           >
                             Avvisa
                           </button>
@@ -253,7 +262,7 @@ export default function EventChatModerationPage() {
                             type="button"
                             className={styles.removeButton}
                             onClick={() => setRemoveTarget(report)}
-                            disabled={isPending}
+                            disabled={disableActions}
                           >
                             Ta bort meddelande
                           </button>

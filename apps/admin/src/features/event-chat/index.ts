@@ -96,6 +96,12 @@ export interface AdminEventChatReportRow extends AdminEventChatReportSummary {
 /** Report statuses that can still be acted on (open reports). */
 export const OPEN_REPORT_STATUSES: readonly ChatMessageReportStatus[] = ['new', 'under_review'];
 
+/**
+ * Statuses a report can be transitioned to via the resolve callable. Excludes
+ * `'new'` (the initial state) — resolution only moves a report forward.
+ */
+export type ResolvableReportStatus = 'under_review' | 'resolved' | 'dismissed';
+
 // ---------------------------------------------------------------------------
 // Callable-backed data layer
 // ---------------------------------------------------------------------------
@@ -111,6 +117,13 @@ export interface AdminEventChatReportRowsResponse {
   meta: { page: number; pageSize: number; total: number; hasNext: boolean };
 }
 
+/**
+ * Maps a raw backend report into a typed row. The merged backend always
+ * populates the identifying fields (id/eventId/messageId/createdAt); the
+ * `?? ''` here is only a defensive last resort against a malformed payload.
+ * Rows with an empty `id` are dropped in `loadAdminChatReports` so a broken
+ * report can never render.
+ */
 function toReportRow(report: Record<string, unknown>): AdminEventChatReportRow {
   return {
     id: String(report.id ?? ''),
@@ -144,7 +157,8 @@ export async function loadAdminChatReports(
 
   return {
     ok: true,
-    data: { reports: result.reports.map(toReportRow) },
+    // Drop any malformed row missing its identifying `id` so it never renders.
+    data: { reports: result.reports.map(toReportRow).filter((row) => row.id !== '') },
     meta: result.meta,
   };
 }
@@ -156,9 +170,9 @@ export async function loadAdminChatReports(
 export async function resolveAdminChatReport(
   eventId: string,
   reportId: string,
-  status: 'under_review' | 'resolved' | 'dismissed',
-): Promise<{ reportId: string; status: string }> {
-  return callAdmin<{ reportId: string; status: string }>('events-resolveChatReport', {
+  status: ResolvableReportStatus,
+): Promise<{ reportId: string; status: ResolvableReportStatus }> {
+  return callAdmin<{ reportId: string; status: ResolvableReportStatus }>('events-resolveChatReport', {
     eventId,
     reportId,
     status,
