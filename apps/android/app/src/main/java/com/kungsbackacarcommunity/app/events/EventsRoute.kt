@@ -44,6 +44,7 @@ fun EventsRoute(
     chatEnabled: Boolean,
     groupDriveRepository: GroupDriveRepository?,
     groupDriveCoordinator: GroupDriveCoordinator?,
+    onShowOnMap: ((List<String>) -> Unit)? = null,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -100,6 +101,7 @@ fun EventsRoute(
             isActiveMember = isActiveMember,
             eventStatus = event?.status,
             myRsvp = myRsvp,
+            onShowOnMap = onShowOnMap,
             onBack = { showGroupDrive = false },
         )
         return

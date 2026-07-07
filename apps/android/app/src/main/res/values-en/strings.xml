@@ -287,6 +287,7 @@
     <string name="groupDrive_countOnTheWay">On the way</string>
     <string name="groupDrive_countArrived">Arrived</string>
     <string name="groupDrive_goToLiveLocation">Manage live location</string>
+    <string name="groupDrive_showOnMap">Show group on map</string>
     <string name="savedDrives_screenTitle">My drives</string>
     <string name="savedDrives_loading">Loading drives...</string>
     <string name="savedDrives_detailTitle">Drive details</string>

@@ -75,6 +75,27 @@ class FirebaseLiveLocationRepository private constructor(
         awaitClose { ref.removeEventListener(listener) }
     }
 
+    override fun observeLatest(uid: String): Flow<LiveMarker?> = callbackFlow {
+        // Per-uid marker read only (liveLocation/{uid}/latest); never scans the
+        // collection. Mirrors observeOwnSession's callbackFlow/ValueEventListener.
+        val ref = database.getReference("liveLocation/$uid/latest")
+        val listener =
+            object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    trySend(snapshot.toLiveMarker(uid))
+                }
+
+                override fun onCancelled(error: DatabaseError) {
+                    // Read denied (not an active, non-suspended member) or
+                    // interrupted: emit null (no marker) rather than hanging; a
+                    // later successful read self-corrects.
+                    trySend(null)
+                }
+            }
+        ref.addValueEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
     private suspend fun call(name: String, data: Map<String, Any>): Unit =
         suspendCancellableCoroutine { continuation ->
             functions
@@ -108,6 +129,19 @@ class FirebaseLiveLocationRepository private constructor(
             )
         }
     }
+}
+
+/**
+ * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when
+ * absent (not sharing) or missing a coordinate. Reads only the marker-complete
+ * fields written by live.updatePosition (latitude/longitude/displayName).
+ */
+private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
+    if (!exists()) return null
+    val latitude = child("latitude").getValue(Double::class.java) ?: return null
+    val longitude = child("longitude").getValue(Double::class.java) ?: return null
+    val displayName = child("displayName").getValue(String::class.java)
+    return LiveMarker(uid = uid, latitude = latitude, longitude = longitude, displayName = displayName)
 }
 
 /** Maps the RTDB session node to the Firebase-free [LiveSessionInfo]. */

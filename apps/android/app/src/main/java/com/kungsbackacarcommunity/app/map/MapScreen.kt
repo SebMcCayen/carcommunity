@@ -30,30 +30,32 @@ import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
 
 /**
- * Map surface (Phase 12 slice 7) hosting a Mapbox [MapView] via [AndroidView].
+ * Map surface (Phase 12 slice 7 + live-markers follow-up) hosting a Mapbox
+ * [MapView] via [AndroidView].
  *
- * Renders a standard-style map centered either on the caller's own live
- * position (when [ownMarker] is non-null) or on a default town-level camera,
- * and draws a single circle annotation for the caller's own marker. There is
- * no multi-member feed here — the live RTDB rules grant only a per-uid
- * `liveLocation/{uid}/latest` read, so viewing other members' markers is a
- * follow-up (see [MapMarkers]).
+ * Renders a standard-style map centered on the caller's own live position (when
+ * present) or on a default town-level camera, and draws a circle annotation for
+ * every marker in [markers]: the caller's OWN marker in the primary colour and
+ * other members' markers (e.g. a group-drive roster) in the secondary colour.
+ * The marker feed is built from per-uid `liveLocation/{uid}/latest` reads — no
+ * collection scan (see [MapMarkers] / [MapRoute]).
  *
  * Tile rendering requires a real Mapbox access token, which is a secret NOT
  * present in CI and is provisioned at cutover (see [MapRoute] /
  * `MapboxOptions.accessToken`). Without a token the MapView still renders (an
  * empty style) rather than crashing, keeping the config-less build green.
  *
- * @param ownMarker the caller's own position, or null when unavailable.
+ * @param markers the markers to draw; own first, then other members. Empty when
+ * no one is sharing.
  * @param onBack optional back navigation, mirroring the other slices.
  */
 @Composable
 fun MapScreen(
-    ownMarker: MapMarker?,
+    markers: List<MapMarker>,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
 ) {
-    val camera = MapMarkers.cameraFor(ownMarker)
+    val camera = MapMarkers.cameraForMarkers(markers)
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -69,8 +71,9 @@ fun MapScreen(
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 MapboxMapView(
                     camera = camera,
-                    ownMarker = ownMarker,
-                    markerColor = MaterialTheme.colorScheme.primary.toArgb(),
+                    markers = markers,
+                    ownColor = MaterialTheme.colorScheme.primary.toArgb(),
+                    otherColor = MaterialTheme.colorScheme.secondary.toArgb(),
                 )
             }
 
@@ -85,7 +88,7 @@ fun MapScreen(
 
 /**
  * The Mapbox [MapView] itself, bridged into Compose. Loads the standard style,
- * applies the camera, and (best-effort) draws the own marker once the style is
+ * applies the camera, and (best-effort) draws all markers once the style is
  * ready.
  *
  * MapView v11 self-observes the host lifecycle via its lifecycle plugin, so no
@@ -94,30 +97,35 @@ fun MapScreen(
  * native map down when the composition leaves, so nothing leaks if the plugin
  * is not attached.
  *
- * @param markerColor ARGB color for the own-marker circle, sourced from the
- * theme so it stays consistent with the app's palette.
+ * @param ownColor ARGB colour for the caller's own marker.
+ * @param otherColor ARGB colour for other members' markers. Both are sourced
+ * from the theme so they stay consistent with the app's palette.
  */
 @Composable
 private fun MapboxMapView(
     camera: MapCameraPosition,
-    ownMarker: MapMarker?,
-    markerColor: Int,
+    markers: List<MapMarker>,
+    ownColor: Int,
+    otherColor: Int,
 ) {
     // Holds the annotation manager created after the style loads, so the update
-    // lambda can clear/recreate the own marker when [ownMarker] changes.
+    // lambda can clear/recreate the markers when [markers] change.
     val managerHolder = remember { arrayOfNulls<CircleAnnotationManager>(1) }
-    // Latest marker + color, kept current by the update lambda. loadStyle runs
+    // Latest markers + colours, kept current by the update lambda. loadStyle runs
     // asynchronously, so its callback must NOT capture the factory-time values —
-    // it draws from these holders instead, so a marker that changed before the
-    // style finished loading is rendered correctly (not the stale initial value).
-    val markerHolder = remember { arrayOfNulls<MapMarker>(1) }
-    val colorHolder = remember { intArrayOf(0) }
+    // it draws from these holders instead, so markers that changed before the
+    // style finished loading are rendered correctly (not the stale initial value).
+    @Suppress("UNCHECKED_CAST")
+    val markersHolder = remember { arrayOfNulls<List<MapMarker>>(1) }
+    val ownColorHolder = remember { intArrayOf(0) }
+    val otherColorHolder = remember { intArrayOf(0) }
 
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
-            markerHolder[0] = ownMarker
-            colorHolder[0] = markerColor
+            markersHolder[0] = markers
+            ownColorHolder[0] = ownColor
+            otherColorHolder[0] = otherColor
             MapView(context).apply {
                 mapboxMap.setCamera(
                     cameraOptions {
@@ -126,29 +134,35 @@ private fun MapboxMapView(
                     },
                 )
                 // Create the circle-annotation manager once a style is present.
-                // No image asset needed (a circle annotation), so this never
+                // No image asset needed (circle annotations), so this never
                 // fails on a missing drawable and stays crash-free even when
                 // tiles cannot load (no token). Drawn from the holders so it
-                // reflects the current [ownMarker], even if it changed while the
+                // reflects the current [markers], even if they changed while the
                 // style was still loading.
                 mapboxMap.loadStyle(Style.STANDARD) {
                     managerHolder[0] = annotations.createCircleAnnotationManager()
-                    drawOwnMarker(managerHolder[0], markerHolder[0], colorHolder[0])
+                    drawMarkers(
+                        managerHolder[0],
+                        markersHolder[0].orEmpty(),
+                        ownColorHolder[0],
+                        otherColorHolder[0],
+                    )
                 }
             }
         },
         update = { mapView ->
-            markerHolder[0] = ownMarker
-            colorHolder[0] = markerColor
+            markersHolder[0] = markers
+            ownColorHolder[0] = ownColor
+            otherColorHolder[0] = otherColor
             mapView.mapboxMap.setCamera(
                 cameraOptions {
                     center(Point.fromLngLat(camera.longitude, camera.latitude))
                     zoom(camera.zoom)
                 },
             )
-            // Redraw when [ownMarker] (or its coordinate) changes; a no-op until
-            // the style has loaded and the manager exists.
-            drawOwnMarker(managerHolder[0], ownMarker, markerColor)
+            // Redraw when [markers] change; a no-op until the style has loaded
+            // and the manager exists.
+            drawMarkers(managerHolder[0], markers, ownColor, otherColor)
         },
         onRelease = { mapView ->
             managerHolder[0] = null
@@ -158,23 +172,25 @@ private fun MapboxMapView(
 }
 
 /**
- * Clears any existing own-marker annotation and, when [ownMarker] is non-null,
- * draws a fresh circle for it. No-op until [manager] is available (i.e. the
- * style has finished loading).
+ * Clears any existing annotations and draws a fresh circle for every marker,
+ * colouring own vs other by [MapMarker.kind]. No-op until [manager] is
+ * available (i.e. the style has finished loading).
  */
-private fun drawOwnMarker(
+private fun drawMarkers(
     manager: CircleAnnotationManager?,
-    ownMarker: MapMarker?,
-    markerColor: Int,
+    markers: List<MapMarker>,
+    ownColor: Int,
+    otherColor: Int,
 ) {
     manager ?: return
     manager.deleteAll()
-    ownMarker?.let { marker ->
+    markers.forEach { marker ->
+        val color = if (marker.kind == MapMarkerKind.OWN) ownColor else otherColor
         manager.create(
             CircleAnnotationOptions()
                 .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
                 .withCircleRadius(8.0)
-                .withCircleColor(markerColor),
+                .withCircleColor(color),
         )
     }
 }
@@ -183,6 +199,6 @@ private fun drawOwnMarker(
 @Composable
 private fun MapScreenPreview() {
     KccTheme {
-        MapScreen(ownMarker = null, onBack = {})
+        MapScreen(markers = emptyList(), onBack = {})
     }
 }

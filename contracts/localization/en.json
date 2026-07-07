@@ -319,7 +319,8 @@
     "countJoined": "Joined",
     "countOnTheWay": "On the way",
     "countArrived": "Arrived",
-    "goToLiveLocation": "Manage live location"
+    "goToLiveLocation": "Manage live location",
+    "showOnMap": "Show group on map"
   },
   "savedDrives": {
     "screenTitle": "My drives",

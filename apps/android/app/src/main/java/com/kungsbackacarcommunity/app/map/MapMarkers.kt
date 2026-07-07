@@ -1,16 +1,20 @@
 package com.kungsbackacarcommunity.app.map
 
+import com.kungsbackacarcommunity.app.live.LiveMarker
+
 /**
- * Pure map/camera logic for the Map slice (Phase 12 slice 7).
+ * Pure map/camera logic for the Map slice (Phase 12 slice 7 + live-markers
+ * follow-up).
  *
  * No Android or Mapbox imports so it is JVM-unit-testable and reused by the
  * screen. Holds the default camera used before/without a live fix, the marker
- * model, and the rule for turning a raw position into that model.
+ * model, and the rules for turning raw live positions into that model.
  *
- * The multi-member marker feed is deliberately OUT OF SCOPE here: the live
- * RTDB rules grant only a per-uid `liveLocation/{uid}/latest` read (no
- * collection scan), so this slice renders the caller's OWN marker only. A
- * follow-up will add per-uid reads for other members.
+ * Markers are built from per-uid `liveLocation/{uid}/latest` reads only — there
+ * is NO collection scan (the RTDB rules grant per-uid reads only). The caller's
+ * OWN marker is drawn in the primary colour; other members (e.g. a group-drive
+ * roster) in the secondary colour. Members who stopped sharing have a null
+ * marker and are simply dropped.
  */
 
 /** A lng/lat position plus zoom — enough to drive a Mapbox camera. */
@@ -20,10 +24,20 @@ data class MapCameraPosition(
     val zoom: Double,
 )
 
-/** A single map marker (currently only the caller's own position). */
+/** Whether a marker is the caller's own position or another member's. */
+enum class MapMarkerKind { OWN, OTHER }
+
+/**
+ * A single map marker. [kind] selects the colour (own vs other) and [uid]/
+ * [displayName] carry identity for future labelling; only lng/lat are needed to
+ * draw the circle.
+ */
 data class MapMarker(
     val longitude: Double,
     val latitude: Double,
+    val kind: MapMarkerKind = MapMarkerKind.OWN,
+    val uid: String? = null,
+    val displayName: String? = null,
 )
 
 object MapMarkers {
@@ -35,7 +49,7 @@ object MapMarkers {
     val DEFAULT_CAMERA: MapCameraPosition =
         MapCameraPosition(longitude = 12.0757, latitude = 57.4874, zoom = 11.0)
 
-    /** Zoom used once we have the caller's own position to focus on. */
+    /** Zoom used once we have a position to focus on. */
     const val OWN_MARKER_ZOOM: Double = 14.0
 
     /**
@@ -45,7 +59,39 @@ object MapMarkers {
      */
     fun ownMarker(longitude: Double?, latitude: Double?): MapMarker? {
         if (longitude == null || latitude == null) return null
-        return MapMarker(longitude = longitude, latitude = latitude)
+        return MapMarker(longitude = longitude, latitude = latitude, kind = MapMarkerKind.OWN)
+    }
+
+    /** Maps a live [LiveMarker] to a map [MapMarker] of the given [kind]. */
+    fun markerOf(marker: LiveMarker?, kind: MapMarkerKind): MapMarker? {
+        marker ?: return null
+        return MapMarker(
+            longitude = marker.longitude,
+            latitude = marker.latitude,
+            kind = kind,
+            uid = marker.uid,
+            displayName = marker.displayName,
+        )
+    }
+
+    /**
+     * Builds the ordered marker list to draw: the caller's own marker first
+     * (when present), then every other member who is currently sharing. Null
+     * entries (members who stopped sharing / never had a fix) are dropped, and
+     * the own uid is never duplicated among the others.
+     */
+    fun markers(own: LiveMarker?, others: List<LiveMarker?>): List<MapMarker> {
+        val ownMarker = markerOf(own, MapMarkerKind.OWN)
+        val ownUid = own?.uid
+        val otherMarkers =
+            others
+                .asSequence()
+                .filterNotNull()
+                .filter { it.uid != ownUid }
+                .distinctBy { it.uid }
+                .mapNotNull { markerOf(it, MapMarkerKind.OTHER) }
+                .toList()
+        return if (ownMarker != null) listOf(ownMarker) + otherMarkers else otherMarkers
     }
 
     /**
@@ -63,4 +109,16 @@ object MapMarkers {
                 zoom = OWN_MARKER_ZOOM,
             )
         }
+
+    /**
+     * Camera for a whole marker list: focus on the caller's own marker when it
+     * is present (it is always first), else the first available other marker,
+     * else the default town camera. A single focus point (not a bounds fit)
+     * keeps this Mapbox-free and deterministic for tests; the own position is
+     * the natural centre when the caller is sharing.
+     */
+    fun cameraForMarkers(markers: List<MapMarker>): MapCameraPosition {
+        val focus = markers.firstOrNull { it.kind == MapMarkerKind.OWN } ?: markers.firstOrNull()
+        return cameraFor(focus)
+    }
 }

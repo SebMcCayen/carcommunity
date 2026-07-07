@@ -34,6 +34,8 @@ class LiveLocationCoordinatorTest {
         }
 
         override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
+
+        override fun observeLatest(uid: String): Flow<LiveMarker?> = flowOf(null)
     }
 
     @Test

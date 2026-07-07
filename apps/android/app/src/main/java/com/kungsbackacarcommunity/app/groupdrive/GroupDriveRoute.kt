@@ -23,6 +23,7 @@ fun GroupDriveRoute(
     isActiveMember: Boolean,
     eventStatus: EventStatus?,
     myRsvp: RsvpStatus?,
+    onShowOnMap: ((List<String>) -> Unit)? = null,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -44,6 +45,14 @@ fun GroupDriveRoute(
         onJoin = { coordinator?.let { c -> scope.launch { c.join(eventId) } } },
         onSetStatus = { status -> coordinator?.let { c -> scope.launch { c.updateStatus(eventId, status) } } },
         onLeave = { coordinator?.let { c -> scope.launch { c.leave(eventId) } } },
+        // Show the active roster on the shared map. Passes the active
+        // participants' uids for per-uid live-marker reads (no collection scan);
+        // whether each is actually sharing is decided by the RTDB rules + the
+        // presence of a `latest` node. Hidden when the map is not wired.
+        onShowOnMap =
+            onShowOnMap?.let { show ->
+                { show(GroupDrive.activeParticipants(participants).map { it.uid }) }
+            },
         onBack = onBack,
     )
 }

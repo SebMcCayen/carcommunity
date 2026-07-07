@@ -35,6 +35,7 @@ fun GroupDriveScreen(
     onJoin: () -> Unit,
     onSetStatus: (GroupDriveStatus) -> Unit,
     onLeave: () -> Unit,
+    onShowOnMap: (() -> Unit)? = null,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -79,6 +80,17 @@ fun GroupDriveScreen(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+
+            // "Show on map" opens the shared map for the active roster. Only
+            // wired when live markers are available (onShowOnMap != null) and
+            // there is at least one active participant to show. Each member only
+            // renders if they are actually sharing (their own opt-in) — joining
+            // a drive never implies live-location sharing.
+            if (onShowOnMap != null && activeCount > 0) {
+                OutlinedButton(onClick = onShowOnMap, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.groupDrive_showOnMap))
+                }
+            }
 
             if (participating) {
                 Text(

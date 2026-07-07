@@ -13,16 +13,32 @@ data class LiveCoordinate(
 )
 
 /**
+ * A lean live marker read from `liveLocation/{uid}/latest` — enough to draw a
+ * map pin. Mirrors the backend `buildLatestNode` shape
+ * (functions/src/live/live-core.ts): latitude/longitude plus the denormalized
+ * [displayName]. [uid] is carried so callers can key markers and colour the
+ * caller's own differently from other members'. Only members who are actively
+ * sharing have a `latest` node, so a null flow value means "not sharing".
+ */
+data class LiveMarker(
+    val uid: String,
+    val latitude: Double,
+    val longitude: Double,
+    val displayName: String? = null,
+)
+
+/**
  * Live-location session operations (Phase 12 slice 5). Firebase-free interface
  * so the coordinator and screen logic are JVM-unit-testable with fakes.
  *
  * Session state and markers live in Realtime Database under liveLocation/; all
  * writes flow through the member-gated callables (functions/src/live/session.ts).
  *
- * This interface observes the caller's OWN session only. Viewing OTHER members'
- * markers is deliberately the Map slice's concern: the target RTDB rules grant
- * a per-uid marker read (`liveLocation/{uid}/latest`) but no collection scan, so
- * the marker feed is built alongside the map, not here.
+ * Session state is observed per-owner ([observeOwnSession]); live markers are
+ * read per-uid ([observeLatest]) from `liveLocation/{uid}/latest`. There is NO
+ * collection scan — the RTDB rules grant only per-uid reads — so viewing other
+ * members' markers is done by combining explicit per-uid [observeLatest] flows
+ * (e.g. a group-drive roster) in the Map layer.
  */
 interface LiveLocationRepository {
     /** live.startSession — (re)starts the caller's session with a duration. */
@@ -39,4 +55,13 @@ interface LiveLocationRepository {
 
     /** Live view of the caller's own session node; emits null when none. */
     fun observeOwnSession(uid: String): Flow<LiveSessionInfo?>
+
+    /**
+     * Live view of a single member's latest marker at
+     * `liveLocation/{uid}/latest`. Emits null when the member is not sharing
+     * (absent node) or when the read is denied (not an active, non-suspended
+     * member) — never scans the collection. Used for both the caller's own
+     * marker and, combined per-uid, other members'.
+     */
+    fun observeLatest(uid: String): Flow<LiveMarker?>
 }
