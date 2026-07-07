@@ -61,6 +61,7 @@ import {
   adminListPartnerCompanies,
   adminPausePartnerOffer,
 } from '../features/partners';
+import { awardHelpfulMemberBadge, loadAdminBadgeSummary } from '../features/badges';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -715,5 +716,47 @@ describe('partners module', () => {
       action: 'pause',
       reason: 'Kampanj pausad',
     });
+  });
+});
+
+describe('badges module', () => {
+  it('wraps the badges-adminSummary payload in the REST envelope', async () => {
+    callAdminMock.mockResolvedValue({
+      summary: [
+        { key: 'first_event', name: 'Första träffen', totalCount: 12, recentCount: 3 },
+        { key: 'helpful_member', name: 'Hjälpsam medlem', totalCount: 4, recentCount: 1 },
+      ],
+    });
+    const response = await loadAdminBadgeSummary();
+    expect(callAdminMock).toHaveBeenCalledWith('badges-adminSummary', {});
+    expect(response.ok).toBe(true);
+    expect(response.data.summary).toHaveLength(2);
+    expect(response.data.summary[0]).toMatchObject({ key: 'first_event', totalCount: 12 });
+  });
+
+  it('maps the award request onto the callable payload and shapes a fresh award', async () => {
+    callAdminMock.mockResolvedValue({
+      targetUid: 'user1',
+      badgeKey: 'helpful_member',
+      alreadyAwarded: false,
+    });
+    const response = await awardHelpfulMemberBadge('user1', { reason: 'Hjälpte till på träffen' });
+    expect(callAdminMock).toHaveBeenCalledWith('badges-awardHelpfulMember', {
+      targetUid: 'user1',
+      reason: 'Hjälpte till på träffen',
+    });
+    expect(response.data.alreadyAwarded).toBe(false);
+    expect(response.data.badge).toMatchObject({ key: 'helpful_member', name: 'Hjälpsam medlem' });
+    expect(typeof response.data.badge.awardedAt).toBe('string');
+  });
+
+  it('reports an idempotent repeat award', async () => {
+    callAdminMock.mockResolvedValue({
+      targetUid: 'user1',
+      badgeKey: 'helpful_member',
+      alreadyAwarded: true,
+    });
+    const response = await awardHelpfulMemberBadge('user1', { reason: 'Igen' });
+    expect(response.data.alreadyAwarded).toBe(true);
   });
 });

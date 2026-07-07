@@ -1,59 +1,92 @@
 /**
- * Badges feature module for the admin portal.
+ * Badges feature module for the admin portal (Phase 13g — Firebase migration).
  *
- * Provides shared types, helpers, and API client functions for the
- * badge admin area. Pages in src/app/badges/ import from here.
+ * Migrated from the legacy `apiRequest` REST client to the Firebase callable
+ * client (`callAdmin`). The page-facing function signatures and response
+ * envelopes are unchanged, so `src/app/badges/` keeps working as-is.
  *
  * Security notes:
- *  - All admin operations are validated server-side. Client-side role checks
- *    are UX only and are NOT security boundaries.
+ *  - All admin operations are validated server-side (the callable independently
+ *    verifies the `admin` custom claim). Client-side role checks are UX only.
  *  - Only `helpful_member` may be awarded manually. Arbitrary badge keys are
  *    rejected by the backend.
  *  - Award operations are idempotent — a second award for the same badge
- *    returns the existing record.
+ *    returns `alreadyAwarded: true` without duplicating the record or audit.
  *  - Audit records for manual awards are written by the backend.
- *  - No rankings, leaderboards, or user comparisons are exposed.
- *  - Do not include personal data beyond the userId in requests.
+ *  - The summary exposes aggregate counts only (no rankings, no user lists).
  */
 
 import {
-  BADGE_ROUTE_PATHS,
-  buildAdminAwardHelpfulMemberPath,
+  type AdminBadgeAggregateItem,
   type AdminBadgeSummaryResponse,
+  type AwardedBadge,
   type AwardHelpfulMemberRequest,
   type AwardHelpfulMemberResponse,
+  type BadgeKey,
 } from '@carcommunity/shared/badges';
 
-import { ApiError, apiRequest } from '../../lib/api';
+import { ApiError } from '../../lib/api';
+import { callAdmin } from '../../lib/callables';
 
 export type { AdminBadgeSummaryResponse, AwardHelpfulMemberRequest, AwardHelpfulMemberResponse };
 export { ApiError };
 
 // ---------------------------------------------------------------------------
-// API client helpers
+// Callable-backed data layer
 // ---------------------------------------------------------------------------
 
 /**
- * Loads aggregate badge statistics for the admin summary view.
- * Returns award counts per badge key. No individual user data.
+ * Loads aggregate badge statistics for the admin summary view via the
+ * `badges-adminSummary` callable (an Admin-SDK collectionGroup aggregate —
+ * badges stay owner-only for clients). Returns award counts per badge key.
+ *
+ * The callable returns the raw `{ summary }` payload; it is wrapped in the REST
+ * envelope the page already consumes. The legacy `token` argument is retained
+ * for signature parity but is unused (the callable carries the ID token).
  */
-export async function loadAdminBadgeSummary(token?: string): Promise<AdminBadgeSummaryResponse> {
-  return apiRequest<AdminBadgeSummaryResponse>(BADGE_ROUTE_PATHS.adminBadgeSummary, { token });
+export async function loadAdminBadgeSummary(_token?: string): Promise<AdminBadgeSummaryResponse> {
+  const result = await callAdmin<{ summary: AdminBadgeAggregateItem[] }>('badges-adminSummary', {});
+  return { ok: true, data: { summary: result.summary } };
 }
 
 /**
- * Manually awards the `helpful_member` badge to a user.
- * Requires a reason. Action is audited by the backend.
- * Returns the existing award idempotently if already awarded.
+ * Static `helpful_member` catalog values — mirrors the backend badge catalog
+ * (functions/src/badges/badge-core.ts). Badges are an owner-only subcollection,
+ * so the admin client cannot read the award document back; the fields below are
+ * the canonical definition used to shape the response.
+ */
+const HELPFUL_MEMBER_DEFINITION: Omit<AwardedBadge, 'awardedAt'> = {
+  key: 'helpful_member',
+  name: 'Hjälpsam medlem',
+  description: 'Har bidragit positivt och hjälpsamt i communityn.',
+  iconIdentifier: 'badge_helpful_member',
+};
+
+/**
+ * Manually awards the `helpful_member` badge to a user via the
+ * `badges-awardHelpfulMember` callable. Requires a reason (audited by the
+ * backend). Idempotent: a repeat award returns `alreadyAwarded: true`.
+ *
+ * The callable returns only `{ alreadyAwarded }` (never the award document,
+ * which is owner-only), so on a fresh award the returned `AwardedBadge` is
+ * synthesized from the static catalog with the current timestamp.
  */
 export async function awardHelpfulMemberBadge(
   userId: string,
   request: AwardHelpfulMemberRequest,
-  token?: string,
+  _token?: string,
 ): Promise<AwardHelpfulMemberResponse> {
-  return apiRequest<AwardHelpfulMemberResponse>(buildAdminAwardHelpfulMemberPath(userId), {
-    method: 'POST',
-    body: request,
-    token,
-  });
+  const result = await callAdmin<{
+    targetUid: string;
+    badgeKey: BadgeKey;
+    alreadyAwarded: boolean;
+  }>('badges-awardHelpfulMember', { targetUid: userId, reason: request.reason });
+
+  return {
+    ok: true,
+    data: {
+      badge: { ...HELPFUL_MEMBER_DEFINITION, awardedAt: new Date().toISOString() },
+      alreadyAwarded: result.alreadyAwarded,
+    },
+  };
 }
