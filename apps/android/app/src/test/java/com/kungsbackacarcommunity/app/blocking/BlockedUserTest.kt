@@ -51,6 +51,24 @@ class BlockedUserTest {
         coordinator.reset()
         assertEquals(BlockActionStatus.Idle, coordinator.actionStatus.value)
     }
+
+    @Test
+    fun `block-from-chat marks done and calls the blocking-block callable`() = runTest {
+        // Mirrors the chat block-from-message flow: reset then block the author.
+        val repo = FakeBlockingRepository(shouldFail = false)
+        val coordinator = BlockingCoordinator(repo)
+        coordinator.reset()
+        coordinator.block("author-9")
+        assertEquals(BlockActionStatus.Done, coordinator.actionStatus.value)
+        assertEquals(listOf("block:author-9"), repo.calls)
+    }
+
+    @Test
+    fun `block-from-chat marks failed when the callable throws`() = runTest {
+        val coordinator = BlockingCoordinator(FakeBlockingRepository(shouldFail = true))
+        coordinator.block("author-9")
+        assertEquals(BlockActionStatus.Failed, coordinator.actionStatus.value)
+    }
 }
 
 private class FakeBlockingRepository(private val shouldFail: Boolean) : BlockingRepository {

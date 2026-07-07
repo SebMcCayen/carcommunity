@@ -123,4 +123,52 @@ class EventChatScreenTest {
         composeTestRule.onNodeWithText(str(R.string.chat_reportReasonSpam)).performClick()
         assertEquals("m9" to ChatReportReason.SPAM, reported)
     }
+
+    @Test
+    fun blockingOthersMessage_confirmDialog_blocksAuthor() {
+        var blocked: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(
+                    state = ChatMessagesState.Loaded(listOf(message("m9", "Ada", "other"))),
+                    currentUid = "me",
+                    canParticipate = true,
+                    sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle,
+                    onSend = {},
+                    onReport = { _, _ -> },
+                    onReportDismiss = {},
+                    onBack = {},
+                    canBlock = true,
+                    onBlock = { blocked = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.blocking_blockUser)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.blocking_blockConfirmTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.blocking_blockConfirmAction)).performClick()
+        assertEquals("other", blocked)
+    }
+
+    @Test
+    fun ownMessage_showsNoBlockAction() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(
+                    state = ChatMessagesState.Loaded(listOf(message("m1", "Me", "me"))),
+                    currentUid = "me",
+                    canParticipate = true,
+                    sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle,
+                    onSend = {},
+                    onReport = { _, _ -> },
+                    onReportDismiss = {},
+                    onBack = {},
+                    canBlock = true,
+                    onBlock = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.blocking_blockUser)).assertDoesNotExist()
+    }
 }

@@ -44,4 +44,59 @@ class EventChatTest {
         assertEquals("unsafe_driving", ChatReportReason.UNSAFE_DRIVING.wire)
         assertEquals("other", ChatReportReason.OTHER.wire)
     }
+
+    private fun message(id: String, author: String) =
+        ChatMessage(
+            id = id,
+            authorUserId = author,
+            authorDisplayName = author,
+            message = "m-$id",
+            isRemoved = false,
+            createdAtMillis = null,
+        )
+
+    @Test
+    fun `canBlock is false for own message and true for another user`() {
+        assertFalse(EventChat.canBlock(message("1", "me"), "me"))
+        assertTrue(EventChat.canBlock(message("2", "other"), "me"))
+    }
+
+    @Test
+    fun `filterBlocked hides blocked authors and keeps own plus others`() {
+        val messages =
+            listOf(
+                message("1", "me"),
+                message("2", "blocked"),
+                message("3", "friend"),
+                message("4", "blocked"),
+            )
+        val result = EventChat.filterBlocked(messages, setOf("blocked"))
+        assertEquals(listOf("1", "3"), result.map { it.id })
+    }
+
+    @Test
+    fun `filterBlocked with an empty set returns the list unchanged`() {
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        assertEquals(messages, EventChat.filterBlocked(messages, emptySet()))
+    }
+
+    @Test
+    fun `filterBlocked is a pure filter that drops any author in the set, including the caller`() {
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        // filterBlocked has no notion of the caller: if "me" is in the set it is
+        // dropped like any other author. Caller-exclusion is the call site's job
+        // (EventChatRoute removes currentUid from the set before filtering), which
+        // is exercised by the next test.
+        assertEquals(listOf("2"), EventChat.filterBlocked(messages, setOf("me")).map { it.id })
+    }
+
+    @Test
+    fun `caller uid removed from the set keeps the callers own messages`() {
+        // Mirrors the call-site invariant: subtracting currentUid ("me") from the
+        // blocked set before filtering guarantees the caller's messages survive
+        // even if the blocked mirror ever contains their own uid.
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        val blocked = setOf("me", "other") - "me"
+        assertEquals(listOf("1"), EventChat.filterBlocked(messages, blocked).map { it.id })
+    }
 }

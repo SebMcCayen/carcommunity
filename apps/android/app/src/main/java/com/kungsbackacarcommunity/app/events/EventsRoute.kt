@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChat
+import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRoute
 import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
@@ -45,6 +46,9 @@ fun EventsRoute(
     groupDriveRepository: GroupDriveRepository?,
     groupDriveCoordinator: GroupDriveCoordinator?,
     onBack: () -> Unit,
+    // Blocking-in-context: null-safe. When null, chat offers no block action
+    // and does no blocked-author filtering (config-less builds pass unchanged).
+    blockingRepository: BlockingRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -87,6 +91,7 @@ fun EventsRoute(
             eventStatus = event?.status,
             myRsvp = myRsvp,
             onBack = { showChat = false },
+            blockingRepository = blockingRepository,
         )
         return
     }

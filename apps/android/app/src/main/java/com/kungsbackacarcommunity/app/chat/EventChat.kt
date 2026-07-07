@@ -64,4 +64,30 @@ object EventChat {
 
     /** Whether a draft message is within the 1..MAX bound after trimming. */
     fun isSendable(text: String): Boolean = text.trim().length in 1..MESSAGE_MAX_LENGTH
+
+    /**
+     * Whether the caller may block a message's author. False for the caller's
+     * own messages — the backend rejects self-blocks anyway, and no block
+     * affordance should ever appear on your own message. Directional: blocking
+     * is one-way and never revealed to the target.
+     */
+    fun canBlock(message: ChatMessage, currentUid: String): Boolean =
+        message.authorUserId != currentUid
+
+    /**
+     * Client-side display filter (Phase 12): drops every message whose
+     * [ChatMessage.authorUserId] is in [blockedUids]. This is display-only —
+     * server-side enforcement is a separate parity row — and directional: it
+     * hides authors the caller has blocked without revealing anything to those
+     * authors. An empty set returns the list unchanged.
+     *
+     * Pure function: it has no notion of the caller. If the caller's own uid is
+     * present in [blockedUids] their messages WILL be dropped, so excluding the
+     * caller (you cannot block yourself) is the caller's responsibility and is
+     * enforced at the call site in EventChatRoute.
+     */
+    fun filterBlocked(messages: List<ChatMessage>, blockedUids: Set<String>): List<ChatMessage> {
+        if (blockedUids.isEmpty()) return messages
+        return messages.filterNot { it.authorUserId in blockedUids }
+    }
 }
