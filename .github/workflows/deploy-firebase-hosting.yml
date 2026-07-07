@@ -51,7 +51,34 @@ jobs:
         run: npm run build --workspace @carcommunity/shared
 
       - name: Build admin web
-        run: npm run build --workspace apps/admin
+        # Vite bakes these VITE_* values into the client bundle at build time,
+        # so the deployed admin app boots with the real Firebase project config.
+        # They are non-secret client identifiers (public in the shipped bundle),
+        # so they live as `production` ENVIRONMENT VARIABLES (vars.*), not
+        # secrets. The job's `environment: production` makes them resolve here;
+        # the PR-only validate-admin-web build has no environment and builds
+        # without them (it never needs the real project). Real protection stays
+        # Security Rules + Auth + App Check + the Browser-key referrer allowlist.
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+        run: |
+          # Fail loudly if any value is missing — better than deploying a
+          # bundle that throws "Missing required environment variable" on load.
+          missing=""
+          for v in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID \
+                   VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing production environment variable(s):$missing — set them under Settings → Environments → production → Variables."
+            exit 1
+          fi
+          npm run build --workspace apps/admin
 
       - name: Deploy Firebase Hosting
         working-directory: functions
