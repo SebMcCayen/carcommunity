@@ -11,7 +11,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import {
   initializeAppCheck,
-  ReCaptchaV3Provider,
+  ReCaptchaEnterpriseProvider,
   type AppCheck,
 } from 'firebase/app-check';
 import { getAuth, type Auth } from 'firebase/auth';
@@ -36,12 +36,14 @@ const firebaseConfig = {
 let appCheckInstance: AppCheck | null = null;
 
 /**
- * Registers Firebase App Check (Phase 15c) with the reCAPTCHA v3
- * provider. Registration is a no-op until VITE_APPCHECK_SITE_KEY is
- * configured (console provisioning at cutover) — clients degrade
- * gracefully while enforcement is off server-side per docs/app-check.md.
- * In non-production builds VITE_APPCHECK_DEBUG_TOKEN feeds the debug
- * provider for emulator/CI runs.
+ * Registers Firebase App Check (Phase 15c) with the reCAPTCHA Enterprise
+ * provider (VITE_APPCHECK_SITE_KEY is the reCAPTCHA Enterprise site key;
+ * the Web app must be registered under reCAPTCHA Enterprise in the Firebase
+ * App Check console). Registration is a no-op until the key is configured —
+ * clients degrade gracefully while enforcement is off server-side per
+ * docs/app-check.md. In non-production builds VITE_APPCHECK_DEBUG_TOKEN sets
+ * FIREBASE_APPCHECK_DEBUG_TOKEN, enabling App Check debug mode (still the
+ * reCAPTCHA provider) for emulator/CI runs.
  */
 function registerAppCheck(app: FirebaseApp): void {
   if (appCheckInstance) return;
@@ -54,7 +56,7 @@ function registerAppCheck(app: FirebaseApp): void {
     }
   }
   appCheckInstance = initializeAppCheck(app, {
-    provider: new ReCaptchaV3Provider(siteKey),
+    provider: new ReCaptchaEnterpriseProvider(siteKey),
     isTokenAutoRefreshEnabled: true,
   });
 }
