@@ -62,6 +62,11 @@ import {
   adminPausePartnerOffer,
 } from '../features/partners';
 import { awardHelpfulMemberBadge, loadAdminBadgeSummary } from '../features/badges';
+import {
+  loadAdminChatReports,
+  removeAdminChatMessageFromReport,
+  resolveAdminChatReport,
+} from '../features/event-chat';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -762,5 +767,76 @@ describe('badges module', () => {
     expect(response.data.alreadyAwarded).toBe(true);
     // No fabricated "new award" time for an idempotent repeat.
     expect(response.data.badge.awardedAt).toBe('');
+  });
+});
+
+describe('event-chat module', () => {
+  it('maps listChatReports rows (eventId + reporter) and forwards the status filter', async () => {
+    callAdminMock.mockResolvedValue({
+      reports: [
+        {
+          id: 'r1',
+          eventId: 'ev1',
+          messageId: 'm1',
+          reporterUserId: 'reporter1',
+          reason: 'spam',
+          details: 'Länkspam',
+          status: 'new',
+          createdAt: '2026-07-05T10:00:00.000Z',
+          reviewedAt: null,
+          reviewedByUserId: null,
+        },
+      ],
+      meta: { page: 1, pageSize: 20, total: 1, hasNext: false },
+    });
+    const response = await loadAdminChatReports({ status: 'new', pageSize: 20 });
+    expect(callAdminMock).toHaveBeenCalledWith('events-listChatReports', {
+      status: 'new',
+      pageSize: 20,
+    });
+    expect(response.data.reports[0]).toMatchObject({
+      id: 'r1',
+      eventId: 'ev1',
+      messageId: 'm1',
+      reporterUserId: 'reporter1',
+      reason: 'spam',
+      status: 'new',
+    });
+    expect(response.meta.total).toBe(1);
+  });
+
+  it('omits absent params from the callable payload', async () => {
+    callAdminMock.mockResolvedValue({
+      reports: [],
+      meta: { page: 1, pageSize: 20, total: 0, hasNext: false },
+    });
+    await loadAdminChatReports();
+    expect(callAdminMock).toHaveBeenCalledWith('events-listChatReports', {});
+  });
+
+  it('resolves a report via events-resolveChatReport with its eventId', async () => {
+    callAdminMock.mockResolvedValue({ reportId: 'r1', status: 'dismissed' });
+    const result = await resolveAdminChatReport('ev1', 'r1', 'dismissed');
+    expect(callAdminMock).toHaveBeenCalledWith('events-resolveChatReport', {
+      eventId: 'ev1',
+      reportId: 'r1',
+      status: 'dismissed',
+    });
+    expect(result.status).toBe('dismissed');
+  });
+
+  it('removes the offending message via events-removeChatMessage', async () => {
+    callAdminMock.mockResolvedValue({
+      eventId: 'ev1',
+      messageId: 'm1',
+      moderationState: 'removed',
+    });
+    const result = await removeAdminChatMessageFromReport('ev1', 'm1', 'Regelbrott');
+    expect(callAdminMock).toHaveBeenCalledWith('events-removeChatMessage', {
+      eventId: 'ev1',
+      messageId: 'm1',
+      reason: 'Regelbrott',
+    });
+    expect(result.moderationState).toBe('removed');
   });
 });

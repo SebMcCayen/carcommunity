@@ -1,46 +1,51 @@
 'use client';
 
 /**
- * Event chat moderation page — admin portal.
+ * Event chat moderation page — admin portal (Phase 13h — Firebase migration).
  *
- * Shows reported chat messages with moderation context.
- * Allows admins to remove messages with a required reason.
+ * Reports-driven moderation queue backed by Firebase callables:
+ *  - events-listChatReports lists reported messages newest-first.
+ *  - events-resolveChatReport transitions a report (granska/lös/avvisa).
+ *  - events-removeChatMessage soft-removes the offending message.
+ *
+ * The legacy cross-event "all messages" browser is intentionally not carried
+ * over: chat messages are participant-only by design and the backend exposes no
+ * admin message read. Every report carries its eventId + messageId, so an admin
+ * moderates entirely from the report — the message body is never fetched.
  *
  * Security notes:
+ * - The admin never receives message bodies (nothing is rendered as HTML).
  * - Backend verifies admin role for all operations.
- * - Message content is rendered as plain text only — never as raw HTML.
- * - Reporter identities are not exposed.
- * - Removal preserves the message for audit purposes.
+ * - Reporter identities are surfaced to admins only.
+ * - Removal preserves the message for audit purposes (soft-delete).
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import styles from './page.module.css';
 
 import {
-  formatModerationState,
   formatReportReason,
   formatReportStatus,
-  loadAdminChatMessages,
   loadAdminChatReports,
-  removeAdminChatMessage,
-  type AdminEventChatMessageSummary,
-  type AdminEventChatReportSummary,
+  removeAdminChatMessageFromReport,
+  resolveAdminChatReport,
+  OPEN_REPORT_STATUSES,
+  type AdminEventChatReportRow,
+  type ApiError,
 } from '@/features/event-chat';
 
-type Tab = 'messages' | 'reports';
-
 // ---------------------------------------------------------------------------
-// Remove message dialog
+// Remove message dialog (acts on a report — no message body is available)
 // ---------------------------------------------------------------------------
 
 interface RemoveDialogProps {
-  message: AdminEventChatMessageSummary;
+  report: AdminEventChatReportRow;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
   isSubmitting: boolean;
 }
 
-function RemoveDialog({ message, onConfirm, onCancel, isSubmitting }: RemoveDialogProps) {
+function RemoveDialog({ report, onConfirm, onCancel, isSubmitting }: RemoveDialogProps) {
   const [reason, setReason] = useState('');
   const reasonTrimmed = reason.trim();
 
@@ -49,10 +54,9 @@ function RemoveDialog({ message, onConfirm, onCancel, isSubmitting }: RemoveDial
       <div className={styles.dialog}>
         <h3 className={styles.dialogTitle}>Ta bort meddelande</h3>
         <p className={styles.dialogMeta}>
-          Av: <strong>{message.author.displayName ?? 'Okänd'}</strong>
+          Meddelande-ID: <strong>{report.messageId}</strong>
         </p>
-        {/* Plain text only — never render as HTML */}
-        <p className={styles.dialogExcerpt}>{message.message.slice(0, 200)}</p>
+        <p className={styles.dialogMeta}>Anledning: {formatReportReason(report.reason)}</p>
         <label className={styles.label} htmlFor="removal-reason">
           Orsak <span aria-hidden="true">*</span>
         </label>
@@ -96,143 +100,21 @@ function RemoveDialog({ message, onConfirm, onCancel, isSubmitting }: RemoveDial
 }
 
 // ---------------------------------------------------------------------------
-// Messages tab
-// ---------------------------------------------------------------------------
-
-interface MessagesTabProps {
-  messages: AdminEventChatMessageSummary[];
-  isLoading: boolean;
-  error: string | null;
-  onRemove: (msg: AdminEventChatMessageSummary) => void;
-}
-
-function MessagesTab({ messages, isLoading, error, onRemove }: MessagesTabProps) {
-  if (isLoading) return <p className={styles.statusText}>Laddar meddelanden…</p>;
-  if (error) return <p className={styles.errorText}>{error}</p>;
-  if (messages.length === 0) return <p className={styles.statusText}>Inga meddelanden hittades.</p>;
-
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr>
-          <th>Händelse</th>
-          <th>Avsändare</th>
-          <th>Meddelande</th>
-          <th>Datum</th>
-          <th>Rapporter</th>
-          <th>Status</th>
-          <th>Åtgärder</th>
-        </tr>
-      </thead>
-      <tbody>
-        {messages.map((msg) => (
-          <tr key={msg.id} className={msg.moderationState === 'removed' ? styles.removedRow : undefined}>
-            <td className={styles.idCell} title={msg.eventId}>{msg.eventId.slice(0, 8)}…</td>
-            <td>{msg.author.displayName ?? 'Okänd'}</td>
-            {/* Plain text only — content is NOT rendered as HTML */}
-            <td className={styles.excerptCell}>{msg.message.slice(0, 80)}{msg.message.length > 80 ? '…' : ''}</td>
-            <td>{new Date(msg.createdAt).toLocaleDateString('sv-SE')}</td>
-            <td>{msg.reportCount}</td>
-            <td>
-              <span className={msg.moderationState === 'removed' ? styles.badgeRemoved : styles.badgeVisible}>
-                {formatModerationState(msg.moderationState)}
-              </span>
-            </td>
-            <td>
-              {msg.moderationState === 'visible' && (
-                <button
-                  type="button"
-                  className={styles.actionButton}
-                  onClick={() => onRemove(msg)}
-                >
-                  Ta bort
-                </button>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Reports tab
-// ---------------------------------------------------------------------------
-
-interface ReportsTabProps {
-  reports: AdminEventChatReportSummary[];
-  isLoading: boolean;
-  error: string | null;
-}
-
-function ReportsTab({ reports, isLoading, error }: ReportsTabProps) {
-  if (isLoading) return <p className={styles.statusText}>Laddar rapporter…</p>;
-  if (error) return <p className={styles.errorText}>{error}</p>;
-  if (reports.length === 0) return <p className={styles.statusText}>Inga rapporter hittades.</p>;
-
-  return (
-    <table className={styles.table}>
-      <thead>
-        <tr>
-          <th>Meddelande-ID</th>
-          <th>Anledning</th>
-          <th>Status</th>
-          <th>Detaljer</th>
-          <th>Datum</th>
-          <th>Granskad</th>
-        </tr>
-      </thead>
-      <tbody>
-        {reports.map((report) => (
-          <tr key={report.id}>
-            <td className={styles.idCell} title={report.messageId}>{report.messageId.slice(0, 8)}…</td>
-            <td>{formatReportReason(report.reason)}</td>
-            <td>
-              <span className={styles.badge}>{formatReportStatus(report.status)}</span>
-            </td>
-            {/* Plain text only */}
-            <td>{report.details ?? '–'}</td>
-            <td>{new Date(report.createdAt).toLocaleDateString('sv-SE')}</td>
-            <td>{report.reviewedAt ? new Date(report.reviewedAt).toLocaleDateString('sv-SE') : '–'}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
+const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 8)}…` : id);
+
 export default function EventChatModerationPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('messages');
-
-  const [messages, setMessages] = useState<AdminEventChatMessageSummary[]>([]);
-  const [messagesLoading, setMessagesLoading] = useState(false);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
-
-  const [reports, setReports] = useState<AdminEventChatReportSummary[]>([]);
-  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reports, setReports] = useState<AdminEventChatReportRow[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
   const [reportsError, setReportsError] = useState<string | null>(null);
 
-  const [removeTarget, setRemoveTarget] = useState<AdminEventChatMessageSummary | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<AdminEventChatReportRow | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
-
-  const fetchMessages = useCallback(async () => {
-    setMessagesLoading(true);
-    setMessagesError(null);
-    try {
-      const res = await loadAdminChatMessages();
-      setMessages(res.data.messages);
-    } catch (err) {
-      setMessagesError('Kunde inte ladda meddelanden. Försök igen.');
-      console.error('Failed to load admin chat messages:', err instanceof Error ? err.message : String(err));
-    } finally {
-      setMessagesLoading(false);
-    }
-  }, []);
+  // Report id currently being transitioned, to disable its row buttons.
+  const [pendingReportId, setPendingReportId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchReports = useCallback(async () => {
     setReportsLoading(true);
@@ -241,33 +123,44 @@ export default function EventChatModerationPage() {
       const res = await loadAdminChatReports();
       setReports(res.data.reports);
     } catch (err) {
-      setReportsError('Kunde inte ladda rapporter. Försök igen.');
-      console.error('Failed to load admin chat reports:', err instanceof Error ? err.message : String(err));
+      setReportsError((err as ApiError)?.message ?? 'Kunde inte ladda rapporter. Försök igen.');
     } finally {
       setReportsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchMessages();
     void fetchReports();
-  }, [fetchMessages, fetchReports]);
+  }, [fetchReports]);
+
+  const handleResolve = useCallback(
+    async (report: AdminEventChatReportRow, status: 'under_review' | 'resolved' | 'dismissed') => {
+      setPendingReportId(report.id);
+      setActionError(null);
+      try {
+        await resolveAdminChatReport(report.eventId, report.id, status);
+        await fetchReports();
+      } catch (err) {
+        setActionError((err as ApiError)?.message ?? 'Åtgärden misslyckades. Försök igen.');
+      } finally {
+        setPendingReportId(null);
+      }
+    },
+    [fetchReports],
+  );
 
   const handleRemoveConfirm = useCallback(
     async (reason: string) => {
       if (!removeTarget) return;
       setIsRemoving(true);
+      setActionError(null);
       try {
-        const res = await removeAdminChatMessage(removeTarget.id, reason);
-        setMessages((prev) =>
-          prev.map((m) => (m.id === removeTarget.id ? res.data.message : m)),
-        );
+        await removeAdminChatMessageFromReport(removeTarget.eventId, removeTarget.messageId, reason);
         setRemoveTarget(null);
-        // Refresh reports since removal resolves open reports
-        void fetchReports();
+        // Removal auto-resolves the message's open reports — refresh the queue.
+        await fetchReports();
       } catch (err) {
-        console.error('Failed to remove chat message:', err instanceof Error ? err.message : String(err));
-        alert('Kunde inte ta bort meddelandet. Försök igen.');
+        setActionError((err as ApiError)?.message ?? 'Kunde inte ta bort meddelandet. Försök igen.');
       } finally {
         setIsRemoving(false);
       }
@@ -282,46 +175,108 @@ export default function EventChatModerationPage() {
         <p className={styles.subtitle}>Rapporterade meddelanden och moderationsåtgärder.</p>
       </header>
 
-      <nav className={styles.tabs} aria-label="Chat moderation tabs">
-        <button
-          type="button"
-          className={`${styles.tab} ${activeTab === 'messages' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('messages')}
-          aria-current={activeTab === 'messages' ? 'page' : undefined}
-        >
-          Meddelanden
-        </button>
-        <button
-          type="button"
-          className={`${styles.tab} ${activeTab === 'reports' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('reports')}
-          aria-current={activeTab === 'reports' ? 'page' : undefined}
-        >
-          Rapporterade meddelanden
-        </button>
-      </nav>
+      {actionError && (
+        <p className={styles.errorText} role="alert">
+          {actionError}
+        </p>
+      )}
 
       <main className={styles.content}>
-        {activeTab === 'messages' && (
-          <MessagesTab
-            messages={messages}
-            isLoading={messagesLoading}
-            error={messagesError}
-            onRemove={setRemoveTarget}
-          />
-        )}
-        {activeTab === 'reports' && (
-          <ReportsTab
-            reports={reports}
-            isLoading={reportsLoading}
-            error={reportsError}
-          />
+        {reportsLoading ? (
+          <p className={styles.statusText}>Laddar rapporter…</p>
+        ) : reportsError ? (
+          <p className={styles.errorText}>{reportsError}</p>
+        ) : reports.length === 0 ? (
+          <p className={styles.statusText}>Inga rapporter hittades.</p>
+        ) : (
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Händelse</th>
+                <th>Meddelande-ID</th>
+                <th>Anledning</th>
+                <th>Status</th>
+                <th>Detaljer</th>
+                <th>Datum</th>
+                <th>Åtgärder</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reports.map((report) => {
+                const isOpen = OPEN_REPORT_STATUSES.includes(report.status);
+                const isPending = pendingReportId === report.id;
+                return (
+                  <tr key={report.id}>
+                    <td className={styles.idCell} title={report.eventId}>
+                      {shortId(report.eventId)}
+                    </td>
+                    <td className={styles.idCell} title={report.messageId}>
+                      {shortId(report.messageId)}
+                    </td>
+                    <td>{formatReportReason(report.reason)}</td>
+                    <td>
+                      <span className={styles.badge}>{formatReportStatus(report.status)}</span>
+                    </td>
+                    {/* Plain text only */}
+                    <td>{report.details ?? '–'}</td>
+                    <td>{report.createdAt ? new Date(report.createdAt).toLocaleDateString('sv-SE') : '–'}</td>
+                    <td>
+                      {isOpen ? (
+                        <div className={styles.rowActions}>
+                          {report.status === 'new' && (
+                            <button
+                              type="button"
+                              className={styles.actionButton}
+                              onClick={() => void handleResolve(report, 'under_review')}
+                              disabled={isPending}
+                            >
+                              Granska
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => void handleResolve(report, 'resolved')}
+                            disabled={isPending}
+                          >
+                            Lös
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => void handleResolve(report, 'dismissed')}
+                            disabled={isPending}
+                          >
+                            Avvisa
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.removeButton}
+                            onClick={() => setRemoveTarget(report)}
+                            disabled={isPending}
+                          >
+                            Ta bort meddelande
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={styles.statusText}>
+                          {report.reviewedAt
+                            ? `Granskad ${new Date(report.reviewedAt).toLocaleDateString('sv-SE')}`
+                            : '–'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </main>
 
       {removeTarget && (
         <RemoveDialog
-          message={removeTarget}
+          report={removeTarget}
           onConfirm={(reason) => void handleRemoveConfirm(reason)}
           onCancel={() => setRemoveTarget(null)}
           isSubmitting={isRemoving}
