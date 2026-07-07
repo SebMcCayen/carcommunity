@@ -24,6 +24,7 @@
 import {
   ADMIN_INSIGHTS_PERIODS,
   type AdminInsightsPeriod,
+  type AggregationPeriod,
   type InsightResultStatus,
   type PartnerInsightsMetric,
   type PartnerInsightsSummary,
@@ -36,8 +37,6 @@ import { callAdmin } from '../../lib/callables';
 export type * from '@carcommunity/shared/partner-insights';
 export { ADMIN_INSIGHTS_PERIODS, ApiError };
 
-type BackendPeriodType = 'day' | 'week' | 'month';
-
 interface BackendMetric {
   interactionType: PartnerInteractionType;
   totalCount: number;
@@ -47,7 +46,7 @@ interface BackendMetric {
 
 interface BackendSummary {
   companyId: string;
-  periodType: BackendPeriodType;
+  periodType: AggregationPeriod;
   periodStart: string;
   metrics: BackendMetric[];
 }
@@ -59,7 +58,7 @@ interface BackendSummary {
  * reference date back into the prior month.
  */
 export function periodToBucket(period: AdminInsightsPeriod): {
-  periodType: BackendPeriodType;
+  periodType: AggregationPeriod;
   // Every branch below sets an explicit reference date, so `date` is required.
   date: string;
 } {
