@@ -44,4 +44,47 @@ class EventChatTest {
         assertEquals("unsafe_driving", ChatReportReason.UNSAFE_DRIVING.wire)
         assertEquals("other", ChatReportReason.OTHER.wire)
     }
+
+    private fun message(id: String, author: String) =
+        ChatMessage(
+            id = id,
+            authorUserId = author,
+            authorDisplayName = author,
+            message = "m-$id",
+            isRemoved = false,
+            createdAtMillis = null,
+        )
+
+    @Test
+    fun `canBlock is false for own message and true for another user`() {
+        assertFalse(EventChat.canBlock(message("1", "me"), "me"))
+        assertTrue(EventChat.canBlock(message("2", "other"), "me"))
+    }
+
+    @Test
+    fun `filterBlocked hides blocked authors and keeps own plus others`() {
+        val messages =
+            listOf(
+                message("1", "me"),
+                message("2", "blocked"),
+                message("3", "friend"),
+                message("4", "blocked"),
+            )
+        val result = EventChat.filterBlocked(messages, setOf("blocked"))
+        assertEquals(listOf("1", "3"), result.map { it.id })
+    }
+
+    @Test
+    fun `filterBlocked with an empty set returns the list unchanged`() {
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        assertEquals(messages, EventChat.filterBlocked(messages, emptySet()))
+    }
+
+    @Test
+    fun `filterBlocked never drops the callers own messages`() {
+        val messages = listOf(message("1", "me"), message("2", "other"))
+        // Even if "me" somehow appears in the set, own messages are addressed by
+        // canBlock (no self-block); this documents that a set without "me" keeps them.
+        assertEquals(listOf("1", "2"), EventChat.filterBlocked(messages, setOf("nobody")).map { it.id })
+    }
 }

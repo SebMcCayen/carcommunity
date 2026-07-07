@@ -28,12 +28,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 
 /**
  * Event chat (Phase 12 slice 10). Stateless apart from the message draft and
- * the report-dialog selection. Participation is gated on [canParticipate]
+ * the report/block dialog selections. Participation is gated on [canParticipate]
  * (active member + published + going/maybe RSVP); removed messages render a
- * neutral placeholder. Reporting opens a reason picker.
+ * neutral placeholder. Reporting opens a reason picker; blocking opens a
+ * confirm dialog.
+ *
+ * Blocking here is contextual (block a message's author). Blocks are
+ * directional and never revealed to the target; the caller's own messages
+ * never offer a block affordance ([EventChat.canBlock]).
  */
 @Composable
 fun EventChatScreen(
@@ -47,10 +53,17 @@ fun EventChatScreen(
     onReportDismiss: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Null when blocking is unavailable (config-less builds): no block
+    // affordance and no block-status surfacing.
+    canBlock: Boolean = false,
+    blockStatus: BlockActionStatus = BlockActionStatus.Idle,
+    onBlock: (String) -> Unit = {},
+    onBlockDismiss: () -> Unit = {},
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
     var reportingMessageId by rememberSaveable { mutableStateOf<String?>(null) }
+    var blockingUserId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Clear the draft only once a post actually succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
@@ -117,7 +130,11 @@ fun EventChatScreen(
                                 MessageRow(
                                     message = message,
                                     isOwn = message.authorUserId == currentUid,
+                                    // Block only another user's message, and only when blocking
+                                    // is wired (canBlock). Directional; never on own messages.
+                                    canBlock = canBlock && EventChat.canBlock(message, currentUid),
                                     onReport = { reportingMessageId = message.id },
+                                    onBlock = { blockingUserId = message.authorUserId },
                                 )
                             }
                         }
@@ -141,6 +158,20 @@ fun EventChatScreen(
             if (reportStatus == ChatReportStatus.Done) {
                 Text(
                     text = stringResource(R.string.chat_reportSubmitted),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (blockStatus == BlockActionStatus.Failed) {
+                Text(
+                    text = stringResource(R.string.blocking_errorGeneric),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (blockStatus == BlockActionStatus.Done) {
+                Text(
+                    text = stringResource(R.string.blocking_blockSuccess),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -183,10 +214,30 @@ fun EventChatScreen(
             },
         )
     }
+
+    val selectedBlockUserId = blockingUserId
+    if (selectedBlockUserId != null) {
+        BlockConfirmDialog(
+            onConfirm = {
+                blockingUserId = null
+                onBlock(selectedBlockUserId)
+            },
+            onDismiss = {
+                blockingUserId = null
+                onBlockDismiss()
+            },
+        )
+    }
 }
 
 @Composable
-private fun MessageRow(message: ChatMessage, isOwn: Boolean, onReport: () -> Unit) {
+private fun MessageRow(
+    message: ChatMessage,
+    isOwn: Boolean,
+    canBlock: Boolean,
+    onReport: () -> Unit,
+    onBlock: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -211,15 +262,43 @@ private fun MessageRow(message: ChatMessage, isOwn: Boolean, onReport: () -> Uni
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                // You cannot report your own message.
+                // Moderation actions on another user's message only. You cannot
+                // report or block your own message (canBlock is already false
+                // for own messages via EventChat.canBlock).
                 if (!isOwn) {
-                    TextButton(onClick = onReport) {
-                        Text(text = stringResource(R.string.chat_reportMessage))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = onReport) {
+                            Text(text = stringResource(R.string.chat_reportMessage))
+                        }
+                        if (canBlock) {
+                            TextButton(onClick = onBlock) {
+                                Text(text = stringResource(R.string.blocking_blockUser))
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun BlockConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.blocking_blockConfirmTitle)) },
+        text = { Text(text = stringResource(R.string.blocking_blockConfirmBody)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = stringResource(R.string.blocking_blockConfirmAction))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.blocking_blockCancelAction))
+            }
+        },
+    )
 }
 
 @Composable

@@ -270,6 +270,8 @@ fun AuthenticatedApp(
                             groupDriveRepository = groupDriveRepository,
                             groupDriveCoordinator = groupDriveCoordinator,
                             onBack = { destination = MainDestination.Home },
+                            // Blocking-in-context (chat): null-safe passthrough.
+                            blockingRepository = blockingRepository,
                         )
                     } else {
                         // Unreachable: the Home entry is gated on eventsRepository
