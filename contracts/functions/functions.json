@@ -442,6 +442,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Notifications)"
     },
     {
+      "name": "notifications.adminSend",
+      "domain": "notifications",
+      "description": "Admin batch in-app notification send. Resolves an audience (all_users/free_users/members/admins/specific_user/event_participants), then fans an in-app notification out via writeInAppNotification (skips deleted/suspended recipients and honours per-category in-app opt-outs; essential categories always deliver). Idempotent per idempotencyKey (deterministic batchId; a replay is already-exists). Broad audiences (all_users/free_users) require confirmed:true. Synchronous fan-out bounded by 500 (larger audiences rejected). Mandatory reason is written to adminAuditEvents. Push delivery is out of scope (needs FCM console setup). Deployed via grouped export as notifications-adminSend (functions/src/notifications/adminSend.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "services/api/src/lib/notification-delivery-service.ts (deliverToAudience)"
+    },
+    {
       "name": "notifications.unregisterPushToken",
       "domain": "notifications",
       "description": "Deletes a push token registration by tokenId. Requires authentication only — suspended users may clean up their devices (legacy parity). Idempotent: returns removed=false when the registration does not exist. Deployed via grouped export as notifications-unregisterPushToken (functions/src/notifications/pushTokens.ts).",
