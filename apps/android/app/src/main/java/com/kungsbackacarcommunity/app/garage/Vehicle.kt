@@ -32,6 +32,12 @@ data class Vehicle(
     val modelYear: Int,
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
+    /**
+     * Cloud Storage path of the vehicle photo
+     * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. The path
+     * is stored; a URL is resolved lazily for rendering.
+     */
+    val imagePath: String? = null,
 )
 
 /** Editable form state (modelYear is text while typing). */

@@ -9,6 +9,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
+import com.kungsbackacarcommunity.app.media.ImageUploadStatus
+import com.kungsbackacarcommunity.app.media.MediaUpload
+import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import java.time.Year
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.flowOf
@@ -25,6 +32,7 @@ fun GarageRoute(
     uid: String,
     isActiveMember: Boolean,
     onBack: () -> Unit,
+    mediaUploader: MediaUploader? = null,
     currentYear: Int = Year.now().value,
 ) {
     val scope = rememberCoroutineScope()
@@ -53,6 +61,37 @@ fun GarageRoute(
                 )
             } ?: VehicleForm()
 
+        // Photo upload is available only when editing an existing vehicle: a
+        // brand-new vehicle has no id yet to key vehicleImages/{uid}/{id}/. The
+        // 10 MB cap + member gate mirror the storage rules (garage is member-
+        // gated). Wired only when the uploader is present (config-less builds
+        // hide the button).
+        val photoContext = LocalContext.current
+        val photoCoordinator =
+            remember(mediaUploader, editingId) {
+                if (mediaUploader != null && editingId != null) {
+                    ImageUploadCoordinator(mediaUploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
+                } else {
+                    null
+                }
+            }
+        val photoStatus by
+            (photoCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
+                .collectAsState(initial = ImageUploadStatus.Idle)
+        val photoUrl = rememberStorageImageUrl(photoContext, vehicle?.imagePath)
+        val photoPicker =
+            rememberImagePickLauncher(
+                maxBytes = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
+            ) { picked ->
+                if (picked != null && photoCoordinator != null && editingId != null) {
+                    val imageId = MediaUpload.newImageId(picked.contentType)
+                    val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
+                    photoCoordinator.upload(picked, path) { storedPath ->
+                        repository.updateVehicleImagePath(editingId, storedPath)
+                    }
+                }
+            }
+
         key(editingId) {
             VehicleFormScreen(
                 initial = initial,
@@ -66,7 +105,19 @@ fun GarageRoute(
                     showForm = false
                     editingVehicleId = null
                     coordinator?.reset()
+                    photoCoordinator?.reset()
                 },
+                photoUrl = photoUrl,
+                photoUploadStatus = photoStatus,
+                onChangePhoto =
+                    if (photoCoordinator != null) {
+                        {
+                            photoCoordinator.reset()
+                            photoPicker.pickImage()
+                        }
+                    } else {
+                        null
+                    },
             )
         }
     } else {

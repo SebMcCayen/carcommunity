@@ -41,6 +41,7 @@ import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
+import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
@@ -101,6 +102,8 @@ class MainActivity : ComponentActivity() {
             notificationSettingsRepository?.let { NotificationSettingsCoordinator(it) }
         val garageRepository = FirebaseGarageRepository.createIfAvailable(applicationContext)
         val garageCoordinator = garageRepository?.let { GarageCoordinator(it) }
+        // Shared Cloud Storage uploader (avatar + vehicle photos); guarded.
+        val mediaUploader = FirebaseMediaUploader.createIfAvailable(applicationContext)
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
@@ -164,6 +167,7 @@ class MainActivity : ComponentActivity() {
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
+                        mediaUploader = mediaUploader,
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         drivesRepository = drivesRepository,

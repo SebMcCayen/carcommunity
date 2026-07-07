@@ -17,4 +17,13 @@ interface ProfileRepository {
      * @throws Exception when the write is rejected (rules, network).
      */
     suspend fun updateProfile(uid: String, displayName: String, bio: String)
+
+    /**
+     * Direct owner write of the avatar path only (rules whitelist: avatarPath +
+     * updatedAt). [avatarPath] must be profileImages/{uid}/... (≤500 chars); the
+     * rules re-validate it. Called after a successful avatar upload.
+     *
+     * @throws Exception when the write is rejected (rules, network).
+     */
+    suspend fun updateAvatarPath(uid: String, avatarPath: String)
 }

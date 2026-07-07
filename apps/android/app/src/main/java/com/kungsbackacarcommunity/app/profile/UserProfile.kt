@@ -7,6 +7,12 @@ package com.kungsbackacarcommunity.app.profile
 data class UserProfile(
     val displayName: String?,
     val bio: String?,
+    /**
+     * Cloud Storage path of the avatar (profileImages/{uid}/{imageId}), or null
+     * when unset. The path — not a URL — is stored; a URL is resolved lazily for
+     * rendering (media/StorageImageUrl).
+     */
+    val avatarPath: String? = null,
     /** True once auth.completeOnboarding has stamped onboardingCompletedAt. */
     val onboardingComplete: Boolean,
     /**

@@ -172,7 +172,12 @@
     "errorNameRequired": "Enter a display name.",
     "errorTooLong": "That text is too long.",
     "loadError": "Couldn’t load your profile.",
-    "saveError": "Couldn’t save. Please try again."
+    "saveError": "Couldn’t save. Please try again.",
+    "avatarAlt": "Profile picture",
+    "avatarChange": "Change picture",
+    "avatarUploading": "Uploading…",
+    "avatarUploadError": "Couldn’t upload the image. Please try again.",
+    "avatarTooLarge": "The image is too large."
   },
   "map": {
     "title": "Map",
@@ -406,7 +411,13 @@
     "retryButton": "Try again",
     "validationMakeTooLong": "Make is too long (max 80 characters).",
     "validationModelTooLong": "Model is too long (max 80 characters).",
-    "validationEngineDescriptionTooLong": "Engine description is too long (max 120 characters)."
+    "validationEngineDescriptionTooLong": "Engine description is too long (max 120 characters).",
+    "photoAlt": "Vehicle photo",
+    "photoAdd": "Add photo",
+    "photoChange": "Change photo",
+    "photoUploading": "Uploading…",
+    "photoUploadError": "Couldn’t upload the image. Please try again.",
+    "photoTooLarge": "The image is too large."
   },
   "badges": {
     "screenTitle": "Awards",

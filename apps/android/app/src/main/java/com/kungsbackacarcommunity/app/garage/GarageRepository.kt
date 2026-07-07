@@ -23,5 +23,12 @@ interface GarageRepository {
 
     suspend fun updateVehicle(vehicleId: String, input: VehicleInput)
 
+    /**
+     * Records the uploaded photo path on the vehicle via garage-updateVehicle
+     * (imagePath field). [imagePath] must lie under the caller's own
+     * vehicleImages/{uid}/{vehicleId}/ prefix; the callable re-validates it.
+     */
+    suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String)
+
     suspend fun deleteVehicle(vehicleId: String)
 }

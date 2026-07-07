@@ -21,11 +21,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 
 /**
  * Vehicle add/edit form (Phase 12 slice 13). Owns its field state; validates
@@ -41,6 +51,13 @@ fun VehicleFormScreen(
     onSave: (VehicleInput) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    // Photo (edit only — a new vehicle has no id yet to key the storage path):
+    // the resolved current-photo URL, the in-flight upload status, and the
+    // add/change action. onChangePhoto null hides the button (config-less build
+    // or add mode).
+    photoUrl: String? = null,
+    photoUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
+    onChangePhoto: (() -> Unit)? = null,
 ) {
     var make by rememberSaveable { mutableStateOf(initial.make) }
     var model by rememberSaveable { mutableStateOf(initial.model) }
@@ -73,6 +90,14 @@ fun VehicleFormScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+
+            if (onChangePhoto != null) {
+                VehiclePhotoSection(
+                    photoUrl = photoUrl,
+                    uploadStatus = photoUploadStatus,
+                    onChangePhoto = onChangePhoto,
+                )
+            }
 
             OutlinedTextField(
                 value = make,
@@ -154,5 +179,61 @@ fun VehicleFormScreen(
                 Text(text = stringResource(R.string.garage_cancelButton))
             }
         }
+    }
+}
+
+@Composable
+private fun VehiclePhotoSection(
+    photoUrl: String?,
+    uploadStatus: ImageUploadStatus,
+    onChangePhoto: () -> Unit,
+) {
+    val uploading = uploadStatus == ImageUploadStatus.Uploading
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (photoUrl != null) {
+            // Coil renders nothing (keeps the placeholder) when no URL resolves.
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = stringResource(R.string.garage_photoAlt),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+            )
+        }
+        if (uploading) {
+            CircularProgressIndicator()
+        }
+    }
+    OutlinedButton(onClick = onChangePhoto, enabled = !uploading, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(
+                when {
+                    uploading -> R.string.garage_photoUploading
+                    photoUrl != null -> R.string.garage_photoChange
+                    else -> R.string.garage_photoAdd
+                },
+            ),
+        )
+    }
+    when (uploadStatus) {
+        ImageUploadStatus.TooLarge ->
+            Text(
+                text = stringResource(R.string.garage_photoTooLarge),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        ImageUploadStatus.Failed ->
+            Text(
+                text = stringResource(R.string.garage_photoUploadError),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        else -> Unit
     }
 }

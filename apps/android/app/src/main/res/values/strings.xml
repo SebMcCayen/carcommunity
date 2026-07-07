@@ -158,6 +158,11 @@
     <string name="profile_errorTooLong">Texten är för lång.</string>
     <string name="profile_loadError">Kunde inte ladda profilen.</string>
     <string name="profile_saveError">Kunde inte spara. Försök igen.</string>
+    <string name="profile_avatarAlt">Profilbild</string>
+    <string name="profile_avatarChange">Byt profilbild</string>
+    <string name="profile_avatarUploading">Laddar upp…</string>
+    <string name="profile_avatarUploadError">Kunde inte ladda upp bilden. Försök igen.</string>
+    <string name="profile_avatarTooLarge">Bilden är för stor.</string>
     <string name="map_title">Karta</string>
     <string name="map_placeholder">Kartvyn kommer snart.</string>
     <string name="map_noOtherMarkersTitle">Inga andra medlemmar delar sin liveposition just nu.</string>
@@ -370,6 +375,12 @@
     <string name="garage_validationMakeTooLong">Märket är för långt (max 80 tecken).</string>
     <string name="garage_validationModelTooLong">Modellen är för lång (max 80 tecken).</string>
     <string name="garage_validationEngineDescriptionTooLong">Motorbeskrivningen är för lång (max 120 tecken).</string>
+    <string name="garage_photoAlt">Fordonsbild</string>
+    <string name="garage_photoAdd">Lägg till bild</string>
+    <string name="garage_photoChange">Byt bild</string>
+    <string name="garage_photoUploading">Laddar upp…</string>
+    <string name="garage_photoUploadError">Kunde inte ladda upp bilden. Försök igen.</string>
+    <string name="garage_photoTooLarge">Bilden är för stor.</string>
     <string name="badges_screenTitle">Utmärkelser</string>
     <string name="badges_loading">Laddar utmärkelser...</string>
     <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>

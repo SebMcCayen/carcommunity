@@ -158,6 +158,11 @@
     <string name="profile_errorTooLong">That text is too long.</string>
     <string name="profile_loadError">Couldn’t load your profile.</string>
     <string name="profile_saveError">Couldn’t save. Please try again.</string>
+    <string name="profile_avatarAlt">Profile picture</string>
+    <string name="profile_avatarChange">Change picture</string>
+    <string name="profile_avatarUploading">Uploading…</string>
+    <string name="profile_avatarUploadError">Couldn’t upload the image. Please try again.</string>
+    <string name="profile_avatarTooLarge">The image is too large.</string>
     <string name="map_title">Map</string>
     <string name="map_placeholder">Map view coming soon.</string>
     <string name="map_noOtherMarkersTitle">No other members are currently sharing their live location.</string>
@@ -370,6 +375,12 @@
     <string name="garage_validationMakeTooLong">Make is too long (max 80 characters).</string>
     <string name="garage_validationModelTooLong">Model is too long (max 80 characters).</string>
     <string name="garage_validationEngineDescriptionTooLong">Engine description is too long (max 120 characters).</string>
+    <string name="garage_photoAlt">Vehicle photo</string>
+    <string name="garage_photoAdd">Add photo</string>
+    <string name="garage_photoChange">Change photo</string>
+    <string name="garage_photoUploading">Uploading…</string>
+    <string name="garage_photoUploadError">Couldn’t upload the image. Please try again.</string>
+    <string name="garage_photoTooLarge">The image is too large.</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>
