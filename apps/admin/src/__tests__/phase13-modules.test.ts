@@ -903,13 +903,20 @@ describe('notifications module', () => {
 });
 
 describe('partner-insights module', () => {
-  it('maps admin period options onto backend calendar buckets', () => {
-    expect(periodToBucket('last_7_days')).toEqual({ periodType: 'week' });
-    expect(periodToBucket('last_30_days')).toEqual({ periodType: 'month' });
-    expect(periodToBucket('current_month')).toEqual({ periodType: 'month' });
-    const previous = periodToBucket('previous_month');
-    expect(previous.periodType).toBe('month');
-    expect(typeof previous.date).toBe('string');
+  it('maps admin period options onto backend calendar buckets with an explicit date', () => {
+    // Every option pins an explicit reference date so the backend never falls
+    // back to its "yesterday" default (which would drift on boundary days).
+    for (const [period, expectedType] of [
+      ['last_7_days', 'week'],
+      ['last_30_days', 'month'],
+      ['current_month', 'month'],
+      ['previous_month', 'month'],
+    ] as const) {
+      const bucket = periodToBucket(period);
+      expect(bucket.periodType).toBe(expectedType);
+      expect(typeof bucket.date).toBe('string');
+      expect(Number.isNaN(Date.parse(bucket.date!))).toBe(false);
+    }
   });
 
   it('summarizes via partnerInsights-adminSummary and adapts the metrics', async () => {
@@ -928,10 +935,13 @@ describe('partner-insights module', () => {
       ],
     });
     const summary = await adminGetPartnerInsightsSummary('co1', 'last_30_days');
-    expect(callAdminMock).toHaveBeenCalledWith('partnerInsights-adminSummary', {
-      companyId: 'co1',
-      periodType: 'month',
-    });
+    expect(callAdminMock).toHaveBeenCalledWith(
+      'partnerInsights-adminSummary',
+      expect.objectContaining({ companyId: 'co1', periodType: 'month' }),
+    );
+    // An explicit reference date is always sent (avoids the backend's yesterday default).
+    const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(typeof payload.date).toBe('string');
     expect(summary.partnerId).toBe('co1');
     expect(summary.period).toBe('last_30_days');
     expect(summary.metrics[0]).toMatchObject({

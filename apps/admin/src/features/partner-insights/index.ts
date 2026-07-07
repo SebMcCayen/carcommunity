@@ -63,11 +63,14 @@ export function periodToBucket(period: AdminInsightsPeriod): {
   date?: string;
 } {
   switch (period) {
+    // Always pass an explicit reference date. Without one the backend defaults
+    // to "yesterday", which on boundary days (e.g. the 1st of a month) resolves
+    // to the PREVIOUS calendar bucket — so `now` pins the current week/month.
     case 'last_7_days':
-      return { periodType: 'week' };
+      return { periodType: 'week', date: new Date().toISOString() };
     case 'last_30_days':
     case 'current_month':
-      return { periodType: 'month' };
+      return { periodType: 'month', date: new Date().toISOString() };
     case 'previous_month': {
       const now = new Date();
       // Mid-previous-month so the reference lands squarely inside that bucket.
