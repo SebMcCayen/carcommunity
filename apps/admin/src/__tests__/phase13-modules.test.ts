@@ -72,6 +72,11 @@ import {
   adminGetPartnerInsightsSummary,
   periodToBucket,
 } from '../features/partner-insights';
+import {
+  adminGetUserSubscription,
+  adminGrantMembership,
+  adminRevokeMembership,
+} from '../features/subscription';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -987,5 +992,70 @@ describe('partner-insights module', () => {
     expect(
       candidates.some((c) => sent.getUTCFullYear() === c.year && sent.getUTCMonth() === c.month),
     ).toBe(true);
+  });
+});
+
+describe('subscription module', () => {
+  const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+
+  it('builds the summary from subscriptions/{uid} + users/{uid}', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'manual',
+          status: 'active',
+          entitlement: 'member_monthly',
+          expiresAt: ts('2026-12-31T00:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary).toMatchObject({
+      userId: 'u1',
+      entitlement: 'member_monthly',
+      isSuspendedWithActiveSubscription: false,
+    });
+    expect(summary.subscription).toMatchObject({
+      platform: 'manual',
+      status: 'active',
+      expiresAt: '2026-12-31T00:00:00.000Z',
+    });
+  });
+
+  it('flags a suspended user who still holds an active subscription', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({ platform: 'manual', status: 'active', entitlement: 'member_monthly' }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: true }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.isSuspendedWithActiveSubscription).toBe(true);
+  });
+
+  it('resolves a missing subscription to entitlement none', async () => {
+    getDocMock
+      .mockResolvedValueOnce({ data: () => undefined })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.entitlement).toBe('none');
+    expect(summary.subscription).toBeNull();
+  });
+
+  it('grants and revokes membership via subscription-grantEntitlement', async () => {
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', entitlement: 'member_monthly' });
+    await adminGrantMembership('u1', 'Kampanj');
+    expect(callAdminMock).toHaveBeenCalledWith('subscription-grantEntitlement', {
+      targetUid: 'u1',
+      entitlement: 'member_monthly',
+      reason: 'Kampanj',
+    });
+
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', entitlement: 'none' });
+    await adminRevokeMembership('u1', 'Återbetalning');
+    expect(callAdminMock).toHaveBeenLastCalledWith('subscription-grantEntitlement', {
+      targetUid: 'u1',
+      entitlement: 'none',
+      reason: 'Återbetalning',
+    });
   });
 });

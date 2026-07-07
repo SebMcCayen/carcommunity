@@ -21,6 +21,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', href: '/', icon: '◼' },
       { label: 'Users', href: '/users', icon: '◎' },
+      { label: 'Subscription', href: '/subscription', icon: '★' },
     ],
   },
   {
