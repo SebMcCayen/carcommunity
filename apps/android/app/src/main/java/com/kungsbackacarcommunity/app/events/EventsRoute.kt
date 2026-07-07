@@ -45,6 +45,7 @@ fun EventsRoute(
     chatEnabled: Boolean,
     groupDriveRepository: GroupDriveRepository?,
     groupDriveCoordinator: GroupDriveCoordinator?,
+    onShowOnMap: ((List<String>) -> Unit)? = null,
     onBack: () -> Unit,
     // Blocking-in-context: null-safe. When null, chat offers no block action
     // and does no blocked-author filtering (config-less builds pass unchanged).
@@ -105,6 +106,7 @@ fun EventsRoute(
             isActiveMember = isActiveMember,
             eventStatus = event?.status,
             myRsvp = myRsvp,
+            onShowOnMap = onShowOnMap,
             onBack = { showGroupDrive = false },
         )
         return

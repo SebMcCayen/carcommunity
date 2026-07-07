@@ -287,6 +287,7 @@
     <string name="groupDrive_countOnTheWay">På väg</string>
     <string name="groupDrive_countArrived">Framme</string>
     <string name="groupDrive_goToLiveLocation">Hantera liveposition</string>
+    <string name="groupDrive_showOnMap">Visa gruppen på kartan</string>
     <string name="savedDrives_screenTitle">Mina körningar</string>
     <string name="savedDrives_loading">Laddar körningar...</string>
     <string name="savedDrives_detailTitle">Körningsdetaljer</string>

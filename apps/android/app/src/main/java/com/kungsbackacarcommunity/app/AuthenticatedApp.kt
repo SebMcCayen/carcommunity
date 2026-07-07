@@ -158,6 +158,12 @@ fun AuthenticatedApp(
         AuthedDestination.Main -> {
             val profile = (profileState as? ProfileState.Loaded)?.profile
             var destination by rememberSaveable { mutableStateOf(MainDestination.Home) }
+            // The map destination is an arg-less enum, so the uids to show on it
+            // are held here (mirroring how Events holds its selected event id).
+            // Set by the group-drive "show on map" affordance before navigating
+            // to MainDestination.Map; cleared when the map is left.
+            var mapParticipantUids by
+                rememberSaveable { mutableStateOf<ArrayList<String>>(ArrayList()) }
 
             // Flag-gated (not member-gated): reaching the live-location screen.
             // Sharing itself is member-gated inside the screen (backend parity).
@@ -244,9 +250,20 @@ fun AuthenticatedApp(
 
                 MainDestination.Map -> {
                     // Flag-gated (not member-gated) like the live-location
-                    // entry; the map itself needs no repository. The Mapbox
-                    // token guard lives in MapRoute.
-                    MapRoute(onBack = { destination = MainDestination.Home })
+                    // entry. The live repository is passed so the map can draw
+                    // the caller's OWN marker (per-uid observeLatest) and any
+                    // group-drive participants held in [mapParticipantUids]
+                    // (per-uid reads, no collection scan). The Mapbox token
+                    // guard lives in MapRoute. Leaving the map clears the uids.
+                    MapRoute(
+                        repository = liveLocationRepository,
+                        uid = uid,
+                        participantUids = mapParticipantUids,
+                        onBack = {
+                            mapParticipantUids = ArrayList()
+                            destination = MainDestination.Home
+                        },
+                    )
                 }
 
                 MainDestination.Events -> {
@@ -269,6 +286,19 @@ fun AuthenticatedApp(
                                 ),
                             groupDriveRepository = groupDriveRepository,
                             groupDriveCoordinator = groupDriveCoordinator,
+                            // Group-drive "show on map": stash the roster uids and
+                            // open the shared map. Only wired when the live
+                            // repository (own + per-uid marker reads) is available;
+                            // null hides the affordance in the group-drive screen.
+                            onShowOnMap =
+                                if (liveLocationRepository != null) {
+                                    { uids ->
+                                        mapParticipantUids = ArrayList(uids)
+                                        destination = MainDestination.Map
+                                    }
+                                } else {
+                                    null
+                                },
                             onBack = { destination = MainDestination.Home },
                             // Blocking-in-context (chat): null-safe passthrough.
                             blockingRepository = blockingRepository,

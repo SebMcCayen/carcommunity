@@ -319,7 +319,8 @@
     "countJoined": "Deltar",
     "countOnTheWay": "På väg",
     "countArrived": "Framme",
-    "goToLiveLocation": "Hantera liveposition"
+    "goToLiveLocation": "Hantera liveposition",
+    "showOnMap": "Visa gruppen på kartan"
   },
   "savedDrives": {
     "screenTitle": "Mina körningar",
