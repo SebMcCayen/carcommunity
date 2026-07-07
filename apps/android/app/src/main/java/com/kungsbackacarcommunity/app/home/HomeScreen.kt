@@ -65,6 +65,8 @@ fun HomeScreen(
     onOpenGarage: (() -> Unit)? = null,
     // Phase 12 slice 14: opens badges; null hides the entry.
     onOpenBadges: (() -> Unit)? = null,
+    // Phase 12 slice 8: opens the blocked-users management screen; null hides it.
+    onOpenBlocked: (() -> Unit)? = null,
     // Phase 12 slice 12: opens saved drives; null hides the entry.
     onOpenSavedDrives: (() -> Unit)? = null,
     // Phase 12 slice 15: opens the points wallet; null hides the entry.
@@ -150,6 +152,11 @@ fun HomeScreen(
             if (onOpenBadges != null) {
                 Button(onClick = onOpenBadges, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.badges_screenTitle))
+                }
+            }
+            if (onOpenBlocked != null) {
+                OutlinedButton(onClick = onOpenBlocked, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.blocking_blockedUsersTitle))
                 }
             }
             if (onOpenSavedDrives != null) {

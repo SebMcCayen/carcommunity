@@ -21,6 +21,8 @@ import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
+import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.blocking.BlockingRoute
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
@@ -112,6 +114,7 @@ fun AuthenticatedApp(
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
+    blockingRepository: BlockingRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -327,6 +330,18 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Blocked -> {
+                    if (blockingRepository != null) {
+                        BlockingRoute(
+                            repository = blockingRepository,
+                            uid = uid,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.SavedDrives -> {
                     if (drivesRepository != null) {
                         DrivesRoute(
@@ -488,6 +503,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Blocked users: owner-read management; reachable when configured.
+                        onOpenBlocked =
+                            if (blockingRepository != null) {
+                                { destination = MainDestination.Blocked }
+                            } else {
+                                null
+                            },
                         // Saved drives: owner-read history; reachable when configured.
                         onOpenSavedDrives =
                             if (drivesRepository != null) {
@@ -563,6 +585,7 @@ private enum class MainDestination {
     NotificationSettings,
     Garage,
     Badges,
+    Blocked,
     SavedDrives,
     Points,
     PartnerApplication,
