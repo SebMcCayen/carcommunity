@@ -68,6 +68,10 @@ import {
   resolveAdminChatReport,
 } from '../features/event-chat';
 import { adminSendNotification } from '../features/notifications';
+import {
+  adminGetPartnerInsightsSummary,
+  periodToBucket,
+} from '../features/partner-insights';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -895,5 +899,62 @@ describe('notifications module', () => {
     const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
     expect('eventId' in payload).toBe(false);
     expect(payload.confirmed).toBe(true);
+  });
+});
+
+describe('partner-insights module', () => {
+  it('maps admin period options onto backend calendar buckets', () => {
+    expect(periodToBucket('last_7_days')).toEqual({ periodType: 'week' });
+    expect(periodToBucket('last_30_days')).toEqual({ periodType: 'month' });
+    expect(periodToBucket('current_month')).toEqual({ periodType: 'month' });
+    const previous = periodToBucket('previous_month');
+    expect(previous.periodType).toBe('month');
+    expect(typeof previous.date).toBe('string');
+  });
+
+  it('summarizes via partnerInsights-adminSummary and adapts the metrics', async () => {
+    callAdminMock.mockResolvedValue({
+      companyId: 'co1',
+      periodType: 'month',
+      periodStart: '2026-07-01',
+      metrics: [
+        { interactionType: 'map_view', totalCount: 42, uniqueContributorCount: null, status: 'available' },
+        {
+          interactionType: 'anonymous_pass_by',
+          totalCount: 0,
+          uniqueContributorCount: null,
+          status: 'insufficient_data',
+        },
+      ],
+    });
+    const summary = await adminGetPartnerInsightsSummary('co1', 'last_30_days');
+    expect(callAdminMock).toHaveBeenCalledWith('partnerInsights-adminSummary', {
+      companyId: 'co1',
+      periodType: 'month',
+    });
+    expect(summary.partnerId).toBe('co1');
+    expect(summary.period).toBe('last_30_days');
+    expect(summary.metrics[0]).toMatchObject({
+      interactionType: 'map_view',
+      totalCount: 42,
+      status: 'available',
+      periodStart: '2026-07-01',
+    });
+    // uniqueContributorCount omitted when null.
+    expect('uniqueContributorCount' in summary.metrics[0]!).toBe(false);
+    expect(summary.metrics[1]).toMatchObject({ status: 'insufficient_data', totalCount: 0 });
+  });
+
+  it('passes a reference date for the previous_month option', async () => {
+    callAdminMock.mockResolvedValue({
+      companyId: 'co1',
+      periodType: 'month',
+      periodStart: '2026-06-01',
+      metrics: [],
+    });
+    await adminGetPartnerInsightsSummary('co1', 'previous_month');
+    const payload = callAdminMock.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.periodType).toBe('month');
+    expect(typeof payload.date).toBe('string');
   });
 });
