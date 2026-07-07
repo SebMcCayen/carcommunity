@@ -228,3 +228,47 @@ export function buildChatReportDocument(
     createdAt: serverTimestamp(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Admin chat-report moderation (Phase 18d) — resolve / list inputs
+// ---------------------------------------------------------------------------
+
+/**
+ * Statuses a moderator can transition a report to. 'new' is the initial state
+ * set by events.reportChatMessage and is never a resolve target.
+ */
+export const CHAT_REPORT_RESOLVABLE_STATUSES = ['under_review', 'resolved', 'dismissed'] as const;
+export type ChatReportResolvableStatus = (typeof CHAT_REPORT_RESOLVABLE_STATUSES)[number];
+
+const resolveChatReportSchema = z
+  .object({
+    eventId: z.string().trim().min(1).max(128),
+    reportId: z.string().trim().min(1).max(256),
+    status: z.enum(CHAT_REPORT_RESOLVABLE_STATUSES),
+  })
+  .strict();
+
+export type ResolveChatReportInput = z.infer<typeof resolveChatReportSchema>;
+
+export function parseResolveChatReportInput(data: unknown): ParseResult<ResolveChatReportInput> {
+  return parse(
+    resolveChatReportSchema,
+    data,
+    'Expected { eventId, reportId, status: under_review|resolved|dismissed }.',
+  );
+}
+
+const listChatReportsSchema = z
+  .object({
+    status: z.enum(['new', 'under_review', 'resolved', 'dismissed']).optional(),
+    // No `page`: the queue is a single newest-first window (bounded scan). A
+    // real cursor is the documented follow-up if the backlog outgrows it.
+    pageSize: z.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+
+export type ListChatReportsInput = z.infer<typeof listChatReportsSchema>;
+
+export function parseListChatReportsInput(data: unknown): ParseResult<ListChatReportsInput> {
+  return parse(listChatReportsSchema, data, 'Expected { status?, pageSize? }.');
+}

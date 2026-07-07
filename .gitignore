@@ -154,3 +154,4 @@ apps/android/**/build/
 apps/android/local.properties
 apps/android/app/google-services.json
 apps/android/.kotlin/
+.claude/worktrees/

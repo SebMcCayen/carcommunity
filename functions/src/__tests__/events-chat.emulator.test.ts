@@ -359,3 +359,61 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
     expect(report.reviewedAt).not.toBeNull();
   });
 });
+
+describe('events-listChatReports / events-resolveChatReport (moderation queue)', () => {
+  it('is admin-only, lists reports, and transitions their status', async () => {
+    // Seed a fresh report directly (backend-only collection) to moderate.
+    const reportId = `report-mod-${Date.now()}`;
+    const reportRef = adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('messageReports')
+      .doc(reportId);
+    await reportRef.set({
+      messageId: 'msg-under-review',
+      reporterUserId: memberGoing.uid,
+      reason: 'spam',
+      details: null,
+      status: 'new',
+      reviewedAt: null,
+      reviewedByUserId: null,
+      createdAt: new Date(),
+    });
+
+    // Non-admin cannot use the moderation callables.
+    await signInAs(memberGoing);
+    expect(await callableErrorCode(call('events-listChatReports', {}))).toBe(
+      'functions/permission-denied',
+    );
+    expect(
+      await callableErrorCode(call('events-resolveChatReport', { eventId, reportId, status: 'resolved' })),
+    ).toBe('functions/permission-denied');
+
+    // Admin sees the report in the queue (with eventId).
+    await signInAs(adminUser);
+    const list = await call('events-listChatReports', {});
+    const reports = (
+      list.data as {
+        reports: Array<{ id: string; eventId: string; status: string; reporterUserId: string | null }>;
+      }
+    ).reports;
+    const seeded = reports.find((r) => r.id === reportId);
+    expect(seeded).toBeDefined();
+    expect(seeded!.eventId).toBe(eventId);
+    // Reporter identity is surfaced to admins.
+    expect(seeded!.reporterUserId).toBe(memberGoing.uid);
+
+    // Resolve transitions status + stamps reviewer metadata.
+    const resolved = await call('events-resolveChatReport', { eventId, reportId, status: 'dismissed' });
+    expect((resolved.data as { status: string }).status).toBe('dismissed');
+    const after = (await reportRef.get()).data()!;
+    expect(after.status).toBe('dismissed');
+    expect(after.reviewedByUserId).toBe(adminUser.uid);
+    expect(after.reviewedAt).not.toBeNull();
+
+    // Unknown report → not-found.
+    expect(
+      await callableErrorCode(call('events-resolveChatReport', { eventId, reportId: 'nope', status: 'resolved' })),
+    ).toBe('functions/not-found');
+  });
+});

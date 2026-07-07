@@ -23,6 +23,7 @@ import { create, update } from './events/manageEvent';
 import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
+import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
@@ -131,6 +132,9 @@ export const events = {
   postChatMessage,
   reportChatMessage,
   removeChatMessage,
+  // Chat report moderation queue (Phase 18d): admin list + resolve.
+  listChatReports,
+  resolveChatReport,
 };
 
 /**

@@ -1,6 +1,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "messageReports",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [
