@@ -377,6 +377,7 @@ fun AuthenticatedApp(
                         DrivesRoute(
                             repository = drivesRepository,
                             uid = uid,
+                            isActiveMember = profile?.activeMember == true,
                             onBack = { destination = MainDestination.Home },
                         )
                     } else {

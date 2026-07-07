@@ -35,6 +35,7 @@ import java.util.Date
 fun DrivesListScreen(
     state: DrivesState,
     onSelect: (String) -> Unit,
+    onRecord: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -51,6 +52,12 @@ fun DrivesListScreen(
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
+            }
+
+            item {
+                Button(onClick = onRecord, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.savedDrives_recordAction))
+                }
             }
 
             when (state) {

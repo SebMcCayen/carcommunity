@@ -66,6 +66,10 @@ class SavedDriveTest {
 private class FakeDrivesRepository(private val shouldFail: Boolean) : DrivesRepository {
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
+    override suspend fun saveDrive(request: Map<String, Any?>) {
+        if (shouldFail) throw IllegalStateException("save failed")
+    }
+
     override suspend fun deleteDrive(rideId: String) {
         if (shouldFail) throw IllegalStateException("delete failed")
     }
