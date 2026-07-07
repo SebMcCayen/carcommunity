@@ -570,5 +570,73 @@
     "confirmationRequiredNote": "Utskick till alla användare kräver bekräftelse.",
     "loading": "Laddar...",
     "saving": "Skickar..."
+  },
+  "users": {
+    "title": "Användare",
+    "subtitle": "Sök och moderera användare. Åtgärder loggas och verifieras i backend.",
+    "searchLabel": "Sök användare",
+    "searchPlaceholder": "Sök på namn eller användar-ID…",
+    "loading": "Hämtar användare…",
+    "loadError": "Kunde inte hämta användarna.",
+    "empty": "Inga användare hittades.",
+    "emptyFiltered": "Inga användare matchar sökningen.",
+    "unnamed": "(namnlös)",
+    "columns": {
+      "name": "Namn",
+      "role": "Roll",
+      "member": "Medlem",
+      "status": "Status",
+      "created": "Skapad"
+    },
+    "role": {
+      "user": "Användare",
+      "admin": "Administratör",
+      "owner": "Ägare"
+    },
+    "member": {
+      "yes": "Ja",
+      "no": "Nej"
+    },
+    "status": {
+      "active": "Aktiv",
+      "suspended": "Avstängd",
+      "deleted": "Raderad"
+    },
+    "detail": {
+      "back": "← Tillbaka till användare",
+      "loading": "Hämtar användare…",
+      "loadError": "Kunde inte hämta användaren.",
+      "notFound": "Användaren hittades inte.",
+      "profileTitle": "Profil",
+      "roleLabel": "Roll",
+      "memberLabel": "Medlem",
+      "statusLabel": "Status",
+      "bioLabel": "Biografi",
+      "createdLabel": "Skapad",
+      "updatedLabel": "Uppdaterad",
+      "subscriptionLink": "Hantera prenumeration",
+      "actionTitle": "Moderering",
+      "ownerNote": "Ägarkonton kan inte modereras här.",
+      "reasonLabel": "Orsak",
+      "reasonPlaceholder": "Ange orsak (loggas)…",
+      "warn": "Varna",
+      "suspend": "Stäng av",
+      "restore": "Återställ",
+      "grantAdmin": "Gör till administratör",
+      "revokeAdmin": "Ta bort administratör",
+      "confirm": "Bekräfta",
+      "cancel": "Avbryt",
+      "confirmSuspend": "Är du säker på att du vill stänga av den här användaren?",
+      "confirmGrantAdmin": "Är du säker på att du vill ge den här användaren administratörsbehörighet?",
+      "confirmRevokeAdmin": "Är du säker på att du vill ta bort användarens administratörsbehörighet?",
+      "suspendedBanner": "Den här användaren är avstängd.",
+      "deletedBanner": "Den här användaren är raderad.",
+      "warnSuccess": "Varning utfärdad.",
+      "suspendSuccess": "Användaren har stängts av.",
+      "restoreSuccess": "Åtkomsten har återställts.",
+      "grantAdminSuccess": "Administratörsbehörighet beviljad.",
+      "revokeAdminSuccess": "Administratörsbehörighet borttagen.",
+      "actionError": "Åtgärden misslyckades."
+    }
   }
 }

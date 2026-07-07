@@ -77,6 +77,14 @@ import {
   adminGrantMembership,
   adminRevokeMembership,
 } from '../features/subscription';
+import {
+  adminGetUser,
+  adminListUsers,
+  adminRestoreAccess,
+  adminSetAdminRole,
+  adminSuspendUser,
+  adminWarnUser,
+} from '../features/users';
 
 beforeEach(() => {
   getDocMock.mockReset();
@@ -1075,6 +1083,148 @@ describe('subscription module', () => {
       targetUid: 'u1',
       entitlement: 'none',
       reason: 'Återbetalning',
+    });
+  });
+});
+
+describe('users module', () => {
+  const ts = (iso: string) => ({ toDate: () => new Date(iso) });
+
+  it('maps user docs into the admin summary (newest-first list)', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'u1',
+          data: () => ({
+            displayName: 'Anna',
+            role: 'admin',
+            activeMember: true,
+            suspended: false,
+            deleted: false,
+            createdAt: ts('2026-07-01T10:00:00Z'),
+          }),
+        },
+      ],
+    });
+    const users = await adminListUsers();
+    expect(users).toHaveLength(1);
+    expect(users[0]).toEqual({
+      uid: 'u1',
+      displayName: 'Anna',
+      role: 'admin',
+      activeMember: true,
+      suspended: false,
+      deleted: false,
+      createdAt: '2026-07-01T10:00:00.000Z',
+    });
+  });
+
+  it('coerces malformed role/booleans to safe defaults in the list', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'u2',
+          data: () => ({
+            // Unknown role must never read as admin/owner.
+            role: 'superuser',
+            // Non-boolean truthy values must not flip the flags on.
+            activeMember: 'yes',
+            suspended: 1,
+            deleted: null,
+            // Missing displayName / createdAt.
+          }),
+        },
+      ],
+    });
+    const users = await adminListUsers();
+    expect(users[0]).toEqual({
+      uid: 'u2',
+      displayName: '',
+      role: 'user',
+      activeMember: false,
+      suspended: false,
+      deleted: false,
+      createdAt: null,
+    });
+  });
+
+  it('maps the user detail (users/{uid} only) with the safe fields', async () => {
+    getDocMock.mockResolvedValue({
+      data: () => ({
+        displayName: 'Bertil',
+        role: 'user',
+        activeMember: false,
+        suspended: true,
+        deleted: false,
+        bio: 'Bilentusiast',
+        createdAt: ts('2026-06-01T10:00:00Z'),
+        updatedAt: ts('2026-07-02T10:00:00Z'),
+      }),
+    });
+    const detail = await adminGetUser('u3');
+    expect(detail).toEqual({
+      uid: 'u3',
+      displayName: 'Bertil',
+      role: 'user',
+      activeMember: false,
+      suspended: true,
+      deleted: false,
+      bio: 'Bilentusiast',
+      createdAt: '2026-06-01T10:00:00.000Z',
+      updatedAt: '2026-07-02T10:00:00.000Z',
+    });
+  });
+
+  it('resolves a missing user document to null', async () => {
+    getDocMock.mockResolvedValue({ data: () => undefined });
+    expect(await adminGetUser('missing')).toBeNull();
+  });
+
+  it('warns via admin-warnUser with the exact payload', async () => {
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', actionId: 'a1' });
+    const result = await adminWarnUser('u1', 'Regelbrott');
+    expect(callAdminMock).toHaveBeenCalledWith('admin-warnUser', {
+      targetUid: 'u1',
+      reason: 'Regelbrott',
+    });
+    expect(result).toEqual({ targetUid: 'u1', actionId: 'a1' });
+  });
+
+  it('suspends via admin-suspendUser with the exact payload', async () => {
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', suspended: true });
+    const result = await adminSuspendUser('u1', 'Upprepade överträdelser');
+    expect(callAdminMock).toHaveBeenCalledWith('admin-suspendUser', {
+      targetUid: 'u1',
+      reason: 'Upprepade överträdelser',
+    });
+    expect(result.suspended).toBe(true);
+  });
+
+  it('restores via admin-restoreAccess with the exact payload', async () => {
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', suspended: false });
+    const result = await adminRestoreAccess('u1', 'Överklagan godkänd');
+    expect(callAdminMock).toHaveBeenCalledWith('admin-restoreAccess', {
+      targetUid: 'u1',
+      reason: 'Överklagan godkänd',
+    });
+    expect(result.suspended).toBe(false);
+  });
+
+  it('grants and revokes admin via admin-setAdminRole with the boolean flag', async () => {
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', role: 'admin', admin: true });
+    await adminSetAdminRole('u1', true, 'Ny moderator');
+    expect(callAdminMock).toHaveBeenCalledWith('admin-setAdminRole', {
+      targetUid: 'u1',
+      admin: true,
+      reason: 'Ny moderator',
+    });
+
+    callAdminMock.mockResolvedValue({ targetUid: 'u1', role: 'user', admin: false });
+    await adminSetAdminRole('u1', false, 'Roll borttagen');
+    expect(callAdminMock).toHaveBeenLastCalledWith('admin-setAdminRole', {
+      targetUid: 'u1',
+      admin: false,
+      reason: 'Roll borttagen',
     });
   });
 });
