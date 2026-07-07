@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
@@ -41,8 +42,13 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.home.HomeScreen
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
+import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
+import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRepository
+import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRoute
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
+import com.kungsbackacarcommunity.app.notifications.currentPushPermissionStatus
+import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
@@ -101,6 +107,8 @@ fun AuthenticatedApp(
     offerCodeCoordinator: OfferCodeCoordinator?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
+    notificationSettingsRepository: NotificationSettingsRepository?,
+    notificationSettingsCoordinator: NotificationSettingsCoordinator?,
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
@@ -277,6 +285,22 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.NotificationSettings -> {
+                    if (notificationSettingsRepository != null) {
+                        val context = LocalContext.current
+                        NotificationSettingsRoute(
+                            repository = notificationSettingsRepository,
+                            coordinator = notificationSettingsCoordinator,
+                            uid = uid,
+                            pushPermission = currentPushPermissionStatus(context),
+                            onOpenSystemSettings = { openAppNotificationSettings(context) },
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Garage -> {
                     if (garageRepository != null) {
                         GarageRoute(
@@ -442,6 +466,13 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Notification preferences: owner-write; reachable when configured.
+                        onOpenNotificationSettings =
+                            if (notificationSettingsRepository != null) {
+                                { destination = MainDestination.NotificationSettings }
+                            } else {
+                                null
+                            },
                         // Garage is a member feature (add/edit/delete are
                         // member-gated callables); entry requires membership.
                         onOpenGarage =
@@ -529,6 +560,7 @@ private enum class MainDestination {
     CrownHunt,
     Partners,
     Notifications,
+    NotificationSettings,
     Garage,
     Badges,
     SavedDrives,
