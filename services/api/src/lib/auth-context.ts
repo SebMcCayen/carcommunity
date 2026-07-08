@@ -118,17 +118,22 @@ export async function registerAuthContext(
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
-  // Requests that presented a bearer token (valid or not). Used by the
-  // non-production dev-header hook below so it never has to re-read the
-  // authorization header itself.
-  const requestsWithBearerToken = new WeakSet<FastifyRequest>();
+  // Requests that presented an Authorization header — a token auth attempt,
+  // whether it parsed to a valid token or not (e.g. `Bearer`, `Bearer ` and
+  // other malformed values parse to null). The non-production dev-header hook
+  // below consults this so it never injects auth for a client that already
+  // tried to authenticate; a failed attempt must not silently fall through to
+  // the dev header.
+  const requestsWithAuthorizationHeader = new WeakSet<FastifyRequest>();
 
   app.addHook('onRequest', async (request) => {
     const authorizationHeader = request.headers.authorization;
+    if (typeof authorizationHeader === 'string' && authorizationHeader.trim() !== '') {
+      requestsWithAuthorizationHeader.add(request);
+    }
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
 
     if (token) {
-      requestsWithBearerToken.add(request);
       // --- Firebase ID token path (preferred in production) ---
       if (firebaseIdTokenVerifier) {
         try {
@@ -189,48 +194,47 @@ export async function registerAuthContext(
 
   // TODO: Remove development header auth once all local/dev tooling uses real login.
   //
-  // The x-dev-user header is a development-only convenience. This hook is a
-  // separate handler (not part of the token path above), so it can never be
-  // used to bypass token auth: it no-ops the moment a request presents any
-  // bearer token, and it does nothing at all in production. The production
-  // guard reads server config only — never request data.
-  app.addHook('onRequest', async (request) => {
-    if (config.isProduction) {
-      return;
-    }
+  // The x-dev-user header is a development-only convenience. This hook is
+  // registered ONLY when config.isProduction is false — the decision is made
+  // once here at startup from server config, never from request data, so in
+  // production the hook (and any code path from the header to an auth context)
+  // does not exist at all. It is also a separate handler from the token path
+  // above, so even in development it can never be used to bypass token auth.
+  if (!config.isProduction) {
+    app.addHook('onRequest', async (request) => {
+      // Never override a real auth context, and never consult the dev header
+      // when the request presented an Authorization header — even a malformed
+      // or rejected one. A failed token attempt leaves the request
+      // unauthenticated, matching the Firebase path's behaviour and
+      // deliberately stricter than the old legacy-session path, which fell
+      // back to the dev header after a failed session lookup.
+      if (request.auth || requestsWithAuthorizationHeader.has(request)) {
+        return;
+      }
 
-    // Never override a real auth context, and never consult the dev header
-    // when the request carried a bearer token (even an invalid one). A
-    // rejected token leaves the request unauthenticated — matching the
-    // Firebase path's historical behaviour, and deliberately stricter than
-    // the old legacy-session path, which fell back to the dev header after
-    // a failed session lookup.
-    if (request.auth || requestsWithBearerToken.has(request)) {
-      return;
-    }
-
-    const devHeader = request.headers[DEV_AUTH_HEADER];
-    if (typeof devHeader === 'string') {
-      const parsed = parseDevAuthContext(devHeader);
-      request.auth = parsed
-        ? {
-            ...parsed,
-            user: {
-              userId: parsed.userId,
-              displayName: null,
-              identities: [],
-              roles: [parsed.role],
-              status: parsed.status,
-              subscriptionEntitlement: parsed.subscriptionEntitlement,
+      const devHeader = request.headers[DEV_AUTH_HEADER];
+      if (typeof devHeader === 'string') {
+        const parsed = parseDevAuthContext(devHeader);
+        request.auth = parsed
+          ? {
+              ...parsed,
+              user: {
+                userId: parsed.userId,
+                displayName: null,
+                identities: [],
+                roles: [parsed.role],
+                status: parsed.status,
+                subscriptionEntitlement: parsed.subscriptionEntitlement,
+                onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
+              },
+              sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+              lastActiveAt: null,
               onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
-            },
-            sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-            lastActiveAt: null,
-            onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
-          }
-        : null;
-    }
-  });
+            }
+          : null;
+      }
+    });
+  }
 }
 
 /**
