@@ -20,6 +20,15 @@
  * claims and other user-doc fields are preserved (merged); `updatedAt` is
  * refreshed with a server timestamp to mirror the callable's behaviour.
  *
+ * Safety guards mirroring the Cloud Functions (functions/src/admin/claims-core.ts,
+ * functions/src/shared/access.ts) are applied to the fetched profile BEFORE any
+ * write:
+ *   - refuse if `role === 'owner'` — owner accounts are managed out-of-band and
+ *     must never be clobbered to 'admin' (mirrors guardSetAdminRole).
+ *   - refuse if the profile is `suspended` or `deleted` — a restricted account
+ *     is denied admin access, so we never issue it an admin claim (mirrors
+ *     guardActorIsActiveAdmin / canAccessAdminFeatures).
+ *
  * Project: the target project id is read from the environment (never
  * hardcoded, so this is safe against wrong-project runs and works for forks),
  * checking FIREBASE_PROJECT_ID, then GCLOUD_PROJECT, then GOOGLE_CLOUD_PROJECT.
@@ -92,6 +101,37 @@ if (!userSnap.exists) {
   console.error(
     `users/${user.uid} does not exist. The user must sign in / be provisioned ` +
       'first before they can be promoted (we will not create a partial profile).',
+  );
+  process.exit(1);
+}
+
+// Read the backend-managed access fields the same way toUserAccessState does
+// (functions/src/shared/access.ts): a missing/invalid role is a plain 'user',
+// and suspended/deleted are only true when strictly === true.
+const userData = userSnap.data() ?? {};
+const role = ['user', 'admin', 'owner'].includes(userData.role) ? userData.role : 'user';
+const suspended = userData.suspended === true;
+const deleted = userData.deleted === true;
+
+// Mirror guardSetAdminRole (functions/src/admin/claims-core.ts): the owner role
+// is managed out-of-band and must never be overwritten — refuse before we can
+// clobber an owner's role down to 'admin'.
+if (role === 'owner') {
+  console.error(
+    `users/${user.uid}.role is 'owner'. Refusing to modify owner accounts ` +
+      '(mirrors guardSetAdminRole); owner status is managed out-of-band.',
+  );
+  process.exit(1);
+}
+
+// Mirror guardActorIsActiveAdmin / canAccessAdminFeatures (isRestricted):
+// suspended or deleted accounts are denied admin access, so never grant the
+// admin claim to one — a missing `suspended` custom claim could otherwise let
+// Firestore rules accept the token.
+if (suspended || deleted) {
+  console.error(
+    `users/${user.uid} is ${deleted ? 'deleted' : 'suspended'}. Refusing to grant ` +
+      'admin to a suspended/deleted account (mirrors guardActorIsActiveAdmin).',
   );
   process.exit(1);
 }
