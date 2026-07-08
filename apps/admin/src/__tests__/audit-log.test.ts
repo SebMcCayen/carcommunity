@@ -111,6 +111,45 @@ describe('audit-log module — document mapping', () => {
     });
     expect(page.events[1]?.createdAt).toBe('2026-06-30T08:30:00.000Z');
   });
+
+  it('maps malformed Timestamp-like createdAt values to null instead of throwing', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        // toDate() throws — the row must still map, with createdAt null.
+        fakeDoc('evt-throw', {
+          action: 'user.warn',
+          createdAt: {
+            toDate: () => {
+              throw new Error('corrupt timestamp');
+            },
+          },
+        }),
+        // toDate() returns an invalid Date — toISOString() would RangeError.
+        fakeDoc('evt-invalid', {
+          action: 'user.warn',
+          createdAt: { toDate: () => new Date('nonsense') },
+        }),
+        // toDate() returns a non-Date value.
+        fakeDoc('evt-nondate', {
+          action: 'user.warn',
+          createdAt: { toDate: () => 'not a date' },
+        }),
+        // A valid sibling row proves the mapping survives the bad ones.
+        fakeDoc('evt-ok', {
+          action: 'user.warn',
+          createdAt: { toDate: () => new Date('2026-07-02T12:00:00.000Z') },
+        }),
+      ],
+    });
+
+    const page = await listAdminAuditEvents();
+    expect(page.events.map((e) => e.createdAt)).toEqual([
+      null,
+      null,
+      null,
+      '2026-07-02T12:00:00.000Z',
+    ]);
+  });
 });
 
 describe('audit-log module — action labels', () => {
