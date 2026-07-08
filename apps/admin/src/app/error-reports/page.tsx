@@ -19,7 +19,7 @@
  *    reports render an explicit "anonymous" label.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   adminGetErrorReport,
@@ -172,7 +172,14 @@ export default function ErrorReportsPage() {
   const [platformFilter, setPlatformFilter] = useState<DiagnosticsPlatform | ''>('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Monotonic request sequence: overlapping loads (toggling filters + refresh)
+  // can resolve out of order, so only the most recently issued request is
+  // allowed to write state — a slower earlier read can never overwrite it with
+  // stale-filter results.
+  const requestSeqRef = useRef(0);
+
   const fetchReports = useCallback(async () => {
+    const seq = ++requestSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -180,14 +187,18 @@ export default function ErrorReportsPage() {
         ...(severityFilter ? { severity: severityFilter } : {}),
         ...(platformFilter ? { platform: platformFilter } : {}),
       });
+      if (seq !== requestSeqRef.current) return;
       setReports(page.reports);
       setHasNext(page.hasNext);
     } catch (err) {
+      if (seq !== requestSeqRef.current) return;
       setReports([]);
       setHasNext(false);
       setError((err as ApiError)?.message ?? t('errorReports.loadError'));
     } finally {
-      setLoading(false);
+      // Only the latest request clears the loading flag; a superseded request
+      // must leave it set for the in-flight winner.
+      if (seq === requestSeqRef.current) setLoading(false);
     }
   }, [severityFilter, platformFilter]);
 
