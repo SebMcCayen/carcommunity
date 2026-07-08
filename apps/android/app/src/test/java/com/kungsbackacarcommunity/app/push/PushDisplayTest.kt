@@ -2,7 +2,9 @@ package com.kungsbackacarcommunity.app.push
 
 import com.kungsbackacarcommunity.app.notifications.NotificationCategory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PushDisplayTest {
@@ -82,6 +84,18 @@ class PushDisplayTest {
             )
         assertEquals("Real title", model.title)
         assertNull(model.body)
+    }
+
+    @Test
+    fun `display requires BOTH a signed-in user and the notification permission`() {
+        // Signed-out pushes must never display (tokens outlive sign-out;
+        // a shared device would leak the previous user's notifications).
+        assertFalse(PushDisplay.shouldDisplay(signedIn = false, permissionGranted = true))
+        assertFalse(PushDisplay.shouldDisplay(signedIn = false, permissionGranted = false))
+        // Signed in but permission denied — dropped.
+        assertFalse(PushDisplay.shouldDisplay(signedIn = true, permissionGranted = false))
+        // Signed in with permission — shown.
+        assertTrue(PushDisplay.shouldDisplay(signedIn = true, permissionGranted = true))
     }
 
     @Test

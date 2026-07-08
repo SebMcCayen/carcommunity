@@ -25,8 +25,12 @@ import kotlinx.coroutines.launch
  *   requires an authenticated, active actor (pushTokens.ts). Signed-out
  *   rotations are picked up by the sign-in-time registration instead.
  * - [onMessageReceived]: maps the message through [PushDisplay] and posts a
- *   system notification when POST_NOTIFICATIONS is granted; silently drops
- *   it otherwise (the durable in-app inbox is the source of truth).
+ *   system notification only when a user is signed in AND POST_NOTIFICATIONS
+ *   is granted ([PushDisplay.shouldDisplay]); silently drops it otherwise
+ *   (the durable in-app inbox is the source of truth). The signed-in guard
+ *   matters because tokens outlive sign-out (unregister-on-sign-out is
+ *   deferred): a signed-out shared device must not display the previous
+ *   user's account/event notifications.
  *
  * Config-less safety: FCM only delivers when google-services.json is present,
  * so this service never runs in CI builds; every Firebase touch is still
@@ -59,7 +63,15 @@ class KccMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        if (currentPushPermissionStatus(applicationContext) != PushPermissionStatus.GRANTED) return
+        // Cheap and crash-safe: without an initialized FirebaseApp there is
+        // no auth state to consult (and no legitimate delivery) — drop.
+        if (FirebaseApp.getApps(applicationContext).isEmpty()) return
+        val signedIn = FirebaseAuth.getInstance().currentUser != null
+        val permissionGranted =
+            currentPushPermissionStatus(applicationContext) == PushPermissionStatus.GRANTED
+        if (!PushDisplay.shouldDisplay(signedIn = signedIn, permissionGranted = permissionGranted)) {
+            return
+        }
 
         val model =
             PushDisplay.fromMessage(

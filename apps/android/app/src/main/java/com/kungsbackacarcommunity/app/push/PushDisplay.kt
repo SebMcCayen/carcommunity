@@ -54,6 +54,17 @@ object PushDisplay {
     private const val KEY_RELATED_ENTITY_ID = "relatedEntityId"
     private const val KEY_NOTIFICATION_ID = "notificationId"
 
+    /**
+     * Whether a received push may be displayed at all. Tokens outlive
+     * sign-out (unregister-on-sign-out is deferred — there is no
+     * pre-sign-out hook yet), so on a shared device a signed-out shell can
+     * still receive the previous user's pushes; displaying them would leak
+     * that user's account/event details. Signed-in AND permission-granted
+     * are both required.
+     */
+    fun shouldDisplay(signedIn: Boolean, permissionGranted: Boolean): Boolean =
+        signedIn && permissionGranted
+
     /** Channel for a category (unknown categories already fall back to SYSTEM_NOTICE). */
     fun channelFor(category: NotificationCategory): PushChannel =
         when (category) {
