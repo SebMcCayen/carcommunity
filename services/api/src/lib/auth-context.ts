@@ -128,7 +128,11 @@ export async function registerAuthContext(
 
   app.addHook('onRequest', async (request) => {
     const authorizationHeader = request.headers.authorization;
-    if (typeof authorizationHeader === 'string' && authorizationHeader.trim() !== '') {
+    // Mark on ANY present Authorization header, in any form — a string, an
+    // empty string, or (duplicate headers surfaced by Node/Fastify as) a
+    // string[]. A present-but-unusable header is still an auth attempt and
+    // must suppress the dev-header fallback.
+    if (authorizationHeader !== undefined) {
       requestsWithAuthorizationHeader.add(request);
     }
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
