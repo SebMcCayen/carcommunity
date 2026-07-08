@@ -563,5 +563,39 @@
       "revokeAdminSuccess": "Admin privileges revoked.",
       "actionError": "The action failed."
     }
+  },
+  "accountDeletions": {
+    "title": "Account deletions",
+    "subtitle": "Queue of user account-deletion requests. Pending requests are purged automatically by the scheduled purge 30 days after the request.",
+    "tabs": {
+      "pending": "Pending",
+      "processed": "Processed",
+      "all": "All"
+    },
+    "loading": "Loading…",
+    "loadError": "Could not load deletion requests.",
+    "empty": "No deletion requests to show.",
+    "table": {
+      "userId": "User ID",
+      "reason": "Reason",
+      "requestedAt": "Requested",
+      "purgeIn": "Purge in",
+      "status": "Status",
+      "actions": "Action"
+    },
+    "noReason": "No reason given",
+    "day": "day",
+    "days": "days",
+    "purgeDue": "Due – purged on the next run",
+    "status": {
+      "pending": "Pending",
+      "processed": "Processed"
+    },
+    "markProcessed": "Mark as processed",
+    "markProcessedPending": "Marking…",
+    "confirmMarkProcessed": "Mark this request as processed? This removes it from the automatic purge queue – only do this if the deletion has already been handled manually.",
+    "markProcessedSuccess": "Request marked as processed.",
+    "alreadyProcessed": "The request was already processed – no change was made.",
+    "markProcessedError": "Could not mark the request as processed."
   }
 }

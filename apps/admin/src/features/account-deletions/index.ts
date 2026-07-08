@@ -1,0 +1,215 @@
+/**
+ * Admin account-deletions feature module (Phase 13o — Firebase migration).
+ *
+ * Backed by Firebase (no legacy REST route existed — this replaces the
+ * placeholder):
+ *  - Lists `accountDeletionRequests` directly (admin-readable per
+ *    firestore.rules). Document ID == the requesting user's UID; documents
+ *    are written by the account.deleteAccount callable (Phase 9p) with
+ *    { userId, reason (nullable), status: 'pending', createdAt } and flipped
+ *    to { status: 'processed', processedAt } by the scheduled
+ *    account-purgeDeleted hard purge after the 30-day retention window.
+ *  - Pending requests are listed OLDEST FIRST — queue semantics matching the
+ *    purge sweep's own ordering. The `status ASC + createdAt ASC` composite
+ *    index (firebase/firestore.indexes.json) serves the filtered queries.
+ *  - markAccountDeletionProcessed applies a direct, shape-minimal
+ *    `updateDoc` — { status: 'processed', processedAt: serverTimestamp() },
+ *    the exact fields the scheduled purge writes. This is the one admin
+ *    module that mutates Firestore directly: the rules explicitly grant
+ *    admins `update` on this collection ("Admins may read all requests and
+ *    update status (e.g. mark as processed)") with no field validation on
+ *    the admin path, so no callable exists or is needed.
+ *
+ * Operational note: the scheduled purge only sweeps status == 'pending'
+ * requests. Marking a request processed therefore REMOVES it from the
+ * automatic purge queue — it is for requests an admin has handled manually
+ * (or verified as purged); the page's confirm dialog spells this out.
+ */
+
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit as fsLimit,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+
+import { ApiError } from '../../lib/api';
+import { getAdminFirestore } from '../../lib/firestore';
+
+export { ApiError };
+
+// ---------------------------------------------------------------------------
+// Domain model
+// ---------------------------------------------------------------------------
+
+/** Mirrors DELETION_RETENTION_DAYS in functions/src/account/deletion-core.ts. */
+export const DELETION_RETENTION_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const ACCOUNT_DELETION_STATUSES = ['pending', 'processed'] as const;
+export type AccountDeletionStatus = (typeof ACCOUNT_DELETION_STATUSES)[number];
+
+/** List filter — the two stored statuses plus the unfiltered view. */
+export type AccountDeletionStatusFilter = AccountDeletionStatus | 'all';
+
+export interface AdminAccountDeletionRequest {
+  /** Document ID == the requesting user's Firebase UID. */
+  userId: string;
+  /** Optional free-text reason (max 500 chars, backend-validated). */
+  reason: string | null;
+  status: AccountDeletionStatus;
+  /** ISO string; null only for malformed/hand-edited documents. */
+  createdAt: string | null;
+  /** Stamped by the scheduled purge (or an admin mark-processed). */
+  processedAt: string | null;
+  /** createdAt + 30 days — when the scheduled purge becomes eligible. */
+  purgeDueAt: string | null;
+}
+
+export const DEFAULT_DELETION_PAGE_SIZE = 50;
+
+// ---------------------------------------------------------------------------
+// Mapping helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalizes a stored timestamp field to an ISO string. Permissive by design
+ * (the subscription-module precedent) — accepts a Firestore Timestamp
+ * (toDate()), a native Date, or an already-serialized date string, and
+ * returns null only when the value is absent or unparseable.
+ */
+function toIso(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof (value as { toDate?: unknown }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Coerces a stored status to the known set. Unknown values fall back to
+ * 'pending' — the fail-safe direction for a deletion queue: an unrecognized
+ * request surfaces for admin attention instead of silently disappearing.
+ */
+function coerceStatus(raw: unknown): AccountDeletionStatus {
+  return (ACCOUNT_DELETION_STATUSES as readonly string[]).includes(raw as string)
+    ? (raw as AccountDeletionStatus)
+    : 'pending';
+}
+
+/** createdAt + the 30-day retention window, as an ISO string. */
+export function purgeDueAtIso(createdAtIso: string | null): string | null {
+  if (!createdAtIso) return null;
+  const created = new Date(createdAtIso);
+  if (Number.isNaN(created.getTime())) return null;
+  return new Date(created.getTime() + DELETION_RETENTION_DAYS * DAY_MS).toISOString();
+}
+
+/**
+ * Whole days until the scheduled purge may pick the request up. 0 or
+ * negative means the request is already past the retention window (the
+ * next 03:30 sweep will purge it). Null when createdAt is missing.
+ */
+export function daysUntilPurge(createdAtIso: string | null, now: Date = new Date()): number | null {
+  const dueIso = purgeDueAtIso(createdAtIso);
+  if (!dueIso) return null;
+  return Math.ceil((new Date(dueIso).getTime() - now.getTime()) / DAY_MS);
+}
+
+export function toAdminAccountDeletionRequest(
+  id: string,
+  data: Record<string, unknown>,
+): AdminAccountDeletionRequest {
+  const createdAt = toIso(data.createdAt);
+  return {
+    userId: typeof data.userId === 'string' ? data.userId : id,
+    reason: typeof data.reason === 'string' && data.reason.length > 0 ? data.reason : null,
+    status: coerceStatus(data.status),
+    createdAt,
+    processedAt: toIso(data.processedAt),
+    purgeDueAt: purgeDueAtIso(createdAt),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Reads (direct Firestore, admin rules-gated)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lists deletion requests, oldest first (queue semantics — the same order
+ * the purge sweep drains them in). Status filters use the existing
+ * `status ASC + createdAt ASC` composite index; 'all' is a plain
+ * single-field createdAt ordering.
+ */
+export async function adminListAccountDeletionRequests(
+  filter: AccountDeletionStatusFilter = 'pending',
+  pageSize: number = DEFAULT_DELETION_PAGE_SIZE,
+): Promise<AdminAccountDeletionRequest[]> {
+  const requests = collection(getAdminFirestore(), 'accountDeletionRequests');
+  const constraints =
+    filter === 'all'
+      ? [orderBy('createdAt', 'asc'), fsLimit(pageSize)]
+      : [where('status', '==', filter), orderBy('createdAt', 'asc'), fsLimit(pageSize)];
+  const snapshot = await getDocs(query(requests, ...constraints));
+  return snapshot.docs.map((d) => toAdminAccountDeletionRequest(d.id, d.data()));
+}
+
+/** Reads a single request by the requesting user's UID; null when absent. */
+export async function adminGetAccountDeletionRequest(
+  uid: string,
+): Promise<AdminAccountDeletionRequest | null> {
+  const snapshot = await getDoc(doc(getAdminFirestore(), 'accountDeletionRequests', uid));
+  if (!snapshot.exists()) return null;
+  return toAdminAccountDeletionRequest(snapshot.id, snapshot.data() as Record<string, unknown>);
+}
+
+// ---------------------------------------------------------------------------
+// Mark processed (direct rules-granted admin update)
+// ---------------------------------------------------------------------------
+
+export interface MarkProcessedResult {
+  userId: string;
+  status: 'processed';
+  /** True when the request was already processed — no write was performed. */
+  alreadyProcessed: boolean;
+}
+
+/**
+ * Marks a request processed — a shape-minimal status update writing exactly
+ * the fields the scheduled purge writes ({ status, processedAt }). Reads the
+ * document first so an already-processed request is a graceful no-op instead
+ * of silently overwriting the purge's processedAt stamp.
+ *
+ * NOTE: this removes the request from the scheduled purge's pending queue —
+ * use it only for requests handled (or verified purged) manually.
+ */
+export async function markAccountDeletionProcessed(uid: string): Promise<MarkProcessedResult> {
+  const ref = doc(getAdminFirestore(), 'accountDeletionRequests', uid);
+  const snapshot = await getDoc(ref);
+  if (!snapshot.exists()) {
+    throw new ApiError(404, 'not-found', 'Deletion request not found.');
+  }
+  const current = toAdminAccountDeletionRequest(
+    snapshot.id,
+    snapshot.data() as Record<string, unknown>,
+  );
+  if (current.status === 'processed') {
+    return { userId: uid, status: 'processed', alreadyProcessed: true };
+  }
+  await updateDoc(ref, { status: 'processed', processedAt: serverTimestamp() });
+  return { userId: uid, status: 'processed', alreadyProcessed: false };
+}
