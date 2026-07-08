@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
 import { loadDashboardStats, type DashboardStats } from '@/features/dashboard';
+import { isFirestoreEmulatorEnabled } from '@/lib/firestore';
 import styles from './page.module.css';
 
 /** Formats a live count, or "—" when the stat isn't available yet. */
@@ -37,12 +38,18 @@ export default function DashboardPage() {
   const s = stats;
   const openReports = s?.openReports ?? null;
 
+  // Avoid claiming "production database" when reads are routed to the local
+  // Firestore emulator (dev / non-PROD builds with VITE_FIRESTORE_EMULATOR_HOST).
+  const dataSource = isFirestoreEmulatorEnabled()
+    ? 'the local Firestore emulator'
+    : 'the production database';
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.subtitle}>
-          Live figures from the production database. Tiles showing “—” aren’t wired to a
+          Live figures from {dataSource}. Tiles showing “—” aren’t wired to a
           data source yet (Realtime Database or pending admin-read access).
         </p>
       </div>
