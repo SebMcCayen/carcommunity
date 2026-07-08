@@ -563,5 +563,73 @@
       "revokeAdminSuccess": "Admin privileges revoked.",
       "actionError": "The action failed."
     }
+  },
+  "errorReports": {
+    "title": "Error reports",
+    "subtitle": "Crash and error telemetry from the apps. Read-only view — reports are created by the backend only and are purged after 90 days.",
+    "loading": "Loading error reports…",
+    "loadError": "Could not load error reports. Please try again.",
+    "empty": "No error reports found.",
+    "refresh": "Refresh",
+    "moreAvailable": "There may be more reports — only the latest page is shown.",
+    "filter": {
+      "severityLabel": "Severity",
+      "platformLabel": "Platform",
+      "allSeverities": "All severities",
+      "allPlatforms": "All platforms"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical"
+    },
+    "platform": {
+      "ios": "iOS",
+      "android": "Android",
+      "web": "Web",
+      "unknown": "Unknown"
+    },
+    "featureArea": {
+      "auth": "Authentication",
+      "live_location": "Live location",
+      "events": "Events",
+      "subscription": "Subscription",
+      "admin": "Admin",
+      "map": "Map",
+      "network": "Network",
+      "unknown": "Unknown"
+    },
+    "columns": {
+      "severity": "Severity",
+      "platform": "Platform",
+      "featureArea": "Feature area",
+      "message": "Message",
+      "errorCode": "Error code",
+      "user": "User",
+      "createdAt": "Time",
+      "actions": "Actions"
+    },
+    "actions": {
+      "show": "Show details",
+      "hide": "Hide details"
+    },
+    "detail": {
+      "loading": "Loading report…",
+      "loadError": "Could not load the report. Please try again.",
+      "notFound": "The report no longer exists (purged by the 90-day retention sweep).",
+      "reportId": "Report ID",
+      "user": "User",
+      "anonymous": "Anonymous",
+      "featureArea": "Feature area",
+      "errorCode": "Error code",
+      "appVersion": "App version",
+      "buildNumber": "Build number",
+      "osVersion": "OS version",
+      "fingerprint": "Fingerprint",
+      "createdAt": "Created",
+      "metadata": "Metadata",
+      "noMetadata": "No metadata."
+    }
   }
 }
