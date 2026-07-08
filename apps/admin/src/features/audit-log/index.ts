@@ -35,10 +35,11 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 
-import { ApiError } from '../../lib/api';
 import { getAdminFirestore } from '../../lib/firestore';
 
-export { ApiError };
+import type { ApiError } from '../../lib/api';
+
+export type { ApiError };
 
 export const AUDIT_LOG_PAGE_SIZE = 25;
 

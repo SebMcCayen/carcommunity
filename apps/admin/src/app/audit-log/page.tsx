@@ -69,6 +69,10 @@ export default function AuditLogPage() {
   const load = useCallback(async (targetId: string) => {
     const seq = ++requestSeq.current;
     setLoading(true);
+    // A fresh load supersedes any in-flight load-more: that stale response
+    // will skip its finally (no longer the current seq), so clear the flag
+    // here or the filter/load-more buttons could stay disabled forever.
+    setLoadingMore(false);
     setError(null);
     try {
       const page = await listAdminAuditEvents({ targetId: targetId || undefined });
