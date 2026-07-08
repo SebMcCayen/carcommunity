@@ -72,9 +72,15 @@ export default function AccountDeletionsPage() {
       if (seq !== loadSeqRef.current) return;
       setRequests(rows);
     } catch (err) {
+      // A superseded load neither mutates state nor rethrows — the request
+      // that overtook it owns the outcome.
       if (seq !== loadSeqRef.current) return;
       setRequests([]);
       setError((err as ApiError)?.message ?? t('accountDeletions.loadError'));
+      // Rethrow so a caller awaiting the reload (handleMarkProcessed) sees the
+      // failure and skips its success banner. The error state is already set,
+      // so callers that ignore the rejection still surface it in the UI.
+      throw err;
     } finally {
       // Only the latest load owns the loading flag; a superseded one leaves it
       // to the request that overtook it.
@@ -83,7 +89,9 @@ export default function AccountDeletionsPage() {
   }, []);
 
   useEffect(() => {
-    void load(filter);
+    // load() rethrows on failure; the error is already reflected in state, so
+    // swallow the rejection here to avoid an unhandled promise rejection.
+    void load(filter).catch(() => {});
   }, [filter, load]);
 
   const handleMarkProcessed = useCallback(
