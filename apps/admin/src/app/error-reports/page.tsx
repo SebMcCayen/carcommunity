@@ -253,17 +253,17 @@ export default function ErrorReportsPage() {
         ) : reports.length === 0 ? (
           <p className={styles.statusText}>{t('errorReports.empty')}</p>
         ) : (
-          <table className={styles.table}>
+          <table className={styles.table} aria-label={t('errorReports.title')}>
             <thead>
               <tr>
-                <th>{t('errorReports.columns.severity')}</th>
-                <th>{t('errorReports.columns.platform')}</th>
-                <th>{t('errorReports.columns.featureArea')}</th>
-                <th>{t('errorReports.columns.message')}</th>
-                <th>{t('errorReports.columns.errorCode')}</th>
-                <th>{t('errorReports.columns.user')}</th>
-                <th>{t('errorReports.columns.createdAt')}</th>
-                <th>{t('errorReports.columns.actions')}</th>
+                <th scope="col">{t('errorReports.columns.severity')}</th>
+                <th scope="col">{t('errorReports.columns.platform')}</th>
+                <th scope="col">{t('errorReports.columns.featureArea')}</th>
+                <th scope="col">{t('errorReports.columns.message')}</th>
+                <th scope="col">{t('errorReports.columns.errorCode')}</th>
+                <th scope="col">{t('errorReports.columns.user')}</th>
+                <th scope="col">{t('errorReports.columns.createdAt')}</th>
+                <th scope="col">{t('errorReports.columns.actions')}</th>
               </tr>
             </thead>
             <tbody>
