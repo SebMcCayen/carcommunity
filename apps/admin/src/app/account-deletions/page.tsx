@@ -162,15 +162,15 @@ export default function AccountDeletionsPage() {
         <p className={styles.muted}>{t('accountDeletions.empty')}</p>
       ) : (
         <div className={styles.tableWrap}>
-          <table className={styles.table}>
+          <table className={styles.table} aria-label={t('accountDeletions.tableLabel')}>
             <thead>
               <tr>
-                <th>{t('accountDeletions.table.userId')}</th>
-                <th>{t('accountDeletions.table.reason')}</th>
-                <th>{t('accountDeletions.table.requestedAt')}</th>
-                <th>{t('accountDeletions.table.purgeIn')}</th>
-                <th>{t('accountDeletions.table.status')}</th>
-                <th>{t('accountDeletions.table.actions')}</th>
+                <th scope="col">{t('accountDeletions.table.userId')}</th>
+                <th scope="col">{t('accountDeletions.table.reason')}</th>
+                <th scope="col">{t('accountDeletions.table.requestedAt')}</th>
+                <th scope="col">{t('accountDeletions.table.purgeIn')}</th>
+                <th scope="col">{t('accountDeletions.table.status')}</th>
+                <th scope="col">{t('accountDeletions.table.actions')}</th>
               </tr>
             </thead>
             <tbody>

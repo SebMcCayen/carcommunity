@@ -575,6 +575,7 @@
     "loading": "Loading…",
     "loadError": "Could not load deletion requests.",
     "empty": "No deletion requests to show.",
+    "tableLabel": "Deletion requests",
     "table": {
       "userId": "User ID",
       "reason": "Reason",

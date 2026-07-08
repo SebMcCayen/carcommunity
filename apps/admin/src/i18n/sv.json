@@ -650,6 +650,7 @@
     "loading": "Hämtar…",
     "loadError": "Kunde inte hämta raderingsbegäranden.",
     "empty": "Inga raderingsbegäranden att visa.",
+    "tableLabel": "Raderingsbegäranden",
     "table": {
       "userId": "Användar-ID",
       "reason": "Orsak",
