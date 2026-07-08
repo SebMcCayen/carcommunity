@@ -14,7 +14,7 @@
  *    are never hidden or mislabeled.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   auditActionLabelKey,
@@ -31,8 +31,14 @@ import styles from './page.module.css';
 
 const t = (key: string) => translate('sv', key);
 
-/** Human-readable label for an action code; raw value for unknown actions. */
+/**
+ * Human-readable label for an action code. Known actions use their i18n
+ * label; a non-blank unknown action renders as its raw value (new backend
+ * actions are never hidden); a blank/missing action shows a localized
+ * "unknown action" placeholder rather than an empty label.
+ */
 function actionLabel(action: string): string {
+  if (!action) return t('auditLog.unknownAction');
   const key = auditActionLabelKey(action);
   return key ? t(key) : action;
 }
@@ -54,19 +60,28 @@ export default function AuditLogPage() {
   const [activeTargetId, setActiveTargetId] = useState('');
   const [actionFilter, setActionFilter] = useState('');
 
+  // Monotonic request id shared by load() and handleLoadMore(). Each call
+  // claims the next id; a response only touches state while it is still the
+  // latest request, so a filter change or load-more that starts during an
+  // in-flight fetch can never let the stale response overwrite/append.
+  const requestSeq = useRef(0);
+
   const load = useCallback(async (targetId: string) => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setError(null);
     try {
       const page = await listAdminAuditEvents({ targetId: targetId || undefined });
+      if (seq !== requestSeq.current) return;
       setEvents(page.events);
       setCursor(page.cursor);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setEvents([]);
       setCursor(null);
       setError((err as ApiError)?.message ?? t('auditLog.loadError'));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, []);
 
@@ -86,6 +101,7 @@ export default function AuditLogPage() {
 
   const handleLoadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
+    const seq = ++requestSeq.current;
     setLoadingMore(true);
     setError(null);
     try {
@@ -93,12 +109,14 @@ export default function AuditLogPage() {
         targetId: activeTargetId || undefined,
         cursor,
       });
+      if (seq !== requestSeq.current) return;
       setEvents((prev) => [...prev, ...page.events]);
       setCursor(page.cursor);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError((err as ApiError)?.message ?? t('auditLog.loadError'));
     } finally {
-      setLoadingMore(false);
+      if (seq === requestSeq.current) setLoadingMore(false);
     }
   }, [cursor, loadingMore, activeTargetId]);
 
@@ -178,7 +196,7 @@ export default function AuditLogPage() {
         <p className={styles.statusText} aria-live="polite" aria-busy="true">
           {t('auditLog.loading')}
         </p>
-      ) : visibleEvents.length === 0 ? (
+      ) : error ? null : visibleEvents.length === 0 ? (
         <p className={styles.statusText} aria-live="polite">
           {t('auditLog.empty')}
         </p>
@@ -199,7 +217,7 @@ export default function AuditLogPage() {
                 <tr key={event.id}>
                   <td>
                     <span className={styles.actionLabel}>{actionLabel(event.action)}</span>
-                    <span className={styles.actionCode}>{event.action}</span>
+                    <span className={styles.actionCode}>{event.action || '–'}</span>
                   </td>
                   <td className={styles.monoCell} title={event.adminId}>
                     {event.adminId || '–'}

@@ -652,6 +652,7 @@
     "loading": "Laddar granskningslogg…",
     "loadError": "Kunde inte ladda granskningsloggen.",
     "empty": "Inga händelser hittades.",
+    "unknownAction": "Okänd åtgärd",
     "loadMore": "Ladda fler",
     "loadingMore": "Laddar…",
     "columnAction": "Åtgärd",

@@ -577,6 +577,7 @@
     "loading": "Loading audit log…",
     "loadError": "Could not load the audit log.",
     "empty": "No events found.",
+    "unknownAction": "Unknown action",
     "loadMore": "Load more",
     "loadingMore": "Loading…",
     "columnAction": "Action",
