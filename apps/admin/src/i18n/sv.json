@@ -638,5 +638,73 @@
       "revokeAdminSuccess": "Administratörsbehörighet borttagen.",
       "actionError": "Åtgärden misslyckades."
     }
+  },
+  "errorReports": {
+    "title": "Felrapporter",
+    "subtitle": "Krasch- och feltelemetri från apparna. Skrivskyddad vy — rapporter skapas endast via backend och rensas efter 90 dagar.",
+    "loading": "Laddar felrapporter…",
+    "loadError": "Kunde inte ladda felrapporter. Försök igen.",
+    "empty": "Inga felrapporter hittades.",
+    "refresh": "Uppdatera",
+    "moreAvailable": "Fler rapporter finns — endast den senaste sidan visas.",
+    "filter": {
+      "severityLabel": "Allvarlighetsgrad",
+      "platformLabel": "Plattform",
+      "allSeverities": "Alla allvarlighetsgrader",
+      "allPlatforms": "Alla plattformar"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Varning",
+      "error": "Fel",
+      "critical": "Kritisk"
+    },
+    "platform": {
+      "ios": "iOS",
+      "android": "Android",
+      "web": "Webb",
+      "unknown": "Okänd"
+    },
+    "featureArea": {
+      "auth": "Inloggning",
+      "live_location": "Live-position",
+      "events": "Event",
+      "subscription": "Prenumeration",
+      "admin": "Admin",
+      "map": "Karta",
+      "network": "Nätverk",
+      "unknown": "Okänt"
+    },
+    "columns": {
+      "severity": "Allvarlighetsgrad",
+      "platform": "Plattform",
+      "featureArea": "Funktionsområde",
+      "message": "Meddelande",
+      "errorCode": "Felkod",
+      "user": "Användare",
+      "createdAt": "Tidpunkt",
+      "actions": "Åtgärder"
+    },
+    "actions": {
+      "show": "Visa detaljer",
+      "hide": "Dölj detaljer"
+    },
+    "detail": {
+      "loading": "Laddar rapport…",
+      "loadError": "Kunde inte ladda rapporten. Försök igen.",
+      "notFound": "Rapporten finns inte längre (rensad enligt 90-dagarsgallringen).",
+      "reportId": "Rapport-ID",
+      "user": "Användare",
+      "anonymous": "Anonym",
+      "featureArea": "Funktionsområde",
+      "errorCode": "Felkod",
+      "appVersion": "Appversion",
+      "buildNumber": "Byggnummer",
+      "osVersion": "OS-version",
+      "fingerprint": "Fingeravtryck",
+      "createdAt": "Skapad",
+      "metadata": "Metadata",
+      "noMetadata": "Ingen metadata."
+    }
   }
 }
