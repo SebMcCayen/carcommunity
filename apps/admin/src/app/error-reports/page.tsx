@@ -29,6 +29,7 @@ import {
   type AdminErrorReportDetail,
   type AdminErrorReportSummary,
   type ApiError,
+  type DiagnosticsFeatureArea,
   type DiagnosticsPlatform,
   type DiagnosticsSeverity,
 } from '@/features/error-reports';
@@ -40,7 +41,8 @@ const t = (key: string) => translate('sv', key);
 
 const severityLabel = (severity: DiagnosticsSeverity) => t(`errorReports.severity.${severity}`);
 const platformLabel = (platform: DiagnosticsPlatform) => t(`errorReports.platform.${platform}`);
-const featureAreaLabel = (featureArea: string) => t(`errorReports.featureArea.${featureArea}`);
+const featureAreaLabel = (featureArea: DiagnosticsFeatureArea) =>
+  t(`errorReports.featureArea.${featureArea}`);
 
 // CSS-module lookups are typed `string | undefined`; className accepts both.
 const SEVERITY_BADGE_CLASS: Record<DiagnosticsSeverity, string | undefined> = {
