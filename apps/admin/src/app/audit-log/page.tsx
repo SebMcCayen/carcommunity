@@ -200,10 +200,15 @@ export default function AuditLogPage() {
         <p className={styles.statusText} aria-live="polite" aria-busy="true">
           {t('auditLog.loading')}
         </p>
-      ) : error ? null : visibleEvents.length === 0 ? (
-        <p className={styles.statusText} aria-live="polite">
-          {t('auditLog.empty')}
-        </p>
+      ) : visibleEvents.length === 0 ? (
+        // Suppress the empty state on error (the error banner above already
+        // explains it); but when rows are already loaded, keep rendering the
+        // table even if a later load-more failed.
+        error ? null : (
+          <p className={styles.statusText} aria-live="polite">
+            {t('auditLog.empty')}
+          </p>
+        )
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table} aria-label={t('auditLog.tableLabel')}>
