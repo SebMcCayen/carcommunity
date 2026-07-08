@@ -175,19 +175,23 @@ export default function AuditLogPage() {
       )}
 
       {loading ? (
-        <p className={styles.statusText}>{t('auditLog.loading')}</p>
+        <p className={styles.statusText} aria-live="polite" aria-busy="true">
+          {t('auditLog.loading')}
+        </p>
       ) : visibleEvents.length === 0 ? (
-        <p className={styles.statusText}>{t('auditLog.empty')}</p>
+        <p className={styles.statusText} aria-live="polite">
+          {t('auditLog.empty')}
+        </p>
       ) : (
         <div className={styles.tableWrap}>
-          <table className={styles.table}>
+          <table className={styles.table} aria-label={t('auditLog.tableLabel')}>
             <thead>
               <tr>
-                <th>{t('auditLog.columnAction')}</th>
-                <th>{t('auditLog.columnActor')}</th>
-                <th>{t('auditLog.columnTarget')}</th>
-                <th>{t('auditLog.columnReason')}</th>
-                <th>{t('auditLog.columnTime')}</th>
+                <th scope="col">{t('auditLog.columnAction')}</th>
+                <th scope="col">{t('auditLog.columnActor')}</th>
+                <th scope="col">{t('auditLog.columnTarget')}</th>
+                <th scope="col">{t('auditLog.columnReason')}</th>
+                <th scope="col">{t('auditLog.columnTime')}</th>
               </tr>
             </thead>
             <tbody>

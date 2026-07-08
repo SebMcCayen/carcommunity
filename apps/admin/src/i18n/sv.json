@@ -642,6 +642,7 @@
   "auditLog": {
     "title": "Granskningslogg",
     "subtitle": "Oföränderlig logg över alla adminåtgärder i portalen, nyast först.",
+    "tableLabel": "Granskningslogghändelser",
     "targetIdLabel": "Mål-ID",
     "targetIdPlaceholder": "t.ex. användar-uid eller event-id",
     "applyFilter": "Filtrera",

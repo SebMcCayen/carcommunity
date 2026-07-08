@@ -567,6 +567,7 @@
   "auditLog": {
     "title": "Audit Log",
     "subtitle": "Immutable record of all admin actions in this portal, newest first.",
+    "tableLabel": "Audit log events",
     "targetIdLabel": "Target ID",
     "targetIdPlaceholder": "e.g. user uid or event id",
     "applyFilter": "Filter",
