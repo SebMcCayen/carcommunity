@@ -101,9 +101,11 @@ function parseDevAuthContext(value: string): DevAuthContext | null {
  *    there is no fallback to the legacy session path.
  * 2. If `firebaseIdTokenVerifier` is not provided, fall back to legacy
  *    session-based lookup via `authService.lookupSession`.
- * 3. In non-production environments, accept the `x-dev-user` header as a
- *    convenience for local development and testing. Silently ignored in
- *    production.
+ * 3. In non-production environments only, a second hook (registered at
+ *    startup exclusively when `config.isProduction` is false) accepts the
+ *    `x-dev-user` header as a convenience for local development and testing.
+ *    In production that hook does not exist at all — there is no runtime
+ *    branch on the header.
  *
  * Rate limiting is applied globally by the `@fastify/rate-limit` plugin
  * registered in `registerSecurity` before this hook runs.
@@ -116,7 +118,6 @@ export async function registerAuthContext(
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
-  // lgtm[js/missing-rate-limiting] Global rate limiting is registered in registerSecurity before this hook.
   app.addHook('onRequest', async (request) => {
     const authorizationHeader = request.headers.authorization;
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
@@ -177,10 +178,30 @@ export async function registerAuthContext(
       }
     }
 
-    // TODO: Remove development header auth once all local/dev tooling uses real login.
-    if (!config.isProduction) {
-      // Development-only: accept the x-dev-user header to inject a fake auth context.
-      // NEVER honour this header in production — the guard above ensures it is skipped.
+    // Protected routes continue to require a valid backend session.
+  });
+
+  // TODO: Remove development header auth once all local/dev tooling uses real login.
+  //
+  // The x-dev-user hook is registered ONLY in non-production environments —
+  // the decision is made once at startup from server config, never from
+  // request data, so in production this code path does not exist at runtime.
+  if (!config.isProduction) {
+    app.addHook('onRequest', async (request) => {
+      // Never override a real auth context, and never consult the dev header
+      // when the request carried a bearer token (even an invalid one). A
+      // rejected token leaves the request unauthenticated — matching the
+      // Firebase path's historical behaviour, and deliberately stricter than
+      // the old legacy-session path, which fell back to the dev header after
+      // a failed session lookup.
+      if (request.auth) {
+        return;
+      }
+      const authorizationHeader = request.headers.authorization;
+      if (typeof authorizationHeader === 'string' && parseBearerToken(authorizationHeader)) {
+        return;
+      }
+
       const devHeader = request.headers[DEV_AUTH_HEADER];
       if (typeof devHeader === 'string') {
         const parsed = parseDevAuthContext(devHeader);
@@ -202,9 +223,8 @@ export async function registerAuthContext(
             }
           : null;
       }
-    }
-    // Protected routes continue to require a valid backend session.
-  });
+    });
+  }
 }
 
 /**
