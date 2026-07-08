@@ -19,7 +19,7 @@
  *    reports render an explicit "anonymous" label.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   adminGetErrorReport,
@@ -149,10 +149,10 @@ function ReportDetail({ reportId }: ReportDetailProps) {
       ) : (
         <dl className={styles.detailGrid}>
           {metadataEntries.map(([key, value]) => (
-            <div className={styles.metadataRow} key={key}>
+            <Fragment key={key}>
               <dt className={styles.mono}>{key}</dt>
               <dd className={styles.mono}>{value === null ? '–' : String(value)}</dd>
-            </div>
+            </Fragment>
           ))}
         </dl>
       )}

@@ -207,10 +207,6 @@
   word-break: break-word;
 }
 
-.metadataRow {
-  display: contents;
-}
-
 .statusText {
   margin: 0;
   color: var(--text-secondary);
