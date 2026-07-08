@@ -145,9 +145,10 @@ const ACTION_LABEL_KEYS: Record<KnownAuditAction, string> = {
  * (callers fall back to rendering the raw action string).
  */
 export function auditActionLabelKey(action: string): string | null {
-  // hasOwn guard: a plain index lookup would resolve prototype keys (e.g. a
-  // stored action of "constructor") to functions instead of undefined.
-  return Object.hasOwn(ACTION_LABEL_KEYS, action)
+  // Own-property guard: a plain index lookup would resolve prototype keys
+  // (e.g. a stored action of "constructor") to functions instead of undefined.
+  // Use hasOwnProperty.call for the widest runtime support.
+  return Object.prototype.hasOwnProperty.call(ACTION_LABEL_KEYS, action)
     ? ACTION_LABEL_KEYS[action as KnownAuditAction]
     : null;
 }
