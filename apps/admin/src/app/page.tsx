@@ -1,97 +1,113 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
+import { COUNTABLE_STATS, loadDashboardStats, type DashboardStats } from '@/features/dashboard';
+import { isFirestoreEmulatorEnabled } from '@/lib/firestore';
 import styles from './page.module.css';
 
-// TODO: Replace mock data with real API calls once backend integration is in place.
-// TODO: Backend must verify admin role before serving any data to this page.
-
-const mockStats = {
-  totalUsers: 1247,
-  activeMembers: 432,
-  liveSessions: 18,
-  openReports: 7,
-  pendingPartners: 3,
-  pendingBillboards: 5,
-  // Garage aggregate stats — no private vehicle details, no registration data.
-  totalVehicleProfiles: 0,
-  usersWithVehicles: 0,
-};
+/** Formats a live count, or "—" when the stat isn't available yet. */
+function fmt(value: number | null, loading: boolean): string {
+  if (loading) return '…';
+  if (value === null) return '—';
+  return value.toLocaleString('sv-SE');
+}
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    loadDashboardStats()
+      .then((s) => {
+        if (!active) return;
+        setStats(s);
+        // safeCount() turns per-tile failures into null, so loadDashboardStats
+        // resolves even when a countable query was denied/failed. Surface that
+        // as an error (while still rendering what loaded) — placeholder tiles
+        // are always null by design and must not count as failures.
+        if (COUNTABLE_STATS.some((key) => s[key] === null)) {
+          setError('Some statistics could not be loaded. Try refreshing.');
+        }
+      })
+      .catch(() => {
+        if (active) setError('Could not load dashboard statistics. Try refreshing.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const s = stats;
+  const openReports = s?.openReports ?? null;
+
+  // Avoid claiming "production database" when reads are routed to the local
+  // Firestore emulator (dev / non-PROD builds with VITE_FIRESTORE_EMULATOR_HOST).
+  const dataSource = isFirestoreEmulatorEnabled()
+    ? 'the local Firestore emulator'
+    : 'the production database';
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.subtitle}>
-          Admin overview — all figures are placeholder mock data only.
+          Live figures from {dataSource}. Tiles showing “—” aren’t wired to a
+          data source yet (Realtime Database or pending admin-read access).
         </p>
       </div>
+
+      {error && (
+        <p className={styles.subtitle} role="alert">{error}</p>
+      )}
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Overview</h2>
         <div className={styles.statsGrid}>
-          <StatCard
-            label="Total Users"
-            value={mockStats.totalUsers.toLocaleString('sv-SE')}
-            note="All registered accounts"
-          />
+          <StatCard label="Total Users" value={fmt(s?.totalUsers ?? null, loading)} note="All registered accounts" />
           <StatCard
             label="Active Members"
-            value={mockStats.activeMembers.toLocaleString('sv-SE')}
-            note="member_monthly subscription"
+            value={fmt(s?.activeMembers ?? null, loading)}
+            note="Accounts with an active membership"
             variant="success"
           />
           <StatCard
             label="Live Location Sessions"
-            value={mockStats.liveSessions}
-            note="Currently active sessions"
+            value={fmt(s?.liveSessions ?? null, loading)}
+            note="Realtime Database — not yet wired"
           />
           <StatCard
             label="Open Reports"
-            value={mockStats.openReports}
+            value={fmt(openReports, loading)}
             note="Awaiting moderation review"
-            variant={mockStats.openReports > 0 ? 'warning' : 'default'}
+            variant={typeof openReports === 'number' && openReports > 0 ? 'warning' : 'default'}
           />
           <StatCard
             label="Pending Partner Approvals"
-            value={mockStats.pendingPartners}
-            note="Awaiting admin review"
-            variant={mockStats.pendingPartners > 0 ? 'warning' : 'default'}
+            value={fmt(s?.pendingPartners ?? null, loading)}
+            note="Needs admin-read access"
           />
           <StatCard
             label="Pending Billboards"
-            value={mockStats.pendingBillboards}
-            note="Awaiting content review"
-            variant={mockStats.pendingBillboards > 0 ? 'warning' : 'default'}
+            value={fmt(s?.pendingBillboards ?? null, loading)}
+            note="Needs admin-read access"
           />
-          {/* Garage aggregate stats — no private vehicle details, no registration data. */}
-          {/* TODO: Connect to real API once admin auth and backend integration are in place. */}
-          {/* TODO: Add moderation aggregate if public vehicle profiles are introduced later. */}
           <StatCard
             label="Vehicle Profiles"
-            value={mockStats.totalVehicleProfiles.toLocaleString('sv-SE')}
+            value={fmt(s?.vehicleProfiles ?? null, loading)}
             note="Total private vehicle profiles"
           />
           <StatCard
             label="Users with Vehicles"
-            value={mockStats.usersWithVehicles.toLocaleString('sv-SE')}
-            note="Users with at least one vehicle"
+            value={fmt(s?.usersWithVehicles ?? null, loading)}
+            note="Aggregate not yet available"
           />
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Planned admin behaviours</h2>
-        <ul className={styles.behaviorList}>
-          <li>View and manage active users and subscription status</li>
-          <li>Monitor active live location session count (no exact coordinates)</li>
-          <li>Review and action moderation reports</li>
-          <li>Send warnings and suspend users</li>
-          <li>Manage partner companies and approve partner offers</li>
-          <li>Review and approve digital billboard content</li>
-          <li>Manage Kronjakt campaigns</li>
-          <li>View aggregated statistics</li>
-          <li>View immutable audit log of all admin actions</li>
-        </ul>
       </section>
     </div>
   );
