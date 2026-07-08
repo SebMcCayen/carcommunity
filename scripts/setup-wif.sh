@@ -70,6 +70,29 @@ gcloud iam service-accounts add-iam-policy-binding \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser" >/dev/null
 echo "    roles/iam.serviceAccountUser on ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+# Act-as on the App Engine default SA too — firebase-tools' functions-deploy
+# preflight requires iam.serviceAccounts.ActAs on {project}@appspot regardless
+# of the gen2 runtime SA (deploy fails otherwise: "Missing permissions … ActAs
+# on kungsbacka-car-community@appspot.gserviceaccount.com"). The appspot SA is
+# created lazily on first App Engine / Cloud Functions use, so it may not exist
+# on a brand-new project yet — guard so this idempotent script doesn't abort.
+APPSPOT_SA="${PROJECT_ID}@appspot.gserviceaccount.com"
+if gcloud iam service-accounts describe "${APPSPOT_SA}" >/dev/null 2>&1; then
+  gcloud iam service-accounts add-iam-policy-binding \
+    "${APPSPOT_SA}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/iam.serviceAccountUser" >/dev/null
+  echo "    roles/iam.serviceAccountUser on ${APPSPOT_SA}"
+else
+  echo "    WARNING: App Engine default SA ${APPSPOT_SA} does not exist yet."
+  echo "             It is provisioned lazily on the first App Engine / Cloud"
+  echo "             Functions deploy. firebase-tools' functions-deploy preflight"
+  echo "             requires roles/iam.serviceAccountUser (ActAs) on it, so the"
+  echo "             first functions deploy will still fail until this binding is"
+  echo "             in place. Re-run this script (it is idempotent) after the"
+  echo "             first deploy provisions ${APPSPOT_SA}, or enable App Engine"
+  echo "             first, then re-run — this step will then apply the binding."
+fi
 # If a deploy later fails with a 403 despite the roles above, the usual
 # additions are roles/serviceusage.serviceUsageConsumer and roles/firebase.viewer
 # (firebase-tools preflight checks) — add only what the error asks for.

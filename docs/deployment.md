@@ -84,7 +84,17 @@ The service account must be granted only the permissions required for deployment
 
 - `roles/cloudfunctions.developer` — for Functions deploy
 - `roles/firebasehosting.admin` — for Hosting deploy
-- `roles/iam.serviceAccountUser` — to act as the Cloud Functions runtime service account
+- `roles/iam.serviceAccountUser` (ActAs) on the gen2 Cloud Functions runtime SA
+  (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) — to act as the
+  Functions runtime service account
+- `roles/iam.serviceAccountUser` (ActAs) on the App Engine default SA
+  (`{PROJECT_ID}@appspot.gserviceaccount.com`) — `firebase-tools`' functions-deploy
+  preflight requires `iam.serviceAccounts.ActAs` on the appspot SA in addition to
+  the compute runtime SA, or the deploy fails. This SA is created lazily on first
+  App Engine / Cloud Functions use, so the binding is existence-guarded.
+
+[`scripts/setup-wif.sh`](../scripts/setup-wif.sh) is the source of truth for the
+exact bindings and applies them idempotently.
 
 ### Setting up Workload Identity Federation
 
