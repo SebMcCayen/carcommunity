@@ -47,6 +47,9 @@ import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
+import com.kungsbackacarcommunity.app.push.FirebasePushTokenRepository
+import com.kungsbackacarcommunity.app.push.FirebasePushTokenSource
+import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
 import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
 import kotlinx.coroutines.launch
@@ -118,6 +121,23 @@ class MainActivity : ComponentActivity() {
         val partnerStatsRepository =
             FirebasePartnerStatsRepository.createIfAvailable(applicationContext)
         val partnerStatsCoordinator = partnerStatsRepository?.let { PartnerStatsCoordinator(it) }
+        // FCM token registration (Phase 12 slice 21, push portion): the
+        // guarded callable repository + token source feed the coordinator,
+        // which AuthenticatedApp invokes once a user is signed in. Null in
+        // config-less builds like the rest of the Firebase wiring.
+        val pushTokenRepository =
+            FirebasePushTokenRepository.createIfAvailable(
+                applicationContext,
+                appVersion = BuildConfig.VERSION_NAME,
+                buildNumber = BuildConfig.VERSION_CODE.toString(),
+            )
+        val pushTokenSource = FirebasePushTokenSource.createIfAvailable(applicationContext)
+        val pushRegistrationCoordinator =
+            if (pushTokenRepository != null && pushTokenSource != null) {
+                PushRegistrationCoordinator(pushTokenRepository, pushTokenSource)
+            } else {
+                null
+            }
         // Play Billing needs no google-services.json (public Maven, no Firebase);
         // the verifier is guarded like the other callables.
         val billingRepository = PlayBillingRepository.createIfAvailable(applicationContext)
@@ -179,6 +199,7 @@ class MainActivity : ComponentActivity() {
                         partnerStatsCoordinator = partnerStatsCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
+                        pushRegistrationCoordinator = pushRegistrationCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )

@@ -6,6 +6,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +84,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
+import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -136,11 +138,20 @@ fun AuthenticatedApp(
     partnerStatsCoordinator: PartnerStatsCoordinator?,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
+    pushRegistrationCoordinator: PushRegistrationCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     val scope = rememberCoroutineScope()
+
+    // Sign-in-time push-token registration (Phase 12 slice 21, push portion):
+    // best-effort, once per signed-in uid; failures stay inside the
+    // coordinator and never block the UI. Null in config-less builds.
+    LaunchedEffect(uid, pushRegistrationCoordinator) {
+        pushRegistrationCoordinator?.registerCurrentToken()
+    }
+
     val profileFlow =
         remember(uid, profileRepository) {
             profileRepository?.observeProfile(uid) ?: flowOf(ProfileState.Unavailable)

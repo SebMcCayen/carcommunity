@@ -547,4 +547,10 @@
     <string name="notifications_permissionRationale">Receive reminders about events and important messages.</string>
     <string name="notifications_permissionOptional">Notifications are optional.</string>
     <string name="notifications_permissionChangeHint">You can change your preferences later under Settings.</string>
+    <string name="notifications_channelEventsName">Events</string>
+    <string name="notifications_channelEventsDescription">Reminders and updates about events.</string>
+    <string name="notifications_channelAccountName">Account</string>
+    <string name="notifications_channelAccountDescription">Important notices about your account.</string>
+    <string name="notifications_channelGeneralName">General</string>
+    <string name="notifications_channelGeneralDescription">Membership updates and other messages from the club.</string>
 </resources>

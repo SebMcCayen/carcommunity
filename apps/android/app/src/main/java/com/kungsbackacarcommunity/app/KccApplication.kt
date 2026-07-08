@@ -8,6 +8,7 @@ import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
+import com.kungsbackacarcommunity.app.push.PushChannels
 
 /**
  * Application entry point (Phase 15b): registers Firebase App Check as
@@ -30,6 +31,11 @@ import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 class KccApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // Notification channels are pure Android (no Firebase) — created
+        // unconditionally so they exist before the first FCM delivery
+        // (Phase 12 slice 21, push portion).
+        PushChannels.ensureCreated(this)
 
         // FirebaseApp.initializeApp returns null when configuration is
         // absent — mirror FirebaseAuthRepository.createIfAvailable.
