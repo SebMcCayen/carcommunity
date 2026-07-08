@@ -58,18 +58,27 @@ export default function AccountDeletionsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const actingRef = useRef(false);
+  // Monotonic request id: tab switches and post-action reloads can overlap, so
+  // only the most recently started load is allowed to commit state — a slow
+  // earlier request must not overwrite newer results or clear a fresh loading.
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(async (activeFilter: AccountDeletionStatusFilter) => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const rows = await adminListAccountDeletionRequests(activeFilter);
+      if (seq !== loadSeqRef.current) return;
       setRequests(rows);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setRequests([]);
       setError((err as ApiError)?.message ?? t('accountDeletions.loadError'));
     } finally {
-      setLoading(false);
+      // Only the latest load owns the loading flag; a superseded one leaves it
+      // to the request that overtook it.
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
 
@@ -112,13 +121,12 @@ export default function AccountDeletionsPage() {
         <p className={styles.subtitle}>{t('accountDeletions.subtitle')}</p>
       </header>
 
-      <div className={styles.tabs} role="tablist" aria-label={t('accountDeletions.title')}>
+      <div className={styles.tabs} role="group" aria-label={t('accountDeletions.title')}>
         {FILTERS.map((value) => (
           <button
             key={value}
             type="button"
-            role="tab"
-            aria-selected={filter === value}
+            aria-pressed={filter === value}
             className={filter === value ? styles.tabActive : styles.tab}
             onClick={() => setFilter(value)}
             disabled={loading && filter === value}
