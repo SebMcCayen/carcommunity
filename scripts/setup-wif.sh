@@ -70,6 +70,15 @@ gcloud iam service-accounts add-iam-policy-binding \
   --member="serviceAccount:${SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser" >/dev/null
 echo "    roles/iam.serviceAccountUser on ${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+# Act-as on the App Engine default SA too — firebase-tools' functions-deploy
+# preflight requires iam.serviceAccounts.ActAs on {project}@appspot regardless
+# of the gen2 runtime SA (deploy fails otherwise: "Missing permissions … ActAs
+# on kungsbacka-car-community@appspot.gserviceaccount.com").
+gcloud iam service-accounts add-iam-policy-binding \
+  "${PROJECT_ID}@appspot.gserviceaccount.com" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser" >/dev/null
+echo "    roles/iam.serviceAccountUser on ${PROJECT_ID}@appspot.gserviceaccount.com"
 # If a deploy later fails with a 403 despite the roles above, the usual
 # additions are roles/serviceusage.serviceUsageConsumer and roles/firebase.viewer
 # (firebase-tools preflight checks) — add only what the error asks for.
