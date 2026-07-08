@@ -1,6 +1,9 @@
 package com.kungsbackacarcommunity.app.push
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -88,6 +91,74 @@ class PushRegistrationCoordinatorTest {
         val coordinator = PushRegistrationCoordinator(repo) { "fcm-token" }
         coordinator.unregisterCurrentToken()
         assertEquals(PushRegistrationStatus.Failed, coordinator.status.value)
+    }
+
+    @Test
+    fun `two concurrent register calls register exactly once`() = runTest {
+        // A repo whose register suspends on a gate so the first caller holds the
+        // coordinator lock across the suspension while the second caller runs.
+        val gate = CompletableDeferred<Unit>()
+        val repo =
+            object : PushTokenRepository {
+                var registerCount = 0
+
+                override suspend fun register(token: String) {
+                    registerCount++
+                    gate.await()
+                }
+
+                override suspend fun unregister(token: String) = Unit
+            }
+        val coordinator = PushRegistrationCoordinator(repo) { "fcm-token" }
+
+        val first = launch { coordinator.registerCurrentToken() }
+        val second = launch { coordinator.registerCurrentToken() }
+        // Run both up to their first suspension: the winner reaches gate.await()
+        // holding the lock; the loser fails tryLock and returns a no-op.
+        runCurrent()
+        assertEquals(1, repo.registerCount)
+
+        gate.complete(Unit)
+        first.join()
+        second.join()
+
+        // Still exactly one backend register after both complete.
+        assertEquals(1, repo.registerCount)
+        assertEquals(PushRegistrationStatus.Registered, coordinator.status.value)
+    }
+
+    @Test
+    fun `a register in flight blocks a concurrent unregister`() = runTest {
+        // Shared lock: an unregister must not interleave with an in-flight
+        // register (they would race the backend register/unregister).
+        val gate = CompletableDeferred<Unit>()
+        val repo =
+            object : PushTokenRepository {
+                var registerCount = 0
+                var unregisterCount = 0
+
+                override suspend fun register(token: String) {
+                    registerCount++
+                    gate.await()
+                }
+
+                override suspend fun unregister(token: String) {
+                    unregisterCount++
+                }
+            }
+        val coordinator = PushRegistrationCoordinator(repo) { "fcm-token" }
+
+        val reg = launch { coordinator.registerCurrentToken() }
+        val unreg = launch { coordinator.unregisterCurrentToken() }
+        runCurrent()
+        // Register holds the lock; the concurrent unregister was a no-op.
+        assertEquals(1, repo.registerCount)
+        assertEquals(0, repo.unregisterCount)
+
+        gate.complete(Unit)
+        reg.join()
+        unreg.join()
+        assertEquals(0, repo.unregisterCount)
     }
 
     @Test

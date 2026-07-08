@@ -5,6 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 
 /**
  * FCM token registration domain (Phase 12 slice 21, push portion). Pure
@@ -66,11 +67,19 @@ class PushRegistrationCoordinator(
     private val state = MutableStateFlow<PushRegistrationStatus>(PushRegistrationStatus.Idle)
     val status: StateFlow<PushRegistrationStatus> = state.asStateFlow()
 
+    // Atomic check-and-set guard shared by BOTH actions: only the coroutine
+    // that wins tryLock() runs, so concurrent calls can't double-register (the
+    // check-then-set on `state` alone raced), and a register and an unregister
+    // can never interleave. Held for the whole critical section, always
+    // released in finally. Mirrors ImageUploadCoordinator (PR #283).
+    private val actionLock = Mutex()
+
     /** Registers the device's current token (call once a user is signed in). */
     suspend fun registerCurrentToken() {
-        if (state.value == PushRegistrationStatus.Registering) return
-        state.value = PushRegistrationStatus.Registering
+        // Atomic guard: if another action already holds the lock, do nothing.
+        if (!actionLock.tryLock()) return
         try {
+            state.value = PushRegistrationStatus.Registering
             val token = tokenSource.currentToken()
             if (token.isNullOrBlank()) {
                 // No token available (messaging not ready) — nothing to retry now.
@@ -84,14 +93,17 @@ class PushRegistrationCoordinator(
             throw cancellation
         } catch (failure: Exception) {
             state.value = PushRegistrationStatus.Failed
+        } finally {
+            actionLock.unlock()
         }
     }
 
     /** Unregisters the device's current token (call before signing out). */
     suspend fun unregisterCurrentToken() {
-        if (state.value == PushRegistrationStatus.Registering) return
-        state.value = PushRegistrationStatus.Registering
+        // Atomic guard: if another action already holds the lock, do nothing.
+        if (!actionLock.tryLock()) return
         try {
+            state.value = PushRegistrationStatus.Registering
             val token = tokenSource.currentToken()
             if (!token.isNullOrBlank()) {
                 repository.unregister(token)
@@ -102,6 +114,8 @@ class PushRegistrationCoordinator(
             throw cancellation
         } catch (failure: Exception) {
             state.value = PushRegistrationStatus.Failed
+        } finally {
+            actionLock.unlock()
         }
     }
 }
