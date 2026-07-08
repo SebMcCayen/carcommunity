@@ -189,44 +189,48 @@ export async function registerAuthContext(
 
   // TODO: Remove development header auth once all local/dev tooling uses real login.
   //
-  // The x-dev-user hook is registered ONLY in non-production environments —
-  // the decision is made once at startup from server config, never from
-  // request data, so in production this code path does not exist at runtime.
-  if (!config.isProduction) {
-    app.addHook('onRequest', async (request) => {
-      // Never override a real auth context, and never consult the dev header
-      // when the request carried a bearer token (even an invalid one). A
-      // rejected token leaves the request unauthenticated — matching the
-      // Firebase path's historical behaviour, and deliberately stricter than
-      // the old legacy-session path, which fell back to the dev header after
-      // a failed session lookup.
-      if (request.auth || requestsWithBearerToken.has(request)) {
-        return;
-      }
+  // The x-dev-user header is a development-only convenience. This hook is a
+  // separate handler (not part of the token path above), so it can never be
+  // used to bypass token auth: it no-ops the moment a request presents any
+  // bearer token, and it does nothing at all in production. The production
+  // guard reads server config only — never request data.
+  app.addHook('onRequest', async (request) => {
+    if (config.isProduction) {
+      return;
+    }
 
-      const devHeader = request.headers[DEV_AUTH_HEADER];
-      if (typeof devHeader === 'string') {
-        const parsed = parseDevAuthContext(devHeader);
-        request.auth = parsed
-          ? {
-              ...parsed,
-              user: {
-                userId: parsed.userId,
-                displayName: null,
-                identities: [],
-                roles: [parsed.role],
-                status: parsed.status,
-                subscriptionEntitlement: parsed.subscriptionEntitlement,
-                onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
-              },
-              sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-              lastActiveAt: null,
+    // Never override a real auth context, and never consult the dev header
+    // when the request carried a bearer token (even an invalid one). A
+    // rejected token leaves the request unauthenticated — matching the
+    // Firebase path's historical behaviour, and deliberately stricter than
+    // the old legacy-session path, which fell back to the dev header after
+    // a failed session lookup.
+    if (request.auth || requestsWithBearerToken.has(request)) {
+      return;
+    }
+
+    const devHeader = request.headers[DEV_AUTH_HEADER];
+    if (typeof devHeader === 'string') {
+      const parsed = parseDevAuthContext(devHeader);
+      request.auth = parsed
+        ? {
+            ...parsed,
+            user: {
+              userId: parsed.userId,
+              displayName: null,
+              identities: [],
+              roles: [parsed.role],
+              status: parsed.status,
+              subscriptionEntitlement: parsed.subscriptionEntitlement,
               onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
-            }
-          : null;
-      }
-    });
-  }
+            },
+            sessionExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+            lastActiveAt: null,
+            onboardingCompletedAt: parsed.onboardingCompletedAt ?? null,
+          }
+        : null;
+    }
+  });
 }
 
 /**
