@@ -5,6 +5,55 @@
     "settingsTodoNote": "TODO: Funktionsflaggor och inställningar måste hanteras i backend. Den här sidan är endast visning tills backend-RBAC är implementerat. Växla aldrig funktionsflaggor enbart via klientstatus.",
     "userDetailTodoNote": "TODO: Ersätt ruttparametern med riktig användaruppslagning från backend-API:et. Backend måste verifiera administratörsroll innan användardata skickas. Exponera aldrig mer persondata än nödvändigt."
   },
+  "announcements": {
+    "title": "Meddelanden",
+    "subtitle": "Skapa och hantera meddelanden som visas för medlemmar i appen. Att dra tillbaka (inaktivera) är det primära sättet att dölja ett meddelande.",
+    "createdLabel": "Skapad",
+    "updatedLabel": "Uppdaterad",
+    "badge": {
+      "active": "Aktivt",
+      "inactive": "Inaktivt"
+    },
+    "create": {
+      "heading": "Skapa nytt meddelande",
+      "submit": "Skapa meddelande",
+      "submitting": "Skapar..."
+    },
+    "list": {
+      "heading": "Alla meddelanden",
+      "loading": "Läser in...",
+      "empty": "Inga meddelanden ännu."
+    },
+    "form": {
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Meddelandets titel",
+      "bodyLabel": "Innehåll",
+      "bodyPlaceholder": "Meddelandets innehåll",
+      "activeLabel": "Aktivt (synligt för medlemmar)"
+    },
+    "actions": {
+      "edit": "Redigera",
+      "cancel": "Avbryt",
+      "save": "Spara",
+      "saving": "Sparar...",
+      "activate": "Aktivera",
+      "deactivate": "Dra tillbaka",
+      "delete": "Ta bort",
+      "working": "Arbetar..."
+    },
+    "deleteConfirm": "Vill du ta bort meddelandet permanent? Detta kan inte ångras. Överväg att dra tillbaka (inaktivera) i stället.",
+    "errors": {
+      "titleRequired": "Titel krävs.",
+      "titleTooLong": "Titeln får vara högst 120 tecken.",
+      "bodyRequired": "Innehåll krävs.",
+      "bodyTooLong": "Innehållet får vara högst 2000 tecken.",
+      "loadFailed": "Kunde inte läsa in meddelanden.",
+      "createFailed": "Meddelandet kunde inte skapas.",
+      "updateFailed": "Ändringen kunde inte sparas.",
+      "toggleFailed": "Statusändringen misslyckades.",
+      "deleteFailed": "Borttagningen misslyckades."
+    }
+  },
   "events": {
     "title": "Event",
     "createEvent": "Skapa event",

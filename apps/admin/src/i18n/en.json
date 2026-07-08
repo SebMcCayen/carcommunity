@@ -5,6 +5,55 @@
     "settingsTodoNote": "TODO: Feature flags and settings must be backend-managed. This page is display-only until backend RBAC is implemented. Never toggle feature flags via client-side state alone.",
     "userDetailTodoNote": "TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
   },
+  "announcements": {
+    "title": "Announcements",
+    "subtitle": "Create and manage announcements shown to members in the app. Retracting (deactivating) is the primary way to hide an announcement.",
+    "createdLabel": "Created",
+    "updatedLabel": "Updated",
+    "badge": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "create": {
+      "heading": "Create new announcement",
+      "submit": "Create announcement",
+      "submitting": "Creating..."
+    },
+    "list": {
+      "heading": "All announcements",
+      "loading": "Loading...",
+      "empty": "No announcements yet."
+    },
+    "form": {
+      "titleLabel": "Title",
+      "titlePlaceholder": "Announcement title",
+      "bodyLabel": "Body",
+      "bodyPlaceholder": "Announcement body",
+      "activeLabel": "Active (visible to members)"
+    },
+    "actions": {
+      "edit": "Edit",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "activate": "Activate",
+      "deactivate": "Retract",
+      "delete": "Delete",
+      "working": "Working..."
+    },
+    "deleteConfirm": "Permanently delete this announcement? This cannot be undone. Consider retracting (deactivating) instead.",
+    "errors": {
+      "titleRequired": "Title is required.",
+      "titleTooLong": "Title must be at most 120 characters.",
+      "bodyRequired": "Body is required.",
+      "bodyTooLong": "Body must be at most 2000 characters.",
+      "loadFailed": "Could not load announcements.",
+      "createFailed": "The announcement could not be created.",
+      "updateFailed": "The change could not be saved.",
+      "toggleFailed": "The status change failed.",
+      "deleteFailed": "The deletion failed."
+    }
+  },
   "events": {
     "title": "Events",
     "createEvent": "Create event",
