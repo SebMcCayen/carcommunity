@@ -30,10 +30,11 @@
  *     guardActorIsActiveAdmin / canAccessAdminFeatures).
  *
  * One-time-bootstrap guard: this script is strictly for the FIRST admin. Before
- * any write it refuses to run if any OTHER `users/*` already has a role of
- * 'admin' or 'owner' — once one exists, all further promotions must go through
- * the audited `admin-setAdminRole` callable. Re-running for the same target
- * (whose role is already admin) is still allowed so the bootstrap is idempotent.
+ * any write it refuses to run if any OTHER `users/*` (id != target) already has a
+ * role of 'admin' or 'owner'. Re-running for the same target is idempotent ONLY
+ * while no such other privileged user exists; once any additional admin/owner is
+ * present the script refuses even for the original target, and all further
+ * promotions must go through the audited `admin-setAdminRole` callable.
  *
  * Project: the target project id is read from the environment (never
  * hardcoded, so this is safe against wrong-project runs and works for forks),
