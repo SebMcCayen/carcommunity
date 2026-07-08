@@ -165,7 +165,9 @@ export default function AccountDeletionsPage() {
       )}
 
       {loading ? (
-        <p className={styles.muted}>{t('accountDeletions.loading')}</p>
+        <p className={styles.muted} aria-live="polite" aria-busy="true">
+          {t('accountDeletions.loading')}
+        </p>
       ) : requests.length === 0 ? (
         <p className={styles.muted}>{t('accountDeletions.empty')}</p>
       ) : (
