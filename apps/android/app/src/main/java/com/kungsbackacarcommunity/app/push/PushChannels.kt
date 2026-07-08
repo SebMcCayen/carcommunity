@@ -11,8 +11,12 @@ import com.kungsbackacarcommunity.app.R
  * Called from KccApplication.onCreate BEFORE the Firebase guard — channel
  * creation is pure Android (no Firebase), so it is safe in config-less
  * CI/validation builds — and defensively again before posting from
- * [KccMessagingService]. createNotificationChannel is idempotent; names and
- * descriptions are localized resources and refresh on every call.
+ * [KccMessagingService]. createNotificationChannel is safe to call
+ * repeatedly: for a channel that already exists it is a no-op. Note that a
+ * channel's user-visible name/description are fixed at creation — calling
+ * this again does NOT rename an existing channel; only deleting and
+ * recreating the channel (or reinstalling the app) changes those. The names
+ * and descriptions are localized resources.
  */
 object PushChannels {
 
