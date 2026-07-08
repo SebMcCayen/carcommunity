@@ -12,13 +12,18 @@
  *  - Pending requests are listed OLDEST FIRST — queue semantics matching the
  *    purge sweep's own ordering. The `status ASC + createdAt ASC` composite
  *    index (firebase/firestore.indexes.json) serves the filtered queries.
- *  - markAccountDeletionProcessed applies a direct, shape-minimal
- *    `updateDoc` — { status: 'processed', processedAt: serverTimestamp() },
- *    the exact fields the scheduled purge writes. This is the one admin
- *    module that mutates Firestore directly: the rules explicitly grant
- *    admins `update` on this collection ("Admins may read all requests and
- *    update status (e.g. mark as processed)") with no field validation on
- *    the admin path, so no callable exists or is needed.
+ *  - markAccountDeletionProcessed applies a direct, shape-minimal status
+ *    update — { status: 'processed', processedAt: serverTimestamp() },
+ *    the exact fields the scheduled purge writes — inside a Firestore
+ *    transaction, so the read + conditional write are atomic: if the
+ *    scheduled purge (or another admin) processes the request between the
+ *    read and the write, the transaction retries and lands in the graceful
+ *    already-processed no-op instead of overwriting the purge's
+ *    processedAt stamp. This is the one admin module that mutates
+ *    Firestore directly: the rules explicitly grant admins `update` on
+ *    this collection ("Admins may read all requests and update status
+ *    (e.g. mark as processed)") with no field validation on the admin
+ *    path, so no callable exists or is needed.
  *
  * Operational note: the scheduled purge only sweeps status == 'pending'
  * requests. Marking a request processed therefore REMOVES it from the
@@ -34,8 +39,8 @@ import {
   limit as fsLimit,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 
@@ -88,7 +93,8 @@ export const DEFAULT_DELETION_PAGE_SIZE = 50;
 function toIso(value: unknown): string | null {
   if (value == null) return null;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().toISOString();
+    const date = (value as { toDate: () => Date }).toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
   }
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
@@ -190,26 +196,32 @@ export interface MarkProcessedResult {
 
 /**
  * Marks a request processed — a shape-minimal status update writing exactly
- * the fields the scheduled purge writes ({ status, processedAt }). Reads the
- * document first so an already-processed request is a graceful no-op instead
- * of silently overwriting the purge's processedAt stamp.
+ * the fields the scheduled purge writes ({ status, processedAt }). The read
+ * and the conditional write run in a single Firestore transaction, so the
+ * already-processed no-op is atomic under contention: if the scheduled purge
+ * (or another admin) flips the request between our read and write, the
+ * transaction retries against the fresh snapshot and the purge's processedAt
+ * stamp is never overwritten.
  *
  * NOTE: this removes the request from the scheduled purge's pending queue —
  * use it only for requests handled (or verified purged) manually.
  */
 export async function markAccountDeletionProcessed(uid: string): Promise<MarkProcessedResult> {
-  const ref = doc(getAdminFirestore(), 'accountDeletionRequests', uid);
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) {
-    throw new ApiError(404, 'not-found', 'Deletion request not found.');
-  }
-  const current = toAdminAccountDeletionRequest(
-    snapshot.id,
-    snapshot.data() as Record<string, unknown>,
-  );
-  if (current.status === 'processed') {
-    return { userId: uid, status: 'processed', alreadyProcessed: true };
-  }
-  await updateDoc(ref, { status: 'processed', processedAt: serverTimestamp() });
-  return { userId: uid, status: 'processed', alreadyProcessed: false };
+  const db = getAdminFirestore();
+  const ref = doc(db, 'accountDeletionRequests', uid);
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists()) {
+      throw new ApiError(404, 'not-found', 'Deletion request not found.');
+    }
+    const current = toAdminAccountDeletionRequest(
+      snapshot.id,
+      snapshot.data() as Record<string, unknown>,
+    );
+    if (current.status === 'processed') {
+      return { userId: uid, status: 'processed' as const, alreadyProcessed: true };
+    }
+    transaction.update(ref, { status: 'processed', processedAt: serverTimestamp() });
+    return { userId: uid, status: 'processed' as const, alreadyProcessed: false };
+  });
 }

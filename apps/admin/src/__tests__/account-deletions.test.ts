@@ -1,19 +1,22 @@
 /**
  * Unit tests for the Phase 13o account-deletions admin feature module:
  * document mapping, purge-date math, status-filtered list queries, and the
- * markProcessed direct status update (happy path, already-processed no-op,
- * and missing-document error).
+ * transactional markProcessed status update (happy path, already-processed
+ * no-op, missing-document error, and propagated commit failure).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getDocMock = vi.fn();
 const getDocsMock = vi.fn();
-const updateDocMock = vi.fn();
 const whereMock = vi.fn();
 const orderByMock = vi.fn();
 const limitMock = vi.fn();
 const queryMock = vi.fn();
+const runTransactionMock = vi.fn();
+/** The transaction handle handed to the runTransaction callback. */
+const txGetMock = vi.fn();
+const txUpdateMock = vi.fn();
 
 const SERVER_TIMESTAMP = { __serverTimestamp: true };
 
@@ -27,7 +30,7 @@ vi.mock('firebase/firestore', () => ({
   limit: (...args: unknown[]) => limitMock(...args),
   getDoc: (...args: unknown[]) => getDocMock(...args),
   getDocs: (...args: unknown[]) => getDocsMock(...args),
-  updateDoc: (...args: unknown[]) => updateDocMock(...args),
+  runTransaction: (...args: unknown[]) => runTransactionMock(...args),
   serverTimestamp: () => SERVER_TIMESTAMP,
 }));
 
@@ -48,12 +51,20 @@ const ts = (iso: string) => ({ toDate: () => new Date(iso) });
 beforeEach(() => {
   getDocMock.mockReset();
   getDocsMock.mockReset();
-  updateDocMock.mockReset();
   whereMock.mockReset();
   orderByMock.mockReset();
   limitMock.mockReset();
   queryMock.mockReset();
   queryMock.mockImplementation((target: unknown) => target);
+  runTransactionMock.mockReset();
+  txGetMock.mockReset();
+  txUpdateMock.mockReset();
+  // Default: run the callback against the mocked transaction handle, like
+  // the real SDK does on a contention-free attempt.
+  runTransactionMock.mockImplementation(
+    (_db: unknown, fn: (tx: { get: typeof txGetMock; update: typeof txUpdateMock }) => unknown) =>
+      fn({ get: txGetMock, update: txUpdateMock }),
+  );
 });
 
 describe('toAdminAccountDeletionRequest mapping', () => {
@@ -99,6 +110,19 @@ describe('toAdminAccountDeletionRequest mapping', () => {
     // Unknown status surfaces for attention rather than disappearing.
     expect(row.status).toBe('pending');
     expect(row.createdAt).toBeNull();
+    expect(row.purgeDueAt).toBeNull();
+  });
+
+  it('returns null timestamps instead of throwing when toDate() yields an invalid Date', () => {
+    const row = toAdminAccountDeletionRequest('uid-4', {
+      userId: 'uid-4',
+      status: 'pending',
+      // A corrupt Timestamp-like value: toISOString() on this would throw.
+      createdAt: { toDate: () => new Date('invalid') },
+      processedAt: { toDate: () => new Date(Number.NaN) },
+    });
+    expect(row.createdAt).toBeNull();
+    expect(row.processedAt).toBeNull();
     expect(row.purgeDueAt).toBeNull();
   });
 });
@@ -189,8 +213,8 @@ describe('adminGetAccountDeletionRequest', () => {
 });
 
 describe('markAccountDeletionProcessed', () => {
-  it('writes the shape-minimal processed update (status + processedAt server stamp)', async () => {
-    getDocMock.mockResolvedValue({
+  it('writes the shape-minimal processed update (status + processedAt server stamp) inside a transaction', async () => {
+    txGetMock.mockResolvedValue({
       exists: () => true,
       id: 'uid-1',
       data: () => ({
@@ -199,13 +223,15 @@ describe('markAccountDeletionProcessed', () => {
         createdAt: ts('2026-07-01T00:00:00.000Z'),
       }),
     });
-    updateDocMock.mockResolvedValue(undefined);
 
     const result = await markAccountDeletionProcessed('uid-1');
 
     expect(result).toEqual({ userId: 'uid-1', status: 'processed', alreadyProcessed: false });
-    expect(updateDocMock).toHaveBeenCalledTimes(1);
-    const [ref, payload] = updateDocMock.mock.calls[0] as [
+    // Read and write share one transaction — atomic under contention.
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(txGetMock).toHaveBeenCalledTimes(1);
+    expect(txUpdateMock).toHaveBeenCalledTimes(1);
+    const [ref, payload] = txUpdateMock.mock.calls[0] as [
       { segments: unknown[] },
       Record<string, unknown>,
     ];
@@ -214,8 +240,10 @@ describe('markAccountDeletionProcessed', () => {
     expect(payload).toEqual({ status: 'processed', processedAt: SERVER_TIMESTAMP });
   });
 
-  it('is a graceful no-op when the request is already processed', async () => {
-    getDocMock.mockResolvedValue({
+  it('is a graceful no-op when the transactional read sees an already-processed request', async () => {
+    // The state a concurrent purge (or another admin) leaves behind: on
+    // contention the SDK re-runs the callback against this fresh snapshot.
+    txGetMock.mockResolvedValue({
       exists: () => true,
       id: 'uid-2',
       data: () => ({
@@ -230,30 +258,21 @@ describe('markAccountDeletionProcessed', () => {
 
     expect(result.alreadyProcessed).toBe(true);
     // The purge's processedAt stamp is never overwritten.
-    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
   it('throws a 404 ApiError when the request does not exist', async () => {
-    getDocMock.mockResolvedValue({ exists: () => false });
+    txGetMock.mockResolvedValue({ exists: () => false });
     await expect(markAccountDeletionProcessed('missing')).rejects.toMatchObject({
       name: 'ApiError',
       statusCode: 404,
       code: 'not-found',
     });
-    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
-  it('propagates update failures (e.g. rules rejection) to the caller', async () => {
-    getDocMock.mockResolvedValue({
-      exists: () => true,
-      id: 'uid-3',
-      data: () => ({
-        userId: 'uid-3',
-        status: 'pending',
-        createdAt: ts('2026-07-01T00:00:00.000Z'),
-      }),
-    });
-    updateDocMock.mockRejectedValue(new Error('permission-denied'));
+  it('propagates transaction failures (e.g. rules rejection at commit) to the caller', async () => {
+    runTransactionMock.mockRejectedValue(new Error('permission-denied'));
 
     await expect(markAccountDeletionProcessed('uid-3')).rejects.toThrow('permission-denied');
   });
