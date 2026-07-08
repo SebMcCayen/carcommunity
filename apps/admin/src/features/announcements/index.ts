@@ -2,8 +2,12 @@
  * Admin announcements feature module (Phase 13p — Firebase migration).
  *
  * Backed by direct Firestore access per firestore.rules
- * (`announcements/{id}`: read = isAuthenticated(), write = isAdmin()) —
- * full admin CRUD is rules-sanctioned, so no callable is involved.
+ * (`announcements/{id}`: read = isAuthenticated(), write = isAdmin()).
+ * This is an intentional, rules-sanctioned exception to the usual admin
+ * pattern (lib/firestore.ts: reads direct, mutations via callables): the
+ * rules grant admins full direct write on this collection and no
+ * field-validating callable exists for it, so mutations here are direct
+ * SDK writes rather than callables.
  *
  * Document shape mirrors docs/firebase-data-model.md ("announcements —
  * community announcements"):
@@ -190,7 +194,9 @@ export async function adminSetAnnouncementActive(
 ): Promise<void> {
   const db = getAdminFirestore();
   await updateDoc(doc(db, COLLECTION, announcementId), {
-    active,
+    // Strict boolean coercion, consistent with the create/update paths —
+    // the stored `active` field must always be a real boolean.
+    active: active === true,
     updatedAt: serverTimestamp(),
   });
 }
