@@ -10,6 +10,7 @@ import {
   cancelAdminEvent,
   loadAdminEvent,
   publishAdminEvent,
+  resolveEventCreatorName,
   updateAdminEvent,
   type AdminEventDetail,
   type ApiError,
@@ -36,6 +37,9 @@ export default function EventDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [groupDriveSummary, setGroupDriveSummary] = useState<AdminGroupDriveSummary | null>(null);
+
+  // Resolved display name for the creator uid (falls back to the uid itself).
+  const [creatorName, setCreatorName] = useState<string | null>(null);
 
   const [showPublish, setShowPublish] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
@@ -74,6 +78,23 @@ export default function EventDetailPage() {
       // Non-critical: group drive summary may be unavailable for some events.
     });
   }, [eventId]);
+
+  // Resolve the creator uid to a display name — best-effort, non-blocking.
+  // The page renders regardless; on any failure the uid is shown as a fallback.
+  useEffect(() => {
+    const uid = event?.createdByUserId;
+    if (!uid) {
+      setCreatorName(null);
+      return;
+    }
+    let active = true;
+    void resolveEventCreatorName(uid).then((name) => {
+      if (active) setCreatorName(name);
+    });
+    return () => {
+      active = false;
+    };
+  }, [event?.createdByUserId]);
 
   async function handleUpdate(data: UpdateEventRequest) {
     if (!eventId || !event) return;
@@ -210,7 +231,9 @@ export default function EventDetailPage() {
         <div className={styles.metaRow}>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>{t('events.meta.createdBy')}</span>
-            <span className={styles.metaValue}>{event.createdByUserId ?? '—'}</span>
+            <span className={styles.metaValue} title={event.createdByUserId ?? undefined}>
+              {event.createdByUserId ? (creatorName ?? event.createdByUserId) : '—'}
+            </span>
           </div>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>{t('events.meta.createdAt')}</span>

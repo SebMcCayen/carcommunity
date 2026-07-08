@@ -41,6 +41,7 @@ import {
   loadAdminEvent,
   loadAdminEvents,
   publishAdminEvent,
+  resolveEventCreatorName,
   updateAdminEvent,
 } from '../features/events';
 import { loadAdminGroupDriveSummary } from '../features/group-drive';
@@ -352,6 +353,23 @@ describe('events module', () => {
       approximateArea: 'Onsala',
     });
     expect(response.data.event.title).toBe('Uppdaterad');
+  });
+
+  it('resolves the creator uid to the displayName from users/{uid}', async () => {
+    getDocMock.mockResolvedValue({ data: () => ({ displayName: 'Anna Admin' }) });
+    expect(await resolveEventCreatorName('admin1')).toBe('Anna Admin');
+  });
+
+  it('falls back to the uid when the user doc is missing or displayName is empty', async () => {
+    getDocMock.mockResolvedValueOnce({ data: () => undefined });
+    expect(await resolveEventCreatorName('admin1')).toBe('admin1');
+    getDocMock.mockResolvedValueOnce({ data: () => ({ displayName: '' }) });
+    expect(await resolveEventCreatorName('admin1')).toBe('admin1');
+  });
+
+  it('falls back to the uid when the users read is not permitted', async () => {
+    getDocMock.mockRejectedValueOnce(new Error('permission-denied'));
+    expect(await resolveEventCreatorName('admin1')).toBe('admin1');
   });
 
   it('publishes via events-publish with { eventId } then re-reads', async () => {
