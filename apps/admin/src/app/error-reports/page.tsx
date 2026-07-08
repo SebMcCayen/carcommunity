@@ -34,6 +34,7 @@ import {
   type DiagnosticsSeverity,
 } from '@/features/error-reports';
 import { translate } from '@/i18n';
+import { formatDate } from '@/lib/format';
 
 import styles from './page.module.css';
 
@@ -53,7 +54,7 @@ const SEVERITY_BADGE_CLASS: Record<DiagnosticsSeverity, string | undefined> = {
 };
 
 function formatDateTime(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('sv-SE') : '–';
+  return formatDate(iso);
 }
 
 const shortId = (id: string) => (id.length > 8 ? `${id.slice(0, 8)}…` : id);

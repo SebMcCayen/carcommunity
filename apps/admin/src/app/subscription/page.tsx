@@ -23,6 +23,7 @@ import {
   type ApiError,
 } from '@/features/subscription';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 
 import styles from './page.module.css';
 
@@ -49,7 +50,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString('sv-SE') : '–';
+  return formatDateOnly(iso);
 }
 
 function entitlementLabel(entitlement: string): string {

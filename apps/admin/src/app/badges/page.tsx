@@ -25,6 +25,7 @@ import {
   type ApiError,
 } from '@/features/badges';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 import styles from './page.module.css';
 
 const t = (key: string) => translate('sv', key);
@@ -95,7 +96,7 @@ export default function BadgesPage() {
         setAwardSuccess(null);
       } else {
         setAwardSuccess(
-          `${t('badges.award.success')} ${new Date(result.data.badge.awardedAt).toLocaleDateString('sv-SE', { year: 'numeric', month: 'long', day: 'numeric' })}.`,
+          `${t('badges.award.success')} ${formatDateOnly(result.data.badge.awardedAt)}.`,
         );
         setUserId('');
         setReason('');

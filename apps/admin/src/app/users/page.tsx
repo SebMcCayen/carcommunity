@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom';
 
 import { adminListUsers, type AdminUserSummary, type ApiError } from '@/features/users';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 
 import styles from './page.module.css';
 
@@ -36,7 +37,7 @@ function roleLabel(role: string): string {
 }
 
 function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString('sv-SE') : '–';
+  return formatDateOnly(iso);
 }
 
 export default function UsersPage() {

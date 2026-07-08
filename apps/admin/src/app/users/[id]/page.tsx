@@ -31,6 +31,7 @@ import {
   type ApiError,
 } from '@/features/users';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 
 import { UserPointsSection } from './PointsSection';
 import styles from './page.module.css';
@@ -49,7 +50,7 @@ function roleLabel(role: string): string {
 }
 
 function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString('sv-SE') : '–';
+  return formatDateOnly(iso);
 }
 
 /** Actions that require an explicit confirmation step before firing. */

@@ -10,6 +10,12 @@ const t = (key: string) => translate('sv', key);
 /** Length of 'YYYY-MM-DDTHH:mm' — the format required by HTML datetime-local inputs. */
 const DATETIME_LOCAL_LENGTH = 16;
 
+/** Maximum allowed event duration: an end may be at most 3 days after the start. */
+const MAX_EVENT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** Default time used when a date is picked without an accompanying time. */
+const DEFAULT_TIME = '00:00';
+
 function toLocalDateTimeValue(value: string | null | undefined): string {
   if (!value) {
     return '';
@@ -27,12 +33,53 @@ function toLocalDateTimeValue(value: string | null | undefined): string {
   ).slice(0, DATETIME_LOCAL_LENGTH);
 }
 
+/** Split a 'YYYY-MM-DDTHH:mm' value into its date ('YYYY-MM-DD') part. */
+function datePartOf(value: string): string {
+  return value ? value.slice(0, 10) : '';
+}
+
+/** Split a 'YYYY-MM-DDTHH:mm' value into its time ('HH:mm') part. */
+function timePartOf(value: string): string {
+  return value.length >= DATETIME_LOCAL_LENGTH ? value.slice(11, 16) : '';
+}
+
+/**
+ * Combine separate date and time inputs back into a 'YYYY-MM-DDTHH:mm' string.
+ * A date without a time defaults the time to 00:00; without a date there is no
+ * value at all.
+ */
+function combineDateTime(date: string, time: string): string {
+  if (!date) {
+    return '';
+  }
+  return `${date}T${time || DEFAULT_TIME}`;
+}
+
+/**
+ * Whether `endLocal` is more than 3 days (72h) after `startLocal`. Both are
+ * 'YYYY-MM-DDTHH:mm' local-time strings. Returns false if either is unset or
+ * unparseable (other validations cover those cases).
+ */
+export function exceedsMaxEventDuration(startLocal: string, endLocal: string): boolean {
+  if (!startLocal || !endLocal) {
+    return false;
+  }
+  const start = new Date(startLocal).getTime();
+  const end = new Date(endLocal).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return false;
+  }
+  return end - start > MAX_EVENT_DURATION_MS;
+}
+
 interface EventFormData {
   title: string;
   summary: string;
   description: string;
-  startsAt: string;
-  endsAt: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
   approximateArea: string;
   locationName: string;
   address: string;
@@ -56,8 +103,10 @@ function toFormData(event?: AdminEventDetail): EventFormData {
       title: '',
       summary: '',
       description: '',
-      startsAt: '',
-      endsAt: '',
+      startDate: '',
+      startTime: '',
+      endDate: '',
+      endTime: '',
       approximateArea: '',
       locationName: '',
       address: '',
@@ -67,12 +116,17 @@ function toFormData(event?: AdminEventDetail): EventFormData {
     };
   }
 
+  const startsAtLocal = toLocalDateTimeValue(event.startsAt);
+  const endsAtLocal = toLocalDateTimeValue(event.endsAt);
+
   return {
     title: event.title,
     summary: event.summary ?? '',
     description: event.description ?? '',
-    startsAt: toLocalDateTimeValue(event.startsAt),
-    endsAt: toLocalDateTimeValue(event.endsAt),
+    startDate: datePartOf(startsAtLocal),
+    startTime: timePartOf(startsAtLocal),
+    endDate: datePartOf(endsAtLocal),
+    endTime: timePartOf(endsAtLocal),
     approximateArea: event.approximateArea,
     locationName: event.locationName ?? '',
     address: event.address ?? '',
@@ -131,16 +185,21 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
       errors.title = t('events.form.validation.titleTooLong');
     }
 
-    if (!form.startsAt) {
-      errors.startsAt = t('events.form.validation.startsAtRequired');
+    const startsAt = combineDateTime(form.startDate, form.startTime);
+    const endsAt = combineDateTime(form.endDate, form.endTime);
+
+    if (!form.startDate) {
+      errors.startDate = t('events.form.validation.startsAtRequired');
     }
 
     if (!form.approximateArea.trim()) {
       errors.approximateArea = t('events.form.validation.approximateAreaRequired');
     }
 
-    if (form.endsAt && form.startsAt && new Date(form.endsAt) <= new Date(form.startsAt)) {
-      errors.endsAt = t('events.form.validation.endsAtAfterStartsAt');
+    if (endsAt && startsAt && new Date(endsAt) <= new Date(startsAt)) {
+      errors.endDate = t('events.form.validation.endsAtAfterStartsAt');
+    } else if (exceedsMaxEventDuration(startsAt, endsAt)) {
+      errors.endDate = t('events.form.validation.endsAtTooFarFromStart');
     }
 
     const hasLat = form.latitude.trim() !== '';
@@ -174,13 +233,16 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
     const lat = form.latitude.trim() !== '' ? Number(form.latitude) : null;
     const lon = form.longitude.trim() !== '' ? Number(form.longitude) : null;
 
+    const startsAtLocal = combineDateTime(form.startDate, form.startTime);
+    const endsAtLocal = combineDateTime(form.endDate, form.endTime);
+
     if (isEdit) {
       const data: UpdateEventRequest = {
         title: form.title.trim() || undefined,
         summary: form.summary.trim() || null,
         description: form.description.trim() || null,
-        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : undefined,
-        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+        startsAt: startsAtLocal ? new Date(startsAtLocal).toISOString() : undefined,
+        endsAt: endsAtLocal ? new Date(endsAtLocal).toISOString() : null,
         approximateArea: form.approximateArea.trim() || undefined,
         locationName: form.locationName.trim() || null,
         address: form.address.trim() || null,
@@ -194,8 +256,8 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         title: form.title.trim(),
         summary: form.summary.trim() || null,
         description: form.description.trim() || null,
-        startsAt: new Date(form.startsAt).toISOString(),
-        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null,
+        startsAt: new Date(startsAtLocal).toISOString(),
+        endsAt: endsAtLocal ? new Date(endsAtLocal).toISOString() : null,
         approximateArea: form.approximateArea.trim(),
         locationName: form.locationName.trim() || null,
         address: form.address.trim() || null,
@@ -268,43 +330,85 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         />
       </div>
 
-      <div className={styles.fieldGroup}>
-        <label className={styles.label} htmlFor="ev-starts-at">
+      <fieldset className={styles.dateTimeFieldset}>
+        <legend className={styles.label}>
           {t('events.form.startsAtLabel')}
           <span className={styles.required} aria-hidden="true">*</span>
-        </label>
-        <input
-          id="ev-starts-at"
-          className={styles.input}
-          type="datetime-local"
-          value={form.startsAt}
-          onChange={(e) => handleChange('startsAt', e.target.value)}
-          disabled={isSubmitting}
-          aria-required="true"
-          aria-describedby={clientErrors.startsAt ? 'ev-starts-at-error' : undefined}
-        />
-        {clientErrors.startsAt && (
-          <span id="ev-starts-at-error" className={styles.fieldError} role="alert">{clientErrors.startsAt}</span>
+        </legend>
+        <div className={styles.dateTimeRow}>
+          <div className={styles.fieldGroup}>
+            <label className={styles.subLabel} htmlFor="ev-start-date">
+              {t('events.form.dateLabel')}
+            </label>
+            <input
+              id="ev-start-date"
+              className={styles.input}
+              type="date"
+              value={form.startDate}
+              onChange={(e) => handleChange('startDate', e.target.value)}
+              disabled={isSubmitting}
+              aria-required="true"
+              aria-describedby={clientErrors.startDate ? 'ev-start-error' : undefined}
+            />
+          </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.subLabel} htmlFor="ev-start-time">
+              {t('events.form.timeLabel')}
+            </label>
+            <input
+              id="ev-start-time"
+              className={styles.input}
+              type="time"
+              value={form.startTime}
+              onChange={(e) => handleChange('startTime', e.target.value)}
+              disabled={isSubmitting}
+              aria-describedby={clientErrors.startDate ? 'ev-start-error' : undefined}
+            />
+          </div>
+        </div>
+        {clientErrors.startDate && (
+          <span id="ev-start-error" className={styles.fieldError} role="alert">{clientErrors.startDate}</span>
         )}
-      </div>
+      </fieldset>
 
-      <div className={styles.fieldGroup}>
-        <label className={styles.label} htmlFor="ev-ends-at">
+      <fieldset className={styles.dateTimeFieldset}>
+        <legend className={styles.label}>
           {t('events.form.endsAtLabel')}
-        </label>
-        <input
-          id="ev-ends-at"
-          className={styles.input}
-          type="datetime-local"
-          value={form.endsAt}
-          onChange={(e) => handleChange('endsAt', e.target.value)}
-          disabled={isSubmitting}
-          aria-describedby={clientErrors.endsAt ? 'ev-ends-at-error' : undefined}
-        />
-        {clientErrors.endsAt && (
-          <span id="ev-ends-at-error" className={styles.fieldError} role="alert">{clientErrors.endsAt}</span>
+        </legend>
+        <div className={styles.dateTimeRow}>
+          <div className={styles.fieldGroup}>
+            <label className={styles.subLabel} htmlFor="ev-end-date">
+              {t('events.form.dateLabel')}
+            </label>
+            <input
+              id="ev-end-date"
+              className={styles.input}
+              type="date"
+              value={form.endDate}
+              onChange={(e) => handleChange('endDate', e.target.value)}
+              disabled={isSubmitting}
+              aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
+            />
+          </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.subLabel} htmlFor="ev-end-time">
+              {t('events.form.timeLabel')}
+            </label>
+            <input
+              id="ev-end-time"
+              className={styles.input}
+              type="time"
+              value={form.endTime}
+              onChange={(e) => handleChange('endTime', e.target.value)}
+              disabled={isSubmitting}
+              aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
+            />
+          </div>
+        </div>
+        {clientErrors.endDate && (
+          <span id="ev-end-error" className={styles.fieldError} role="alert">{clientErrors.endDate}</span>
         )}
-      </div>
+      </fieldset>
 
       <div className={styles.fieldGroup}>
         <label className={styles.label} htmlFor="ev-area">

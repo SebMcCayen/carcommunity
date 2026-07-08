@@ -117,6 +117,8 @@
       "descriptionLabel": "Beskrivning",
       "startsAtLabel": "Starttid",
       "endsAtLabel": "Sluttid (valfritt)",
+      "dateLabel": "Datum",
+      "timeLabel": "Tid",
       "approximateAreaLabel": "Ungefärligt område",
       "locationNameLabel": "Platsnamn",
       "addressLabel": "Adress (valfritt)",
@@ -135,6 +137,7 @@
         "startsAtRequired": "Starttid krävs.",
         "approximateAreaRequired": "Område krävs.",
         "endsAtAfterStartsAt": "Sluttid måste vara efter starttid.",
+        "endsAtTooFarFromStart": "Slutdatum får inte vara mer än 3 dagar efter startdatum.",
         "coordinatesBothOrNone": "Latitud och longitud måste anges båda eller ingen.",
         "latitudeInvalid": "Latitud måste vara mellan -90 och 90.",
         "longitudeInvalid": "Longitud måste vara mellan -180 och 180."

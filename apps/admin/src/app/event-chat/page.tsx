@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import styles from './page.module.css';
+import { formatDateOnly } from '@/lib/format';
 
 import {
   formatReportReason,
@@ -228,7 +229,7 @@ export default function EventChatModerationPage() {
                     </td>
                     {/* Plain text only */}
                     <td>{report.details ?? '–'}</td>
-                    <td>{report.createdAt ? new Date(report.createdAt).toLocaleDateString('sv-SE') : '–'}</td>
+                    <td>{formatDateOnly(report.createdAt)}</td>
                     <td>
                       {isOpen ? (
                         <div className={styles.rowActions}>
@@ -270,7 +271,7 @@ export default function EventChatModerationPage() {
                       ) : (
                         <span className={styles.statusText}>
                           {report.reviewedAt
-                            ? `Granskad ${new Date(report.reviewedAt).toLocaleDateString('sv-SE')}`
+                            ? `Granskad ${formatDateOnly(report.reviewedAt)}`
                             : '–'}
                         </span>
                       )}
