@@ -235,6 +235,24 @@ export async function loadAdminEvent(eventId: string, _token?: string): Promise<
   };
 }
 
+/**
+ * Resolves an event creator's display name from the admin-safe `users/{uid}`
+ * document (never `userPrivate/{uid}`). Best-effort: a missing document, an
+ * empty/absent `displayName`, or a read failure all fall back to the uid so
+ * the caller always has something to render. `displayName` on `users/{uid}`
+ * is already admin-visible (surfaced by the users admin module).
+ */
+export async function resolveEventCreatorName(uid: string): Promise<string> {
+  try {
+    const snap = await getDoc(doc(getAdminFirestore(), 'users', uid));
+    const stored = snap.data()?.displayName;
+    return typeof stored === 'string' && stored.length > 0 ? stored : uid;
+  } catch {
+    // User doc not readable or missing — fall back to the raw uid.
+    return uid;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Mutations (audited events.* callables) — re-read to return the fresh detail
 // ---------------------------------------------------------------------------

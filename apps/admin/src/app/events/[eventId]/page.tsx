@@ -10,6 +10,7 @@ import {
   cancelAdminEvent,
   loadAdminEvent,
   publishAdminEvent,
+  resolveEventCreatorName,
   updateAdminEvent,
   type AdminEventDetail,
   type ApiError,
@@ -36,6 +37,11 @@ export default function EventDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [groupDriveSummary, setGroupDriveSummary] = useState<AdminGroupDriveSummary | null>(null);
+
+  // Resolved display name for the creator, tagged with the uid it was resolved
+  // for. Keeping the uid alongside the name lets the render discard a result
+  // that belongs to a previously viewed event (see the derivation below).
+  const [resolvedCreator, setResolvedCreator] = useState<{ uid: string; name: string } | null>(null);
 
   const [showPublish, setShowPublish] = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
@@ -74,6 +80,22 @@ export default function EventDetailPage() {
       // Non-critical: group drive summary may be unavailable for some events.
     });
   }, [eventId]);
+
+  // Resolve the creator uid to a display name — best-effort, non-blocking.
+  // The page renders regardless; on any failure the uid is shown as a fallback.
+  // The result is tagged with its uid so the render can ignore a stale name
+  // resolved for a different event (see the derivation below).
+  useEffect(() => {
+    const uid = event?.createdByUserId;
+    if (!uid) return;
+    let active = true;
+    void resolveEventCreatorName(uid).then((name) => {
+      if (active) setResolvedCreator({ uid, name });
+    });
+    return () => {
+      active = false;
+    };
+  }, [event?.createdByUserId]);
 
   async function handleUpdate(data: UpdateEventRequest) {
     if (!eventId || !event) return;
@@ -150,6 +172,15 @@ export default function EventDetailPage() {
   const canPublish = event.status === 'draft';
   const canCancel = event.status === 'draft' || event.status === 'published';
 
+  // Only use the resolved name when it was resolved for THIS event's creator
+  // uid. On navigating between events the resolved state briefly belongs to the
+  // previous event, so we fall back to the current uid during render — no
+  // post-paint flash of the wrong creator is possible.
+  const creatorDisplay =
+    resolvedCreator && resolvedCreator.uid === event.createdByUserId
+      ? resolvedCreator.name
+      : event.createdByUserId;
+
   return (
     <div className={styles.page}>
       <Link to="/events" className={styles.backLink}>← {t('events.backToList')}</Link>
@@ -210,7 +241,9 @@ export default function EventDetailPage() {
         <div className={styles.metaRow}>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>{t('events.meta.createdBy')}</span>
-            <span className={styles.metaValue}>{event.createdByUserId ?? '—'}</span>
+            <span className={styles.metaValue} title={event.createdByUserId ?? undefined}>
+              {event.createdByUserId ? creatorDisplay : '—'}
+            </span>
           </div>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>{t('events.meta.createdAt')}</span>
