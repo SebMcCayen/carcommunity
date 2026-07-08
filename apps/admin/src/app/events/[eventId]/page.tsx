@@ -88,6 +88,10 @@ export default function EventDetailPage() {
       return;
     }
     let active = true;
+    // Clear any previously resolved name so the render falls back to the new
+    // event's uid while this lookup is in flight (avoids showing the prior
+    // event's creator name when navigating between events).
+    setCreatorName(null);
     void resolveEventCreatorName(uid).then((name) => {
       if (active) setCreatorName(name);
     });
