@@ -165,7 +165,7 @@ function coerceMetadata(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object') return null;
   const proto: unknown = Object.getPrototypeOf(raw);
   if (proto !== Object.prototype && proto !== null) return null;
-  const scalars: Record<string, unknown> = {};
+  const scalars: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (
       value === null ||
