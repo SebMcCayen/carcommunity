@@ -154,17 +154,29 @@ function coerceOptionalString(raw: unknown): string | null {
 }
 
 /**
- * Metadata is server-sanitized on write, but is still validated defensively:
- * anything that is not a plain object (prototype Object.prototype or null —
- * arrays, class instances, Dates, Timestamps etc. are rejected) resolves to
- * null.
+ * Metadata is server-sanitized on write, but is still validated defensively.
+ * The container must be a plain object (prototype Object.prototype or null —
+ * arrays, class instances, Dates, Timestamps etc. are rejected), and per the
+ * "bounded scalars only" contract each entry is kept only when its value is a
+ * scalar (string/number/boolean/null); nested objects/arrays/functions are
+ * dropped. Resolves to null when nothing scalar remains.
  */
 function coerceMetadata(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object') return null;
   const proto: unknown = Object.getPrototypeOf(raw);
   if (proto !== Object.prototype && proto !== null) return null;
-  const entries = Object.entries(raw as Record<string, unknown>);
-  return entries.length > 0 ? (raw as Record<string, unknown>) : null;
+  const scalars: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (
+      value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
+      scalars[key] = value;
+    }
+  }
+  return Object.keys(scalars).length > 0 ? scalars : null;
 }
 
 function toSummary(id: string, data: Record<string, unknown>): AdminErrorReportSummary {

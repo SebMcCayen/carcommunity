@@ -571,7 +571,7 @@
     "loadError": "Could not load error reports. Please try again.",
     "empty": "No error reports found.",
     "refresh": "Refresh",
-    "moreAvailable": "More reports exist — only the latest page is shown.",
+    "moreAvailable": "There may be more reports — only the latest page is shown.",
     "filter": {
       "severityLabel": "Severity",
       "platformLabel": "Platform",

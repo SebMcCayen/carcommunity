@@ -646,7 +646,7 @@
     "loadError": "Kunde inte ladda felrapporter. Försök igen.",
     "empty": "Inga felrapporter hittades.",
     "refresh": "Uppdatera",
-    "moreAvailable": "Fler rapporter finns — endast den senaste sidan visas.",
+    "moreAvailable": "Det kan finnas fler rapporter — endast den senaste sidan visas.",
     "filter": {
       "severityLabel": "Allvarlighetsgrad",
       "platformLabel": "Plattform",

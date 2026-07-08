@@ -217,6 +217,36 @@ describe('error-reports module — detail', () => {
     expect((await adminGetErrorReport('r2'))!.metadata).toBeNull();
   });
 
+  it('keeps only scalar entries and drops nested objects/arrays', async () => {
+    getDocMock.mockResolvedValueOnce({
+      data: () =>
+        reportData({
+          metadata: {
+            retryCount: 3,
+            endpoint: 'events.list',
+            offline: false,
+            lastValue: null,
+            nested: { token: 'nope' },
+            list: [1, 2, 3],
+            fn: () => 1,
+          },
+        }),
+    });
+    expect((await adminGetErrorReport('r1'))!.metadata).toEqual({
+      retryCount: 3,
+      endpoint: 'events.list',
+      offline: false,
+      lastValue: null,
+    });
+  });
+
+  it('resolves metadata with no scalar entries to null', async () => {
+    getDocMock.mockResolvedValueOnce({
+      data: () => reportData({ metadata: { nested: { a: 1 }, list: [1] } }),
+    });
+    expect((await adminGetErrorReport('r1'))!.metadata).toBeNull();
+  });
+
   it('accepts null-prototype objects as plain metadata', async () => {
     const bare = Object.create(null) as Record<string, unknown>;
     bare.retryCount = 2;
