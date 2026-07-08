@@ -913,6 +913,43 @@ test('GET /v1/users/me returns 401 unauthenticated when no auth is provided', as
   }
 });
 
+test('GET /v1/users/me ignores x-dev-user when a (malformed) bearer header was presented', async () => {
+  // A client that attempted token auth must not silently fall through to the
+  // dev header, even if the token was malformed and parsed to null
+  // (e.g. `Bearer ` with no token). The request stays unauthenticated.
+  const app = await createServer(
+    {
+      nodeEnv: 'test',
+      port: 4006,
+      databaseUrl: LOCAL_DATABASE_URL,
+      isProduction: false,
+    },
+    { userService: createFakeUserService() },
+  );
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/users/me',
+      headers: {
+        authorization: 'Bearer ',
+        'x-dev-user': devUserAuth({}),
+      },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), {
+      ok: false,
+      error: {
+        code: 'unauthenticated',
+        message: 'Authentication required.',
+      },
+    });
+  } finally {
+    await app.close();
+  }
+});
+
 test('GET /v1/admin/users returns 401 unauthenticated when no auth is provided', async () => {
   const app = await createServer({
     nodeEnv: 'test',

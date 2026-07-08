@@ -101,9 +101,11 @@ function parseDevAuthContext(value: string): DevAuthContext | null {
  *    there is no fallback to the legacy session path.
  * 2. If `firebaseIdTokenVerifier` is not provided, fall back to legacy
  *    session-based lookup via `authService.lookupSession`.
- * 3. In non-production environments, accept the `x-dev-user` header as a
- *    convenience for local development and testing. Silently ignored in
- *    production.
+ * 3. In non-production environments only, a second hook (registered at
+ *    startup exclusively when `config.isProduction` is false) accepts the
+ *    `x-dev-user` header as a convenience for local development and testing.
+ *    In production that hook does not exist at all — there is no runtime
+ *    branch on the header.
  *
  * Rate limiting is applied globally by the `@fastify/rate-limit` plugin
  * registered in `registerSecurity` before this hook runs.
@@ -116,9 +118,23 @@ export async function registerAuthContext(
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
-  // lgtm[js/missing-rate-limiting] Global rate limiting is registered in registerSecurity before this hook.
+  // Requests that presented an Authorization header — a token auth attempt,
+  // whether it parsed to a valid token or not (e.g. `Bearer`, `Bearer ` and
+  // other malformed values parse to null). The non-production dev-header hook
+  // below consults this so it never injects auth for a client that already
+  // tried to authenticate; a failed attempt must not silently fall through to
+  // the dev header.
+  const requestsWithAuthorizationHeader = new WeakSet<FastifyRequest>();
+
   app.addHook('onRequest', async (request) => {
     const authorizationHeader = request.headers.authorization;
+    // Mark on ANY present Authorization header, in any form — a string, an
+    // empty string, or (duplicate headers surfaced by Node/Fastify as) a
+    // string[]. A present-but-unusable header is still an auth attempt and
+    // must suppress the dev-header fallback.
+    if (authorizationHeader !== undefined) {
+      requestsWithAuthorizationHeader.add(request);
+    }
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
 
     if (token) {
@@ -177,10 +193,29 @@ export async function registerAuthContext(
       }
     }
 
-    // TODO: Remove development header auth once all local/dev tooling uses real login.
-    if (!config.isProduction) {
-      // Development-only: accept the x-dev-user header to inject a fake auth context.
-      // NEVER honour this header in production — the guard above ensures it is skipped.
+    // Protected routes continue to require a valid backend session.
+  });
+
+  // TODO: Remove development header auth once all local/dev tooling uses real login.
+  //
+  // The x-dev-user header is a development-only convenience. This hook is
+  // registered ONLY when config.isProduction is false — the decision is made
+  // once here at startup from server config, never from request data, so in
+  // production the hook (and any code path from the header to an auth context)
+  // does not exist at all. It is also a separate handler from the token path
+  // above, so even in development it can never be used to bypass token auth.
+  if (!config.isProduction) {
+    app.addHook('onRequest', async (request) => {
+      // Never override a real auth context, and never consult the dev header
+      // when the request presented an Authorization header — even a malformed
+      // or rejected one. A failed token attempt leaves the request
+      // unauthenticated, matching the Firebase path's behaviour and
+      // deliberately stricter than the old legacy-session path, which fell
+      // back to the dev header after a failed session lookup.
+      if (request.auth || requestsWithAuthorizationHeader.has(request)) {
+        return;
+      }
+
       const devHeader = request.headers[DEV_AUTH_HEADER];
       if (typeof devHeader === 'string') {
         const parsed = parseDevAuthContext(devHeader);
@@ -202,9 +237,8 @@ export async function registerAuthContext(
             }
           : null;
       }
-    }
-    // Protected routes continue to require a valid backend session.
-  });
+    });
+  }
 }
 
 /**
