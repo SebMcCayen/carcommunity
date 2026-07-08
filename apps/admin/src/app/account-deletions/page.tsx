@@ -129,7 +129,11 @@ export default function AccountDeletionsPage() {
             aria-pressed={filter === value}
             className={filter === value ? styles.tabActive : styles.tab}
             onClick={() => setFilter(value)}
-            disabled={loading && filter === value}
+            // Lock the filter while a mark-processed action is in flight: its
+            // post-action load(filter) captured the filter at click time, so a
+            // mid-action switch would repaint with wrong-filter rows plus an
+            // unrelated success banner.
+            disabled={(loading && filter === value) || actingUid !== null}
           >
             {t(`accountDeletions.tabs.${value}`)}
           </button>

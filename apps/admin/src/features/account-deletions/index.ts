@@ -65,7 +65,14 @@ export type AccountDeletionStatus = (typeof ACCOUNT_DELETION_STATUSES)[number];
 export type AccountDeletionStatusFilter = AccountDeletionStatus | 'all';
 
 export interface AdminAccountDeletionRequest {
-  /** Document ID == the requesting user's Firebase UID. */
+  /**
+   * The requesting user's Firebase UID — taken from the DOCUMENT ID, which
+   * is authoritative (deleteAccount writes the request at
+   * `accountDeletionRequests/{uid}`). Never sourced from the stored
+   * `userId` field: markAccountDeletionProcessed operates on the doc id, so
+   * a malformed/hand-edited doc whose `userId` field disagreed with its id
+   * would otherwise mark-process (or display) the wrong account.
+   */
   userId: string;
   /** Optional free-text reason (max 500 chars, backend-validated). */
   reason: string | null;
@@ -142,7 +149,9 @@ export function toAdminAccountDeletionRequest(
 ): AdminAccountDeletionRequest {
   const createdAt = toIso(data.createdAt);
   return {
-    userId: typeof data.userId === 'string' ? data.userId : id,
+    // The doc id is authoritative — the stored userId field is deliberately
+    // not consulted (see AdminAccountDeletionRequest.userId).
+    userId: id,
     reason: typeof data.reason === 'string' && data.reason.length > 0 ? data.reason : null,
     status: coerceStatus(data.status),
     createdAt,

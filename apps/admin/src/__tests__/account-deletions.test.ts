@@ -99,7 +99,7 @@ describe('toAdminAccountDeletionRequest mapping', () => {
     expect(row.purgeDueAt).toBe('2026-05-31T00:00:00.000Z');
   });
 
-  it('is defensive about malformed documents: falls back to the doc id, a pending status, and null timestamps', () => {
+  it('is defensive about malformed documents: uses the doc id, a pending status, and null timestamps', () => {
     const row = toAdminAccountDeletionRequest('uid-3', {
       status: 'bogus',
       reason: 42,
@@ -111,6 +111,18 @@ describe('toAdminAccountDeletionRequest mapping', () => {
     expect(row.status).toBe('pending');
     expect(row.createdAt).toBeNull();
     expect(row.purgeDueAt).toBeNull();
+  });
+
+  it('treats the document ID as the authoritative userId even when the stored userId field disagrees', () => {
+    // A hand-edited/malformed doc whose stored userId points elsewhere must
+    // never win: mark-processed acts on the doc id, so the mapping surfaces
+    // the doc id — not the field — to keep display and action on the same uid.
+    const row = toAdminAccountDeletionRequest('doc-uid', {
+      userId: 'attacker-controlled-uid',
+      status: 'pending',
+      createdAt: ts('2026-07-01T00:00:00.000Z'),
+    });
+    expect(row.userId).toBe('doc-uid');
   });
 
   it('returns null timestamps instead of throwing when toDate() yields an invalid Date', () => {
