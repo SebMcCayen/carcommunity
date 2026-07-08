@@ -29,6 +29,12 @@
  *     is denied admin access, so we never issue it an admin claim (mirrors
  *     guardActorIsActiveAdmin / canAccessAdminFeatures).
  *
+ * One-time-bootstrap guard: this script is strictly for the FIRST admin. Before
+ * any write it refuses to run if any OTHER `users/*` already has a role of
+ * 'admin' or 'owner' — once one exists, all further promotions must go through
+ * the audited `admin-setAdminRole` callable. Re-running for the same target
+ * (whose role is already admin) is still allowed so the bootstrap is idempotent.
+ *
  * Project: the target project id is read from the environment (never
  * hardcoded, so this is safe against wrong-project runs and works for forks),
  * checking FIREBASE_PROJECT_ID, then GCLOUD_PROJECT, then GOOGLE_CLOUD_PROJECT.
@@ -77,7 +83,23 @@ initializeApp({ credential: applicationDefault(), projectId });
 const auth = getAuth();
 const db = getFirestore();
 
-const user = await auth.getUserByEmail(email);
+// getUserByEmail throws if the email has a typo or the person has never signed
+// in — surface a clear, actionable message instead of a raw stack trace.
+let user;
+try {
+  user = await auth.getUserByEmail(email);
+} catch (err) {
+  if (err?.code === 'auth/user-not-found') {
+    console.error(
+      `No Firebase Auth user exists for ${email}. Double-check the address ` +
+        'and make sure the person has signed in to the admin web at least once ' +
+        'so their account is provisioned.',
+    );
+  } else {
+    console.error(`Failed to look up ${email}: ${err?.message ?? err}`);
+  }
+  process.exit(1);
+}
 
 // Show the operator exactly what is about to happen before mutating anything.
 console.log(`Project: ${projectId}`);
@@ -88,6 +110,27 @@ if (!confirmed) {
   console.error(
     'Refusing to promote without confirmation. Re-run with --yes ' +
       '(or CONFIRM=1) once the project and target above are correct.',
+  );
+  process.exit(1);
+}
+
+// One-time-bootstrap guard: this script exists only to set the FIRST admin.
+// Once any admin/owner exists, all further promotions must go through the
+// audited `admin-setAdminRole` callable (see the header). A single-field
+// where-in on `role` needs no composite index; limit(2) is enough to find
+// someone other than the target.
+const existingPrivileged = await db
+  .collection('users')
+  .where('role', 'in', ['admin', 'owner'])
+  .limit(2)
+  .get();
+const otherPrivileged = existingPrivileged.docs.find((doc) => doc.id !== user.uid);
+if (otherPrivileged) {
+  console.error(
+    `users/${otherPrivileged.id} already has role '${otherPrivileged.data().role}'. ` +
+      'An admin/owner already exists, so this one-time bootstrap is disabled. ' +
+      'Use the audited admin-setAdminRole callable in the admin UI for further ' +
+      'promotions.',
   );
   process.exit(1);
 }
