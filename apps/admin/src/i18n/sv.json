@@ -751,6 +751,41 @@
       "userWarn": "Användare varnad"
     }
   },
+  "accountDeletions": {
+    "title": "Kontoraderingar",
+    "subtitle": "Kö över användares begäranden om kontoradering. Väntande begäranden rensas automatiskt av den schemalagda rensningen 30 dagar efter begäran.",
+    "tabs": {
+      "pending": "Väntande",
+      "processed": "Behandlade",
+      "all": "Alla"
+    },
+    "loading": "Hämtar…",
+    "loadError": "Kunde inte hämta raderingsbegäranden.",
+    "empty": "Inga raderingsbegäranden att visa.",
+    "tableLabel": "Raderingsbegäranden",
+    "table": {
+      "userId": "Användar-ID",
+      "reason": "Orsak",
+      "requestedAt": "Begärd",
+      "purgeIn": "Rensas om",
+      "status": "Status",
+      "actions": "Åtgärd"
+    },
+    "noReason": "Ingen orsak angiven",
+    "day": "dag",
+    "days": "dagar",
+    "purgeDue": "Förfallen – rensas vid nästa körning",
+    "status": {
+      "pending": "Väntande",
+      "processed": "Behandlad"
+    },
+    "markProcessed": "Markera som behandlad",
+    "markProcessedPending": "Markerar…",
+    "confirmMarkProcessed": "Markera begäran som behandlad? Detta tar bort den från den automatiska rensningskön – gör det endast om raderingen redan har hanterats manuellt.",
+    "markProcessedSuccess": "Begäran markerad som behandlad.",
+    "alreadyProcessed": "Begäran var redan behandlad – ingen ändring gjordes.",
+    "markProcessedError": "Kunde inte markera begäran som behandlad."
+  },
   "errorReports": {
     "title": "Felrapporter",
     "subtitle": "Krasch- och feltelemetri från apparna. Skrivskyddad vy — rapporter skapas endast via backend och rensas efter 90 dagar.",
