@@ -11,6 +11,7 @@ const addDocMock = vi.fn();
 const updateDocMock = vi.fn();
 const deleteDocMock = vi.fn();
 const getDocsMock = vi.fn();
+const limitMock = vi.fn();
 
 vi.mock('../lib/firestore', () => ({ getAdminFirestore: () => ({}) }));
 vi.mock('firebase/firestore', () => ({
@@ -18,6 +19,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (...segments: unknown[]) => ({ segments }),
   query: (target: unknown) => target,
   orderBy: () => undefined,
+  limit: (...args: unknown[]) => limitMock(...args),
   serverTimestamp: () => ({ __serverTimestamp: true }),
   addDoc: (...args: unknown[]) => addDocMock(...args),
   updateDoc: (...args: unknown[]) => updateDocMock(...args),
@@ -55,6 +57,7 @@ beforeEach(() => {
   updateDocMock.mockReset();
   deleteDocMock.mockReset();
   getDocsMock.mockReset();
+  limitMock.mockReset();
 });
 
 describe('announcement content validation', () => {
@@ -181,6 +184,13 @@ describe('adminListAnnouncements', () => {
         updatedAt: null,
       },
     ]);
+  });
+
+  it('caps the query at the admin-list first-page limit', async () => {
+    getDocsMock.mockResolvedValue({ docs: [] });
+    await adminListAnnouncements();
+    // Matches the flat-list convention (features/users LIST_LIMIT = 50).
+    expect(limitMock).toHaveBeenCalledWith(50);
   });
 });
 

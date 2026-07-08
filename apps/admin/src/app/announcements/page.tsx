@@ -39,12 +39,17 @@ const VALIDATION_ERROR_KEYS: Record<string, string> = {
   'announcement/body-too-long': 'announcements.errors.bodyTooLong',
 };
 
+/**
+ * Localizes an error for display. Only the module's own validation ApiErrors
+ * (recognized by their stable `announcement/...` codes) map to specific i18n
+ * messages; everything else — including raw Firebase SDK errors, which carry
+ * untranslated English strings — falls back to the localized fallback key.
+ */
 function errorMessage(err: unknown, fallbackKey: string): string {
   if (err instanceof ApiError) {
     const key = VALIDATION_ERROR_KEYS[err.code];
     if (key) return t(key);
   }
-  if (err instanceof Error && err.message) return err.message;
   return t(fallbackKey);
 }
 

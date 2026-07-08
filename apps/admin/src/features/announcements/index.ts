@@ -34,6 +34,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit as fsLimit,
   orderBy,
   query,
   serverTimestamp,
@@ -50,6 +51,13 @@ export const ANNOUNCEMENT_TITLE_MAX_LENGTH = 120;
 export const ANNOUNCEMENT_BODY_MAX_LENGTH = 2000;
 
 const COLLECTION = 'announcements';
+
+/**
+ * Admin list cap (first page only), matching the flat-list convention in
+ * features/users (LIST_LIMIT = 50). Announcements are low-volume and
+ * newest-first, so the newest 50 covers the operational view.
+ */
+const LIST_LIMIT = 50;
 
 export interface AdminAnnouncement {
   id: string;
@@ -135,14 +143,16 @@ function toAdminAnnouncement(id: string, data: DocumentData): AdminAnnouncement 
 }
 
 /**
- * Lists all announcements (active and inactive) newest-first. Admin sees the
- * full collection; the member app applies the `active == true` filter (the
- * composite index exists for that query, not this one).
+ * Lists announcements (active and inactive) newest-first, capped at the
+ * newest LIST_LIMIT documents per the admin-list convention (first page
+ * only). Admin sees active and inactive alike; the member app applies the
+ * `active == true` filter (the composite index exists for that query, not
+ * this one).
  */
 export async function adminListAnnouncements(): Promise<AdminAnnouncement[]> {
   const db = getAdminFirestore();
   const snapshot = await getDocs(
-    query(collection(db, COLLECTION), orderBy('createdAt', 'desc')),
+    query(collection(db, COLLECTION), orderBy('createdAt', 'desc'), fsLimit(LIST_LIMIT)),
   );
   return snapshot.docs.map((d) => toAdminAnnouncement(d.id, d.data()));
 }
