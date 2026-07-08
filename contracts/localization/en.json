@@ -599,6 +599,12 @@
     "settingsSaving": "Saving...",
     "permissionRationale": "Receive reminders about events and important messages.",
     "permissionOptional": "Notifications are optional.",
-    "permissionChangeHint": "You can change your preferences later under Settings."
+    "permissionChangeHint": "You can change your preferences later under Settings.",
+    "channelEventsName": "Events",
+    "channelEventsDescription": "Reminders and updates about events.",
+    "channelAccountName": "Account",
+    "channelAccountDescription": "Important notices about your account.",
+    "channelGeneralName": "General",
+    "channelGeneralDescription": "Membership updates and other messages from the club."
   }
 }

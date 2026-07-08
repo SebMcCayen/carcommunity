@@ -599,6 +599,12 @@
     "settingsSaving": "Sparar...",
     "permissionRationale": "Få påminnelser om event och viktiga meddelanden.",
     "permissionOptional": "Notiser är valfria.",
-    "permissionChangeHint": "Du kan ändra dina val senare under Inställningar."
+    "permissionChangeHint": "Du kan ändra dina val senare under Inställningar.",
+    "channelEventsName": "Event",
+    "channelEventsDescription": "Påminnelser och uppdateringar om event.",
+    "channelAccountName": "Konto",
+    "channelAccountDescription": "Viktig information om ditt konto.",
+    "channelGeneralName": "Allmänt",
+    "channelGeneralDescription": "Medlemskapsuppdateringar och andra meddelanden från klubben."
   }
 }

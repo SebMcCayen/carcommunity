@@ -547,4 +547,10 @@
     <string name="notifications_permissionRationale">Få påminnelser om event och viktiga meddelanden.</string>
     <string name="notifications_permissionOptional">Notiser är valfria.</string>
     <string name="notifications_permissionChangeHint">Du kan ändra dina val senare under Inställningar.</string>
+    <string name="notifications_channelEventsName">Event</string>
+    <string name="notifications_channelEventsDescription">Påminnelser och uppdateringar om event.</string>
+    <string name="notifications_channelAccountName">Konto</string>
+    <string name="notifications_channelAccountDescription">Viktig information om ditt konto.</string>
+    <string name="notifications_channelGeneralName">Allmänt</string>
+    <string name="notifications_channelGeneralDescription">Medlemskapsuppdateringar och andra meddelanden från klubben.</string>
 </resources>

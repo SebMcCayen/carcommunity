@@ -33,6 +33,17 @@
             android:name=".location.LocationSharingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- FCM entry points: token rotation + message display (Phase 12
+             slice 21, push portion). Only invoked by FCM, which requires
+             google-services.json — inert in config-less CI builds. -->
+        <service
+            android:name=".push.KccMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
