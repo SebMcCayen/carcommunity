@@ -56,7 +56,15 @@ else
 fi
 
 echo "==> 4/5 Least-privilege deploy roles (docs/deployment.md)"
-for role in roles/cloudfunctions.developer roles/firebasehosting.admin; do
+# roles/datastore.viewer: firebase-tools' functions-deploy preflight reads the
+# Firestore database metadata (the codebase has Firestore-triggered functions),
+# so a read-only Datastore role is required or deploy fails with a 403 on
+# GET .../databases/(default).
+# roles/cloudscheduler.admin: the codebase has scheduled (cron) functions;
+# deploying them upserts Cloud Scheduler jobs (cloudscheduler.jobs.update),
+# which cloudfunctions.developer does not grant — deploy 403s on the
+# firebase-schedule-* jobs without this.
+for role in roles/cloudfunctions.developer roles/firebasehosting.admin roles/datastore.viewer roles/cloudscheduler.admin; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${role}" \

@@ -84,6 +84,19 @@ The service account must be granted only the permissions required for deployment
 
 - `roles/cloudfunctions.developer` — for Functions deploy
 - `roles/firebasehosting.admin` — for Hosting deploy
+- `roles/datastore.viewer` (read-only) — `firebase-tools`' functions-deploy
+  preflight reads the Firestore database metadata (`GET .../databases/(default)`)
+  because the codebase has Firestore-triggered functions, so the deploy SA needs
+  Datastore read access or the deploy fails with a 403
+- `roles/cloudscheduler.admin` — the codebase has scheduled (cron / `onSchedule`)
+  functions; deploying them upserts Cloud Scheduler jobs
+  (`cloudscheduler.jobs.update`), which `roles/cloudfunctions.developer` does not
+  grant, so the deploy SA needs this or the deploy fails with a 403 on the
+  `firebase-schedule-*` jobs. This role is broader than strictly needed, but
+  Cloud Scheduler has no narrower predefined role that can create/update jobs
+  (`roles/cloudscheduler.jobRunner` only runs existing jobs); a custom role
+  limited to the `cloudscheduler.jobs.*` permissions is the stricter
+  least-privilege alternative if you want to avoid granting admin
 - `roles/iam.serviceAccountUser` (ActAs) on the gen2 Cloud Functions runtime SA
   (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) — to act as the
   Functions runtime service account
