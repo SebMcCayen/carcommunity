@@ -15,7 +15,7 @@ vi.mock('firebase/firestore', () => ({
   getCountFromServer: (...args: unknown[]) => getCountFromServerMock(...args),
 }));
 
-import { loadDashboardStats } from '../features/dashboard';
+import { COUNTABLE_STATS, loadDashboardStats } from '../features/dashboard';
 
 const countResult = (count: number) => ({ data: () => ({ count }) });
 
@@ -58,5 +58,16 @@ describe('dashboard stats module', () => {
     expect(stats.activeMembers).toBeNull(); // failed count → null, page unaffected
     expect(stats.openReports).toBe(0);
     expect(stats.vehicleProfiles).toBe(3);
+  });
+
+  it('marks exactly the count-backed tiles as countable (drives the page error banner)', () => {
+    // The page flags an error when any COUNTABLE_STATS field is null; the always-null
+    // placeholder tiles must be excluded so they never trip a false error.
+    expect([...COUNTABLE_STATS].sort()).toEqual(
+      ['activeMembers', 'openReports', 'totalUsers', 'vehicleProfiles'].sort(),
+    );
+    for (const placeholder of ['liveSessions', 'pendingPartners', 'pendingBillboards', 'usersWithVehicles']) {
+      expect(COUNTABLE_STATS).not.toContain(placeholder);
+    }
   });
 });

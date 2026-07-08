@@ -33,6 +33,18 @@ export interface DashboardStats {
   usersWithVehicles: number | null;
 }
 
+/**
+ * Stat keys backed by a real Firestore count query. A `null` for one of these
+ * means that query failed (rules denial, network) — unlike the intentionally
+ * unwired placeholder tiles, which are always `null` and render "—" by design.
+ */
+export const COUNTABLE_STATS: readonly (keyof DashboardStats)[] = [
+  'totalUsers',
+  'activeMembers',
+  'openReports',
+  'vehicleProfiles',
+];
+
 /** Runs a count query; returns null on any failure so one tile can't break the page. */
 async function safeCount(build: () => Query): Promise<number | null> {
   try {

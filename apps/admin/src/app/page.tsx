@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
-import { loadDashboardStats, type DashboardStats } from '@/features/dashboard';
+import { COUNTABLE_STATS, loadDashboardStats, type DashboardStats } from '@/features/dashboard';
 import { isFirestoreEmulatorEnabled } from '@/lib/firestore';
 import styles from './page.module.css';
 
@@ -16,16 +16,24 @@ function fmt(value: number | null, loading: boolean): string {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     loadDashboardStats()
       .then((s) => {
-        if (active) setStats(s);
+        if (!active) return;
+        setStats(s);
+        // safeCount() turns per-tile failures into null, so loadDashboardStats
+        // resolves even when a countable query was denied/failed. Surface that
+        // as an error (while still rendering what loaded) — placeholder tiles
+        // are always null by design and must not count as failures.
+        if (COUNTABLE_STATS.some((key) => s[key] === null)) {
+          setError('Some statistics could not be loaded. Try refreshing.');
+        }
       })
       .catch(() => {
-        if (active) setError(true);
+        if (active) setError('Could not load dashboard statistics. Try refreshing.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -55,7 +63,7 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <p className={styles.subtitle}>Could not load dashboard statistics. Try refreshing.</p>
+        <p className={styles.subtitle} role="alert">{error}</p>
       )}
 
       <section className={styles.section}>
