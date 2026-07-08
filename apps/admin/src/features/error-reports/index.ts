@@ -160,6 +160,12 @@ function coerceOptionalString(raw: unknown): string | null {
  * "bounded scalars only" contract each entry is kept only when its value is a
  * scalar (string/number/boolean/null); nested objects/arrays/functions are
  * dropped. Resolves to null when nothing scalar remains.
+ *
+ * The accumulator has a null prototype so a stored `__proto__` (or
+ * `constructor`) key becomes an ordinary own-property instead of triggering
+ * the prototype setter — no prototype pollution from hostile stored data.
+ * Callers only ever iterate own keys (Object.entries), so a null prototype is
+ * transparent to them.
  */
 function coerceMetadata(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object') return null;

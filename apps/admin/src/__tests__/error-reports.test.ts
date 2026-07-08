@@ -253,4 +253,30 @@ describe('error-reports module — detail', () => {
     getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: bare }) });
     expect((await adminGetErrorReport('r1'))!.metadata).toEqual({ retryCount: 2 });
   });
+
+  it('does not pollute the prototype chain via a stored __proto__ key', async () => {
+    // A hostile stored document carrying a __proto__ own-key with a scalar
+    // value must not mutate any prototype. JSON.parse is one of the few ways
+    // to create a genuine own `__proto__` property.
+    const hostile = JSON.parse('{"__proto__": "polluted", "retryCount": 1}') as Record<
+      string,
+      unknown
+    >;
+    getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: hostile }) });
+    const detail = await adminGetErrorReport('r1');
+
+    // No prototype pollution: fresh unrelated objects are unaffected.
+    expect(({} as Record<string, unknown>).retryCount).toBeUndefined();
+    expect(([] as unknown as Record<string, unknown>).polluted).toBeUndefined();
+
+    // __proto__ is kept as an ordinary own data-property (the null-prototype
+    // accumulator turns the setter into a plain assignment); with a `{}`
+    // accumulator it would have hit the prototype setter instead.
+    const metadata = detail!.metadata!;
+    expect(Object.prototype.hasOwnProperty.call(metadata, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(metadata, '__proto__')?.value).toBe('polluted');
+    expect(metadata.retryCount).toBe(1);
+    // The result's own prototype is untouched (still the null-proto accumulator).
+    expect(Object.getPrototypeOf(metadata)).toBeNull();
+  });
 });
