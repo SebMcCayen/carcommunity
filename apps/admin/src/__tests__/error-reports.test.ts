@@ -205,4 +205,22 @@ describe('error-reports module — detail', () => {
     getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: null }) });
     expect((await adminGetErrorReport('r4'))!.metadata).toBeNull();
   });
+
+  it('rejects non-plain objects (class instances, Dates) as metadata', async () => {
+    class Sneaky {
+      token = 'nope';
+    }
+    getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: new Sneaky() }) });
+    expect((await adminGetErrorReport('r1'))!.metadata).toBeNull();
+
+    getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: new Date() }) });
+    expect((await adminGetErrorReport('r2'))!.metadata).toBeNull();
+  });
+
+  it('accepts null-prototype objects as plain metadata', async () => {
+    const bare = Object.create(null) as Record<string, unknown>;
+    bare.retryCount = 2;
+    getDocMock.mockResolvedValueOnce({ data: () => reportData({ metadata: bare }) });
+    expect((await adminGetErrorReport('r1'))!.metadata).toEqual({ retryCount: 2 });
+  });
 });

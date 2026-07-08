@@ -97,7 +97,11 @@ function ReportDetail({ reportId }: ReportDetailProps) {
   }, [reportId]);
 
   if (loading) {
-    return <p className={styles.statusText}>{t('errorReports.detail.loading')}</p>;
+    return (
+      <p className={styles.statusText} aria-live="polite" aria-busy="true">
+        {t('errorReports.detail.loading')}
+      </p>
+    );
   }
   if (error) {
     return (
@@ -245,7 +249,9 @@ export default function ErrorReportsPage() {
 
       <main className={styles.content}>
         {loading ? (
-          <p className={styles.statusText}>{t('errorReports.loading')}</p>
+          <p className={styles.statusText} aria-live="polite" aria-busy="true">
+            {t('errorReports.loading')}
+          </p>
         ) : error ? (
           <p className={styles.errorText} role="alert">
             {error}
@@ -309,7 +315,8 @@ function ReportRow({ report, expanded, onToggle }: ReportRowProps) {
         {/* Plain text only — sanitized server-side at write time. */}
         <td className={styles.messageCell}>{report.safeMessage || '–'}</td>
         <td className={styles.mono}>{report.errorCode ?? '–'}</td>
-        <td className={styles.mono} title={report.userId ?? undefined}>
+        {/* Truncated only — no title attr exposing the full id; the detail view carries it. */}
+        <td className={styles.mono}>
           {report.userId ? shortId(report.userId) : t('errorReports.detail.anonymous')}
         </td>
         <td>{formatDateTime(report.createdAt)}</td>

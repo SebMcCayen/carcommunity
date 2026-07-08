@@ -155,10 +155,14 @@ function coerceOptionalString(raw: unknown): string | null {
 
 /**
  * Metadata is server-sanitized on write, but is still validated defensively:
- * anything that is not a plain object resolves to null.
+ * anything that is not a plain object (prototype Object.prototype or null —
+ * arrays, class instances, Dates, Timestamps etc. are rejected) resolves to
+ * null.
  */
 function coerceMetadata(raw: unknown): Record<string, unknown> | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (!raw || typeof raw !== 'object') return null;
+  const proto: unknown = Object.getPrototypeOf(raw);
+  if (proto !== Object.prototype && proto !== null) return null;
   const entries = Object.entries(raw as Record<string, unknown>);
   return entries.length > 0 ? (raw as Record<string, unknown>) : null;
 }
