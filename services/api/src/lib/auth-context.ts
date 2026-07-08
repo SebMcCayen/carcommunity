@@ -118,11 +118,17 @@ export async function registerAuthContext(
 ): Promise<void> {
   app.decorateRequest('auth', null);
 
+  // Requests that presented a bearer token (valid or not). Used by the
+  // non-production dev-header hook below so it never has to re-read the
+  // authorization header itself.
+  const requestsWithBearerToken = new WeakSet<FastifyRequest>();
+
   app.addHook('onRequest', async (request) => {
     const authorizationHeader = request.headers.authorization;
     const token = typeof authorizationHeader === 'string' ? parseBearerToken(authorizationHeader) : null;
 
     if (token) {
+      requestsWithBearerToken.add(request);
       // --- Firebase ID token path (preferred in production) ---
       if (firebaseIdTokenVerifier) {
         try {
@@ -194,11 +200,7 @@ export async function registerAuthContext(
       // Firebase path's historical behaviour, and deliberately stricter than
       // the old legacy-session path, which fell back to the dev header after
       // a failed session lookup.
-      if (request.auth) {
-        return;
-      }
-      const authorizationHeader = request.headers.authorization;
-      if (typeof authorizationHeader === 'string' && parseBearerToken(authorizationHeader)) {
+      if (request.auth || requestsWithBearerToken.has(request)) {
         return;
       }
 
