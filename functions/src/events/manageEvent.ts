@@ -27,6 +27,7 @@ import {
   guardUpdatableStatus,
   parseCreateEventInput,
   parseUpdateEventInput,
+  stockholmEndOfDay,
   type EventStatus,
 } from './events-core';
 
@@ -134,6 +135,17 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     const { eventDoc, privateDoc, changedFields } = buildEventUpdates(input, serverTimestamp);
     if (changedFields.length === 0) {
       throw new HttpsError('invalid-argument', 'No event fields to update.');
+    }
+
+    // When the times are edited but the resulting event has a start and no
+    // explicit end, default endsAt to the Europe/Stockholm end-of-day of the
+    // effective start (mirrors the create-time default in buildEventDocuments).
+    const timesTouched = input.startsAt !== undefined || input.endsAt !== undefined;
+    if (timesTouched && effectiveEndsAt === null) {
+      eventDoc.endsAt = new Date(stockholmEndOfDay(effectiveStartsAt));
+      if (!changedFields.includes('endsAt')) {
+        changedFields.push('endsAt');
+      }
     }
 
     if (Object.keys(eventDoc).length > 0) {

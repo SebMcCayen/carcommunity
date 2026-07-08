@@ -128,6 +128,75 @@ export function parseCancelEventInput(data: unknown): ParseResult<CancelEventInp
 }
 
 // ---------------------------------------------------------------------------
+// Time helpers (Europe/Stockholm) — the app serves Kungsbacka, Sweden
+// ---------------------------------------------------------------------------
+
+/** An event may last at most 3 days (72 hours) from start to end. */
+export const MAX_EVENT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
+
+const STOCKHOLM_TIME_ZONE = 'Europe/Stockholm';
+
+/** The Europe/Stockholm wall-clock fields (y/m/d h:m:s) for a given instant. */
+function stockholmWallClock(instant: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+  const field: Record<string, number> = {};
+  for (const part of parts) {
+    if (part.type !== 'literal') field[part.type] = Number(part.value);
+  }
+  return {
+    year: field.year ?? 0,
+    month: field.month ?? 1,
+    day: field.day ?? 1,
+    hour: field.hour ?? 0,
+    minute: field.minute ?? 0,
+    second: field.second ?? 0,
+  };
+}
+
+/**
+ * The UTC offset (in minutes) of Europe/Stockholm at a given instant.
+ * Sweden observes CET (UTC+1) in winter and CEST (UTC+2) in summer, so this
+ * flips across DST boundaries. Derived from Intl so the transition dates stay
+ * correct without a bundled tz database.
+ */
+function stockholmOffsetMinutes(instant: Date): number {
+  const { year, month, day, hour, minute, second } = stockholmWallClock(instant);
+  const asIfUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  // Wall-clock parts have no sub-second component; round so the offset is the
+  // exact whole-minute tz offset regardless of the instant's milliseconds.
+  return Math.round((asIfUtc - instant.getTime()) / 60_000);
+}
+
+/**
+ * Returns the ISO instant for 23:59:59.999 on the Europe/Stockholm calendar
+ * day of `startsAtIso`. End-of-day is never near a DST transition (those happen
+ * around 02:00–03:00 local), so a single offset correction from a UTC guess is
+ * exact for both CET and CEST.
+ */
+export function stockholmEndOfDay(startsAtIso: string): string {
+  const { year, month, day } = stockholmWallClock(new Date(startsAtIso));
+  const localEndOfDayAsUtc = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+  const offsetMinutes = stockholmOffsetMinutes(new Date(localEndOfDayAsUtc));
+  return new Date(localEndOfDayAsUtc - offsetMinutes * 60_000).toISOString();
+}
+
+// ---------------------------------------------------------------------------
 // Business-rule guards (legacy event-service.ts parity)
 // ---------------------------------------------------------------------------
 
@@ -135,10 +204,24 @@ export type GuardResult =
   | { ok: true }
   | { ok: false; code: 'invalid-argument' | 'failed-precondition' | 'not-found'; message: string };
 
-/** endsAt, when present, must be strictly after startsAt. */
+/**
+ * endsAt, when present, must be strictly after startsAt and no more than
+ * 3 days (72 hours) after it.
+ */
 export function guardEventTimes(startsAt: string, endsAt: string | null | undefined): GuardResult {
-  if (endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
-    return { ok: false, code: 'invalid-argument', message: 'endsAt must be after startsAt.' };
+  if (endsAt) {
+    const startMs = new Date(startsAt).getTime();
+    const endMs = new Date(endsAt).getTime();
+    if (endMs <= startMs) {
+      return { ok: false, code: 'invalid-argument', message: 'endsAt must be after startsAt.' };
+    }
+    if (endMs - startMs > MAX_EVENT_DURATION_MS) {
+      return {
+        ok: false,
+        code: 'invalid-argument',
+        message: 'endsAt cannot be more than 3 days after startsAt.',
+      };
+    }
   }
   return { ok: true };
 }
@@ -253,7 +336,9 @@ export function buildEventDocuments(
       title: input.title,
       summary: input.summary ?? null,
       startsAt: new Date(input.startsAt),
-      endsAt: input.endsAt ? new Date(input.endsAt) : null,
+      // When no explicit end is given, an event runs until the end of its
+      // Europe/Stockholm start day (23:59:59.999 local).
+      endsAt: new Date(input.endsAt ?? stockholmEndOfDay(input.startsAt)),
       approximateArea: input.approximateArea,
       isOfficial: input.isOfficial ?? false,
       status: 'draft',
