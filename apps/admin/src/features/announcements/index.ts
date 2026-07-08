@@ -83,7 +83,16 @@ export interface AnnouncementInput {
 function toIso(value: unknown): string | null {
   if (value == null) return null;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().toISOString();
+    // A hand-edited doc can make toDate() throw or return a non-Date/invalid
+    // Date — guard it so a single bad field can't break the whole listing.
+    try {
+      const date = (value as { toDate: () => Date }).toDate();
+      return date instanceof Date && !Number.isNaN(date.getTime())
+        ? date.toISOString()
+        : null;
+    } catch {
+      return null;
+    }
   }
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();

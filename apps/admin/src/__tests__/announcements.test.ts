@@ -186,6 +186,39 @@ describe('adminListAnnouncements', () => {
     ]);
   });
 
+  it('tolerates malformed timestamps without breaking the listing', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'bad',
+          data: () => ({
+            title: 'Trasig',
+            body: 'Innehåll',
+            active: true,
+            // Hand-edited docs: toDate() throws, or returns an invalid Date.
+            createdAt: {
+              toDate: () => {
+                throw new Error('corrupt timestamp');
+              },
+            },
+            updatedAt: { toDate: () => new Date('not-a-date') },
+          }),
+        },
+      ],
+    });
+    const items = await adminListAnnouncements();
+    expect(items).toEqual([
+      {
+        id: 'bad',
+        title: 'Trasig',
+        body: 'Innehåll',
+        active: true,
+        createdAt: null,
+        updatedAt: null,
+      },
+    ]);
+  });
+
   it('caps the query at the admin-list first-page limit', async () => {
     getDocsMock.mockResolvedValue({ docs: [] });
     await adminListAnnouncements();
