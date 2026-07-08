@@ -88,6 +88,11 @@ The service account must be granted only the permissions required for deployment
   preflight reads the Firestore database metadata (`GET .../databases/(default)`)
   because the codebase has Firestore-triggered functions, so the deploy SA needs
   Datastore read access or the deploy fails with a 403
+- `roles/cloudscheduler.admin` — the codebase has scheduled (cron / `onSchedule`)
+  functions; deploying them upserts Cloud Scheduler jobs
+  (`cloudscheduler.jobs.update`), which `roles/cloudfunctions.developer` does not
+  grant, so the deploy SA needs this or the deploy fails with a 403 on the
+  `firebase-schedule-*` jobs
 - `roles/iam.serviceAccountUser` (ActAs) on the gen2 Cloud Functions runtime SA
   (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) — to act as the
   Functions runtime service account
