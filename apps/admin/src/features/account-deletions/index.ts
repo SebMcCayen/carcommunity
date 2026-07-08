@@ -85,7 +85,8 @@ export interface AdminAccountDeletionRequest {
   purgeDueAt: string | null;
 }
 
-export const DEFAULT_DELETION_PAGE_SIZE = 50;
+/** Page size for the deletion-requests list — never load all requests at once. */
+const LIST_LIMIT = 50;
 
 // ---------------------------------------------------------------------------
 // Mapping helpers
@@ -115,8 +116,12 @@ function toIso(value: unknown): string | null {
 
 /**
  * Coerces a stored status to the known set. Unknown values fall back to
- * 'pending' — the fail-safe direction for a deletion queue: an unrecognized
- * request surfaces for admin attention instead of silently disappearing.
+ * 'pending' — the fail-safe direction for a deletion queue: once fetched, an
+ * unrecognized request displays as pending rather than as an empty/blank
+ * status. Note this coercion is display-only: the pending/processed views
+ * query Firestore with `where('status', '==', ...)` against the STORED value,
+ * so a doc with an unknown status is never returned there — it surfaces only
+ * under the unfiltered `all` view (which coerces it to 'pending' for display).
  */
 function coerceStatus(raw: unknown): AccountDeletionStatus {
   return (ACCOUNT_DELETION_STATUSES as readonly string[]).includes(raw as string)
@@ -172,7 +177,7 @@ export function toAdminAccountDeletionRequest(
  */
 export async function adminListAccountDeletionRequests(
   filter: AccountDeletionStatusFilter = 'pending',
-  pageSize: number = DEFAULT_DELETION_PAGE_SIZE,
+  pageSize: number = LIST_LIMIT,
 ): Promise<AdminAccountDeletionRequest[]> {
   const requests = collection(getAdminFirestore(), 'accountDeletionRequests');
   const constraints =
