@@ -88,12 +88,25 @@ The service account must be granted only the permissions required for deployment
 
 ### Setting up Workload Identity Federation
 
-1. Create a Workload Identity Pool in Google Cloud IAM.
-2. Add a GitHub Actions OIDC provider to the pool, scoped to this repository.
-3. Create a least-privilege service account and bind it to the pool with a condition that limits access to the `main` branch.
-4. Store the provider resource name and service account email as secrets in the `production` GitHub environment.
+> **This is a required one-time step — deploys fail until it is done.** Both
+> deploy workflows guard for it and fail with a pointer here if the secrets
+> are missing.
 
-See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for step-by-step instructions.
+Run [`scripts/setup-wif.sh`](../scripts/setup-wif.sh) with gcloud authenticated
+as an owner/IAM admin of the project (easiest: paste it into
+[Google Cloud Shell](https://shell.cloud.google.com)). It provisions, idempotently:
+
+1. A Workload Identity Pool (`github-actions`) in Google Cloud IAM.
+2. A GitHub Actions OIDC provider (`github`) on the pool, restricted to this
+   repository **and** the `main` branch via an attribute condition.
+3. The least-privilege `github-deploy` service account with the roles above,
+   bound to the pool so the repo's workflows can impersonate it.
+
+The script prints the exact `gh secret set` commands for step 4: storing
+`WIF_PROVIDER` and `WIF_SERVICE_ACCOUNT` as secrets in the `production`
+GitHub environment.
+
+See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for background.
 
 ## Branch Protection
 

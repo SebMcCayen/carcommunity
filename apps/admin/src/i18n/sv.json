@@ -5,6 +5,55 @@
     "settingsTodoNote": "TODO: Funktionsflaggor och inställningar måste hanteras i backend. Den här sidan är endast visning tills backend-RBAC är implementerat. Växla aldrig funktionsflaggor enbart via klientstatus.",
     "userDetailTodoNote": "TODO: Ersätt ruttparametern med riktig användaruppslagning från backend-API:et. Backend måste verifiera administratörsroll innan användardata skickas. Exponera aldrig mer persondata än nödvändigt."
   },
+  "announcements": {
+    "title": "Meddelanden",
+    "subtitle": "Skapa och hantera meddelanden som visas för medlemmar i appen. Att dra tillbaka (inaktivera) är det primära sättet att dölja ett meddelande.",
+    "createdLabel": "Skapad",
+    "updatedLabel": "Uppdaterad",
+    "badge": {
+      "active": "Aktivt",
+      "inactive": "Inaktivt"
+    },
+    "create": {
+      "heading": "Skapa nytt meddelande",
+      "submit": "Skapa meddelande",
+      "submitting": "Skapar..."
+    },
+    "list": {
+      "heading": "Alla meddelanden",
+      "loading": "Läser in...",
+      "empty": "Inga meddelanden ännu."
+    },
+    "form": {
+      "titleLabel": "Titel",
+      "titlePlaceholder": "Meddelandets titel",
+      "bodyLabel": "Innehåll",
+      "bodyPlaceholder": "Meddelandets innehåll",
+      "activeLabel": "Aktivt (synligt för medlemmar)"
+    },
+    "actions": {
+      "edit": "Redigera",
+      "cancel": "Avbryt",
+      "save": "Spara",
+      "saving": "Sparar...",
+      "activate": "Aktivera",
+      "deactivate": "Dra tillbaka",
+      "delete": "Ta bort",
+      "working": "Arbetar..."
+    },
+    "deleteConfirm": "Vill du ta bort meddelandet permanent? Detta kan inte ångras. Överväg att dra tillbaka (inaktivera) i stället.",
+    "errors": {
+      "titleRequired": "Titel krävs.",
+      "titleTooLong": "Titeln får vara högst 120 tecken.",
+      "bodyRequired": "Innehåll krävs.",
+      "bodyTooLong": "Innehållet får vara högst 2000 tecken.",
+      "loadFailed": "Kunde inte läsa in meddelanden.",
+      "createFailed": "Meddelandet kunde inte skapas.",
+      "updateFailed": "Ändringen kunde inte sparas.",
+      "toggleFailed": "Statusändringen misslyckades.",
+      "deleteFailed": "Borttagningen misslyckades."
+    }
+  },
   "events": {
     "title": "Event",
     "createEvent": "Skapa event",
@@ -700,6 +749,74 @@
       "userSetAdminRole": "Adminroll ändrad",
       "userSuspend": "Användare avstängd",
       "userWarn": "Användare varnad"
+    }
+  },
+  "errorReports": {
+    "title": "Felrapporter",
+    "subtitle": "Krasch- och feltelemetri från apparna. Skrivskyddad vy — rapporter skapas endast via backend och rensas efter 90 dagar.",
+    "loading": "Laddar felrapporter…",
+    "loadError": "Kunde inte ladda felrapporter. Försök igen.",
+    "empty": "Inga felrapporter hittades.",
+    "refresh": "Uppdatera",
+    "moreAvailable": "Det kan finnas fler rapporter — endast den senaste sidan visas.",
+    "filter": {
+      "severityLabel": "Allvarlighetsgrad",
+      "platformLabel": "Plattform",
+      "allSeverities": "Alla allvarlighetsgrader",
+      "allPlatforms": "Alla plattformar"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Varning",
+      "error": "Fel",
+      "critical": "Kritisk"
+    },
+    "platform": {
+      "ios": "iOS",
+      "android": "Android",
+      "web": "Webb",
+      "unknown": "Okänd"
+    },
+    "featureArea": {
+      "auth": "Inloggning",
+      "live_location": "Live-position",
+      "events": "Event",
+      "subscription": "Prenumeration",
+      "admin": "Admin",
+      "map": "Karta",
+      "network": "Nätverk",
+      "unknown": "Okänt"
+    },
+    "columns": {
+      "severity": "Allvarlighetsgrad",
+      "platform": "Plattform",
+      "featureArea": "Funktionsområde",
+      "message": "Meddelande",
+      "errorCode": "Felkod",
+      "user": "Användare",
+      "createdAt": "Tidpunkt",
+      "actions": "Åtgärder"
+    },
+    "actions": {
+      "show": "Visa detaljer",
+      "hide": "Dölj detaljer"
+    },
+    "detail": {
+      "loading": "Laddar rapport…",
+      "loadError": "Kunde inte ladda rapporten. Försök igen.",
+      "notFound": "Rapporten finns inte längre (rensad enligt 90-dagarsgallringen).",
+      "reportId": "Rapport-ID",
+      "user": "Användare",
+      "anonymous": "Anonym",
+      "featureArea": "Funktionsområde",
+      "errorCode": "Felkod",
+      "appVersion": "Appversion",
+      "buildNumber": "Byggnummer",
+      "osVersion": "OS-version",
+      "fingerprint": "Fingeravtryck",
+      "createdAt": "Skapad",
+      "metadata": "Metadata",
+      "noMetadata": "Ingen metadata."
     }
   }
 }

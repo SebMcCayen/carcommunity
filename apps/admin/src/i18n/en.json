@@ -5,6 +5,55 @@
     "settingsTodoNote": "TODO: Feature flags and settings must be backend-managed. This page is display-only until backend RBAC is implemented. Never toggle feature flags via client-side state alone.",
     "userDetailTodoNote": "TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
   },
+  "announcements": {
+    "title": "Announcements",
+    "subtitle": "Create and manage announcements shown to members in the app. Retracting (deactivating) is the primary way to hide an announcement.",
+    "createdLabel": "Created",
+    "updatedLabel": "Updated",
+    "badge": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "create": {
+      "heading": "Create new announcement",
+      "submit": "Create announcement",
+      "submitting": "Creating..."
+    },
+    "list": {
+      "heading": "All announcements",
+      "loading": "Loading...",
+      "empty": "No announcements yet."
+    },
+    "form": {
+      "titleLabel": "Title",
+      "titlePlaceholder": "Announcement title",
+      "bodyLabel": "Body",
+      "bodyPlaceholder": "Announcement body",
+      "activeLabel": "Active (visible to members)"
+    },
+    "actions": {
+      "edit": "Edit",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "activate": "Activate",
+      "deactivate": "Retract",
+      "delete": "Delete",
+      "working": "Working..."
+    },
+    "deleteConfirm": "Permanently delete this announcement? This cannot be undone. Consider retracting (deactivating) instead.",
+    "errors": {
+      "titleRequired": "Title is required.",
+      "titleTooLong": "Title must be at most 120 characters.",
+      "bodyRequired": "Body is required.",
+      "bodyTooLong": "Body must be at most 2000 characters.",
+      "loadFailed": "Could not load announcements.",
+      "createFailed": "The announcement could not be created.",
+      "updateFailed": "The change could not be saved.",
+      "toggleFailed": "The status change failed.",
+      "deleteFailed": "The deletion failed."
+    }
+  },
   "events": {
     "title": "Events",
     "createEvent": "Create event",
@@ -625,6 +674,74 @@
       "userSetAdminRole": "Admin role changed",
       "userSuspend": "User suspended",
       "userWarn": "User warned"
+    }
+  },
+  "errorReports": {
+    "title": "Error reports",
+    "subtitle": "Crash and error telemetry from the apps. Read-only view — reports are created by the backend only and are purged after 90 days.",
+    "loading": "Loading error reports…",
+    "loadError": "Could not load error reports. Please try again.",
+    "empty": "No error reports found.",
+    "refresh": "Refresh",
+    "moreAvailable": "There may be more reports — only the latest page is shown.",
+    "filter": {
+      "severityLabel": "Severity",
+      "platformLabel": "Platform",
+      "allSeverities": "All severities",
+      "allPlatforms": "All platforms"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical"
+    },
+    "platform": {
+      "ios": "iOS",
+      "android": "Android",
+      "web": "Web",
+      "unknown": "Unknown"
+    },
+    "featureArea": {
+      "auth": "Authentication",
+      "live_location": "Live location",
+      "events": "Events",
+      "subscription": "Subscription",
+      "admin": "Admin",
+      "map": "Map",
+      "network": "Network",
+      "unknown": "Unknown"
+    },
+    "columns": {
+      "severity": "Severity",
+      "platform": "Platform",
+      "featureArea": "Feature area",
+      "message": "Message",
+      "errorCode": "Error code",
+      "user": "User",
+      "createdAt": "Time",
+      "actions": "Actions"
+    },
+    "actions": {
+      "show": "Show details",
+      "hide": "Hide details"
+    },
+    "detail": {
+      "loading": "Loading report…",
+      "loadError": "Could not load the report. Please try again.",
+      "notFound": "The report no longer exists (purged by the 90-day retention sweep).",
+      "reportId": "Report ID",
+      "user": "User",
+      "anonymous": "Anonymous",
+      "featureArea": "Feature area",
+      "errorCode": "Error code",
+      "appVersion": "App version",
+      "buildNumber": "Build number",
+      "osVersion": "OS version",
+      "fingerprint": "Fingerprint",
+      "createdAt": "Created",
+      "metadata": "Metadata",
+      "noMetadata": "No metadata."
     }
   }
 }
