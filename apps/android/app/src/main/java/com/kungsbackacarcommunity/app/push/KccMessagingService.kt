@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.push
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.FirebaseApp
@@ -7,6 +9,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.kungsbackacarcommunity.app.BuildConfig
+import com.kungsbackacarcommunity.app.MainActivity
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.notifications.PushPermissionStatus
 import com.kungsbackacarcommunity.app.notifications.currentPushPermissionStatus
@@ -87,6 +90,7 @@ class KccMessagingService : FirebaseMessagingService() {
             NotificationCompat.Builder(applicationContext, model.channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(model.title ?: getString(R.string.app_name))
+                .setContentIntent(openAppIntent())
                 .setAutoCancel(true)
                 .apply { model.body?.let { setContentText(it) } }
                 .build()
@@ -97,6 +101,26 @@ class KccMessagingService : FirebaseMessagingService() {
         } catch (_: SecurityException) {
             // Permission revoked between the check and the post — drop silently.
         }
+    }
+
+    /**
+     * Content intent that opens the app when the notification is tapped. Deep-
+     * linking to the related entity (actionType/relatedEntityId) is deferred;
+     * for now the launcher activity is brought to front (CLEAR_TOP | SINGLE_TOP
+     * reuses the existing task instead of stacking a new MainActivity). Without
+     * a content intent [NotificationCompat.setAutoCancel] has nothing to fire,
+     * so the notification would also not dismiss on tap.
+     */
+    private fun openAppIntent(): PendingIntent {
+        val intent =
+            Intent(applicationContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        return PendingIntent.getActivity(
+            applicationContext,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 
     override fun onDestroy() {

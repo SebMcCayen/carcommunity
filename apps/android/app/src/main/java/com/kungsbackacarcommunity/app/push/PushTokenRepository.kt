@@ -17,7 +17,11 @@ interface PushTokenRepository {
     /** Registers the RAW token; the backend stores only its SHA-256 hash. Idempotent. */
     suspend fun register(token: String)
 
-    /** Unregisters by the token's derived tokenId ([PushTokens.tokenId]). Idempotent. */
+    /**
+     * Unregisters the RAW token; implementations derive the backend tokenId
+     * from it ([PushTokens.tokenId]). The raw token never leaves the client.
+     * Idempotent.
+     */
     suspend fun unregister(token: String)
 }
 
