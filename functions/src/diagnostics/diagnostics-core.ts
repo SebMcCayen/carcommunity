@@ -237,11 +237,23 @@ export function parseSubmitDiagnosticsReportInput(
 // Document builder
 // ---------------------------------------------------------------------------
 
+/**
+ * Server-derived context attached to the stored report (never client-supplied).
+ * `appCheckPresent` records whether the request carried a VALID App Check token
+ * — submitReport is intentionally non-enforcing (pre-auth telemetry must work
+ * even when App Check is unavailable), so admins use this flag to tell attested
+ * reports from unattested ones. `null` when the caller did not compute it.
+ */
+export interface DiagnosticsReportContext {
+  appCheckPresent?: boolean;
+}
+
 /** diagnosticsReports/{reportId} document. */
 export function buildDiagnosticsReportDocument(
   input: SubmitDiagnosticsReportInput,
   userId: string | null,
   serverTimestamp: () => unknown,
+  context: DiagnosticsReportContext = {},
 ): Record<string, unknown> {
   return {
     userId,
@@ -254,6 +266,9 @@ export function buildDiagnosticsReportDocument(
     osVersion: input.osVersion ?? null,
     errorCode: input.errorCode ?? null,
     metadata: sanitizeMetadata(input.metadata ?? null),
+    // Server-derived attestation flag (see DiagnosticsReportContext). Stored as
+    // a bounded boolean; `null` when the caller did not supply it.
+    appCheckPresent: context.appCheckPresent ?? null,
     fingerprint: generateFingerprint(input),
     createdAt: serverTimestamp(),
   };

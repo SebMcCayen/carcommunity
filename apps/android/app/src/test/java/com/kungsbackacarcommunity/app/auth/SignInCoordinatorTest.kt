@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -73,35 +74,115 @@ class SignInCoordinatorTest {
     @Test
     fun `generic failure reports the sanitized exception type, never the message`() = runTest {
         val repository = FakeAuthRepository()
-        val reported = mutableListOf<String>()
+        val reported = mutableListOf<SignInFailureDetails>()
         val coordinator =
             SignInCoordinator(
                 { throw SignInFailedException("token dismissed for user@example.com") },
                 repository,
-                { errorType -> reported += errorType },
+                { details -> reported += details },
             )
 
         coordinator.signIn()
 
-        // Only the exception's simple class name is reported — never the message.
-        assertEquals(listOf("SignInFailedException"), reported)
+        // Only sanitized class names — never the message — reach the reporter.
+        assertEquals(listOf("SignInFailedException"), reported.map { it.errorType })
+        assertEquals(SignInStep.CREDENTIAL_FETCH, reported.single().step)
         assertEquals(SignInStatus.Failed(SignInFailure.GENERIC), coordinator.status.value)
     }
 
     @Test
     fun `unavailable failure is not reported as a sign-in failure`() = runTest {
         val repository = FakeAuthRepository()
-        val reported = mutableListOf<String>()
+        val reported = mutableListOf<SignInFailureDetails>()
         val coordinator =
             SignInCoordinator(
                 { throw SignInUnavailableException("not configured") },
                 repository,
-                { errorType -> reported += errorType },
+                { details -> reported += details },
             )
 
         coordinator.signIn()
 
         assertTrue(reported.isEmpty())
+    }
+
+    @Test
+    fun `reports the ROOT cause type, the full cause chain, and the failing step`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<SignInFailureDetails>()
+        // A concrete Credential Manager failure wrapped by the app's own type —
+        // the wrapper simple name alone (SignInFailedException) would hide the
+        // real cause, so the root cause must be surfaced instead.
+        val rootCause = IllegalStateException("no credential available")
+        val coordinator =
+            SignInCoordinator(
+                {
+                    throw SignInFailedException(
+                        "Google credential flow did not complete.",
+                        cause = rootCause,
+                        diagnosticCode = "androidx.credentials.TYPE_NO_CREDENTIAL",
+                    )
+                },
+                repository,
+                { details -> reported += details },
+            )
+
+        coordinator.signIn()
+
+        val details = reported.single()
+        // errorType is the ROOT cause, not the wrapper.
+        assertEquals("IllegalStateException", details.errorType)
+        // The full unwrap is preserved, outermost first.
+        assertEquals(
+            listOf("SignInFailedException", "IllegalStateException"),
+            details.causeChain,
+        )
+        // The PII-safe Credential Manager status constant is surfaced.
+        assertEquals("androidx.credentials.TYPE_NO_CREDENTIAL", details.statusCode)
+        assertEquals(SignInStep.CREDENTIAL_FETCH, details.step)
+    }
+
+    @Test
+    fun `a firebase exchange failure is attributed to the exchange step with its status code`() =
+        runTest {
+            val repository =
+                FakeAuthRepository().apply {
+                    failWith =
+                        SignInFailedException(
+                            "Firebase credential exchange failed.",
+                            cause = IllegalStateException("rejected"),
+                            diagnosticCode = "ERROR_INVALID_CREDENTIAL",
+                        )
+                }
+            val reported = mutableListOf<SignInFailureDetails>()
+            val coordinator =
+                SignInCoordinator({ "google-id-token" }, repository, { details -> reported += details })
+
+            coordinator.signIn()
+
+            val details = reported.single()
+            assertEquals(SignInStep.FIREBASE_EXCHANGE, details.step)
+            assertEquals("IllegalStateException", details.errorType)
+            assertEquals("ERROR_INVALID_CREDENTIAL", details.statusCode)
+        }
+
+    @Test
+    fun `an unwrapped failure with no cause reports itself and a null status code`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<SignInFailureDetails>()
+        val coordinator =
+            SignInCoordinator(
+                { throw IllegalArgumentException("boom") },
+                repository,
+                { details -> reported += details },
+            )
+
+        coordinator.signIn()
+
+        val details = reported.single()
+        assertEquals("IllegalArgumentException", details.errorType)
+        assertEquals(listOf("IllegalArgumentException"), details.causeChain)
+        assertNull(details.statusCode)
     }
 
     @Test

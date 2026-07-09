@@ -106,6 +106,30 @@ describe('diagnostics-core input and builder', () => {
     expect(JSON.stringify(docData)).not.toContain('idToken');
   });
 
+  it('records the server-derived App Check presence flag (attested vs unattested)', () => {
+    const parsed = parseSubmitDiagnosticsReportInput(validInput);
+    if (!parsed.ok) throw new Error('expected ok');
+
+    // Pre-auth telemetry is non-enforcing: a report WITHOUT a valid App Check
+    // token is still stored, flagged so admins can distinguish it.
+    const unattested = buildDiagnosticsReportDocument(
+      parsed.input,
+      null,
+      () => 'SERVER_TS',
+      { appCheckPresent: false },
+    );
+    expect(unattested.appCheckPresent).toBe(false);
+
+    const attested = buildDiagnosticsReportDocument(parsed.input, null, () => 'SERVER_TS', {
+      appCheckPresent: true,
+    });
+    expect(attested.appCheckPresent).toBe(true);
+
+    // Backward-compatible: callers that omit the context store null (not undefined).
+    const legacy = buildDiagnosticsReportDocument(parsed.input, null, () => 'SERVER_TS');
+    expect(legacy.appCheckPresent).toBeNull();
+  });
+
   it('computes the 90-day retention cutoff', () => {
     expect(diagnosticsRetentionCutoff(new Date('2026-07-05T12:00:00Z')).toISOString()).toBe(
       '2026-04-06T12:00:00.000Z',

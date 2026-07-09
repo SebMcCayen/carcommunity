@@ -41,8 +41,16 @@ class GoogleCredentialTokenProvider(
                 CredentialManager.create(activityContext)
                     .getCredential(activityContext, request)
             } catch (exception: GetCredentialException) {
-                // Never log tokens or credential contents.
-                throw SignInFailedException("Google credential flow did not complete.", exception)
+                // Never log tokens or credential contents. Carry the Credential
+                // Manager error TYPE (a stable androidx constant, e.g.
+                // `androidx.credentials.TYPE_NO_CREDENTIAL`) as a PII-safe
+                // diagnostic code so the diagnostics pipeline can report the real
+                // status; the concrete subtype is preserved via `cause`.
+                throw SignInFailedException(
+                    "Google credential flow did not complete.",
+                    exception,
+                    diagnosticCode = exception.type,
+                )
             }
 
         val credential = result.credential
