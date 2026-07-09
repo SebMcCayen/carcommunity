@@ -274,8 +274,11 @@ serves this policy or the admin console) may use strictly necessary cookies.
 ## 11. Security
 
 We protect your data with: transport encryption (**HTTPS/TLS** for all network traffic),
-server-side access-control rules that block direct client access to sensitive data,
-Cloud-Function-mediated writes with auditing, **hashing** of sensitive tokens (push tokens,
+server-side Security Rules that govern data access and enforce authentication, ownership,
+field validation, and suspension checks on the everyday user data written directly by the
+client, Cloud Functions with server-side authorization and auditing for specific sensitive or
+privileged operations (e.g. moderation and admin actions, role and subscription changes, and
+the points ledger) rather than for all writes, **hashing** of sensitive tokens (push tokens,
 purchase tokens) so raw values are never stored, device attestation (Play Integrity / App
 Check) to deter abuse, and data minimization by design (e.g. no plates/VIN; approximate-area
 labels instead of exact addresses where possible). No system is perfectly secure, but we
