@@ -85,7 +85,7 @@ design here must preserve that invariant.
   year / powertrain / engine fields plus `VehicleValidation` mirroring the
   backend bounds. A plate field + "Fetch details" button would sit above the
   existing fields and populate the same `VehicleForm` state.
-- **React-Native app** (`apps/mobile/.../VehicleFormScreen.tsx`) is the
+- **React-Native app** (`apps/mobile/src/screens/VehicleFormScreen.tsx`) is the
   legacy/parallel client; per current MVP scope (Android + admin web +
   backend) new work targets native Android. The RN screen even documents
   "Does not request registration number, VIN, insurance, or location" — that
@@ -123,7 +123,7 @@ hobby/community app — this is the deciding factor.
 
 > **Confidence note:** exact prices, rate limits and current terms below could
 > not be fully verified without a signed commercial account (Biluppgifter's API
-> docs return HTTP 403 to anonymous fetch; Car.info/D&B are quote-based). Every
+> docs return HTTP 403 to anonymous requests; Car.info/D&B are quote-based). Every
 > "cost" figure is an order-of-magnitude estimate and **must be confirmed with
 > the vendor before any decision.** Treat this section as a research starting
 > point, not contract terms.
