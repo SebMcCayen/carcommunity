@@ -472,6 +472,18 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // managedCredentials – admin token / credential renewal tracker
+    // Internal operational records of tracked secrets/tokens (their expiry and
+    // rotation dates — never the secret values themselves). Admin-only on BOTH
+    // read and write: members must never see this collection. Written directly
+    // from the admin portal (features/credentials); no field-validating
+    // callable exists, so the client module is the write-side shape gatekeeper.
+    // -------------------------------------------------------------------------
+    match /managedCredentials/{credentialId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
     // hazards – road hazard reports
     // -------------------------------------------------------------------------
     match /hazards/{hazardId} {

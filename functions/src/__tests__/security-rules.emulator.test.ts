@@ -1861,6 +1861,46 @@ describe('Firestore – announcements (pre-migration scaffold coverage)', () => 
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: managedCredentials (admin token / credential renewal tracker)
+// Admin-only on BOTH read and write — members must never see this collection.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – managedCredentials (admin-only)', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'managedCredentials/c1'), {
+        name: 'Upload keystore',
+        category: 'signing-keystore',
+        expiresAt: null,
+      });
+    });
+  });
+
+  it('admins read and write; regular users and unauth are denied read', async () => {
+    const adminFs = testEnv
+      .authenticatedContext('cred-admin', { admin: true })
+      .firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'managedCredentials/c1')));
+    await assertSucceeds(
+      setDoc(doc(adminFs, 'managedCredentials/c2'), {
+        name: 'Mapbox token',
+        category: 'mapbox-token',
+        expiresAt: null,
+      }),
+    );
+
+    const userFs = testEnv.authenticatedContext('cred-user').firestore();
+    await assertFails(getDoc(doc(userFs, 'managedCredentials/c1')));
+    await assertFails(
+      setDoc(doc(userFs, 'managedCredentials/c3'), { name: 'Sneaky' }),
+    );
+
+    const unauth = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(unauth.firestore(), 'managedCredentials/c1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Realtime Database security rules – unauthenticated access
 // ---------------------------------------------------------------------------
 
