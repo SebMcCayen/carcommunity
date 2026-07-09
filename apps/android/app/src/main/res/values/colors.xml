@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- KCC Crown UI palette (contracts/design-tokens/tokens.json). -->
+    <!-- Crown Gold: FCM default notification accent / small-icon tint. -->
+    <color name="kcc_crown_gold">#EAB54B</color>
+    <!-- Ink Black: dark page/splash background. -->
+    <color name="kcc_ink_black">#040211</color>
+</resources>

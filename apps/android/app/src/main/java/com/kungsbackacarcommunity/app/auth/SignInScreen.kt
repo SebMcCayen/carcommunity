@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.auth
 
 import android.content.res.Configuration
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,68 +40,90 @@ fun SignInScreen(
     onSignInClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+    // The sign-in screen is a brand moment shown over Ink Black art, so it is
+    // always dark-on-light regardless of the system theme. Forcing KccTheme's
+    // dark scheme keeps every text/button color on a contract token (light
+    // ivory text, gold button) instead of hardcoding hex.
+    KccTheme(darkTheme = true) {
+        Surface(
+            modifier = modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
         ) {
-            Text(
-                text = stringResource(R.string.auth_loginTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.auth_loginSubtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(24.dp))
-
-            when (status) {
-                SignInStatus.InProgress -> {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.auth_loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Subtle full-screen brand background. The art is bottom-weighted
+                // (top ~55% is clean), so the centered form stays legible over it.
+                Image(
+                    painter = painterResource(R.drawable.login_bg),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.kcc_logo_dark_bg),
+                        contentDescription = stringResource(R.string.app_name),
+                        modifier = Modifier.fillMaxWidth(0.7f),
                     )
-                }
-
-                is SignInStatus.Failed -> {
+                    Spacer(Modifier.height(32.dp))
                     Text(
-                        text =
-                            stringResource(
-                                when (status.reason) {
-                                    SignInFailure.UNAVAILABLE -> R.string.auth_platformUnsupported
-                                    SignInFailure.GENERIC -> R.string.auth_errorGeneric
-                                },
-                            ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                        text = stringResource(R.string.auth_loginTitle),
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(16.dp))
-                    GoogleSignInButton(onSignInClick)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.auth_loginSubtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(24.dp))
+
+                    when (status) {
+                        SignInStatus.InProgress -> {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.auth_loading),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        is SignInStatus.Failed -> {
+                            Text(
+                                text =
+                                    stringResource(
+                                        when (status.reason) {
+                                            SignInFailure.UNAVAILABLE -> R.string.auth_platformUnsupported
+                                            SignInFailure.GENERIC -> R.string.auth_errorGeneric
+                                        },
+                                    ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            GoogleSignInButton(onSignInClick)
+                        }
+
+                        SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+                    Text(
+                        text = stringResource(R.string.auth_privacyNote),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
                 }
-
-                SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
             }
-
-            Spacer(Modifier.height(24.dp))
-            Text(
-                text = stringResource(R.string.auth_privacyNote),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }
