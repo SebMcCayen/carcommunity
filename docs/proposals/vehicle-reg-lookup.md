@@ -8,7 +8,7 @@
 > **Date:** 2026-07-09
 > **Recommendation (short version):** **Spike-first, then most likely defer.**
 > The client UX is trivial; the blocker is legal access to Swedish vehicle
-> data. See [§8](#8-recommendation).
+> data. See [§9](#9-recommendation).
 
 ## 1. Summary
 
@@ -66,8 +66,9 @@ design here must preserve that invariant.
 
 - **Backend callables** live in `functions/src/garage/manageVehicle.ts`
   (`addVehicle` / `updateVehicle` / `deleteVehicle`), all member-only via
-  `requireMemberActor`, `europe-west1`, `enforceAppCheck` on outside the
-  emulator. Pure validation/builders are in `garage-core.ts`. A lookup would
+  `requireMemberActor`, `europe-west1`, with App Check enforced
+  (`enforceAppCheck`) outside the emulator. Pure validation/builders are in
+  `garage-core.ts`. A lookup would
   be a **new sibling callable** (e.g. `garage.lookupPlate`) that returns
   *prefill suggestions only* and writes nothing to `vehicles` — the user
   still saves through the existing `addVehicle`.
@@ -287,8 +288,13 @@ fallback) and a **spike confirming access + price first**.
 - **Auth:** `requireMemberActor` — member-only, same as the rest of garage.
 - **Input:** `{ plate: string }` — validated/normalised in a pure
   `garage-core` helper (uppercase, strip spaces, assert the Swedish plate
-  format `^[A-ZÅÄÖ]{3}[0-9]{2}[0-9A-Z]$` etc.). Reject malformed plates before
-  spending a paid call.
+  format). Use a conservative **shape** check with Latin letters only —
+  e.g. `^[A-Z]{3}[0-9]{2}[0-9A-Z]$` — to reject malformed plates before
+  spending a paid call. **Note:** the exact allowed letters and series
+  (e.g. which letters are excluded, personalised plates) must be confirmed
+  against Transportstyrelsen / the chosen provider's documentation before
+  hard-coding the pattern; the regex above is a placeholder shape, not an
+  authoritative rule.
 - **Quota (cost + abuse control):** a small reusable rate-limit helper
   (generalising the `postChatMessage` pattern) enforcing e.g. **N lookups per
   user per day** and a global daily ceiling as a cost circuit-breaker.
