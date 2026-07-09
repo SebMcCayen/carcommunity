@@ -553,4 +553,18 @@
     <string name="notifications_channelAccountDescription">Viktig information om ditt konto.</string>
     <string name="notifications_channelGeneralName">Allmänt</string>
     <string name="notifications_channelGeneralDescription">Medlemskapsuppdateringar och andra meddelanden från klubben.</string>
+    <string name="feedback_title">Rapportera ett problem</string>
+    <string name="feedback_openButton">Rapportera ett problem</string>
+    <string name="feedback_publicNoticeTitle">Rapporten är offentlig</string>
+    <string name="feedback_publicNotice">Din rapport publiceras som ett offentligt ärende på vår ärendehanterare på GitHub, där vem som helst kan läsa den. Skriv inte med personlig eller känslig information – till exempel namn, e-post, telefonnummer, platser eller lösenord.</string>
+    <string name="feedback_summaryLabel">Kort sammanfattning (valfritt)</string>
+    <string name="feedback_descriptionLabel">Beskriv problemet</string>
+    <string name="feedback_descriptionRequired">Beskrivningen får inte vara tom.</string>
+    <string name="feedback_submit">Skicka rapport</string>
+    <string name="feedback_close">Stäng</string>
+    <string name="feedback_success">Tack! Din rapport har skickats.</string>
+    <string name="feedback_successWithIssue">Tack! Din rapport har skickats och ett ärende har skapats.</string>
+    <string name="feedback_viewIssue">Visa ärende</string>
+    <string name="feedback_error">Kunde inte skicka rapporten. Försök igen.</string>
+    <string name="feedback_rateLimited">Du har skickat för många rapporter. Vänta en stund och försök igen.</string>
 </resources>

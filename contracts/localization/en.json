@@ -606,5 +606,21 @@
     "channelAccountDescription": "Important notices about your account.",
     "channelGeneralName": "General",
     "channelGeneralDescription": "Membership updates and other messages from the club."
+  },
+  "feedback": {
+    "title": "Report a problem",
+    "openButton": "Report a problem",
+    "publicNoticeTitle": "This report is public",
+    "publicNotice": "Your report is posted as a public issue on our GitHub issue tracker, where anyone can read it. Do not include personal or sensitive information such as names, email, phone numbers, locations, or passwords.",
+    "summaryLabel": "Short summary (optional)",
+    "descriptionLabel": "Describe the problem",
+    "descriptionRequired": "Description cannot be empty.",
+    "submit": "Send report",
+    "close": "Close",
+    "success": "Thanks! Your report was sent.",
+    "successWithIssue": "Thanks! Your report was sent and an issue was created.",
+    "viewIssue": "View issue",
+    "error": "Could not send your report. Please try again.",
+    "rateLimited": "You've sent too many reports. Please wait a while and try again."
   }
 }
