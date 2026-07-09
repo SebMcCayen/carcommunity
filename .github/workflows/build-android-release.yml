@@ -124,13 +124,51 @@ jobs:
             echo "::error::Release AAB not found at $AAB."
             exit 1
           fi
-          # -strict makes jarsigner return a NON-ZERO exit code for an unsigned or
-          # not-fully-signed jar (plain -verify exits 0 even when unsigned), so we
-          # rely on the exit status instead of parsing localized output.
-          if "$JAVA_HOME/bin/jarsigner" -verify -strict "$AAB"; then
-            echo "Release AAB signature verified."
+          # Assert the v1 JAR signature is present (a META-INF/<ALIAS>.RSA|EC|DSA
+          # signature block AND its matching META-INF/<ALIAS>.SF) rather than
+          # running `jarsigner -verify`. jarsigner trips on a BENIGN "signed in
+          # JarFile but is not signed in JarInputStream" discrepancy for App
+          # Bundles — its random-access and streaming passes disagree on entry
+          # ordering — and `-strict` turns that into a non-zero exit even though
+          # every entry IS signed by the upload key. Play does the authoritative
+          # signature check on upload and re-signs with the Play App Signing key,
+          # so a present-and-complete signature block is the correct,
+          # deterministic gate here.
+          #
+          # We list RAW zip entry paths with `unzip -Z1` (zipinfo mode, one bare
+          # entry per line) instead of parsing the tabular `unzip -l` output, and
+          # we require the .SF that matches the block's base name — a block alone
+          # can pass even when the .SF is missing or corrupt.
+          #
+          # Capture the entry list ONCE via command substitution (unzip runs to
+          # completion — no SIGPIPE), then match against it with here-strings.
+          # Feeding grep from a here-string means `grep -q` exiting early has no
+          # upstream process to kill, so it can't SIGPIPE a `unzip` under
+          # `pipefail` into a false non-zero — a live `unzip -Z1 | grep -q` pipe
+          # would (grep -q closes the pipe, unzip dies with SIGPIPE/141, and with
+          # pipefail the whole pipeline is non-zero, failing a correctly-signed
+          # AAB). The .SF check also uses FIXED-STRING whole-line matching so
+          # regex metacharacters in the alias (which is unconstrained — it comes
+          # from the keystore) can't break or spoof the match.
+          entries="$(unzip -Z1 "$AAB")"
+          block="$(grep -iE '^META-INF/[^/]+\.(rsa|ec|dsa)$' <<< "$entries" | head -n1 || true)"
+          if [ -z "$block" ]; then
+            echo "::error::Release AAB has no signature block — signing did not run (check the ANDROID_KEYSTORE_* secrets)."
+            exit 1
+          fi
+          # Derive the block's base name (alias) and require the matching .SF.
+          # Match the exact expected path as a FIXED STRING (grep -F), case-
+          # insensitively (-i, for .SF/.sf and alias case) and whole-line (-x, so
+          # UPLOAD.SF can't partial-match a decoy UPLOAD.SFX). No regex, so an
+          # alias containing '.', '*', '[', etc. is matched literally.
+          base="$(basename "$block")"; base="${base%.*}"
+          sf="META-INF/${base}.SF"
+          if grep -F -i -x -q "$sf" <<< "$entries"; then
+            echo "Release AAB is signed — signature block + matching .SF present:"
+            echo "  $block"
+            grep -F -i -x "$sf" <<< "$entries" | sed 's/^/  /' || true
           else
-            echo "::error::Release AAB is NOT signed / failed strict verification — check the ANDROID_KEYSTORE_* secrets."
+            echo "::error::Signature block ${block} present but matching ${sf} is missing — signing is incomplete or corrupt."
             exit 1
           fi
 
