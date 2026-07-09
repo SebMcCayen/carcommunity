@@ -64,7 +64,21 @@ echo "==> 4/5 Least-privilege deploy roles (docs/deployment.md)"
 # deploying them upserts Cloud Scheduler jobs (cloudscheduler.jobs.update),
 # which cloudfunctions.developer does not grant — deploy 403s on the
 # firebase-schedule-* jobs without this.
-for role in roles/cloudfunctions.developer roles/firebasehosting.admin roles/datastore.viewer roles/cloudscheduler.admin; do
+# roles/secretmanager.admin: some functions declare a Secret Manager secret via
+# defineSecret (GITHUB_ISSUE_TOKEN in functions/src/feedback/reportIssue.ts,
+# listed in the function's secrets:[...]). `firebase deploy --only functions`
+# must (a) READ that secret (secretmanager.secrets.get) during preflight and
+# (b) SET the secret's IAM policy (secretmanager.secrets.setIamPolicy) to grant
+# the function's runtime SA secretAccessor — deploy 403s on
+# secretmanager.secrets.get otherwise. Among predefined roles only
+# secretmanager.admin covers BOTH get + setIamPolicy (secretmanager.viewer is
+# read-only; secretAccessor only reads payloads), so this role is required.
+# NOTE (least privilege): this grants project-wide Secret Manager admin; a
+# tighter alternative is to grant roles/secretmanager.admin — or a custom role
+# limited to secretmanager.secrets.get + setIamPolicy — on the SPECIFIC secret
+# resource (the GITHUB_ISSUE_TOKEN secret) rather than the whole project, if the
+# operator prefers to narrow the blast radius.
+for role in roles/cloudfunctions.developer roles/firebasehosting.admin roles/datastore.viewer roles/cloudscheduler.admin roles/secretmanager.admin; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${role}" \
