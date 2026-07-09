@@ -3,3 +3,6 @@
 keystore.properties
 *.jks
 *.keystore
+
+# Mapbox runtime token — never commit (repo is public); local builds only
+mapbox.properties

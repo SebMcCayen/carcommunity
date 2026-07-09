@@ -60,6 +60,32 @@ if (keystorePropsFile.exists() && !(keystorePropsFile.isFile && keystorePropsFil
     )
 }
 
+// Mapbox runtime access token (a public `pk.` token). Injected without ever
+// committing it (this repo is public): read from the MAPBOX_ACCESS_TOKEN Gradle
+// property — CI sets it from the production secret via the
+// ORG_GRADLE_PROJECT_MAPBOX_ACCESS_TOKEN env var — else from a gitignored
+// mapbox.properties for local signed builds, else empty. Empty is valid: the
+// MapView still renders (blank style) so config-less / CI validation builds
+// stay green (MapRoute.kt only sets MapboxOptions.accessToken when non-blank).
+val mapboxPropsFile = file("mapbox.properties")
+val mapboxProps = Properties().apply {
+    if (mapboxPropsFile.isFile && mapboxPropsFile.canRead()) {
+        try {
+            mapboxPropsFile.inputStream().use { load(it) }
+        } catch (e: Exception) {
+            logger.warn(
+                "Could not read mapbox.properties (${e.message}); the Mapbox token " +
+                    "will be empty and the map will render blank.",
+            )
+        }
+    }
+}
+val mapboxAccessToken: String = (
+    providers.gradleProperty("MAPBOX_ACCESS_TOKEN").orNull
+        ?: mapboxProps.getProperty("MAPBOX_ACCESS_TOKEN")
+        ?: ""
+    ).trim()
+
 // Firebase configuration: google-services.json is intentionally NOT committed
 // (see .gitignore and apps/android/README.md). The plugin is applied only when
 // the file is present so that CI validation builds work without secrets.
@@ -94,13 +120,9 @@ android {
 
     buildTypes {
         debug {
-            // Mapbox runtime access token: a secret NOT committed and NOT
-            // present in CI, so it DEFAULTS to empty. The Map slice sets
-            // MapboxOptions.accessToken only when non-blank; an empty value
-            // still renders the MapView (empty style) so the config-less
-            // build and launch stay green. The real token is provisioned at
-            // cutover (override this resValue or inject from a secret).
-            resValue("string", "mapbox_access_token", "")
+            // Resolved above: empty unless MAPBOX_ACCESS_TOKEN / mapbox.properties
+            // provides a token. Empty keeps config-less/CI builds green.
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
         }
         release {
             if (hasReleaseSigning) {
@@ -111,7 +133,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            resValue("string", "mapbox_access_token", "")
+            resValue("string", "mapbox_access_token", mapboxAccessToken)
         }
     }
 

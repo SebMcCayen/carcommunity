@@ -18,6 +18,28 @@ Native Android app (Kotlin, Jetpack Compose). Created in migration plan Phase 5;
 
 The Google Services Gradle plugin is applied **only when the file exists**, so CI and fresh clones build fine without it.
 
+## Release build (Google Play)
+
+The signed release AAB is produced by the **Build Android Release** GitHub Actions workflow (`.github/workflows/build-android-release.yml`, manual dispatch only). It decodes the upload keystore, injects the Mapbox token, signs the bundle, and uploads it as the `app-release-aab` artifact. Required `production` **environment** secrets:
+
+| Secret | What |
+| --- | --- |
+| `ANDROID_GOOGLE_SERVICES_JSON` | base64 of `google-services.json` |
+| `ANDROID_KEYSTORE_BASE64` | base64 of the upload keystore (`.jks`) |
+| `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` | keystore + key password |
+| `ANDROID_KEY_ALIAS` | key alias (`upload`) |
+| `MAPBOX_ACCESS_TOKEN` | public `pk.` runtime token (empty ⇒ blank map, build still succeeds) |
+
+Google **Play App Signing** re-signs the uploaded bundle, so the keystore here is only the *upload* key. Nothing signing-related is committed.
+
+**Local signed build** (optional): create `app/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) pointing at a keystore outside the repo, and `app/mapbox.properties` (`MAPBOX_ACCESS_TOKEN=pk...`). Both are gitignored. Then:
+
+```bash
+./gradlew bundleRelease   # or: -PMAPBOX_ACCESS_TOKEN=pk...
+```
+
+Without those files the release build is **unsigned** with a blank-map token — never fatal, so CI/validation builds stay green.
+
 ## Localization
 
 `res/values/strings.xml` (Swedish, default) and `res/values-en/strings.xml` are **generated** from the canonical contracts:
