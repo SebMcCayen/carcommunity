@@ -856,5 +856,83 @@
       "metadata": "Metadata",
       "noMetadata": "Ingen metadata."
     }
+  },
+  "credentials": {
+    "title": "Token- och nyckelförnyelser",
+    "subtitle": "Håll koll på hanterade tokens, nycklar och tjänstekonton och se vilka som har gått ut eller snart går ut. Endast administratörer.",
+    "noExpiry": "Inget utgångsdatum",
+    "summary": {
+      "label": "Sammanfattning",
+      "expired": "Utgångna",
+      "expiringSoon": "Går ut snart (≤30 dagar)"
+    },
+    "status": {
+      "expired": "Utgången",
+      "expiringSoon": "Går ut snart",
+      "ok": "OK",
+      "no-expiry": "Inget utgångsdatum",
+      "invalid": "Ogiltigt datum"
+    },
+    "category": {
+      "github-pat": "GitHub-token (PAT)",
+      "mapbox-token": "Mapbox-token",
+      "signing-keystore": "Signeringsnyckel (keystore)",
+      "api-key": "API-nyckel",
+      "service-account": "Tjänstekonto",
+      "other": "Övrigt"
+    },
+    "columns": {
+      "status": "Status",
+      "name": "Namn",
+      "category": "Kategori",
+      "expiresAt": "Går ut",
+      "lastRotatedAt": "Senast roterad",
+      "notes": "Anteckningar",
+      "actions": "Åtgärder"
+    },
+    "create": {
+      "heading": "Lägg till nyckel eller token",
+      "submit": "Lägg till",
+      "submitting": "Lägger till..."
+    },
+    "list": {
+      "heading": "Alla hanterade nycklar och tokens",
+      "loading": "Läser in...",
+      "empty": "Inga nycklar eller tokens ännu."
+    },
+    "form": {
+      "nameLabel": "Namn",
+      "namePlaceholder": "T.ex. Android uppladdningsnyckel",
+      "categoryLabel": "Kategori",
+      "descriptionLabel": "Beskrivning",
+      "descriptionPlaceholder": "Kort beskrivning (valfritt)",
+      "expiresLabel": "Går ut",
+      "expiresHint": "Lämna tomt om nyckeln inte har något utgångsdatum.",
+      "rotatedLabel": "Senast roterad",
+      "notesLabel": "Anteckningar",
+      "notesPlaceholder": "Var nyckeln finns, hur den roteras m.m. (valfritt)"
+    },
+    "actions": {
+      "edit": "Redigera",
+      "cancel": "Avbryt",
+      "save": "Spara",
+      "saving": "Sparar...",
+      "delete": "Ta bort",
+      "working": "Arbetar..."
+    },
+    "deleteConfirm": "Vill du ta bort den här posten permanent? Detta kan inte ångras.",
+    "errors": {
+      "nameRequired": "Namn krävs.",
+      "nameTooLong": "Namnet får vara högst 120 tecken.",
+      "categoryInvalid": "Okänd kategori.",
+      "descriptionTooLong": "Beskrivningen får vara högst 500 tecken.",
+      "notesTooLong": "Anteckningarna får vara högst 2000 tecken.",
+      "expiresInvalid": "Ogiltigt utgångsdatum.",
+      "rotatedInvalid": "Ogiltigt roteringsdatum.",
+      "loadFailed": "Kunde inte läsa in nycklar och tokens.",
+      "createFailed": "Posten kunde inte skapas.",
+      "updateFailed": "Ändringen kunde inte sparas.",
+      "deleteFailed": "Borttagningen misslyckades."
+    }
   }
 }

@@ -31,6 +31,7 @@ import LiveLocationPage from '@/app/live-location/page';
 import SupportPage from '@/app/support/page';
 import AuditLogPage from '@/app/audit-log/page';
 import FeatureFlagsPage from '@/app/feature-flags/page';
+import CredentialsPage from '@/app/credentials/page';
 import SubscriptionPage from '@/app/subscription/page';
 import SettingsPage from '@/app/settings/page';
 
@@ -73,6 +74,7 @@ export function App() {
         <Route path="/support" element={<SupportPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />
         <Route path="/feature-flags" element={<FeatureFlagsPage />} />
+        <Route path="/credentials" element={<CredentialsPage />} />
         <Route path="/subscription" element={<SubscriptionPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

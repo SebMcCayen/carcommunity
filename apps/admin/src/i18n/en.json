@@ -781,5 +781,83 @@
       "metadata": "Metadata",
       "noMetadata": "No metadata."
     }
+  },
+  "credentials": {
+    "title": "Token / credential renewals",
+    "subtitle": "Track managed tokens, keys and service accounts and see which have expired or expire soon. Admins only.",
+    "noExpiry": "No expiry",
+    "summary": {
+      "label": "Summary",
+      "expired": "Expired",
+      "expiringSoon": "Expiring soon (≤30 days)"
+    },
+    "status": {
+      "expired": "Expired",
+      "expiringSoon": "Expiring soon",
+      "ok": "OK",
+      "no-expiry": "No expiry",
+      "invalid": "Invalid date"
+    },
+    "category": {
+      "github-pat": "GitHub token (PAT)",
+      "mapbox-token": "Mapbox token",
+      "signing-keystore": "Signing keystore",
+      "api-key": "API key",
+      "service-account": "Service account",
+      "other": "Other"
+    },
+    "columns": {
+      "status": "Status",
+      "name": "Name",
+      "category": "Category",
+      "expiresAt": "Expires",
+      "lastRotatedAt": "Last rotated",
+      "notes": "Notes",
+      "actions": "Actions"
+    },
+    "create": {
+      "heading": "Add credential",
+      "submit": "Add",
+      "submitting": "Adding..."
+    },
+    "list": {
+      "heading": "All managed credentials",
+      "loading": "Loading...",
+      "empty": "No credentials yet."
+    },
+    "form": {
+      "nameLabel": "Name",
+      "namePlaceholder": "E.g. Android upload keystore",
+      "categoryLabel": "Category",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Short description (optional)",
+      "expiresLabel": "Expires",
+      "expiresHint": "Leave empty if the credential has no expiry.",
+      "rotatedLabel": "Last rotated",
+      "notesLabel": "Notes",
+      "notesPlaceholder": "Where it lives, how it is rotated, etc. (optional)"
+    },
+    "actions": {
+      "edit": "Edit",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "delete": "Delete",
+      "working": "Working..."
+    },
+    "deleteConfirm": "Permanently delete this record? This cannot be undone.",
+    "errors": {
+      "nameRequired": "Name is required.",
+      "nameTooLong": "Name must be at most 120 characters.",
+      "categoryInvalid": "Unknown category.",
+      "descriptionTooLong": "Description must be at most 500 characters.",
+      "notesTooLong": "Notes must be at most 2000 characters.",
+      "expiresInvalid": "Invalid expiry date.",
+      "rotatedInvalid": "Invalid rotation date.",
+      "loadFailed": "Could not load credentials.",
+      "createFailed": "The record could not be created.",
+      "updateFailed": "The change could not be saved.",
+      "deleteFailed": "Deletion failed."
+    }
   }
 }
