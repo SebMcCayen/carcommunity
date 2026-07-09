@@ -78,7 +78,17 @@ echo "==> 4/5 Least-privilege deploy roles (docs/deployment.md)"
 # limited to secretmanager.secrets.get + setIamPolicy — on the SPECIFIC secret
 # resource (the GITHUB_ISSUE_TOKEN secret) rather than the whole project, if the
 # operator prefers to narrow the blast radius.
-for role in roles/cloudfunctions.developer roles/firebasehosting.admin roles/datastore.viewer roles/cloudscheduler.admin roles/secretmanager.admin; do
+# roles/run.admin: gen2 callable/HTTPS functions are backed by a Cloud Run
+# service, and firebase-tools sets the invoker (allUsers) on that service at
+# deploy so the function is reachable — auth is enforced inside the function.
+# Setting the invoker requires run.services.setIamPolicy, which
+# cloudfunctions.developer does NOT grant, so deploy fails with "Unable to set
+# the invoker for the IAM policy" (surfaced by the new feedback-reportIssue
+# onCall function). NOTE (least privilege): this grants project-wide Cloud Run
+# admin; a tighter alternative is a custom role limited to
+# run.services.setIamPolicy + getIamPolicy — or granting it on the SPECIFIC
+# Cloud Run service backing the function — rather than project-wide run.admin.
+for role in roles/cloudfunctions.developer roles/firebasehosting.admin roles/datastore.viewer roles/cloudscheduler.admin roles/secretmanager.admin roles/run.admin; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="${role}" \
