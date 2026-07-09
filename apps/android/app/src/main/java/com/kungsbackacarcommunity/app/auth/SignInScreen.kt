@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.auth
 
-import android.content.res.Configuration
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -138,14 +137,16 @@ private fun GoogleSignInButton(onClick: () -> Unit) {
     }
 }
 
-@Preview(name = "Idle Light", showBackground = true)
+// SignInScreen forces its own dark theme, so these previews always render
+// dark regardless of ambient/system theme — the names reflect that.
+@Preview(name = "Idle (forced dark)", showBackground = true)
 @Composable
 private fun SignInScreenPreviewIdle() {
     // SignInScreen applies its own KccTheme — do not wrap it again.
     SignInScreen(status = SignInStatus.Idle, onSignInClick = {})
 }
 
-@Preview(name = "Failed Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Failed (forced dark)", showBackground = true)
 @Composable
 private fun SignInScreenPreviewFailed() {
     // SignInScreen applies its own KccTheme — do not wrap it again.
