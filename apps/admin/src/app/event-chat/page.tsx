@@ -272,7 +272,7 @@ export default function EventChatModerationPage() {
                         <span className={styles.statusText}>
                           {report.reviewedAt
                             ? `Granskad ${formatDateOnly(report.reviewedAt)}`
-                            : '–'}
+                            : '—'}
                         </span>
                       )}
                     </td>
