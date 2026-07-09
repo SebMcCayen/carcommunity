@@ -173,7 +173,16 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
       isDirtyRef.current = true;
       return { ...prev, [field]: value };
     });
-    setClientErrors((prev) => ({ ...prev, [field]: undefined }));
+    setClientErrors((prev) => {
+      const next: Partial<Record<keyof EventFormData, string>> = { ...prev, [field]: undefined };
+      // The cross-field end validation (end-after-start / max-duration) is keyed
+      // under `endDate`, but it depends on both the start and end date/time. Clear
+      // that stale error when editing any of the participating fields.
+      if (field === 'startDate' || field === 'startTime' || field === 'endDate' || field === 'endTime') {
+        next.endDate = undefined;
+      }
+      return next;
+    });
   }
 
   function validate(): boolean {

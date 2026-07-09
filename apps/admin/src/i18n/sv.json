@@ -134,7 +134,7 @@
       "validation": {
         "titleRequired": "Titel krävs.",
         "titleTooLong": "Titel får inte vara längre än 200 tecken.",
-        "startsAtRequired": "Starttid krävs.",
+        "startsAtRequired": "Startdatum krävs.",
         "approximateAreaRequired": "Område krävs.",
         "endsAtAfterStartsAt": "Sluttid måste vara efter starttid.",
         "endsAtTooFarFromStart": "Slutdatum får inte vara mer än 3 dagar efter startdatum.",
