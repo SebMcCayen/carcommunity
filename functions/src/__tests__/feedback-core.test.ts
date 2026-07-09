@@ -86,7 +86,7 @@ describe('feedback-core public GitHub issue', () => {
     );
     // Never empty.
     expect(buildGitHubIssueTitle({ ...report, summary: null, description: '   ' })).toBe(
-      '[Android] Problemrapport',
+      '[Android] Problem report',
     );
     // Bounded.
     const long = buildGitHubIssueTitle({ ...report, summary: 'x'.repeat(200) });

@@ -165,7 +165,7 @@ function firstLine(text: string): string {
 export function buildGitHubIssueTitle(report: FeedbackReport): string {
   const source = report.summary ?? firstLine(report.description);
   const summary = source.replace(/\s+/g, ' ').trim().slice(0, MAX_SUMMARY_LENGTH);
-  const safe = summary.length > 0 ? summary : 'Problemrapport';
+  const safe = summary.length > 0 ? summary : 'Problem report';
   return `${FEEDBACK_TITLE_TAG} ${safe}`;
 }
 
