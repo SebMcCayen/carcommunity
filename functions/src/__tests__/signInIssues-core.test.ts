@@ -11,10 +11,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTO_GENERATED_LABEL,
+  KNOWN_SIGN_IN_EXCEPTION_TYPES,
   SIGN_IN_FEATURE_AREA,
   SIGN_IN_ISSUE_LABEL,
+  SIGN_IN_ISSUE_STALE_CREATING_MS,
   SIGN_IN_PUBLIC_REASON,
   UNKNOWN_ERROR_TYPE,
+  bucketExceptionType,
   buildNewSignInIssueLink,
   buildSignInIssueBody,
   buildSignInIssueLinkCreated,
@@ -195,23 +198,114 @@ describe('extractSignInFailureReport', () => {
   });
 
   it('tolerates absent optionals and non-object metadata on an otherwise valid report', () => {
-    // Minimal valid report: required gate fields + a valid errorCode with the
-    // matching safeMessage, but no appVersion/buildNumber/osVersion/metadata.
+    // Minimal valid report: required gate fields + a valid ALLOWLISTED errorCode
+    // with the matching safeMessage, but no appVersion/buildNumber/osVersion/metadata.
     const result = extractSignInFailureReport({
       featureArea: SIGN_IN_FEATURE_AREA,
       platform: 'android',
       severity: 'error',
-      errorCode: 'SignInException',
-      safeMessage: 'Sign-in failed: SignInException',
+      errorCode: 'SignInFailedException',
+      safeMessage: 'Sign-in failed: SignInFailedException',
     });
     expect(result).toEqual({
-      errorType: 'SignInException',
+      errorType: 'SignInFailedException',
       appVersion: null,
       buildNumber: null,
       osVersion: null,
       deviceModel: null,
-      fingerprint: computeSignInFingerprint('SignInException'),
+      fingerprint: computeSignInFingerprint('SignInFailedException'),
     });
+  });
+
+  it('keeps an ALLOWLISTED exception type as its own bucket/fingerprint', () => {
+    const result = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      platform: 'android',
+      severity: 'error',
+      errorCode: 'FirebaseAuthInvalidCredentialsException',
+      safeMessage: 'Sign-in failed: FirebaseAuthInvalidCredentialsException',
+    });
+    expect(result?.errorType).toBe('FirebaseAuthInvalidCredentialsException');
+    expect(result?.fingerprint).toBe(
+      computeSignInFingerprint('FirebaseAuthInvalidCredentialsException'),
+    );
+  });
+
+  it('collapses a valid-but-NON-allowlisted token to the single Unknown bucket', () => {
+    // Anti-abuse: a valid class-name token that is not on the allowlist must not
+    // get its own public issue — it maps to the `Unknown` bucket. safeMessage is
+    // still checked against the RAW client token (self-consistency), while the
+    // PUBLIC errorType/fingerprint use the bucketed `Unknown` type.
+    const result = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      platform: 'android',
+      severity: 'error',
+      errorCode: 'A0Exception',
+      safeMessage: 'Sign-in failed: A0Exception',
+    });
+    expect(result?.errorType).toBe(UNKNOWN_ERROR_TYPE);
+    expect(result?.fingerprint).toBe(computeSignInFingerprint(UNKNOWN_ERROR_TYPE));
+  });
+
+  it('maps TWO distinct non-allowlisted tokens to the SAME fingerprint (bounded)', () => {
+    // The core anti-abuse property: an unauthenticated caller cycling through
+    // distinct fabricated tokens cannot spawn distinct public issues — they all
+    // collapse to one `Unknown` bucket, so the distinct-issue count is bounded.
+    const mk = (code: string) =>
+      extractSignInFailureReport({
+        featureArea: SIGN_IN_FEATURE_AREA,
+        platform: 'android',
+        severity: 'error',
+        errorCode: code,
+        safeMessage: `Sign-in failed: ${code}`,
+      });
+    const a = mk('A0Exception');
+    const b = mk('A1Exception');
+    expect(a?.errorType).toBe(UNKNOWN_ERROR_TYPE);
+    expect(b?.errorType).toBe(UNKNOWN_ERROR_TYPE);
+    expect(a?.fingerprint).toBe(b?.fingerprint);
+  });
+
+  it('buckets a fully-qualified allowlisted token by its simple name', () => {
+    // com.google.firebase.auth.FirebaseAuthException collapses onto the same
+    // bucket as the bare simple name, so qualified/unqualified do not fork issues.
+    const result = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      platform: 'android',
+      severity: 'error',
+      errorCode: 'com.google.firebase.auth.FirebaseAuthException',
+      safeMessage: 'Sign-in failed: com.google.firebase.auth.FirebaseAuthException',
+    });
+    expect(result?.errorType).toBe('FirebaseAuthException');
+    expect(result?.fingerprint).toBe(computeSignInFingerprint('FirebaseAuthException'));
+  });
+});
+
+describe('bucketExceptionType (anti-abuse allowlist + single bucket)', () => {
+  it('returns an allowlisted simple class name unchanged', () => {
+    expect(bucketExceptionType('GetCredentialException')).toBe('GetCredentialException');
+    expect(bucketExceptionType('FirebaseAuthException')).toBe('FirebaseAuthException');
+    expect(bucketExceptionType('ApiException')).toBe('ApiException');
+  });
+
+  it('collapses the simple name of a fully-qualified allowlisted token', () => {
+    expect(bucketExceptionType('com.google.firebase.auth.FirebaseAuthException')).toBe(
+      'FirebaseAuthException',
+    );
+  });
+
+  it('collapses any non-allowlisted valid token to the single Unknown bucket', () => {
+    expect(bucketExceptionType('A0Exception')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('A1Exception')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('SomeRandomException')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(bucketExceptionType('com.evil.Nope')).toBe(UNKNOWN_ERROR_TYPE);
+  });
+
+  it('the allowlist is non-empty and every entry buckets to itself', () => {
+    expect(KNOWN_SIGN_IN_EXCEPTION_TYPES.size).toBeGreaterThan(0);
+    for (const type of KNOWN_SIGN_IN_EXCEPTION_TYPES) {
+      expect(bucketExceptionType(type)).toBe(type);
+    }
   });
 });
 
@@ -253,6 +347,39 @@ describe('decideSignInIssueAction (dedup)', () => {
       count: 4,
     };
     expect(decideSignInIssueAction(failed)).toBe('create');
+  });
+
+  it('increments a FRESH creating claim but repairs a STALE one', () => {
+    const creating: SignInIssueLink = {
+      fingerprint,
+      status: 'creating',
+      issueNumber: null,
+      issueUrl: null,
+      count: 2,
+    };
+    const now = 1_000_000_000_000;
+    // Fresh in-flight claim (within the stale window) → increment, so concurrent
+    // creations never double-file.
+    expect(
+      decideSignInIssueAction(creating, {
+        nowMs: now,
+        lastActivityMs: now - (SIGN_IN_ISSUE_STALE_CREATING_MS - 1),
+      }),
+    ).toBe('increment');
+    // Stranded claim (past the stale window) → create (repair retry) so the
+    // dedup index is not stuck in-flight forever.
+    expect(
+      decideSignInIssueAction(creating, {
+        nowMs: now,
+        lastActivityMs: now - (SIGN_IN_ISSUE_STALE_CREATING_MS + 1),
+      }),
+    ).toBe('create');
+    // No timestamp available → treated as fresh (never re-file on garbage).
+    expect(
+      decideSignInIssueAction(creating, { nowMs: now, lastActivityMs: null }),
+    ).toBe('increment');
+    // No context at all (pure default) → creating is always an increment.
+    expect(decideSignInIssueAction(creating)).toBe('increment');
   });
 });
 
@@ -322,10 +449,11 @@ describe('buildSignInIssueBody', () => {
     const body = buildSignInIssueBody(report, meta);
     expect(body).toContain('- Error type: GetCredentialException');
     expect(body).toContain(`- Reason: ${SIGN_IN_PUBLIC_REASON}`);
-    expect(body).toContain('- App version: 1.4.0');
-    expect(body).toContain('- Build number: 42');
-    expect(body).toContain('- OS version: Android 14 (API 34)');
-    expect(body).toContain('- Device model: Google Pixel 8');
+    // Client context scalars are wrapped in inline-code spans (markdown-safe).
+    expect(body).toContain('- App version: `1.4.0`');
+    expect(body).toContain('- Build number: `42`');
+    expect(body).toContain('- OS version: `Android 14 (API 34)`');
+    expect(body).toContain('- Device model: `Google Pixel 8`');
     expect(body).toContain(`- Fingerprint: ${fingerprint}`);
     expect(body).toContain('- First seen: 2026-07-09T12:00:00.000Z');
     expect(body).toContain('- Occurrences: 1');
@@ -337,8 +465,39 @@ describe('buildSignInIssueBody', () => {
       meta,
     );
     expect(body).toContain('- Error type: Unknown');
+    // Absent scalars render as the bare word `unknown` (no code span, no value).
     expect(body).toContain('- App version: unknown');
     expect(body).toContain('- Device model: unknown');
+  });
+
+  it('neutralizes an attacker-controlled markdown LINK in a context scalar', () => {
+    // On the unauthenticated endpoint appVersion/deviceModel are attacker-set.
+    // A markdown link/image must NOT render clickable in the world-readable body:
+    // wrapping the value in an inline-code span makes markdown treat it literally.
+    const hostile: SignInFailureReport = {
+      ...report,
+      appVersion: '[click me](http://evil.example)',
+      deviceModel: '![img](http://evil.example/x.png)',
+    };
+    const body = buildSignInIssueBody(hostile, meta);
+    // The value survives verbatim but only INSIDE a code span (backtick-wrapped).
+    expect(body).toContain('- App version: `[click me](http://evil.example)`');
+    expect(body).toContain('- Device model: `![img](http://evil.example/x.png)`');
+    // And it never appears as a bare (renderable) link on the line.
+    expect(body).not.toContain('- App version: [click me](http://evil.example)');
+  });
+
+  it('strips backticks so a scalar cannot break OUT of its code span', () => {
+    // A raw backtick is the only char that could escape the inline-code span; it
+    // is replaced so the injected `](http://evil)` cannot become a live link.
+    const hostile: SignInFailureReport = {
+      ...report,
+      appVersion: 'v1`](http://evil.example)`x',
+    };
+    const body = buildSignInIssueBody(hostile, meta);
+    expect(body).toContain("- App version: `v1'](http://evil.example)'x`");
+    // No raw backtick from the value leaked into the line.
+    expect(body).not.toContain('v1`');
   });
 });
 

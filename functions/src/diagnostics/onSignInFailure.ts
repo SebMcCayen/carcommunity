@@ -30,6 +30,13 @@
  *   re-attempts creation. The diagnostics doc is left intact. Dedup by
  *   fingerprint bounds this to one create attempt per occurrence, so a failure
  *   storm can't hammer GitHub.
+ * - Stuck-claim repair: if the issue is filed but the follow-up `created` write
+ *   fails, the link is stranded in `creating` (issue URL lost). A `creating`
+ *   claim older than SIGN_IN_ISSUE_STALE_CREATING_MS is treated as STALE, and the
+ *   next occurrence re-attempts creation rather than incrementing forever. The
+ *   retry re-claims with a fresh `creating` timestamp so only one occurrence
+ *   re-files; the accepted, rare cost is a duplicate public issue in that narrow
+ *   window (documented at the `created`-write failure below).
  */
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
@@ -85,7 +92,13 @@ export const onSignInFailure = onDocumentCreated(
       action = await db.runTransaction(async (tx) => {
         const existing = await tx.get(linkRef);
         const link = existing.exists ? (existing.data() as SignInIssueLink) : null;
-        const decision = decideSignInIssueAction(link);
+        // Last time this fingerprint was touched, used to detect a STALE
+        // `creating` claim (a create that stranded in-flight). Only a real
+        // Firestore Timestamp yields a value; otherwise the claim is treated as
+        // fresh (never stale) so we never re-file on a missing/garbage timestamp.
+        const lastActivityMs =
+          link && link.lastSeenAt instanceof Timestamp ? link.lastSeenAt.toMillis() : null;
+        const decision = decideSignInIssueAction(link, { nowMs: Date.now(), lastActivityMs });
         if (decision === 'increment') {
           tx.update(
             linkRef,
@@ -94,10 +107,14 @@ export const onSignInFailure = onDocumentCreated(
             ),
           );
         } else if (link) {
-          // Retry after a prior FAILED create: re-claim the existing link
-          // WITHOUT resetting the preserved tally/firstSeenAt, and count this
-          // occurrence too. Concurrent occurrences during the retry see the
-          // status flip back to `creating` and increment instead of double-filing.
+          // Retry: re-claim an existing link for another create attempt. Covers
+          // both a prior FAILED create AND a STALE `creating` claim (one that has
+          // been in-flight past SIGN_IN_ISSUE_STALE_CREATING_MS — see the repair
+          // note at the `created`-write failure below). Preserve the tally /
+          // firstSeenAt and count this occurrence too. The patch flips status to
+          // a FRESH `creating` (refreshing lastSeenAt), so concurrent occurrences
+          // during the retry see a non-stale claim and increment instead of
+          // double-filing — only THIS single occurrence re-files.
           tx.update(
             linkRef,
             buildSignInIssueLinkRetry(FieldValue.increment(1), () => FieldValue.serverTimestamp()),
@@ -149,9 +166,20 @@ export const onSignInFailure = onDocumentCreated(
       try {
         await linkRef.update(buildSignInIssueLinkCreated(issue));
       } catch (error) {
-        // The issue exists; only the link write failed. Log and move on — the
-        // link stays `creating` (dedup still holds: future occurrences see the
-        // doc and increment rather than re-filing).
+        // The issue exists; only the `created` link write failed, so we've lost
+        // the issueNumber/issueUrl and the link is stranded in `status: creating`.
+        // Dedup still holds in the near term (future occurrences see the doc and
+        // increment). REPAIR: after SIGN_IN_ISSUE_STALE_CREATING_MS the link
+        // counts as a STALE `creating` claim, and the next occurrence re-attempts
+        // creation (decideSignInIssueAction → create) instead of incrementing
+        // forever — otherwise admins would permanently lose the issue URL and the
+        // dedup index would be stuck in-flight.
+        // TRADEOFF: because we don't know the issueNumber GitHub already assigned,
+        // that repair retry can file a DUPLICATE public issue in this rare
+        // "issue created but link write failed" case. That is an accepted,
+        // documented cost — a rare duplicate is strictly better than a
+        // permanently-stuck dedup index with a lost issue URL. (We deliberately do
+        // NOT search GitHub for the existing issue — keeping this simple.)
         logger.error('diagnostics.onSignInFailure: failed to record issue link', {
           fingerprint: report.fingerprint,
           issueNumber: issue.number,

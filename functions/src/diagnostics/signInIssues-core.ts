@@ -22,14 +22,21 @@
  *
  * PUBLIC-REPO SAFETY: the repo is world-readable AND `diagnostics.submitReport`
  * is UNAUTHENTICATED, so every report field is attacker-controllable. The issue
- * body therefore carries only a STRICTLY-VALIDATED exception type (a class-name
- * token, or the fixed `Unknown` placeholder — never client free-text), a fixed
- * reason string, app/build/OS version, device model, the server-derived
- * fingerprint, first-seen timestamp, and occurrence count. The client-supplied
- * `safeMessage` free text is NEVER echoed into the public issue (it stays only
- * in the private diagnosticsReports doc). There is NO uid (userId is null), no
- * email, no token. Remaining client scalars are still neutralized (@mention/
- * #ref) and bounded as defence in depth. The test suite asserts this.
+ * body therefore carries only a SERVER-BUCKETED exception type — either one of a
+ * fixed server-side allowlist of known sign-in exception class names, or the
+ * fixed `Unknown` placeholder into which EVERY other valid-but-unknown token
+ * collapses (never client free-text) — a fixed reason string, app/build/OS
+ * version, device model, the server-derived fingerprint, first-seen timestamp,
+ * and occurrence count. This bounds the number of distinct public issues to
+ * (allowlist size + 1), so an unauthenticated caller cannot spawn unbounded
+ * public issues by cycling through distinct valid tokens (A0Exception,
+ * A1Exception, …) — they all land in the single `Unknown` bucket. The
+ * client-supplied `safeMessage` free text is NEVER echoed into the public issue
+ * (it stays only in the private diagnosticsReports doc). There is NO uid (userId
+ * is null), no email, no token. Client context scalars (appVersion/osVersion/
+ * deviceModel/buildNumber) are rendered as markdown inline-code spans and
+ * neutralized (@mention/#ref) so no attacker-controlled markdown link/image/html
+ * can render in the world-readable body. The test suite asserts this.
  *
  * Pure module — no Firebase Admin SDK and no network imports.
  */
@@ -67,8 +74,79 @@ const MAX_CONTEXT_LENGTH = 120;
  */
 const EXCEPTION_TYPE_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
 
-/** Fixed placeholder used whenever the reported type is absent or invalid. */
+/**
+ * Fixed placeholder used whenever the reported type is absent, invalid, OR a
+ * valid class-name token that is not on the known-exception allowlist below.
+ * ALL non-allowlisted valid tokens collapse into this single bucket.
+ */
 export const UNKNOWN_ERROR_TYPE = 'Unknown';
+
+/**
+ * Server-side allowlist of KNOWN Google/Firebase Android sign-in exception
+ * SIMPLE class names. This is the anti-abuse gate: because
+ * `diagnostics.submitReport` is unauthenticated, a caller who passes App Check
+ * could otherwise mint an unbounded number of distinct public GitHub issues by
+ * submitting many distinct valid class-name tokens (`A0Exception`, `A1Exception`
+ * …). Only a token whose simple class name is in this set gets its OWN public
+ * issue/fingerprint; every other valid token collapses to the single
+ * {@link UNKNOWN_ERROR_TYPE} bucket, bounding the distinct-issue count to
+ * (allowlist size + 1).
+ *
+ * Derived from the real Android sign-in path (SignInCoordinator →
+ * GoogleCredentialTokenProvider → FirebaseAuthRepository): the app's own
+ * `SignInFailedException`/`SignInUnavailableException`, the Credential Manager
+ * `GetCredential*` family, the Firebase Auth exception hierarchy, Google Play
+ * services `ApiException`/`ResolvableApiException`, and the common JVM/coroutine
+ * types those flows can surface. Intentionally EXTENSIBLE — add new known types
+ * here as they are observed; unknown types are never lost, they simply share the
+ * `Unknown` bucket.
+ */
+export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
+  // App-defined sign-in wrappers (the dominant real-world types).
+  'SignInFailedException',
+  'SignInUnavailableException',
+  // AndroidX Credential Manager.
+  'GetCredentialException',
+  'GetCredentialCancellationException',
+  'GetCredentialInterruptedException',
+  'GetCredentialProviderConfigurationException',
+  'GetCredentialUnknownException',
+  'GetCredentialUnsupportedException',
+  'NoCredentialException',
+  // Firebase Auth hierarchy.
+  'FirebaseAuthException',
+  'FirebaseAuthInvalidCredentialsException',
+  'FirebaseAuthInvalidUserException',
+  'FirebaseAuthUserCollisionException',
+  'FirebaseAuthWebException',
+  'FirebaseNetworkException',
+  'FirebaseTooManyRequestsException',
+  'FirebaseApiNotAvailableException',
+  // Google Play services / GMS.
+  'ApiException',
+  'ResolvableApiException',
+  // Common JVM / coroutine types those flows can surface.
+  'IllegalStateException',
+  'IllegalArgumentException',
+  'CancellationException',
+  'IOException',
+  'TimeoutException',
+]);
+
+/**
+ * Anti-abuse bucketing: maps a strictly-validated class-name token to the type
+ * that reaches the PUBLIC issue + fingerprint. Uses the SIMPLE class name (the
+ * last dot-separated segment, so `com.google.FirebaseAuthException` and
+ * `FirebaseAuthException` collapse together). An allowlisted simple name is
+ * returned as-is (its own bucket); anything else — including every otherwise
+ * valid but unknown token — collapses to {@link UNKNOWN_ERROR_TYPE}. This is a
+ * pure post-validation step: callers still reject non-class-name tokens BEFORE
+ * bucketing (see strictExceptionType), so this never sees free text.
+ */
+export function bucketExceptionType(validToken: string): string {
+  const simpleName = validToken.slice(validToken.lastIndexOf('.') + 1);
+  return KNOWN_SIGN_IN_EXCEPTION_TYPES.has(simpleName) ? simpleName : UNKNOWN_ERROR_TYPE;
+}
 
 /** Fixed, non-client reason line shown in the public issue. */
 export const SIGN_IN_PUBLIC_REASON = 'pre-authentication sign-in failure';
@@ -126,11 +204,14 @@ function expectedSignInSafeMessage(errorCode: string): string {
 
 /**
  * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature
- * area + the VALIDATED exception type ONLY — never from client free text
- * (safeMessage / appVersion / etc). This keeps dedup stable and unpollutable:
- * an unauthenticated caller cannot spawn unbounded public issues, since there
- * is at most one issue per distinct valid class name plus a single `Unknown`
- * bucket for everything that fails validation.
+ * area + the server-BUCKETED exception type ONLY (see {@link bucketExceptionType})
+ * — never from client free text (safeMessage / appVersion / etc). This keeps
+ * dedup stable, unpollutable, AND bounded: there is at most ONE public issue per
+ * ALLOWLISTED exception type, plus a SINGLE `Unknown` bucket into which every
+ * other valid-but-unknown token collapses (so distinct fabricated tokens like
+ * `A0Exception`, `A1Exception`, … all map to the same fingerprint/issue).
+ * Tokens that are not valid class-name shapes are rejected OUTRIGHT upstream by
+ * the extractor and never reach this function (no issue is filed for them).
  */
 export function computeSignInFingerprint(errorType: string): string {
   return createHash('sha256')
@@ -146,9 +227,10 @@ export function computeSignInFingerprint(errorType: string): string {
 /** The sign-in-failure fields lifted out of a `diagnosticsReports/{id}` doc. */
 export interface SignInFailureReport {
   /**
-   * The VALIDATED exception type — a class-name token, or `Unknown` when the
-   * reported value failed validation. This is the only client-derived string
-   * ever echoed into the public issue; it is safe by construction.
+   * The server-BUCKETED exception type — an allowlisted known class-name token,
+   * or `Unknown` when the (valid) reported token is not on the allowlist. This
+   * is the only client-derived string ever echoed into the public issue; it is
+   * safe AND bounded by construction (see {@link bucketExceptionType}).
    */
   errorType: string;
   appVersion: string | null;
@@ -182,12 +264,17 @@ function boundedString(value: unknown, max: number): string | null {
  *   - `errorCode` is a strictly-shaped simple/qualified class-name token, AND
  *   - `safeMessage` is exactly `Sign-in failed: <errorCode>`.
  * A non-matching `errorCode` REJECTS the report (no `Unknown` fallback here):
- * an off-format code means the report was not produced by the real client. The
- * `safeMessage` is validated only as a shape/consistency gate — its content is
- * never surfaced into the public issue (it stays in the private diagnosticsReports
- * doc). The dedup fingerprint is recomputed server-side from the validated type —
- * the raw `data.fingerprint` (which upstream folds in client free text) is
- * intentionally ignored so a malicious caller cannot pollute dedup.
+ * an off-format code means the report was not produced by the real client. A
+ * VALID token is then anti-abuse BUCKETED (see {@link bucketExceptionType}) — an
+ * allowlisted known type keeps its own bucket, every other valid token collapses
+ * to the single `Unknown` bucket — before it reaches the public issue/fingerprint,
+ * so the distinct-issue count is bounded. The `safeMessage` is validated only as
+ * a shape/consistency gate against the RAW client `errorCode` (proving the report
+ * came from the real reporter); its content is never surfaced into the public
+ * issue (it stays in the private diagnosticsReports doc). The dedup fingerprint is
+ * recomputed server-side from the BUCKETED type — the raw `data.fingerprint`
+ * (which upstream folds in client free text) is intentionally ignored so a
+ * malicious caller cannot pollute dedup.
  */
 export function extractSignInFailureReport(
   data: Record<string, unknown> | undefined | null,
@@ -199,13 +286,19 @@ export function extractSignInFailureReport(
 
   // errorCode must be the exact class-name shape the client sends; anything else
   // (free text, email, over-long, non-string) rejects the whole report.
-  const errorType = strictExceptionType(data.errorCode);
-  if (errorType === null) return null;
+  const rawToken = strictExceptionType(data.errorCode);
+  if (rawToken === null) return null;
 
   // safeMessage must be byte-for-byte the client's `Sign-in failed: <errorCode>`
-  // format — a consistency gate proving the report came from the real reporter.
-  // Its CONTENT is never echoed into the public issue.
-  if (data.safeMessage !== expectedSignInSafeMessage(errorType)) return null;
+  // format, checked against the RAW client token (the client's self-consistency
+  // gate proving the report came from the real reporter). Its CONTENT is never
+  // echoed into the public issue.
+  if (data.safeMessage !== expectedSignInSafeMessage(rawToken)) return null;
+
+  // Anti-abuse: only the BUCKETED type (allowlisted known type, else the single
+  // `Unknown` bucket) reaches the public issue + fingerprint. This bounds the
+  // number of distinct public issues an unauthenticated caller can create.
+  const errorType = bucketExceptionType(rawToken);
 
   const metadata =
     data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
@@ -242,7 +335,25 @@ export interface SignInIssueLink {
   issueNumber: number | null;
   issueUrl: string | null;
   count: number;
+  /**
+   * Server timestamps written by the doc builders (Firestore `Timestamp` at
+   * runtime). Typed loosely to keep this module free of firebase-admin imports;
+   * the trigger reads `lastSeenAt.toMillis()` to detect a stale `creating` claim.
+   */
+  firstSeenAt?: unknown;
+  lastSeenAt?: unknown;
 }
+
+/**
+ * How long a `creating` claim may stay in-flight before it is treated as STALE
+ * and eligible for a repair retry. A create attempt (write placeholder → call
+ * GitHub → write `created`) completes in seconds; anything still `creating` well
+ * beyond that has almost certainly stranded (e.g. the process died AFTER filing
+ * the issue but BEFORE writing the `created` fields, so the issueNumber/issueUrl
+ * were lost and the dedup index is stuck in-flight). 10 minutes is comfortably
+ * longer than any legitimate in-flight window yet short enough to self-heal.
+ */
+export const SIGN_IN_ISSUE_STALE_CREATING_MS = 10 * 60 * 1000;
 
 /**
  * Dedup decision:
@@ -250,15 +361,35 @@ export interface SignInIssueLink {
  * - a `failed` link → CREATE (retry): a previous attempt failed but concurrent
  *   occurrences were preserved, so this occurrence re-attempts issue creation
  *   while the caller keeps the existing tally (never resets it);
- * - any other existing link (`creating` in flight, or `created`) → only
+ * - a STALE `creating` link → CREATE (repair retry): the claim has been in-flight
+ *   past {@link SIGN_IN_ISSUE_STALE_CREATING_MS}, which means the create almost
+ *   certainly stranded (typically the issue WAS filed but the follow-up
+ *   `created` write failed, losing the issueNumber/issueUrl). Rather than leave
+ *   the dedup index stuck forever, re-attempt creation. `context` must carry
+ *   `nowMs` and the link's last-activity millis for this to trigger; without
+ *   `context` (the pure default) a `creating` link is always treated as fresh;
+ * - any other existing link (a FRESH `creating` in flight, or `created`) → only
  *   INCREMENT the occurrence tally — one unique error is one issue, never one
  *   per tester/occurrence, and we never comment on every occurrence.
+ *
+ * Only ONE occurrence ever re-files: the repair retry flips the link back to a
+ * FRESH `creating` (bumping lastSeenAt), so any concurrent occurrence re-reading
+ * the link sees a non-stale claim and increments instead of double-filing.
  */
 export function decideSignInIssueAction(
   existing: SignInIssueLink | null | undefined,
+  context?: { nowMs: number; lastActivityMs: number | null },
 ): 'create' | 'increment' {
   if (!existing) return 'create';
   if (existing.status === 'failed') return 'create';
+  if (
+    existing.status === 'creating' &&
+    context &&
+    context.lastActivityMs !== null &&
+    context.nowMs - context.lastActivityMs > SIGN_IN_ISSUE_STALE_CREATING_MS
+  ) {
+    return 'create';
+  }
   return 'increment';
 }
 
@@ -309,8 +440,10 @@ export function buildSignInIssueLinkIncrement(
 }
 
 /**
- * Patch that RE-CLAIMS a previously-`failed` link for another create attempt:
- * flips status back to `creating` (so concurrent occurrences during the retry
+ * Patch that RE-CLAIMS a link for another create attempt — used both for a
+ * previously-`failed` link AND for a STALE `creating` link (see
+ * decideSignInIssueAction). Flips status to `creating` and REFRESHES `lastSeenAt`
+ * (so concurrent occurrences during the retry see a fresh, non-stale claim and
  * increment instead of double-filing) and counts this occurrence — WITHOUT
  * resetting the preserved `count`/`firstSeenAt`. `increment` is the
  * FieldValue.increment(1) sentinel (injected to stay pure).
@@ -357,17 +490,34 @@ export interface SignInIssueMeta {
 }
 
 /**
- * Public issue body. CONTAINS ONLY: the VALIDATED exception type, a FIXED
+ * Renders a client-supplied context scalar as a markdown INLINE-CODE span so it
+ * cannot inject a link/image/html into the WORLD-READABLE issue body. Markdown
+ * is not interpreted inside a code span, so `[x](http://evil)` renders literally
+ * instead of as a clickable link; the only char that could break out of the span
+ * is a backtick, which is stripped (replaced with `'`) first. @mention/#ref are
+ * neutralized too. Applied to every attacker-controllable scalar (app/build/OS
+ * version, device model) since `diagnostics.submitReport` is unauthenticated.
+ */
+function inlineCodeScalar(value: string): string {
+  const safe = neutralizeMentions(value).replace(/`/g, "'");
+  return `\`${safe}\``;
+}
+
+/**
+ * Public issue body. CONTAINS ONLY: the server-bucketed exception type, a FIXED
  * (non-client) reason string, app/build/OS version, device model, the
  * server-derived fingerprint, first-seen timestamp and occurrence count. It
  * NEVER echoes the client-supplied `safeMessage` free text, and never a uid
- * (reports are unauthenticated), email, coordinates or tokens. The error type
- * is validated to a class-name token; the remaining client scalars are bounded
- * and neutralized against @mention/#ref abuse; the fingerprint and
- * server-generated timestamp/count are left as-is.
+ * (reports are unauthenticated), email, coordinates or tokens. The error type is
+ * bucketed to an allowlisted class-name token or `Unknown` (safe by
+ * construction); the remaining client scalars are bounded, neutralized against
+ * @mention/#ref abuse, AND wrapped in inline-code spans so no attacker-controlled
+ * markdown link/image/html can render; the fingerprint and server-generated
+ * timestamp/count are left as-is.
  */
 export function buildSignInIssueBody(report: SignInFailureReport, meta: SignInIssueMeta): string {
-  const field = (value: string | null): string => (value ? neutralizeMentions(value) : 'unknown');
+  const field = (value: string | null): string =>
+    value ? inlineCodeScalar(value) : 'unknown';
 
   const lines = [
     'Automatically filed from an Android sign-in failure reported via the public diagnostics channel (pre-authentication — no account is associated).',
