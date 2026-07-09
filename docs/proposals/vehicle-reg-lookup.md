@@ -83,7 +83,7 @@ design here must preserve that invariant.
   "Does not request registration number, VIN, insurance, or location" — that
   comment would need revisiting if this ships.
 - **Contracts:** a new `lookupPlateRequest` / `lookupPlateResponse` pair in
-  `contracts/schemas/garage.schema.json`, plus a `functions.json` entry.
+  `contracts/schemas/garage.schema.json`, plus a `contracts/functions/functions.json` entry.
 
 ### 2.3 Gaps in the current backend (new patterns this would introduce)
 
@@ -91,7 +91,10 @@ Flagged because they materially affect the estimate:
 
 - **No outbound-HTTP or third-party-API pattern exists.** A grep across
   `functions/src` finds **no `fetch(` to external hosts and no
-  `defineSecret`** — every callable today talks only to Firestore/Storage.
+  `defineSecret`**. Callables today use a range of Firebase services —
+  Firestore and Storage, plus Auth and the Realtime Database (see
+  `functions/src/firebase.ts` and, e.g., `functions/src/live/session.ts`) —
+  but there is **no third-party outbound HTTP/API integration pattern** yet.
   This feature would be the **first** to call a paid external API and the
   first to need a stored API credential (Firebase Secrets / Secret Manager).
 - **No general rate-limiter.** Only `events/postChatMessage.ts` implements
