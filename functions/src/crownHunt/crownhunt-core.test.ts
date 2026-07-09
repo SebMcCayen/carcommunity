@@ -68,6 +68,17 @@ describe('crownhunt-core award-guard identifiers', () => {
       expect(awardGuardDocId.length).toBe(4);
     });
 
+    it('cannot collide when a uid or pointId contains the separator', () => {
+      // Length-prefixed hashing is injective: these tuples would collide under
+      // naive `${uid}__${pointId}` concatenation.
+      expect(awardGuardDocId('a', 'b__c', 'once', now)).not.toBe(
+        awardGuardDocId('a__b', 'c', 'once', now),
+      );
+      expect(awardGuardDocId('u_', '_p', 'once', now)).not.toBe(
+        awardGuardDocId('u', '__p', 'once', now),
+      );
+    });
+
     it('produces a Firestore-safe document id', () => {
       for (const rule of ['once', 'daily', 'weekly'] as const) {
         expect(isFirestoreSafeId(awardGuardDocId(uid, pointId, rule, now))).toBe(true);
@@ -79,13 +90,13 @@ describe('crownhunt-core award-guard identifiers', () => {
     const now = new Date('2026-07-09T12:00:00.000Z');
 
     it('is one bucket per user per UTC day', () => {
-      expect(dailyClaimCounterDocId(uid, now)).toBe(`${uid}__2026-07-09`);
-      expect(dailyClaimCounterDocId(uid, new Date('2026-07-09T23:00:00.000Z'))).toBe(
-        `${uid}__2026-07-09`,
-      );
-      expect(dailyClaimCounterDocId(uid, new Date('2026-07-10T01:00:00.000Z'))).toBe(
-        `${uid}__2026-07-10`,
-      );
+      const bucket = dailyClaimCounterDocId(uid, now);
+      // Same UTC day → same bucket, regardless of time of day.
+      expect(dailyClaimCounterDocId(uid, new Date('2026-07-09T23:00:00.000Z'))).toBe(bucket);
+      // Next UTC day → a different bucket.
+      expect(dailyClaimCounterDocId(uid, new Date('2026-07-10T01:00:00.000Z'))).not.toBe(bucket);
+      // Different user → a different bucket.
+      expect(dailyClaimCounterDocId('other-user', now)).not.toBe(bucket);
     });
 
     it('produces a Firestore-safe document id', () => {

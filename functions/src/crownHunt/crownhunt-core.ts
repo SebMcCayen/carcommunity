@@ -329,10 +329,26 @@ export function awardGuardWindowKey(rule: CrownHuntRepeatRule, now: Date): strin
 }
 
 /**
+ * Length-prefixed SHA-256 over a tuple → a collision-resistant, Firestore-safe
+ * (hex) document ID. Length-prefixing makes the encoding injective: no input
+ * value can forge a field boundary, so distinct tuples never map to the same
+ * digest regardless of which characters (including the historical `__`
+ * separator) the parts contain. Used for guard/counter IDs, which must be
+ * derived purely from server-trusted values — never the client idempotency key.
+ */
+function hashDocId(parts: readonly string[]): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(`${part.length}:${part}`);
+  }
+  return hash.digest('hex');
+}
+
+/**
  * Deterministic crownHuntAwardGuards document ID for a (user, point, window).
  * A `tx.create` of this ID inside the award transaction rejects a second
- * concurrent award for the same window (already-claimed). Firestore-safe by
- * construction: uid, pointId, rule and the date key use only [A-Za-z0-9._-].
+ * concurrent award for the same window (already-claimed). Hashed so it cannot
+ * collide even if a uid or pointId contains separator substrings.
  */
 export function awardGuardDocId(
   uid: string,
@@ -340,14 +356,15 @@ export function awardGuardDocId(
   rule: CrownHuntRepeatRule,
   now: Date,
 ): string {
-  return `${uid}__${pointId}__${rule}_${awardGuardWindowKey(rule, now)}`;
+  return hashDocId([uid, pointId, rule, awardGuardWindowKey(rule, now)]);
 }
 
 /**
  * Deterministic crownHuntDailyClaims counter document ID for a (user, UTC
  * day). Read-and-incremented inside the award transaction so the daily cap
- * cannot be beaten by concurrent claims.
+ * cannot be beaten by concurrent claims. Hashed for collision resistance (the
+ * queryable userId/day are stored as fields on the document).
  */
 export function dailyClaimCounterDocId(uid: string, now: Date): string {
-  return `${uid}__${utcDayKey(now)}`;
+  return hashDocId([uid, utcDayKey(now)]);
 }
