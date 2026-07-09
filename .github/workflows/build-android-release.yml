@@ -85,11 +85,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          # Restrictive umask so the secret-bearing files below are created mode
+          # 600 (not group/world-readable to other processes on the runner).
+          umask 077
           if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
             echo "::error::Android signing secrets are not fully set in the production environment (need ANDROID_KEYSTORE_BASE64/PASSWORD, ANDROID_KEY_ALIAS/PASSWORD)."
             exit 1
           fi
           # Decode the keystore — never echo it. base64 -d tolerates line wrapping.
+          # pipefail aborts the step if base64 -d fails instead of writing a broken file.
           printf '%s' "$KEYSTORE_B64" | base64 -d > apps/android/app/upload-keystore.jks
           # Write the gitignored keystore.properties the signingConfig reads. Use
           # printf (not a heredoc) so secret values are written verbatim, and an
@@ -113,11 +118,19 @@ jobs:
 
       - name: Verify the AAB is signed
         run: |
+          set -euo pipefail
           AAB=apps/android/app/build/outputs/bundle/release/app-release.aab
-          if "$JAVA_HOME/bin/jarsigner" -verify "$AAB" | grep -q "jar verified"; then
+          if [ ! -f "$AAB" ]; then
+            echo "::error::Release AAB not found at $AAB."
+            exit 1
+          fi
+          # -strict makes jarsigner return a NON-ZERO exit code for an unsigned or
+          # not-fully-signed jar (plain -verify exits 0 even when unsigned), so we
+          # rely on the exit status instead of parsing localized output.
+          if "$JAVA_HOME/bin/jarsigner" -verify -strict "$AAB"; then
             echo "Release AAB signature verified."
           else
-            echo "::error::Release AAB is NOT signed — check the ANDROID_KEYSTORE_* secrets."
+            echo "::error::Release AAB is NOT signed / failed strict verification — check the ANDROID_KEYSTORE_* secrets."
             exit 1
           fi
 
