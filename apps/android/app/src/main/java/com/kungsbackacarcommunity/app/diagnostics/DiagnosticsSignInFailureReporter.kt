@@ -17,7 +17,8 @@ import com.kungsbackacarcommunity.app.auth.SignInFailureReporter
  * which the backend independently re-sanitizes.
  *
  * Fire-and-forget: [reportSignInFailure] never throws (the underlying reporter
- * already swallows failures; this guards again) and returns promptly.
+ * already swallows failures; this guards against any that slip through) and
+ * returns promptly.
  */
 class DiagnosticsSignInFailureReporter(
     private val reporter: DiagnosticsReporter,

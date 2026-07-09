@@ -35,7 +35,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { createGitHubIssue } from '../shared/githubIssues';
 import {
@@ -124,10 +124,22 @@ export const onSignInFailure = onDocumentCreated(
     // trigger) — the tally was bumped, nothing else to do.
     if (action === 'increment') return;
 
-    // We claimed the fingerprint → file the single public issue for it.
-    const firstSeenIso = new Date().toISOString();
+    // We claimed the fingerprint → file the single public issue for it. Read the
+    // link back (a bounded single extra read, only on the create path) so the
+    // issue body's "First seen"/"Occurrences" reflect the ACTUAL link doc: on a
+    // retry of a `failed` link the preserved firstSeenAt/count carry over, and
+    // any concurrent occurrence that incremented during the claim is included —
+    // both of which a hardcoded `{ count: 1, now }` would misreport. The GitHub
+    // call still happens OUTSIDE any transaction.
+    const claimed = (await linkRef.get()).data();
+    const count = typeof claimed?.count === 'number' ? claimed.count : 1;
+    const firstSeenAt = claimed?.firstSeenAt;
+    const firstSeenIso =
+      firstSeenAt instanceof Timestamp
+        ? firstSeenAt.toDate().toISOString()
+        : new Date().toISOString();
     const issue = await createGitHubIssue(
-      buildSignInIssuePayload(report, { firstSeenIso, count: 1 }),
+      buildSignInIssuePayload(report, { firstSeenIso, count }),
       GITHUB_ISSUE_TOKEN.value(),
       'carcommunity-signin-bot',
       { fingerprint: report.fingerprint },

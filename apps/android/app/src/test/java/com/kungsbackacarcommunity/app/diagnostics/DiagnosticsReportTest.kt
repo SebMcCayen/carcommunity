@@ -73,7 +73,7 @@ class DiagnosticsReportTest {
     }
 
     @Test
-    fun `toData includes non-empty metadata (e-g- device model for sign-in failures)`() {
+    fun `toData includes non-empty metadata (for example the device model for sign-in failures)`() {
         val data =
             DiagnosticsReport(
                 severity = DiagnosticsSeverity.ERROR,

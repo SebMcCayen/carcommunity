@@ -90,6 +90,41 @@ export function validateExceptionType(value: unknown): string {
 }
 
 /**
+ * STRICT variant used by the extractor gate: returns the value UNCHANGED when it
+ * is EXACTLY the shape the Android reporter sends for `errorCode` (a bounded,
+ * anchored, whitespace-free simple/qualified class-name token), or `null`
+ * otherwise. Unlike {@link validateExceptionType}, a non-matching value is
+ * REJECTED (→ the report is ignored, no public issue) rather than collapsed to
+ * `Unknown` — because on the unauthenticated endpoint an off-format `errorCode`
+ * means the report was not produced by the real client, so it should not file a
+ * public issue at all. No trim: the client never pads the token, and the value
+ * must match the raw `safeMessage` (`Sign-in failed: <errorCode>`) byte-for-byte.
+ */
+function strictExceptionType(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (value.length === 0 || value.length > MAX_ERROR_TYPE_LENGTH) return null;
+  return EXCEPTION_TYPE_PATTERN.test(value) ? value : null;
+}
+
+/**
+ * Diagnostics platform reserved for the Android sign-in reporter (the ONLY
+ * client that files these). Matches DIAGNOSTICS_PLATFORMS in diagnostics-core.
+ */
+const ANDROID_PLATFORM = 'android';
+
+/** Diagnostics severity the sign-in reporter always sends. Matches DIAGNOSTICS_SEVERITIES. */
+const ERROR_SEVERITY = 'error';
+
+/**
+ * Exact `safeMessage` the Android reporter emits for a sign-in failure, given
+ * the validated `errorCode`. Mirrors DiagnosticsSignInFailureReporter.kt:
+ * `safeMessage = "Sign-in failed: $errorType"` with `errorCode = errorType`.
+ */
+function expectedSignInSafeMessage(errorCode: string): string {
+  return `Sign-in failed: ${errorCode}`;
+}
+
+/**
  * Dedup key for a sign-in failure, derived SERVER-SIDE from the fixed feature
  * area + the VALIDATED exception type ONLY — never from client free text
  * (safeMessage / appVersion / etc). This keeps dedup stable and unpollutable:
@@ -133,35 +168,49 @@ function boundedString(value: unknown, max: number): string | null {
 
 /**
  * Returns the sign-in-failure view of a raw diagnostics doc, or `null` when the
- * doc is NOT a sign-in failure (wrong featureArea) or carries no `safeMessage`
- * (the presence signal for a populated report). The trigger uses the null
- * return as its "ignore this doc" signal, so every non-sign-in report is a
- * cheap no-op.
+ * doc must NOT file a public issue. The trigger uses the null return as its
+ * "ignore this doc" signal, so anything rejected here is a cheap no-op.
  *
- * The client-supplied `errorCode` is passed through `validateExceptionType`,
- * and the client-supplied `safeMessage` free text is deliberately NOT surfaced
- * (it stays in the private diagnosticsReports doc). The dedup fingerprint is
- * recomputed server-side from the validated type — the raw `data.fingerprint`
- * (which upstream folds in client free text) is intentionally ignored so a
- * malicious caller cannot pollute dedup.
+ * `diagnostics.submitReport` is UNAUTHENTICATED, so any caller that passes App
+ * Check can craft an arbitrary report. To shrink that abuse surface (public
+ * issue spam, non-Android/non-error reports filing issues), extraction is
+ * STRICT: it returns `null` UNLESS the doc matches EXACTLY what the real Android
+ * sign-in reporter (DiagnosticsSignInFailureReporter.kt) sends —
+ *   - `featureArea === 'sign_in'`,
+ *   - `platform === 'android'`,
+ *   - `severity === 'error'`,
+ *   - `errorCode` is a strictly-shaped simple/qualified class-name token, AND
+ *   - `safeMessage` is exactly `Sign-in failed: <errorCode>`.
+ * A non-matching `errorCode` REJECTS the report (no `Unknown` fallback here):
+ * an off-format code means the report was not produced by the real client. The
+ * `safeMessage` is validated only as a shape/consistency gate — its content is
+ * never surfaced into the public issue (it stays in the private diagnosticsReports
+ * doc). The dedup fingerprint is recomputed server-side from the validated type —
+ * the raw `data.fingerprint` (which upstream folds in client free text) is
+ * intentionally ignored so a malicious caller cannot pollute dedup.
  */
 export function extractSignInFailureReport(
   data: Record<string, unknown> | undefined | null,
 ): SignInFailureReport | null {
-  if (!data || data.featureArea !== SIGN_IN_FEATURE_AREA) return null;
+  if (!data) return null;
+  if (data.featureArea !== SIGN_IN_FEATURE_AREA) return null;
+  if (data.platform !== ANDROID_PLATFORM) return null;
+  if (data.severity !== ERROR_SEVERITY) return null;
 
-  // A populated sign-in report always carries a safeMessage; we use it only as
-  // a presence signal. Its free-text CONTENT is never echoed into the public
-  // issue (unauthenticated endpoint + world-readable repo).
-  const safeMessage = typeof data.safeMessage === 'string' ? data.safeMessage : null;
-  if (!safeMessage || safeMessage.trim().length === 0) return null;
+  // errorCode must be the exact class-name shape the client sends; anything else
+  // (free text, email, over-long, non-string) rejects the whole report.
+  const errorType = strictExceptionType(data.errorCode);
+  if (errorType === null) return null;
+
+  // safeMessage must be byte-for-byte the client's `Sign-in failed: <errorCode>`
+  // format — a consistency gate proving the report came from the real reporter.
+  // Its CONTENT is never echoed into the public issue.
+  if (data.safeMessage !== expectedSignInSafeMessage(errorType)) return null;
 
   const metadata =
     data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
       ? (data.metadata as Record<string, unknown>)
       : null;
-
-  const errorType = validateExceptionType(data.errorCode);
 
   return {
     errorType,

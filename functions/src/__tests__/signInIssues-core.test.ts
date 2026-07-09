@@ -76,19 +76,29 @@ describe('validateExceptionType', () => {
 });
 
 describe('computeSignInFingerprint (dedup from validated type only)', () => {
-  it('is stable for the same validated type regardless of client free-text', () => {
-    // Two reports with the SAME exception type but DIFFERENT (attacker-varied)
-    // safeMessage/context must dedup to the SAME issue — the fingerprint is
-    // derived from the validated type only, so it cannot be polluted.
+  it('is stable for the same validated type regardless of other client context', () => {
+    // Two valid reports with the SAME exception type but DIFFERENT client context
+    // (appVersion/buildNumber/deviceModel) must dedup to the SAME issue — the
+    // fingerprint is derived from the validated type only, so it cannot be
+    // polluted by any other client-controlled field.
     const a = extractSignInFailureReport({
       featureArea: SIGN_IN_FEATURE_AREA,
-      safeMessage: 'Sign-in failed: GetCredentialException (attempt 1)',
+      platform: 'android',
+      severity: 'error',
+      safeMessage: 'Sign-in failed: GetCredentialException',
       errorCode: 'GetCredentialException',
+      appVersion: '1.4.0',
+      buildNumber: '42',
     });
     const b = extractSignInFailureReport({
       featureArea: SIGN_IN_FEATURE_AREA,
-      safeMessage: 'totally different attacker text 9f2a',
+      platform: 'android',
+      severity: 'error',
+      safeMessage: 'Sign-in failed: GetCredentialException',
       errorCode: 'GetCredentialException',
+      appVersion: '9.9.9',
+      buildNumber: '1',
+      metadata: { deviceModel: 'Other Device' },
     });
     expect(a?.fingerprint).toBe(b?.fingerprint);
     expect(a?.fingerprint).toBe(computeSignInFingerprint('GetCredentialException'));
@@ -130,44 +140,77 @@ describe('extractSignInFailureReport', () => {
     expect(extractSignInFailureReport({ ...rawDoc, featureArea: 'auth' })).toBeNull();
   });
 
-  it('ignores the client fingerprint but still requires a safeMessage presence signal', () => {
-    // fingerprint is no longer trusted from the client — recomputed server-side.
-    expect(extractSignInFailureReport({ ...rawDoc, fingerprint: undefined })).toEqual(report);
-    // safeMessage is still the "populated report" signal.
+  it('rejects a non-android platform (only the Android reporter may file issues)', () => {
+    expect(extractSignInFailureReport({ ...rawDoc, platform: 'ios' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, platform: 'web' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, platform: undefined })).toBeNull();
+  });
+
+  it('rejects a non-error severity', () => {
+    expect(extractSignInFailureReport({ ...rawDoc, severity: 'info' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, severity: 'critical' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, severity: undefined })).toBeNull();
+  });
+
+  it('rejects an off-format errorCode instead of filing an Unknown issue', () => {
+    // A hostile UNAUTHENTICATED caller stuffs an email into errorCode + PII into
+    // safeMessage. The strict gate REJECTS the whole report (no issue filed at
+    // all — safer than an `Unknown` bucket), and nothing hostile is surfaced.
+    const result = extractSignInFailureReport({
+      ...rawDoc,
+      safeMessage: 'my email is victim@example.com and phone 0700000000',
+      errorCode: 'attacker@evil.com',
+    });
+    expect(result).toBeNull();
+    // Other off-format codes are rejected too.
+    expect(extractSignInFailureReport({ ...rawDoc, errorCode: 'has spaces' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, errorCode: '' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, errorCode: undefined })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, errorCode: 'A'.repeat(101) })).toBeNull();
+  });
+
+  it('rejects a safeMessage that is not exactly `Sign-in failed: <errorCode>`', () => {
+    // safeMessage must match the real reporter's format byte-for-byte given the
+    // errorCode; a mismatch (extra text, wrong code, empty, missing) is rejected.
+    expect(
+      extractSignInFailureReport({
+        ...rawDoc,
+        safeMessage: 'Sign-in failed: GetCredentialException (attempt 1)',
+      }),
+    ).toBeNull();
+    expect(
+      extractSignInFailureReport({ ...rawDoc, safeMessage: 'Sign-in failed: OtherException' }),
+    ).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, safeMessage: 'totally unrelated' })).toBeNull();
     expect(extractSignInFailureReport({ ...rawDoc, safeMessage: '' })).toBeNull();
     expect(extractSignInFailureReport({ ...rawDoc, safeMessage: '   ' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, safeMessage: undefined })).toBeNull();
+  });
+
+  it('ignores the client fingerprint (recomputed server-side)', () => {
+    // fingerprint is no longer trusted from the client — recomputed server-side.
+    expect(extractSignInFailureReport({ ...rawDoc, fingerprint: undefined })).toEqual(report);
     expect(extractSignInFailureReport(null)).toBeNull();
     expect(extractSignInFailureReport(undefined)).toBeNull();
   });
 
-  it('collapses an invalid/PII errorCode to Unknown and never surfaces it', () => {
-    // A hostile UNAUTHENTICATED caller stuffs an email into errorCode + PII into
-    // safeMessage. Neither may reach the extracted report / public payload.
+  it('tolerates absent optionals and non-object metadata on an otherwise valid report', () => {
+    // Minimal valid report: required gate fields + a valid errorCode with the
+    // matching safeMessage, but no appVersion/buildNumber/osVersion/metadata.
     const result = extractSignInFailureReport({
       featureArea: SIGN_IN_FEATURE_AREA,
-      safeMessage: 'my email is victim@example.com and phone 0700000000',
-      errorCode: 'attacker@evil.com',
-      appVersion: '1.4.0',
-    });
-    expect(result?.errorType).toBe(UNKNOWN_ERROR_TYPE);
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain('victim@example.com');
-    expect(serialized).not.toContain('attacker@evil.com');
-    expect(serialized).not.toContain('0700000000');
-  });
-
-  it('tolerates absent optionals and non-object metadata (type → Unknown)', () => {
-    const result = extractSignInFailureReport({
-      featureArea: SIGN_IN_FEATURE_AREA,
-      safeMessage: 'Sign-in failed',
+      platform: 'android',
+      severity: 'error',
+      errorCode: 'SignInException',
+      safeMessage: 'Sign-in failed: SignInException',
     });
     expect(result).toEqual({
-      errorType: UNKNOWN_ERROR_TYPE,
+      errorType: 'SignInException',
       appVersion: null,
       buildNumber: null,
       osVersion: null,
       deviceModel: null,
-      fingerprint: computeSignInFingerprint(UNKNOWN_ERROR_TYPE),
+      fingerprint: computeSignInFingerprint('SignInException'),
     });
   });
 });
@@ -318,29 +361,21 @@ describe('public payload safety (world-readable repo, unauthenticated source)', 
     expect(serialized).not.toContain('userid');
   });
 
-  it('does NOT publish PII stuffed into errorCode/safeMessage by a hostile caller', () => {
+  it('files NO issue at all for a hostile report (PII in errorCode/safeMessage)', () => {
     // Full pipeline: a hostile UNAUTHENTICATED report with an email in errorCode
-    // and free-text PII in safeMessage. The published payload must contain only
-    // the Unknown placeholder + the fixed reason — never the attacker text.
+    // and free-text PII in safeMessage. The strict extractor REJECTS it (returns
+    // null → the trigger no-ops), so no public issue is ever created — strictly
+    // safer than filing an `Unknown` issue, and the attacker text never leaves
+    // the private diagnosticsReports doc.
     const raw = {
       featureArea: SIGN_IN_FEATURE_AREA,
+      platform: 'android',
+      severity: 'error',
       safeMessage: 'contact me at victim@example.com — password is hunter2',
       errorCode: 'phish@evil.com',
       appVersion: '1.4.0',
     };
-    const extracted = extractSignInFailureReport(raw);
-    expect(extracted).not.toBeNull();
-    const payload = buildSignInIssuePayload(extracted as SignInFailureReport, meta);
-    const serialized = JSON.stringify(payload);
-    expect(serialized).not.toContain('victim@example.com');
-    expect(serialized).not.toContain('phish@evil.com');
-    expect(serialized).not.toContain('hunter2');
-    expect(serialized).not.toContain('@');
-    expect(payload.title).toBe('[Sign-in] Unknown');
-    expect(payload.body).toContain('- Error type: Unknown');
-    expect(payload.body).toContain(`- Reason: ${SIGN_IN_PUBLIC_REASON}`);
-    // The free-text safeMessage never appears.
-    expect(payload.body).not.toContain('contact me at');
+    expect(extractSignInFailureReport(raw)).toBeNull();
   });
 
   it('neutralizes @mention / #ref as defence in depth on any included scalar', () => {
