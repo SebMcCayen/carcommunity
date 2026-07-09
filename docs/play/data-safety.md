@@ -39,8 +39,12 @@ Two account-wide answers (set once in the form):
 - **Shared:** No (stored in our Firebase Realtime Database). Map rendering exposes the map
   view to Mapbox (see Mapbox note) — this is technical, but be conservative and disclose.
 - **Optional/Required:** **Optional** — only collected when the user starts live-location
-  sharing / a group drive, records a drive, or claims a Kronjakt point. Foreground-only;
-  no background-location permission is requested.
+  sharing / a group drive, records a drive, or claims a Kronjakt point. The
+  `ACCESS_BACKGROUND_LOCATION` permission is **not** requested, so there is **no passive or
+  always-on collection**. During a user-initiated live-location session the app streams
+  location via a **foreground service (type: location) with an ongoing notification**, which
+  **may continue while the app is backgrounded** until the user stops sharing or the session
+  ends — this is foreground-service location, not background-location-permission collection.
 - **Purposes:** App functionality (live location sharing, group drives, drive recording,
   location-based game feature).
 - **Encrypted in transit:** Yes.
@@ -168,7 +172,9 @@ Two account-wide answers (set once in the form):
 
 - Health & fitness, Contacts, Calendar, SMS/call logs, Web browsing history, Installed apps,
   Audio (voice/sound recordings), Music files, other files/docs, Payment card info, Sexual
-  orientation, Political/religious beliefs, Race/ethnicity, Precise **background** location.
+  orientation, Political/religious beliefs, Race/ethnicity, **passive/always-on background
+  location** (no `ACCESS_BACKGROUND_LOCATION`; the location we do collect is the
+  user-initiated foreground-service session described above).
 
 ---
 

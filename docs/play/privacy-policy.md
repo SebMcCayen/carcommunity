@@ -100,9 +100,12 @@ actually stores.
 - **Kronjakt (Crown Hunt):** when you claim a location-based point, your device position is
   used **momentarily** to verify you are within range. We store the resulting distance and
   claim outcome, not your raw coordinates.
-- Location sharing is **always user-initiated and foreground-only**. The App does **not**
-  collect location in the background and does not request the Android background-location
-  permission.
+- Location sharing is **always user-initiated**. The App does **not** request the Android
+  background-location permission (`ACCESS_BACKGROUND_LOCATION`), so there is **no passive or
+  always-on location tracking**. Location is collected **only during a live-location session
+  you start**, streamed by a foreground service that shows an ongoing notification the whole
+  time. Because it is a foreground service, that session **may continue to send your location
+  while the App is in the background**, until **you stop sharing** (or the session ends).
 
 ### 4.4 Community content
 - **Event chat messages** (text you post in event chats), your **RSVP** status to events,

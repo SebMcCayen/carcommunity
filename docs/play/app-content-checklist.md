@@ -79,15 +79,26 @@ Complete the IARC questionnaire. Suggested answers grounded in the app:
 
 ## 5. Ads — **required**
 
-- **Does your app contain ads?** → **No** (recommended, verify).
-- **Rationale:** the **"billboards" and partner offers** feature shows **first-party,
-  in-app partner promotions curated by the community/admins** (`billboards`, `companies`,
-  `offers`). It is **not** a third-party ad network — there is **no AdMob or other ad-SDK**
-  in the Android dependencies. Because Google's "contains ads" declaration is about
-  third-party ad serving, the honest answer is **No ads**.
-- If Google's definition is read broadly to include any promotional content, be prepared to
-  explain that these are owned partner promos, not paid third-party ad placements.
-- **Human decision:** confirm partner offers are never sold as paid third-party ad inventory.
+- **Does your app contain ads?** → **Yes** (conservative and the likely-correct answer).
+- **Rationale:** the app shows in-app **digital billboards** — explicitly **sponsored
+  third-party partner placements**, labelled "Sponsrad placering", with impression tracking
+  and call-to-action buttons (`packages/shared/src/digital-billboards.ts`,
+  `billboards/BillboardsScreen.kt`) — plus **partner offers/promotions** (`companies`,
+  `offers`). Google Play's "contains ads" declaration covers **display ads, native ads, and
+  banner ads**, not only ads delivered through a third-party ad SDK; the delivery mechanism
+  does not matter. The only house-ads carve-out is for cross-promoting **your own other
+  apps** — these billboards promote **third-party partner businesses**, so the carve-out does
+  **not** apply. There is no AdMob or third-party ad SDK, but sponsored third-party
+  promotional placements shown to users are still ads. The honest, conservative answer is
+  therefore **Yes**.
+- **Downstream implication:** declaring ads adds the **"Contains ads"** store-listing label
+  and feeds the **content-rating / target-audience** handling (in-app ads interact with the
+  16+ audience choice and Play's ad-content policy). Keep this consistent with Sections 3–4.
+- **Ad-policy compliance:** because ads are declared, ensure the billboards/offers meet Play's
+  ad requirements (clearly labelled, dismissible where applicable, not interfering with app
+  use, age-appropriate content).
+- **Human decision:** confirm whether billboards/partner offers are sold as paid inventory
+  (reinforces "Yes") and that ad content complies with the ad-policy points above.
 
 ---
 
@@ -123,11 +134,16 @@ Declared permissions (`apps/android/app/src/main/AndroidManifest.xml`):
 | `FOREGROUND_SERVICE_LOCATION` | Yes | Android 14+ typed foreground service for location streaming. |
 | `POST_NOTIFICATIONS` | Yes | Show push notifications the user enabled. |
 
-- **Background location:** **NOT requested.** `ACCESS_BACKGROUND_LOCATION` is absent from the
-  manifest, Kotlin source, and merged release manifest. Location is **foreground-only**, via a
-  visible foreground-service notification (`location/LocationSharingService.kt`,
-  `foregroundServiceType="location"`). This means **no Play background-location declaration /
-  prominent-disclosure review is required** — do **not** accidentally opt into it.
+- **Background location:** **`ACCESS_BACKGROUND_LOCATION` NOT requested.** It is absent from the
+  manifest, Kotlin source, and merged release manifest, so the app has **no passive/always-on
+  background location** and **no Play background-location declaration / prominent-disclosure
+  review is required** — do **not** accidentally opt into it. Keep the distinction clear:
+  location is collected **only during a user-initiated live-location session**, streamed by a
+  **foreground service** (`location/LocationSharingService.kt`,
+  `foregroundServiceType="location"`) with a visible ongoing notification, which **may
+  continue while the app is backgrounded until the user stops sharing**. That is
+  foreground-service location — *not* the background-location permission, and *not* the same
+  as "only while the app is on screen."
 - **Foreground-service (location) type** must be declared/justified in Play Console's
   foreground-service form: purpose = user-initiated live location sharing with other
   community members, with an ongoing notification. Prepare a short demo/description.
@@ -160,7 +176,9 @@ Declared permissions (`apps/android/app/src/main/AndroidManifest.xml`):
 ## Human decisions summary
 1. **Privacy policy URL** — resolve hosting + legal review, then paste.
 2. **Age floor** (recommend 16+, min 15) — must match onboarding gate + content rating.
-3. **Ads = No** — confirm partner offers are not sold as third-party ad inventory.
+3. **Ads = Yes** — in-app sponsored digital billboards / partner promotions are ads under
+   Play's display/native-ad definition (adds the "Contains ads" label). Confirm paid-inventory
+   status and ad-policy compliance.
 4. **Content-rating category** and honest UGC + location-sharing answers.
 5. **App access test account** for reviewers (sign-in required).
 6. **Play Integrity / App Check** enablement + release SHA registration (tracked separately).
