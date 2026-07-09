@@ -40,10 +40,11 @@ fun SignInScreen(
     onSignInClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The sign-in screen is a brand moment shown over Ink Black art, so it is
-    // always dark-on-light regardless of the system theme. Forcing KccTheme's
-    // dark scheme keeps every text/button color on a contract token (light
-    // ivory text, gold button) instead of hardcoding hex.
+    // The sign-in screen is a brand moment shown over Ink Black art, so it
+    // always renders light-on-dark (light content over the dark background)
+    // regardless of the system theme. Forcing KccTheme's dark scheme keeps
+    // every text/button color on a contract token (light ivory text, gold
+    // button) instead of hardcoding hex.
     KccTheme(darkTheme = true) {
         Surface(
             modifier = modifier.fillMaxSize(),
