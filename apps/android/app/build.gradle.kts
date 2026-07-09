@@ -1,7 +1,63 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Release signing: keystore.properties and the keystore file are gitignored and
+// absent in CI, so release builds there stay unsigned (mirrors the
+// google-services.json apply-if-present pattern below). Locally, if
+// keystore.properties points at a readable keystore, the release build is
+// signed with the upload key for Google Play.
+val keystorePropsFile = file("keystore.properties")
+val keystoreProps = Properties().apply {
+    // Loading keystore.properties must never be fatal: an unreadable file,
+    // broken symlink, or malformed contents should fall through to unsigned
+    // rather than break Gradle configuration. Pre-check isFile && canRead(),
+    // and still catch read/parse errors in case the file changes underneath.
+    if (keystorePropsFile.isFile && keystorePropsFile.canRead()) {
+        try {
+            keystorePropsFile.inputStream().use { load(it) }
+        } catch (e: Exception) {
+            logger.warn(
+                "Release signing disabled: keystore.properties could not be read " +
+                    "(${e.message}). The release build will be unsigned.",
+            )
+        }
+    }
+}
+// Read every required property up front, trimmed. A blank storeFile must not
+// resolve to the project dir and slip through, and a missing password/alias
+// must not produce null values later, so the release signing path is taken
+// only when all four are non-blank AND the keystore file actually exists.
+val keystoreStoreFile = keystoreProps.getProperty("storeFile")?.trim()
+val keystoreStorePassword = keystoreProps.getProperty("storePassword")?.trim()
+val keystoreKeyAlias = keystoreProps.getProperty("keyAlias")?.trim()
+val keystoreKeyPassword = keystoreProps.getProperty("keyPassword")?.trim()
+val hasReleaseSigning = !keystoreStoreFile.isNullOrBlank() &&
+    file(keystoreStoreFile).run { isFile && canRead() } &&
+    !keystoreStorePassword.isNullOrBlank() &&
+    !keystoreKeyAlias.isNullOrBlank() &&
+    !keystoreKeyPassword.isNullOrBlank()
+
+// If keystore.properties exists but is unusable, fall through to unsigned
+// (never fatal) and note why, so the missing signature isn't a silent surprise.
+// Distinguish "the file itself couldn't be read" (a directory or permission
+// issue) from "the file loaded but the config is incomplete" so the warning
+// points at the real problem instead of blaming missing keys in both cases.
+if (keystorePropsFile.exists() && !(keystorePropsFile.isFile && keystorePropsFile.canRead())) {
+    logger.warn(
+        "Release signing disabled: keystore.properties exists but is not a readable " +
+            "file (a directory or permission issue?). The release build will be unsigned.",
+    )
+} else if (keystorePropsFile.exists() && !hasReleaseSigning) {
+    logger.warn(
+        "Release signing disabled: keystore.properties is present but incomplete " +
+            "(need a readable storeFile plus storePassword, keyAlias, keyPassword). " +
+            "The release build will be unsigned.",
+    )
 }
 
 // Firebase configuration: google-services.json is intentionally NOT committed
@@ -25,6 +81,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreStoreFile)
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Mapbox runtime access token: a secret NOT committed and NOT
@@ -36,6 +103,9 @@ android {
             resValue("string", "mapbox_access_token", "")
         }
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

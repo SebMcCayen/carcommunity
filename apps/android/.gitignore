@@ -1,0 +1,5 @@
+
+# Release signing secrets — never commit (keystore lives outside the repo)
+keystore.properties
+*.jks
+*.keystore
