@@ -299,3 +299,72 @@ export function repeatRuleWindowStart(rule: CrownHuntRepeatRule, now: Date): Dat
   if (rule === 'weekly') return startOfUtcWeek(now);
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Deterministic award-guard identifiers (Phase 9h race hardening)
+//
+// The step-11 repeat-rule query and the step-12 daily-cap query are read
+// BEFORE the award transaction, so N concurrent claims with distinct
+// client idempotency keys each pass those pre-checks and each award. The
+// guard documents below make the repeat rule and daily cap enforceable
+// INSIDE the award transaction with IDs that do NOT derive from the
+// client-supplied idempotency key, so concurrent duplicates serialize on a
+// shared document and only one commits. Both collections are backend-only
+// (firestore.rules deny all client access).
+// ---------------------------------------------------------------------------
+
+/** UTC calendar-day key (YYYY-MM-DD) — the daily window and counter bucket. */
+export function utcDayKey(date: Date): string {
+  return startOfUtcDay(date).toISOString().slice(0, 10);
+}
+
+/**
+ * The window key an award falls in for a repeat rule: 'once' (all history),
+ * or the ISO date (YYYY-MM-DD) of the daily/weekly window start. Using the
+ * window-start date keeps the key unambiguous without ISO-week arithmetic.
+ */
+export function awardGuardWindowKey(rule: CrownHuntRepeatRule, now: Date): string {
+  const start = repeatRuleWindowStart(rule, now);
+  return start ? start.toISOString().slice(0, 10) : 'once';
+}
+
+/**
+ * Length-prefixed SHA-256 over a tuple → a collision-resistant, Firestore-safe
+ * (hex) document ID. Length-prefixing makes the encoding injective: no input
+ * value can forge a field boundary, so distinct tuples never map to the same
+ * digest regardless of which characters (including the historical `__`
+ * separator) the parts contain. Used for guard/counter IDs, which must be
+ * derived purely from server-trusted values — never the client idempotency key.
+ */
+function hashDocId(parts: readonly string[]): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(`${part.length}:${part}`);
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Deterministic crownHuntAwardGuards document ID for a (user, point, window).
+ * A `tx.create` of this ID inside the award transaction rejects a second
+ * concurrent award for the same window (already-claimed). Hashed so it cannot
+ * collide even if a uid or pointId contains separator substrings.
+ */
+export function awardGuardDocId(
+  uid: string,
+  pointId: string,
+  rule: CrownHuntRepeatRule,
+  now: Date,
+): string {
+  return hashDocId([uid, pointId, rule, awardGuardWindowKey(rule, now)]);
+}
+
+/**
+ * Deterministic crownHuntDailyClaims counter document ID for a (user, UTC
+ * day). Read-and-incremented inside the award transaction so the daily cap
+ * cannot be beaten by concurrent claims. Hashed for collision resistance (the
+ * queryable userId/day are stored as fields on the document).
+ */
+export function dailyClaimCounterDocId(uid: string, now: Date): string {
+  return hashDocId([uid, utcDayKey(now)]);
+}

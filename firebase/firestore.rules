@@ -534,6 +534,21 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // crownHuntAwardGuards / crownHuntDailyClaims – award-race guards (9h)
+    // Fully backend-only. Deterministic documents (IDs independent of the
+    // client idempotency key) that crownHunt.submitClaim reads and writes
+    // INSIDE the award transaction to enforce the repeat rule and daily cap
+    // under concurrency. Never client-readable or client-writable.
+    // -------------------------------------------------------------------------
+    match /crownHuntAwardGuards/{guardId} {
+      allow read, write: if false;
+    }
+
+    match /crownHuntDailyClaims/{counterId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // pointsLedger – Kronpoäng balances and append-only ledger (Phase 9g)
     // Owner-only read (wallet + history); ALL writes are backend transactions
     // (creditPoints/debitPoints + the points.admin* callables) — clients
