@@ -32,7 +32,7 @@ import {
   type PointsTransactionSummary,
 } from '@carcommunity/shared/points';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
 

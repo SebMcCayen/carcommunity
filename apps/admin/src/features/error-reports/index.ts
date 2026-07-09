@@ -46,7 +46,7 @@ import {
 
 import { getAdminFirestore } from '../../lib/firestore';
 
-import type { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/errors';
 
 export type { ApiError, DiagnosticsFeatureArea, DiagnosticsPlatform, DiagnosticsSeverity };
 export { DIAGNOSTICS_FEATURE_AREAS, DIAGNOSTICS_PLATFORMS, DIAGNOSTICS_SEVERITIES };

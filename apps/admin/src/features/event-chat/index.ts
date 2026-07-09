@@ -32,7 +32,7 @@ import {
   type ChatMessageReportStatus,
 } from '@carcommunity/shared/event-chat';
 
-import type { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 
 export type {

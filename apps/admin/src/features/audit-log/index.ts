@@ -37,7 +37,7 @@ import {
 
 import { getAdminFirestore } from '../../lib/firestore';
 
-import type { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/errors';
 
 export type { ApiError };
 

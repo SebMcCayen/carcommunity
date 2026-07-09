@@ -36,7 +36,7 @@ import { USER_ROLES, type UserRole } from '@carcommunity/shared/users';
 import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
 
-import type { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/errors';
 
 export type { ApiError, UserRole };
 export { USER_ROLES };

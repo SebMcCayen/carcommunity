@@ -31,7 +31,7 @@ import {
   type PartnerInteractionType,
 } from '@carcommunity/shared/partner-insights';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 
 export type * from '@carcommunity/shared/partner-insights';

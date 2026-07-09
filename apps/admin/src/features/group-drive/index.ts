@@ -30,7 +30,7 @@ import {
   type Query,
 } from 'firebase/firestore';
 
-import type { ApiError } from '../../lib/api';
+import type { ApiError } from '../../lib/errors';
 import { getAdminFirestore } from '../../lib/firestore';
 
 export type { ApiError };
