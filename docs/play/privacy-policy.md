@@ -124,10 +124,12 @@ actually stores.
 
 ### 4.6 Notifications
 - A **hashed identifier of your push-notification token** — a one-way SHA-256 hash used to
-  **register your device** for notifications and to keep that registration current (the hash
-  is the record's identifier, so re-registering on token refresh simply updates it). We store
-  **only this hash, never the raw device token**, plus platform and app version. The raw token
-  that would be needed to actually deliver a push is not persisted at rest.
+  **register your device** for notifications. The hash is the device record's identifier, so
+  when your token rotates (the notification service issues a new token) registering it creates
+  a **new** device record rather than updating the old one; the App can explicitly **unregister**
+  a device (for example when you sign out or turn notifications off) to remove its record. We
+  store **only this hash, never the raw device token**, plus platform and app version. The raw
+  token that would be needed to actually deliver a push is not persisted at rest.
 - Your **notification preferences** and an in-app notification inbox (titles/short text).
 
 ### 4.7 Subscriptions / purchases
