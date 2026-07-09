@@ -85,8 +85,14 @@ actually stores.
 ### 4.2 Vehicles (Garage)
 - Vehicle **make, model, year, powertrain, engine description, free-text description**, and
   **photos** you upload (up to 5 vehicles).
-- We deliberately **do not** collect registration plates, VIN, insurance details, or vehicle
-  location.
+- We deliberately **do not** ask for or record registration plates, VIN, insurance details,
+  or a vehicle's location as structured data in our database.
+- **Photo metadata (EXIF):** photos (vehicle and profile) are uploaded as the original image
+  file you choose. Depending on your camera and device settings, that file may contain
+  embedded **EXIF metadata — including GPS coordinates** of where the photo was taken. The App
+  does **not** strip this metadata before upload, and does **not** read, index, or otherwise
+  use it; it is simply stored inside the image file. If you prefer, you can remove location
+  data from a photo on your device before uploading it.
 
 ### 4.3 Precise location (only when you turn it on)
 - **Live location sharing / group drives:** when you start a session, the App streams your
@@ -117,9 +123,11 @@ actually stores.
   value and no location is stored in the points ledger.
 
 ### 4.6 Notifications
-- A **hashed identifier of your push-notification token** (we store a one-way SHA-256 hash,
-  never the raw device token), plus platform and app version, so we can send you push
-  notifications.
+- A **hashed identifier of your push-notification token** — a one-way SHA-256 hash used to
+  **register your device** for notifications and to keep that registration current (the hash
+  is the record's identifier, so re-registering on token refresh simply updates it). We store
+  **only this hash, never the raw device token**, plus platform and app version. The raw token
+  that would be needed to actually deliver a push is not persisted at rest.
 - Your **notification preferences** and an in-app notification inbox (titles/short text).
 
 ### 4.7 Subscriptions / purchases
