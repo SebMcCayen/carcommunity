@@ -133,7 +133,7 @@ bind it.
   issues. Create it once with:
 
   ```
-  firebase functions:secrets:set GITHUB_ISSUE_TOKEN --project kungsbacka-car-community
+  firebase functions:secrets:set GITHUB_ISSUE_TOKEN --project PROJECT_ID
   ```
 
   and paste the fine-grained GitHub PAT (with the **Issues: Read and write**
