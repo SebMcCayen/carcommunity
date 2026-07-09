@@ -20,6 +20,7 @@ import {
   parseEventIdInput,
   parseUpdateEventInput,
   stockholmEndOfDay,
+  type UpdateEventInput,
 } from '../events/events-core';
 
 /**
@@ -283,6 +284,99 @@ describe('events-core document builders', () => {
     expect(Object.keys(eventDoc)).toHaveLength(0);
     expect(Object.keys(privateDoc)).toHaveLength(0);
     expect(changedFields).toHaveLength(0);
+  });
+});
+
+describe('events-core update-path endsAt defaulting/removal', () => {
+  // The emulator suite (events.emulator.test.ts) exercises events.update but not
+  // endsAt defaulting/removal, and it cannot run in every environment (no local
+  // Firebase emulator). These tests reproduce the exact decision in
+  // manageEvent.update — using the same production pure functions it calls
+  // (buildEventUpdates + stockholmEndOfDay) — so the update-path default is
+  // covered without an emulator.
+  const RESOLVE_UNTOUCHED = Symbol('endsAt-untouched');
+
+  /**
+   * Mirrors the endsAt resolution in manageEvent.update: given the parsed
+   * update input and the stored event times, returns the value that would be
+   * written to eventDoc.endsAt (or RESOLVE_UNTOUCHED when endsAt is not written).
+   */
+  function resolveUpdateEndsAt(
+    input: UpdateEventInput,
+    stored: { startsAt: string; endsAt: string | null },
+  ): Date | null | typeof RESOLVE_UNTOUCHED {
+    const { eventDoc } = buildEventUpdates(input, serverTimestamp);
+
+    const effectiveStartsAt = input.startsAt ?? stored.startsAt;
+    const resolvedEndsAt = input.endsAt !== undefined ? input.endsAt : stored.endsAt;
+    const timesTouched = input.startsAt !== undefined || input.endsAt !== undefined;
+
+    if (timesTouched && resolvedEndsAt === null) {
+      return new Date(stockholmEndOfDay(effectiveStartsAt));
+    }
+    if ('endsAt' in eventDoc) return eventDoc.endsAt as Date | null;
+    return RESOLVE_UNTOUCHED;
+  }
+
+  it('buildEventUpdates carries an explicit endsAt removal (null) as a changed field', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', endsAt: null });
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc, changedFields } = buildEventUpdates(parsed.input, serverTimestamp);
+    expect(eventDoc.endsAt).toBeNull();
+    expect(changedFields).toContain('endsAt');
+  });
+
+  it('defaults to Stockholm end-of-day when endsAt is explicitly removed', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', endsAt: null });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Stored start 2027-06-01T18:00Z (summer); clearing the end defaults it to
+    // the end of that Stockholm day rather than leaving it null.
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: '2027-06-02T10:00:00.000Z',
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-06-01T21:59:59.999Z');
+  });
+
+  it('defaults to end-of-day of the new start when startsAt is edited and stored end is null', () => {
+    const parsed = parseUpdateEventInput({
+      eventId: 'e1',
+      startsAt: '2027-01-15T18:00:00.000Z',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Winter start with no stored end → end-of-day of the *new* start (CET).
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-01-15T22:59:59.999Z');
+  });
+
+  it('preserves an explicitly provided endsAt without defaulting', () => {
+    const parsed = parseUpdateEventInput({
+      eventId: 'e1',
+      endsAt: '2027-06-02T10:00:00.000Z',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-06-02T10:00:00.000Z');
+  });
+
+  it('does not retroactively default endsAt when only non-time fields are edited', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', title: 'Renamed cruise' });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Times untouched: a stored null end stays null (no retroactive defaulting).
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBe(RESOLVE_UNTOUCHED);
   });
 });
 

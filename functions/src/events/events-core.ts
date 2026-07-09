@@ -206,8 +206,10 @@ export type GuardResult =
 
 /**
  * The effective end of an event: the explicit `endsAt` when provided, otherwise
- * the Europe/Stockholm end-of-day of `startsAt` (23:59:59.999 local). Mirrors the
- * create/update default in `buildEventDocuments` so guards and stored docs agree.
+ * the Europe/Stockholm end-of-day of `startsAt` (23:59:59.999 local). This is the
+ * same end-of-day default the stored documents receive — applied on the create
+ * path in `buildEventDocuments` and on the update path in `manageEvent.update` —
+ * so guards and stored docs agree.
  */
 export function effectiveEndsAt(startsAt: string, endsAt: string | null | undefined): string {
   return endsAt ?? stockholmEndOfDay(startsAt);
