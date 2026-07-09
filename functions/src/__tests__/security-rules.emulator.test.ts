@@ -1876,7 +1876,7 @@ describe('Firestore – managedCredentials (admin-only)', () => {
     });
   });
 
-  it('admins read and write; regular users and unauth are denied read', async () => {
+  it('admins read and write; regular users and unauth are denied read and write', async () => {
     const adminFs = testEnv
       .authenticatedContext('cred-admin', { admin: true })
       .firestore();

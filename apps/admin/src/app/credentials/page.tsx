@@ -408,13 +408,13 @@ export default function CredentialsPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th className={styles.th}>{t('credentials.columns.status')}</th>
-                  <th className={styles.th}>{t('credentials.columns.name')}</th>
-                  <th className={styles.th}>{t('credentials.columns.category')}</th>
-                  <th className={styles.th}>{t('credentials.columns.expiresAt')}</th>
-                  <th className={styles.th}>{t('credentials.columns.lastRotatedAt')}</th>
-                  <th className={styles.th}>{t('credentials.columns.notes')}</th>
-                  <th className={styles.th}>{t('credentials.columns.actions')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.status')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.name')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.category')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.expiresAt')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.lastRotatedAt')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.notes')}</th>
+                  <th scope="col" className={styles.th}>{t('credentials.columns.actions')}</th>
                 </tr>
               </thead>
               <tbody>
