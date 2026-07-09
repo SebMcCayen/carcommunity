@@ -97,6 +97,18 @@ The service account must be granted only the permissions required for deployment
   (`roles/cloudscheduler.jobRunner` only runs existing jobs); a custom role
   limited to the `cloudscheduler.jobs.*` permissions is the stricter
   least-privilege alternative if you want to avoid granting admin
+- `roles/secretmanager.admin` — some functions declare a Secret Manager secret
+  via `defineSecret` (`GITHUB_ISSUE_TOKEN` in
+  `functions/src/feedback/reportIssue.ts`, listed in the function's
+  `secrets: [...]`). `firebase deploy --only functions` must read that secret
+  (`secretmanager.secrets.get`) and set the secret's IAM policy
+  (`secretmanager.secrets.setIamPolicy`) so the function's runtime SA gets
+  `secretAccessor`, or the deploy fails with a 403 on `secretmanager.secrets.get`.
+  Among predefined roles only `secretmanager.admin` covers both get +
+  setIamPolicy. This is broader than strictly needed; granting the role (or a
+  custom role limited to `secretmanager.secrets.get` + `setIamPolicy`) on the
+  **specific** secret resource rather than project-wide is the stricter
+  least-privilege alternative
 - `roles/iam.serviceAccountUser` (ActAs) on the gen2 Cloud Functions runtime SA
   (`{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`) — to act as the
   Functions runtime service account
@@ -108,6 +120,26 @@ The service account must be granted only the permissions required for deployment
 
 [`scripts/setup-wif.sh`](../scripts/setup-wif.sh) is the source of truth for the
 exact bindings and applies them idempotently.
+
+### Google Cloud Secret Manager secrets
+
+Some functions bind runtime secrets via `defineSecret` — this reads a **Google
+Cloud Secret Manager** secret, not a GitHub Actions secret of the same name.
+For the functions deploy to succeed, the secret must already exist in Secret
+Manager, or `firebase deploy --only functions` fails when it tries to read and
+bind it.
+
+- **`GITHUB_ISSUE_TOKEN`** — used by `feedback.reportIssue` to file GitHub
+  issues. Create it once with:
+
+  ```
+  firebase functions:secrets:set GITHUB_ISSUE_TOKEN --project PROJECT_ID
+  ```
+
+  and paste the fine-grained GitHub PAT (with the **Issues: Read and write**
+  repository permission on `SebMcCayen/carcommunity`) when prompted. This is a GCP Secret Manager secret
+  bound by `defineSecret`; it is separate from — and unrelated to — any GitHub
+  Actions secret named `GITHUB_ISSUE_TOKEN`.
 
 ### Setting up Workload Identity Federation
 
