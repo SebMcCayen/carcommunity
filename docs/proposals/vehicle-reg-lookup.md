@@ -48,6 +48,14 @@ Source of truth: `docs/firebase-data-model.md`,
 | `imagePath` | string? | `vehicleImages/{uid}/{vehicleId}/{imageId}` |
 | `createdAt` / `updatedAt` | Timestamp | server-set |
 
+> **Naming note:** the canonical field name in the contracts and backend code
+> is `modelYear` (`contracts/schemas/garage.schema.json`,
+> `functions/src/garage/garage-core.ts`), and the canonical image path is
+> `vehicleImages/{uid}/{vehicleId}/{imageId}`. The older
+> `docs/firebase-data-model.md` table still shows the earlier names — `year`
+> for the field and `vehicleImages/{uid}/{imageId}` for the path — so treat the
+> contracts/code as authoritative and don't copy that table verbatim.
+
 **The single most important constraint in the whole codebase for this
 feature** (`docs/firebase-data-model.md` line ~144, and repeated in the
 schema description and both clients):
@@ -156,7 +164,8 @@ hobby/community app — this is the deciding factor.
   for pre-integration. **Owner-data endpoints are separately gated** — you
   only get ägaruppgifter if explicitly granted, which is exactly the split we
   want (we can subscribe to *technical* data only).
-- **Auth:** API key (details behind a 403'd doc portal — confirm on signup).
+- **Auth:** API key (details behind docs that return HTTP 403 to anonymous
+  requests — confirm on signup).
 - **Cost:** pay-per-use / per-lookup; **figure unconfirmed** — must request a
   quote. Model appears to be per-request credits.
 - **Rate limits / ToS:** unconfirmed; standard commercial ToS expected
