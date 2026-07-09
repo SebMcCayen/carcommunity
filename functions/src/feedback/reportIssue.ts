@@ -149,7 +149,7 @@ export const reportIssue = onCall(
       const countSnap = await tx.get(
         feedbackReports
           .where('uid', '==', actor.uid)
-          .where('createdAt', '>', windowStart)
+          .where('createdAt', '>=', windowStart)
           .count(),
       );
       if (isFeedbackRateLimited(countSnap.data().count)) {
