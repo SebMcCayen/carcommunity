@@ -14,7 +14,18 @@
     },
     "diagnosticsFeatureArea": {
       "type": "string",
-      "enum": ["auth", "live_location", "events", "subscription", "admin", "map", "network", "unknown"]
+      "description": "Feature area the report originated from. `sign_in` is reserved for pre-authentication Google Sign-In failures: reports in this area are picked up by the diagnostics-onSignInFailure Firestore trigger, which files a deduplicated public GitHub issue (labelled sign-in-failure + auto-generated) keyed by the report fingerprint.",
+      "enum": [
+        "auth",
+        "sign_in",
+        "live_location",
+        "events",
+        "subscription",
+        "admin",
+        "map",
+        "network",
+        "unknown"
+      ]
     },
     "submitDiagnosticsReportRequest": {
       "type": "object",

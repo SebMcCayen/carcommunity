@@ -20,6 +20,13 @@ data class DiagnosticsReport(
     val appVersion: String? = null,
     val buildNumber: String? = null,
     val osVersion: String? = null,
+    /**
+     * Optional context passed through to the backend, which re-sanitizes it
+     * (tokens/credentials/coordinates/stack-like keys stripped, bounded scalars
+     * only). Keep values PII-free; scalars only. Used e.g. to carry the device
+     * model for sign-in-failure reports.
+     */
+    val metadata: Map<String, Any?>? = null,
 ) {
     /** Callable payload for `diagnostics-submitReport`; omits absent optionals. */
     fun toData(): Map<String, Any?> =
@@ -32,6 +39,7 @@ data class DiagnosticsReport(
             appVersion?.let { put("appVersion", it) }
             buildNumber?.let { put("buildNumber", it) }
             osVersion?.let { put("osVersion", it) }
+            metadata?.takeIf { it.isNotEmpty() }?.let { put("metadata", it) }
         }
 
     companion object {
@@ -50,6 +58,13 @@ object DiagnosticsSeverity {
 /** Feature areas accepted by the backend (contracts/functions diagnostics). */
 object DiagnosticsFeatureArea {
     const val AUTH = "auth"
+
+    /**
+     * Pre-authentication Google Sign-In failures. Reports in this area are
+     * picked up server-side by the diagnostics-onSignInFailure trigger, which
+     * files a deduplicated public GitHub issue keyed by the report fingerprint.
+     */
+    const val SIGN_IN = "sign_in"
     const val LIVE_LOCATION = "live_location"
     const val EVENTS = "events"
     const val SUBSCRIPTION = "subscription"

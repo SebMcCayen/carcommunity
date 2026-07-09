@@ -41,6 +41,7 @@ export type DiagnosticsPlatform = (typeof DIAGNOSTICS_PLATFORMS)[number];
 
 export const DIAGNOSTICS_FEATURE_AREAS = [
   'auth',
+  'sign_in',
   'live_location',
   'events',
   'subscription',

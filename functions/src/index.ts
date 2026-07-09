@@ -54,10 +54,15 @@ import { cleanupExpired as cleanupExpiredNotifications } from './notifications/s
 import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
-import { join as joinGroupDrive, leave as leaveGroupDrive, updateStatus as updateDriveStatus } from './groupDrive/participants';
+import {
+  join as joinGroupDrive,
+  leave as leaveGroupDrive,
+  updateStatus as updateDriveStatus,
+} from './groupDrive/participants';
 import { deleteAccount } from './account/deleteAccount';
 import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
+import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
@@ -328,9 +333,20 @@ export const notifications = {
  * stripped, bounded scalars only, dedup fingerprints). Admin-only
  * Firestore reads; 90-day retention swept monthly. Replaces the Phase 8
  * errorReports scaffold.
+ *
+ * `diagnostics-onSignInFailure` is a Firestore create trigger on
+ * diagnosticsReports/{reportId}: for `sign_in`-area reports ONLY it files ONE
+ * deduplicated PUBLIC GitHub issue per unique fingerprint (labelled
+ * sign-in-failure + auto-generated), tracking occurrences in the server-only
+ * signInIssueLinks/{fingerprint} collection. The body carries only the
+ * sanitized error type/reason + client context + fingerprint — no uid (reports
+ * are unauthenticated) or PII. GitHub failures never crash-loop the trigger.
+ * Requires the GITHUB_ISSUE_TOKEN secret
+ * (functions/src/diagnostics/onSignInFailure.ts).
  */
 export const diagnostics = {
   submitReport,
+  onSignInFailure,
   cleanupExpired: cleanupExpiredDiagnostics,
 };
 

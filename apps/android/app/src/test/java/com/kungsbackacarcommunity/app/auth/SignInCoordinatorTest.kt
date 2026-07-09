@@ -71,6 +71,55 @@ class SignInCoordinatorTest {
     }
 
     @Test
+    fun `generic failure reports the sanitized exception type, never the message`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<String>()
+        val coordinator =
+            SignInCoordinator(
+                { throw SignInFailedException("token dismissed for user@example.com") },
+                repository,
+                { errorType -> reported += errorType },
+            )
+
+        coordinator.signIn()
+
+        // Only the exception's simple class name is reported — never the message.
+        assertEquals(listOf("SignInFailedException"), reported)
+        assertEquals(SignInStatus.Failed(SignInFailure.GENERIC), coordinator.status.value)
+    }
+
+    @Test
+    fun `unavailable failure is not reported as a sign-in failure`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<String>()
+        val coordinator =
+            SignInCoordinator(
+                { throw SignInUnavailableException("not configured") },
+                repository,
+                { errorType -> reported += errorType },
+            )
+
+        coordinator.signIn()
+
+        assertTrue(reported.isEmpty())
+    }
+
+    @Test
+    fun `a throwing failure reporter never masks the sign-in failure`() = runTest {
+        val repository = FakeAuthRepository()
+        val coordinator =
+            SignInCoordinator(
+                { throw SignInFailedException("dismissed") },
+                repository,
+                { throw IllegalStateException("reporter boom") },
+            )
+
+        coordinator.signIn()
+
+        assertEquals(SignInStatus.Failed(SignInFailure.GENERIC), coordinator.status.value)
+    }
+
+    @Test
     fun `firebase credential exchange failure surfaces the generic failure`() = runTest {
         val repository = FakeAuthRepository().apply { failWith = IllegalStateException("rejected") }
         val coordinator = SignInCoordinator({ "google-id-token" }, repository)
