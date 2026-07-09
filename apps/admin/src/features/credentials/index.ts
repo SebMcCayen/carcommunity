@@ -45,7 +45,6 @@ export const CREDENTIAL_NOTES_MAX_LENGTH = 2000;
 
 /** Window (in days) before expiry within which a credential is "expiring soon". */
 export const EXPIRING_SOON_DAYS = 30;
-const EXPIRING_SOON_MS = EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000;
 
 const COLLECTION = 'managedCredentials';
 
@@ -112,10 +111,18 @@ export interface ManagedCredentialInput {
  *   data). Surfaced explicitly rather than mapped to `no-expiry`, so bad data
  *   is visible to an operator instead of masquerading as an intentional
  *   "no expiry".
- * - `expired`     — `expiresAt` is strictly before `now`.
- * - `expiring-soon` — `expiresAt` is within EXPIRING_SOON_DAYS from `now`
+ * - `expired`     — `expiresAt` is strictly before `now` (instant comparison).
+ * - `expiring-soon` — `expiresAt`'s local calendar day is within
+ *   EXPIRING_SOON_DAYS *calendar days* of `now`'s local calendar day
  *   (inclusive of the exact 30-day boundary).
- * - `ok`          — `expiresAt` is more than EXPIRING_SOON_DAYS away.
+ * - `ok`          — `expiresAt` is more than EXPIRING_SOON_DAYS calendar days away.
+ *
+ * Since expiries are captured date-only (local midnight) and the tracker cares
+ * about days — not time-of-day — "expiring soon" is classified by whole
+ * calendar-day difference (local date parts) rather than a millisecond window.
+ * This keeps the result DST-safe and independent of the current hour-of-day.
+ * "expired" stays a strict instant check: a credential whose local-midnight
+ * instant is before now is expired.
  *
  * Pure and side-effect free — `now` is injected so it is deterministically
  * testable. Accepts an ISO string (as stored on the view model) or null.
@@ -127,10 +134,22 @@ export function computeCredentialStatus(
   if (expiresAt == null) return 'no-expiry';
   const expiry = new Date(expiresAt);
   if (Number.isNaN(expiry.getTime())) return 'invalid';
-  const diff = expiry.getTime() - now.getTime();
-  if (diff < 0) return 'expired';
-  if (diff <= EXPIRING_SOON_MS) return 'expiring-soon';
+  if (expiry.getTime() < now.getTime()) return 'expired';
+  if (daysBetweenLocalDates(now, expiry) <= EXPIRING_SOON_DAYS) return 'expiring-soon';
   return 'ok';
+}
+
+/**
+ * Whole calendar-day difference between two instants, computed from their LOCAL
+ * date parts (Y/M/D). Both instants are anchored to local midnight before
+ * diffing, so the result is the number of calendar days between the two days
+ * regardless of time-of-day. Rounding (Math.round) absorbs the ±1h wobble a DST
+ * transition introduces between the two midnights, keeping the count exact.
+ */
+function daysBetweenLocalDates(a: Date, b: Date): number {
+  const midnightA = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const midnightB = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((midnightB - midnightA) / (24 * 60 * 60 * 1000));
 }
 
 /**

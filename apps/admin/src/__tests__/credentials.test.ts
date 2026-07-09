@@ -106,13 +106,34 @@ describe('computeCredentialStatus', () => {
     expect(computeCredentialStatus(exactly30, now)).toBe('expiring-soon');
   });
 
-  it('returns ok just past the 30-day boundary', () => {
-    const justOver = new Date(now.getTime() + EXPIRING_SOON_DAYS * DAY_MS + 1000).toISOString();
+  it('returns ok one full day past the 30-day boundary', () => {
+    // Calendar-day semantics: 31 whole days out lands on the next calendar day,
+    // outside the 30-day window. (A sub-day nudge would stay on day 30 and thus
+    // still be expiring-soon, so advance by a full day here.)
+    const justOver = new Date(now.getTime() + (EXPIRING_SOON_DAYS + 1) * DAY_MS).toISOString();
     expect(computeCredentialStatus(justOver, now)).toBe('ok');
   });
 
   it('returns ok for a far-future expiry', () => {
     expect(computeCredentialStatus('2053-11-24T00:00:00Z', now)).toBe('ok');
+  });
+
+  it('classifies by calendar day, independent of now hour-of-day', () => {
+    // The 30-day boundary is a calendar-day count, so the same expiry must land
+    // in the same bucket whether "now" is early or late in its local day. Build
+    // the reference days from LOCAL date parts to stay timezone-independent.
+    const y = 2026;
+    const m = 5; // June (0-based)
+    const d = 15;
+    const at = (hour: number) => new Date(y, m, d, hour, 0, 0);
+    const onDay = (dayOffset: number) => new Date(y, m, d + dayOffset).toISOString();
+
+    // Exactly 30 calendar days out → expiring-soon regardless of now's hour.
+    expect(computeCredentialStatus(onDay(30), at(0))).toBe('expiring-soon');
+    expect(computeCredentialStatus(onDay(30), at(23))).toBe('expiring-soon');
+    // 31 calendar days out → ok regardless of now's hour.
+    expect(computeCredentialStatus(onDay(31), at(0))).toBe('ok');
+    expect(computeCredentialStatus(onDay(31), at(23))).toBe('ok');
   });
 });
 
