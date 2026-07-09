@@ -39,6 +39,7 @@ import {
   ApiError,
   computeCredentialStatus,
   CREDENTIAL_NAME_MAX_LENGTH,
+  expiryDisplay,
   EXPIRING_SOON_DAYS,
   INVALID_EXPIRY,
   isCredentialCategory,
@@ -134,6 +135,25 @@ describe('computeCredentialStatus', () => {
     // 31 calendar days out → ok regardless of now's hour.
     expect(computeCredentialStatus(onDay(31), at(0))).toBe('ok');
     expect(computeCredentialStatus(onDay(31), at(23))).toBe('ok');
+  });
+});
+
+describe('expiryDisplay', () => {
+  it('renders a real ISO expiry as a date', () => {
+    expect(expiryDisplay('2026-08-01T00:00:00Z')).toEqual({
+      kind: 'date',
+      iso: '2026-08-01T00:00:00Z',
+    });
+  });
+
+  it('renders a null expiry as the no-expiry placeholder case', () => {
+    expect(expiryDisplay(null)).toEqual({ kind: 'none' });
+  });
+
+  it('renders a corrupt expiry as a distinct invalid label (not the missing "—")', () => {
+    // The date column must distinguish present-but-corrupt data from "no expiry"
+    // so it shows the localized invalid label instead of the empty placeholder.
+    expect(expiryDisplay(INVALID_EXPIRY)).toEqual({ kind: 'invalid' });
   });
 });
 

@@ -24,6 +24,7 @@ import {
   CREDENTIAL_DESCRIPTION_MAX_LENGTH,
   CREDENTIAL_NAME_MAX_LENGTH,
   CREDENTIAL_NOTES_MAX_LENGTH,
+  expiryDisplay,
   type AdminManagedCredential,
   type CredentialCategory,
   type CredentialStatus,
@@ -419,6 +420,7 @@ export default function CredentialsPage() {
               <tbody>
                 {items.map((item) => {
                   const status = computeCredentialStatus(item.expiresAt, now);
+                  const expiry = expiryDisplay(item.expiresAt);
                   const isEditing = editingId === item.id;
                   return (
                     <tr key={item.id} className={styles.tr}>
@@ -473,9 +475,18 @@ export default function CredentialsPage() {
                           </td>
                           <td className={styles.td}>{categoryLabel(item.category)}</td>
                           <td className={styles.td}>
-                            {item.expiresAt
-                              ? formatDateOnly(item.expiresAt)
-                              : t('credentials.noExpiry')}
+                            {expiry.kind === 'date' ? (
+                              formatDateOnly(expiry.iso)
+                            ) : expiry.kind === 'invalid' ? (
+                              // Present-but-corrupt expiry: surface a distinct
+                              // localized label (reusing the row's invalid status
+                              // text) so bad data doesn't read as "no expiry".
+                              <span className={styles.invalidDate}>
+                                {t('credentials.status.invalid')}
+                              </span>
+                            ) : (
+                              t('credentials.noExpiry')
+                            )}
                           </td>
                           <td className={styles.td}>
                             {item.lastRotatedAt ? formatDateOnly(item.lastRotatedAt) : '—'}

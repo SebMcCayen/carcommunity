@@ -140,6 +140,29 @@ export function computeCredentialStatus(
 }
 
 /**
+ * How the expiry-date column should render a stored `expiresAt`, keeping the
+ * three cases distinct so corrupt data is never mistaken for "no expiry":
+ *
+ * - `none`    — no expiry set (`null`) → the "—"/"no expiry" placeholder.
+ * - `invalid` — present but unparseable (`INVALID_EXPIRY`) → a distinct label,
+ *   matching the row's explicit `'invalid'` status instead of collapsing to the
+ *   missing-value placeholder.
+ * - `date`    — a real ISO string → formatted as a date.
+ *
+ * Pure; the page maps each case to its localized label/formatting.
+ */
+export type ExpiryDisplay =
+  | { kind: 'none' }
+  | { kind: 'invalid' }
+  | { kind: 'date'; iso: string };
+
+export function expiryDisplay(expiresAt: string | null): ExpiryDisplay {
+  if (expiresAt == null) return { kind: 'none' };
+  if (expiresAt === INVALID_EXPIRY) return { kind: 'invalid' };
+  return { kind: 'date', iso: expiresAt };
+}
+
+/**
  * Whole calendar-day difference between two instants, computed from their LOCAL
  * date parts (Y/M/D). Both instants are anchored to local midnight before
  * diffing, so the result is the number of calendar days between the two days
