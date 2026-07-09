@@ -106,7 +106,8 @@ Flagged because they materially affect the estimate:
   This feature would be the **first** to call a paid external API and the
   first to need a stored API credential (Firebase Secrets / Secret Manager).
 - **No general rate-limiter.** Only `events/postChatMessage.ts` implements
-  per-user throttling, and it does so with an ad-hoc Firestore counter. A
+  per-user throttling, and it does so with a best-effort collection-group
+  `count()` query over recent messages (no dedicated counter document). A
   cost-sensitive external lookup needs real per-user/day quotas — a small
   reusable helper would have to be written (see [§5](#5-proposed-design)).
 - Egress: Cloud Functions calling an external API needs outbound network
