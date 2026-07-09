@@ -136,8 +136,8 @@ bind it.
   firebase functions:secrets:set GITHUB_ISSUE_TOKEN --project kungsbacka-car-community
   ```
 
-  and paste the fine-grained GitHub PAT (`issues: write` on
-  `SebMcCayen/carcommunity`) when prompted. This is a GCP Secret Manager secret
+  and paste the fine-grained GitHub PAT (with the **Issues: Read and write**
+  repository permission on `SebMcCayen/carcommunity`) when prompted. This is a GCP Secret Manager secret
   bound by `defineSecret`; it is separate from — and unrelated to — any GitHub
   Actions secret named `GITHUB_ISSUE_TOKEN`.
 
