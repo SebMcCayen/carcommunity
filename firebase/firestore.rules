@@ -597,6 +597,19 @@ service cloud.firestore {
       // No client writes: diagnostics.submitReport only.
     }
 
+    // feedbackReports – "Report a problem" record of record (Android)
+    // Admin-only read. The PRIVATE record: carries the reporter's uid, the
+    // typed text, client context, and the cross-referenced GitHub issue
+    // number/url/status. ALL writes go through the feedback.reportIssue
+    // callable, which files the public GitHub issue without attaching the
+    // caller's uid or any server-side account identifier (user-typed text is
+    // public; the in-app UI warns against including personal info) — a direct
+    // client create would bypass that safety, so none is allowed.
+    match /feedbackReports/{reportId} {
+      allow read: if isAdmin();
+      // No client writes: feedback.reportIssue only.
+    }
+
     // -------------------------------------------------------------------------
     // adminAuditEvents – backend-written audit log
     // Immutable records written exclusively by the Admin SDK (admin callables).

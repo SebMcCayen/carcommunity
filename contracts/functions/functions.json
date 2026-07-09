@@ -496,6 +496,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Diagnostics reports)"
     },
     {
+      "name": "feedback.reportIssue",
+      "domain": "feedback",
+      "description": "Android \"Report a problem\" flow. AUTHENTICATED (non-suspended, non-deleted): unauthenticated callers are rejected with unauthenticated. Rate-limited to 5 reports/hour/user (resource-exhausted when exceeded). Persists the PRIVATE record of record to feedbackReports/{reportId} (admin-only read; carries the uid + client context + timestamp) FIRST so a report is never lost, then files a PUBLIC GitHub issue (labelled android-issue) on SebMcCayen/carcommunity via REST using the GITHUB_ISSUE_TOKEN secret. PUBLIC-REPO SAFETY: the issue body carries the user-entered description (public — the in-app UI warns users not to include personal info, and the backend does not scrub free text) plus only non-identifying context: appVersion/osVersion/deviceModel, the server report id and the submitted-at timestamp. The backend never attaches the caller's uid or any other server-side account identifier to the public issue. GitHub failures mark the doc githubIssueStatus:'failed' but still return success (never surfacing a raw GitHub error). Deployed via grouped export as feedback-reportIssue (functions/src/feedback/reportIssue.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "account.deleteAccount",
       "domain": "account",
       "description": "Immediate soft delete (stage 1 of the two-stage deletion workflow): disables the Firebase Auth user and revokes refresh tokens FIRST (fail-safe ordering), then writes accountDeletionRequests/{uid} (status pending) and users/{uid}.deleted=true atomically. Idempotent — repeat calls return the pending request. signedIn access: works while suspended (deletion is a support path). The hard purge runs after the 30-day retention window via the scheduled account-purgeDeleted (Firestore trees, owned vehicles/rides, storage prefixes, the Auth user; moderation/audit history is deliberately retained and the request record becomes the proof-of-deletion). Deployed via grouped export as account-deleteAccount (functions/src/account/deleteAccount.ts).",

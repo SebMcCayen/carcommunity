@@ -553,4 +553,18 @@
     <string name="notifications_channelAccountDescription">Important notices about your account.</string>
     <string name="notifications_channelGeneralName">General</string>
     <string name="notifications_channelGeneralDescription">Membership updates and other messages from the club.</string>
+    <string name="feedback_title">Report a problem</string>
+    <string name="feedback_openButton">Report a problem</string>
+    <string name="feedback_publicNoticeTitle">This report is public</string>
+    <string name="feedback_publicNotice">Your report is posted as a public issue on our GitHub issue tracker, where anyone can read it. Do not include personal or sensitive information such as names, email, phone numbers, locations, or passwords.</string>
+    <string name="feedback_summaryLabel">Short summary (optional)</string>
+    <string name="feedback_descriptionLabel">Describe the problem</string>
+    <string name="feedback_descriptionRequired">Description cannot be empty.</string>
+    <string name="feedback_submit">Send report</string>
+    <string name="feedback_close">Close</string>
+    <string name="feedback_success">Thanks! Your report was sent.</string>
+    <string name="feedback_successWithIssue">Thanks! Your report was sent and an issue was created.</string>
+    <string name="feedback_viewIssue">View issue</string>
+    <string name="feedback_error">Could not send your report. Please try again.</string>
+    <string name="feedback_rateLimited">You\'ve sent too many reports. Please wait a while and try again.</string>
 </resources>

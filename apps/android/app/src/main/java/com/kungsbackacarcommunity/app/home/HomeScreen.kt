@@ -84,6 +84,8 @@ fun HomeScreen(
     onOpenAccountDeletion: (() -> Unit)? = null,
     // Phase 12 slice 19: opens partner-stats opt-in; null hides the entry.
     onOpenPartnerStats: (() -> Unit)? = null,
+    // "Report a problem": opens the feedback form; null hides the entry.
+    onOpenFeedback: (() -> Unit)? = null,
 ) {
     val greetingName = HomeContent.greetingName(displayName)
     Surface(
@@ -192,6 +194,11 @@ fun HomeScreen(
             if (onOpenPartnerStats != null) {
                 OutlinedButton(onClick = onOpenPartnerStats, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.privacySettings_title))
+                }
+            }
+            if (onOpenFeedback != null) {
+                OutlinedButton(onClick = onOpenFeedback, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.feedback_openButton))
                 }
             }
             if (onOpenAccountDeletion != null) {

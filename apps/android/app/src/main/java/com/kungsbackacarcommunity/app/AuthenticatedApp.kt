@@ -38,6 +38,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
+import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
+import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
@@ -136,6 +138,7 @@ fun AuthenticatedApp(
     accountDeletionCoordinator: AccountDeletionCoordinator?,
     partnerStatsRepository: PartnerStatsRepository?,
     partnerStatsCoordinator: PartnerStatsCoordinator?,
+    feedbackCoordinator: FeedbackCoordinator?,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     pushRegistrationCoordinator: PushRegistrationCoordinator?,
@@ -538,6 +541,17 @@ fun AuthenticatedApp(
                     }
                 }
 
+                MainDestination.Feedback -> {
+                    if (feedbackCoordinator != null) {
+                        FeedbackReportRoute(
+                            coordinator = feedbackCoordinator,
+                            onBack = { destination = MainDestination.Home },
+                        )
+                    } else {
+                        LoadingScreen()
+                    }
+                }
+
                 MainDestination.Subscription -> {
                     if (billingRepository != null && subscriptionVerifier != null) {
                         SubscriptionRoute(
@@ -724,6 +738,14 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Report a problem: any signed-in user; reachable when
+                        // Firebase is configured (the callable requires auth).
+                        onOpenFeedback =
+                            if (feedbackCoordinator != null) {
+                                { destination = MainDestination.Feedback }
+                            } else {
+                                null
+                            },
                     )
                 }
             }
@@ -751,6 +773,7 @@ private enum class MainDestination {
     Billboards,
     AccountDeletion,
     PartnerStats,
+    Feedback,
     Subscription,
 }
 

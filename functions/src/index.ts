@@ -59,6 +59,7 @@ import { purgeDeleted } from './account/scheduled';
 import { submitReport } from './diagnostics/submitReport';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
+import { reportIssue } from './feedback/reportIssue';
 
 /**
  * GET /health
@@ -328,6 +329,23 @@ export const notifications = {
 export const diagnostics = {
   submitReport,
   cleanupExpired: cleanupExpiredDiagnostics,
+};
+
+/**
+ * Feedback domain (grouped export → deployed as `feedback-reportIssue`).
+ *
+ * The Android "Report a problem" flow (contracts/functions/functions.json:
+ * feedback.reportIssue). AUTHENTICATED + App-Check enforced, rate-limited to
+ * 5 reports/hour/user. Persists the private record of record to
+ * feedbackReports/{reportId} (admin-only read; carries the uid) FIRST, then
+ * files a PUBLIC GitHub issue (labelled android-issue) whose body carries only
+ * the typed description + client context + report id + timestamp — no uid or
+ * PII. GitHub failures never fail the callable (the report is already
+ * captured) and never surface a raw GitHub error to the app. Requires the
+ * GITHUB_ISSUE_TOKEN secret (functions/src/feedback/reportIssue.ts).
+ */
+export const feedback = {
+  reportIssue,
 };
 
 /**

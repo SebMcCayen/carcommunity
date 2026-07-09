@@ -27,6 +27,8 @@ import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.garage.FirebaseGarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
+import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
+import com.kungsbackacarcommunity.app.feedback.FirebaseFeedbackRepository
 import com.kungsbackacarcommunity.app.groupdrive.FirebaseGroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationSettingsRepository
@@ -121,6 +123,11 @@ class MainActivity : ComponentActivity() {
         val partnerStatsRepository =
             FirebasePartnerStatsRepository.createIfAvailable(applicationContext)
         val partnerStatsCoordinator = partnerStatsRepository?.let { PartnerStatsCoordinator(it) }
+        // "Report a problem" → feedback.reportIssue callable (files a public
+        // GitHub issue). Guarded like the rest of the Firebase wiring.
+        val feedbackCoordinator =
+            FirebaseFeedbackRepository.createIfAvailable(applicationContext)
+                ?.let { FeedbackCoordinator(it) }
         // FCM token registration (Phase 12 slice 21, push portion): the
         // guarded callable repository + token source feed the coordinator,
         // which AuthenticatedApp invokes once a user is signed in. Null in
@@ -197,6 +204,7 @@ class MainActivity : ComponentActivity() {
                         accountDeletionCoordinator = accountDeletionCoordinator,
                         partnerStatsRepository = partnerStatsRepository,
                         partnerStatsCoordinator = partnerStatsCoordinator,
+                        feedbackCoordinator = feedbackCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
                         pushRegistrationCoordinator = pushRegistrationCoordinator,
