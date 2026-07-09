@@ -795,7 +795,8 @@
       "expired": "Expired",
       "expiringSoon": "Expiring soon",
       "ok": "OK",
-      "no-expiry": "No expiry"
+      "no-expiry": "No expiry",
+      "invalid": "Invalid date"
     },
     "category": {
       "github-pat": "GitHub token (PAT)",

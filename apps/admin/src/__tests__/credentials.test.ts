@@ -40,6 +40,7 @@ import {
   computeCredentialStatus,
   CREDENTIAL_NAME_MAX_LENGTH,
   EXPIRING_SOON_DAYS,
+  INVALID_EXPIRY,
   isCredentialCategory,
   validateCredentialInput,
   type ManagedCredentialInput,
@@ -86,8 +87,8 @@ describe('computeCredentialStatus', () => {
     expect(computeCredentialStatus(null, now)).toBe('no-expiry');
   });
 
-  it('returns no-expiry when expiresAt is unparseable', () => {
-    expect(computeCredentialStatus('not-a-date', now)).toBe('no-expiry');
+  it('returns invalid (not no-expiry) when a present expiresAt is unparseable', () => {
+    expect(computeCredentialStatus('not-a-date', now)).toBe('invalid');
   });
 
   it('returns expired when expiry is strictly before now', () => {
@@ -167,8 +168,28 @@ describe('validateCredentialInput', () => {
     expect(result.description).toBe('desc');
     expect(result.notes).toBe('note');
     expect(result.category).toBe('signing-keystore');
-    expect(result.expiresAt).toEqual({ __timestamp: new Date('2053-11-24').toISOString() });
-    expect(result.lastRotatedAt).toEqual({ __timestamp: new Date('2026-07-01').toISOString() });
+    // Date-only strings are stored at LOCAL midnight (not UTC), so assert
+    // against a locally-constructed Date to stay timezone-independent.
+    expect(result.expiresAt).toEqual({ __timestamp: new Date(2053, 10, 24).toISOString() });
+    expect(result.lastRotatedAt).toEqual({ __timestamp: new Date(2026, 6, 1).toISOString() });
+  });
+
+  it('parses a date-only string at local midnight, not UTC midnight', () => {
+    const result = validateCredentialInput(baseInput({ expiresAt: '2026-03-15' }));
+    const stored = new Date((result.expiresAt as unknown as { __timestamp: string }).__timestamp);
+    // Local calendar components must match the chosen day regardless of the
+    // runner's timezone (a UTC-midnight parse could shift the day by one).
+    expect(stored.getFullYear()).toBe(2026);
+    expect(stored.getMonth()).toBe(2);
+    expect(stored.getDate()).toBe(15);
+    expect(stored.getHours()).toBe(0);
+    expect(stored.getMinutes()).toBe(0);
+  });
+
+  it('rejects an impossible date-only string (calendar rollover)', () => {
+    expect(
+      captureApiError(() => validateCredentialInput(baseInput({ expiresAt: '2026-02-31' }))).code,
+    ).toBe('credential/expires-invalid');
   });
 
   it('keeps null date fields as null', () => {
@@ -235,6 +256,36 @@ describe('adminListManagedCredentials', () => {
     const items = await adminListManagedCredentials();
     expect(items.map((i) => i.id)).toEqual(['soon', 'far', 'no-expiry']);
     expect(limitMock).toHaveBeenCalledWith(50);
+  });
+
+  it('surfaces a corrupt stored expiry as invalid and sorts it first', async () => {
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'no-expiry',
+          data: () => ({ name: 'No expiry', category: 'mapbox-token', expiresAt: null }),
+        },
+        {
+          id: 'dated',
+          data: () => ({
+            name: 'Dated',
+            category: 'github-pat',
+            expiresAt: { toDate: () => new Date('2026-08-01T00:00:00Z') },
+          }),
+        },
+        {
+          id: 'corrupt',
+          data: () => ({ name: 'Corrupt', category: 'api-key', expiresAt: 'not-a-date' }),
+        },
+      ],
+    });
+    const items = await adminListManagedCredentials();
+    // Corrupt data must not masquerade as no-expiry: it maps to the invalid
+    // marker and sorts first so an operator sees it.
+    const corrupt = items.find((i) => i.id === 'corrupt');
+    expect(corrupt?.expiresAt).toBe(INVALID_EXPIRY);
+    expect(computeCredentialStatus(corrupt?.expiresAt ?? null)).toBe('invalid');
+    expect(items.map((i) => i.id)).toEqual(['corrupt', 'dated', 'no-expiry']);
   });
 
   it('falls back to a safe category for unknown stored values', async () => {

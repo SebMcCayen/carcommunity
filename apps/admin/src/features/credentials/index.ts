@@ -69,7 +69,17 @@ export const CREDENTIAL_CATEGORIES = [
 export type CredentialCategory = (typeof CREDENTIAL_CATEGORIES)[number];
 
 /** Renewal status derived from `expiresAt` relative to "now". */
-export type CredentialStatus = 'expired' | 'expiring-soon' | 'ok' | 'no-expiry';
+export type CredentialStatus = 'expired' | 'expiring-soon' | 'ok' | 'no-expiry' | 'invalid';
+
+/**
+ * View-model marker for a stored `expiresAt` that is *present but unparseable*
+ * (corrupt / hand-edited data). Kept distinct from `null` (no expiry set) so
+ * the tracker surfaces bad data as a separate `'invalid'` status instead of
+ * silently rendering it as an intentional "no expiry". It is an unparseable
+ * string, so all the string-tolerant consumers (computeCredentialStatus,
+ * formatDateOnly, isoToDateInput) degrade gracefully.
+ */
+export const INVALID_EXPIRY = '__invalid__' as const;
 
 export interface AdminManagedCredential {
   id: string;
@@ -98,6 +108,10 @@ export interface ManagedCredentialInput {
  * Derives the renewal status of a credential from its expiry.
  *
  * - `no-expiry`   — `expiresAt` is null (a token/secret with no rotation deadline).
+ * - `invalid`     — `expiresAt` is a present-but-unparseable value (corrupt
+ *   data). Surfaced explicitly rather than mapped to `no-expiry`, so bad data
+ *   is visible to an operator instead of masquerading as an intentional
+ *   "no expiry".
  * - `expired`     — `expiresAt` is strictly before `now`.
  * - `expiring-soon` — `expiresAt` is within EXPIRING_SOON_DAYS from `now`
  *   (inclusive of the exact 30-day boundary).
@@ -112,7 +126,7 @@ export function computeCredentialStatus(
 ): CredentialStatus {
   if (expiresAt == null) return 'no-expiry';
   const expiry = new Date(expiresAt);
-  if (Number.isNaN(expiry.getTime())) return 'no-expiry';
+  if (Number.isNaN(expiry.getTime())) return 'invalid';
   const diff = expiry.getTime() - now.getTime();
   if (diff < 0) return 'expired';
   if (diff <= EXPIRING_SOON_MS) return 'expiring-soon';
@@ -152,14 +166,45 @@ export function isCredentialCategory(value: unknown): value is CredentialCategor
   );
 }
 
+/** Matches a date-only `YYYY-MM-DD` string (as emitted by `<input type="date">`). */
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Parses a form date value into a Date. A bare date-only string (`YYYY-MM-DD`,
+ * which is what `<input type="date">` produces) is interpreted at LOCAL
+ * midnight — not UTC midnight, which is what `new Date("YYYY-MM-DD")` would do
+ * per the ECMAScript spec. Parsing at local midnight keeps the stored day equal
+ * to the operator's chosen calendar day regardless of timezone/DST (a UTC parse
+ * renders/thresholds as the previous day for operators east of UTC). Any other
+ * (date-time) string is delegated to the native parser. Returns an invalid Date
+ * (NaN) on failure, including impossible date-only values (e.g. `2026-02-31`).
+ */
+function parseFormDate(value: string): Date {
+  const match = DATE_ONLY_RE.exec(value);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    // Reject calendar rollover (e.g. 2026-02-31 → 2026-03-03) so impossible
+    // date-only values still fail, matching the native parser's rejection.
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return new Date(NaN);
+    }
+    return date;
+  }
+  return new Date(value);
+}
+
 /**
  * Converts an optional `YYYY-MM-DD` (or any Date-parseable) string to a
- * Firestore Timestamp, or null. Throws ApiError(400) on an unparseable value
- * so the page can map it to an i18n message.
+ * Firestore Timestamp, or null. Date-only strings are stored at local midnight
+ * (see parseFormDate). Throws ApiError(400) on an unparseable value so the page
+ * can map it to an i18n message.
  */
 function toTimestampOrNull(value: string | null, code: string): Timestamp | null {
   if (value == null || value.trim() === '') return null;
-  const date = new Date(value);
+  const date = parseFormDate(value.trim());
   if (Number.isNaN(date.getTime())) {
     throw new ApiError(400, code, 'Invalid date.');
   }
@@ -216,6 +261,18 @@ export function validateCredentialInput(input: ManagedCredentialInput): {
   return { name, description, category: input.category, expiresAt, lastRotatedAt, notes };
 }
 
+/**
+ * Normalizes the stored `expiresAt` field for the view model. Unlike toIso(),
+ * this preserves the distinction between "no expiry set" (field absent →
+ * null) and "expiry present but corrupt/unparseable" (→ INVALID_EXPIRY), so
+ * the tracker can flag bad data as 'invalid' instead of silently collapsing it
+ * to 'no-expiry'.
+ */
+function toExpiryView(value: unknown): string | null {
+  if (value == null) return null;
+  return toIso(value) ?? INVALID_EXPIRY;
+}
+
 /** Maps a managedCredentials/{id} document to the admin view model. */
 function toAdminCredential(id: string, data: DocumentData): AdminManagedCredential {
   return {
@@ -223,7 +280,7 @@ function toAdminCredential(id: string, data: DocumentData): AdminManagedCredenti
     name: typeof data.name === 'string' ? data.name : '',
     description: typeof data.description === 'string' ? data.description : '',
     category: isCredentialCategory(data.category) ? data.category : 'other',
-    expiresAt: toIso(data.expiresAt),
+    expiresAt: toExpiryView(data.expiresAt),
     lastRotatedAt: toIso(data.lastRotatedAt),
     notes: typeof data.notes === 'string' ? data.notes : '',
     createdAt: toIso(data.createdAt),
@@ -232,19 +289,25 @@ function toAdminCredential(id: string, data: DocumentData): AdminManagedCredenti
 }
 
 /**
- * Sort comparator ordering credentials by soonest expiry first. Credentials
- * with no expiry (or an unparseable one) sort last, since they have no
- * renewal deadline to surface.
+ * Sort comparator surfacing the credentials that need attention first:
+ * credentials with a corrupt/unparseable expiry (group 0) sort first — bad
+ * data must not hide — then dated credentials by soonest expiry (group 1),
+ * then credentials with no expiry (group 2) last, since they have no renewal
+ * deadline to surface. Ties within a group fall back to name order.
  */
+function expirySortKey(item: AdminManagedCredential): { group: 0 | 1 | 2; time: number } {
+  if (item.expiresAt == null) return { group: 2, time: 0 };
+  const time = new Date(item.expiresAt).getTime();
+  if (Number.isNaN(time)) return { group: 0, time: 0 };
+  return { group: 1, time };
+}
+
 function bySoonestExpiry(a: AdminManagedCredential, b: AdminManagedCredential): number {
-  const at = a.expiresAt ? new Date(a.expiresAt).getTime() : null;
-  const bt = b.expiresAt ? new Date(b.expiresAt).getTime() : null;
-  const av = at != null && !Number.isNaN(at) ? at : null;
-  const bv = bt != null && !Number.isNaN(bt) ? bt : null;
-  if (av == null && bv == null) return a.name.localeCompare(b.name, 'sv');
-  if (av == null) return 1;
-  if (bv == null) return -1;
-  return av - bv;
+  const ka = expirySortKey(a);
+  const kb = expirySortKey(b);
+  if (ka.group !== kb.group) return ka.group - kb.group;
+  if (ka.group === 1) return ka.time - kb.time;
+  return a.name.localeCompare(b.name, 'sv');
 }
 
 /**

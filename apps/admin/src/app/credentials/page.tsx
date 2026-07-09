@@ -66,6 +66,7 @@ const STATUS_CLASS: Record<CredentialStatus, string> = {
   'expiring-soon': styles.statusExpiring ?? '',
   ok: styles.statusOk ?? '',
   'no-expiry': styles.statusNeutral ?? '',
+  invalid: styles.statusInvalid ?? '',
 };
 
 function statusLabel(status: CredentialStatus): string {

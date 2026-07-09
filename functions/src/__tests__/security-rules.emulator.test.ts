@@ -1897,6 +1897,9 @@ describe('Firestore – managedCredentials (admin-only)', () => {
 
     const unauth = testEnv.unauthenticatedContext();
     await assertFails(getDoc(doc(unauth.firestore(), 'managedCredentials/c1')));
+    await assertFails(
+      setDoc(doc(unauth.firestore(), 'managedCredentials/c4'), { name: 'Sneaky unauth' }),
+    );
   });
 });
 

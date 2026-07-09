@@ -870,7 +870,8 @@
       "expired": "Utgången",
       "expiringSoon": "Går ut snart",
       "ok": "OK",
-      "no-expiry": "Inget utgångsdatum"
+      "no-expiry": "Inget utgångsdatum",
+      "invalid": "Ogiltigt datum"
     },
     "category": {
       "github-pat": "GitHub-token (PAT)",
