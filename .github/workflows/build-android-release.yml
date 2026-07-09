@@ -7,17 +7,19 @@ name: Build Android Release
 # Security model:
 #  - Manual dispatch only. There is deliberately NO pull_request/push trigger,
 #    so an untrusted branch or fork PR can never run this workflow and pull the
-#    secret into an attacker-controlled build.
-#  - The secret is an ENVIRONMENT secret in `production`; the job opts into that
+#    secrets into an attacker-controlled build.
+#  - All secrets are ENVIRONMENT secrets in `production`; the job opts into that
 #    environment, so it also inherits the environment's protection + deployment
 #    branch rules (e.g. main-only, required reviewers).
 #  - Least-privilege GITHUB_TOKEN (contents: read only); no checkout credential
-#    persistence; the decoded file is removed after the build.
+#    persistence; every decoded secret file is removed after the build.
 #
-# The release buildType has no signingConfig yet, so this produces an UNSIGNED
-# AAB — enough to verify the release variant compiles against the real Firebase
-# config. Signing (upload keystore secret + a signingConfig in build.gradle.kts)
-# is a Google Play follow-up.
+# This produces a SIGNED release AAB, ready to upload to Google Play. The upload
+# keystore (base64) + its passwords and the Mapbox runtime token are all
+# `production` environment secrets, materialized on disk only for the build and
+# removed afterwards. If the Mapbox secret is unset the build still succeeds with
+# a blank-map token (empty is valid); if the keystore secrets are missing the
+# build fails fast rather than silently shipping an unsigned bundle.
 
 on:
   workflow_dispatch:
@@ -76,13 +78,55 @@ jobs:
             || { echo "::error::Decoded google-services.json is not valid for com.kungsbackacarcommunity.app."; exit 1; }
           echo "google-services.json materialized and validated."
 
+      - name: Materialize upload keystore + signing config from production secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Android signing secrets are not fully set in the production environment (need ANDROID_KEYSTORE_BASE64/PASSWORD, ANDROID_KEY_ALIAS/PASSWORD)."
+            exit 1
+          fi
+          # Decode the keystore — never echo it. base64 -d tolerates line wrapping.
+          printf '%s' "$KEYSTORE_B64" | base64 -d > apps/android/app/upload-keystore.jks
+          # Write the gitignored keystore.properties the signingConfig reads. Use
+          # printf (not a heredoc) so secret values are written verbatim, and an
+          # absolute storeFile path so file() resolves it regardless of CWD.
+          {
+            printf 'storeFile=%s\n' "$GITHUB_WORKSPACE/apps/android/app/upload-keystore.jks"
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > apps/android/app/keystore.properties
+          echo "upload keystore + keystore.properties materialized."
+
       - name: Build release bundle (AAB)
         working-directory: apps/android
+        # ORG_GRADLE_PROJECT_* exposes the token to Gradle as the
+        # MAPBOX_ACCESS_TOKEN project property (see app/build.gradle.kts). Unset
+        # secret -> empty token -> blank map, but the build still succeeds.
+        env:
+          ORG_GRADLE_PROJECT_MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
         run: ./gradlew --no-daemon bundleRelease
 
-      - name: Remove google-services.json
+      - name: Verify the AAB is signed
+        run: |
+          AAB=apps/android/app/build/outputs/bundle/release/app-release.aab
+          if "$JAVA_HOME/bin/jarsigner" -verify "$AAB" | grep -q "jar verified"; then
+            echo "Release AAB signature verified."
+          else
+            echo "::error::Release AAB is NOT signed — check the ANDROID_KEYSTORE_* secrets."
+            exit 1
+          fi
+
+      - name: Remove decoded secrets from disk
         if: always()
-        run: rm -f apps/android/app/google-services.json
+        run: |
+          rm -f apps/android/app/google-services.json
+          rm -f apps/android/app/upload-keystore.jks
+          rm -f apps/android/app/keystore.properties
 
       - name: Upload release AAB
         uses: actions/upload-artifact@v7
