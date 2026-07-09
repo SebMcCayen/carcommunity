@@ -101,7 +101,7 @@ android {
         applicationId = "com.kungsbackacarcommunity.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -133,6 +133,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Bundle native debug symbols (Mapbox / Play Services .so files) into
+            // the AAB so Play symbolicates native crashes & ANRs. Clears the Play
+            // Console "native code without debug symbols" upload warning.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
             resValue("string", "mapbox_access_token", mapboxAccessToken)
         }
     }
