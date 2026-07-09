@@ -20,10 +20,10 @@ Two account-wide answers (set once in the form):
   (Firebase SDKs, Cloud Functions, Mapbox).
 - **Do you provide a way for users to request data deletion?** → **Yes.** The app has an
   in-app account-deletion flow (`functions/src/account/deleteAccount.ts`) that soft-deletes
-  immediately and hard-purges via a daily cleanup job after a 30-day retention window —
-  typically within ~30–31 days of the request
-  (`functions/src/account/scheduled.ts` → `account-purgeDeleted`). Provide the in-app path
-  and, if required, a web deletion-request URL.
+  the account immediately. Deleted accounts are retained for up to 30 days, then permanently
+  hard-purged by a daily cleanup job (`functions/src/account/scheduled.ts` →
+  `account-purgeDeleted`), so full deletion typically completes within ~30–31 days of the
+  request. Provide the in-app path and, if required, a web deletion-request URL.
 
 > Note on "Shared": we treat **Google/Firebase and Mapbox as processors** (they operate the
 > app on our behalf), so most rows are **Collected = Yes, Shared = No**. The clear exception

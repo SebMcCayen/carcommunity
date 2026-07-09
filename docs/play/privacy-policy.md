@@ -55,7 +55,7 @@ data-protection law, supervised by the Swedish Authority for Privacy Protection
 The App includes social features (community chat, live location sharing, group drives)
 that are **not suitable for young children**.
 
-- **Minimum age to use the App:** `[AGE FLOOR — recommended 15 or 16]`. See
+- **Minimum age to use the App:** `[AGE FLOOR]` (recommended 15 or 16). See
   `app-content-checklist.md` for the rationale; the presence of user-to-user chat and
   precise real-time location sharing argues for a non-child audience.
 - During onboarding we record an **age confirmation** timestamp (`ageConfirmedAt`) together
