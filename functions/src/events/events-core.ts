@@ -205,23 +205,33 @@ export type GuardResult =
   | { ok: false; code: 'invalid-argument' | 'failed-precondition' | 'not-found'; message: string };
 
 /**
- * endsAt, when present, must be strictly after startsAt and no more than
- * 3 days (72 hours) after it.
+ * The effective end of an event: the explicit `endsAt` when provided, otherwise
+ * the Europe/Stockholm end-of-day of `startsAt` (23:59:59.999 local). Mirrors the
+ * create/update default in `buildEventDocuments` so guards and stored docs agree.
+ */
+export function effectiveEndsAt(startsAt: string, endsAt: string | null | undefined): string {
+  return endsAt ?? stockholmEndOfDay(startsAt);
+}
+
+/**
+ * The effective endsAt — the explicit value or the defaulted Stockholm
+ * end-of-day — must be strictly after startsAt and no more than 3 days
+ * (72 hours) after it. Guarding the effective (not just the input) endsAt keeps
+ * the "endsAt after startsAt" invariant intact even for the defaulted value
+ * (e.g. a startsAt already at 23:59:59.999 local).
  */
 export function guardEventTimes(startsAt: string, endsAt: string | null | undefined): GuardResult {
-  if (endsAt) {
-    const startMs = new Date(startsAt).getTime();
-    const endMs = new Date(endsAt).getTime();
-    if (endMs <= startMs) {
-      return { ok: false, code: 'invalid-argument', message: 'endsAt must be after startsAt.' };
-    }
-    if (endMs - startMs > MAX_EVENT_DURATION_MS) {
-      return {
-        ok: false,
-        code: 'invalid-argument',
-        message: 'endsAt cannot be more than 3 days after startsAt.',
-      };
-    }
+  const startMs = new Date(startsAt).getTime();
+  const endMs = new Date(effectiveEndsAt(startsAt, endsAt)).getTime();
+  if (endMs <= startMs) {
+    return { ok: false, code: 'invalid-argument', message: 'endsAt must be after startsAt.' };
+  }
+  if (endMs - startMs > MAX_EVENT_DURATION_MS) {
+    return {
+      ok: false,
+      code: 'invalid-argument',
+      message: 'endsAt cannot be more than 3 days after startsAt.',
+    };
   }
   return { ok: true };
 }
@@ -338,7 +348,7 @@ export function buildEventDocuments(
       startsAt: new Date(input.startsAt),
       // When no explicit end is given, an event runs until the end of its
       // Europe/Stockholm start day (23:59:59.999 local).
-      endsAt: new Date(input.endsAt ?? stockholmEndOfDay(input.startsAt)),
+      endsAt: new Date(effectiveEndsAt(input.startsAt, input.endsAt)),
       approximateArea: input.approximateArea,
       isOfficial: input.isOfficial ?? false,
       status: 'draft',
