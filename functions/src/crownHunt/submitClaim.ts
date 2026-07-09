@@ -369,6 +369,13 @@ export const submitClaim = onCall(
       }
       return respond('daily_limit_reached');
     }
+    // Authoritative count of awarded claims already made today, used to SEED
+    // the transactional daily counter when its document does not yet exist
+    // (first claim of the day, a mid-day deploy of this change, or a deleted
+    // counter). Without this seed the counter would restart at 0 and let the
+    // day's cap be exceeded. Read non-transactionally here; the counter is the
+    // serialising source once seeded.
+    const priorAwardedToday = dailyCount.data().count;
 
     // 13. Rate/velocity signals for risk scoring.
     const [attemptsSnap, successesSnap, latestPosition] = await Promise.all([
@@ -461,6 +468,10 @@ export const submitClaim = onCall(
     const dailyCounterRef = db
       .collection('crownHuntDailyClaims')
       .doc(dailyClaimCounterDocId(uid, now));
+    // Computed in the read guard, written absolutely in the write phase so the
+    // counter self-heals from the authoritative awarded-claims count when its
+    // document is missing (mid-day deploy / deleted counter).
+    let nextDailyCount = priorAwardedToday + 1;
 
     try {
       const ledgerResult = await creditPoints(
@@ -491,7 +502,7 @@ export const submitClaim = onCall(
             {
               userId: uid,
               day: utcDayKey(now),
-              count: FieldValue.increment(1),
+              count: nextDailyCount,
               updatedAt: FieldValue.serverTimestamp(),
             },
             { merge: true },
@@ -529,10 +540,16 @@ export const submitClaim = onCall(
           if (guardSnap.exists) {
             throw new ClaimGuardRejection('already_claimed');
           }
-          const dailyCount = (counterSnap.data()?.count as number | undefined) ?? 0;
-          if (dailyCount >= MAX_DAILY_SUCCESSFUL_CLAIMS) {
+          // Trust the counter when present; otherwise seed from the
+          // authoritative awarded-claims count so a missing counter cannot
+          // reset the day's cap. Written back absolutely in the write phase.
+          const currentDaily = counterSnap.exists
+            ? ((counterSnap.data()?.count as number | undefined) ?? priorAwardedToday)
+            : priorAwardedToday;
+          if (currentDaily >= MAX_DAILY_SUCCESSFUL_CLAIMS) {
             throw new ClaimGuardRejection('daily_limit_reached');
           }
+          nextDailyCount = currentDaily + 1;
         },
       );
 

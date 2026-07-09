@@ -390,6 +390,39 @@ describe('crownHunt-submitClaim', () => {
     expect(guards.size).toBe(1);
   });
 
+  it('seeds the daily counter from prior awards when no counter doc exists', async () => {
+    // Mid-day-deploy / deleted-counter safety: a fresh award must not reset
+    // the daily cap to zero. Seed 3 awarded claims for today with NO
+    // crownHuntDailyClaims counter, then a new award must persist an absolute
+    // count of 4 (3 prior + 1), not 1.
+    const capUser = await createProvisionedUser('ch-cap');
+    await adminDb.collection('users').doc(capUser.uid).set({ activeMember: true }, { merge: true });
+    const today = new Date();
+    for (let i = 0; i < 3; i += 1) {
+      await adminDb.collection('crownHuntClaims').doc(`seed-${capUser.uid}-${i}`).set({
+        userId: capUser.uid,
+        pointId: `seed-point-${i}`,
+        result: 'awarded',
+        claimedAt: today,
+        createdAt: today,
+      });
+    }
+
+    const pointId = await createActivePoint();
+    await signInAs(capUser);
+    const response = (await call('crownHunt-submitClaim', claimInput({ pointId }))).data as {
+      result: string;
+    };
+    expect(response.result).toBe('awarded');
+
+    const counters = await adminDb
+      .collection('crownHuntDailyClaims')
+      .where('userId', '==', capUser.uid)
+      .get();
+    expect(counters.size).toBe(1);
+    expect(counters.docs[0].data().count).toBe(4);
+  });
+
   it('rejects claims outside the geofence, at speed, and with stale positions', async () => {
     const pointId = await createActivePoint();
     await signInAs(member);
