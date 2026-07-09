@@ -637,6 +637,19 @@ service cloud.firestore {
       // No client writes: feedback.reportIssue only.
     }
 
+    // signInIssueLinks – sign-in-failure → GitHub issue dedup index (server-only)
+    // Keyed by the diagnostics report fingerprint. Written EXCLUSIVELY by the
+    // diagnostics-onSignInFailure Firestore trigger (Admin SDK): it stores the
+    // filed public GitHub issue number/url plus the occurrence tally
+    // (count/firstSeenAt/lastSeenAt) so one unique sign-in error maps to one
+    // issue. Admin-only read for triage; NO client writes — the trigger bypasses
+    // rules via the Admin SDK, and a client write could forge/spoof the dedup
+    // link or the issue reference.
+    match /signInIssueLinks/{fingerprint} {
+      allow read: if isAdmin();
+      // No client writes: diagnostics-onSignInFailure (Admin SDK) only.
+    }
+
     // -------------------------------------------------------------------------
     // adminAuditEvents – backend-written audit log
     // Immutable records written exclusively by the Admin SDK (admin callables).

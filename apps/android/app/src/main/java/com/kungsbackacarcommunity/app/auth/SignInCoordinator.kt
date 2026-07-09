@@ -23,6 +23,22 @@ enum class SignInFailure {
 }
 
 /**
+ * Fire-and-forget sink for a sanitized sign-in failure, used for observability
+ * during testing. Implementations must never throw and must not block. The
+ * [errorType] is the failing exception's simple class name (e.g. a Credential
+ * Manager / Firebase auth exception type) — NEVER the exception message,
+ * credentials, tokens, email, or any PII.
+ */
+fun interface SignInFailureReporter {
+    fun reportSignInFailure(errorType: String)
+}
+
+/** No-op reporter (default): keeps [SignInCoordinator] pure and Firebase-free. */
+object NoopSignInFailureReporter : SignInFailureReporter {
+    override fun reportSignInFailure(errorType: String) = Unit
+}
+
+/**
  * Orchestrates Google Sign-In: fetch a Google ID token, exchange it for a
  * Firebase session. Pure Kotlin (no Firebase/Android types) so the flow is
  * unit-testable with fakes.
@@ -30,6 +46,7 @@ enum class SignInFailure {
 class SignInCoordinator(
     private val tokenProvider: GoogleIdTokenProvider,
     private val repository: AuthRepository,
+    private val failureReporter: SignInFailureReporter = NoopSignInFailureReporter,
 ) {
     private val state = MutableStateFlow<SignInStatus>(SignInStatus.Idle)
 
@@ -50,7 +67,18 @@ class SignInCoordinator(
             state.value = SignInStatus.Failed(SignInFailure.UNAVAILABLE)
         } catch (failure: Exception) {
             // Error details (which may reference credentials) are never logged.
+            // Only the exception's simple class name — a sanitized error type,
+            // never the message — is reported for observability. The reporter is
+            // fire-and-forget and must never throw, but guard anyway so a
+            // reporting fault can't mask the sign-in failure.
             state.value = SignInStatus.Failed(SignInFailure.GENERIC)
+            try {
+                failureReporter.reportSignInFailure(
+                    failure.javaClass.simpleName.ifBlank { "SignInException" },
+                )
+            } catch (_: Exception) {
+                // Diagnostics must never crash the app or mask the original error.
+            }
         }
     }
 

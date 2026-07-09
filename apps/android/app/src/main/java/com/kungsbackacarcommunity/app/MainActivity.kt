@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app
 
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,8 +12,11 @@ import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.FirebaseAccountDeletionRepository
+import com.kungsbackacarcommunity.app.auth.NoopSignInFailureReporter
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
+import com.kungsbackacarcommunity.app.diagnostics.DiagnosticsSignInFailureReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
@@ -71,11 +75,26 @@ class MainActivity : ComponentActivity() {
         // google-services.json is absent (CI/local validation builds), so the
         // app renders an unauthenticated shell instead of crashing.
         val authRepository = FirebaseAuthRepository.createIfAvailable(applicationContext)
+        // Pre-auth sign-in failures are reported through the PUBLIC diagnostics
+        // callable (featureArea sign_in); the backend files a deduplicated
+        // GitHub issue. Guarded like the rest of the Firebase wiring — null in
+        // config-less builds, in which case failures simply aren't reported.
+        val signInFailureReporter =
+            FirebaseDiagnosticsReporter.createIfAvailable(applicationContext)?.let { reporter ->
+                DiagnosticsSignInFailureReporter(
+                    reporter = reporter,
+                    appVersion = BuildConfig.VERSION_NAME,
+                    buildNumber = BuildConfig.VERSION_CODE.toString(),
+                    osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                    deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                )
+            }
         val signInCoordinator =
             authRepository?.let {
                 SignInCoordinator(
                     tokenProvider = GoogleCredentialTokenProvider(this),
                     repository = it,
+                    failureReporter = signInFailureReporter ?: NoopSignInFailureReporter,
                 )
             }
         val profileRepository = FirebaseProfileRepository.createIfAvailable(applicationContext)

@@ -69,6 +69,33 @@ class DiagnosticsReportTest {
         assertEquals("timeout", data["safeMessage"])
         assertFalse(data.containsKey("appVersion"))
         assertFalse(data.containsKey("errorCode"))
+        assertFalse(data.containsKey("metadata"))
+    }
+
+    @Test
+    fun `toData includes non-empty metadata (e-g- device model for sign-in failures)`() {
+        val data =
+            DiagnosticsReport(
+                severity = DiagnosticsSeverity.ERROR,
+                featureArea = DiagnosticsFeatureArea.SIGN_IN,
+                safeMessage = "Sign-in failed: GetCredentialException",
+                errorCode = "GetCredentialException",
+                metadata = mapOf("deviceModel" to "Google Pixel 8"),
+            ).toData()
+        assertEquals("sign_in", data["featureArea"])
+        assertEquals(mapOf("deviceModel" to "Google Pixel 8"), data["metadata"])
+    }
+
+    @Test
+    fun `toData omits empty metadata`() {
+        val data =
+            DiagnosticsReport(
+                severity = DiagnosticsSeverity.ERROR,
+                featureArea = DiagnosticsFeatureArea.SIGN_IN,
+                safeMessage = "Sign-in failed",
+                metadata = emptyMap(),
+            ).toData()
+        assertFalse(data.containsKey("metadata"))
     }
 
     @Test

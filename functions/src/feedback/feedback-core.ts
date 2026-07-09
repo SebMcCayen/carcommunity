@@ -22,6 +22,12 @@
  */
 
 import { z } from 'zod';
+import { neutralizeMentions } from '../shared/githubIssues';
+
+// Re-exported for backwards compatibility: neutralizeMentions now lives in the
+// shared GitHub-issue helper (used by both feedback and the sign-in-failure
+// trigger). Callers/tests that import it from feedback-core keep working.
+export { neutralizeMentions };
 
 // ---------------------------------------------------------------------------
 // Limits
@@ -156,24 +162,12 @@ export function parseReportIssueInput(data: unknown): ParseResult<FeedbackReport
 
 /** First non-empty line of the description, used when no summary was given. */
 function firstLine(text: string): string {
-  return text.split('\n').map((s) => s.trim()).find((s) => s.length > 0) ?? '';
-}
-
-/**
- * Neutralizes GitHub's live-reference syntax in USER-provided text destined for
- * the public issue. A zero-width space (U+200B) is inserted immediately after
- * every `@` and `#`, so `@maintainer` → `@​maintainer` and `#123` → `#​123`:
- * they render visually identical but are no longer a live @mention (which would
- * notify a maintainer) or `#` issue cross-reference. This blocks the in-app
- * flow from being used to spam/ping maintainers or auto-link arbitrary issues,
- * even under per-user rate limiting.
- *
- * More robust than wrapping in a fenced code block (a user can break out with
- * their own ```), and applied ONLY to the strings sent to GitHub — the private
- * Firestore record keeps the raw text verbatim.
- */
-export function neutralizeMentions(text: string): string {
-  return text.replace(/[@#]/g, '$&\u200b');
+  return (
+    text
+      .split('\n')
+      .map((s) => s.trim())
+      .find((s) => s.length > 0) ?? ''
+  );
 }
 
 /**
