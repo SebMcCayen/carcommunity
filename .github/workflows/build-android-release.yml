@@ -139,19 +139,36 @@ jobs:
           # entry per line) instead of parsing the tabular `unzip -l` output, and
           # we require the .SF that matches the block's base name — a block alone
           # can pass even when the .SF is missing or corrupt.
-          block="$(unzip -Z1 "$AAB" | grep -iE '^META-INF/[^/]+\.(rsa|ec|dsa)$' | head -n1 || true)"
+          #
+          # Capture the entry list ONCE via command substitution (unzip runs to
+          # completion — no SIGPIPE), then match against it with here-strings.
+          # Feeding grep from a here-string means `grep -q` exiting early has no
+          # upstream process to kill, so it can't SIGPIPE a `unzip` under
+          # `pipefail` into a false non-zero — a live `unzip -Z1 | grep -q` pipe
+          # would (grep -q closes the pipe, unzip dies with SIGPIPE/141, and with
+          # pipefail the whole pipeline is non-zero, failing a correctly-signed
+          # AAB). The .SF check also uses FIXED-STRING whole-line matching so
+          # regex metacharacters in the alias (which is unconstrained — it comes
+          # from the keystore) can't break or spoof the match.
+          entries="$(unzip -Z1 "$AAB")"
+          block="$(grep -iE '^META-INF/[^/]+\.(rsa|ec|dsa)$' <<< "$entries" | head -n1 || true)"
           if [ -z "$block" ]; then
             echo "::error::Release AAB has no signature block — signing did not run (check the ANDROID_KEYSTORE_* secrets)."
             exit 1
           fi
           # Derive the block's base name (alias) and require the matching .SF.
-          # Alias base names are simple tokens, so they're safe to embed in the regex.
+          # Match the exact expected path as a FIXED STRING (grep -F), case-
+          # insensitively (-i, for .SF/.sf and alias case) and whole-line (-x, so
+          # UPLOAD.SF can't partial-match a decoy UPLOAD.SFX). No regex, so an
+          # alias containing '.', '*', '[', etc. is matched literally.
           base="$(basename "$block")"; base="${base%.*}"
-          if unzip -Z1 "$AAB" | grep -qiE "^META-INF/${base}\.sf$"; then
+          sf="META-INF/${base}.SF"
+          if grep -Fixq "$sf" <<< "$entries"; then
             echo "Release AAB is signed — signature block + matching .SF present:"
-            unzip -Z1 "$AAB" | grep -iE "^META-INF/${base}\.(rsa|ec|dsa|sf)$" || true
+            echo "  $block"
+            grep -Fix "$sf" <<< "$entries" | sed 's/^/  /' || true
           else
-            echo "::error::Signature block ${block} present but matching META-INF/${base}.SF is missing — signing is incomplete or corrupt."
+            echo "::error::Signature block ${block} present but matching ${sf} is missing — signing is incomplete or corrupt."
             exit 1
           fi
 
