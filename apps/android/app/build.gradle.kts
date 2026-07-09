@@ -17,8 +17,29 @@ val keystoreProps = Properties().apply {
         keystorePropsFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseSigning = keystoreProps.getProperty("storeFile")
-    ?.let { file(it).exists() } == true
+// Read every required property up front, trimmed. A blank storeFile must not
+// resolve to the project dir and slip through, and a missing password/alias
+// must not produce null values later, so the release signing path is taken
+// only when all four are non-blank AND the keystore file actually exists.
+val keystoreStoreFile = keystoreProps.getProperty("storeFile")?.trim()
+val keystoreStorePassword = keystoreProps.getProperty("storePassword")?.trim()
+val keystoreKeyAlias = keystoreProps.getProperty("keyAlias")?.trim()
+val keystoreKeyPassword = keystoreProps.getProperty("keyPassword")?.trim()
+val hasReleaseSigning = !keystoreStoreFile.isNullOrBlank() &&
+    file(keystoreStoreFile).isFile &&
+    !keystoreStorePassword.isNullOrBlank() &&
+    !keystoreKeyAlias.isNullOrBlank() &&
+    !keystoreKeyPassword.isNullOrBlank()
+
+// If keystore.properties exists but is incomplete, fall through to unsigned
+// (never fatal) and note why, so the missing signature isn't a silent surprise.
+if (keystorePropsFile.exists() && !hasReleaseSigning) {
+    logger.warn(
+        "Release signing disabled: keystore.properties is present but incomplete " +
+            "(need a readable storeFile plus storePassword, keyAlias, keyPassword). " +
+            "The release build will be unsigned.",
+    )
+}
 
 // Firebase configuration: google-services.json is intentionally NOT committed
 // (see .gitignore and apps/android/README.md). The plugin is applied only when
@@ -44,10 +65,10 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                storeFile = file(keystoreStoreFile)
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
             }
         }
     }
