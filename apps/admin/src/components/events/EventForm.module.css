@@ -88,6 +88,32 @@
   gap: var(--space-4);
 }
 
+.dateTimeFieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.dateTimeFieldset > legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+
+.dateTimeRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-4);
+}
+
+.subLabel {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+}
+
 .formActions {
   display: flex;
   gap: var(--space-3);

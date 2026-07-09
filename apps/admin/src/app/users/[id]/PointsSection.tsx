@@ -27,6 +27,7 @@ import {
   type ApiError,
 } from '@/features/points';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 import styles from './PointsSection.module.css';
 
 const t = (key: string) => translate('sv', key);
@@ -36,11 +37,7 @@ const t = (key: string) => translate('sv', key);
 // ---------------------------------------------------------------------------
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('sv-SE', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDateOnly(iso);
 }
 
 // ---------------------------------------------------------------------------

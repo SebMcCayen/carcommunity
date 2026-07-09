@@ -4,22 +4,9 @@
 
 export { signInWithGoogle, signOut, checkAdminClaim, getCurrentIdToken, onAdminAuthStateChanged } from './auth';
 
-/** Format a date to a readable admin-friendly string (Swedish locale). */
-export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleString('sv-SE', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/** Truncate a string to a max length with ellipsis. */
-export function truncate(str: string, maxLength: number): string {
-  if (str.length <= maxLength) return str;
-  if (maxLength <= 0) return '';
-  if (maxLength === 1) return '…';
-  return `${str.slice(0, maxLength - 1)}…`;
-}
+// Date/string formatting helpers live in a Firebase-free module. Import them
+// from `@/lib/format` directly to avoid initializing the Firebase SDK. They are
+// re-exported here for backwards compatibility with existing `@/lib` callers,
+// but note that this barrel also re-exports Firebase-dependent modules (via
+// `./auth`), so importing from `@/lib` still pulls in the Firebase SDK.
+export { formatDate, formatDateOnly, formatTimeOnly, truncate } from './format';

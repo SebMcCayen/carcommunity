@@ -32,18 +32,14 @@ import {
   ApiError,
 } from '@/features/digital-billboards';
 import { translate } from '@/i18n';
+import { formatDateOnly } from '@/lib/format';
 
 import styles from '../kronjakt/page.module.css';
 
 const t = (key: string) => translate('sv', key);
 
 function formatDate(iso: string | undefined | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('sv-SE', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDateOnly(iso);
 }
 
 function statusLabel(status: string): string {

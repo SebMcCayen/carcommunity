@@ -27,6 +27,7 @@ import {
   type ApiError,
 } from '@/features/account-deletions';
 import { translate } from '@/i18n';
+import { formatDate } from '@/lib/format';
 
 import styles from './page.module.css';
 
@@ -35,7 +36,7 @@ const t = (key: string) => translate('sv', key);
 const FILTERS: readonly AccountDeletionStatusFilter[] = ['pending', 'processed', 'all'];
 
 function formatDateTime(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('sv-SE') : '–';
+  return formatDate(iso);
 }
 
 /** "X dagar" until the purge window opens; due/overdue and unknown states. */

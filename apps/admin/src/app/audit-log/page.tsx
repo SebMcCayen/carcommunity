@@ -26,6 +26,7 @@ import {
   type AuditLogCursor,
 } from '@/features/audit-log';
 import { translate } from '@/i18n';
+import { formatDate } from '@/lib/format';
 
 import styles from './page.module.css';
 
@@ -44,7 +45,7 @@ function actionLabel(action: string): string {
 }
 
 function formatDateTime(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('sv-SE') : '–';
+  return formatDate(iso);
 }
 
 export default function AuditLogPage() {
