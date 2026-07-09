@@ -88,7 +88,13 @@ class KccMessagingService : FirebaseMessagingService() {
 
         val notification =
             NotificationCompat.Builder(applicationContext, model.channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(
+                    androidx.core.content.ContextCompat.getColor(
+                        applicationContext,
+                        R.color.kcc_crown_gold,
+                    ),
+                )
                 .setContentTitle(model.title ?: getString(R.string.app_name))
                 .setContentIntent(openAppIntent())
                 .setAutoCancel(true)

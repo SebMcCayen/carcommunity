@@ -14,9 +14,23 @@
     <application
         android:name=".KccApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KCC">
+
+        <!-- FCM display defaults: branded white-crown small icon (Android tints
+             it) + Crown Gold accent. Consulted by messages that omit an explicit
+             icon; the in-app builder (KccMessagingService) sets the same
+             drawable. Inert without google-services.json. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/kcc_crown_gold" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
