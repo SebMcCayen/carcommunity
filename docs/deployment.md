@@ -115,7 +115,8 @@ The service account must be granted only the permissions required for deployment
   Setting the invoker requires `run.services.setIamPolicy`, which
   `roles/cloudfunctions.developer` does not grant, so the deploy fails with
   "Unable to set the invoker for the IAM policy" (surfaced by the new
-  `feedback.reportIssue` `onCall` function). This is broader than strictly
+  `feedback.reportIssue` `onCall` function — deployed as, and named in the
+  error, `feedback-reportIssue`). This is broader than strictly
   needed; a custom role limited to `run.services.setIamPolicy` +
   `getIamPolicy` — or granting it on the **specific** Cloud Run service backing
   the function rather than project-wide `run.admin` — is the stricter
