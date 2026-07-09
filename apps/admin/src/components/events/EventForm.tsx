@@ -394,7 +394,14 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
               className={styles.input}
               type="date"
               value={form.endDate}
-              onChange={(e) => handleChange('endDate', e.target.value)}
+              onChange={(e) => {
+                handleChange('endDate', e.target.value);
+                // A time without a date is discarded on submit; clear the stale
+                // end time so the UI never shows a time that will be ignored.
+                if (!e.target.value) {
+                  handleChange('endTime', '');
+                }
+              }}
               disabled={isSubmitting}
               aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
             />
@@ -409,7 +416,7 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
               type="time"
               value={form.endTime}
               onChange={(e) => handleChange('endTime', e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !form.endDate}
               aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
             />
           </div>
