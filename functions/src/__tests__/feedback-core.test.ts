@@ -56,8 +56,10 @@ describe('feedback-core input parsing', () => {
   });
 
   it('strips control characters and collapses context whitespace', () => {
-    // NUL/BEL control chars are stripped; tab/newline survive.
+    // NUL/BEL/CR control chars are stripped; tab/newline survive.
     expect(boundText('a\u0000b\u0007c', 100)).toBe('abc');
+    // Carriage return (\r / U+000D) is stripped while \t and \n are preserved.
+    expect(boundText('a\rb\r\nc', 100)).toBe('ab\nc');
     expect(boundText('keeps\ttab and\nnewline', 100)).toBe('keeps\ttab and\nnewline');
     expect(boundContext('  Android   14 \n beta ', 100)).toBe('Android 14 beta');
     expect(boundContext('', 100)).toBeNull();
@@ -152,6 +154,9 @@ describe('feedback-core mention neutralization', () => {
       ...report,
       summary: 'cc @maintainer fix #1',
       description: 'Please @someone look at #123 — the map is broken.',
+      appVersion: '1.2.3 @ci',
+      osVersion: 'Android #14',
+      deviceModel: 'Pixel @8',
     };
 
     const title = buildGitHubIssueTitle(spammy);
@@ -162,6 +167,10 @@ describe('feedback-core mention neutralization', () => {
 
     const body = buildGitHubIssueBody(spammy, 'rep_123', '2026-07-09T12:00:00.000Z');
     expect(body).toContain(`Please @${ZWSP}someone look at #${ZWSP}123 — the map is broken.`);
+    // Caller-controlled context scalars are neutralized in the public body too.
+    expect(body).toContain(`- App version: 1.2.3 @${ZWSP}ci`);
+    expect(body).toContain(`- OS version: Android #${ZWSP}14`);
+    expect(body).toContain(`- Device model: Pixel @${ZWSP}8`);
     // No bare @ or # (each is followed by a zero-width space) in the whole body.
     expect(body).not.toMatch(/@(?!\u200b)/);
     expect(body).not.toMatch(/#(?!\u200b)/);
@@ -185,6 +194,9 @@ describe('feedback-core private document', () => {
       ...report,
       summary: 'cc @maintainer fix #1',
       description: 'Please @someone look at #123.',
+      appVersion: '1.2.3 @ci',
+      osVersion: 'Android #14',
+      deviceModel: 'Pixel @8',
     };
     const doc = buildFeedbackReportDocument(spammy, 'uid_secret_abc123', () => 'SERVER_TS');
     // The private record of record keeps the original text, ZWSP-free.
@@ -192,5 +204,12 @@ describe('feedback-core private document', () => {
     expect(doc.summary).toBe('cc @maintainer fix #1');
     expect(doc.description).not.toContain(ZWSP);
     expect(doc.summary).not.toContain(ZWSP);
+    // Caller-controlled context scalars are also persisted raw (no neutralization).
+    expect(doc.appVersion).toBe('1.2.3 @ci');
+    expect(doc.osVersion).toBe('Android #14');
+    expect(doc.deviceModel).toBe('Pixel @8');
+    expect(doc.appVersion).not.toContain(ZWSP);
+    expect(doc.osVersion).not.toContain(ZWSP);
+    expect(doc.deviceModel).not.toContain(ZWSP);
   });
 });

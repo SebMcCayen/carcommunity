@@ -63,9 +63,11 @@ export function isFeedbackRateLimited(recentCount: number): boolean {
 // Sanitization
 // ---------------------------------------------------------------------------
 
-// C0/C1 control characters, minus tab (\t) and newline (\n), that could
-// smuggle escape sequences into the public issue body.
-const MULTILINE_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+// C0/C1 control characters, minus tab (\t, U+0009) and newline
+// (\n, U+000A), that could smuggle escape sequences into the public issue
+// body. The \u000B-\u001F range deliberately includes carriage
+// return (\r, U+000D) so it is stripped too; ONLY \t and \n survive.
+const MULTILINE_CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
 // As above but also stripping tab/newline for single-line context scalars.
 const SINGLELINE_CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
 
@@ -199,17 +201,21 @@ export function buildGitHubIssueBody(
   reportId: string,
   submittedAtIso: string,
 ): string {
+  // appVersion/osVersion/deviceModel are caller-controlled, so neutralize any
+  // @mention/#ref in them too before they enter the public body (the private
+  // Firestore doc keeps the raw bounded values). reportId/submittedAtIso are
+  // server-generated and left as-is.
   const context = [
-    `- App version: ${report.appVersion ?? 'unknown'}`,
-    `- OS version: ${report.osVersion ?? 'unknown'}`,
-    `- Device model: ${report.deviceModel ?? 'unknown'}`,
+    `- App version: ${report.appVersion ? neutralizeMentions(report.appVersion) : 'unknown'}`,
+    `- OS version: ${report.osVersion ? neutralizeMentions(report.osVersion) : 'unknown'}`,
+    `- Device model: ${report.deviceModel ? neutralizeMentions(report.deviceModel) : 'unknown'}`,
     `- Report ID: ${reportId}`,
     `- Submitted at: ${submittedAtIso}`,
   ].join('\n');
 
   return [
-    // Only the user-typed description is neutralized; the static context lines
-    // below are template text we control.
+    // The user-typed description and caller-controlled context scalars are
+    // neutralized; the static labels below are template text we control.
     neutralizeMentions(report.description),
     '',
     '---',
