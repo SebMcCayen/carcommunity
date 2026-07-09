@@ -133,7 +133,7 @@ class LocationSharingService : Service() {
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(getString(R.string.liveLocation_backgroundNotificationTitle))
                 .setContentText(getString(R.string.liveLocation_backgroundNotificationBody))
-                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()

@@ -31,9 +31,10 @@ import com.kungsbackacarcommunity.app.design.KccTheme
  * Minimal sign-in scaffold (migration plan Phase 7, PR 7c).
  *
  * Google Sign-In per docs/auth-mobile-requirements.md. All copy comes from
- * generated string resources (contracts/localization). The screen applies its
- * own [KccTheme] (dark, a brand moment over Ink Black), so callers should NOT
- * wrap it in another [KccTheme].
+ * generated string resources (contracts/localization). The screen forces its
+ * own [KccTheme] (dark — a brand moment over Ink Black) internally, overriding
+ * any ambient/app-level theme, so it looks the same regardless of the caller's
+ * theme; no dedicated [KccTheme] wrapper is needed for it.
  */
 @Composable
 fun SignInScreen(
