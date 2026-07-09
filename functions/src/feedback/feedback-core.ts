@@ -158,6 +158,23 @@ function firstLine(text: string): string {
 }
 
 /**
+ * Neutralizes GitHub's live-reference syntax in USER-provided text destined for
+ * the public issue. A zero-width space (U+200B) is inserted immediately after
+ * every `@` and `#`, so `@maintainer` → `@​maintainer` and `#123` → `#​123`:
+ * they render visually identical but are no longer a live @mention (which would
+ * notify a maintainer) or `#` issue cross-reference. This blocks the in-app
+ * flow from being used to spam/ping maintainers or auto-link arbitrary issues,
+ * even under per-user rate limiting.
+ *
+ * More robust than wrapping in a fenced code block (a user can break out with
+ * their own ```), and applied ONLY to the strings sent to GitHub — the private
+ * Firestore record keeps the raw text verbatim.
+ */
+export function neutralizeMentions(text: string): string {
+  return text.replace(/[@#]/g, '$&\u200b');
+}
+
+/**
  * Public issue title: `[Android] ` + a bounded summary. Falls back to the
  * first line of the description, then to a generic label so the title is never
  * empty. Single-lined and capped at [MAX_SUMMARY_LENGTH].
@@ -166,7 +183,9 @@ export function buildGitHubIssueTitle(report: FeedbackReport): string {
   const source = report.summary ?? firstLine(report.description);
   const summary = source.replace(/\s+/g, ' ').trim().slice(0, MAX_SUMMARY_LENGTH);
   const safe = summary.length > 0 ? summary : 'Problem report';
-  return `${FEEDBACK_TITLE_TAG} ${safe}`;
+  // Neutralize AFTER bounding so the visible summary stays within budget; the
+  // static `[Android]` tag is template text and left untouched.
+  return `${FEEDBACK_TITLE_TAG} ${neutralizeMentions(safe)}`;
 }
 
 /**
@@ -189,7 +208,9 @@ export function buildGitHubIssueBody(
   ].join('\n');
 
   return [
-    report.description,
+    // Only the user-typed description is neutralized; the static context lines
+    // below are template text we control.
+    neutralizeMentions(report.description),
     '',
     '---',
     context,

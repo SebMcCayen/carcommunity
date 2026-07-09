@@ -18,9 +18,12 @@ import {
   buildGitHubIssueTitle,
   feedbackRateLimitWindowStart,
   isFeedbackRateLimited,
+  neutralizeMentions,
   parseReportIssueInput,
   type FeedbackReport,
 } from '../feedback/feedback-core';
+
+const ZWSP = '\u200b';
 
 const report: FeedbackReport = {
   description: 'The map does not load after I open the app.',
@@ -133,6 +136,38 @@ describe('feedback-core public GitHub issue', () => {
   });
 });
 
+describe('feedback-core mention neutralization', () => {
+  it('inserts a zero-width space after @ and # so they are not live refs', () => {
+    expect(neutralizeMentions('ping @maintainer about #123')).toBe(
+      `ping @${ZWSP}maintainer about #${ZWSP}123`,
+    );
+    // Every occurrence is neutralized.
+    expect(neutralizeMentions('@a @b #c')).toBe(`@${ZWSP}a @${ZWSP}b #${ZWSP}c`);
+    // Text without @/# is untouched.
+    expect(neutralizeMentions('plain text')).toBe('plain text');
+  });
+
+  it('neutralizes @mentions / #refs in the GitHub-bound title and body', () => {
+    const spammy: FeedbackReport = {
+      ...report,
+      summary: 'cc @maintainer fix #1',
+      description: 'Please @someone look at #123 — the map is broken.',
+    };
+
+    const title = buildGitHubIssueTitle(spammy);
+    // The static [Android] tag is intact; the user portion has neutralized refs.
+    expect(title).toBe(`[Android] cc @${ZWSP}maintainer fix #${ZWSP}1`);
+    // No live @mention survives (an @ is always followed by the ZWSP).
+    expect(title).not.toMatch(/@(?!\u200b)/);
+
+    const body = buildGitHubIssueBody(spammy, 'rep_123', '2026-07-09T12:00:00.000Z');
+    expect(body).toContain(`Please @${ZWSP}someone look at #${ZWSP}123 — the map is broken.`);
+    // No bare @ or # (each is followed by a zero-width space) in the whole body.
+    expect(body).not.toMatch(/@(?!\u200b)/);
+    expect(body).not.toMatch(/#(?!\u200b)/);
+  });
+});
+
 describe('feedback-core private document', () => {
   it('stores the uid + context and starts pending', () => {
     const doc = buildFeedbackReportDocument(report, 'uid_secret_abc123', () => 'SERVER_TS');
@@ -143,5 +178,19 @@ describe('feedback-core private document', () => {
     expect(doc.githubIssueNumber).toBeNull();
     expect(doc.githubIssueUrl).toBeNull();
     expect(doc.createdAt).toBe('SERVER_TS');
+  });
+
+  it('preserves RAW @mention/#ref text verbatim (no neutralization when persisted)', () => {
+    const spammy: FeedbackReport = {
+      ...report,
+      summary: 'cc @maintainer fix #1',
+      description: 'Please @someone look at #123.',
+    };
+    const doc = buildFeedbackReportDocument(spammy, 'uid_secret_abc123', () => 'SERVER_TS');
+    // The private record of record keeps the original text, ZWSP-free.
+    expect(doc.description).toBe('Please @someone look at #123.');
+    expect(doc.summary).toBe('cc @maintainer fix #1');
+    expect(doc.description).not.toContain(ZWSP);
+    expect(doc.summary).not.toContain(ZWSP);
   });
 });
