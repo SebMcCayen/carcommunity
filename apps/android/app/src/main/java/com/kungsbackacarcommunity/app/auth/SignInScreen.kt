@@ -31,8 +31,9 @@ import com.kungsbackacarcommunity.app.design.KccTheme
  * Minimal sign-in scaffold (migration plan Phase 7, PR 7c).
  *
  * Google Sign-In per docs/auth-mobile-requirements.md. All copy comes from
- * generated string resources (contracts/localization). Wrap in [KccTheme]
- * at the call site.
+ * generated string resources (contracts/localization). The screen applies its
+ * own [KccTheme] (dark, a brand moment over Ink Black), so callers should NOT
+ * wrap it in another [KccTheme].
  */
 @Composable
 fun SignInScreen(
@@ -139,16 +140,16 @@ private fun GoogleSignInButton(onClick: () -> Unit) {
 @Preview(name = "Idle Light", showBackground = true)
 @Composable
 private fun SignInScreenPreviewIdle() {
-    KccTheme { SignInScreen(status = SignInStatus.Idle, onSignInClick = {}) }
+    // SignInScreen applies its own KccTheme — do not wrap it again.
+    SignInScreen(status = SignInStatus.Idle, onSignInClick = {})
 }
 
 @Preview(name = "Failed Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun SignInScreenPreviewFailed() {
-    KccTheme {
-        SignInScreen(
-            status = SignInStatus.Failed(SignInFailure.GENERIC),
-            onSignInClick = {},
-        )
-    }
+    // SignInScreen applies its own KccTheme — do not wrap it again.
+    SignInScreen(
+        status = SignInStatus.Failed(SignInFailure.GENERIC),
+        onSignInClick = {},
+    )
 }
