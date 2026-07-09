@@ -54,6 +54,12 @@ export interface PointsMutationResult {
  * Extra writes committed ATOMICALLY with the mutation (e.g. the admin audit
  * record) — runs inside the transaction, only when a new entry is written
  * (idempotent replays add nothing).
+ *
+ * WRITE-ONLY: this runs AFTER the mutation's ledger/entry writes, so a
+ * `tx.get` here would violate Firestore's read-before-write rule and fail at
+ * runtime. Any transactional read the caller needs (cap checks, uniqueness
+ * lookups) must go in an {@link AtomicReadGuard}; `tx.create`/`tx.set`
+ * against documents whose IDs are already known is fine here.
  */
 export type AtomicExtraWrites = (
   tx: FirebaseFirestore.Transaction,
@@ -63,11 +69,13 @@ export type AtomicExtraWrites = (
 /**
  * A read-phase guard run INSIDE the mutation transaction, after the balance
  * read and BEFORE any writes (Firestore requires all reads before all
- * writes). It may perform additional reads and THROW to abort the whole
- * mutation with no points credited. Callers use it to enforce a cap or
- * uniqueness invariant atomically with the award — e.g. a Kronjakt claim
- * reading its deterministic per-window guard and daily-counter documents so
- * concurrent claims cannot double-award. Not invoked on an idempotent replay.
+ * writes). This is the ONLY place a caller may add transactional reads; it
+ * may THROW to abort the whole mutation with no points credited. Callers use
+ * it to enforce a cap or uniqueness invariant atomically with the award —
+ * e.g. a Kronjakt claim reading its deterministic per-window guard and
+ * daily-counter documents so concurrent claims cannot double-award. Values it
+ * reads can be closed over and used by the paired {@link AtomicExtraWrites}.
+ * Not invoked on an idempotent replay.
  */
 export type AtomicReadGuard = (tx: FirebaseFirestore.Transaction) => Promise<void>;
 

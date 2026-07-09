@@ -355,18 +355,20 @@ describe('crownHunt-submitClaim', () => {
     await signInAs(racer);
 
     const CONCURRENCY = 6;
+    // Do NOT swallow rejections: a losing racer must return the 'already_claimed'
+    // result code, never throw. Letting Promise.all reject makes the test fail
+    // loudly if the server ever surfaces an internal error for a loser.
     const results = await Promise.all(
       Array.from({ length: CONCURRENCY }, () =>
         call('crownHunt-submitClaim', claimInput({ pointId })).then(
           (r) => (r.data as { result: string }).result,
-          // A losing racer can also surface as an internal error if the guard
-          // `create` collides at commit; that is still a non-award outcome.
-          () => 'error',
         ),
       ),
     );
 
+    // Exactly one winner; every loser gets the authoritative repeat-rule code.
     expect(results.filter((r) => r === 'awarded').length).toBe(1);
+    expect(results.filter((r) => r === 'already_claimed').length).toBe(CONCURRENCY - 1);
 
     // Exactly one awarded claim row and one ledger credit — no inflation.
     const awardedClaims = await adminDb
