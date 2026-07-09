@@ -217,8 +217,9 @@ Data Privacy Framework, as offered by each provider.
 
 - **Account, profile, vehicles, points, notifications:** kept while your account is active.
 - **Live location positions:** transient — stale after ~60 seconds, sessions expire at their
-  chosen duration (1/2/4 h), and a scheduled sweep removes remaining position nodes within
-  ~15 minutes. "Hide me now" removes your latest position immediately.
+  chosen duration (1/2/4 h), and a scheduled sweep (runs every ~5 minutes) removes remaining
+  position nodes once they are older than 15 minutes, so they are gone within ~15–20 minutes.
+  "Hide me now" removes your latest position immediately.
 - **Drive routes / saved drives:** kept until you delete them or your account.
 - **Push tokens:** stored as hashes and refreshed; removed on account deletion.
 - **Subscription records:** kept for the life of the entitlement and as required for billing
@@ -226,8 +227,9 @@ Data Privacy Framework, as offered by each provider.
 - **Diagnostics:** short-lived, sanitized.
 - **Moderation / audit records:** retained for safety and legal accountability even after
   account deletion (legitimate interest).
-- **Account deletion:** see Section 9 — soft-delete is immediate; hard purge runs after a
-  **30-day** window.
+- **Account deletion:** see Section 9 — soft-delete is immediate; a deletion request is
+  retained for up to 30 days, then permanently purged by a daily cleanup job — typically
+  within **~30–31 days** of the request.
 
 ---
 
@@ -241,10 +243,11 @@ sharing or disabling notifications).
 - **Access / correction:** most profile, vehicle and preference data can be viewed and edited
   directly in the App. For other requests, contact `[PRIVACY CONTACT EMAIL]`.
 - **Erasure / account deletion:** you can request deletion **in the App** (account
-  deletion). This immediately disables your account and schedules a full purge. Within
-  **30 days** we permanently delete your profile, private data, vehicles, saved drives,
-  push tokens, notifications, points ledger, and your uploaded images (profile and vehicle
-  photos, route files).
+  deletion). This immediately disables your account and schedules a full purge. Your
+  deletion request is retained for up to 30 days, then a daily cleanup job permanently
+  deletes your profile, private data, vehicles, saved drives, push tokens, notifications,
+  points ledger, and your uploaded images (profile and vehicle photos, route files) —
+  typically within **~30–31 days** of your request.
   - **What we retain after deletion, and why:** limited **moderation reports, moderation
     actions and admin audit logs** (safety and legal accountability), **anonymized partner
     analytics** (stored only as non-reversible hashes with a short TTL), and

@@ -20,7 +20,8 @@ Two account-wide answers (set once in the form):
   (Firebase SDKs, Cloud Functions, Mapbox).
 - **Do you provide a way for users to request data deletion?** → **Yes.** The app has an
   in-app account-deletion flow (`functions/src/account/deleteAccount.ts`) that soft-deletes
-  immediately and hard-purges after 30 days
+  immediately and hard-purges via a daily cleanup job after a 30-day retention window —
+  typically within ~30–31 days of the request
   (`functions/src/account/scheduled.ts` → `account-purgeDeleted`). Provide the in-app path
   and, if required, a web deletion-request URL.
 
@@ -48,7 +49,8 @@ Two account-wide answers (set once in the form):
 - **Purposes:** App functionality (live location sharing, group drives, drive recording,
   location-based game feature).
 - **Encrypted in transit:** Yes.
-- **User can request deletion:** Yes. Also auto-expires (positions stale ~60s; sweep ~15 min).
+- **User can request deletion:** Yes. Also auto-expires (positions stale ~60s; a sweep runs
+  every ~5 min and removes position markers once they are older than 15 min, so ~15–20 min).
 - **Source:** `functions/src/live/live-core.ts`, `packages/shared/src/live-location.ts`,
   `firebase/database.rules.json`; Android `location/LocationSharingService.kt`
   (`foregroundServiceType="location"`), `play-services-location`.
