@@ -133,26 +133,36 @@ export const reportIssue = onCall(
     }
     const report = parsed.input;
 
-    // Per-user rate limit (5 reports / hour). Best-effort count query on
-    // feedbackReports (composite index uid ASC, createdAt ASC).
+    // Per-user rate limit (5 reports / hour) enforced INSIDE the transaction:
+    // the windowed count read and the new-report write serialize together, so
+    // concurrent submissions can never race the cap past FEEDBACK_RATE_LIMIT_MAX
+    // and spam the public issue tracker (mirrors MAX_VEHICLES_PER_USER in
+    // garage/manageVehicle.ts). Composite index: uid ASC, createdAt ASC.
+    //
+    // The doc is also persisted here (before the GitHub call) so the report is
+    // never lost even if GitHub is down; the slot is reserved transactionally
+    // BEFORE the external issue creation below.
     const windowStart = Timestamp.fromMillis(Date.now() - FEEDBACK_RATE_LIMIT_WINDOW_MS);
-    const recent = await db
-      .collection('feedbackReports')
-      .where('uid', '==', actor.uid)
-      .where('createdAt', '>', windowStart)
-      .count()
-      .get();
-    if (isFeedbackRateLimited(recent.data().count)) {
-      throw new HttpsError(
-        'resource-exhausted',
-        'Too many reports — please wait a while before submitting another.',
+    const feedbackReports = db.collection('feedbackReports');
+    const ref = feedbackReports.doc();
+    await db.runTransaction(async (tx) => {
+      const countSnap = await tx.get(
+        feedbackReports
+          .where('uid', '==', actor.uid)
+          .where('createdAt', '>', windowStart)
+          .count(),
       );
-    }
-
-    // Persist FIRST so the report is never lost, even if GitHub is down.
-    const ref = await db
-      .collection('feedbackReports')
-      .add(buildFeedbackReportDocument(report, actor.uid, () => FieldValue.serverTimestamp()));
+      if (isFeedbackRateLimited(countSnap.data().count)) {
+        throw new HttpsError(
+          'resource-exhausted',
+          'Too many reports — please wait a while before submitting another.',
+        );
+      }
+      tx.set(
+        ref,
+        buildFeedbackReportDocument(report, actor.uid, () => FieldValue.serverTimestamp()),
+      );
+    });
     const reportId = ref.id;
 
     const submittedAtIso = new Date().toISOString();

@@ -53,6 +53,11 @@ private fun currentFeedbackClientContext(): FeedbackClientContext =
     )
 
 private fun openUrl(context: Context, url: String) {
+    // Only ever launch an http(s) github.com URL. This is a privileged in-app
+    // flow, so a malformed/compromised backend response must not be able to
+    // launch a non-web intent (file:/intent:/javascript: …). The report was
+    // already filed, so silently skip anything that fails validation.
+    if (!isGitHubWebUrl(url)) return
     try {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -60,4 +65,13 @@ private fun openUrl(context: Context, url: String) {
     } catch (_: ActivityNotFoundException) {
         // No browser available — nothing to open; the report was already filed.
     }
+}
+
+/** True only for an http(s) URL on github.com (or a *.github.com subdomain). */
+private fun isGitHubWebUrl(url: String): Boolean {
+    val uri = Uri.parse(url)
+    val scheme = uri.scheme?.lowercase()
+    if (scheme != "http" && scheme != "https") return false
+    val host = uri.host?.lowercase() ?: return false
+    return host == "github.com" || host.endsWith(".github.com")
 }
