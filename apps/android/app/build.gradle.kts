@@ -42,9 +42,17 @@ val hasReleaseSigning = !keystoreStoreFile.isNullOrBlank() &&
     !keystoreKeyAlias.isNullOrBlank() &&
     !keystoreKeyPassword.isNullOrBlank()
 
-// If keystore.properties exists but is incomplete, fall through to unsigned
+// If keystore.properties exists but is unusable, fall through to unsigned
 // (never fatal) and note why, so the missing signature isn't a silent surprise.
-if (keystorePropsFile.exists() && !hasReleaseSigning) {
+// Distinguish "the file itself couldn't be read" (a directory or permission
+// issue) from "the file loaded but the config is incomplete" so the warning
+// points at the real problem instead of blaming missing keys in both cases.
+if (keystorePropsFile.exists() && !(keystorePropsFile.isFile && keystorePropsFile.canRead())) {
+    logger.warn(
+        "Release signing disabled: keystore.properties exists but is not a readable " +
+            "file (a directory or permission issue?). The release build will be unsigned.",
+    )
+} else if (keystorePropsFile.exists() && !hasReleaseSigning) {
     logger.warn(
         "Release signing disabled: keystore.properties is present but incomplete " +
             "(need a readable storeFile plus storePassword, keyAlias, keyPassword). " +
