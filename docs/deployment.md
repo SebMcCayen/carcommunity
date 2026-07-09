@@ -106,7 +106,7 @@ The service account must be granted only the permissions required for deployment
   `secretAccessor`, or the deploy fails with a 403 on `secretmanager.secrets.get`.
   Among predefined roles only `secretmanager.admin` covers both get +
   setIamPolicy. This is broader than strictly needed; granting the role (or a
-  custom role limited to `secretmanager.secrets.get` + `setIamPolicy`) on the
+  custom role limited to `secretmanager.secrets.get` + `secretmanager.secrets.setIamPolicy`) on the
   **specific** secret resource rather than project-wide is the stricter
   least-privilege alternative
 - `roles/run.admin` — gen2 callable / HTTPS functions are backed by a Cloud Run
@@ -118,7 +118,7 @@ The service account must be granted only the permissions required for deployment
   `feedback.reportIssue` `onCall` function — deployed as, and named in the
   error, `feedback-reportIssue`). This is broader than strictly
   needed; a custom role limited to `run.services.setIamPolicy` +
-  `getIamPolicy` — or granting it on the **specific** Cloud Run service backing
+  `run.services.getIamPolicy` — or granting it on the **specific** Cloud Run service backing
   the function rather than project-wide `run.admin` — is the stricter
   least-privilege alternative
 - `roles/iam.serviceAccountUser` (ActAs) on the gen2 Cloud Functions runtime SA
