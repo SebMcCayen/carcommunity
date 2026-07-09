@@ -1,8 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing: keystore.properties and the keystore file are gitignored and
+// absent in CI, so release builds there stay unsigned (mirrors the
+// google-services.json apply-if-present pattern below). Locally, if
+// keystore.properties points at a readable keystore, the release build is
+// signed with the upload key for Google Play.
+val keystorePropsFile = file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseSigning = keystoreProps.getProperty("storeFile")
+    ?.let { file(it).exists() } == true
 
 // Firebase configuration: google-services.json is intentionally NOT committed
 // (see .gitignore and apps/android/README.md). The plugin is applied only when
@@ -25,6 +41,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Mapbox runtime access token: a secret NOT committed and NOT
@@ -36,6 +63,9 @@ android {
             resValue("string", "mapbox_access_token", "")
         }
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
