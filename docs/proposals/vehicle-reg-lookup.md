@@ -80,8 +80,8 @@ design here must preserve that invariant.
   be a **new sibling callable** (e.g. `garage.lookupPlate`) that returns
   *prefill suggestions only* and writes nothing to `vehicles` — the user
   still saves through the existing `addVehicle`.
-- **Android UI** (`apps/android/.../garage/VehicleFormScreen.kt`,
-  `Vehicle.kt`, `GarageCoordinator.kt`): a Compose form with make / model /
+- **Android UI** (`apps/android/app/src/main/java/com/kungsbackacarcommunity/app/garage/VehicleFormScreen.kt`,
+  `Vehicle.kt`, `GarageCoordinator.kt` in the same directory): a Compose form with make / model /
   year / powertrain / engine fields plus `VehicleValidation` mirroring the
   backend bounds. A plate field + "Fetch details" button would sit above the
   existing fields and populate the same `VehicleForm` state.
@@ -207,7 +207,7 @@ hobby/community app — this is the deciding factor.
 | Transportstyrelsen open data | Public / PDM | None | Free | No | No per-plate lookup |
 | **Biluppgifter API** | Paid commercial, test keys | API key | Per-lookup (TBC) | Separately gated | **Best candidate** |
 | Car.info B2B | Quote / contract | API key | Enterprise (TBC) | Configurable | Fallback |
-| D&B Vehicle Data Finder | Needs Tpst. permission | Contract | Enterprise | Yes | No — eligibility |
+| D&B Vehicle Data Finder | Needs Transportstyrelsen permission | Contract | Enterprise | Yes | No — eligibility |
 | Unofficial scraper | None | None | Free | Whatever page shows | **Rejected** |
 
 ## 4. Legal / GDPR
@@ -296,7 +296,7 @@ fallback) and a **spike confirming access + price first**.
 ### 5.1 Backend — new callable `garage.lookupPlate`
 
 - Sibling of `manageVehicle.ts` in `functions/src/garage/`, `europe-west1`,
-  `memory: 256MiB`, `enforceAppCheck` on (matching existing garage callables).
+  `memory: 256MiB`, with App Check enforced (`enforceAppCheck`) outside the emulator (matching existing garage callables).
 - **Auth:** `requireMemberActor` — member-only, same as the rest of garage.
 - **Input:** `{ plate: string }` — validated/normalised in a pure
   `garage-core` helper (uppercase, strip spaces, assert the Swedish plate
