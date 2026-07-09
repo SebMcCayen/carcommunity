@@ -60,6 +60,17 @@ export type AtomicExtraWrites = (
   result: PointsMutationResult,
 ) => void;
 
+/**
+ * A read-phase guard run INSIDE the mutation transaction, after the balance
+ * read and BEFORE any writes (Firestore requires all reads before all
+ * writes). It may perform additional reads and THROW to abort the whole
+ * mutation with no points credited. Callers use it to enforce a cap or
+ * uniqueness invariant atomically with the award — e.g. a Kronjakt claim
+ * reading its deterministic per-window guard and daily-counter documents so
+ * concurrent claims cannot double-award. Not invoked on an idempotent replay.
+ */
+export type AtomicReadGuard = (tx: FirebaseFirestore.Transaction) => Promise<void>;
+
 async function assertTargetCanTransact(targetUid: string): Promise<void> {
   const snap = await db.collection('users').doc(targetUid).get();
   if (!snap.exists) {
@@ -79,6 +90,7 @@ async function mutatePoints(
   params: PointsMutationParams,
   signedAmount: number,
   extraWrites?: AtomicExtraWrites,
+  readGuard?: AtomicReadGuard,
 ): Promise<PointsMutationResult> {
   if (!Number.isInteger(params.amount) || params.amount <= 0) {
     throw new HttpsError('invalid-argument', 'Amount must be a positive integer.');
@@ -114,6 +126,12 @@ async function mutatePoints(
     const check = applyDelta(currentBalance, signedAmount);
     if (!check.ok) {
       throw new HttpsError('failed-precondition', check.message);
+    }
+
+    // Read-phase guard: any additional reads (and abort-throws) must happen
+    // before the first write below, per Firestore's read-before-write rule.
+    if (readGuard) {
+      await readGuard(tx);
     }
 
     const serverTimestamp = () => FieldValue.serverTimestamp();
@@ -155,8 +173,9 @@ async function mutatePoints(
 export function creditPoints(
   params: PointsMutationParams,
   extraWrites?: AtomicExtraWrites,
+  readGuard?: AtomicReadGuard,
 ): Promise<PointsMutationResult> {
-  return mutatePoints(params, params.amount, extraWrites);
+  return mutatePoints(params, params.amount, extraWrites, readGuard);
 }
 
 /** Spends points (negative entry); never allows overdraft. Internal. */

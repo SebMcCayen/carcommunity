@@ -42,16 +42,55 @@ import {
   CROWN_HUNT_FLAG_KEY,
   MAX_CLAIM_SPEED_MPS,
   MAX_DAILY_SUCCESSFUL_CLAIMS,
+  awardGuardDocId,
+  awardGuardWindowKey,
   claimLedgerIdempotencyKey,
+  dailyClaimCounterDocId,
   getClaimMessage,
   isPointCurrentlyAvailable,
   parseSubmitClaimInput,
   repeatRuleWindowStart,
   scopeClaimIdempotencyKey,
   startOfUtcDay,
+  utcDayKey,
   type CrownHuntClaimResult,
   type CrownHuntRepeatRule,
 } from './crownhunt-core';
+
+/**
+ * Thrown inside the award transaction's read guard when a deterministic
+ * guard/counter document shows the claim would breach the repeat rule or the
+ * daily cap. Carries the authoritative result code the caller replies with.
+ */
+class ClaimGuardRejection extends Error {
+  constructor(readonly result: Extract<CrownHuntClaimResult, 'already_claimed' | 'daily_limit_reached'>) {
+    super(result);
+    this.name = 'ClaimGuardRejection';
+  }
+}
+
+/**
+ * Maps a thrown award-transaction error to an authoritative claim result, or
+ * null when it is not a guard rejection (rethrow). Handles both the explicit
+ * read-guard throw and the Firestore ALREADY_EXISTS from the guard-document
+ * `tx.create` when two claims race past the read check simultaneously.
+ */
+function classifyClaimGuardRejection(
+  error: unknown,
+): Extract<CrownHuntClaimResult, 'already_claimed' | 'daily_limit_reached'> | null {
+  if (error instanceof ClaimGuardRejection) {
+    return error.result;
+  }
+  // Firestore create-on-existing → gRPC ALREADY_EXISTS: a concurrent award
+  // won the guard document. The admin SDK surfaces this as numeric code 6, an
+  // 'already-exists' string, or an ALREADY_EXISTS message depending on version.
+  const code = (error as { code?: unknown })?.code;
+  const message = String((error as { message?: unknown })?.message ?? '');
+  if (code === 6 || code === 'already-exists' || message.includes('ALREADY_EXISTS')) {
+    return 'already_claimed';
+  }
+  return null;
+}
 
 export interface SubmitClaimResponse {
   result: CrownHuntClaimResult;
@@ -403,49 +442,125 @@ export const submitClaim = onCall(
     // 15. Award: ledger credit + claim record + risk record, atomically
     // (AtomicExtraWrites runs inside the ledger transaction; replays via the
     // derived ledger idempotency key add no extra writes).
+    //
+    // Steps 11/12 above are non-transactional fast-path reads; they cannot
+    // stop concurrent claims that use DISTINCT client idempotency keys (each
+    // is an independent transaction that serialises only on the shared
+    // pointsLedger balance, which does not re-check the repeat rule or cap).
+    // The authoritative enforcement lives HERE, inside the award
+    // transaction, on documents whose IDs do NOT derive from the client key:
+    //   - crownHuntAwardGuards/{uid__point__window}: a `tx.create` that a
+    //     second concurrent award for the same window loses (already_claimed);
+    //   - crownHuntDailyClaims/{uid__utcDay}: a counter read in the read guard
+    //     and incremented here, so the daily cap holds under concurrency.
     const rewardPoints = point!.rewardPoints as number;
-    const ledgerResult = await creditPoints(
-      {
-        targetUid: uid,
-        amount: rewardPoints,
-        transactionType: 'earn',
-        source: 'crown_hunt',
-        description: `Kronjakt: ${point!.title as string}`,
-        idempotencyKey: claimLedgerIdempotencyKey(scopedKey),
-        relatedEntityType: 'crown_hunt_point',
-        relatedEntityId: input.pointId,
-      },
-      (tx, mutation) => {
-        tx.set(claimsRef.doc(scopedKey), {
-          pointId: input.pointId,
-          userId: uid,
-          result: 'awarded',
-          claimedAt: Timestamp.fromDate(now),
-          distanceMeters,
-          positionRecordedAt: Timestamp.fromDate(recordedAtDate),
-          reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
-          pointsAwarded: mutation.amount,
-          balanceAfter: mutation.balanceAfter,
-          pointsLedgerEntryId: mutation.entryId,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-        if (riskEval.riskScore > 0) {
-          tx.set(db.collection('crownHuntClaimRisk').doc(scopedKey), {
+    const repeatRule = point!.repeatRule as CrownHuntRepeatRule;
+    const awardGuardRef = db
+      .collection('crownHuntAwardGuards')
+      .doc(awardGuardDocId(uid, input.pointId, repeatRule, now));
+    const dailyCounterRef = db
+      .collection('crownHuntDailyClaims')
+      .doc(dailyClaimCounterDocId(uid, now));
+
+    try {
+      const ledgerResult = await creditPoints(
+        {
+          targetUid: uid,
+          amount: rewardPoints,
+          transactionType: 'earn',
+          source: 'crown_hunt',
+          description: `Kronjakt: ${point!.title as string}`,
+          idempotencyKey: claimLedgerIdempotencyKey(scopedKey),
+          relatedEntityType: 'crown_hunt_point',
+          relatedEntityId: input.pointId,
+        },
+        (tx, mutation) => {
+          // Write phase. The guard `create` fails with ALREADY_EXISTS if a
+          // concurrent award already claimed this window; the counter
+          // increment pairs with the read-guard check below.
+          tx.create(awardGuardRef, {
             userId: uid,
             pointId: input.pointId,
-            riskScore: riskEval.riskScore,
-            riskReasons: riskEval.riskReasons,
+            repeatRule,
+            windowKey: awardGuardWindowKey(repeatRule, now),
+            claimedAt: Timestamp.fromDate(now),
             createdAt: FieldValue.serverTimestamp(),
           });
-        }
-      },
-    );
+          tx.set(
+            dailyCounterRef,
+            {
+              userId: uid,
+              day: utcDayKey(now),
+              count: FieldValue.increment(1),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+          tx.set(claimsRef.doc(scopedKey), {
+            pointId: input.pointId,
+            userId: uid,
+            result: 'awarded',
+            claimedAt: Timestamp.fromDate(now),
+            distanceMeters,
+            positionRecordedAt: Timestamp.fromDate(recordedAtDate),
+            reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+            pointsAwarded: mutation.amount,
+            balanceAfter: mutation.balanceAfter,
+            pointsLedgerEntryId: mutation.entryId,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+          if (riskEval.riskScore > 0) {
+            tx.set(db.collection('crownHuntClaimRisk').doc(scopedKey), {
+              userId: uid,
+              pointId: input.pointId,
+              riskScore: riskEval.riskScore,
+              riskReasons: riskEval.riskReasons,
+              createdAt: FieldValue.serverTimestamp(),
+            });
+          }
+        },
+        // Read phase (runs before the writes above): reject a duplicate or an
+        // over-cap claim from inside the transaction. Reads only.
+        async (tx) => {
+          const [guardSnap, counterSnap] = await Promise.all([
+            tx.get(awardGuardRef),
+            tx.get(dailyCounterRef),
+          ]);
+          if (guardSnap.exists) {
+            throw new ClaimGuardRejection('already_claimed');
+          }
+          const dailyCount = (counterSnap.data()?.count as number | undefined) ?? 0;
+          if (dailyCount >= MAX_DAILY_SUCCESSFUL_CLAIMS) {
+            throw new ClaimGuardRejection('daily_limit_reached');
+          }
+        },
+      );
 
-    return {
-      result: 'awarded',
-      pointsAwarded: ledgerResult.amount,
-      newBalance: ledgerResult.balanceAfter,
-      message: getClaimMessage('awarded'),
-    };
+      return {
+        result: 'awarded',
+        pointsAwarded: ledgerResult.amount,
+        newBalance: ledgerResult.balanceAfter,
+        message: getClaimMessage('awarded'),
+      };
+    } catch (error) {
+      const guarded = classifyClaimGuardRejection(error);
+      if (!guarded) {
+        throw error;
+      }
+      // Lost the race: record the attempt with the authoritative result and
+      // replay it, mirroring the non-transactional steps 11/12.
+      const existing = await recordAttempt(scopedKey, {
+        pointId: input.pointId,
+        userId: uid,
+        result: guarded,
+        claimedAt: Timestamp.fromDate(now),
+        distanceMeters,
+        positionRecordedAt: Timestamp.fromDate(recordedAtDate),
+      });
+      if (existing) {
+        return replayStoredClaim(existing, input.pointId);
+      }
+      return respond(guarded);
+    }
   },
 );

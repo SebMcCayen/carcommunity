@@ -299,3 +299,55 @@ export function repeatRuleWindowStart(rule: CrownHuntRepeatRule, now: Date): Dat
   if (rule === 'weekly') return startOfUtcWeek(now);
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Deterministic award-guard identifiers (Phase 9h race hardening)
+//
+// The step-11 repeat-rule query and the step-12 daily-cap query are read
+// BEFORE the award transaction, so N concurrent claims with distinct
+// client idempotency keys each pass those pre-checks and each award. The
+// guard documents below make the repeat rule and daily cap enforceable
+// INSIDE the award transaction with IDs that do NOT derive from the
+// client-supplied idempotency key, so concurrent duplicates serialize on a
+// shared document and only one commits. Both collections are backend-only
+// (firestore.rules deny all client access).
+// ---------------------------------------------------------------------------
+
+/** UTC calendar-day key (YYYY-MM-DD) — the daily window and counter bucket. */
+export function utcDayKey(date: Date): string {
+  return startOfUtcDay(date).toISOString().slice(0, 10);
+}
+
+/**
+ * The window key an award falls in for a repeat rule: 'once' (all history),
+ * or the ISO date (YYYY-MM-DD) of the daily/weekly window start. Using the
+ * window-start date keeps the key unambiguous without ISO-week arithmetic.
+ */
+export function awardGuardWindowKey(rule: CrownHuntRepeatRule, now: Date): string {
+  const start = repeatRuleWindowStart(rule, now);
+  return start ? start.toISOString().slice(0, 10) : 'once';
+}
+
+/**
+ * Deterministic crownHuntAwardGuards document ID for a (user, point, window).
+ * A `tx.create` of this ID inside the award transaction rejects a second
+ * concurrent award for the same window (already-claimed). Firestore-safe by
+ * construction: uid, pointId, rule and the date key use only [A-Za-z0-9._-].
+ */
+export function awardGuardDocId(
+  uid: string,
+  pointId: string,
+  rule: CrownHuntRepeatRule,
+  now: Date,
+): string {
+  return `${uid}__${pointId}__${rule}_${awardGuardWindowKey(rule, now)}`;
+}
+
+/**
+ * Deterministic crownHuntDailyClaims counter document ID for a (user, UTC
+ * day). Read-and-incremented inside the award transaction so the daily cap
+ * cannot be beaten by concurrent claims.
+ */
+export function dailyClaimCounterDocId(uid: string, now: Date): string {
+  return `${uid}__${utcDayKey(now)}`;
+}

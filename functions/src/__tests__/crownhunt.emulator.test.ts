@@ -342,6 +342,54 @@ describe('crownHunt-submitClaim', () => {
     expect(second.result).toBe('already_claimed');
   });
 
+  it('awards only once when many claims race with distinct idempotency keys', async () => {
+    // The core race fix (H2): N concurrent submitClaim calls for the same
+    // once-point, each with a DIFFERENT idempotency key (so the ledger's
+    // key-based idempotency does NOT collapse them), must produce exactly one
+    // award. Before the deterministic in-transaction award guard, every
+    // parallel request passed the non-transactional repeat-rule pre-check and
+    // double-credited the Kronpoäng balance.
+    const pointId = await createActivePoint({ rewardPoints: 25 });
+    const racer = await createProvisionedUser('ch-racer');
+    await adminDb.collection('users').doc(racer.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(racer);
+
+    const CONCURRENCY = 6;
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENCY }, () =>
+        call('crownHunt-submitClaim', claimInput({ pointId })).then(
+          (r) => (r.data as { result: string }).result,
+          // A losing racer can also surface as an internal error if the guard
+          // `create` collides at commit; that is still a non-award outcome.
+          () => 'error',
+        ),
+      ),
+    );
+
+    expect(results.filter((r) => r === 'awarded').length).toBe(1);
+
+    // Exactly one awarded claim row and one ledger credit — no inflation.
+    const awardedClaims = await adminDb
+      .collection('crownHuntClaims')
+      .where('userId', '==', racer.uid)
+      .where('pointId', '==', pointId)
+      .where('result', '==', 'awarded')
+      .get();
+    expect(awardedClaims.size).toBe(1);
+
+    const balance = (await adminDb.collection('pointsLedger').doc(racer.uid).get()).data()!
+      .balance as number;
+    expect(balance).toBe(25);
+
+    // The deterministic guard document exists exactly once for this window.
+    const guards = await adminDb
+      .collection('crownHuntAwardGuards')
+      .where('userId', '==', racer.uid)
+      .where('pointId', '==', pointId)
+      .get();
+    expect(guards.size).toBe(1);
+  });
+
   it('rejects claims outside the geofence, at speed, and with stale positions', async () => {
     const pointId = await createActivePoint();
     await signInAs(member);
