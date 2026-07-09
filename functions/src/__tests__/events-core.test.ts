@@ -22,7 +22,7 @@ import {
   stockholmEndOfDay,
 } from '../events/events-core';
 
-/** Wall-clock time (y/m/d h:m:s.ms) of an instant in the Europe/Stockholm zone. */
+/** Wall-clock time (y/m/d h:m:s) of an instant in the Europe/Stockholm zone. */
 function stockholmParts(iso: string): string {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/Stockholm',
