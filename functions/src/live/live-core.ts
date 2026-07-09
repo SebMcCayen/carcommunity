@@ -23,8 +23,10 @@
  *   whose recordedAt is older than 15 minutes (client gone silent).
  * - "Hide me now" (privacy): stops the session and removes `latest`
  *   immediately; must work for ANY signed-in user, suspended included.
- * - Blocking enforcement is the blocking domain's follow-up (no blocks
- *   collection exists yet) — same documented seam as event chat.
+ * - Blocking IS enforced on marker reads: blocking-onBlockWrite mirrors the
+ *   userBlocks graph into RTDB (liveLocationBlocks/), and the
+ *   liveLocation/{uid}/latest read rule denies either party who has blocked
+ *   the other. RTDB rules cannot read Firestore, hence the mirror.
  *
  * ISO-8601 UTC timestamps sort lexicographically, so RTDB string
  * comparisons on expiresAt/recordedAt are chronological.

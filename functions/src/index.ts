@@ -27,6 +27,7 @@ import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
+import { onBlockWrite } from './blocking/onBlockWrite';
 import { addVehicle, deleteVehicle, updateVehicle } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
@@ -154,18 +155,20 @@ export const drives = {
 };
 
 /**
- * Blocking domain (grouped export → deployed as `blocking-block` and
- * `blocking-unblock`).
+ * Blocking domain (grouped export → deployed as `blocking-block`,
+ * `blocking-unblock`, and the `blocking-onBlockWrite` Firestore trigger).
  *
  * Directional, idempotent user blocking backed by
  * userBlocks/{uid}/blocked/{targetUid} (owner-readable; backend-only writes).
  * Ports services/api blocking-service.ts. The blocked list is a direct owner
- * read of the subcollection; cross-feature visibility enforcement (live
- * location / chat) is tracked separately in the parity matrix.
+ * read of the subcollection. onBlockWrite mirrors the block graph into RTDB
+ * (liveLocationBlocks/) so live-location marker reads honour blocks — RTDB
+ * security rules cannot read Firestore directly.
  */
 export const blocking = {
   block: blockUser,
   unblock: unblockUser,
+  onBlockWrite,
 };
 
 /**

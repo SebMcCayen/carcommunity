@@ -1973,6 +1973,49 @@ describe('Realtime Database – liveLocation (Phase 10)', () => {
     await assertSucceeds(dbGet(dbRef(ownerCtx.database(), `liveLocation/${SHARER}/session`)));
   });
 
+  it('blocking hides the marker symmetrically (either party having blocked)', async () => {
+    const BLOCKED_BY_SHARER = 'loc-blocked-by-sharer'; // SHARER blocked them
+    const BLOCKER_OF_SHARER = 'loc-blocker-of-sharer'; // they blocked SHARER
+
+    // Seed the RTDB mirror the way blocking-onBlockWrite maintains it.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await dbSet(
+        dbRef(ctx.database(), `liveLocationBlocks/${SHARER}/${BLOCKED_BY_SHARER}`),
+        true,
+      );
+      await dbSet(
+        dbRef(ctx.database(), `liveLocationBlocks/${BLOCKER_OF_SHARER}/${SHARER}`),
+        true,
+      );
+    });
+
+    // Target blocked viewer → denied.
+    const blockedBySharer = testEnv.authenticatedContext(BLOCKED_BY_SHARER, {
+      activeMember: true,
+    });
+    await assertFails(dbGet(dbRef(blockedBySharer.database(), `liveLocation/${SHARER}/latest`)));
+
+    // Viewer blocked target → also denied (symmetric hide).
+    const blockerOfSharer = testEnv.authenticatedContext(BLOCKER_OF_SHARER, {
+      activeMember: true,
+    });
+    await assertFails(dbGet(dbRef(blockerOfSharer.database(), `liveLocation/${SHARER}/latest`)));
+
+    // An unblocked entitled member is unaffected, and the owner still reads own.
+    const other = testEnv.authenticatedContext('loc-unblocked-member', { activeMember: true });
+    await assertSucceeds(dbGet(dbRef(other.database(), `liveLocation/${SHARER}/latest`)));
+    const ownerCtx = testEnv.authenticatedContext(SHARER, { activeMember: true });
+    await assertSucceeds(dbGet(dbRef(ownerCtx.database(), `liveLocation/${SHARER}/latest`)));
+  });
+
+  it('the liveLocationBlocks mirror is never client-readable or writable', async () => {
+    const ctx = testEnv.authenticatedContext(MEMBER, { activeMember: true });
+    await assertFails(dbGet(dbRef(ctx.database(), `liveLocationBlocks/${SHARER}/${MEMBER}`)));
+    await assertFails(
+      dbSet(dbRef(ctx.database(), `liveLocationBlocks/${MEMBER}/${SHARER}`), true),
+    );
+  });
+
   it('non-members, suspended members, and strangers cannot read', async () => {
     const nonMember = testEnv.authenticatedContext(NON_MEMBER);
     await assertFails(dbGet(dbRef(nonMember.database(), `liveLocation/${SHARER}/latest`)));

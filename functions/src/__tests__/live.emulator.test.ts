@@ -285,3 +285,32 @@ describe('live TTL sweep', () => {
     expect((await adminRtdb.ref('liveLocation/ttl-healthy/latest').get()).exists()).toBe(true);
   });
 });
+
+describe('live-location block mirror (blocking-onBlockWrite)', () => {
+  it('mirrors a block into liveLocationBlocks and removes it on unblock', async () => {
+    const target = await createProvisionedUser('live-block-target');
+    await makeMember(target);
+    await signInAs(member);
+
+    // blocking.block writes userBlocks/{member}/blocked/{target}; the trigger
+    // mirrors it to RTDB so the liveLocation read rule can enforce it.
+    await call('blocking-block', { targetUserId: target.uid });
+    const mirrored = await pollUntil(async () => {
+      const snap = await adminRtdb
+        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
+        .get();
+      return snap.val() === true ? true : undefined;
+    });
+    expect(mirrored).toBe(true);
+
+    // Unblock removes the mirror node.
+    await call('blocking-unblock', { targetUserId: target.uid });
+    const removed = await pollUntil(async () => {
+      const snap = await adminRtdb
+        .ref(`liveLocationBlocks/${member.uid}/${target.uid}`)
+        .get();
+      return snap.exists() ? undefined : true;
+    });
+    expect(removed).toBe(true);
+  });
+});

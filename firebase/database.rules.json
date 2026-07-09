@@ -8,9 +8,13 @@
           ".read": "auth != null && auth.uid == $uid"
         },
         "latest": {
-          ".read": "auth != null && auth.token.activeMember == true && auth.token.suspended != true"
+          ".read": "auth != null && auth.token.activeMember == true && auth.token.suspended != true && (auth.uid == $uid || (!root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
         }
       }
+    },
+    "liveLocationBlocks": {
+      ".read": false,
+      ".write": false
     },
     "presence": {
       "$uid": {
