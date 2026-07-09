@@ -19,7 +19,33 @@ import {
   parseCreateEventInput,
   parseEventIdInput,
   parseUpdateEventInput,
+  stockholmEndOfDay,
+  type UpdateEventInput,
 } from '../events/events-core';
+
+/**
+ * Wall-clock time of an instant in the Europe/Stockholm zone, normalized to
+ * 'YYYY-MM-DD HH:MM:SS'. Built from `formatToParts` numeric fields rather than
+ * the raw `format()` string so assertions don't depend on locale punctuation,
+ * which is not a stable contract across Node/ICU/CLDR updates.
+ */
+function stockholmParts(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Stockholm',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const field: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== 'literal') field[part.type] = part.value;
+  }
+  return `${field.year}-${field.month}-${field.day} ${field.hour}:${field.minute}:${field.second}`;
+}
 
 const serverTimestamp = () => 'SERVER_TS';
 
@@ -83,6 +109,19 @@ describe('events-core business guards', () => {
     expect(guardEventTimes(start, null).ok).toBe(true);
   });
 
+  it('accepts an end exactly 3 days after start but rejects a longer span', () => {
+    const start = '2027-06-01T18:00:00.000Z';
+    // Exactly 72 hours later is allowed.
+    const threeDays = guardEventTimes(start, '2027-06-04T18:00:00.000Z');
+    expect(threeDays.ok).toBe(true);
+    // One millisecond past 3 days is rejected as invalid-argument.
+    const justOver = guardEventTimes(start, '2027-06-04T18:00:00.001Z');
+    expect(justOver.ok).toBe(false);
+    if (!justOver.ok) expect(justOver.code).toBe('invalid-argument');
+    // Clearly-too-long spans are rejected too.
+    expect(guardEventTimes(start, '2027-06-10T18:00:00.000Z').ok).toBe(false);
+  });
+
   it('requires latitude and longitude as a pair', () => {
     expect(guardCoordinatePair(59.3, null).ok).toBe(false);
     expect(guardCoordinatePair(null, 18.0).ok).toBe(false);
@@ -127,7 +166,64 @@ describe('events-core business guards', () => {
   });
 });
 
+describe('events-core stockholmEndOfDay', () => {
+  it('returns 23:59:59.999 local on the summer (CEST, UTC+2) start day', () => {
+    // 2027-06-01T18:00Z is 20:00 in Stockholm → same calendar day.
+    const eod = stockholmEndOfDay('2027-06-01T18:00:00.000Z');
+    expect(eod).toBe('2027-06-01T21:59:59.999Z');
+    expect(stockholmParts(eod)).toBe('2027-06-01 23:59:59');
+  });
+
+  it('returns 23:59:59.999 local on the winter (CET, UTC+1) start day', () => {
+    const eod = stockholmEndOfDay('2027-01-15T18:00:00.000Z');
+    expect(eod).toBe('2027-01-15T22:59:59.999Z');
+    expect(stockholmParts(eod)).toBe('2027-01-15 23:59:59');
+  });
+
+  it('uses the Stockholm calendar day, not the UTC day', () => {
+    // 23:30Z is already 01:30 the next day in Stockholm (UTC+2 in summer).
+    const eod = stockholmEndOfDay('2027-06-01T23:30:00.000Z');
+    expect(stockholmParts(eod)).toBe('2027-06-02 23:59:59');
+  });
+
+  it('is correct across the spring-forward DST boundary (end-of-day is CEST)', () => {
+    // Sweden springs forward on 2027-03-28; the day still ends at 23:59 CEST.
+    const eod = stockholmEndOfDay('2027-03-28T10:00:00.000Z');
+    expect(stockholmParts(eod)).toBe('2027-03-28 23:59:59');
+    expect(eod).toBe('2027-03-28T21:59:59.999Z');
+  });
+
+  it('is correct across the fall-back DST boundary (end-of-day is CET)', () => {
+    // Sweden falls back on 2027-10-31; the day still ends at 23:59 CET.
+    const eod = stockholmEndOfDay('2027-10-31T10:00:00.000Z');
+    expect(stockholmParts(eod)).toBe('2027-10-31 23:59:59');
+    expect(eod).toBe('2027-10-31T22:59:59.999Z');
+  });
+});
+
 describe('events-core document builders', () => {
+  it('defaults a missing endsAt to the Stockholm end-of-day of startsAt', () => {
+    const parsed = parseCreateEventInput(validCreate);
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc } = buildEventDocuments(parsed.input, 'admin-1', serverTimestamp);
+
+    const endsAt = eventDoc.endsAt as Date;
+    expect(endsAt).toBeInstanceOf(Date);
+    // validCreate.startsAt is 2027-06-01T18:00Z → end of that Stockholm day.
+    expect(endsAt.toISOString()).toBe('2027-06-01T21:59:59.999Z');
+    expect(stockholmParts(endsAt.toISOString())).toBe('2027-06-01 23:59:59');
+  });
+
+  it('preserves an explicitly provided endsAt', () => {
+    const parsed = parseCreateEventInput({
+      ...validCreate,
+      endsAt: '2027-06-02T10:00:00.000Z',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc } = buildEventDocuments(parsed.input, 'admin-1', serverTimestamp);
+    expect((eventDoc.endsAt as Date).toISOString()).toBe('2027-06-02T10:00:00.000Z');
+  });
+
   it('splits teaser-safe and member-gated fields on create', () => {
     const parsed = parseCreateEventInput({
       ...validCreate,
@@ -188,6 +284,99 @@ describe('events-core document builders', () => {
     expect(Object.keys(eventDoc)).toHaveLength(0);
     expect(Object.keys(privateDoc)).toHaveLength(0);
     expect(changedFields).toHaveLength(0);
+  });
+});
+
+describe('events-core update-path endsAt defaulting/removal', () => {
+  // The emulator suite (events.emulator.test.ts) exercises events.update but not
+  // endsAt defaulting/removal, and it cannot run in every environment (no local
+  // Firebase emulator). These tests reproduce the exact decision in
+  // manageEvent.update — using the same production pure functions it calls
+  // (buildEventUpdates + stockholmEndOfDay) — so the update-path default is
+  // covered without an emulator.
+  const RESOLVE_UNTOUCHED = Symbol('endsAt-untouched');
+
+  /**
+   * Mirrors the endsAt resolution in manageEvent.update: given the parsed
+   * update input and the stored event times, returns the value that would be
+   * written to eventDoc.endsAt (or RESOLVE_UNTOUCHED when endsAt is not written).
+   */
+  function resolveUpdateEndsAt(
+    input: UpdateEventInput,
+    stored: { startsAt: string; endsAt: string | null },
+  ): Date | null | typeof RESOLVE_UNTOUCHED {
+    const { eventDoc } = buildEventUpdates(input, serverTimestamp);
+
+    const effectiveStartsAt = input.startsAt ?? stored.startsAt;
+    const resolvedEndsAt = input.endsAt !== undefined ? input.endsAt : stored.endsAt;
+    const timesTouched = input.startsAt !== undefined || input.endsAt !== undefined;
+
+    if (timesTouched && resolvedEndsAt === null) {
+      return new Date(stockholmEndOfDay(effectiveStartsAt));
+    }
+    if ('endsAt' in eventDoc) return eventDoc.endsAt as Date | null;
+    return RESOLVE_UNTOUCHED;
+  }
+
+  it('buildEventUpdates carries an explicit endsAt removal (null) as a changed field', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', endsAt: null });
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc, changedFields } = buildEventUpdates(parsed.input, serverTimestamp);
+    expect(eventDoc.endsAt).toBeNull();
+    expect(changedFields).toContain('endsAt');
+  });
+
+  it('defaults to Stockholm end-of-day when endsAt is explicitly removed', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', endsAt: null });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Stored start 2027-06-01T18:00Z (summer); clearing the end defaults it to
+    // the end of that Stockholm day rather than leaving it null.
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: '2027-06-02T10:00:00.000Z',
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-06-01T21:59:59.999Z');
+  });
+
+  it('defaults to end-of-day of the new start when startsAt is edited and stored end is null', () => {
+    const parsed = parseUpdateEventInput({
+      eventId: 'e1',
+      startsAt: '2027-01-15T18:00:00.000Z',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Winter start with no stored end → end-of-day of the *new* start (CET).
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-01-15T22:59:59.999Z');
+  });
+
+  it('preserves an explicitly provided endsAt without defaulting', () => {
+    const parsed = parseUpdateEventInput({
+      eventId: 'e1',
+      endsAt: '2027-06-02T10:00:00.000Z',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBeInstanceOf(Date);
+    expect((resolved as Date).toISOString()).toBe('2027-06-02T10:00:00.000Z');
+  });
+
+  it('does not retroactively default endsAt when only non-time fields are edited', () => {
+    const parsed = parseUpdateEventInput({ eventId: 'e1', title: 'Renamed cruise' });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Times untouched: a stored null end stays null (no retroactive defaulting).
+    const resolved = resolveUpdateEndsAt(parsed.input, {
+      startsAt: '2027-06-01T18:00:00.000Z',
+      endsAt: null,
+    });
+    expect(resolved).toBe(RESOLVE_UNTOUCHED);
   });
 });
 
