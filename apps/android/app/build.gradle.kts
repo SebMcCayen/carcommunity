@@ -13,8 +13,19 @@ plugins {
 // signed with the upload key for Google Play.
 val keystorePropsFile = file("keystore.properties")
 val keystoreProps = Properties().apply {
-    if (keystorePropsFile.exists()) {
-        keystorePropsFile.inputStream().use { load(it) }
+    // Loading keystore.properties must never be fatal: an unreadable file,
+    // broken symlink, or malformed contents should fall through to unsigned
+    // rather than break Gradle configuration. Pre-check isFile && canRead(),
+    // and still catch read/parse errors in case the file changes underneath.
+    if (keystorePropsFile.isFile && keystorePropsFile.canRead()) {
+        try {
+            keystorePropsFile.inputStream().use { load(it) }
+        } catch (e: Exception) {
+            logger.warn(
+                "Release signing disabled: keystore.properties could not be read " +
+                    "(${e.message}). The release build will be unsigned.",
+            )
+        }
     }
 }
 // Read every required property up front, trimmed. A blank storeFile must not
@@ -26,7 +37,7 @@ val keystoreStorePassword = keystoreProps.getProperty("storePassword")?.trim()
 val keystoreKeyAlias = keystoreProps.getProperty("keyAlias")?.trim()
 val keystoreKeyPassword = keystoreProps.getProperty("keyPassword")?.trim()
 val hasReleaseSigning = !keystoreStoreFile.isNullOrBlank() &&
-    file(keystoreStoreFile).isFile &&
+    file(keystoreStoreFile).run { isFile && canRead() } &&
     !keystoreStorePassword.isNullOrBlank() &&
     !keystoreKeyAlias.isNullOrBlank() &&
     !keystoreKeyPassword.isNullOrBlank()
