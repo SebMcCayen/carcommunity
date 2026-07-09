@@ -22,10 +22,14 @@
  * - Public-safe body: only the sanitized error code/type, reason, app/build/OS
  *   version, device model, fingerprint, first-seen timestamp and occurrence
  *   count. No uid (unauthenticated → none), no PII (see signInIssues-core).
- * - Resilience: a GitHub failure NEVER throws the trigger into a crash-loop —
- *   the placeholder link is rolled back so the next occurrence retries, and the
- *   diagnostics doc is left intact. Dedup by fingerprint bounds this to one
- *   create attempt per occurrence, so a failure storm can't hammer GitHub.
+ * - Resilience: a GitHub failure NEVER throws the trigger into a crash-loop.
+ *   Cleanup is concurrency-safe (a transaction re-reads the link): a pristine
+ *   placeholder (`creating`, count 1) is deleted so the next occurrence retries;
+ *   a placeholder a concurrent occurrence already incremented (count > 1) is
+ *   kept and marked `failed` so no occurrence is lost and a future occurrence
+ *   re-attempts creation. The diagnostics doc is left intact. Dedup by
+ *   fingerprint bounds this to one create attempt per occurrence, so a failure
+ *   storm can't hammer GitHub.
  */
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
@@ -38,7 +42,9 @@ import {
   SIGN_IN_ISSUE_LINKS_COLLECTION,
   buildNewSignInIssueLink,
   buildSignInIssueLinkCreated,
+  buildSignInIssueLinkFailed,
   buildSignInIssueLinkIncrement,
+  buildSignInIssueLinkRetry,
   buildSignInIssuePayload,
   decideSignInIssueAction,
   extractSignInFailureReport,
@@ -78,15 +84,23 @@ export const onSignInFailure = onDocumentCreated(
     try {
       action = await db.runTransaction(async (tx) => {
         const existing = await tx.get(linkRef);
-        const decision = decideSignInIssueAction(
-          existing.exists ? (existing.data() as SignInIssueLink) : null,
-        );
+        const link = existing.exists ? (existing.data() as SignInIssueLink) : null;
+        const decision = decideSignInIssueAction(link);
         if (decision === 'increment') {
           tx.update(
             linkRef,
             buildSignInIssueLinkIncrement(FieldValue.increment(1), () =>
               FieldValue.serverTimestamp(),
             ),
+          );
+        } else if (link) {
+          // Retry after a prior FAILED create: re-claim the existing link
+          // WITHOUT resetting the preserved tally/firstSeenAt, and count this
+          // occurrence too. Concurrent occurrences during the retry see the
+          // status flip back to `creating` and increment instead of double-filing.
+          tx.update(
+            linkRef,
+            buildSignInIssueLinkRetry(FieldValue.increment(1), () => FieldValue.serverTimestamp()),
           );
         } else {
           tx.set(
@@ -135,11 +149,36 @@ export const onSignInFailure = onDocumentCreated(
       return;
     }
 
-    // GitHub failed (already logged in the helper, no throw): roll back the
-    // placeholder so the NEXT occurrence retries. The diagnostics doc is left
-    // intact; dedup still bounds retries to one create attempt per occurrence.
+    // GitHub failed (already logged in the helper, no throw): clean up the
+    // placeholder so a future occurrence retries. This MUST be concurrency-safe:
+    // while we were awaiting GitHub, a concurrent occurrence of the same
+    // fingerprint may have seen our `creating` placeholder and incremented
+    // `count`/`lastSeenAt`. An unconditional delete would wipe that occurrence.
+    // So re-read inside a transaction and decide atomically:
+    //   - pristine placeholder (still `creating` AND count === 1, i.e. no
+    //     concurrent increment) → delete it, matching the original rollback
+    //     intent so the next occurrence creates a fresh issue;
+    //   - a concurrent occurrence already bumped it (count > 1) → do NOT delete;
+    //     mark the link `failed` (retriable) so the tally/lastSeenAt survive and
+    //     a FUTURE occurrence re-attempts creation (decideSignInIssueAction →
+    //     create). Marking `failed` (not leaving `creating`) is what lets the
+    //     retry happen without looping: only the single occurrence that finds a
+    //     `failed` link re-files; concurrent ones during that retry increment.
+    // The GitHub network call already happened OUTSIDE this transaction.
     try {
-      await linkRef.delete();
+      await db.runTransaction(async (tx) => {
+        const current = await tx.get(linkRef);
+        if (!current.exists) return;
+        const link = current.data() as SignInIssueLink;
+        // Only our own in-flight placeholder is eligible for cleanup. `created`
+        // (a concurrent trigger somehow filed it) is left untouched.
+        if (link.status !== 'creating') return;
+        if (link.count === 1) {
+          tx.delete(linkRef);
+        } else {
+          tx.update(linkRef, buildSignInIssueLinkFailed());
+        }
+      });
     } catch (error) {
       logger.error('diagnostics.onSignInFailure: failed to roll back placeholder link', {
         fingerprint: report.fingerprint,

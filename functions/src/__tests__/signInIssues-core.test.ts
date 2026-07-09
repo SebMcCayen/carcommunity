@@ -3,7 +3,9 @@
  * (signInIssues-core.ts). No emulators. The public-body PII-exclusion
  * assertions are the point — the auto-filed GitHub issue is world-readable and
  * the source reports are UNAUTHENTICATED (there is no uid to leak, and there
- * must never be one).
+ * must never be one). Because the endpoint is unauthenticated, EVERY report
+ * field is attacker-controllable, so the server must whitelist the exception
+ * type and never echo client free-text (safeMessage) into the public issue.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -11,25 +13,30 @@ import {
   AUTO_GENERATED_LABEL,
   SIGN_IN_FEATURE_AREA,
   SIGN_IN_ISSUE_LABEL,
+  SIGN_IN_PUBLIC_REASON,
+  UNKNOWN_ERROR_TYPE,
   buildNewSignInIssueLink,
   buildSignInIssueBody,
   buildSignInIssueLinkCreated,
+  buildSignInIssueLinkFailed,
   buildSignInIssueLinkIncrement,
+  buildSignInIssueLinkRetry,
   buildSignInIssuePayload,
   buildSignInIssueTitle,
+  computeSignInFingerprint,
   decideSignInIssueAction,
   extractSignInFailureReport,
+  validateExceptionType,
   type SignInFailureReport,
   type SignInIssueLink,
 } from '../diagnostics/signInIssues-core';
 
-const ZWSP = '\u200b';
+const ZWSP = '​';
 
-const fingerprint = 'a'.repeat(64);
+const fingerprint = computeSignInFingerprint('GetCredentialException');
 
 const report: SignInFailureReport = {
-  errorCode: 'GetCredentialException',
-  safeMessage: 'Sign-in failed: GetCredentialException',
+  errorType: 'GetCredentialException',
   appVersion: '1.4.0',
   buildNumber: '42',
   osVersion: 'Android 14 (API 34)',
@@ -38,6 +45,61 @@ const report: SignInFailureReport = {
 };
 
 const meta = { firstSeenIso: '2026-07-09T12:00:00.000Z', count: 1 };
+
+// ---------------------------------------------------------------------------
+// Exception-type whitelist (the server-side PII control)
+// ---------------------------------------------------------------------------
+
+describe('validateExceptionType', () => {
+  it('accepts a simple or fully-qualified class-name token', () => {
+    expect(validateExceptionType('GetCredentialException')).toBe('GetCredentialException');
+    expect(validateExceptionType('SignInException')).toBe('SignInException');
+    expect(validateExceptionType('com.google.FirebaseAuthException')).toBe(
+      'com.google.FirebaseAuthException',
+    );
+    expect(validateExceptionType('  Trimmed_Exception$Inner  ')).toBe('Trimmed_Exception$Inner');
+  });
+
+  it('collapses anything that is not a class-name token to Unknown', () => {
+    expect(validateExceptionType(null)).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType(undefined)).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType('')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType(42 as unknown)).toBe(UNKNOWN_ERROR_TYPE);
+    // Free text / PII must never survive.
+    expect(validateExceptionType('attacker@evil.com')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType('cc @maintainer see #123')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType('Sign-in failed: something')).toBe(UNKNOWN_ERROR_TYPE);
+    expect(validateExceptionType('has spaces')).toBe(UNKNOWN_ERROR_TYPE);
+    // Over-length rejected (bounded).
+    expect(validateExceptionType('A'.repeat(101))).toBe(UNKNOWN_ERROR_TYPE);
+  });
+});
+
+describe('computeSignInFingerprint (dedup from validated type only)', () => {
+  it('is stable for the same validated type regardless of client free-text', () => {
+    // Two reports with the SAME exception type but DIFFERENT (attacker-varied)
+    // safeMessage/context must dedup to the SAME issue — the fingerprint is
+    // derived from the validated type only, so it cannot be polluted.
+    const a = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      safeMessage: 'Sign-in failed: GetCredentialException (attempt 1)',
+      errorCode: 'GetCredentialException',
+    });
+    const b = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      safeMessage: 'totally different attacker text 9f2a',
+      errorCode: 'GetCredentialException',
+    });
+    expect(a?.fingerprint).toBe(b?.fingerprint);
+    expect(a?.fingerprint).toBe(computeSignInFingerprint('GetCredentialException'));
+  });
+
+  it('differs for different validated types', () => {
+    expect(computeSignInFingerprint('GetCredentialException')).not.toBe(
+      computeSignInFingerprint('SignInException'),
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Extraction
@@ -55,10 +117,11 @@ describe('extractSignInFailureReport', () => {
     buildNumber: '42',
     osVersion: 'Android 14 (API 34)',
     metadata: { deviceModel: 'Google Pixel 8' },
-    fingerprint,
+    // A client-provided fingerprint is deliberately IGNORED (recomputed).
+    fingerprint: 'client-provided-value-that-must-be-ignored',
   };
 
-  it('extracts the sign-in view including deviceModel from metadata', () => {
+  it('extracts the validated view including deviceModel, recomputing the fingerprint', () => {
     expect(extractSignInFailureReport(rawDoc)).toEqual(report);
   });
 
@@ -67,27 +130,44 @@ describe('extractSignInFailureReport', () => {
     expect(extractSignInFailureReport({ ...rawDoc, featureArea: 'auth' })).toBeNull();
   });
 
-  it('returns null when fingerprint or safeMessage is missing', () => {
-    expect(extractSignInFailureReport({ ...rawDoc, fingerprint: undefined })).toBeNull();
+  it('ignores the client fingerprint but still requires a safeMessage presence signal', () => {
+    // fingerprint is no longer trusted from the client — recomputed server-side.
+    expect(extractSignInFailureReport({ ...rawDoc, fingerprint: undefined })).toEqual(report);
+    // safeMessage is still the "populated report" signal.
     expect(extractSignInFailureReport({ ...rawDoc, safeMessage: '' })).toBeNull();
+    expect(extractSignInFailureReport({ ...rawDoc, safeMessage: '   ' })).toBeNull();
     expect(extractSignInFailureReport(null)).toBeNull();
     expect(extractSignInFailureReport(undefined)).toBeNull();
   });
 
-  it('tolerates absent optionals and non-object metadata', () => {
+  it('collapses an invalid/PII errorCode to Unknown and never surfaces it', () => {
+    // A hostile UNAUTHENTICATED caller stuffs an email into errorCode + PII into
+    // safeMessage. Neither may reach the extracted report / public payload.
+    const result = extractSignInFailureReport({
+      featureArea: SIGN_IN_FEATURE_AREA,
+      safeMessage: 'my email is victim@example.com and phone 0700000000',
+      errorCode: 'attacker@evil.com',
+      appVersion: '1.4.0',
+    });
+    expect(result?.errorType).toBe(UNKNOWN_ERROR_TYPE);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('victim@example.com');
+    expect(serialized).not.toContain('attacker@evil.com');
+    expect(serialized).not.toContain('0700000000');
+  });
+
+  it('tolerates absent optionals and non-object metadata (type → Unknown)', () => {
     const result = extractSignInFailureReport({
       featureArea: SIGN_IN_FEATURE_AREA,
       safeMessage: 'Sign-in failed',
-      fingerprint,
     });
     expect(result).toEqual({
-      errorCode: null,
-      safeMessage: 'Sign-in failed',
+      errorType: UNKNOWN_ERROR_TYPE,
       appVersion: null,
       buildNumber: null,
       osVersion: null,
       deviceModel: null,
-      fingerprint,
+      fingerprint: computeSignInFingerprint(UNKNOWN_ERROR_TYPE),
     });
   });
 });
@@ -102,7 +182,7 @@ describe('decideSignInIssueAction (dedup)', () => {
     expect(decideSignInIssueAction(undefined)).toBe('create');
   });
 
-  it('increments when a link already exists (creating OR created)', () => {
+  it('increments when a link is in flight (creating) or done (created)', () => {
     const creating: SignInIssueLink = {
       fingerprint,
       status: 'creating',
@@ -119,6 +199,17 @@ describe('decideSignInIssueAction (dedup)', () => {
     };
     expect(decideSignInIssueAction(creating)).toBe('increment');
     expect(decideSignInIssueAction(created)).toBe('increment');
+  });
+
+  it('re-creates (retries) when a prior attempt is marked failed', () => {
+    const failed: SignInIssueLink = {
+      fingerprint,
+      status: 'failed',
+      issueNumber: null,
+      issueUrl: null,
+      count: 4,
+    };
+    expect(decideSignInIssueAction(failed)).toBe('create');
   });
 });
 
@@ -150,6 +241,21 @@ describe('signInIssueLinks document builders', () => {
     // Never re-writes firstSeenAt, issueNumber, or status.
     expect(Object.keys(patch).sort()).toEqual(['count', 'lastSeenAt']);
   });
+
+  it('builds a retry patch that re-claims (creating) and counts this occurrence', () => {
+    const patch = buildSignInIssueLinkRetry('INC', () => 'TS');
+    expect(patch).toEqual({ status: 'creating', count: 'INC', lastSeenAt: 'TS' });
+    // Never resets firstSeenAt / issueNumber (tally is preserved).
+    expect(Object.keys(patch).sort()).toEqual(['count', 'lastSeenAt', 'status']);
+  });
+
+  it('builds a failed patch that only flips status (preserving the tally)', () => {
+    const patch = buildSignInIssueLinkFailed();
+    expect(patch).toEqual({ status: 'failed' });
+    // Must NOT touch count / lastSeenAt / firstSeenAt, so concurrent occurrences
+    // recorded before the failure are never lost.
+    expect(Object.keys(patch)).toEqual(['status']);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -157,22 +263,22 @@ describe('signInIssueLinks document builders', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildSignInIssueTitle', () => {
-  it('tags with [Sign-in] and uses the error code', () => {
+  it('tags with [Sign-in] and uses the validated error type', () => {
     expect(buildSignInIssueTitle(report)).toBe('[Sign-in] GetCredentialException');
   });
 
-  it('falls back to the reason, then a generic label', () => {
-    expect(buildSignInIssueTitle({ ...report, errorCode: null })).toBe(
-      '[Sign-in] Sign-in failed: GetCredentialException',
+  it('uses the Unknown placeholder when the type failed validation', () => {
+    expect(buildSignInIssueTitle({ ...report, errorType: UNKNOWN_ERROR_TYPE })).toBe(
+      '[Sign-in] Unknown',
     );
   });
 });
 
 describe('buildSignInIssueBody', () => {
-  it('includes the sanitized fields, fingerprint, first-seen and count', () => {
+  it('includes the validated type, a FIXED reason, context, fingerprint and count', () => {
     const body = buildSignInIssueBody(report, meta);
-    expect(body).toContain('- Error code/type: GetCredentialException');
-    expect(body).toContain('- Reason: Sign-in failed: GetCredentialException');
+    expect(body).toContain('- Error type: GetCredentialException');
+    expect(body).toContain(`- Reason: ${SIGN_IN_PUBLIC_REASON}`);
     expect(body).toContain('- App version: 1.4.0');
     expect(body).toContain('- Build number: 42');
     expect(body).toContain('- OS version: Android 14 (API 34)');
@@ -182,18 +288,18 @@ describe('buildSignInIssueBody', () => {
     expect(body).toContain('- Occurrences: 1');
   });
 
-  it('renders unknown for absent context', () => {
+  it('renders Unknown/unknown for an absent type and context', () => {
     const body = buildSignInIssueBody(
-      { ...report, errorCode: null, appVersion: null, osVersion: null, deviceModel: null },
+      { ...report, errorType: UNKNOWN_ERROR_TYPE, appVersion: null, osVersion: null, deviceModel: null },
       meta,
     );
-    expect(body).toContain('- Error code/type: unknown');
+    expect(body).toContain('- Error type: Unknown');
     expect(body).toContain('- App version: unknown');
     expect(body).toContain('- Device model: unknown');
   });
 });
 
-describe('public payload safety (world-readable repo)', () => {
+describe('public payload safety (world-readable repo, unauthenticated source)', () => {
   it('labels every issue sign-in-failure + auto-generated', () => {
     expect(buildSignInIssuePayload(report, meta).labels).toEqual([
       SIGN_IN_ISSUE_LABEL,
@@ -204,10 +310,6 @@ describe('public payload safety (world-readable repo)', () => {
   });
 
   it('NEVER leaks a uid, email, token, or raw exception message', () => {
-    // Even if a hostile UNAUTHENTICATED client stuffs PII-shaped strings into
-    // the sanitized-reason/context fields, the payload must not surface a uid,
-    // an email, or a token. (The extractor + the diagnostics callable strip
-    // these upstream; this asserts the builder adds none of its own.)
     const serialized = JSON.stringify(buildSignInIssuePayload(report, meta)).toLowerCase();
     expect(serialized).not.toContain('uid');
     expect(serialized).not.toContain('@');
@@ -216,19 +318,42 @@ describe('public payload safety (world-readable repo)', () => {
     expect(serialized).not.toContain('userid');
   });
 
-  it('neutralizes @mention / #ref abuse in client-controlled fields', () => {
-    // diagnostics.submitReport is unauthenticated, so errorCode/safeMessage/
-    // context are attacker-controllable: a crafted @maintainer / #123 must not
-    // become a live mention or cross-reference on the public issue.
+  it('does NOT publish PII stuffed into errorCode/safeMessage by a hostile caller', () => {
+    // Full pipeline: a hostile UNAUTHENTICATED report with an email in errorCode
+    // and free-text PII in safeMessage. The published payload must contain only
+    // the Unknown placeholder + the fixed reason — never the attacker text.
+    const raw = {
+      featureArea: SIGN_IN_FEATURE_AREA,
+      safeMessage: 'contact me at victim@example.com — password is hunter2',
+      errorCode: 'phish@evil.com',
+      appVersion: '1.4.0',
+    };
+    const extracted = extractSignInFailureReport(raw);
+    expect(extracted).not.toBeNull();
+    const payload = buildSignInIssuePayload(extracted as SignInFailureReport, meta);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).not.toContain('victim@example.com');
+    expect(serialized).not.toContain('phish@evil.com');
+    expect(serialized).not.toContain('hunter2');
+    expect(serialized).not.toContain('@');
+    expect(payload.title).toBe('[Sign-in] Unknown');
+    expect(payload.body).toContain('- Error type: Unknown');
+    expect(payload.body).toContain(`- Reason: ${SIGN_IN_PUBLIC_REASON}`);
+    // The free-text safeMessage never appears.
+    expect(payload.body).not.toContain('contact me at');
+  });
+
+  it('neutralizes @mention / #ref as defence in depth on any included scalar', () => {
+    // A validated type can never contain @/#, but the neutralizer still runs on
+    // whatever IS included (belt-and-suspenders). Feed a raw errorType with a
+    // mention directly to the builder and confirm it is defused, not live.
     const hostile: SignInFailureReport = {
       ...report,
-      errorCode: 'Boom @maintainer',
-      safeMessage: 'cc @maintainer see #123',
+      errorType: 'Boom @maintainer',
       appVersion: '1.0 @ci',
     };
     const payload = buildSignInIssuePayload(hostile, meta);
     expect(payload.title).toBe(`[Sign-in] Boom @${ZWSP}maintainer`);
-    expect(payload.body).toContain(`cc @${ZWSP}maintainer see #${ZWSP}123`);
     expect(payload.body).toContain(`1.0 @${ZWSP}ci`);
   });
 });
