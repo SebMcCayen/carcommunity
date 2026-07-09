@@ -13,18 +13,10 @@ When documentation conflicts, use this priority order:
 7. `.github/instructions/firebase-security.instructions.md`
 8. `.github/instructions/firebase-ci-cost.instructions.md`
 9. `docs/product-decisions.md`
-10. Legacy implementation code — as evidence of existing product behavior only
 
-## Legacy freeze
+## Platform rules
 
-`apps/mobile` (React Native / Expo) and `services/api` (Node.js / Fastify / Prisma / PostgreSQL) are **frozen to new product features**.
-
-Changes in those directories are only allowed for:
-
-- Critical security fixes.
-- Keeping the legacy build operational during migration.
-- Extracting behavior descriptions into migration documentation or contracts.
-- Migration-specific compatibility work explicitly requested by a task.
+The legacy React Native / Expo app (`apps/mobile`) and the Fastify / Prisma / PostgreSQL API (`services/api`) have been **removed from the repository**. Do not reintroduce them. Their behavior lives on in the migration docs (`docs/migration/`) and contracts (`contracts/`).
 
 New mobile features must be implemented in both `apps/ios` and `apps/android`.
 
@@ -33,8 +25,6 @@ New backend business logic must target Firebase Cloud Functions, Firestore, Real
 The TypeScript package `packages/shared` is **not** an executable shared mobile library. It contains TypeScript contracts for the backend and admin web. Native platforms must align through language-neutral contracts, not shared runtime code.
 
 A mobile feature is incomplete until both native platform implementations and their tests are present.
-
-Copilot must not continue extending React Native (`apps/mobile`) or Fastify (`services/api`) merely because those implementations currently contain more code.
 
 ## Mandatory mobile parity
 
@@ -67,8 +57,6 @@ Follow the full mobile parity instructions defined in:
   - Firebase Authentication, App Check, Cloud Messaging
   - Mapbox Maps SDK (iOS and Android native SDKs)
   - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
-  - **LEGACY (frozen):** React Native / Expo mobile app at `apps/mobile`
-  - **LEGACY (frozen):** Node.js + Fastify + Prisma + PostgreSQL API at `services/api`
 
 ## Language and naming rules
 

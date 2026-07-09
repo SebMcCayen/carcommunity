@@ -2,9 +2,7 @@ node_modules
 dist
 build
 apps/functions/lib
-.expo
 .next
 coverage
-**/prisma/generated
 package-lock.json
 firebase/public

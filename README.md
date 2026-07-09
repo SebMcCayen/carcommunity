@@ -13,9 +13,9 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 ## High-level architecture
 
-> **Migration in progress.** The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + Fastify + PostgreSQL). These are **legacy migration sources** frozen to new product features. The target architecture below is what the codebase is actively migrating towards. See [ADR-001](docs/adr/001-firebase-platform.md) and [docs/migration/](docs/migration/) for the migration plan.
+> The legacy migration sources (`apps/mobile`, React Native / Expo, and `services/api`, Node.js + Fastify + PostgreSQL) have been removed — superseded by the native Android app and Firebase Cloud Functions. See [ADR-001](docs/adr/001-firebase-platform.md) and [docs/migration/](docs/migration/) for the migration history.
 
-**Target architecture:**
+**Architecture:**
 
 - Android native app (Kotlin / Jetpack Compose) — `apps/android` (MVP mobile client)
 - iOS native app — descoped from MVP (parked on the Future Ideas board)
@@ -34,13 +34,10 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 .
 ├── apps/
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (MVP)
-│   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
 │   └── admin/          # Admin web app (React, hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase
 ├── firebase/           # Firebase CLI config, Security Rules, indexes
-├── contracts/          # Language-neutral cross-platform contracts (planned)
-├── services/
-│   └── api/            # LEGACY: Node.js + Fastify + PostgreSQL API (frozen — migration source)
+├── contracts/          # Language-neutral cross-platform contracts
 ├── packages/
 │   └── shared/         # TypeScript contracts (backend/admin use)
 ├── docs/               # Product, architecture, security, data and design docs
@@ -50,7 +47,7 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 ## Local development
 
-For migration-target development, local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `functions/`). No cloud account is required for day-to-day development. (The legacy `services/api` backend still requires PostgreSQL + Prisma if you need to run it.)
+Local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `functions/`). No cloud account is required for day-to-day development.
 
 Minimum prerequisites:
 
