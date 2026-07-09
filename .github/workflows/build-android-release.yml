@@ -124,21 +124,34 @@ jobs:
             echo "::error::Release AAB not found at $AAB."
             exit 1
           fi
-          # Assert the v1 JAR signature block is present (META-INF/<ALIAS>.RSA|EC|DSA
-          # plus the matching .SF) rather than running `jarsigner -verify`.
-          # jarsigner trips on a BENIGN "signed in JarFile but is not signed in
-          # JarInputStream" discrepancy for App Bundles — its random-access and
-          # streaming passes disagree on entry ordering — and `-strict` turns that
-          # into a non-zero exit even though every entry IS signed by the upload
-          # key. Play does the authoritative signature check on upload and re-signs
-          # with the Play App Signing key, so a present signature block is the
-          # correct, deterministic gate here.
-          entries="$(unzip -l "$AAB")"
-          if grep -qiE 'META-INF/[^[:space:]]+\.(rsa|ec|dsa)$' <<< "$entries"; then
-            echo "Release AAB carries a signature block — signed:"
-            grep -iE 'META-INF/[^[:space:]]+\.(rsa|ec|dsa|sf)$' <<< "$entries"
-          else
+          # Assert the v1 JAR signature is present (a META-INF/<ALIAS>.RSA|EC|DSA
+          # signature block AND its matching META-INF/<ALIAS>.SF) rather than
+          # running `jarsigner -verify`. jarsigner trips on a BENIGN "signed in
+          # JarFile but is not signed in JarInputStream" discrepancy for App
+          # Bundles — its random-access and streaming passes disagree on entry
+          # ordering — and `-strict` turns that into a non-zero exit even though
+          # every entry IS signed by the upload key. Play does the authoritative
+          # signature check on upload and re-signs with the Play App Signing key,
+          # so a present-and-complete signature block is the correct,
+          # deterministic gate here.
+          #
+          # We list RAW zip entry paths with `unzip -Z1` (zipinfo mode, one bare
+          # entry per line) instead of parsing the tabular `unzip -l` output, and
+          # we require the .SF that matches the block's base name — a block alone
+          # can pass even when the .SF is missing or corrupt.
+          block="$(unzip -Z1 "$AAB" | grep -iE '^META-INF/[^/]+\.(rsa|ec|dsa)$' | head -n1 || true)"
+          if [ -z "$block" ]; then
             echo "::error::Release AAB has no signature block — signing did not run (check the ANDROID_KEYSTORE_* secrets)."
+            exit 1
+          fi
+          # Derive the block's base name (alias) and require the matching .SF.
+          # Alias base names are simple tokens, so they're safe to embed in the regex.
+          base="$(basename "$block")"; base="${base%.*}"
+          if unzip -Z1 "$AAB" | grep -qiE "^META-INF/${base}\.sf$"; then
+            echo "Release AAB is signed — signature block + matching .SF present:"
+            unzip -Z1 "$AAB" | grep -iE "^META-INF/${base}\.(rsa|ec|dsa|sf)$" || true
+          else
+            echo "::error::Signature block ${block} present but matching META-INF/${base}.SF is missing — signing is incomplete or corrupt."
             exit 1
           fi
 
