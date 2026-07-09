@@ -106,9 +106,19 @@ class FirebaseFeedbackRepository private constructor(
                         // property itself is private on the Java class.
                         @Suppress("UNCHECKED_CAST")
                         val payload = task.result?.getData() as? Map<String, Any?> ?: emptyMap()
+                        // reportId is required for downstream UX/triage; a
+                        // missing/blank id is a contract violation, not a
+                        // success — fail rather than mask a backend regression.
+                        val reportId = (payload["reportId"] as? String)?.takeIf { it.isNotBlank() }
+                        if (reportId == null) {
+                            continuation.resumeWithException(
+                                IllegalStateException("$CALLABLE returned no reportId"),
+                            )
+                            return@addOnCompleteListener
+                        }
                         continuation.resume(
                             FeedbackSubmitResult(
-                                reportId = payload["reportId"] as? String ?: "",
+                                reportId = reportId,
                                 issueUrl = payload["githubIssueUrl"] as? String,
                                 created = payload["status"] == "created",
                             ),

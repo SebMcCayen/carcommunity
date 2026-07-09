@@ -2,8 +2,9 @@
  * feedback.reportIssue — AUTHENTICATED callable
  * (contracts/functions/functions.json).
  *
- * The Android "Report a problem" flow. A signed-in, non-suspended member files
- * a bug report; the callable persists a PRIVATE record of record and then
+ * The Android "Report a problem" flow. An active signed-in user (non-suspended,
+ * non-deleted — no member entitlement required) files a bug report; the callable
+ * persists a PRIVATE record of record and then
  * files a PUBLIC GitHub issue (labelled `android-issue`) on the public repo.
  *
  * Ordering & durability (buildFeedbackReportDocument first, GitHub second):
@@ -122,8 +123,8 @@ async function createGitHubIssue(
 export const reportIssue = onCall(
   CALLABLE_OPTS,
   async (request): Promise<ReportIssueResponse> => {
-    // Auth REQUIRED (reject unauthenticated with `unauthenticated`) — testers
-    // are signed-in members; suspended/deleted are rejected too.
+    // Auth REQUIRED (reject unauthenticated with `unauthenticated`) — any
+    // active signed-in user may file; suspended/deleted are rejected too.
     const actor = await requireActiveActor(request);
 
     const parsed = parseReportIssueInput(request.data);

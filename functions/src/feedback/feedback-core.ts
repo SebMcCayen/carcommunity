@@ -2,8 +2,9 @@
  * Feedback domain — "Report a problem" pure logic (input parsing, bounding,
  * private-record + public-issue builders, rate-limit helpers).
  *
- * A signed-in member files a bug report from the Android app. Two records are
- * produced from one submission:
+ * An active signed-in user (non-suspended, non-deleted — no member entitlement
+ * required) files a bug report from the Android app. Two records are produced
+ * from one submission:
  *
  * - the PRIVATE record of record: `feedbackReports/{reportId}` (admin-only
  *   read), carrying the caller's uid, the typed text, the client context, a
@@ -193,7 +194,7 @@ export function buildGitHubIssueBody(
     '---',
     context,
     '',
-    '_Filed from the Kungsbacka Car Community Android app. Reports are public — they never include account identifiers._',
+    '_Filed via the in-app Report a problem flow. Reports are public — they never include account identifiers._',
   ].join('\n');
 }
 
