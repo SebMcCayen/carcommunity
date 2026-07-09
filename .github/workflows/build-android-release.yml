@@ -163,10 +163,10 @@ jobs:
           # alias containing '.', '*', '[', etc. is matched literally.
           base="$(basename "$block")"; base="${base%.*}"
           sf="META-INF/${base}.SF"
-          if grep -Fixq "$sf" <<< "$entries"; then
+          if grep -F -i -x -q "$sf" <<< "$entries"; then
             echo "Release AAB is signed — signature block + matching .SF present:"
             echo "  $block"
-            grep -Fix "$sf" <<< "$entries" | sed 's/^/  /' || true
+            grep -F -i -x "$sf" <<< "$entries" | sed 's/^/  /' || true
           else
             echo "::error::Signature block ${block} present but matching ${sf} is missing — signing is incomplete or corrupt."
             exit 1
