@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   adminListModerationReports,
+  MODERATION_REPORT_TARGET_TYPES,
   resolveModerationReport,
   type AdminModerationReport,
   type ApiError,
@@ -47,6 +48,18 @@ const DETAILS_PREVIEW_LENGTH = 140;
 
 function formatDateTime(iso: string | null): string {
   return formatDate(iso);
+}
+
+/**
+ * Localized label for a target type. Only the known vocabulary has an i18n
+ * key; an unexpected/corrupt value would otherwise make translate() echo the
+ * raw dot-path key (moderationReports.targetType.<value>), so unknown types
+ * fall back to the explicit localized "unknown" label.
+ */
+function targetTypeLabel(targetType: string): string {
+  return (MODERATION_REPORT_TARGET_TYPES as readonly string[]).includes(targetType)
+    ? t(`moderationReports.targetType.${targetType}`)
+    : t('moderationReports.targetType.unknown');
 }
 
 /** Badge class for a target type; unknown types get the neutral fallback. */
@@ -275,9 +288,7 @@ export default function ModerationReportsPage() {
                   </td>
                   <td>
                     <span className={targetTypeBadgeClass(report.targetType)}>
-                      {report.targetType
-                        ? t(`moderationReports.targetType.${report.targetType}`)
-                        : t('moderationReports.targetType.unknown')}
+                      {targetTypeLabel(report.targetType)}
                     </span>
                     <span className={styles.monoSub} title={report.targetId}>
                       {report.targetId || '–'}

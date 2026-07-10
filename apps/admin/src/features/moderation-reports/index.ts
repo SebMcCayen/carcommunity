@@ -275,7 +275,12 @@ export async function resolveModerationReport(
     if (!snapshot.exists()) {
       throw new ApiError(404, 'not-found', 'Moderation report not found.');
     }
-    const current = coerceStatus((snapshot.data() as DocumentData).status);
+    // Compare the RAW stored status, not the coerced one: coerceStatus() maps
+    // an unknown/corrupt stored value to 'pending', which would make a reset
+    // to 'pending' look like an already-resolved no-op and leave the bad value
+    // in place forever. Using the raw value lets an admin always write a
+    // malformed report back into the allowed vocabulary.
+    const current = (snapshot.data() as DocumentData).status;
     if (current === status) {
       return { id: reportId, status, alreadyResolved: true };
     }

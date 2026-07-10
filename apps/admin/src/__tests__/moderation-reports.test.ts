@@ -365,6 +365,30 @@ describe('resolveModerationReport', () => {
     expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
+  it('lets an admin reset a report with an unknown/corrupt stored status back into the vocabulary', async () => {
+    // Regression guard: the no-op check must compare the RAW stored status, not
+    // the coerced one. If it coerced first, 'bogus' → 'pending' would make a
+    // reset to 'pending' a false already-resolved no-op, stranding the bad
+    // value. The write must go through and fix the record.
+    txGetMock.mockResolvedValue({
+      exists: () => true,
+      id: 'report-corrupt',
+      data: () => ({
+        reportedBy: 'r',
+        targetType: 'user',
+        targetId: 'u',
+        reason: 'spam',
+        status: 'bogus',
+        createdAt: ts('2026-07-01T00:00:00.000Z'),
+      }),
+    });
+
+    const result = await resolveModerationReport('report-corrupt', 'pending');
+
+    expect(result).toEqual({ id: 'report-corrupt', status: 'pending', alreadyResolved: false });
+    expect(txUpdateMock).toHaveBeenCalledWith(expect.anything(), { status: 'pending' });
+  });
+
   it('rejects a status outside the review vocabulary before touching Firestore', async () => {
     await expect(
       // @ts-expect-error — deliberately passing an out-of-vocabulary status.
