@@ -4,11 +4,18 @@ package com.kungsbackacarcommunity.app.onboarding
  * Pure onboarding-form logic (Phase 12 slice 2). No Android/Firebase types
  * so it is JVM-unit-testable (the `./gradlew test` gate).
  *
- * Mirrors the auth.completeOnboarding contract
- * (contracts/schemas/auth.schema.json / functions onboarding-core): the
- * three consents are all mandatory, and the display name is REQUIRED and must
- * be 1..120 characters after trimming. The display name is the user's public
- * profile name — it is never derived from the Google account name.
+ * The three consents are all mandatory, mirroring the auth.completeOnboarding
+ * contract (contracts/schemas/auth.schema.json / functions onboarding-core),
+ * which requires all three to be literally true.
+ *
+ * The display name is CLIENT-ENFORCED as required here: this form does not
+ * enable submission until a non-blank display name of 1..120 characters (after
+ * trimming) is entered, and it is never prefilled from the Google account name.
+ * This is intentionally stricter than the current backend contract — server
+ * side `displayName` is still OPTIONAL (functions onboarding-core), and when a
+ * client omits it completeOnboarding seeds it from `auth.token.name` during
+ * provisioning (functions completeOnboarding.ts). The stricter client rule
+ * ensures members always choose their own public profile name.
  */
 object OnboardingForm {
 

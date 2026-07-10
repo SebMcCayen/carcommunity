@@ -171,7 +171,13 @@ private fun ConsentLink(text: String, url: String) {
         modifier =
             Modifier
                 .padding(start = 48.dp)
-                .clickable { openExternalUrl(context, url) },
+                // Screen readers otherwise announce this as plain text: mark it
+                // as a button and label the action with the link text itself
+                // ("Read the terms" / "Läs villkoren") so it reads as tappable.
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = text,
+                ) { openExternalUrl(context, url) },
     )
 }
 
