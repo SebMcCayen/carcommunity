@@ -133,8 +133,16 @@ The entire UGC-safety loop exists for event chat and ports 1:1:
   security review** — this proposal is that review's input.
 - `functions/src/notifications/pushTokens.ts` + FCM push and the Android
   inbox/prefs UI (`apps/android/.../notifications/`,
-  `NotificationSettingsScreen.kt`) — the opt-out toggle for the new category
-  appears automatically once the category exists in the prefs model.
+  `NotificationSettingsScreen.kt`) — the prefs UI does **not** auto-surface a
+  new category. `NotificationSettingsScreen` renders one toggle row per entry
+  in the hardcoded `NotificationCategories.ACTIVE` list
+  (`NotificationSettings.kt`) and labels each via the hardcoded
+  `categoryLabelRes` `when`. Surfacing a `followed_build_update` toggle
+  therefore needs three manual client edits: append the category to
+  `NotificationCategories.ACTIVE`, add its `categoryLabelRes` case, and add a
+  `notifications_category*` string resource — otherwise it either never
+  renders (absent from `ACTIVE`) or falls back to the generic "System" label
+  (the `else` branch).
 
 ### 2.6 Badges & Kronpoäng (for the *featured*, not the *automatic*, path)
 
