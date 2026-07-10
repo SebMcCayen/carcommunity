@@ -39,6 +39,8 @@ fun GarageScreen(
     onDelete: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Re-invokes the garage load; when null the error state shows no retry.
+    onRetry: (() -> Unit)? = null,
 ) {
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
@@ -73,12 +75,18 @@ fun GarageScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                GarageState.Error ->
+                GarageState.Error -> {
                     Text(
                         text = stringResource(R.string.garage_error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
+                    if (onRetry != null) {
+                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                            Text(text = stringResource(R.string.garage_retryButton))
+                        }
+                    }
+                }
 
                 is GarageState.Loaded -> {
                     if (state.vehicles.isEmpty()) {

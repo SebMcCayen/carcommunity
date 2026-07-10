@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,6 +35,8 @@ fun EventsListScreen(
     onOpenEvent: (String) -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    // Re-invokes the list load; when null the error state shows no retry.
+    onRetry: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -63,12 +66,18 @@ fun EventsListScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                EventsListState.Error ->
+                EventsListState.Error -> {
                     Text(
                         text = stringResource(R.string.events_error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
+                    if (onRetry != null) {
+                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                            Text(text = stringResource(R.string.events_retry))
+                        }
+                    }
+                }
 
                 is EventsListState.Loaded ->
                     if (state.events.isEmpty()) {

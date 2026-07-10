@@ -27,7 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -273,6 +275,7 @@ private fun SavePrompt(
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -311,7 +314,13 @@ private fun SavePrompt(
                 )
             }
 
-            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onSave()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(text = stringResource(R.string.savedDrives_saveAction))
             }
             TextButton(onClick = onDiscard, modifier = Modifier.fillMaxWidth()) {

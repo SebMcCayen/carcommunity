@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.partners
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,9 +29,11 @@ fun PartnersRoute(
     val scope = rememberCoroutineScope()
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Bumped by the "try again" affordance to re-subscribe the companies flow.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
 
     val companiesState by
-        remember(repository) { repository.observeActiveCompanies() }
+        remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
     val offers by
         remember(repository) { repository.observeActiveOffers() }.collectAsState(initial = emptyList())
@@ -43,11 +46,20 @@ fun PartnersRoute(
         (offerCodeCoordinator?.status ?: flowOf(OfferCodeStatus.Idle))
             .collectAsState(initial = OfferCodeStatus.Idle)
 
+    // System/gesture Back returns from the company detail to the list; at the
+    // list root it is disabled so the shell's BackHandler returns to Home.
+    BackHandler(enabled = selectedCompanyId != null) {
+        selectedCompanyId = null
+        expandedOfferId = null
+        offerCodeCoordinator?.reset()
+    }
+
     val companyId = selectedCompanyId
     if (companyId == null) {
         PartnersListScreen(
             state = companiesState,
             onOpenCompany = { selectedCompanyId = it },
+            onRetry = { reloadKey++ },
             onBack = onBack,
         )
         return

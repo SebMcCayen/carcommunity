@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
@@ -196,7 +202,29 @@ fun AuthenticatedApp(
                     isActiveMember = profile?.activeMember == true,
                 )
 
-            when (destination) {
+            // Shared transient-failure surface for the whole signed-in shell.
+            // Screens reach it through [LocalSnackbarHostState]; the host itself
+            // is overlaid at the bottom of the Box below.
+            val snackbarHostState = remember { SnackbarHostState() }
+
+            CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
+              Box(modifier = Modifier.fillMaxSize()) {
+                // System/gesture Back returns to Home from any sub-screen, and
+                // only exits the app from Home. Nested routes (events, garage,
+                // partners, saved drives) register their own BackHandler to
+                // unwind one internal level first — those compose deeper in the
+                // tree, so they take priority while enabled and this shell
+                // handler only fires once a route is at its own root.
+                BackHandler(enabled = destination != MainDestination.Home) {
+                    // Leaving the map clears the stashed participant uids, mirroring
+                    // MapRoute.onBack so a later Home -> Map entry starts clean.
+                    if (destination == MainDestination.Map) {
+                        mapParticipantUids = ArrayList()
+                    }
+                    destination = MainDestination.Home
+                }
+
+                when (destination) {
                 MainDestination.Profile -> {
                     val saveStatus by
                         (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
@@ -748,6 +776,16 @@ fun AuthenticatedApp(
                             },
                     )
                 }
+                }
+
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    // Pad for the system navigation bar so transient messages are
+                    // not obscured by 3-button nav at the window bottom.
+                    modifier =
+                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+                )
+              }
             }
         }
     }

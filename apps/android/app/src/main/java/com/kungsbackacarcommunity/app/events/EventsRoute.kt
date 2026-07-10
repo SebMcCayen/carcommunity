@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.events
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,6 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChat
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
@@ -55,15 +60,32 @@ fun EventsRoute(
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showGroupDrive by rememberSaveable { mutableStateOf(false) }
+    // Bumped by the "try again" affordance to re-subscribe the observe flows.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
     val selected = selectedEventId
+
+    // System/gesture Back unwinds one internal level (chat/group-drive -> detail,
+    // detail -> list); at the list root it is disabled so the shell's BackHandler
+    // returns to Home. Mirrors the in-screen Back buttons' reset behaviour.
+    BackHandler(enabled = selected != null) {
+        when {
+            showChat -> showChat = false
+            showGroupDrive -> showGroupDrive = false
+            else -> {
+                selectedEventId = null
+                rsvpCoordinator?.reset()
+            }
+        }
+    }
 
     if (selected == null) {
         val listState by
-            remember(repository) { repository.observePublishedEvents() }
+            remember(repository, reloadKey) { repository.observePublishedEvents() }
                 .collectAsState(initial = EventsListState.Loading)
         EventsListScreen(
             state = listState,
             onOpenEvent = { selectedEventId = it },
+            onRetry = { reloadKey++ },
             onBack = onBack,
         )
         return
@@ -72,7 +94,7 @@ fun EventsRoute(
     // Track the first snapshot so a null event reads as "loading" (not "error")
     // on the initial composition.
     val eventLoad by
-        remember(selected) {
+        remember(repository, selected, reloadKey) {
             repository.observeEvent(selected).map<EventSummary?, EventLoad> { EventLoad.Loaded(it) }
         }
             .collectAsState(initial = EventLoad.Loading)
@@ -121,6 +143,18 @@ fun EventsRoute(
         (rsvpCoordinator?.status ?: flowOf(RsvpStatusUi.Idle))
             .collectAsState(initial = RsvpStatusUi.Idle)
 
+    // Transient failure surfacing: a failed RSVP write raises a shell snackbar
+    // (the shared, non-blocking feedback channel) instead of a persistent line.
+    val snackbarHostState = LocalSnackbarHostState.current
+    val rsvpFailedMessage = stringResource(R.string.events_rsvpSubmitError)
+    LaunchedEffect(rsvpStatus, snackbarHostState, rsvpFailedMessage) {
+        if (rsvpStatus == RsvpStatusUi.Failed) {
+            // Null when no shell host is attached (previews / isolated tests):
+            // skip so the coroutine never hangs waiting on a detached host.
+            snackbarHostState?.showSnackbar(rsvpFailedMessage)
+        }
+    }
+
     val chatEligible =
         chatEnabled &&
             chatRepository != null &&
@@ -144,6 +178,7 @@ fun EventsRoute(
             selectedEventId = null
             rsvpCoordinator?.reset()
         },
+        onRetry = { reloadKey++ },
         onOpenChat = if (chatEligible) { { showChat = true } } else null,
         onOpenGroupDrive = if (groupDriveEligible) { { showGroupDrive = true } } else null,
     )

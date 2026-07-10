@@ -20,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -48,9 +50,12 @@ fun EventDetailScreen(
     // True until the first Firestore snapshot arrives, so a null event reads
     // as "loading" rather than "error" on the very first composition.
     isLoading: Boolean = false,
+    // Re-invokes the detail load from the error state; null hides the retry.
+    onRetry: (() -> Unit)? = null,
     onOpenChat: (() -> Unit)? = null,
     onOpenGroupDrive: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier =
@@ -74,6 +79,11 @@ fun EventDetailScreen(
                             MaterialTheme.colorScheme.error
                         },
                 )
+                if (!isLoading && onRetry != null) {
+                    Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                        Text(text = stringResource(R.string.events_retry))
+                    }
+                }
                 TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.profile_back))
                 }
@@ -144,16 +154,15 @@ fun EventDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    RsvpButton(R.string.events_rsvpGoing, RsvpStatus.GOING, myRsvp, rsvpStatus, onRsvp)
-                    RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvp)
-                    RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvp)
-                }
-                if (rsvpStatus == RsvpStatusUi.Failed) {
-                    Text(
-                        text = stringResource(R.string.events_rsvpSubmitError),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    // A light confirm haptic accompanies the RSVP write; the
+                    // failure path is surfaced as a shell snackbar by the route.
+                    val onRsvpHaptic: (RsvpStatus) -> Unit = { answer ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRsvp(answer)
+                    }
+                    RsvpButton(R.string.events_rsvpGoing, RsvpStatus.GOING, myRsvp, rsvpStatus, onRsvpHaptic)
+                    RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvpHaptic)
+                    RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
                 }
             }
 

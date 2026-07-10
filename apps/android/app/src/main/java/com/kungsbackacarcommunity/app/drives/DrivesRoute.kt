@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -7,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -27,8 +29,10 @@ fun DrivesRoute(
     isActiveMember: Boolean,
     onBack: () -> Unit,
 ) {
+    // Bumped by the "try again" affordance to re-subscribe the observe flow.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
     val state by
-        remember(repository, uid) { repository.observeDrives(uid) }
+        remember(repository, uid, reloadKey) { repository.observeDrives(uid) }
             .collectAsState(initial = DrivesState.Loading)
     val coordinator = remember(repository) { DrivesCoordinator(repository) }
     val deleteStatus by coordinator.deleteStatus.collectAsState()
@@ -48,6 +52,21 @@ fun DrivesRoute(
 
     val selected =
         (state as? DrivesState.Loaded)?.drives?.firstOrNull { it.rideId == selectedRideId }
+
+    // System/gesture Back unwinds one internal level (recorder or detail -> list);
+    // at the list root it is disabled so the shell's BackHandler returns to Home.
+    // Enabling on `selectedRideId != null` alone (not also `selected != null`)
+    // ensures a transient null `selected` during a list refresh still unwinds to
+    // the list instead of falling through to the shell handler (Home).
+    BackHandler(enabled = recordSession != null || selectedRideId != null) {
+        when {
+            recordSession != null -> recordSession = null
+            else -> {
+                selectedRideId = null
+                coordinator.reset()
+            }
+        }
+    }
 
     when {
         recordSession != null -> {
@@ -78,6 +97,7 @@ fun DrivesRoute(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
                 onRecord = { recordSession = (recordSession ?: 0) + 1 },
+                onRetry = { reloadKey++ },
                 onBack = onBack,
             )
     }

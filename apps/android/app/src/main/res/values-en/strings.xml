@@ -298,6 +298,7 @@
     <string name="savedDrives_detailTitle">Drive details</string>
     <string name="savedDrives_empty">No saved drives yet.</string>
     <string name="savedDrives_error">Could not load drives. Please try again.</string>
+    <string name="savedDrives_retry">Try again</string>
     <string name="savedDrives_errorDetail">Could not load drive details.</string>
     <string name="savedDrives_distance">Distance</string>
     <string name="savedDrives_duration">Drive time</string>
