@@ -147,9 +147,11 @@ fun EventsRoute(
     // (the shared, non-blocking feedback channel) instead of a persistent line.
     val snackbarHostState = LocalSnackbarHostState.current
     val rsvpFailedMessage = stringResource(R.string.events_rsvpSubmitError)
-    LaunchedEffect(rsvpStatus) {
+    LaunchedEffect(rsvpStatus, snackbarHostState) {
         if (rsvpStatus == RsvpStatusUi.Failed) {
-            snackbarHostState.showSnackbar(rsvpFailedMessage)
+            // Null when no shell host is attached (previews / isolated tests):
+            // skip so the coroutine never hangs waiting on a detached host.
+            snackbarHostState?.showSnackbar(rsvpFailedMessage)
         }
     }
 
