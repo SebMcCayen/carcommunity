@@ -987,5 +987,64 @@
       "updateFailed": "Ändringen kunde inte sparas.",
       "deleteFailed": "Borttagningen misslyckades."
     }
+  },
+  "support": {
+    "title": "Support",
+    "subtitle": "Buggrapporter från appen (”Rapportera ett problem”). Skrivskyddad vy — rapporter skapas endast via backend. Användar-ID visas endast för admin och finns aldrig i det publika GitHub-ärendet.",
+    "loading": "Laddar rapporter…",
+    "loadError": "Kunde inte ladda rapporterna. Försök igen.",
+    "empty": "Inga rapporter hittades.",
+    "refresh": "Uppdatera",
+    "moreAvailable": "Det kan finnas fler rapporter — endast den senaste sidan visas.",
+    "filter": {
+      "statusLabel": "GitHub-ärende",
+      "platformLabel": "Plattform",
+      "allStatuses": "Alla statusar",
+      "allPlatforms": "Alla plattformar"
+    },
+    "status": {
+      "created": "Skapat",
+      "failed": "Misslyckades",
+      "pending": "Väntar"
+    },
+    "platform": {
+      "android": "Android"
+    },
+    "columns": {
+      "status": "GitHub-ärende",
+      "platform": "Plattform",
+      "summary": "Sammanfattning",
+      "reporter": "Rapportör",
+      "createdAt": "Tidpunkt",
+      "actions": "Åtgärder"
+    },
+    "issue": {
+      "created": "Ärende",
+      "failed": "Inget ärende (misslyckades)",
+      "pending": "Väntar",
+      "openExternal": "Öppna GitHub-ärende (nytt fönster)"
+    },
+    "actions": {
+      "show": "Visa detaljer",
+      "hide": "Dölj detaljer"
+    },
+    "detail": {
+      "loading": "Laddar rapport…",
+      "loadError": "Kunde inte ladda rapporten. Försök igen.",
+      "notFound": "Rapporten finns inte längre.",
+      "reportId": "Rapport-ID",
+      "reporter": "Rapportör (uid)",
+      "summary": "Sammanfattning",
+      "description": "Beskrivning",
+      "platform": "Plattform",
+      "appVersion": "Appversion",
+      "osVersion": "OS-version",
+      "deviceModel": "Enhetsmodell",
+      "githubStatus": "GitHub-status",
+      "githubIssue": "GitHub-ärende",
+      "createdAt": "Skapad",
+      "noSummary": "Ingen sammanfattning.",
+      "noIssue": "Inget ärende."
+    }
   }
 }
