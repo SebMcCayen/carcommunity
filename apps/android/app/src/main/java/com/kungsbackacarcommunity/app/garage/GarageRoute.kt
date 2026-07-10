@@ -39,9 +39,11 @@ fun GarageRoute(
     val scope = rememberCoroutineScope()
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Bumped by the "try again" affordance to re-subscribe the observe flow.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
 
     val garageState by
-        remember(repository, uid) { repository.observeGarage(uid) }
+        remember(repository, uid, reloadKey) { repository.observeGarage(uid) }
             .collectAsState(initial = GarageState.Loading)
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
@@ -49,7 +51,9 @@ fun GarageRoute(
 
     // System/gesture Back leaves the add/edit form back to the list (mirrors the
     // form's Cancel); at the list root it is disabled so the shell's BackHandler
-    // returns to Home. The form's photo coordinator resets itself on dispose.
+    // returns to Home. Only the save coordinator is reset here; the form's photo
+    // coordinator is form-scoped (remembered inside the form branch) and is simply
+    // discarded when the form leaves composition — it has no self-reset on dispose.
     BackHandler(enabled = showForm) {
         showForm = false
         editingVehicleId = null
@@ -134,6 +138,7 @@ fun GarageRoute(
         GarageScreen(
             state = garageState,
             isActiveMember = isActiveMember,
+            onRetry = { reloadKey++ },
             onAdd = {
                 editingVehicleId = null
                 coordinator?.reset()

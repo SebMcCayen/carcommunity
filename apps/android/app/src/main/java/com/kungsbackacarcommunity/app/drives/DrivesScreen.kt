@@ -38,6 +38,8 @@ fun DrivesListScreen(
     onRecord: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Re-invokes the drives load; when null the error state shows no retry.
+    onRetry: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         // LazyColumn so an unbounded drive history only composes visible rows
@@ -72,11 +74,18 @@ fun DrivesListScreen(
 
                 DrivesState.Error ->
                     item {
-                        Text(
-                            text = stringResource(R.string.savedDrives_error),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.savedDrives_error),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            if (onRetry != null) {
+                                Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                                    Text(text = stringResource(R.string.savedDrives_retry))
+                                }
+                            }
+                        }
                     }
 
                 is DrivesState.Loaded ->

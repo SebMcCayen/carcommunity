@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -28,8 +29,10 @@ fun DrivesRoute(
     isActiveMember: Boolean,
     onBack: () -> Unit,
 ) {
+    // Bumped by the "try again" affordance to re-subscribe the observe flow.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
     val state by
-        remember(repository, uid) { repository.observeDrives(uid) }
+        remember(repository, uid, reloadKey) { repository.observeDrives(uid) }
             .collectAsState(initial = DrivesState.Loading)
     val coordinator = remember(repository) { DrivesCoordinator(repository) }
     val deleteStatus by coordinator.deleteStatus.collectAsState()
@@ -94,6 +97,7 @@ fun DrivesRoute(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
                 onRecord = { recordSession = (recordSession ?: 0) + 1 },
+                onRetry = { reloadKey++ },
                 onBack = onBack,
             )
     }

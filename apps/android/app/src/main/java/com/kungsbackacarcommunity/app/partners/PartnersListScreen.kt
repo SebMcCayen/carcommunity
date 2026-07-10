@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,6 +30,8 @@ fun PartnersListScreen(
     onOpenCompany: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Re-invokes the companies load; when null the error state shows no retry.
+    onRetry: (() -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -53,12 +56,18 @@ fun PartnersListScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                CompaniesState.Error ->
+                CompaniesState.Error -> {
                     Text(
                         text = stringResource(R.string.partners_error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
+                    if (onRetry != null) {
+                        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                            Text(text = stringResource(R.string.partners_retry))
+                        }
+                    }
+                }
 
                 is CompaniesState.Loaded ->
                     if (state.companies.isEmpty()) {

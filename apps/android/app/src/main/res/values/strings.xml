@@ -298,6 +298,7 @@
     <string name="savedDrives_detailTitle">Körningsdetaljer</string>
     <string name="savedDrives_empty">Inga sparade körningar ännu.</string>
     <string name="savedDrives_error">Kunde inte hämta körningar. Försök igen.</string>
+    <string name="savedDrives_retry">Försök igen</string>
     <string name="savedDrives_errorDetail">Kunde inte hämta körningsdetaljer.</string>
     <string name="savedDrives_distance">Distans</string>
     <string name="savedDrives_duration">Körtid</string>

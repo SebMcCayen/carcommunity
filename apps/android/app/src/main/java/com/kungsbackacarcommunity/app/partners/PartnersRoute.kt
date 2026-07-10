@@ -29,9 +29,11 @@ fun PartnersRoute(
     val scope = rememberCoroutineScope()
     var selectedCompanyId by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedOfferId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Bumped by the "try again" affordance to re-subscribe the companies flow.
+    var reloadKey by rememberSaveable { mutableStateOf(0) }
 
     val companiesState by
-        remember(repository) { repository.observeActiveCompanies() }
+        remember(repository, reloadKey) { repository.observeActiveCompanies() }
             .collectAsState(initial = CompaniesState.Loading)
     val offers by
         remember(repository) { repository.observeActiveOffers() }.collectAsState(initial = emptyList())
@@ -57,6 +59,7 @@ fun PartnersRoute(
         PartnersListScreen(
             state = companiesState,
             onOpenCompany = { selectedCompanyId = it },
+            onRetry = { reloadKey++ },
             onBack = onBack,
         )
         return
