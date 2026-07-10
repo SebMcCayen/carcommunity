@@ -61,6 +61,100 @@ export const MAX_ERROR_CODE_LENGTH = 100;
 export const DIAGNOSTICS_RETENTION_DAYS = 90;
 
 // ---------------------------------------------------------------------------
+// Rate limit (per caller — unauthenticated/unattested write surface protection)
+// ---------------------------------------------------------------------------
+
+/** Max reports a single caller may submit per rolling window. */
+export const DIAGNOSTICS_RATE_LIMIT_MAX = 20;
+/** Rolling window width: one hour. */
+export const DIAGNOSTICS_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+
+/** True when a fresh report would exceed the per-caller cap. */
+export function isDiagnosticsRateLimited(recentCount: number): boolean {
+  return recentCount >= DIAGNOSTICS_RATE_LIMIT_MAX;
+}
+
+// ---------------------------------------------------------------------------
+// Client-IP extraction (proxy-safe X-Forwarded-For handling for the anon key)
+// ---------------------------------------------------------------------------
+
+/**
+ * Number of trailing X-Forwarded-For entries that Google's infrastructure
+ * appends and that are therefore trustworthy. diagnostics.submitReport runs as
+ * a gen2 callable, i.e. Cloud Run behind Google's HTTP(S) load balancer /
+ * Google Front End, which appends exactly two values to the RIGHT of any
+ * client-supplied header, in this order: `<client-ip>,<load-balancer-ip>`
+ * (Google Cloud external Application Load Balancer docs:
+ * https://cloud.google.com/load-balancing/docs/https#x-forwarded-for_header).
+ * So the last entry is the LB forwarding-rule IP and the second-to-last is the
+ * real client IP that Google observed. Everything to the LEFT of those two is
+ * caller-supplied and explicitly NOT verified by Google ("The load balancer
+ * does not verify any IP addresses that precede …"), hence spoofable.
+ */
+const GOOGLE_TRUSTED_XFF_SUFFIX = 2;
+/** Offset (from the right, 1-based) of the trusted client IP: second-to-last entry. */
+const TRUSTED_CLIENT_IP_OFFSET_FROM_RIGHT = GOOGLE_TRUSTED_XFF_SUFFIX;
+
+/**
+ * Flattens the raw X-Forwarded-For header into an ordered list of trimmed,
+ * non-blank entries. The header can arrive as a single comma-separated string
+ * or (per Node's http semantics for repeated headers) as a string[], and each
+ * array element may itself be comma-separated — both shapes are handled and
+ * blank/whitespace-only tokens are dropped so they never occupy a position.
+ */
+export function parseForwardedForEntries(forwarded: string | string[] | undefined): string[] {
+  if (forwarded === undefined) return [];
+  const raw = Array.isArray(forwarded) ? forwarded : [forwarded];
+  return raw
+    .flatMap((part) => part.split(','))
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+/**
+ * Extracts the originating client IP address from an HTTPS callable request in
+ * a proxy-SAFE way. The LEFTMOST X-Forwarded-For entry is client-supplied and
+ * spoofable: an attacker can prepend arbitrary fake IPs to mint a fresh
+ * rate-limit bucket per request and defeat the throttle. Instead we take the
+ * value at a fixed offset from the RIGHT — the position Google's load balancer
+ * / Front End guarantees it appended (see GOOGLE_TRUSTED_XFF_SUFFIX) — so any
+ * client-prepended entries on the left are ignored.
+ *
+ * Selection order:
+ *  1. If XFF has at least GOOGLE_TRUSTED_XFF_SUFFIX entries, use the trusted
+ *     client-IP slot (second-to-last). This is the normal production path.
+ *  2. If XFF is shorter than expected (e.g. local/dev or a direct connection
+ *     that did not traverse the full proxy chain), fall back to the rightmost
+ *     non-blank entry — still the most-trusted position available.
+ *  3. Otherwise fall back to the direct connection IP (Express `.ip`).
+ *  4. Ultimately `'unknown'`.
+ *
+ * Blank/whitespace-only values are treated as MISSING at every step so a
+ * present-but-empty header (`""`/`"   "`) or whitespace-only fallback never
+ * collapses distinct callers into a single `''` bucket. Never returns `''`.
+ */
+export function extractClientIp(
+  forwarded: string | string[] | undefined,
+  fallbackIp: string | undefined,
+): string {
+  const entries = parseForwardedForEntries(forwarded);
+  if (entries.length >= TRUSTED_CLIENT_IP_OFFSET_FROM_RIGHT) {
+    // Trusted client IP sits at the fixed offset from the right; spoofed
+    // client-prepended entries are further left and are ignored.
+    const trusted = entries[entries.length - TRUSTED_CLIENT_IP_OFFSET_FROM_RIGHT];
+    if (trusted) return trusted;
+  }
+  if (entries.length > 0) {
+    // Proxy chain shorter than expected: use the most-trusted (rightmost) entry.
+    const rightmost = entries[entries.length - 1];
+    if (rightmost) return rightmost;
+  }
+  const fromFallback = fallbackIp?.trim();
+  if (fromFallback) return fromFallback;
+  return 'unknown';
+}
+
+// ---------------------------------------------------------------------------
 // Metadata sanitization (legacy sanitizeMetadata, ported verbatim)
 // ---------------------------------------------------------------------------
 
@@ -237,11 +331,30 @@ export function parseSubmitDiagnosticsReportInput(
 // Document builder
 // ---------------------------------------------------------------------------
 
+/**
+ * Server-derived context attached to the stored report (never client-supplied).
+ *
+ * `appCheckPresent` records whether the request carried a VALID App Check token
+ * — submitReport is intentionally non-enforcing (pre-auth telemetry must work
+ * even when App Check is unavailable), so admins use this flag to tell attested
+ * reports from unattested ones. `null` when the caller did not compute it.
+ *
+ * `rateLimitKey` is the pseudonymised caller identifier used for per-window
+ * count queries (`diagnosticsReports where rateLimitKey == X and createdAt >=
+ * windowStart`). Authenticated callers use `uid:<uid>`; unauthenticated callers
+ * use `ip:<sha256(ip)>`. The raw IP is NEVER stored. `null` when omitted.
+ */
+export interface DiagnosticsReportContext {
+  appCheckPresent?: boolean;
+  rateLimitKey?: string;
+}
+
 /** diagnosticsReports/{reportId} document. */
 export function buildDiagnosticsReportDocument(
   input: SubmitDiagnosticsReportInput,
   userId: string | null,
   serverTimestamp: () => unknown,
+  context: DiagnosticsReportContext = {},
 ): Record<string, unknown> {
   return {
     userId,
@@ -254,6 +367,13 @@ export function buildDiagnosticsReportDocument(
     osVersion: input.osVersion ?? null,
     errorCode: input.errorCode ?? null,
     metadata: sanitizeMetadata(input.metadata ?? null),
+    // Server-derived attestation flag (see DiagnosticsReportContext). Stored as
+    // a bounded boolean; `null` when the caller did not supply it.
+    appCheckPresent: context.appCheckPresent ?? null,
+    // Pseudonymised caller key used for per-window rate-limit count queries.
+    // `uid:<uid>` for authenticated callers; `ip:<sha256(ip)>` for anonymous.
+    // Never the raw IP. `null` when omitted (backwards-compatible).
+    rateLimitKey: context.rateLimitKey ?? null,
     fingerprint: generateFingerprint(input),
     createdAt: serverTimestamp(),
   };

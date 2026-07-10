@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.auth
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlin.coroutines.resume
@@ -51,8 +52,20 @@ class FirebaseAuthRepository private constructor(
                 if (task.isSuccessful) {
                     continuation.resume(Unit)
                 } else {
+                    val cause =
+                        task.exception ?: IllegalStateException("Sign-in failed without a cause")
+                    // Preserve the concrete Firebase exception as `cause` (so the
+                    // coordinator's cause chain names it) and lift its stable,
+                    // PII-safe errorCode (e.g. ERROR_INVALID_CREDENTIAL) into the
+                    // diagnostic code, letting the pure coordinator report the real
+                    // Firebase status without importing Firebase types. Never logs
+                    // the message.
                     continuation.resumeWithException(
-                        task.exception ?: IllegalStateException("Sign-in failed without a cause"),
+                        SignInFailedException(
+                            "Firebase credential exchange failed.",
+                            cause,
+                            diagnosticCode = (cause as? FirebaseAuthException)?.errorCode,
+                        ),
                     )
                 }
             }

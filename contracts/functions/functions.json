@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
-  "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable must verify authentication context and App Check in production, and return error codes from contracts/errors/errors.json. The status field tracks migration progress (planned vs implemented).",
+  "description": "Canonical registry of callable Cloud Function names. Names use the domain.action convention per docs/api-guidelines.md; this file is the single source of truth for function names across iOS, Android, backend, and admin. Every callable verifies authentication context and, in production, enforces App Check — EXCEPT explicitly-documented pre-authentication endpoints (currently only diagnostics.submitReport) which are intentionally non-enforcing because they must work before the client can mint an App Check token; see each function's appCheck field and description. All callables return error codes from contracts/errors/errors.json. The status field tracks migration progress (planned vs implemented).",
   "accessLevels": {
-    "public": "No authentication required. Reserved for telemetry that must work before sign-in (diagnostics.submitReport); App Check still applies in production.",
+    "public": "No authentication required. Reserved for telemetry that must work before sign-in (diagnostics.submitReport). App Check is non-enforcing on this path so a device that cannot yet attest (the exact failure it surfaces) can still report; a valid token is still verified best-effort. This is the ONLY callable that opts out of App Check enforcement (see submitReport.ts + appcheck-guard.test.ts).",
     "signedIn": "Any signed-in user, including suspended — reserved for cleanup paths that must work under suspension (e.g. push token unregistration).",
     "authenticated": "Any signed-in, non-suspended, non-deleted user.",
     "member": "Requires active member_monthly entitlement; suspension always overrides entitlement.",
@@ -489,9 +489,9 @@
     {
       "name": "diagnostics.submitReport",
       "domain": "diagnostics",
-      "description": "Submits a crash/error report into diagnosticsReports (admin-only read). PUBLIC: anonymous reports are allowed (sign-in failures must be reportable) — App Check still applies in production. All privacy sanitization runs server-side: metadata stripped of tokens/credentials/coordinates/stack-trace keys with bounded scalars only, stack traces and raw headers never stored, SHA-256 dedup fingerprint computed. 90-day retention via the scheduled diagnostics-cleanupExpired. Deployed via grouped export as diagnostics-submitReport (functions/src/diagnostics/submitReport.ts).",
+      "description": "Submits a crash/error report into diagnosticsReports (admin-only read). PUBLIC: anonymous reports are allowed (sign-in failures must be reportable). App Check is INTENTIONALLY NON-ENFORCING on this callable ONLY (unlike every other callable): the pre-auth telemetry path must still work on devices that cannot yet mint a Play Integrity token — the exact case it exists to surface. A valid token is still verified best-effort and recorded (appCheckPresent); a missing/invalid one no longer blocks the write. Abuse is bounded because writes land only in the admin-read-only private diagnosticsReports collection (90-day retention), all payloads are server-sanitized (tokens/credentials/coordinates/stack-trace keys stripped, bounded scalars only, SHA-256 dedup fingerprint), and the only public effect — the diagnostics-onSignInFailure auto-issue — is independently bounded by an allowlist + single Unknown bucket + per-fingerprint dedup. Deployed via grouped export as diagnostics-submitReport (functions/src/diagnostics/submitReport.ts).",
       "access": "public",
-      "appCheck": true,
+      "appCheck": false,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (Diagnostics reports)"
     },

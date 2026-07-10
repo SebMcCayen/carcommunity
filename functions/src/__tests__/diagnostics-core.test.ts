@@ -8,7 +8,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDiagnosticsReportDocument,
   diagnosticsRetentionCutoff,
+  DIAGNOSTICS_RATE_LIMIT_MAX,
+  DIAGNOSTICS_RATE_LIMIT_WINDOW_MS,
   generateFingerprint,
+  isDiagnosticsRateLimited,
   parseSubmitDiagnosticsReportInput,
   sanitizeMetadata,
 } from '../diagnostics/diagnostics-core';
@@ -106,9 +109,60 @@ describe('diagnostics-core input and builder', () => {
     expect(JSON.stringify(docData)).not.toContain('idToken');
   });
 
+  it('records the server-derived App Check presence flag (attested vs unattested)', () => {
+    const parsed = parseSubmitDiagnosticsReportInput(validInput);
+    if (!parsed.ok) throw new Error('expected ok');
+
+    // Pre-auth telemetry is non-enforcing: a report WITHOUT a valid App Check
+    // token is still stored, flagged so admins can distinguish it.
+    const unattested = buildDiagnosticsReportDocument(
+      parsed.input,
+      null,
+      () => 'SERVER_TS',
+      { appCheckPresent: false },
+    );
+    expect(unattested.appCheckPresent).toBe(false);
+
+    const attested = buildDiagnosticsReportDocument(parsed.input, null, () => 'SERVER_TS', {
+      appCheckPresent: true,
+    });
+    expect(attested.appCheckPresent).toBe(true);
+
+    // Backward-compatible: callers that omit the context store null (not undefined).
+    const legacy = buildDiagnosticsReportDocument(parsed.input, null, () => 'SERVER_TS');
+    expect(legacy.appCheckPresent).toBeNull();
+  });
+
   it('computes the 90-day retention cutoff', () => {
     expect(diagnosticsRetentionCutoff(new Date('2026-07-05T12:00:00Z')).toISOString()).toBe(
       '2026-04-06T12:00:00.000Z',
     );
+  });
+});
+
+describe('diagnostics-core rate limit', () => {
+  it('exposes a positive integer cap and a one-hour window', () => {
+    expect(DIAGNOSTICS_RATE_LIMIT_MAX).toBeGreaterThan(0);
+    expect(DIAGNOSTICS_RATE_LIMIT_WINDOW_MS).toBe(60 * 60 * 1000);
+  });
+
+  it('isDiagnosticsRateLimited returns false below and true at/above the cap', () => {
+    expect(isDiagnosticsRateLimited(DIAGNOSTICS_RATE_LIMIT_MAX - 1)).toBe(false);
+    expect(isDiagnosticsRateLimited(DIAGNOSTICS_RATE_LIMIT_MAX)).toBe(true);
+    expect(isDiagnosticsRateLimited(DIAGNOSTICS_RATE_LIMIT_MAX + 10)).toBe(true);
+  });
+
+  it('buildDiagnosticsReportDocument stores the rateLimitKey when supplied', () => {
+    const parsed = parseSubmitDiagnosticsReportInput(validInput);
+    if (!parsed.ok) throw new Error('expected ok');
+
+    const withKey = buildDiagnosticsReportDocument(parsed.input, null, () => 'TS', {
+      rateLimitKey: 'ip:abc123',
+    });
+    expect(withKey.rateLimitKey).toBe('ip:abc123');
+
+    // When omitted the field is stored as null (backwards-compatible).
+    const withoutKey = buildDiagnosticsReportDocument(parsed.input, null, () => 'TS');
+    expect(withoutKey.rateLimitKey).toBeNull();
   });
 });
