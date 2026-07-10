@@ -135,7 +135,7 @@ import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
-import com.kungsbackacarcommunity.app.shell.rememberStubMapSurface
+import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -239,7 +239,9 @@ fun AuthenticatedApp(
                 rememberSaveable { mutableStateOf<ArrayList<String>>(ArrayList()) }
 
             val snackbarHostState = remember { SnackbarHostState() }
-            val mapSurface = rememberStubMapSurface()
+            // Real Mapbox surface when a token is configured (on device),
+            // else the neutral stub (config-less / CI) — see rememberMapSurface.
+            val mapSurface = rememberMapSurface()
             val context = LocalContext.current
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
@@ -464,7 +466,14 @@ fun AuthenticatedApp(
                                                     }
                                             }
                                         },
-                                        onLayers = { showComingSoon() },
+                                        // Layers control toggles the traffic
+                                        // overlay (visible only on the real
+                                        // Mapbox surface; a no-op on the stub).
+                                        onLayers = {
+                                            mapSurface.setTrafficEnabled(
+                                                !mapSurface.trafficEnabled.value,
+                                            )
+                                        },
                                         onRecenter = { mapSurface.recenter() },
                                         onMusic = { showComingSoon() },
                                         // "Create route" opens the Create hub

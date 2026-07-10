@@ -83,6 +83,7 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val marker by mapSurface.userMarker.collectAsState()
+    val trafficOn by mapSurface.trafficEnabled.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
@@ -148,10 +149,26 @@ fun MapHome(
                     if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
                 onClick = onToggleLiveShare,
             )
-            // 2. Map layers toggle (stub hook).
+            // 2. Traffic-overlay toggle — highlighted when the congestion
+            //    layer is on (visible only on the real Mapbox surface).
             CircleControl(
                 icon = Icons.Filled.Layers,
-                contentDescription = stringResource(R.string.shell_mapLayers),
+                contentDescription =
+                    stringResource(
+                        if (trafficOn) R.string.shell_trafficOn else R.string.shell_trafficOff,
+                    ),
+                containerColor =
+                    if (trafficOn) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+                contentColor =
+                    if (trafficOn) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                 onClick = onLayers,
             )
             // 3. Recenter / my-location — calls MapSurface.recenter().
