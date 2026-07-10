@@ -61,6 +61,20 @@ export const MAX_ERROR_CODE_LENGTH = 100;
 export const DIAGNOSTICS_RETENTION_DAYS = 90;
 
 // ---------------------------------------------------------------------------
+// Rate limit (per caller — unauthenticated/unattested write surface protection)
+// ---------------------------------------------------------------------------
+
+/** Max reports a single caller may submit per rolling window. */
+export const DIAGNOSTICS_RATE_LIMIT_MAX = 20;
+/** Rolling window width: one hour. */
+export const DIAGNOSTICS_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+
+/** True when a fresh report would exceed the per-caller cap. */
+export function isDiagnosticsRateLimited(recentCount: number): boolean {
+  return recentCount >= DIAGNOSTICS_RATE_LIMIT_MAX;
+}
+
+// ---------------------------------------------------------------------------
 // Metadata sanitization (legacy sanitizeMetadata, ported verbatim)
 // ---------------------------------------------------------------------------
 
@@ -239,13 +253,20 @@ export function parseSubmitDiagnosticsReportInput(
 
 /**
  * Server-derived context attached to the stored report (never client-supplied).
+ *
  * `appCheckPresent` records whether the request carried a VALID App Check token
  * — submitReport is intentionally non-enforcing (pre-auth telemetry must work
  * even when App Check is unavailable), so admins use this flag to tell attested
  * reports from unattested ones. `null` when the caller did not compute it.
+ *
+ * `rateLimitKey` is the pseudonymised caller identifier used for per-window
+ * count queries (`diagnosticsReports where rateLimitKey == X and createdAt >=
+ * windowStart`). Authenticated callers use `uid:<uid>`; unauthenticated callers
+ * use `ip:<sha256(ip)>`. The raw IP is NEVER stored. `null` when omitted.
  */
 export interface DiagnosticsReportContext {
   appCheckPresent?: boolean;
+  rateLimitKey?: string;
 }
 
 /** diagnosticsReports/{reportId} document. */
@@ -269,6 +290,10 @@ export function buildDiagnosticsReportDocument(
     // Server-derived attestation flag (see DiagnosticsReportContext). Stored as
     // a bounded boolean; `null` when the caller did not supply it.
     appCheckPresent: context.appCheckPresent ?? null,
+    // Pseudonymised caller key used for per-window rate-limit count queries.
+    // `uid:<uid>` for authenticated callers; `ip:<sha256(ip)>` for anonymous.
+    // Never the raw IP. `null` when omitted (backwards-compatible).
+    rateLimitKey: context.rateLimitKey ?? null,
     fingerprint: generateFingerprint(input),
     createdAt: serverTimestamp(),
   };

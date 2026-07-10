@@ -27,12 +27,16 @@
  * private collection (no client can read it back) with a 90-day retention
  * sweep; (2) all payloads are server-sanitized in diagnostics-core (tokens/
  * credentials/coordinates/stack-trace keys stripped, bounded scalars only);
- * and (3) the sole outbound/public effect — the auto-filed GitHub issue via
+ * (3) the sole outbound/public effect — the auto-filed GitHub issue via
  * the onSignInFailure trigger — is independently bounded by signInIssues-core
  * (strict allowlist + single `Unknown` bucket + per-fingerprint dedup), so an
  * unauthenticated flood cannot mint unbounded public issues regardless of how
- * many reports it submits. This relaxation is scoped to THIS callable ONLY;
- * every other callable keeps App Check enforced (see appcheck-guard.test.ts).
+ * many reports it submits; and (4) a Firestore-based per-caller rate limit
+ * (20 reports / hour, keyed on a SHA-256-hashed IP for anonymous callers or
+ * the UID for authenticated ones) caps write volume before it reaches the
+ * collection — the raw IP is never stored. This relaxation is scoped to THIS
+ * callable ONLY; every other callable keeps App Check enforced (see
+ * appcheck-guard.test.ts).
  *
  * All privacy guarantees run server-side in diagnostics-core:
  * metadata sanitization (tokens/credentials/coordinates/stack traces
@@ -40,10 +44,14 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FieldValue } from 'firebase-admin/firestore';
+import type { CallableRequest } from 'firebase-functions/v2/https';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
 import { db } from '../firebase';
 import {
   buildDiagnosticsReportDocument,
+  DIAGNOSTICS_RATE_LIMIT_WINDOW_MS,
+  isDiagnosticsRateLimited,
   parseSubmitDiagnosticsReportInput,
 } from './diagnostics-core';
 
@@ -57,6 +65,27 @@ const CALLABLE_OPTS = {
   // intentional and visible rather than an accident.
   enforceAppCheck: false,
 };
+
+/**
+ * Pseudonymised rate-limit key for the caller so the per-window count query
+ * can filter by it without storing the raw IP address.
+ *
+ * - Authenticated callers: `uid:<uid>` (UID is already an opaque identifier)
+ * - Unauthenticated callers: `ip:<sha256(ip)>` — the first address from
+ *   X-Forwarded-For (the originating client IP behind Cloud Run's proxy),
+ *   hashed so only the pseudonymous digest lands in the database.
+ */
+function callerRateLimitKey(request: CallableRequest): string {
+  if (request.auth?.uid) {
+    return `uid:${request.auth.uid}`;
+  }
+  const forwarded = request.rawRequest.headers['x-forwarded-for'];
+  const raw = Array.isArray(forwarded)
+    ? (forwarded[0] ?? 'unknown')
+    : (forwarded ?? request.rawRequest.ip ?? 'unknown');
+  const ip = typeof raw === 'string' ? (raw.split(',')[0] ?? 'unknown').trim() : 'unknown';
+  return `ip:${createHash('sha256').update(ip).digest('hex').slice(0, 32)}`;
+}
 
 export interface SubmitDiagnosticsReportResponse {
   reportId: string;
@@ -77,13 +106,36 @@ export const submitReport = onCall(
     // attested vs unattested reports.
     const appCheckPresent = request.app != null;
 
+    // Build the document outside the transaction (pure, no side-effects) so
+    // the fingerprint is available for the response even if the tx retries.
+    const rateLimitKey = callerRateLimitKey(request);
     const document = buildDiagnosticsReportDocument(
       parsed.input,
       request.auth?.uid ?? null,
       () => FieldValue.serverTimestamp(),
-      { appCheckPresent },
+      { appCheckPresent, rateLimitKey },
     );
-    const ref = await db.collection('diagnosticsReports').add(document);
+
+    // Per-caller rate limit (20 reports / hour) enforced inside a transaction
+    // so concurrent submissions cannot race the cap. The windowed count is
+    // keyed on the pseudonymised rateLimitKey stored on each document; raw
+    // IPs are never read or stored. Mirrors the per-user cap in
+    // feedback/reportIssue.ts. Composite index: rateLimitKey ASC, createdAt ASC.
+    const windowStart = Timestamp.fromMillis(Date.now() - DIAGNOSTICS_RATE_LIMIT_WINDOW_MS);
+    const diagnosticsReportsRef = db.collection('diagnosticsReports');
+    const ref = diagnosticsReportsRef.doc();
+    await db.runTransaction(async (tx) => {
+      const countSnap = await tx.get(
+        diagnosticsReportsRef
+          .where('rateLimitKey', '==', rateLimitKey)
+          .where('createdAt', '>=', windowStart)
+          .count(),
+      );
+      if (isDiagnosticsRateLimited(countSnap.data().count)) {
+        throw new HttpsError('resource-exhausted', 'Too many reports — please try again later.');
+      }
+      tx.set(ref, document);
+    });
 
     return { reportId: ref.id, fingerprint: document.fingerprint as string };
   },

@@ -149,6 +149,20 @@
       ]
     },
     {
+      "collectionGroup": "diagnosticsReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "rateLimitKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crownHuntPoints",
       "queryScope": "COLLECTION",
       "fields": [
