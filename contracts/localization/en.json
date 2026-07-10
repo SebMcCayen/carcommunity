@@ -110,8 +110,9 @@
     "ageConfirm": "I confirm that I am 18 years of age or older.",
     "termsAccept": "I accept the terms.",
     "privacyAccept": "I have read the privacy policy.",
-    "displayNameLabel": "Display name, optional.",
+    "displayNameLabel": "Display name",
     "displayNamePlaceholder": "Your display name",
+    "displayNameDescription": "This is the public name other members see (in events, chat and more). Your real Google account name is never shown.",
     "partnerStatsOptIn": "I want to contribute anonymised partner statistics.",
     "partnerStatsNote": "You can change this later under Privacy.",
     "continueButton": "Continue",
@@ -119,6 +120,10 @@
     "privacyLink": "Read the privacy policy",
     "loading": "Saving...",
     "error": "Something went wrong. Please try again."
+  },
+  "url": {
+    "terms": "https://kungsbacka-car-community.web.app/terms",
+    "privacy": "https://kungsbacka-car-community.web.app/privacy"
   },
   "privacySettings": {
     "title": "Privacy",

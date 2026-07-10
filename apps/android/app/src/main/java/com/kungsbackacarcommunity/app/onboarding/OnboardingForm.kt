@@ -6,24 +6,36 @@ package com.kungsbackacarcommunity.app.onboarding
  *
  * Mirrors the auth.completeOnboarding contract
  * (contracts/schemas/auth.schema.json / functions onboarding-core): the
- * three consents are all mandatory; the display name is optional and, if
- * present, must be 1..120 characters after trimming.
+ * three consents are all mandatory, and the display name is REQUIRED and must
+ * be 1..120 characters after trimming. The display name is the user's public
+ * profile name — it is never derived from the Google account name.
  */
 object OnboardingForm {
 
     const val DISPLAY_NAME_MAX_LENGTH = 120
 
-    /** All three legally-required consents must be checked to submit. */
+    /**
+     * All three legally-required consents must be checked AND a non-blank,
+     * valid-length display name must be entered before submission is allowed.
+     */
     fun canSubmit(
         ageConfirmed: Boolean,
         termsAccepted: Boolean,
         privacyAccepted: Boolean,
-    ): Boolean = ageConfirmed && termsAccepted && privacyAccepted
+        displayName: String,
+    ): Boolean =
+        ageConfirmed && termsAccepted && privacyAccepted && isDisplayNameValid(displayName)
+
+    /** True when the trimmed display name is non-blank and within the max length. */
+    fun isDisplayNameValid(raw: String): Boolean {
+        val trimmed = raw.trim()
+        return trimmed.isNotEmpty() && trimmed.length <= DISPLAY_NAME_MAX_LENGTH
+    }
 
     /**
-     * Normalizes the optional display name for the callable: trimmed, or
-     * null when blank (the backend schema rejects empty strings, so a blank
-     * field must be omitted rather than sent).
+     * Normalizes the required display name for the callable: trimmed, or null
+     * when invalid (blank or over-long). Callers gate submission on
+     * [canSubmit], so a valid form always yields a non-null value.
      */
     fun normalizedDisplayName(raw: String): String? =
         raw.trim().takeIf { it.isNotEmpty() && it.length <= DISPLAY_NAME_MAX_LENGTH }

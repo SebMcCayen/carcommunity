@@ -1,5 +1,10 @@
 package com.kungsbackacarcommunity.app.onboarding
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
@@ -25,8 +31,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -35,11 +43,17 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 /**
  * Onboarding consent gate (Phase 12 slice 2).
  *
- * Collects the three mandatory consents (age 18+, terms, privacy policy)
- * and an optional display name, then calls auth.completeOnboarding via
- * [onSubmit]. Continue is enabled only when all consents are checked
- * ([OnboardingForm.canSubmit]) and no submission is in flight. All copy is
- * generated string resources (contracts/localization). Wrap in [KccTheme].
+ * Collects the three mandatory consents (age 18+, terms, privacy policy) and a
+ * REQUIRED public display name, then calls auth.completeOnboarding via
+ * [onSubmit]. The display name is what other members see; the user's Google
+ * account name is never prefilled or shown. Continue is enabled only when all
+ * consents are checked and a valid display name is entered
+ * ([OnboardingForm.canSubmit]) and no submission is in flight.
+ *
+ * The content scrolls and consumes safe-drawing insets (status/navigation bars
+ * and the IME) so the submit button stays reachable under edge-to-edge and with
+ * the keyboard open. All copy is generated string resources
+ * (contracts/localization). Wrap in [KccTheme].
  */
 @Composable
 fun OnboardingScreen(
@@ -50,17 +64,20 @@ fun OnboardingScreen(
     var age by remember { mutableStateOf(false) }
     var terms by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf(false) }
+    // Starts empty on purpose — never prefilled with the Google account name.
     var displayName by remember { mutableStateOf("") }
 
     val submitting = status == OnboardingStatus.Submitting
-    val canSubmit =
-        OnboardingForm.canSubmit(age, terms, privacy) &&
-            !OnboardingForm.isDisplayNameTooLong(displayName) &&
-            !submitting
+    val canSubmit = OnboardingForm.canSubmit(age, terms, privacy, displayName) && !submitting
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -75,14 +92,19 @@ fun OnboardingScreen(
             )
 
             ConsentRow(checked = age, onCheckedChange = { age = it }, label = stringResource(R.string.onboarding_ageConfirm))
+
             ConsentRow(checked = terms, onCheckedChange = { terms = it }, label = stringResource(R.string.onboarding_termsAccept))
+            ConsentLink(text = stringResource(R.string.onboarding_termsLink), url = stringResource(R.string.url_terms))
+
             ConsentRow(checked = privacy, onCheckedChange = { privacy = it }, label = stringResource(R.string.onboarding_privacyAccept))
+            ConsentLink(text = stringResource(R.string.onboarding_privacyLink), url = stringResource(R.string.url_privacy))
 
             OutlinedTextField(
                 value = displayName,
                 onValueChange = { displayName = it },
                 label = { Text(stringResource(R.string.onboarding_displayNameLabel)) },
                 placeholder = { Text(stringResource(R.string.onboarding_displayNamePlaceholder)) },
+                supportingText = { Text(stringResource(R.string.onboarding_displayNameDescription)) },
                 isError = OnboardingForm.isDisplayNameTooLong(displayName),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -130,6 +152,43 @@ private fun ConsentRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, lab
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(start = 8.dp),
         )
+    }
+}
+
+/**
+ * A small "read the terms/privacy policy" link. Kept out of the toggleable
+ * consent [Row] so the tap opens the document instead of toggling the checkbox.
+ * Aligned under the label (checkbox width + row padding).
+ */
+@Composable
+private fun ConsentLink(text: String, url: String) {
+    val context = LocalContext.current
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.primary,
+        textDecoration = TextDecoration.Underline,
+        modifier =
+            Modifier
+                .padding(start = 48.dp)
+                .clickable { openExternalUrl(context, url) },
+    )
+}
+
+/**
+ * Opens an external web document via ACTION_VIEW. Restricted to http(s) so a
+ * misconfigured/empty URL resource can never launch a non-web intent
+ * (file:/intent:/javascript: …). Silently no-ops if there is no browser.
+ */
+private fun openExternalUrl(context: Context, url: String) {
+    val uri = Uri.parse(url)
+    if (uri.scheme != "http" && uri.scheme != "https") return
+    try {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (_: ActivityNotFoundException) {
+        // No browser available — nothing to open.
     }
 }
 

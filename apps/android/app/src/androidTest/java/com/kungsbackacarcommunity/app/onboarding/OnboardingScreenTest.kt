@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -24,7 +25,7 @@ class OnboardingScreenTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
     @Test
-    fun continueIsGatedOnAllThreeConsents() {
+    fun continueIsGatedOnAllThreeConsentsAndADisplayName() {
         var submitted = 0
         composeTestRule.setContent {
             KccTheme { OnboardingScreen(status = OnboardingStatus.Idle, onSubmit = { submitted++ }) }
@@ -37,6 +38,13 @@ class OnboardingScreenTest {
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
         composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performClick()
+        // Display name is now required — consents alone are not enough.
+        composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
+
+        composeTestRule
+            .onNodeWithText(str(R.string.onboarding_displayNameLabel))
+            .performScrollTo()
+            .performTextInput("Sebbe")
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsEnabled().performClick()
         assertEquals(1, submitted)
     }

@@ -101,8 +101,9 @@
     <string name="onboarding_ageConfirm">Bekräfta att du är 18 år eller äldre.</string>
     <string name="onboarding_termsAccept">Jag accepterar villkoren.</string>
     <string name="onboarding_privacyAccept">Jag har tagit del av integritetspolicyn.</string>
-    <string name="onboarding_displayNameLabel">Visningsnamn, valfritt.</string>
+    <string name="onboarding_displayNameLabel">Visningsnamn</string>
     <string name="onboarding_displayNamePlaceholder">Ditt visningsnamn</string>
+    <string name="onboarding_displayNameDescription">Detta är det publika namn som andra medlemmar ser (i evenemang, chatt med mera). Ditt riktiga Google-namn visas aldrig.</string>
     <string name="onboarding_partnerStatsOptIn">Jag vill bidra med anonymiserad partnerstatistik.</string>
     <string name="onboarding_partnerStatsNote">Du kan ändra detta senare under Integritet.</string>
     <string name="onboarding_continueButton">Fortsätt</string>
@@ -110,6 +111,8 @@
     <string name="onboarding_privacyLink">Läs integritetspolicyn</string>
     <string name="onboarding_loading">Sparar...</string>
     <string name="onboarding_error">Något gick fel. Försök igen.</string>
+    <string name="url_terms">https://kungsbacka-car-community.web.app/terms</string>
+    <string name="url_privacy">https://kungsbacka-car-community.web.app/privacy</string>
     <string name="privacySettings_title">Integritet</string>
     <string name="privacySettings_partnerStatsTitle">Anonymiserad partnerstatistik</string>
     <string name="privacySettings_partnerStatsBody">Jag vill bidra med anonymiserad partnerstatistik.</string>

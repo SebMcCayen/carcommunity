@@ -110,8 +110,9 @@
     "ageConfirm": "Bekräfta att du är 18 år eller äldre.",
     "termsAccept": "Jag accepterar villkoren.",
     "privacyAccept": "Jag har tagit del av integritetspolicyn.",
-    "displayNameLabel": "Visningsnamn, valfritt.",
+    "displayNameLabel": "Visningsnamn",
     "displayNamePlaceholder": "Ditt visningsnamn",
+    "displayNameDescription": "Detta är det publika namn som andra medlemmar ser (i evenemang, chatt med mera). Ditt riktiga Google-namn visas aldrig.",
     "partnerStatsOptIn": "Jag vill bidra med anonymiserad partnerstatistik.",
     "partnerStatsNote": "Du kan ändra detta senare under Integritet.",
     "continueButton": "Fortsätt",
@@ -119,6 +120,10 @@
     "privacyLink": "Läs integritetspolicyn",
     "loading": "Sparar...",
     "error": "Något gick fel. Försök igen."
+  },
+  "url": {
+    "terms": "https://kungsbacka-car-community.web.app/terms",
+    "privacy": "https://kungsbacka-car-community.web.app/privacy"
   },
   "privacySettings": {
     "title": "Integritet",

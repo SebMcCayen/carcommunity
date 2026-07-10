@@ -101,8 +101,9 @@
     <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>
     <string name="onboarding_termsAccept">I accept the terms.</string>
     <string name="onboarding_privacyAccept">I have read the privacy policy.</string>
-    <string name="onboarding_displayNameLabel">Display name, optional.</string>
+    <string name="onboarding_displayNameLabel">Display name</string>
     <string name="onboarding_displayNamePlaceholder">Your display name</string>
+    <string name="onboarding_displayNameDescription">This is the public name other members see (in events, chat and more). Your real Google account name is never shown.</string>
     <string name="onboarding_partnerStatsOptIn">I want to contribute anonymised partner statistics.</string>
     <string name="onboarding_partnerStatsNote">You can change this later under Privacy.</string>
     <string name="onboarding_continueButton">Continue</string>
@@ -110,6 +111,8 @@
     <string name="onboarding_privacyLink">Read the privacy policy</string>
     <string name="onboarding_loading">Saving...</string>
     <string name="onboarding_error">Something went wrong. Please try again.</string>
+    <string name="url_terms">https://kungsbacka-car-community.web.app/terms</string>
+    <string name="url_privacy">https://kungsbacka-car-community.web.app/privacy</string>
     <string name="privacySettings_title">Privacy</string>
     <string name="privacySettings_partnerStatsTitle">Anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsBody">I want to contribute anonymised partner statistics.</string>
