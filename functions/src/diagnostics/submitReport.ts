@@ -67,23 +67,42 @@ const CALLABLE_OPTS = {
 };
 
 /**
+ * Extracts the originating client IP address from an HTTPS callable request.
+ * Cloud Run routes traffic through a proxy that sets X-Forwarded-For; the
+ * first entry is the original client IP. Falls back to the Express `.ip`
+ * property (the direct connection address) and then to `'unknown'` if
+ * neither is available.
+ */
+function extractClientIp(
+  forwarded: string | string[] | undefined,
+  fallbackIp: string | undefined,
+): string {
+  if (Array.isArray(forwarded)) {
+    return (forwarded[0] ?? 'unknown').split(',')[0]?.trim() ?? 'unknown';
+  }
+  if (typeof forwarded === 'string') {
+    return (forwarded.split(',')[0] ?? 'unknown').trim();
+  }
+  return fallbackIp?.trim() ?? 'unknown';
+}
+
+/**
  * Pseudonymised rate-limit key for the caller so the per-window count query
  * can filter by it without storing the raw IP address.
  *
  * - Authenticated callers: `uid:<uid>` (UID is already an opaque identifier)
- * - Unauthenticated callers: `ip:<sha256(ip)>` — the first address from
- *   X-Forwarded-For (the originating client IP behind Cloud Run's proxy),
- *   hashed so only the pseudonymous digest lands in the database.
+ * - Unauthenticated callers: `ip:<sha256(ip)>` — the originating client IP
+ *   extracted from X-Forwarded-For, hashed so only the pseudonymous digest
+ *   lands in the database.
  */
 function callerRateLimitKey(request: CallableRequest): string {
   if (request.auth?.uid) {
     return `uid:${request.auth.uid}`;
   }
-  const forwarded = request.rawRequest.headers['x-forwarded-for'];
-  const raw = Array.isArray(forwarded)
-    ? (forwarded[0] ?? 'unknown')
-    : (forwarded ?? request.rawRequest.ip ?? 'unknown');
-  const ip = typeof raw === 'string' ? (raw.split(',')[0] ?? 'unknown').trim() : 'unknown';
+  const ip = extractClientIp(
+    request.rawRequest.headers['x-forwarded-for'],
+    request.rawRequest.ip,
+  );
   return `ip:${createHash('sha256').update(ip).digest('hex').slice(0, 32)}`;
 }
 
