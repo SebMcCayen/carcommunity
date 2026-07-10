@@ -24,7 +24,11 @@
  *          root pnpm-lock.yaml (the CI-tested version), and
  *       3. every root pnpm override (root package.json "pnpm"."overrides")
  *          is mirrored in functions/package.json "overrides", so the npm
- *          lock applies the same transitive security pins as pnpm.
+ *          lock applies the same transitive security pins as pnpm, and
+ *       4. functions/package-lock.json actually resolves each overridden
+ *          package to a pinned (non-vulnerable) version — a mirrored override
+ *          that never made it into the committed lock would still let the
+ *          deployed npm tree ship the pre-override version.
  *     Run by validate-functions CI and by the deploy workflow.
  *
  *   node scripts/deploy-lockfile.mjs sync
@@ -133,13 +137,137 @@ function runNpm(args) {
   }
 }
 
+/**
+ * Recursively sorts object keys so that two structurally-equal values
+ * serialize identically regardless of key-insertion order. Arrays keep their
+ * order (order is significant); objects are canonicalised; primitives pass
+ * through untouched.
+ */
+function normalize(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalize);
+  }
+  if (value !== null && typeof value === 'object') {
+    const sorted = {};
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = normalize(value[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+/**
+ * Order-insensitive structural equality. `JSON.stringify` alone is sensitive to
+ * key-insertion order, so a mere reordering of a dependency map (npm and pnpm
+ * do not agree on ordering) would look like drift. Canonicalise first.
+ */
 function deepEqual(a, b) {
-  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+  return JSON.stringify(normalize(a ?? {})) === JSON.stringify(normalize(b ?? {}));
+}
+
+/** Parses `major.minor.patch` from a version string, ignoring pre-release/build. */
+function parseSemver(version) {
+  const cleaned = String(version).trim().replace(/^[v=]/, '');
+  const core = cleaned.split(/[-+]/)[0];
+  const nums = core.split('.').map((part) => Number.parseInt(part, 10));
+  if (nums.length === 0 || nums.some((n) => Number.isNaN(n))) return null;
+  return [nums[0] ?? 0, nums[1] ?? 0, nums[2] ?? 0];
+}
+
+function compareSemver(a, b) {
+  for (let i = 0; i < 3; i += 1) {
+    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * Minimal, self-contained `semver.satisfies` covering the range shapes that
+ * appear in override keys/values (exact, `^`, `~`, and `<`/`<=`/`>`/`>=`/`=`
+ * comparators, plus `*`). Deliberately does not depend on the `semver` package
+ * so the guard works even when node_modules is not hoisted.
+ */
+function semverSatisfies(version, range) {
+  const v = parseSemver(version);
+  if (!v) return false;
+  const r = String(range).trim();
+  if (r === '' || r === '*' || r === 'x' || r === 'latest') return true;
+
+  if (r.startsWith('^')) {
+    const base = parseSemver(r.slice(1));
+    if (!base) return false;
+    if (compareSemver(v, base) < 0) return false;
+    let upper;
+    if (base[0] > 0) upper = [base[0] + 1, 0, 0];
+    else if (base[1] > 0) upper = [0, base[1] + 1, 0];
+    else upper = [0, 0, base[2] + 1];
+    return compareSemver(v, upper) < 0;
+  }
+
+  if (r.startsWith('~')) {
+    const base = parseSemver(r.slice(1));
+    if (!base) return false;
+    if (compareSemver(v, base) < 0) return false;
+    return compareSemver(v, [base[0], base[1] + 1, 0]) < 0;
+  }
+
+  const match = r.match(/^(<=|>=|<|>|=)?\s*(.+)$/);
+  if (!match) return false;
+  const op = match[1] ?? '=';
+  const base = parseSemver(match[2]);
+  if (!base) return false;
+  const cmp = compareSemver(v, base);
+  switch (op) {
+    case '<':
+      return cmp < 0;
+    case '<=':
+      return cmp <= 0;
+    case '>':
+      return cmp > 0;
+    case '>=':
+      return cmp >= 0;
+    default:
+      return cmp === 0;
+  }
+}
+
+/** Splits an override key `name@selector` into its parts (selector may be null). */
+function parseOverrideKey(key) {
+  const at = key.lastIndexOf('@');
+  if (at > 0) {
+    return { name: key.slice(0, at), selector: key.slice(at + 1) };
+  }
+  return { name: key, selector: null };
+}
+
+/**
+ * Every resolved version of `name` in the npm lock, across both the v2/v3
+ * `packages` map (`node_modules/<name>` and nested `.../node_modules/<name>`
+ * keys) and the legacy v1 `dependencies` tree.
+ */
+function lockVersionsFor(lock, name) {
+  const versions = [];
+  const suffix = `node_modules/${name}`;
+  for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+    if ((key === suffix || key.endsWith(`/${suffix}`)) && entry?.version) {
+      versions.push(entry.version);
+    }
+  }
+  const walk = (deps) => {
+    if (!deps) return;
+    for (const [depName, entry] of Object.entries(deps)) {
+      if (depName === name && entry?.version) versions.push(entry.version);
+      if (entry?.dependencies) walk(entry.dependencies);
+    }
+  };
+  walk(lock.dependencies);
+  return versions;
 }
 
 function check() {
   if (!existsSync(lockPath)) {
-    fail('functions/package-lock.json is missing. Run `pnpm run lockfile:sync` and commit the result.');
+    fail('functions/package-lock.json is missing. Run `cd functions && npm run lockfile:sync` (from the repo root) and commit the result.');
   }
   const manifest = readJson(manifestPath);
   const lock = readJson(lockPath);
@@ -185,9 +313,33 @@ function check() {
     }
   }
 
+  // 4. Mirroring the override into package.json is not enough: the committed
+  //    npm lock must actually resolve the overridden package to a pinned
+  //    version. Otherwise `npm ci` on Cloud Build would still ship the
+  //    pre-override (vulnerable) version. For a selector-style override
+  //    (`name@<x.y.z`) no resolved copy may still match the pinned-out range;
+  //    for an unconditional override (`name`) every resolved copy must satisfy
+  //    the pin.
+  for (const [key, value] of Object.entries(rootOverrides)) {
+    const { name, selector } = parseOverrideKey(key);
+    for (const version of lockVersionsFor(lock, name)) {
+      if (selector) {
+        if (semverSatisfies(version, selector)) {
+          problems.push(
+            `package-lock.json still resolves "${name}" to ${version}, which matches the pinned-out range "${selector}" (root pnpm override "${key}": "${value}") — the deployed tree would ship a pre-override version.`,
+          );
+        }
+      } else if (!semverSatisfies(version, value)) {
+        problems.push(
+          `package-lock.json resolves "${name}" to ${version}, which does not satisfy the pinned override "${value}" (root pnpm override "${key}") — the deployed tree would ship an unpinned version.`,
+        );
+      }
+    }
+  }
+
   if (problems.length > 0) {
     for (const problem of problems) console.error(`deploy-lockfile: ${problem}`);
-    console.error('deploy-lockfile: run `pnpm run lockfile:sync` in functions/ and commit the result.');
+    console.error('deploy-lockfile: run `cd functions && npm run lockfile:sync` (from the repo root) and commit the result.');
     process.exit(1);
   }
   console.log('deploy-lockfile: functions/package-lock.json is in sync with package.json and pnpm-lock.yaml.');
