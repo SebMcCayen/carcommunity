@@ -73,6 +73,11 @@ class MapboxMapSurface : MapSurface {
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
 
+    // One-shot guard so the camera auto-centres on the FIRST GPS fix only,
+    // opening close to the user; afterwards it leaves the camera alone so it
+    // never fights the user panning (recenter() is still available on demand).
+    private var centeredOnFirstFix: Boolean = false
+
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
     }
@@ -116,7 +121,23 @@ class MapboxMapSurface : MapSurface {
         // recenter() can jump the camera to it.
         val positionListener =
             remember {
-                OnIndicatorPositionChangedListener { point -> lastPoint = point }
+                OnIndicatorPositionChangedListener { point ->
+                    lastPoint = point
+                    // Auto-centre on the first valid fix so the map opens close
+                    // to the user rather than on the default town camera. Once
+                    // only, so later fixes don't yank the camera while panning.
+                    if (!centeredOnFirstFix) {
+                        centeredOnFirstFix = true
+                        runCatching {
+                            mapViewRef?.mapboxMap?.setCamera(
+                                cameraOptions {
+                                    center(point)
+                                    zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
         AndroidView(
@@ -177,6 +198,7 @@ class MapboxMapSurface : MapSurface {
                 }
                 mapViewRef = null
                 lastPoint = null
+                centeredOnFirstFix = false
                 mapView.onDestroy()
             },
         )
