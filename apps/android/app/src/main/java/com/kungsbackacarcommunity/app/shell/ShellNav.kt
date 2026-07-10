@@ -12,6 +12,15 @@ enum class ShellTab {
     Create,
     Social,
     Garage,
+    ;
+
+    companion object {
+        /**
+         * The tab shown on first entry (map-first home). Production and tests both
+         * reference this so the default isn't tied to enum declaration order.
+         */
+        val DEFAULT = Map
+    }
 }
 
 /**

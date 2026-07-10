@@ -229,7 +229,7 @@ fun AuthenticatedApp(
 
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
-            var selectedTab by rememberSaveable { mutableStateOf(ShellTab.Map) }
+            var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
             var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
 
             // Group-drive "show on map": stash roster uids, switch to the Map

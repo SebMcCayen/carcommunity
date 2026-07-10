@@ -45,8 +45,9 @@ class ShellNavTest {
     }
 
     @Test
-    fun `Map is the default first tab`() {
-        assertEquals(ShellTab.Map, ShellTab.values().first())
+    fun `the default tab is Map`() {
+        // Assert the real default constant (used by production), not enum order.
+        assertEquals(ShellTab.Map, ShellTab.DEFAULT)
     }
 
     // --- live-share toggle decision --------------------------------------
