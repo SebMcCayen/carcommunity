@@ -1,9 +1,14 @@
 package com.kungsbackacarcommunity.app
 
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.graphics.toArgb
+import com.kungsbackacarcommunity.app.design.KccDarkColors
+import com.kungsbackacarcommunity.app.design.KccLightColors
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
@@ -70,6 +75,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Draw edge-to-edge so map/content renders behind the system bars, then
+        // tint the OS navigation bar with the theme surface at 25% opacity (75%
+        // transparent) so the map shows through it. isNavigationBarContrastEnforced
+        // is disabled so the platform does not overlay its own opaque scrim.
+        enableEdgeToEdge()
+        window.navigationBarColor = translucentSystemNavBarColor()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
 
         // Guarded Firebase wiring: each createIfAvailable returns null when
         // google-services.json is absent (CI/local validation builds), so the
@@ -238,5 +253,19 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         lifecycleScope.launch { featureFlagsStore.refresh() }
+    }
+
+    /**
+     * The theme surface color at 25% alpha, chosen for the current (light/dark)
+     * configuration so the OS navigation bar is 75% transparent. A config change
+     * recreates the Activity, so re-reading night mode here in onCreate is enough.
+     */
+    private fun translucentSystemNavBarColor(): Int {
+        val isNight =
+            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                Configuration.UI_MODE_NIGHT_YES
+        val surface =
+            if (isNight) KccDarkColors.surfaceBackground else KccLightColors.surfaceBackground
+        return surface.copy(alpha = 0.25f).toArgb()
     }
 }
