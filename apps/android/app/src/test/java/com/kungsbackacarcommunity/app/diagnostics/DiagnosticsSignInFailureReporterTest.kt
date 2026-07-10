@@ -4,7 +4,6 @@ import com.kungsbackacarcommunity.app.auth.SignInFailureDetails
 import com.kungsbackacarcommunity.app.auth.SignInStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -96,9 +95,10 @@ class DiagnosticsSignInFailureReporterTest {
         val throwing = DiagnosticsReporter { throw IllegalStateException("sink down") }
         val reporter =
             DiagnosticsSignInFailureReporter(throwing, null, null, null, null)
-        // Must swallow the failure — diagnostics can never mask the sign-in error.
+        // The assertion is that this call does NOT throw: diagnostics must
+        // swallow the sink failure so it can never mask the sign-in error.
+        // Reaching the end of the test without an exception is the pass condition.
         reporter.reportSignInFailure(details())
-// Intentionally no assertion: this test passes if no exception is thrown.
     }
 
     @Test
