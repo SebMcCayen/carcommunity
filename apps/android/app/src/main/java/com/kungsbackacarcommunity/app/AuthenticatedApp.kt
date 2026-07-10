@@ -2,13 +2,43 @@ package com.kungsbackacarcommunity.app
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CardMembership
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.MilitaryTech
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
@@ -51,7 +82,6 @@ import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
-import com.kungsbackacarcommunity.app.home.HomeScreen
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRepository
@@ -71,9 +101,11 @@ import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
+import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
+import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
@@ -93,6 +125,14 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
+import com.kungsbackacarcommunity.app.shell.HubEntry
+import com.kungsbackacarcommunity.app.shell.HubScreen
+import com.kungsbackacarcommunity.app.shell.LiveShareAction
+import com.kungsbackacarcommunity.app.shell.LiveShareToggle
+import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.ShellRoute
+import com.kungsbackacarcommunity.app.shell.ShellTab
+import com.kungsbackacarcommunity.app.shell.rememberStubMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -100,14 +140,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
- * The signed-in experience (Phase 12 slice 2): observes the profile
- * document to gate onboarding, then routes between the home shell and the
- * profile screen.
+ * The signed-in experience: observes the profile document to gate onboarding,
+ * then renders the **map-first, 5-tab shell** ([mapFirstShell]) once onboarded.
  *
  * Integration layer — the routing decision ([authedDestination]) and every
- * screen it shows are independently unit/UI-tested; this composable only
- * wires repositories to those pieces. Repositories are nullable so the
- * no-Firebase (Unavailable) build still renders the main shell.
+ * screen it shows are independently unit/UI-tested; this composable only wires
+ * repositories to those pieces. Repositories are nullable so the no-Firebase
+ * (Unavailable) build still renders the main shell.
  */
 @Composable
 fun AuthenticatedApp(
@@ -154,9 +193,8 @@ fun AuthenticatedApp(
 ) {
     val scope = rememberCoroutineScope()
 
-    // Sign-in-time push-token registration (Phase 12 slice 21, push portion):
-    // best-effort, once per signed-in uid; failures stay inside the
-    // coordinator and never block the UI. Null in config-less builds.
+    // Sign-in-time push-token registration: best-effort, once per signed-in
+    // uid; failures stay inside the coordinator and never block the UI.
     LaunchedEffect(uid, pushRegistrationCoordinator) {
         pushRegistrationCoordinator?.registerCurrentToken()
     }
@@ -184,16 +222,27 @@ fun AuthenticatedApp(
 
         AuthedDestination.Main -> {
             val profile = (profileState as? ProfileState.Loaded)?.profile
-            var destination by rememberSaveable { mutableStateOf(MainDestination.Home) }
-            // The map destination is an arg-less enum, so the uids to show on it
-            // are held here (mirroring how Events holds its selected event id).
-            // Set by the group-drive "show on map" affordance before navigating
-            // to MainDestination.Map; cleared when the map is left.
+
+            // Selected bottom-nav tab (Map is the default home) and the
+            // currently-open full-screen sub-route (null = show the tab).
+            var selectedTab by rememberSaveable { mutableStateOf(ShellTab.Map) }
+            var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
+
+            // Group-drive "show on map": stash roster uids, switch to the Map
+            // tab. Preserved for the real Mapbox impl (the stub surfaces only a
+            // count); mirrors the old MapRoute participant wiring.
             var mapParticipantUids by
                 rememberSaveable { mutableStateOf<ArrayList<String>>(ArrayList()) }
 
-            // Flag-gated (not member-gated): reaching the live-location screen.
-            // Sharing itself is member-gated inside the screen (backend parity).
+            val snackbarHostState = remember { SnackbarHostState() }
+            val mapSurface = rememberStubMapSurface()
+            val context = LocalContext.current
+            // Resolved in composition (lint: resource lookups must not use
+            // LocalContext.current) so the click lambdas can show them.
+            val comingSoonText = stringResource(R.string.shell_comingSoon)
+            val unavailableText = stringResource(R.string.shell_unavailable)
+
+            // Flag-gated (not member-gated) reach to the live-location feature.
             val liveLocationEnabled =
                 FeatureGate.isAvailable(
                     flags = flags,
@@ -201,587 +250,362 @@ fun AuthenticatedApp(
                     memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
+            // Starting a session is member-gated (backend parity).
+            val canShareLive =
+                FeatureGate.isAvailable(
+                    flags = flags,
+                    flag = FeatureFlag.LIVE_LOCATION,
+                    memberGated = true,
+                    isActiveMember = profile?.activeMember == true,
+                )
 
-            // Shared transient-failure surface for the whole signed-in shell.
-            // Screens reach it through [LocalSnackbarHostState]; the host itself
-            // is overlaid at the bottom of the Box below.
-            val snackbarHostState = remember { SnackbarHostState() }
+            // Own live-location session drives the floating toggle's colour +
+            // action (wired to the REAL live-location state).
+            val liveSession by
+                remember(uid, liveLocationRepository) {
+                    liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
+                }
+                    .collectAsState(initial = null)
+            val isSharing = LiveLocation.isSharing(liveSession, nowMillis())
+
+            fun showComingSoon() {
+                scope.launch {
+                    snackbarHostState.showSnackbar(comingSoonText)
+                }
+            }
 
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
-                // System/gesture Back returns to Home from any sub-screen, and
-                // only exits the app from Home. Nested routes (events, garage,
-                // partners, saved drives) register their own BackHandler to
-                // unwind one internal level first — those compose deeper in the
-                // tree, so they take priority while enabled and this shell
-                // handler only fires once a route is at its own root.
-                BackHandler(enabled = destination != MainDestination.Home) {
-                    // Leaving the map clears the stashed participant uids, mirroring
-                    // MapRoute.onBack so a later Home -> Map entry starts clean.
-                    if (destination == MainDestination.Map) {
-                        mapParticipantUids = ArrayList()
+                // System Back: close an open route first; from a non-Map tab
+                // return to the Map tab; from Map exit the app (no handler).
+                // Nested route BackHandlers compose deeper and take priority
+                // while enabled, so this only fires at a route's own root.
+                BackHandler(enabled = route != null) {
+                    if (route == ShellRoute.LiveLocation) {
+                        liveLocationCoordinator?.reset()
+                        BackgroundLocationController.stop(context)
                     }
-                    destination = MainDestination.Home
+                    route = null
+                }
+                BackHandler(enabled = route == null && selectedTab != ShellTab.Map) {
+                    selectedTab = ShellTab.Map
                 }
 
-                when (destination) {
-                MainDestination.Profile -> {
-                    val saveStatus by
-                        (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
-                            .collectAsState(initial = ProfileEditStatus.Idle)
-
-                    // Avatar upload: an ImageUploadCoordinator (5 MB cap) uploads
-                    // to profileImages/{uid}/{imageId}, then persists avatarPath
-                    // through the rules-validated profile write. Wired only when
-                    // BOTH the uploader and profile repo are available (config-less
-                    // builds hide the change-picture button).
-                    val avatarContext = LocalContext.current
-                    val avatarCoordinator =
-                        remember(mediaUploader) {
-                            mediaUploader?.let {
-                                ImageUploadCoordinator(it, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
-                            }
-                        }
-                    val avatarStatus by
-                        (avatarCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
-                            .collectAsState(initial = ImageUploadStatus.Idle)
-                    val avatarUrl = rememberStorageImageUrl(avatarContext, profile?.avatarPath)
-                    val avatarPicker =
-                        rememberImagePickLauncher(
-                            maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
-                        ) { picked ->
-                            val repo = profileRepository
-                            if (picked != null && avatarCoordinator != null && repo != null) {
-                                val imageId = MediaUpload.newImageId(picked.contentType)
-                                val path = MediaUpload.profileImagePath(uid, imageId)
-                                avatarCoordinator.upload(picked, path) { storedPath ->
-                                    repo.updateAvatarPath(uid, storedPath)
-                                }
-                            }
-                        }
-
-                    ProfileScreen(
-                        profile = profile,
-                        saveStatus = saveStatus,
-                        onSave = { name, bio ->
-                            profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
-                        },
-                        onBack = {
-                            destination = MainDestination.Home
-                            profileEditCoordinator?.reset()
-                            avatarCoordinator?.reset()
-                        },
+                if (route != null) {
+                    RouteHost(
+                        route = route!!,
+                        uid = uid,
+                        profileActiveMember = profile?.activeMember == true,
+                        scope = scope,
+                        onClose = { route = null },
+                        onOpenRoute = { route = it },
                         onSignOut = onSignOut,
-                        avatarUrl = avatarUrl,
-                        avatarUploadStatus = avatarStatus,
-                        onChangeAvatar =
-                            if (avatarCoordinator != null && profileRepository != null) {
-                                {
-                                    avatarCoordinator.reset()
-                                    avatarPicker.pickImage()
-                                }
-                            } else {
-                                null
-                            },
-                    )
-                }
-
-                MainDestination.LiveLocation -> {
-                    // Foreground background-location service is started/stopped
-                    // alongside the session so GPS streams via live.updatePosition
-                    // (Phase 12 slice 6). The service self-stops when Firebase is
-                    // unavailable or the location permission is absent.
-                    val liveLocationContext = LocalContext.current
-                    val session by
-                        remember(uid, liveLocationRepository) {
-                            liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
-                        }
-                            .collectAsState(initial = null)
-                    val actionStatus by
-                        (liveLocationCoordinator?.status ?: flowOf(LiveActionStatus.Idle))
-                            .collectAsState(initial = LiveActionStatus.Idle)
-                    LiveLocationScreen(
-                        session = session,
-                        nowMillis = nowMillis(),
-                        actionStatus = actionStatus,
-                        // Sharing requires membership (backend live.startSession
-                        // is member-gated); the screen still offers hide-me-now.
-                        canShare =
+                        // repositories / coordinators
+                        profile = profile,
+                        profileRepository = profileRepository,
+                        profileEditCoordinator = profileEditCoordinator,
+                        mediaUploader = mediaUploader,
+                        liveLocationRepository = liveLocationRepository,
+                        liveLocationCoordinator = liveLocationCoordinator,
+                        nowMillis = nowMillis,
+                        canShareLive = canShareLive,
+                        eventsRepository = eventsRepository,
+                        rsvpCoordinator = rsvpCoordinator,
+                        chatRepository = chatRepository,
+                        chatCoordinator = chatCoordinator,
+                        chatEnabled =
                             FeatureGate.isAvailable(
                                 flags = flags,
-                                flag = FeatureFlag.LIVE_LOCATION,
-                                memberGated = true,
+                                flag = FeatureFlag.CHAT,
+                                memberGated = false,
                                 isActiveMember = profile?.activeMember == true,
                             ),
-                        onStart = { d ->
-                            // Only start the foreground service when live-location
-                            // sharing is actually wired (coordinator present). In a
-                            // config-less / Firebase-unavailable build the coordinator
-                            // is null and the service would only start to immediately
-                            // self-stop, churning a foreground notification.
-                            liveLocationCoordinator?.let { c ->
-                                scope.launch { c.start(d) }
-                                BackgroundLocationController.start(liveLocationContext)
-                            }
-                        },
-                        onStop = {
-                            liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
-                            BackgroundLocationController.stop(liveLocationContext)
-                        },
-                        onHideMeNow = {
-                            liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
-                            BackgroundLocationController.stop(liveLocationContext)
-                        },
-                        onBack = {
-                            destination = MainDestination.Home
-                            liveLocationCoordinator?.reset()
-                            BackgroundLocationController.stop(liveLocationContext)
-                        },
+                        groupDriveRepository = groupDriveRepository,
+                        groupDriveCoordinator = groupDriveCoordinator,
+                        mapParticipantUids = mapParticipantUids,
+                        // Group-drive "show on map" opens the REAL Mapbox map as
+                        // a full-screen overlay (existing map/ code, kept behind
+                        // ShellRoute.Map) — the map-first home tab uses the
+                        // MapSurface stub, this preserves the roster view.
+                        onShowOnMap =
+                            if (liveLocationRepository != null) {
+                                { uids ->
+                                    mapParticipantUids = ArrayList(uids)
+                                    route = ShellRoute.Map
+                                }
+                            } else {
+                                null
+                            },
+                        crownHuntRepository = crownHuntRepository,
+                        crownHuntCoordinator = crownHuntCoordinator,
+                        partnersRepository = partnersRepository,
+                        offerCodeCoordinator = offerCodeCoordinator,
+                        notificationsRepository = notificationsRepository,
+                        notificationsCoordinator = notificationsCoordinator,
+                        notificationSettingsRepository = notificationSettingsRepository,
+                        notificationSettingsCoordinator = notificationSettingsCoordinator,
+                        garageRepository = garageRepository,
+                        garageCoordinator = garageCoordinator,
+                        badgesRepository = badgesRepository,
+                        blockingRepository = blockingRepository,
+                        pointsRepository = pointsRepository,
+                        partnerApplicationCoordinator = partnerApplicationCoordinator,
+                        billboardsRepository = billboardsRepository,
+                        accountDeletionCoordinator = accountDeletionCoordinator,
+                        partnerStatsRepository = partnerStatsRepository,
+                        partnerStatsCoordinator = partnerStatsCoordinator,
+                        feedbackCoordinator = feedbackCoordinator,
+                        billingRepository = billingRepository,
+                        subscriptionVerifier = subscriptionVerifier,
+                        // gates for the More hub
+                        partnerStatsEnabled =
+                            FeatureGate.isAvailable(
+                                flags = flags,
+                                flag = FeatureFlag.PARTNER_STATS,
+                                memberGated = false,
+                                isActiveMember = profile?.activeMember == true,
+                            ),
                     )
-                }
-
-                MainDestination.Map -> {
-                    // Flag-gated (not member-gated) like the live-location
-                    // entry. The live repository is passed so the map can draw
-                    // the caller's OWN marker (per-uid observeLatest) and any
-                    // group-drive participants held in [mapParticipantUids]
-                    // (per-uid reads, no collection scan). The Mapbox token
-                    // guard lives in MapRoute. Leaving the map clears the uids.
-                    MapRoute(
-                        repository = liveLocationRepository,
-                        uid = uid,
-                        participantUids = mapParticipantUids,
-                        onBack = {
-                            mapParticipantUids = ArrayList()
-                            destination = MainDestination.Home
+                } else {
+                    Scaffold(
+                        // Each tab manages its own top inset (the map is
+                        // full-bleed); the nav bar handles the bottom inset.
+                        contentWindowInsets = WindowInsets(0),
+                        bottomBar = {
+                            ShellBottomBar(
+                                selected = selectedTab,
+                                onSelect = { selectedTab = it },
+                            )
                         },
-                    )
-                }
+                    ) { padding ->
+                        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                            when (selectedTab) {
+                                ShellTab.Map ->
+                                    MapHome(
+                                        mapSurface = mapSurface,
+                                        isLiveSharing = isSharing,
+                                        participantCount = mapParticipantUids.size,
+                                        userLabel =
+                                            stringResource(R.string.shell_userMarkerLabel),
+                                        onSearch = { showComingSoon() },
+                                        onVoiceSearch = { showComingSoon() },
+                                        onToggleLiveShare = {
+                                            when (
+                                                LiveShareToggle.action(
+                                                    isSharing = isSharing,
+                                                    canShare = canShareLive,
+                                                    wired = liveLocationCoordinator != null,
+                                                )
+                                            ) {
+                                                LiveShareAction.Start -> {
+                                                    liveLocationCoordinator?.let { c ->
+                                                        scope.launch {
+                                                            c.start(LiveSessionDuration.ONE_HOUR)
+                                                        }
+                                                        BackgroundLocationController.start(context)
+                                                    }
+                                                }
+                                                LiveShareAction.Stop -> {
+                                                    liveLocationCoordinator?.let { c ->
+                                                        scope.launch { c.stop() }
+                                                        BackgroundLocationController.stop(context)
+                                                    }
+                                                }
+                                                LiveShareAction.OpenScreen ->
+                                                    if (liveLocationRepository != null) {
+                                                        route = ShellRoute.LiveLocation
+                                                    } else {
+                                                        scope.launch {
+                                                            snackbarHostState.showSnackbar(
+                                                                unavailableText,
+                                                            )
+                                                        }
+                                                    }
+                                            }
+                                        },
+                                        onLayers = { showComingSoon() },
+                                        onRecenter = { mapSurface.recenter() },
+                                        onMusic = { showComingSoon() },
+                                        // "Create route" opens the Create hub
+                                        // (create event / share live location).
+                                        onCreateRoute = { selectedTab = ShellTab.Create },
+                                        onOpenMore = { route = ShellRoute.More },
+                                    )
 
-                MainDestination.Events -> {
-                    if (eventsRepository != null) {
-                        EventsRoute(
-                            repository = eventsRepository,
-                            rsvpCoordinator = rsvpCoordinator,
-                            uid = uid,
-                            isActiveMember = profile?.activeMember == true,
-                            chatRepository = chatRepository,
-                            chatCoordinator = chatCoordinator,
-                            // Chat is flag-gated; member/RSVP eligibility is
-                            // decided per-event inside the route.
-                            chatEnabled =
-                                FeatureGate.isAvailable(
-                                    flags = flags,
-                                    flag = FeatureFlag.CHAT,
-                                    memberGated = false,
-                                    isActiveMember = profile?.activeMember == true,
-                                ),
-                            groupDriveRepository = groupDriveRepository,
-                            groupDriveCoordinator = groupDriveCoordinator,
-                            // Group-drive "show on map": stash the roster uids and
-                            // open the shared map. Only wired when the live
-                            // repository (own + per-uid marker reads) is available;
-                            // null hides the affordance in the group-drive screen.
-                            onShowOnMap =
-                                if (liveLocationRepository != null) {
-                                    { uids ->
-                                        mapParticipantUids = ArrayList(uids)
-                                        destination = MainDestination.Map
+                                ShellTab.History ->
+                                    if (drivesRepository != null) {
+                                        DrivesRoute(
+                                            repository = drivesRepository,
+                                            uid = uid,
+                                            isActiveMember = profile?.activeMember == true,
+                                            onBack = { selectedTab = ShellTab.Map },
+                                        )
+                                    } else {
+                                        HubScreen(
+                                            title = stringResource(R.string.shell_tabHistory),
+                                            entries = emptyList(),
+                                        )
                                     }
-                                } else {
-                                    null
-                                },
-                            onBack = { destination = MainDestination.Home },
-                            // Blocking-in-context (chat): null-safe passthrough.
-                            blockingRepository = blockingRepository,
-                        )
-                    } else {
-                        // Unreachable: the Home entry is gated on eventsRepository
-                        // != null. Render the shell rather than mutate state here.
-                        LoadingScreen()
-                    }
-                }
 
-                MainDestination.CrownHunt -> {
-                    if (crownHuntRepository != null) {
-                        CrownHuntRoute(
-                            repository = crownHuntRepository,
-                            coordinator = crownHuntCoordinator,
-                            isActiveMember = profile?.activeMember == true,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
+                                ShellTab.Create ->
+                                    HubScreen(
+                                        title = stringResource(R.string.shell_createTitle),
+                                        entries =
+                                            listOf(
+                                                HubEntry(
+                                                    label = stringResource(R.string.shell_createEvent),
+                                                    icon = Icons.Filled.Event,
+                                                    onClick =
+                                                        if (eventsRepository != null) {
+                                                            { route = ShellRoute.Events }
+                                                        } else {
+                                                            null
+                                                        },
+                                                ),
+                                                HubEntry(
+                                                    label =
+                                                        stringResource(R.string.shell_startLiveLocation),
+                                                    icon = Icons.Filled.Podcasts,
+                                                    onClick =
+                                                        if (liveLocationRepository != null &&
+                                                            liveLocationEnabled
+                                                        ) {
+                                                            { route = ShellRoute.LiveLocation }
+                                                        } else {
+                                                            null
+                                                        },
+                                                ),
+                                            ),
+                                    )
 
-                MainDestination.Partners -> {
-                    if (partnersRepository != null) {
-                        PartnersRoute(
-                            repository = partnersRepository,
-                            offerCodeCoordinator = offerCodeCoordinator,
-                            uid = uid,
-                            isActiveMember = profile?.activeMember == true,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
+                                ShellTab.Social ->
+                                    HubScreen(
+                                        title = stringResource(R.string.shell_socialTitle),
+                                        entries =
+                                            listOf(
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialEvents),
+                                                    Icons.Filled.Event,
+                                                    if (eventsRepository != null) {
+                                                        { route = ShellRoute.Events }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialNotifications),
+                                                    Icons.Filled.Notifications,
+                                                    if (notificationsRepository != null) {
+                                                        { route = ShellRoute.Notifications }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialCrownHunt),
+                                                    Icons.Filled.EmojiEvents,
+                                                    if (crownHuntRepository != null &&
+                                                        FeatureGate.isAvailable(
+                                                            flags = flags,
+                                                            flag = FeatureFlag.CROWN_HUNT,
+                                                            memberGated = false,
+                                                            isActiveMember = profile?.activeMember == true,
+                                                        )
+                                                    ) {
+                                                        { route = ShellRoute.CrownHunt }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialPartners),
+                                                    Icons.Filled.Storefront,
+                                                    if (partnersRepository != null &&
+                                                        FeatureGate.isAvailable(
+                                                            flags = flags,
+                                                            flag = FeatureFlag.PARTNERS,
+                                                            memberGated = false,
+                                                            isActiveMember = profile?.activeMember == true,
+                                                        )
+                                                    ) {
+                                                        { route = ShellRoute.Partners }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialBillboards),
+                                                    Icons.Filled.Campaign,
+                                                    if (billboardsRepository != null &&
+                                                        FeatureGate.isAvailable(
+                                                            flags = flags,
+                                                            flag = FeatureFlag.DIGITAL_BILLBOARDS,
+                                                            memberGated = false,
+                                                            isActiveMember = profile?.activeMember == true,
+                                                        )
+                                                    ) {
+                                                        { route = ShellRoute.Billboards }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                            ),
+                                    )
 
-                MainDestination.Notifications -> {
-                    if (notificationsRepository != null) {
-                        NotificationsRoute(
-                            repository = notificationsRepository,
-                            coordinator = notificationsCoordinator,
-                            uid = uid,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
+                                ShellTab.Garage ->
+                                    HubScreen(
+                                        title = stringResource(R.string.shell_garageTitle),
+                                        entries =
+                                            listOf(
+                                                HubEntry(
+                                                    stringResource(R.string.shell_garageVehicles),
+                                                    Icons.Filled.DirectionsCar,
+                                                    if (garageRepository != null &&
+                                                        profile?.activeMember == true
+                                                    ) {
+                                                        { route = ShellRoute.Garage }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_garageBadges),
+                                                    Icons.Filled.MilitaryTech,
+                                                    if (badgesRepository != null) {
+                                                        { route = ShellRoute.Badges }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_garagePoints),
+                                                    Icons.Filled.Stars,
+                                                    if (pointsRepository != null) {
+                                                        { route = ShellRoute.Points }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_garageSubscription),
+                                                    Icons.Filled.CardMembership,
+                                                    if (billingRepository != null &&
+                                                        subscriptionVerifier != null
+                                                    ) {
+                                                        { route = ShellRoute.Subscription }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                            ),
+                                    )
+                            }
+                        }
                     }
-                }
-
-                MainDestination.NotificationSettings -> {
-                    if (notificationSettingsRepository != null) {
-                        val context = LocalContext.current
-                        NotificationSettingsRoute(
-                            repository = notificationSettingsRepository,
-                            coordinator = notificationSettingsCoordinator,
-                            uid = uid,
-                            pushPermission = currentPushPermissionStatus(context),
-                            onOpenSystemSettings = { openAppNotificationSettings(context) },
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Garage -> {
-                    if (garageRepository != null) {
-                        GarageRoute(
-                            repository = garageRepository,
-                            coordinator = garageCoordinator,
-                            uid = uid,
-                            isActiveMember = profile?.activeMember == true,
-                            onBack = { destination = MainDestination.Home },
-                            mediaUploader = mediaUploader,
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Badges -> {
-                    if (badgesRepository != null) {
-                        BadgesRoute(
-                            repository = badgesRepository,
-                            uid = uid,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Blocked -> {
-                    if (blockingRepository != null) {
-                        BlockingRoute(
-                            repository = blockingRepository,
-                            uid = uid,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.SavedDrives -> {
-                    if (drivesRepository != null) {
-                        DrivesRoute(
-                            repository = drivesRepository,
-                            uid = uid,
-                            isActiveMember = profile?.activeMember == true,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Points -> {
-                    if (pointsRepository != null) {
-                        PointsRoute(
-                            repository = pointsRepository,
-                            uid = uid,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.PartnerApplication -> {
-                    if (partnerApplicationCoordinator != null) {
-                        PartnerApplicationRoute(
-                            coordinator = partnerApplicationCoordinator,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Billboards -> {
-                    if (billboardsRepository != null) {
-                        BillboardsRoute(
-                            repository = billboardsRepository,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.AccountDeletion -> {
-                    if (accountDeletionCoordinator != null) {
-                        AccountDeletionRoute(
-                            coordinator = accountDeletionCoordinator,
-                            onDeleted = onSignOut,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.PartnerStats -> {
-                    if (partnerStatsRepository != null) {
-                        PartnerStatsRoute(
-                            repository = partnerStatsRepository,
-                            coordinator = partnerStatsCoordinator,
-                            uid = uid,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Feedback -> {
-                    if (feedbackCoordinator != null) {
-                        FeedbackReportRoute(
-                            coordinator = feedbackCoordinator,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Subscription -> {
-                    if (billingRepository != null && subscriptionVerifier != null) {
-                        SubscriptionRoute(
-                            billing = billingRepository,
-                            verifier = subscriptionVerifier,
-                            isActiveMember = profile?.activeMember == true,
-                            onBack = { destination = MainDestination.Home },
-                        )
-                    } else {
-                        LoadingScreen()
-                    }
-                }
-
-                MainDestination.Home -> {
-                    HomeScreen(
-                        displayName = profile?.displayName ?: authDisplayName,
-                        onSignOut = onSignOut,
-                        // Only offer the Profile screen when editing is actually
-                        // available (Firebase configured); otherwise Save is a no-op.
-                        onOpenProfile =
-                            if (profileEditCoordinator != null) {
-                                { destination = MainDestination.Profile }
-                            } else {
-                                null
-                            },
-                        showLiveLocationTeaser = liveLocationEnabled,
-                        // Entitlement-gated (as documented): active membership only.
-                        showMemberValue = profile?.activeMember == true,
-                        // Reachable when the flag is on and Firebase is configured.
-                        onOpenLiveLocation =
-                            if (liveLocationEnabled && liveLocationRepository != null) {
-                                { destination = MainDestination.LiveLocation }
-                            } else {
-                                null
-                            },
-                        // Map: behind the same LIVE_LOCATION flag (flag-gated,
-                        // not member-gated). Needs no Firebase repository — the
-                        // map renders the caller's own view; the Mapbox token
-                        // guard is in MapRoute.
-                        onOpenMap =
-                            if (liveLocationEnabled) {
-                                { destination = MainDestination.Map }
-                            } else {
-                                null
-                            },
-                        // Events are core (no feature flag); reachable when
-                        // Firebase is configured.
-                        onOpenEvents =
-                            if (eventsRepository != null) {
-                                { destination = MainDestination.Events }
-                            } else {
-                                null
-                            },
-                        // Kronjakt: behind the crownHunt flag; membership is
-                        // enforced inside the screen and by the rules.
-                        onOpenCrownHunt =
-                            if (crownHuntRepository != null &&
-                                FeatureGate.isAvailable(
-                                    flags = flags,
-                                    flag = FeatureFlag.CROWN_HUNT,
-                                    memberGated = false,
-                                    isActiveMember = profile?.activeMember == true,
-                                )
-                            ) {
-                                { destination = MainDestination.CrownHunt }
-                            } else {
-                                null
-                            },
-                        // Partners: behind the partners flag; offers are member-
-                        // gated inside the screen.
-                        onOpenPartners =
-                            if (partnersRepository != null &&
-                                FeatureGate.isAvailable(
-                                    flags = flags,
-                                    flag = FeatureFlag.PARTNERS,
-                                    memberGated = false,
-                                    isActiveMember = profile?.activeMember == true,
-                                )
-                            ) {
-                                { destination = MainDestination.Partners }
-                            } else {
-                                null
-                            },
-                        // Notification inbox is core (no flag); reachable when
-                        // Firebase is configured.
-                        onOpenNotifications =
-                            if (notificationsRepository != null) {
-                                { destination = MainDestination.Notifications }
-                            } else {
-                                null
-                            },
-                        // Notification preferences: owner-write; reachable when configured.
-                        onOpenNotificationSettings =
-                            if (notificationSettingsRepository != null) {
-                                { destination = MainDestination.NotificationSettings }
-                            } else {
-                                null
-                            },
-                        // Garage is a member feature (add/edit/delete are
-                        // member-gated callables); entry requires membership.
-                        onOpenGarage =
-                            if (garageRepository != null && profile?.activeMember == true) {
-                                { destination = MainDestination.Garage }
-                            } else {
-                                null
-                            },
-                        // Badges: owner-read; reachable when Firebase is configured.
-                        onOpenBadges =
-                            if (badgesRepository != null) {
-                                { destination = MainDestination.Badges }
-                            } else {
-                                null
-                            },
-                        // Blocked users: owner-read management; reachable when configured.
-                        onOpenBlocked =
-                            if (blockingRepository != null) {
-                                { destination = MainDestination.Blocked }
-                            } else {
-                                null
-                            },
-                        // Saved drives: owner-read history; reachable when configured.
-                        onOpenSavedDrives =
-                            if (drivesRepository != null) {
-                                { destination = MainDestination.SavedDrives }
-                            } else {
-                                null
-                            },
-                        // Points wallet: owner-read; reachable when configured.
-                        onOpenPoints =
-                            if (pointsRepository != null) {
-                                { destination = MainDestination.Points }
-                            } else {
-                                null
-                            },
-                        // Subscriptions: the member purchase path; reachable only
-                        // when BOTH billing (Play) and the verifier (Firebase) are
-                        // available — a config-less build has billing but no
-                        // verifier, so the entry would otherwise be a dead end.
-                        onOpenSubscription =
-                            if (billingRepository != null && subscriptionVerifier != null) {
-                                { destination = MainDestination.Subscription }
-                            } else {
-                                null
-                            },
-                        // Partner application: any authenticated user may apply.
-                        onOpenPartnerApplication =
-                            if (partnerApplicationCoordinator != null) {
-                                { destination = MainDestination.PartnerApplication }
-                            } else {
-                                null
-                            },
-                        // Digital billboards: behind the digitalBillboards flag.
-                        onOpenBillboards =
-                            if (billboardsRepository != null &&
-                                FeatureGate.isAvailable(
-                                    flags = flags,
-                                    flag = FeatureFlag.DIGITAL_BILLBOARDS,
-                                    memberGated = false,
-                                    isActiveMember = profile?.activeMember == true,
-                                )
-                            ) {
-                                { destination = MainDestination.Billboards }
-                            } else {
-                                null
-                            },
-                        // Account deletion: signedIn (works while suspended).
-                        onOpenAccountDeletion =
-                            if (accountDeletionCoordinator != null) {
-                                { destination = MainDestination.AccountDeletion }
-                            } else {
-                                null
-                            },
-                        // Partner-stats opt-in: behind the partnerStats flag.
-                        onOpenPartnerStats =
-                            if (partnerStatsRepository != null &&
-                                FeatureGate.isAvailable(
-                                    flags = flags,
-                                    flag = FeatureFlag.PARTNER_STATS,
-                                    memberGated = false,
-                                    isActiveMember = profile?.activeMember == true,
-                                )
-                            ) {
-                                { destination = MainDestination.PartnerStats }
-                            } else {
-                                null
-                            },
-                        // Report a problem: any signed-in user; reachable when
-                        // Firebase is configured (the callable requires auth).
-                        onOpenFeedback =
-                            if (feedbackCoordinator != null) {
-                                { destination = MainDestination.Feedback }
-                            } else {
-                                null
-                            },
-                    )
-                }
                 }
 
                 SnackbarHost(
                     hostState = snackbarHostState,
-                    // Pad for the system navigation bar so transient messages are
-                    // not obscured by 3-button nav at the window bottom.
                     modifier =
                         Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
                 )
@@ -791,28 +615,465 @@ fun AuthenticatedApp(
     }
 }
 
-/** In-app destinations within the authenticated Main shell (no NavHost yet). */
-private enum class MainDestination {
-    Home,
-    Profile,
-    LiveLocation,
-    Map,
-    Events,
-    CrownHunt,
-    Partners,
-    Notifications,
-    NotificationSettings,
-    Garage,
-    Badges,
-    Blocked,
-    SavedDrives,
-    Points,
-    PartnerApplication,
-    Billboards,
-    AccountDeletion,
-    PartnerStats,
-    Feedback,
-    Subscription,
+/** The 5-tab bottom navigation; Map is the default, highlighted home tab. */
+@Composable
+private fun ShellBottomBar(
+    selected: ShellTab,
+    onSelect: (ShellTab) -> Unit,
+) {
+    NavigationBar {
+        NavigationBarItem(
+            selected = selected == ShellTab.Map,
+            onClick = { onSelect(ShellTab.Map) },
+            icon = { Icon(Icons.Filled.Map, contentDescription = null) },
+            label = { Text(stringResource(R.string.shell_tabMap)) },
+        )
+        NavigationBarItem(
+            selected = selected == ShellTab.History,
+            onClick = { onSelect(ShellTab.History) },
+            icon = { Icon(Icons.Filled.History, contentDescription = null) },
+            label = { Text(stringResource(R.string.shell_tabHistory)) },
+        )
+        NavigationBarItem(
+            selected = selected == ShellTab.Create,
+            onClick = { onSelect(ShellTab.Create) },
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            label = { Text(stringResource(R.string.shell_tabCreate)) },
+        )
+        NavigationBarItem(
+            selected = selected == ShellTab.Social,
+            onClick = { onSelect(ShellTab.Social) },
+            icon = { Icon(Icons.Filled.Groups, contentDescription = null) },
+            label = { Text(stringResource(R.string.shell_tabSocial)) },
+        )
+        NavigationBarItem(
+            selected = selected == ShellTab.Garage,
+            onClick = { onSelect(ShellTab.Garage) },
+            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = null) },
+            label = { Text(stringResource(R.string.shell_tabGarage)) },
+        )
+    }
+}
+
+/**
+ * Renders the currently-open full-screen [route] over the tab shell. Each route
+ * keeps the exact repository wiring + null-guards from the previous shell; its
+ * own back affordance calls [onClose] to return to the tab hub. The "More" hub
+ * (top-bar avatar) lists the profile/settings/account destinations, each of
+ * which re-opens via [onOpenRoute].
+ */
+@Composable
+private fun RouteHost(
+    route: ShellRoute,
+    uid: String,
+    profileActiveMember: Boolean,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onClose: () -> Unit,
+    onOpenRoute: (ShellRoute) -> Unit,
+    onSignOut: () -> Unit,
+    profile: com.kungsbackacarcommunity.app.profile.UserProfile?,
+    profileRepository: ProfileRepository?,
+    profileEditCoordinator: ProfileEditCoordinator?,
+    mediaUploader: MediaUploader?,
+    liveLocationRepository: LiveLocationRepository?,
+    liveLocationCoordinator: LiveLocationCoordinator?,
+    nowMillis: () -> Long,
+    canShareLive: Boolean,
+    eventsRepository: EventsRepository?,
+    rsvpCoordinator: RsvpCoordinator?,
+    chatRepository: EventChatRepository?,
+    chatCoordinator: ChatCoordinator?,
+    chatEnabled: Boolean,
+    groupDriveRepository: GroupDriveRepository?,
+    groupDriveCoordinator: GroupDriveCoordinator?,
+    mapParticipantUids: List<String>,
+    onShowOnMap: ((List<String>) -> Unit)?,
+    crownHuntRepository: CrownHuntRepository?,
+    crownHuntCoordinator: CrownHuntCoordinator?,
+    partnersRepository: PartnersRepository?,
+    offerCodeCoordinator: OfferCodeCoordinator?,
+    notificationsRepository: NotificationsRepository?,
+    notificationsCoordinator: NotificationsCoordinator?,
+    notificationSettingsRepository: NotificationSettingsRepository?,
+    notificationSettingsCoordinator: NotificationSettingsCoordinator?,
+    garageRepository: GarageRepository?,
+    garageCoordinator: GarageCoordinator?,
+    badgesRepository: BadgesRepository?,
+    blockingRepository: BlockingRepository?,
+    pointsRepository: PointsRepository?,
+    partnerApplicationCoordinator: PartnerApplicationCoordinator?,
+    billboardsRepository: BillboardsRepository?,
+    accountDeletionCoordinator: AccountDeletionCoordinator?,
+    partnerStatsRepository: PartnerStatsRepository?,
+    partnerStatsCoordinator: PartnerStatsCoordinator?,
+    feedbackCoordinator: FeedbackCoordinator?,
+    billingRepository: BillingRepository?,
+    subscriptionVerifier: SubscriptionVerifier?,
+    partnerStatsEnabled: Boolean,
+) {
+    val context = LocalContext.current
+    when (route) {
+        ShellRoute.More ->
+            HubScreen(
+                title = stringResource(R.string.shell_moreTitle),
+                onBack = onClose,
+                entries =
+                    listOf(
+                        HubEntry(
+                            stringResource(R.string.shell_moreProfile),
+                            Icons.Filled.Person,
+                            if (profileEditCoordinator != null) {
+                                { onOpenRoute(ShellRoute.Profile) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_moreNotificationSettings),
+                            Icons.Filled.NotificationsActive,
+                            if (notificationSettingsRepository != null) {
+                                { onOpenRoute(ShellRoute.NotificationSettings) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_moreBlocked),
+                            Icons.Filled.Block,
+                            if (blockingRepository != null) {
+                                { onOpenRoute(ShellRoute.Blocked) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_morePartnerApplication),
+                            Icons.Filled.BusinessCenter,
+                            if (partnerApplicationCoordinator != null) {
+                                { onOpenRoute(ShellRoute.PartnerApplication) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_morePartnerStats),
+                            Icons.Filled.BarChart,
+                            if (partnerStatsRepository != null && partnerStatsEnabled) {
+                                { onOpenRoute(ShellRoute.PartnerStats) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_moreFeedback),
+                            Icons.Filled.BugReport,
+                            if (feedbackCoordinator != null) {
+                                { onOpenRoute(ShellRoute.Feedback) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_moreAccountDeletion),
+                            Icons.Filled.DeleteForever,
+                            if (accountDeletionCoordinator != null) {
+                                { onOpenRoute(ShellRoute.AccountDeletion) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_moreSignOut),
+                            Icons.AutoMirrored.Filled.Logout,
+                            onSignOut,
+                        ),
+                    ),
+            )
+
+        ShellRoute.Profile -> {
+            val saveStatus by
+                (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
+                    .collectAsState(initial = ProfileEditStatus.Idle)
+            val avatarCoordinator =
+                remember(mediaUploader) {
+                    mediaUploader?.let {
+                        ImageUploadCoordinator(it, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+                    }
+                }
+            val avatarStatus by
+                (avatarCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
+                    .collectAsState(initial = ImageUploadStatus.Idle)
+            val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+            val avatarPicker =
+                rememberImagePickLauncher(
+                    maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                ) { picked ->
+                    val repo = profileRepository
+                    if (picked != null && avatarCoordinator != null && repo != null) {
+                        val imageId = MediaUpload.newImageId(picked.contentType)
+                        val path = MediaUpload.profileImagePath(uid, imageId)
+                        avatarCoordinator.upload(picked, path) { storedPath ->
+                            repo.updateAvatarPath(uid, storedPath)
+                        }
+                    }
+                }
+            ProfileScreen(
+                profile = profile,
+                saveStatus = saveStatus,
+                onSave = { name, bio ->
+                    profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
+                },
+                onBack = {
+                    onClose()
+                    profileEditCoordinator?.reset()
+                    avatarCoordinator?.reset()
+                },
+                onSignOut = onSignOut,
+                avatarUrl = avatarUrl,
+                avatarUploadStatus = avatarStatus,
+                onChangeAvatar =
+                    if (avatarCoordinator != null && profileRepository != null) {
+                        {
+                            avatarCoordinator.reset()
+                            avatarPicker.pickImage()
+                        }
+                    } else {
+                        null
+                    },
+            )
+        }
+
+        ShellRoute.LiveLocation -> {
+            val session by
+                remember(uid, liveLocationRepository) {
+                    liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
+                }
+                    .collectAsState(initial = null)
+            val actionStatus by
+                (liveLocationCoordinator?.status ?: flowOf(LiveActionStatus.Idle))
+                    .collectAsState(initial = LiveActionStatus.Idle)
+            LiveLocationScreen(
+                session = session,
+                nowMillis = nowMillis(),
+                actionStatus = actionStatus,
+                canShare = canShareLive,
+                onStart = { d ->
+                    liveLocationCoordinator?.let { c ->
+                        scope.launch { c.start(d) }
+                        BackgroundLocationController.start(context)
+                    }
+                },
+                onStop = {
+                    liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
+                    BackgroundLocationController.stop(context)
+                },
+                onHideMeNow = {
+                    liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
+                    BackgroundLocationController.stop(context)
+                },
+                onBack = {
+                    onClose()
+                    liveLocationCoordinator?.reset()
+                    BackgroundLocationController.stop(context)
+                },
+            )
+        }
+
+        ShellRoute.Map ->
+            // The real Mapbox map, used for the group-drive roster overlay. The
+            // token guard lives in MapRoute; it renders an empty style (no
+            // crash) when no token is configured, keeping the config-less build
+            // green. The map-first home tab uses the MapSurface stub instead.
+            MapRoute(
+                repository = liveLocationRepository,
+                uid = uid,
+                participantUids = mapParticipantUids,
+                onBack = onClose,
+            )
+
+        ShellRoute.Events ->
+            if (eventsRepository != null) {
+                EventsRoute(
+                    repository = eventsRepository,
+                    rsvpCoordinator = rsvpCoordinator,
+                    uid = uid,
+                    isActiveMember = profileActiveMember,
+                    chatRepository = chatRepository,
+                    chatCoordinator = chatCoordinator,
+                    chatEnabled = chatEnabled,
+                    groupDriveRepository = groupDriveRepository,
+                    groupDriveCoordinator = groupDriveCoordinator,
+                    onShowOnMap = onShowOnMap,
+                    onBack = onClose,
+                    blockingRepository = blockingRepository,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.CrownHunt ->
+            if (crownHuntRepository != null) {
+                CrownHuntRoute(
+                    repository = crownHuntRepository,
+                    coordinator = crownHuntCoordinator,
+                    isActiveMember = profileActiveMember,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Partners ->
+            if (partnersRepository != null) {
+                PartnersRoute(
+                    repository = partnersRepository,
+                    offerCodeCoordinator = offerCodeCoordinator,
+                    uid = uid,
+                    isActiveMember = profileActiveMember,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Notifications ->
+            if (notificationsRepository != null) {
+                NotificationsRoute(
+                    repository = notificationsRepository,
+                    coordinator = notificationsCoordinator,
+                    uid = uid,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.NotificationSettings ->
+            if (notificationSettingsRepository != null) {
+                NotificationSettingsRoute(
+                    repository = notificationSettingsRepository,
+                    coordinator = notificationSettingsCoordinator,
+                    uid = uid,
+                    pushPermission = currentPushPermissionStatus(context),
+                    onOpenSystemSettings = { openAppNotificationSettings(context) },
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Garage ->
+            if (garageRepository != null) {
+                GarageRoute(
+                    repository = garageRepository,
+                    coordinator = garageCoordinator,
+                    uid = uid,
+                    isActiveMember = profileActiveMember,
+                    onBack = onClose,
+                    mediaUploader = mediaUploader,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Badges ->
+            if (badgesRepository != null) {
+                BadgesRoute(
+                    repository = badgesRepository,
+                    uid = uid,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Blocked ->
+            if (blockingRepository != null) {
+                BlockingRoute(
+                    repository = blockingRepository,
+                    uid = uid,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Points ->
+            if (pointsRepository != null) {
+                PointsRoute(
+                    repository = pointsRepository,
+                    uid = uid,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.PartnerApplication ->
+            if (partnerApplicationCoordinator != null) {
+                PartnerApplicationRoute(
+                    coordinator = partnerApplicationCoordinator,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Billboards ->
+            if (billboardsRepository != null) {
+                BillboardsRoute(
+                    repository = billboardsRepository,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.AccountDeletion ->
+            if (accountDeletionCoordinator != null) {
+                AccountDeletionRoute(
+                    coordinator = accountDeletionCoordinator,
+                    onDeleted = onSignOut,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.PartnerStats ->
+            if (partnerStatsRepository != null) {
+                PartnerStatsRoute(
+                    repository = partnerStatsRepository,
+                    coordinator = partnerStatsCoordinator,
+                    uid = uid,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Feedback ->
+            if (feedbackCoordinator != null) {
+                FeedbackReportRoute(
+                    coordinator = feedbackCoordinator,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Subscription ->
+            if (billingRepository != null && subscriptionVerifier != null) {
+                SubscriptionRoute(
+                    billing = billingRepository,
+                    verifier = subscriptionVerifier,
+                    isActiveMember = profileActiveMember,
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+    }
 }
 
 @Composable

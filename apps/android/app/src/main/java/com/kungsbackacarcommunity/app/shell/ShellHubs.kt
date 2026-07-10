@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,17 +8,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 
 /** A single entry in a hub screen; [onClick] null hides the row (unavailable). */
 data class HubEntry(
@@ -37,16 +42,26 @@ fun HubScreen(
     title: String,
     entries: List<HubEntry>,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
 ) {
+    if (onBack != null) {
+        BackHandler(onBack = onBack)
+    }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (onBack != null) {
+                TextButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+                    Text(text = stringResource(R.string.profile_back))
+                }
+            }
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineMedium,

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.filled.AccountCircle
@@ -35,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -178,7 +181,7 @@ private fun SearchBarRow(
     ) {
         Surface(
             modifier = Modifier.weight(1f),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.full),
+            shape = RoundedCornerShape(KccRadius.full),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 3.dp,
             shadowElevation = 3.dp,
@@ -232,7 +235,7 @@ private fun SearchBarRow(
 @Composable
 private fun LoadingRoadsChip() {
     Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.full),
+        shape = RoundedCornerShape(KccRadius.full),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
     ) {
@@ -258,7 +261,7 @@ private fun LoadingRoadsChip() {
 @Composable
 private fun ParticipantChip(count: Int) {
     Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.full),
+        shape = RoundedCornerShape(KccRadius.full),
         color = MaterialTheme.colorScheme.secondaryContainer,
         tonalElevation = 2.dp,
     ) {
@@ -289,7 +292,7 @@ private fun UserMarkerPin(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Surface(
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.full),
+            shape = RoundedCornerShape(KccRadius.full),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp,
             shadowElevation = 4.dp,
@@ -337,7 +340,7 @@ private fun UserMarkerPin(
 
 @Composable
 private fun CircleControl(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
     containerColor: Color = MaterialTheme.colorScheme.surface,
@@ -366,7 +369,7 @@ private fun CircleControl(
 private fun CreateRoutePill(onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.full),
+        shape = RoundedCornerShape(KccRadius.full),
         color = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
         tonalElevation = 4.dp,

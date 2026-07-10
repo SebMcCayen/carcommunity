@@ -23,6 +23,8 @@ enum class ShellTab {
 enum class ShellRoute {
     Profile,
     LiveLocation,
+    /** The real Mapbox map (group-drive "show on map" overlay). */
+    Map,
     Events,
     CrownHunt,
     Partners,
