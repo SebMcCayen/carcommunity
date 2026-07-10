@@ -45,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -138,6 +139,7 @@ import com.kungsbackacarcommunity.app.shell.rememberStubMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -268,7 +270,23 @@ fun AuthenticatedApp(
                     liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
                 }
                     .collectAsState(initial = null)
-            val isSharing = LiveLocation.isSharing(liveSession, nowMillis())
+            // Re-evaluate at expiry: a single nowMillis() snapshot would keep
+            // isSharing == true if the app stays open past expiresAtMillis with
+            // no other recomposition. Schedule one delay-to-expiry that flips
+            // the state to false exactly when the session actually expires.
+            val isSharing by
+                produceState(
+                    initialValue = LiveLocation.isSharing(liveSession, nowMillis()),
+                    liveSession,
+                ) {
+                    value = LiveLocation.isSharing(liveSession, nowMillis())
+                    val expiry = liveSession?.expiresAtMillis
+                    if (value && expiry != null) {
+                        val remaining = expiry - nowMillis()
+                        if (remaining > 0) delay(remaining)
+                        value = LiveLocation.isSharing(liveSession, nowMillis())
+                    }
+                }
 
             fun showComingSoon() {
                 scope.launch {

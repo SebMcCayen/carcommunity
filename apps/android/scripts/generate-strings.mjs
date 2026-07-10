@@ -82,10 +82,11 @@ for (const { source, out } of targets) {
     // (e.g. "50% off"). Strings that use positional args like `%1$d` /
     // `%2$s` must stay format-validated (default formatted="true"), so that
     // stringResource(id, args) substitutes correctly and lint stays happy.
-    // Strip out any positional specifiers first; only a leftover bare `%`
+    // Strip out ALL Java/Android format specifiers first (positional like
+    // `%1$d` or plain like `%s` / `%d`); only a leftover bare literal `%`
     // requires disabling format validation.
-    const positional = /%(\d+\$)?[-#+ 0,(]*\d*(?:\.\d+)?[a-zA-Z]/g;
-    const hasLiteralPercent = value.replace(positional, '').includes('%');
+    const formatSpecifier = /%(\d+\$)?[-#+ 0,(]*\d*(?:\.\d+)?[a-zA-Z]/g;
+    const hasLiteralPercent = value.replace(formatSpecifier, '').includes('%');
     const formatted = hasLiteralPercent ? ' formatted="false"' : '';
     lines.push(`    <string name="${toResourceName(dotPath)}"${formatted}>${escapeAndroid(value)}</string>`);
   }
