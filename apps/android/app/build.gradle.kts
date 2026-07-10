@@ -179,6 +179,9 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    // Material icons (map-first shell: search, mic, broadcast, layers, my-location,
+    // music, route, tab glyphs). Vectors are stripped by R8 in release.
+    implementation(libs.androidx.material.icons.extended)
 
     // Firebase (versions via BoM)
     implementation(platform(libs.firebase.bom))
