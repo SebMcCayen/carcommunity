@@ -1,12 +1,12 @@
 package com.kungsbackacarcommunity.app.subscription
 
 import android.app.Activity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 
 /**
@@ -28,7 +28,7 @@ fun SubscriptionRoute(
     isActiveMember: Boolean,
     onBack: () -> Unit,
 ) {
-    val activity = LocalContext.current as? Activity
+    val activity: Activity? = LocalActivity.current
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val scope = rememberCoroutineScope()

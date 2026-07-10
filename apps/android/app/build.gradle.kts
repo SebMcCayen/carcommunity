@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -95,7 +96,12 @@ if (file("google-services.json").exists()) {
 
 android {
     namespace = "com.kungsbackacarcommunity.app"
-    compileSdk = 35
+    // compileSdk 36 is required by core-ktx 1.18 / activity-compose 1.13 (their
+    // AAR metadata declares minCompileSdk=36). We deliberately cap at that line:
+    // core 1.19 / lifecycle 2.11 would require compileSdk 37 + AGP 9.x, a larger
+    // toolchain jump out of scope here. targetSdk intentionally stays 35
+    // (raising it is a separate, tested change).
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.kungsbackacarcommunity.app"
@@ -110,7 +116,9 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreStoreFile)
+                // hasReleaseSigning guarantees keystoreStoreFile is non-blank, but
+                // the compiler can't smart-cast a captured val — assert non-null.
+                storeFile = file(keystoreStoreFile!!)
                 storePassword = keystoreStorePassword
                 keyAlias = keystoreKeyAlias
                 keyPassword = keystoreKeyPassword
@@ -148,14 +156,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         // Phase 15: App Check init reads BuildConfig.DEBUG to pick the provider.
         buildConfig = true
+    }
+}
+
+// Replaces the removed android.kotlinOptions DSL (error since Kotlin 2.2+).
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
