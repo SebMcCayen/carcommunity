@@ -92,6 +92,20 @@ class MapFirstShellTest {
     }
 
     @Test
+    fun chatBubble_opensAndDismissesPopup() {
+        setShell()
+        // The floating chat bubble is present (unread count is 0 → "Chat").
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
+        // Tapping it opens the community-chat popup.
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_POPUP_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_chatTitle)).assertIsDisplayed()
+        // Closing minimizes back to the bubble.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_chatClose)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_POPUP_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun bottomNav_switchesTabsAndBack() {
         setShell()
         // All five tabs are present.
