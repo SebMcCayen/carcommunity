@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -779,7 +780,10 @@ fun AuthenticatedApp(
 
                 SnackbarHost(
                     hostState = snackbarHostState,
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    // Pad for the system navigation bar so transient messages are
+                    // not obscured by 3-button nav at the window bottom.
+                    modifier =
+                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
                 )
               }
             }

@@ -52,7 +52,10 @@ fun DrivesRoute(
 
     // System/gesture Back unwinds one internal level (recorder or detail -> list);
     // at the list root it is disabled so the shell's BackHandler returns to Home.
-    BackHandler(enabled = recordSession != null || (selectedRideId != null && selected != null)) {
+    // Enabling on `selectedRideId != null` alone (not also `selected != null`)
+    // ensures a transient null `selected` during a list refresh still unwinds to
+    // the list instead of falling through to the shell handler (Home).
+    BackHandler(enabled = recordSession != null || selectedRideId != null) {
         when {
             recordSession != null -> recordSession = null
             else -> {
