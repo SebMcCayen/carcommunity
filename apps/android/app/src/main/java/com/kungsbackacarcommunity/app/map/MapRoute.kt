@@ -5,7 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
@@ -48,12 +48,12 @@ fun MapRoute(
     onBack: () -> Unit,
     participantUids: List<String> = emptyList(),
 ) {
-    val context = LocalContext.current
-
-    // Apply the access token as a one-shot side effect; empty by default (no
-    // token in CI), in which case the global token is left untouched.
+    // Resolve the token in composition (Compose lint: resource values must be
+    // read via Compose resource APIs, not LocalContext), then apply it as a
+    // one-shot side effect; empty by default (no token in CI), in which case
+    // the global token is left untouched.
+    val token = stringResource(R.string.mapbox_access_token)
     LaunchedEffect(Unit) {
-        val token = context.getString(R.string.mapbox_access_token)
         if (token.isNotBlank()) {
             MapboxOptions.accessToken = token
         }
