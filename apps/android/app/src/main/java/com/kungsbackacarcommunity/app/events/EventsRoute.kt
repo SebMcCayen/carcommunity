@@ -94,7 +94,7 @@ fun EventsRoute(
     // Track the first snapshot so a null event reads as "loading" (not "error")
     // on the initial composition.
     val eventLoad by
-        remember(selected, reloadKey) {
+        remember(repository, selected, reloadKey) {
             repository.observeEvent(selected).map<EventSummary?, EventLoad> { EventLoad.Loaded(it) }
         }
             .collectAsState(initial = EventLoad.Loading)
@@ -147,7 +147,7 @@ fun EventsRoute(
     // (the shared, non-blocking feedback channel) instead of a persistent line.
     val snackbarHostState = LocalSnackbarHostState.current
     val rsvpFailedMessage = stringResource(R.string.events_rsvpSubmitError)
-    LaunchedEffect(rsvpStatus, snackbarHostState) {
+    LaunchedEffect(rsvpStatus, snackbarHostState, rsvpFailedMessage) {
         if (rsvpStatus == RsvpStatusUi.Failed) {
             // Null when no shell host is attached (previews / isolated tests):
             // skip so the coroutine never hangs waiting on a detached host.
