@@ -28,7 +28,7 @@ fun SubscriptionRoute(
     isActiveMember: Boolean,
     onBack: () -> Unit,
 ) {
-    val activity = LocalActivity.current
+    val activity: Activity? = LocalActivity.current
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val scope = rememberCoroutineScope()

@@ -53,7 +53,7 @@ fun MapRoute(
     // one-shot side effect; empty by default (no token in CI), in which case
     // the global token is left untouched.
     val token = stringResource(R.string.mapbox_access_token)
-    LaunchedEffect(Unit) {
+    LaunchedEffect(token) {
         if (token.isNotBlank()) {
             MapboxOptions.accessToken = token
         }

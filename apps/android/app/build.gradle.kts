@@ -96,8 +96,11 @@ if (file("google-services.json").exists()) {
 
 android {
     namespace = "com.kungsbackacarcommunity.app"
-    // compileSdk 36 is required by androidx.core 1.19 / Compose BOM 2026.06;
-    // targetSdk intentionally stays 35 (raising it is a separate, tested change).
+    // compileSdk 36 is required by core-ktx 1.18 / activity-compose 1.13 (their
+    // AAR metadata declares minCompileSdk=36). We deliberately cap at that line:
+    // core 1.19 / lifecycle 2.11 would require compileSdk 37 + AGP 9.x, a larger
+    // toolchain jump out of scope here. targetSdk intentionally stays 35
+    // (raising it is a separate, tested change).
     compileSdk = 36
 
     defaultConfig {
