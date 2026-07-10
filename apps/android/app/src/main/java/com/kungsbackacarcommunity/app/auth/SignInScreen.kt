@@ -160,16 +160,20 @@ fun SignInScreen(
                     // recomposition and rotation; a new one is drawn each time
                     // the screen enters composition. When an explicit
                     // quoteIndex is pinned (previews/tests) no random state is
-                    // created. Either way the index is wrapped into bounds so a
-                    // caller-supplied out-of-range value can't crash this public
+                    // created. The final index is wrapped into bounds at the
+                    // point of use regardless of source (pinned OR a random
+                    // value restored by rememberSaveable), so neither a
+                    // caller-supplied out-of-range value nor a stale saved
+                    // index from an older quote-list size can crash this public
                     // composable. No maxLines: the longest quote wraps to 2-3
                     // centered lines.
-                    val resolvedQuoteIndex =
+                    val rawQuoteIndex =
                         if (quoteIndex != null) {
-                            quoteIndex.mod(signInCarQuoteResIds.size)
+                            quoteIndex
                         } else {
                             rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
                         }
+                    val resolvedQuoteIndex = rawQuoteIndex.mod(signInCarQuoteResIds.size)
                     Text(
                         text = stringResource(signInCarQuoteResIds[resolvedQuoteIndex]),
                         style = MaterialTheme.typography.bodySmall,
