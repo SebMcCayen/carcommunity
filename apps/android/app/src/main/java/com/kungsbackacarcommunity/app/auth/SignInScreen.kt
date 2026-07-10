@@ -30,9 +30,9 @@ import kotlin.random.Random
 
 /**
  * Car quotes shown under the sign-in form — one is picked at random per
- * screen display. The quotes are verbatim (attributed) and deliberately
- * English-only: the localization contract carries the same English text in
- * every locale. Kept internal so tests can assert on the list.
+ * screen display. The quotes are attributed and localized through the
+ * localization contract (Swedish is the default locale, English lives in
+ * values-en). Kept internal so tests can assert on the list.
  */
 internal val signInCarQuoteResIds = listOf(
     R.string.auth_carQuote01,
@@ -155,14 +155,23 @@ fun SignInScreen(
 
                     Spacer(Modifier.height(24.dp))
                     // Random car quote in place of the old privacy note.
-                    // rememberSaveable keeps the pick stable across
-                    // recomposition and rotation; a new one is drawn each
-                    // time the screen enters composition. No maxLines: the
-                    // longest quote wraps to 2-3 centered lines.
-                    val randomQuoteIndex =
-                        rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
+                    // In production (quoteIndex == null) a random index is
+                    // drawn and remembered so the pick stays stable across
+                    // recomposition and rotation; a new one is drawn each time
+                    // the screen enters composition. When an explicit
+                    // quoteIndex is pinned (previews/tests) no random state is
+                    // created. Either way the index is wrapped into bounds so a
+                    // caller-supplied out-of-range value can't crash this public
+                    // composable. No maxLines: the longest quote wraps to 2-3
+                    // centered lines.
+                    val resolvedQuoteIndex =
+                        if (quoteIndex != null) {
+                            quoteIndex.mod(signInCarQuoteResIds.size)
+                        } else {
+                            rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
+                        }
                     Text(
-                        text = stringResource(signInCarQuoteResIds[quoteIndex ?: randomQuoteIndex]),
+                        text = stringResource(signInCarQuoteResIds[resolvedQuoteIndex]),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
