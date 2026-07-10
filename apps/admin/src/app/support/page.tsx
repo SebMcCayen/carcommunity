@@ -27,6 +27,7 @@ import {
   adminListFeedbackReports,
   FEEDBACK_GITHUB_STATUSES,
   FEEDBACK_PLATFORMS,
+  safeGitHubIssueUrl,
   type AdminFeedbackReportDetail,
   type AdminFeedbackReportSummary,
   type ApiError,
@@ -63,14 +64,17 @@ interface IssueBadgeProps {
 }
 
 function IssueBadge({ status, number, url }: IssueBadgeProps) {
-  // A live cross-link only when the issue was created AND a url is present.
-  if (status === 'created' && url) {
+  // A live cross-link only when the issue was created AND the stored url passes
+  // the https-github.com allowlist — a hand-edited doc could carry a
+  // javascript:/data: or off-site href, so never trust it as a raw href.
+  const safeUrl = safeGitHubIssueUrl(url);
+  if (status === 'created' && safeUrl) {
     const label =
       number != null ? `${t('support.issue.created')} #${number}` : t('support.issue.created');
     return (
       <a
         className={styles.issueLink}
-        href={url}
+        href={safeUrl}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={t('support.issue.openExternal')}

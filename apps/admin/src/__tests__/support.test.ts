@@ -24,6 +24,7 @@ vi.mock('firebase/firestore', () => ({
 import {
   adminGetFeedbackReport,
   adminListFeedbackReports,
+  safeGitHubIssueUrl,
   SUPPORT_PAGE_SIZE,
 } from '../features/support';
 
@@ -166,16 +167,27 @@ describe('support module — list', () => {
     expect(page.reports[0]!.createdAt).toBe('2026-07-01T08:30:00.000Z');
   });
 
-  it('coerces a malformed createdAt to null (toDate throws / bad string)', async () => {
+  it('coerces a malformed createdAt to null (toDate throws / invalid Date / bad string)', async () => {
+    const throwing = {
+      toDate: () => {
+        throw new Error('corrupt timestamp');
+      },
+    };
     getDocsMock.mockResolvedValue({
       docs: [
         { id: 'r1', data: () => reportData({ createdAt: 'not-a-date' }) },
+        // toDate() returns an invalid Date.
         { id: 'r2', data: () => reportData({ createdAt: { toDate: () => new Date('nope') } }) },
         { id: 'r3', data: () => reportData({ createdAt: 12345 }) },
+        // toDate() itself throws — must be swallowed, not reject the read.
+        { id: 'r4', data: () => reportData({ createdAt: throwing }) },
       ],
     });
     const page = await adminListFeedbackReports();
-    expect(page.reports.map((r) => r.createdAt)).toEqual([null, null, null]);
+    // The read resolves (a throwing timestamp does not reject the whole page)
+    // and every malformed row maps with createdAt = null.
+    expect(page.reports.map((r) => r.id)).toEqual(['r1', 'r2', 'r3', 'r4']);
+    expect(page.reports.map((r) => r.createdAt)).toEqual([null, null, null, null]);
   });
 
   it('renders missing/unknown githubIssue fields as failed with null number/url', async () => {
@@ -287,5 +299,48 @@ describe('support module — detail', () => {
       githubIssueNumber: null,
       githubIssueUrl: null,
     });
+  });
+});
+
+describe('support module — safeGitHubIssueUrl (anchor-href allowlist)', () => {
+  it('accepts a valid https github.com issue URL', () => {
+    expect(safeGitHubIssueUrl('https://github.com/SebMcCayen/carcommunity/issues/321')).toBe(
+      'https://github.com/SebMcCayen/carcommunity/issues/321',
+    );
+  });
+
+  it('accepts www.github.com', () => {
+    expect(safeGitHubIssueUrl('https://www.github.com/o/r/issues/1')).toBe(
+      'https://www.github.com/o/r/issues/1',
+    );
+  });
+
+  it('rejects a javascript: scheme (XSS vector)', () => {
+    expect(safeGitHubIssueUrl('javascript:alert(document.cookie)')).toBeNull();
+  });
+
+  it('rejects a data: scheme', () => {
+    expect(safeGitHubIssueUrl('data:text/html,<script>alert(1)</script>')).toBeNull();
+  });
+
+  it('rejects plain http (non-https) even on github.com', () => {
+    expect(safeGitHubIssueUrl('http://github.com/o/r/issues/1')).toBeNull();
+  });
+
+  it('rejects an off-site host (phishing vector)', () => {
+    expect(safeGitHubIssueUrl('https://evil.com/o/r/issues/1')).toBeNull();
+  });
+
+  it('rejects a github.com look-alike host', () => {
+    expect(safeGitHubIssueUrl('https://github.com.evil.com/x')).toBeNull();
+    expect(safeGitHubIssueUrl('https://notgithub.com/x')).toBeNull();
+  });
+
+  it('rejects malformed / relative / empty / non-string values', () => {
+    expect(safeGitHubIssueUrl('not a url')).toBeNull();
+    expect(safeGitHubIssueUrl('/o/r/issues/1')).toBeNull();
+    expect(safeGitHubIssueUrl('')).toBeNull();
+    expect(safeGitHubIssueUrl(null)).toBeNull();
+    expect(safeGitHubIssueUrl(undefined)).toBeNull();
   });
 });

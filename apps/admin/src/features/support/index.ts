@@ -121,8 +121,15 @@ export interface AdminFeedbackReportPage {
 function toIso(value: unknown): string | null {
   if (value == null) return null;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
-    const date = (value as { toDate: () => Date }).toDate();
-    return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+    // A hand-edited doc could carry a `toDate` that throws or returns a bad
+    // value; guard so one malformed timestamp can never reject the whole
+    // list/detail read (matching error-reports/account-deletions).
+    try {
+      const date = (value as { toDate: () => Date }).toDate();
+      return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+    } catch {
+      return null;
+    }
   }
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
@@ -178,6 +185,29 @@ function toSummary(id: string, data: Record<string, unknown>): AdminFeedbackRepo
     githubIssueUrl: coerceOptionalString(data.githubIssueUrl),
     createdAt: toIso(data.createdAt),
   };
+}
+
+/** Hosts accepted for the GitHub-issue cross-link. */
+const GITHUB_ISSUE_HOSTS = new Set(['github.com', 'www.github.com']);
+
+/**
+ * Validates a stored `githubIssueUrl` before it is ever used as an anchor
+ * href. The value is free/hand-editable data, so a malformed doc could carry a
+ * `javascript:`/`data:` scheme or an off-site host and turn the admin badge
+ * into an XSS/phishing vector. Returns the URL only when it parses as an
+ * absolute `https:` URL whose host is github.com (or www.github.com);
+ * otherwise null, so the UI falls back to the non-link failed/plain state.
+ */
+export function safeGitHubIssueUrl(url: string | null | undefined): string | null {
+  if (typeof url !== 'string' || url.length === 0) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return null;
+    if (!GITHUB_ISSUE_HOSTS.has(parsed.host.toLowerCase())) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
