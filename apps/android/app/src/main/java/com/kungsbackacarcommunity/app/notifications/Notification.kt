@@ -44,8 +44,9 @@ object Notifications {
      * Maximum inbox items the Firestore listener subscribes to (newest first
      * by createdAt). Keeps the snapshot bounded as the per-user collection
      * grows; older items simply fall off the inbox. Safe for the unread
-     * affordances: [unreadCount] only gates the mark-all-read button and the
-     * per-item unread label, both of which operate on the displayed items —
+     * affordances: [unreadCount] only gates the mark-all-read button — an
+     * aggregate over the displayed items — while each row's unread label is
+     * driven by that item's own [AppNotification.isRead], not by this count;
      * and markAllRead runs server-side over the full collection regardless.
      */
     const val INBOX_QUERY_LIMIT = 50L
