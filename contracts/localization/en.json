@@ -653,7 +653,6 @@
     "participantsSharing": "%1$d sharing",
     "liveShareOn": "Sharing live location",
     "liveShareOff": "Share live location",
-    "mapLayers": "Map layers",
     "recenter": "Recenter",
     "music": "Music",
     "createRoute": "Create route",
@@ -687,6 +686,8 @@
     "moreFeedback": "Report a problem",
     "moreAccountDeletion": "Delete account",
     "moreSignOut": "Sign out",
-    "unavailable": "Not available right now."
+    "unavailable": "Not available right now.",
+    "trafficOn": "Traffic layer on",
+    "trafficOff": "Show traffic"
   }
 }

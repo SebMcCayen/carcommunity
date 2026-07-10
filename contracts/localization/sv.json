@@ -653,7 +653,6 @@
     "participantsSharing": "%1$d delar",
     "liveShareOn": "Delar liveplats",
     "liveShareOff": "Dela liveplats",
-    "mapLayers": "Kartlager",
     "recenter": "Centrera",
     "music": "Musik",
     "createRoute": "Skapa rutt",
@@ -687,6 +686,8 @@
     "moreFeedback": "Rapportera ett problem",
     "moreAccountDeletion": "Radera konto",
     "moreSignOut": "Logga ut",
-    "unavailable": "Inte tillgängligt just nu."
+    "unavailable": "Inte tillgängligt just nu.",
+    "trafficOn": "Trafiklager på",
+    "trafficOff": "Visa trafik"
   }
 }

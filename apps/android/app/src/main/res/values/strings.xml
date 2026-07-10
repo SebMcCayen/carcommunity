@@ -596,7 +596,6 @@
     <string name="shell_participantsSharing" formatted="false">%1$d delar</string>
     <string name="shell_liveShareOn">Delar liveplats</string>
     <string name="shell_liveShareOff">Dela liveplats</string>
-    <string name="shell_mapLayers">Kartlager</string>
     <string name="shell_recenter">Centrera</string>
     <string name="shell_music">Musik</string>
     <string name="shell_createRoute">Skapa rutt</string>
@@ -631,4 +630,6 @@
     <string name="shell_moreAccountDeletion">Radera konto</string>
     <string name="shell_moreSignOut">Logga ut</string>
     <string name="shell_unavailable">Inte tillgängligt just nu.</string>
+    <string name="shell_trafficOn">Trafiklager på</string>
+    <string name="shell_trafficOff">Visa trafik</string>
 </resources>

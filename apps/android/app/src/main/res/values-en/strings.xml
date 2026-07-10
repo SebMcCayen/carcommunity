@@ -596,7 +596,6 @@
     <string name="shell_participantsSharing" formatted="false">%1$d sharing</string>
     <string name="shell_liveShareOn">Sharing live location</string>
     <string name="shell_liveShareOff">Share live location</string>
-    <string name="shell_mapLayers">Map layers</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_music">Music</string>
     <string name="shell_createRoute">Create route</string>
@@ -631,4 +630,6 @@
     <string name="shell_moreAccountDeletion">Delete account</string>
     <string name="shell_moreSignOut">Sign out</string>
     <string name="shell_unavailable">Not available right now.</string>
+    <string name="shell_trafficOn">Traffic layer on</string>
+    <string name="shell_trafficOff">Show traffic</string>
 </resources>

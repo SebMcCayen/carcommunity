@@ -87,4 +87,16 @@ class ShellNavTest {
             LiveShareToggle.action(isSharing = false, canShare = false, wired = true),
         )
     }
+
+    // --- MapSurface traffic toggle (stub wiring) -------------------------
+
+    @Test
+    fun `stub surface starts with traffic off and toggles`() {
+        val surface = StubMapSurface(autoLoad = false)
+        assertEquals(false, surface.trafficEnabled.value)
+        surface.setTrafficEnabled(true)
+        assertEquals(true, surface.trafficEnabled.value)
+        surface.setTrafficEnabled(false)
+        assertEquals(false, surface.trafficEnabled.value)
+    }
 }

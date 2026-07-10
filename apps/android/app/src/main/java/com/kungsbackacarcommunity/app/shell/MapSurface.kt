@@ -50,6 +50,10 @@ data class MapUserMarker(
  * - [recenter] — recentre the camera on the user (stub records the request).
  * - [setUserMarker] — supply/clear the "You / Online" pin.
  * - [loadState] — drives the shell's "Loading roads…" indicator.
+ * - [trafficEnabled] / [setTrafficEnabled] — the optional traffic-congestion
+ *   overlay the layers control toggles. A surface that cannot draw traffic
+ *   (the stub) still exposes the flag so the shell wiring stays uniform; only
+ *   the real Mapbox surface renders coloured congestion lines.
  */
 interface MapSurface {
     /** Current load state; the shell shows "Loading roads…" while [MapLoadState.Loading]. */
@@ -58,11 +62,17 @@ interface MapSurface {
     /** The user marker the surface should draw, or null when none is set. */
     val userMarker: StateFlow<MapUserMarker?>
 
+    /** Whether the traffic-congestion overlay is currently shown. */
+    val trafficEnabled: StateFlow<Boolean>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
     /** Set (or clear, with null) the caller's own marker. */
     fun setUserMarker(marker: MapUserMarker?)
+
+    /** Show or hide the traffic-congestion overlay (no visible effect on the stub). */
+    fun setTrafficEnabled(enabled: Boolean)
 
     /** The map view itself, filling [modifier]. */
     @Composable
@@ -88,6 +98,9 @@ class StubMapSurface(
     private val userMarkerFlow = MutableStateFlow<MapUserMarker?>(null)
     override val userMarker: StateFlow<MapUserMarker?> = userMarkerFlow.asStateFlow()
 
+    private val trafficFlow = MutableStateFlow(false)
+    override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
@@ -98,6 +111,10 @@ class StubMapSurface(
 
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
+    }
+
+    override fun setTrafficEnabled(enabled: Boolean) {
+        trafficFlow.value = enabled
     }
 
     /** Test/impl hook to force the load state (e.g. after tiles finish). */
