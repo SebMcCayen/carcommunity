@@ -262,11 +262,17 @@ vehicles/{vehicleId}/buildEntries/{entryId}     read: isAuthenticated()
 
 vehicles/{vehicleId}/entryReports/{reportId}    read/write: false (backend-only)
   — chat-core report shape: reporterUserId, reason, details, status,
-    reviewedByUserId, reviewedAt; deterministic ID = hash(entryId, reporter, reason)
+    reviewedByUserId, reviewedAt; deterministic composite-key ID (chatReportDocId
+    parity) = `${entryId}_${reporterUserId}_${reason}` — one report per
+    (entry, reporter, reason), repeat reports upsert silently
 
-vehicleFollows/{followId}                       (followId = `${uid}_${vehicleId}`)
+vehicleFollows/{followId}                       (followId = sha256(`${uid}|${vehicleId}`))
+  — NOT `${uid}_${vehicleId}`: both UIDs and vehicleIds may contain `_`
+    (vehicleIdSchema allows [A-Za-z0-9._-]), so plain concatenation is not
+    collision-proof. Hash `${uid}|${vehicleId}` with `|` — a byte that cannot
+    appear in either — for an unambiguous, collision-safe ID.
   read: owner only (resource.data.followerUserId == request.auth.uid)
-  followerUserId   string
+  followerUserId   string   (queryable; the follow doc still stores uid + vehicleId as fields)
   vehicleId        string
   vehicleOwnerUid  string   (denormalized for fan-out + "unfollow on block")
   createdAt        Timestamp
