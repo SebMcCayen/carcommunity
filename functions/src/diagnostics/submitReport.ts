@@ -51,6 +51,7 @@ import { db } from '../firebase';
 import {
   buildDiagnosticsReportDocument,
   DIAGNOSTICS_RATE_LIMIT_WINDOW_MS,
+  extractClientIp,
   isDiagnosticsRateLimited,
   parseSubmitDiagnosticsReportInput,
 } from './diagnostics-core';
@@ -65,31 +66,6 @@ const CALLABLE_OPTS = {
   // intentional and visible rather than an accident.
   enforceAppCheck: false,
 };
-
-/**
- * Extracts the originating client IP address from an HTTPS callable request.
- * Cloud Run routes traffic through a proxy that sets X-Forwarded-For; the
- * first entry is the original client IP. Falls back to the Express `.ip`
- * property (the direct connection address) and then to `'unknown'`.
- *
- * Blank/whitespace-only values are treated as MISSING at every step: a
- * present-but-empty X-Forwarded-For header (`""`/`"   "`) or a whitespace-only
- * `.ip` must NOT collapse distinct callers into a single `''` rate-limit
- * bucket. We prefer the first non-blank forwarded entry, fall through to a
- * non-blank fallback, and only return `'unknown'` when both are blank — this
- * function never returns an empty string.
- */
-function extractClientIp(
-  forwarded: string | string[] | undefined,
-  fallbackIp: string | undefined,
-): string {
-  const firstForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const fromHeader = firstForwarded?.split(',')[0]?.trim();
-  if (fromHeader) return fromHeader; // present-but-empty header falls through
-  const fromFallback = fallbackIp?.trim();
-  if (fromFallback) return fromFallback;
-  return 'unknown';
-}
 
 /**
  * Pseudonymised rate-limit key for the caller so the per-window count query
