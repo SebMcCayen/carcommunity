@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 
 /**
@@ -77,8 +78,8 @@ fun OnboardingScreen(
                     .fillMaxSize()
                     .safeDrawingPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(KccSpacing.s6),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Text(
                 text = stringResource(R.string.onboarding_title),
@@ -170,7 +171,7 @@ private fun ConsentLink(text: String, url: String) {
         textDecoration = TextDecoration.Underline,
         modifier =
             Modifier
-                .padding(start = 48.dp)
+                .padding(start = KccSpacing.s12)
                 // Screen readers otherwise announce this as plain text: mark it
                 // as a button and label the action with the link text itself
                 // ("Read the terms" / "Läs villkoren") so it reads as tappable.
@@ -188,7 +189,9 @@ private fun ConsentLink(text: String, url: String) {
  */
 private fun openExternalUrl(context: Context, url: String) {
     val uri = Uri.parse(url)
-    if (uri.scheme != "http" && uri.scheme != "https") return
+    // Scheme comparison is case-insensitive: a pasted "HTTPS://…" must still open.
+    val scheme = uri.scheme?.lowercase()
+    if (scheme != "http" && scheme != "https") return
     try {
         context.startActivity(
             Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
