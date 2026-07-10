@@ -336,6 +336,23 @@ describe('support module — safeGitHubIssueUrl (anchor-href allowlist)', () => 
     expect(safeGitHubIssueUrl('https://notgithub.com/x')).toBeNull();
   });
 
+  it('rejects a URL with embedded userinfo (credentials/host-spoof vector)', () => {
+    expect(safeGitHubIssueUrl('https://user:pass@github.com/o/r/issues/1')).toBeNull();
+    expect(safeGitHubIssueUrl('https://user@github.com/o/r/issues/1')).toBeNull();
+    // Userinfo that makes the real host off-site must also be rejected.
+    expect(safeGitHubIssueUrl('https://github.com@evil.com/x')).toBeNull();
+  });
+
+  it('accepts the explicit https default port (:443)', () => {
+    expect(safeGitHubIssueUrl('https://github.com:443/o/r/issues/1')).toBe(
+      'https://github.com/o/r/issues/1',
+    );
+  });
+
+  it('rejects a non-default port', () => {
+    expect(safeGitHubIssueUrl('https://github.com:8080/o/r/issues/1')).toBeNull();
+  });
+
   it('rejects malformed / relative / empty / non-string values', () => {
     expect(safeGitHubIssueUrl('not a url')).toBeNull();
     expect(safeGitHubIssueUrl('/o/r/issues/1')).toBeNull();

@@ -193,17 +193,24 @@ const GITHUB_ISSUE_HOSTS = new Set(['github.com', 'www.github.com']);
 /**
  * Validates a stored `githubIssueUrl` before it is ever used as an anchor
  * href. The value is free/hand-editable data, so a malformed doc could carry a
- * `javascript:`/`data:` scheme or an off-site host and turn the admin badge
- * into an XSS/phishing vector. Returns the URL only when it parses as an
- * absolute `https:` URL whose host is github.com (or www.github.com);
- * otherwise null, so the UI falls back to the non-link failed/plain state.
+ * `javascript:`/`data:` scheme, embedded userinfo, or an off-site host and turn
+ * the admin badge into an XSS/phishing vector. Returns the URL only when it
+ * parses as an absolute `https:` URL with no userinfo, whose hostname is
+ * github.com (or www.github.com) on the default/443 port; otherwise null, so
+ * the UI falls back to the non-link failed/plain state.
  */
 export function safeGitHubIssueUrl(url: string | null | undefined): string | null {
   if (typeof url !== 'string' || url.length === 0) return null;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return null;
-    if (!GITHUB_ISSUE_HOSTS.has(parsed.host.toLowerCase())) return null;
+    // Reject embedded credentials (e.g. https://user:pass@github.com/...) —
+    // the userinfo host is the real target of an anchor, so it must be empty.
+    if (parsed.username !== '' || parsed.password !== '') return null;
+    // Use hostname (never host) so a port is not folded into the allowlist
+    // check, then bound the port explicitly to the https default.
+    if (!GITHUB_ISSUE_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+    if (parsed.port !== '' && parsed.port !== '443') return null;
     return parsed.toString();
   } catch {
     return null;
