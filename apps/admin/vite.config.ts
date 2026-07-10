@@ -18,6 +18,43 @@ export default defineConfig({
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
+        // Split rarely-changing vendor code out of the app entry so its
+        // hashed filename survives app-only deploys (better cache retention).
+        //
+        // Deliberately narrow: Firestore (and anything else only reachable
+        // from lazy-loaded routes, e.g. @firebase/functions) must NOT be
+        // grouped with the eagerly imported Firebase auth/app-check modules,
+        // or it would be dragged back into the initial login-route load.
+        // Unmatched modules keep the natural dynamic-import split.
+        manualChunks(id: string) {
+          // Module ids use the platform path separator; normalize to forward
+          // slashes so the patterns below also match on Windows.
+          const moduleId = id.replace(/\\/g, '/');
+
+          if (!moduleId.includes('node_modules')) return undefined;
+          if (moduleId.includes('firestore')) return undefined;
+          if (
+            /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(
+              moduleId,
+            )
+          ) {
+            return 'vendor-react';
+          }
+          // Only the eager Firebase entrypoints (app, auth, app-check) and the
+          // internal @firebase/* deps they share belong in the eager vendor
+          // chunk. Matching the bare `firebase` umbrella package would also
+          // catch lazy-only subpaths such as `firebase/functions`, dragging
+          // them into the login-route load — so match its subpaths explicitly.
+          // Firestore is already excluded above.
+          if (
+            /node_modules\/(firebase\/(app|auth|app-check)|@firebase\/(app|app-check|auth|util|component|logger))\//.test(
+              moduleId,
+            )
+          ) {
+            return 'vendor-firebase-core';
+          }
+          return undefined;
+        },
       },
     },
   },
