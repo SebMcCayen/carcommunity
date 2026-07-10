@@ -35,7 +35,7 @@ import {
   type NotificationCategory,
 } from '@carcommunity/shared/notifications';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 
 export type {

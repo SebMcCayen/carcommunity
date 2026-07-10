@@ -34,7 +34,7 @@ import {
   type SubscriptionEntitlement,
 } from '@carcommunity/shared/users';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
 

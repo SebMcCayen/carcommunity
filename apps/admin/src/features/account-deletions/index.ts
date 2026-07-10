@@ -44,7 +44,7 @@ import {
   where,
 } from 'firebase/firestore';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { getAdminFirestore } from '../../lib/firestore';
 
 export { ApiError };

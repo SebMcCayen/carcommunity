@@ -1,12 +1,12 @@
 /**
  * Callable Cloud Functions client for the admin portal (Phase 13a).
  *
- * The migration target for every admin mutation: callables carry the
+ * The transport for every admin mutation: callables carry the
  * Firebase ID token automatically, the backend independently verifies
  * the `admin` custom claim on each call, and sensitive actions produce
- * adminAuditEvents records server-side. This replaces the legacy
- * `apiRequest` REST client feature by feature (see the Phase 13
- * checklist in docs/migration/native-firebase-migration-plan.md).
+ * adminAuditEvents records server-side. It replaced the legacy REST
+ * client (now removed; see the Phase 13 checklist in
+ * docs/migration/native-firebase-migration-plan.md).
  *
  * Deployed callable names are the grouped-export form `domain-action`
  * (contracts/functions/functions.json).
@@ -20,7 +20,7 @@ import {
 } from 'firebase/functions';
 import { FirebaseError } from 'firebase/app';
 import { getFirebaseApp } from './firebase';
-import { ApiError } from './api';
+import { ApiError } from './errors';
 
 /** All Cloud Functions deploy to europe-west1 (docs/api-guidelines.md). */
 const FUNCTIONS_REGION = 'europe-west1';

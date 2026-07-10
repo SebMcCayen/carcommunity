@@ -9,7 +9,7 @@ import {
   type PartnerInsightsMetric,
   type PartnerInteractionType,
 } from '@/features/partner-insights';
-import { ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/errors';
 import { translate } from '@/i18n';
 
 import styles from '../../../kronjakt/page.module.css';

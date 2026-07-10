@@ -1,7 +1,4 @@
+# Build-script approval for these packages is configured via
+# pnpm.onlyBuiltDependencies in the root package.json.
 packages:
   - 'functions'
-allowBuilds:
-  '@firebase/util': set this to true or false
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
-  re2: set this to true or false

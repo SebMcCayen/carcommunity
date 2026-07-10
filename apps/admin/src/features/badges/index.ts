@@ -25,7 +25,7 @@ import {
   type BadgeKey,
 } from '@carcommunity/shared/badges';
 
-import { ApiError } from '../../lib/api';
+import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 
 export type { AdminBadgeSummaryResponse, AwardHelpfulMemberRequest, AwardHelpfulMemberResponse };
