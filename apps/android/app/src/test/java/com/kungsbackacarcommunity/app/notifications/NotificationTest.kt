@@ -21,6 +21,23 @@ class NotificationTest {
     }
 
     @Test
+    fun `inbox query limit is fifty`() {
+        assertEquals(50L, Notifications.INBOX_QUERY_LIMIT)
+    }
+
+    @Test
+    fun `sortedForInbox matches the query ordering so the cap keeps the newest items`() {
+        // The Firestore listener orders by createdAt descending before applying
+        // INBOX_QUERY_LIMIT; the client-side sort must agree so the displayed
+        // order is exactly the capped query order.
+        val items = (1..60).map { item("n$it", createdAt = it.toLong()) }.shuffled()
+        val capped = Notifications.sortedForInbox(items).take(Notifications.INBOX_QUERY_LIMIT.toInt())
+        assertEquals(50, capped.size)
+        assertEquals("n60", capped.first().id)
+        assertEquals("n11", capped.last().id)
+    }
+
+    @Test
     fun `sortedForInbox is newest first with untimed last`() {
         val items =
             listOf(
