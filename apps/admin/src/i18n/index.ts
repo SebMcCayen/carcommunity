@@ -22,11 +22,19 @@ let englishDictionaryLoad: Promise<TranslationDictionary> | undefined;
  * superset of the English one.
  */
 export const loadEnglishDictionary = (): Promise<TranslationDictionary> => {
-  englishDictionaryLoad ??= import('./en.json').then((module) => {
-    const dictionary = module.default as TranslationDictionary;
-    dictionaries.en = dictionary;
-    return dictionary;
-  });
+  englishDictionaryLoad ??= import('./en.json').then(
+    (module) => {
+      const dictionary = module.default as TranslationDictionary;
+      dictionaries.en = dictionary;
+      return dictionary;
+    },
+    (error: unknown) => {
+      // Drop the memoized promise so a later call can retry after a
+      // transient failure (e.g. a network blip on the chunk fetch).
+      englishDictionaryLoad = undefined;
+      throw error;
+    },
+  );
 
   return englishDictionaryLoad;
 };
@@ -52,8 +60,13 @@ export const translate = (locale: Locale, key: string): string => {
   // key set is a strict subset of `sv`).
   if (locale === 'en') {
     if (!dictionaries.en) {
-      // Kick off the fetch; this render falls back to Swedish below.
-      void loadEnglishDictionary();
+      // Kick off the fetch; this render falls back to Swedish below. Handle
+      // rejection here so a failed chunk fetch cannot surface as an unhandled
+      // promise rejection — the Swedish fallback already covers this render,
+      // and loadEnglishDictionary clears its memo so a later lookup retries.
+      loadEnglishDictionary().catch((error: unknown) => {
+        console.warn('[i18n] Failed to load English dictionary; using Swedish fallback.', error);
+      });
     }
 
     const english = dictionaries.en ? getNestedValue(dictionaries.en, key) : undefined;

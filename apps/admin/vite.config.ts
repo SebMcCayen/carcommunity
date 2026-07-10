@@ -27,10 +27,16 @@ export default defineConfig({
         // or it would be dragged back into the initial login-route load.
         // Unmatched modules keep the natural dynamic-import split.
         manualChunks(id: string) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('firestore')) return undefined;
+          // Module ids use the platform path separator; normalize to forward
+          // slashes so the patterns below also match on Windows.
+          const moduleId = id.replace(/\\/g, '/');
+
+          if (!moduleId.includes('node_modules')) return undefined;
+          if (moduleId.includes('firestore')) return undefined;
           if (
-            /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)
+            /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(
+              moduleId,
+            )
           ) {
             return 'vendor-react';
           }
@@ -42,7 +48,7 @@ export default defineConfig({
           // Firestore is already excluded above.
           if (
             /node_modules\/(firebase\/(app|auth|app-check)|@firebase\/(app|app-check|auth|util|component|logger))\//.test(
-              id,
+              moduleId,
             )
           ) {
             return 'vendor-firebase-core';
