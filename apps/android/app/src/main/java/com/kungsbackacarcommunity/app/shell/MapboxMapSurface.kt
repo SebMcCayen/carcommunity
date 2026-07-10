@@ -24,6 +24,7 @@ import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
+import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,11 +47,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * existing `map/MapRoute` guard — so tile loads work on device without ever
  * committing the token.
  *
- * ## Why the "You / Online" pin is not drawn here
- * The shell overlays a centred Compose [MapUserMarker] pin over the surface
- * (Waze-style: the camera follows the user, who stays screen-centred), so this
- * surface only needs to render the map + the location puck and recentre on
- * demand — it deliberately does not draw the label bubble itself.
+ * ## How the user's own position is drawn
+ * The user is shown by the Mapbox location-component puck at the real GPS
+ * position, so it stays anchored to the ground when the map pans (there is no
+ * centre-locked Compose overlay). The [MapUserMarker] pushed via
+ * [setUserMarker] now only carries live-sharing state: the puck pulses green
+ * while sharing and blue otherwise.
  *
  * Every native-map mutation is wrapped defensively: a missing token, a style
  * that has not finished loading, or an absent location permission degrades to a
@@ -107,6 +109,9 @@ class MapboxMapSurface : MapSurface {
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
+        // The caller's marker only carries live-sharing state now (its position
+        // is the device puck): a green pulse signals sharing, blue otherwise.
+        val marker by userMarkerFlow.collectAsState()
         // Recreate the position listener once; it just records the last fix so
         // recenter() can jump the camera to it.
         val positionListener =
@@ -123,7 +128,10 @@ class MapboxMapSurface : MapSurface {
                 }
                 MapView(context).apply {
                     mapViewRef = this
-                    // Default town camera until the first GPS fix arrives.
+                    // Drop the scale bar (distance/km ruler, upper-left); the
+                    // map-first shell has no room for it.
+                    runCatching { scalebar.updateSettings { enabled = false } }
+                    // Default camera until the first GPS fix arrives.
                     mapboxMap.setCamera(
                         cameraOptions {
                             center(
@@ -146,6 +154,7 @@ class MapboxMapSurface : MapSurface {
                             location.updateSettings {
                                 enabled = true
                                 pulsingEnabled = true
+                                pulsingColor = pulseColorFor(userMarkerFlow.value)
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
                         }
@@ -156,6 +165,10 @@ class MapboxMapSurface : MapSurface {
                 // Apply the current traffic toggle once the style is present.
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
+                }
+                // Reflect live-sharing on the puck: green pulse while sharing.
+                runCatching {
+                    mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
                 }
             },
             onRelease = { mapView ->
@@ -174,6 +187,16 @@ class MapboxMapSurface : MapSurface {
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"
         const val TRAFFIC_TILESET = "mapbox://mapbox.mapbox-traffic-v1"
+
+        /** Puck pulse ARGB while live-sharing (success green, matches the shell). */
+        const val LIVE_SHARE_PULSE_COLOR: Int = 0xFF43A047.toInt()
+
+        /** Puck pulse ARGB when not sharing (neutral blue). */
+        const val DEFAULT_PULSE_COLOR: Int = 0xFF1A73E8.toInt()
+
+        /** Green pulse when the caller is live-sharing, blue otherwise. */
+        fun pulseColorFor(marker: MapUserMarker?): Int =
+            if (marker?.online == true) LIVE_SHARE_PULSE_COLOR else DEFAULT_PULSE_COLOR
 
         /**
          * Adds the Mapbox traffic vector source + a congestion-coloured line
