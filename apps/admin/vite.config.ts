@@ -29,10 +29,22 @@ export default defineConfig({
         manualChunks(id: string) {
           if (!id.includes('node_modules')) return undefined;
           if (id.includes('firestore')) return undefined;
-          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) {
+          if (
+            /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)
+          ) {
             return 'vendor-react';
           }
-          if (/node_modules\/(firebase|@firebase\/(app|auth|app-check|util|component|logger))\//.test(id)) {
+          // Only the eager Firebase entrypoints (app, auth, app-check) and the
+          // internal @firebase/* deps they share belong in the eager vendor
+          // chunk. Matching the bare `firebase` umbrella package would also
+          // catch lazy-only subpaths such as `firebase/functions`, dragging
+          // them into the login-route load — so match its subpaths explicitly.
+          // Firestore is already excluded above.
+          if (
+            /node_modules\/(firebase\/(app|auth|app-check)|@firebase\/(app|app-check|auth|util|component|logger))\//.test(
+              id,
+            )
+          ) {
             return 'vendor-firebase-core';
           }
           return undefined;

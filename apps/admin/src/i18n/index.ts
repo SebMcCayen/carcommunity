@@ -6,7 +6,7 @@ type TranslationDictionary = Record<string, unknown>;
 /**
  * Swedish is the default (and currently only) active locale, so it is bundled
  * eagerly — every translated string is available on first paint with no
- * language flash. English is only ever consulted as a fallback dictionary, so
+ * language flash. English is only ever consulted for explicit `en` lookups, so
  * it is code-split and loaded on demand (see loadEnglishDictionary below).
  */
 const dictionaries: { sv: TranslationDictionary; en?: TranslationDictionary } = { sv };
@@ -46,18 +46,20 @@ const getNestedValue = (dictionary: TranslationDictionary, path: string): string
 };
 
 export const translate = (locale: Locale, key: string): string => {
-  if (locale === 'en' && !dictionaries.en) {
-    // Kick off the fetch; this render falls back to Swedish below.
-    void loadEnglishDictionary();
+  // Swedish is the default and only eager dictionary: `sv` lookups resolve
+  // against it alone and never consult English. English is consulted only for
+  // `en` lookups, with `sv` as the fallback for any key `en` is missing (its
+  // key set is a strict subset of `sv`).
+  if (locale === 'en') {
+    if (!dictionaries.en) {
+      // Kick off the fetch; this render falls back to Swedish below.
+      void loadEnglishDictionary();
+    }
+
+    const english = dictionaries.en ? getNestedValue(dictionaries.en, key) : undefined;
+
+    return english ?? getNestedValue(dictionaries.sv, key) ?? key;
   }
 
-  const currentDictionary = dictionaries[locale] ?? dictionaries.sv;
-  const fallbackDictionary = dictionaries.en;
-
-  return (
-    getNestedValue(currentDictionary, key) ??
-    (fallbackDictionary ? getNestedValue(fallbackDictionary, key) : undefined) ??
-    getNestedValue(dictionaries.sv, key) ??
-    key
-  );
+  return getNestedValue(dictionaries.sv, key) ?? key;
 };
