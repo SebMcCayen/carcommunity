@@ -98,7 +98,7 @@ class DiagnosticsSignInFailureReporterTest {
             DiagnosticsSignInFailureReporter(throwing, null, null, null, null)
         // Must swallow the failure — diagnostics can never mask the sign-in error.
         reporter.reportSignInFailure(details())
-        assertNull(null)
+// Intentionally no assertion: this test passes if no exception is thrown.
     }
 
     @Test
