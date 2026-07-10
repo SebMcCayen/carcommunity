@@ -18,45 +18,36 @@ When documentation conflicts, use this priority order:
 
 The legacy React Native / Expo app (`apps/mobile`) and the Fastify / Prisma / PostgreSQL API (`services/api`) have been **removed from the repository**. Do not reintroduce them. Their behavior lives on in the migration docs (`docs/migration/`) and contracts (`contracts/`).
 
-New mobile features must be implemented in both `apps/ios` and `apps/android`.
+New mobile features are implemented in `apps/android`. An iOS app is **descoped from the MVP** (product decision 2026-07-02 — parked on the ideas board); do not scaffold or target `apps/ios` without explicit approval.
 
 New backend business logic must target Firebase Cloud Functions, Firestore, Realtime Database, Storage, Security Rules, and App Check.
 
 The TypeScript package `packages/shared` is **not** an executable shared mobile library. It contains TypeScript contracts for the backend and admin web. Native platforms must align through language-neutral contracts, not shared runtime code.
 
-A mobile feature is incomplete until both native platform implementations and their tests are present.
+A mobile feature is incomplete until the Android implementation and its tests are present.
 
-## Mandatory mobile parity
+## Mobile parity (future iOS)
 
-The project targets two separate native mobile applications:
+The MVP ships a single native mobile application: `apps/android` (Kotlin and Jetpack Compose).
 
-- `apps/ios` (expected): Swift and SwiftUI
-- `apps/android` (expected): Kotlin and Jetpack Compose
+If and when an iOS app (Swift and SwiftUI) is approved post-MVP, mobile functionality must reach parity across both platforms: implementation details and UI conventions may differ, but functionality, business rules, security, privacy, localization, analytics, API behavior, and user outcomes must remain equivalent. Until then, keep features iOS-portable by aligning through the language-neutral contracts in `contracts/` rather than platform-specific backend behavior.
 
-Any product change that affects mobile functionality must be evaluated and implemented for both platforms.
-
-A mobile feature is not complete when only one platform has been updated.
-
-Platform-native implementation details and UI conventions may differ, but functionality, business rules, security, privacy, localization, analytics, API behavior, and user outcomes must remain equivalent.
-
-Follow the full mobile parity instructions defined in:
-
-`.github/instructions/mobile-platform-parity.instructions.md`
+The full parity instructions live in `.github/instructions/mobile-platform-parity.instructions.md` and apply once iOS work is approved.
 
 ## Repository context
 
 - `carcommunity` is an open source monorepo for a Swedish car community app.
 - MVP brand is Kungsbacka Car Community (KCC), but implementation must stay brand-ready for future national or multi-local branding.
 - Platform scope includes:
-  - iOS native app (Swift and SwiftUI) at `apps/ios` (target — not yet scaffolded)
-  - Android native app (Kotlin and Jetpack Compose) at `apps/android` (target — not yet scaffolded)
+  - Android native app (Kotlin and Jetpack Compose) at `apps/android` (shipped — MVP client)
+  - iOS native app (Swift and SwiftUI) at `apps/ios` (descoped from MVP; post-MVP candidate, not yet approved)
   - Admin web app (React + Vite, hosted on Firebase Hosting) at `apps/admin`
   - Cloud Functions for Firebase (Firebase-supported Node.js runtime, TypeScript) at `functions/`
   - Cloud Firestore (durable data) and Firebase Realtime Database (ephemeral live location, presence)
   - Cloud Storage for Firebase
   - Firebase Authentication, App Check, Cloud Messaging
-  - Mapbox Maps SDK (iOS and Android native SDKs)
-  - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
+  - Mapbox Maps SDK (Android native SDK; iOS SDK when iOS is approved)
+  - Google Sign-In through Firebase Authentication (Android and admin web); Sign in with Apple when iOS is approved
 
 ## Language and naming rules
 
