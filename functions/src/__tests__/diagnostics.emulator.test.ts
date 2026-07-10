@@ -31,6 +31,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runDiagnosticsCleanup } from '../diagnostics/scheduled';
+import { DIAGNOSTICS_RATE_LIMIT_MAX } from '../diagnostics/diagnostics-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -138,6 +139,41 @@ describe('diagnostics-submitReport', () => {
     expect(stored.metadata).toEqual({ screen: 'LoginScreen', retryCount: 2 });
     expect(JSON.stringify(stored)).not.toContain('super-secret-token');
     expect(JSON.stringify(stored)).not.toContain('59.33');
+  });
+
+  it('enforces the per-caller rate limit and stores rateLimitKey/appCheckPresent', async () => {
+    // Authenticated caller so the rate-limit key is `uid:<uid>` and does not
+    // depend on emulator-supplied IP headers.
+    const email = `diag-ratelimit-${Date.now()}@example.com`;
+    const credential = await createUserWithEmailAndPassword(auth, email, 'password-123');
+    const uid = credential.user.uid;
+    await pollUntil(async () => {
+      const snap = await adminDb.collection('users').doc(uid).get();
+      return snap.exists ? true : undefined;
+    });
+
+    // Exactly MAX submissions must all succeed (awaited so they land in one
+    // rolling window and count against the same uid-scoped key).
+    for (let i = 0; i < DIAGNOSTICS_RATE_LIMIT_MAX; i += 1) {
+      await call('diagnostics-submitReport', validReport);
+    }
+
+    // The (MAX + 1)th call must be rejected by the transactional cap.
+    expect(await callableErrorCode(call('diagnostics-submitReport', validReport))).toBe(
+      'functions/resource-exhausted',
+    );
+
+    // Stored docs for this uid carry the server-derived pseudonymised key and
+    // the App Check presence flag. Scope the query to THIS uid so the 20+ docs
+    // do not interfere with (or get asserted against) other tests' data.
+    const snap = await adminDb
+      .collection('diagnosticsReports')
+      .where('userId', '==', uid)
+      .get();
+    expect(snap.size).toBe(DIAGNOSTICS_RATE_LIMIT_MAX);
+    const sample = snap.docs[0].data();
+    expect(sample.rateLimitKey).toBe(`uid:${uid}`);
+    expect(typeof sample.appCheckPresent).toBe('boolean');
   });
 
   it('rejects malformed reports', async () => {
