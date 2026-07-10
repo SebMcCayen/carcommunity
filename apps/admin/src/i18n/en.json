@@ -859,5 +859,64 @@
       "updateFailed": "The change could not be saved.",
       "deleteFailed": "Deletion failed."
     }
+  },
+  "support": {
+    "title": "Support",
+    "subtitle": "In-app bug reports (\"Report a problem\"). Read-only view — reports are created by the backend only. The reporter's user ID is shown to admins only and is never included on the public GitHub issue.",
+    "loading": "Loading reports…",
+    "loadError": "Could not load the reports. Please try again.",
+    "empty": "No reports found.",
+    "refresh": "Refresh",
+    "moreAvailable": "There may be more reports — only the latest page is shown.",
+    "filter": {
+      "statusLabel": "GitHub issue",
+      "platformLabel": "Platform",
+      "allStatuses": "All statuses",
+      "allPlatforms": "All platforms"
+    },
+    "status": {
+      "created": "Created",
+      "failed": "Failed",
+      "pending": "Pending"
+    },
+    "platform": {
+      "android": "Android"
+    },
+    "columns": {
+      "status": "GitHub issue",
+      "platform": "Platform",
+      "summary": "Summary",
+      "reporter": "Reporter",
+      "createdAt": "Time",
+      "actions": "Actions"
+    },
+    "issue": {
+      "created": "Issue",
+      "failed": "No issue (failed)",
+      "pending": "Pending",
+      "openExternal": "Open GitHub issue (new window)"
+    },
+    "actions": {
+      "show": "Show details",
+      "hide": "Hide details"
+    },
+    "detail": {
+      "loading": "Loading report…",
+      "loadError": "Could not load the report. Please try again.",
+      "notFound": "The report no longer exists.",
+      "reportId": "Report ID",
+      "reporter": "Reporter (uid)",
+      "summary": "Summary",
+      "description": "Description",
+      "platform": "Platform",
+      "appVersion": "App version",
+      "osVersion": "OS version",
+      "deviceModel": "Device model",
+      "githubStatus": "GitHub status",
+      "githubIssue": "GitHub issue",
+      "createdAt": "Created",
+      "noSummary": "No summary.",
+      "noIssue": "No issue."
+    }
   }
 }
