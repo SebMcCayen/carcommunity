@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -15,8 +16,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * [NotificationsRepository] backed by an owner-only Firestore listener on the
  * inbox plus the notifications.markRead / markAllRead callables (europe-west1),
- * Phase 12 slice 21. Items are sorted newest-first client-side (no index).
- * Guarded ([createIfAvailable]).
+ * Phase 12 slice 21. The listener is bounded to the newest
+ * [Notifications.INBOX_QUERY_LIMIT] items (createdAt descending — a
+ * single-field orderBy, so Firestore's automatic index suffices); items are
+ * additionally sorted newest-first client-side ([Notifications.sortedForInbox])
+ * with the same ordering. Guarded ([createIfAvailable]).
  */
 class FirebaseNotificationsRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -29,6 +33,8 @@ class FirebaseNotificationsRepository private constructor(
                 .collection(NOTIFICATIONS)
                 .document(uid)
                 .collection(ITEMS)
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .limit(Notifications.INBOX_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(NotificationsState.Error)
@@ -68,6 +74,7 @@ class FirebaseNotificationsRepository private constructor(
     companion object {
         private const val NOTIFICATIONS = "notifications"
         private const val ITEMS = "items"
+        private const val CREATED_AT = "createdAt"
         private const val REGION = "europe-west1"
         private const val MARK_READ = "notifications-markRead"
         private const val MARK_ALL_READ = "notifications-markAllRead"
