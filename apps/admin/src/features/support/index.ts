@@ -121,9 +121,9 @@ export interface AdminFeedbackReportPage {
 function toIso(value: unknown): string | null {
   if (value == null) return null;
   if (typeof (value as { toDate?: unknown }).toDate === 'function') {
-    // A hand-edited doc could carry a `toDate` that throws or returns a bad
-    // value; guard so one malformed timestamp can never reject the whole
-    // list/detail read (matching error-reports/account-deletions).
+    // A hand-edited/corrupt doc could carry a `toDate` that throws or returns
+    // an invalid Date; guard on both so one malformed timestamp resolves to
+    // null instead of rejecting the whole list/detail read.
     try {
       const date = (value as { toDate: () => Date }).toDate();
       return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
