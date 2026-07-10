@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.garage
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +46,15 @@ fun GarageRoute(
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
             .collectAsState(initial = VehicleSaveStatus.Idle)
+
+    // System/gesture Back leaves the add/edit form back to the list (mirrors the
+    // form's Cancel); at the list root it is disabled so the shell's BackHandler
+    // returns to Home. The form's photo coordinator resets itself on dispose.
+    BackHandler(enabled = showForm) {
+        showForm = false
+        editingVehicleId = null
+        coordinator?.reset()
+    }
 
     if (showForm) {
         val editingId = editingVehicleId

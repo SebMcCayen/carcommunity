@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.partners
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +43,14 @@ fun PartnersRoute(
     val codeStatus by
         (offerCodeCoordinator?.status ?: flowOf(OfferCodeStatus.Idle))
             .collectAsState(initial = OfferCodeStatus.Idle)
+
+    // System/gesture Back returns from the company detail to the list; at the
+    // list root it is disabled so the shell's BackHandler returns to Home.
+    BackHandler(enabled = selectedCompanyId != null) {
+        selectedCompanyId = null
+        expandedOfferId = null
+        offerCodeCoordinator?.reset()
+    }
 
     val companyId = selectedCompanyId
     if (companyId == null) {

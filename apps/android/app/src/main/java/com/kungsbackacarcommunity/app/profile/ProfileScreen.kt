@@ -30,7 +30,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,6 +65,7 @@ fun ProfileScreen(
     avatarUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
     onChangeAvatar: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
     var bioField by remember { mutableStateOf("") }
@@ -162,7 +165,13 @@ fun ProfileScreen(
                 ) {
                     Text(stringResource(R.string.profile_editButton))
                 }
-                OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSignOut()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(stringResource(R.string.auth_signOut))
                 }
                 TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {

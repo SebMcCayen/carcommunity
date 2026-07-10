@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -37,6 +39,7 @@ fun AccountDeletionScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHapticFeedback.current
     var confirming by remember { mutableStateOf(false) }
     val busy = status == AccountDeletionStatus.Deleting
 
@@ -96,6 +99,7 @@ fun AccountDeletionScreen(
             text = { Text(text = stringResource(R.string.settings_accountDeletionWarning)) },
             confirmButton = {
                 TextButton(onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     confirming = false
                     onDelete()
                 }) {

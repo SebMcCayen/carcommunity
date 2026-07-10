@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +49,18 @@ fun DrivesRoute(
 
     val selected =
         (state as? DrivesState.Loaded)?.drives?.firstOrNull { it.rideId == selectedRideId }
+
+    // System/gesture Back unwinds one internal level (recorder or detail -> list);
+    // at the list root it is disabled so the shell's BackHandler returns to Home.
+    BackHandler(enabled = recordSession != null || (selectedRideId != null && selected != null)) {
+        when {
+            recordSession != null -> recordSession = null
+            else -> {
+                selectedRideId = null
+                coordinator.reset()
+            }
+        }
+    }
 
     when {
         recordSession != null -> {
