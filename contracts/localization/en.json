@@ -352,7 +352,7 @@
     "showOnMap": "Show group on map"
   },
   "savedDrives": {
-    "screenTitle": "My drives",
+    "screenTitle": "History",
     "loading": "Loading drives...",
     "detailTitle": "Drive details",
     "empty": "No saved drives yet.",
@@ -464,7 +464,7 @@
     }
   },
   "points": {
-    "screenTitle": "Kronpoäng",
+    "screenTitle": "Points",
     "balanceLabel": "Your balance",
     "shortForm": "KP",
     "disclaimer": "Kronpoäng are digital points with no cash value.",

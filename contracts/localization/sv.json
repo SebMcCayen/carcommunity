@@ -352,7 +352,7 @@
     "showOnMap": "Visa gruppen på kartan"
   },
   "savedDrives": {
-    "screenTitle": "Mina körningar",
+    "screenTitle": "Historik",
     "loading": "Laddar körningar...",
     "detailTitle": "Körningsdetaljer",
     "empty": "Inga sparade körningar ännu.",
@@ -464,7 +464,7 @@
     }
   },
   "points": {
-    "screenTitle": "Kronpoäng",
+    "screenTitle": "Points",
     "balanceLabel": "Ditt saldo",
     "shortForm": "KP",
     "disclaimer": "Kronpoäng är digitala poäng utan kontantvärde.",
