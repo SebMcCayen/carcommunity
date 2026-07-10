@@ -278,6 +278,25 @@ fun AuthenticatedApp(
 
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
+                // Single close path for the currently-open route, shared by
+                // system-Back and each route's in-screen close so their teardown
+                // can't drift. Closing the LiveLocation overlay tears down the
+                // live session; closing the Map overlay also drops the stashed
+                // group-drive roster so MapHome's participant chip doesn't linger
+                // after the overlay is dismissed. reset()/stop() are idempotent,
+                // so routing every close through here is safe.
+                val closeRoute = {
+                    when (route) {
+                        ShellRoute.LiveLocation -> {
+                            liveLocationCoordinator?.reset()
+                            BackgroundLocationController.stop(context)
+                        }
+                        ShellRoute.Map -> mapParticipantUids = ArrayList()
+                        else -> Unit
+                    }
+                    route = null
+                }
+
                 // System Back: close an open route first; from a non-Map tab
                 // return to the Map tab; from Map exit the app (no handler). The
                 // decision is delegated to the unit-tested ShellNavigation.onBack
@@ -288,13 +307,7 @@ fun AuthenticatedApp(
                     enabled = ShellNavigation.onBack(selectedTab, route) != ShellBackResult.Exit,
                 ) {
                     when (ShellNavigation.onBack(selectedTab, route)) {
-                        ShellBackResult.CloseRoute -> {
-                            if (route == ShellRoute.LiveLocation) {
-                                liveLocationCoordinator?.reset()
-                                BackgroundLocationController.stop(context)
-                            }
-                            route = null
-                        }
+                        ShellBackResult.CloseRoute -> closeRoute()
                         ShellBackResult.GoToMapTab -> selectedTab = ShellTab.Map
                         // Enabled is false in the Exit case, so this is unreachable;
                         // returning here lets the system perform the default exit.
@@ -308,7 +321,7 @@ fun AuthenticatedApp(
                         uid = uid,
                         profileActiveMember = profile?.activeMember == true,
                         scope = scope,
-                        onClose = { route = null },
+                        onClose = closeRoute,
                         onOpenRoute = { route = it },
                         onSignOut = onSignOut,
                         // repositories / coordinators
@@ -882,11 +895,9 @@ private fun RouteHost(
                     liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
                     BackgroundLocationController.stop(context)
                 },
-                onBack = {
-                    onClose()
-                    liveLocationCoordinator?.reset()
-                    BackgroundLocationController.stop(context)
-                },
+                // onClose routes through the shared closeRoute handler, which
+                // performs this LiveLocation teardown (reset + stop) itself.
+                onBack = onClose,
             )
         }
 

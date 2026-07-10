@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -391,7 +390,6 @@ private fun CreateRoutePill(onClick: () -> Unit) {
                 imageVector = Icons.AutoMirrored.Filled.AltRoute,
                 contentDescription = null,
             )
-            Spacer(Modifier.width(0.dp))
             Text(
                 text = stringResource(R.string.shell_createRoute),
                 style = MaterialTheme.typography.labelLarge,
