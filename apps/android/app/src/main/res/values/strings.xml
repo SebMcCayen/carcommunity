@@ -601,8 +601,6 @@
     <string name="shell_liveShareOn">Delar liveplats</string>
     <string name="shell_liveShareOff">Dela liveplats</string>
     <string name="shell_recenter">Centrera</string>
-    <string name="shell_music">Musik</string>
-    <string name="shell_createRoute">Skapa rutt</string>
     <string name="shell_menu">Meny</string>
     <string name="shell_tabMap">Karta</string>
     <string name="shell_tabHistory">Historik</string>

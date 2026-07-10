@@ -5,20 +5,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
@@ -52,8 +48,8 @@ const val MAP_HOME_TEST_TAG = "map_home"
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
  * prominent "Where to?" search bar, a transient "Loading roads…" status line,
- * a right-side stack of floating circular controls, and a bottom-right "Create
- * route" pill. The user is drawn as a labeled "You / Online" pin over the map.
+ * and a right-side stack of floating circular controls. The user is drawn as a
+ * labeled "You / Online" pin over the map.
  *
  * All map interaction is routed through [mapSurface] (currently a stub); the
  * real Mapbox render + GPS land later behind that same seam. The user is drawn
@@ -76,8 +72,6 @@ fun MapHome(
     onToggleLiveShare: () -> Unit,
     onLayers: () -> Unit,
     onRecenter: () -> Unit,
-    onMusic: () -> Unit,
-    onCreateRoute: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -126,7 +120,7 @@ fun MapHome(
             }
         }
 
-        // Right-side floating controls + Create-route CTA, bottom-right.
+        // Right-side floating controls, bottom-right.
         Column(
             modifier =
                 Modifier
@@ -177,14 +171,6 @@ fun MapHome(
                 contentDescription = stringResource(R.string.shell_recenter),
                 onClick = onRecenter,
             )
-            // 4. Music control (stub entry point).
-            CircleControl(
-                icon = Icons.Filled.MusicNote,
-                contentDescription = stringResource(R.string.shell_music),
-                onClick = onMusic,
-            )
-            Spacer(Modifier.height(4.dp))
-            CreateRoutePill(onClick = onCreateRoute)
         }
     }
 }
@@ -382,37 +368,6 @@ private fun CircleControl(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = contentDescription)
-        }
-    }
-}
-
-@Composable
-private fun CreateRoutePill(onClick: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    Surface(
-        shape = RoundedCornerShape(KccRadius.full),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.AltRoute,
-                contentDescription = null,
-            )
-            Text(
-                text = stringResource(R.string.shell_createRoute),
-                style = MaterialTheme.typography.labelLarge,
-            )
         }
     }
 }

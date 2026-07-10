@@ -601,8 +601,6 @@
     <string name="shell_liveShareOn">Sharing live location</string>
     <string name="shell_liveShareOff">Share live location</string>
     <string name="shell_recenter">Recenter</string>
-    <string name="shell_music">Music</string>
-    <string name="shell_createRoute">Create route</string>
     <string name="shell_menu">Menu</string>
     <string name="shell_tabMap">Map</string>
     <string name="shell_tabHistory">History</string>
