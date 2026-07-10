@@ -14,7 +14,13 @@
     "test:watch": "vitest",
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
     "emulators:start": "firebase emulators:start --config ../firebase.json",
-    "emulators:test": "pnpm build && firebase emulators:exec --only auth,functions,firestore,database,storage --project demo-test --config ../firebase.json 'pnpm test:emulator'"
+    "emulators:test": "pnpm build && firebase emulators:exec --only auth,functions,firestore,database,storage --project demo-test --config ../firebase.json 'pnpm test:emulator'",
+    "lockfile:check": "node scripts/deploy-lockfile.mjs check",
+    "lockfile:sync": "node scripts/deploy-lockfile.mjs sync"
+  },
+  "overrides": {
+    "uuid@<11.1.1": "^11.1.1",
+    "@opentelemetry/core@<2.8.0": "^2.8.0"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

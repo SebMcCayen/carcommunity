@@ -45,6 +45,14 @@ jobs:
         working-directory: functions
         run: pnpm install --frozen-lockfile
 
+      - name: Check deploy lockfile
+        # functions/package-lock.json is what the production Cloud Build
+        # installs from (firebase deploy uploads only functions/, never the
+        # root pnpm-lock.yaml). Fail if it drifted from package.json or from
+        # the pnpm-resolved (CI-tested) production versions.
+        working-directory: functions
+        run: pnpm run lockfile:check
+
       - name: Lint
         working-directory: functions
         run: pnpm run lint

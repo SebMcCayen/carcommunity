@@ -77,10 +77,23 @@ updates:
         update-types:
           - 'version-update:semver-major'
       # functions: this root entry ALSO discovers the pnpm workspace (root holds
-      # pnpm-workspace.yaml + pnpm-lock.yaml), so the /functions ignore rules must be
-      # mirrored here or they are bypassed — #202 shipped a firebase-admin major from
-      # this entry despite the /functions ignore. Firebase majors are upgraded manually
-      # as a set (firebase-admin 14 has no compatible firebase-functions release yet).
+      # pnpm-workspace.yaml + pnpm-lock.yaml) and is the ONLY entry updating
+      # functions deps — the former /functions entry was removed when
+      # functions/package-lock.json was introduced, because a second entry would
+      # race this one on functions/package.json (the #192/#198 incident class)
+      # while updating only one of the two lockfiles. The firebase ignore rules
+      # must live here or they are bypassed — #202 shipped a firebase-admin major
+      # from this entry despite the (then) /functions ignore. Firebase majors are
+      # upgraded manually as a set (firebase-admin 14 has no compatible
+      # firebase-functions release yet).
+      #
+      # functions/package-lock.json (npm format) is what the production Cloud
+      # Build installs from — firebase deploy uploads only functions/, so the
+      # root pnpm-lock.yaml never reaches it. Dependabot updates from this entry
+      # leave that file stale BY DESIGN: the "Check deploy lockfile" step in
+      # validate-functions fails the PR until `pnpm -C functions run
+      # lockfile:sync` is run and committed, so the two lockfiles can never
+      # drift apart silently.
       - dependency-name: 'firebase-admin'
         update-types:
           - 'version-update:semver-major'
@@ -94,49 +107,12 @@ updates:
         update-types:
           - 'version-update:semver-major'
 
-  # Firebase Functions — a pnpm workspace (see pnpm-workspace.yaml) whose lockfile is
-  # the ROOT pnpm-lock.yaml. pnpm's lockfile is separate from npm's package-lock.json,
-  # so this entry does not contend with the consolidated npm entry above.
-  # NOTE: pnpm-lock.yaml lives at the repo root, outside this entry's directory — the
-  # same layout that made #192 ship a stale package-lock.json (fixed in #198). If
-  # functions PRs start arriving with manifest-only changes and a stale pnpm-lock.yaml,
-  # this entry must move to the workspace root or functions needs its own lockfile.
-  - package-ecosystem: 'npm'
-    directory: '/functions'
-    schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:35'
-      timezone: 'Europe/Stockholm'
-    open-pull-requests-limit: 5
-    labels:
-      - 'dependencies'
-      - 'functions'
-      - 'npm'
-    commit-message:
-      prefix: 'deps'
-      include: 'scope'
-    groups:
-      npm-minor-and-patch:
-        update-types:
-          - 'minor'
-          - 'patch'
-    ignore:
-      - dependency-name: '@types/node'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: 'firebase-admin'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: 'firebase-functions'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: 'firebase'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: 'firebase-tools'
-        update-types:
-          - 'version-update:semver-major'
+  # NOTE: there is deliberately NO '/functions' npm entry. Functions deps are
+  # updated by the root entry above (pnpm workspace, root pnpm-lock.yaml); the
+  # npm-format functions/package-lock.json is a deploy artifact kept in sync via
+  # `pnpm -C functions run lockfile:sync` and guarded by CI. A /functions entry
+  # would regenerate package-lock.json without touching pnpm-lock.yaml (and race
+  # the root entry on functions/package.json) — the #192/#198 incident class.
 
   # GitHub Actions workflows
   - package-ecosystem: 'github-actions'
