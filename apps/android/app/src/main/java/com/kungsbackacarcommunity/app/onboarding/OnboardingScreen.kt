@@ -171,7 +171,9 @@ private fun ConsentLink(text: String, url: String) {
         textDecoration = TextDecoration.Underline,
         modifier =
             Modifier
-                .padding(start = KccSpacing.s12)
+                // Checkbox width (s12) + the label's own start padding (s2) so the
+                // link lines up under the consent label text, not the checkbox.
+                .padding(start = KccSpacing.s12 + KccSpacing.s2)
                 // Screen readers otherwise announce this as plain text: mark it
                 // as a button and label the action with the link text itself
                 // ("Read the terms" / "Läs villkoren") so it reads as tappable.
@@ -188,7 +190,8 @@ private fun ConsentLink(text: String, url: String) {
  * (file:/intent:/javascript: …). Silently no-ops if there is no browser.
  */
 private fun openExternalUrl(context: Context, url: String) {
-    val uri = Uri.parse(url)
+    // Trim first: leading/trailing whitespace makes Uri.parse yield a null scheme.
+    val uri = Uri.parse(url.trim())
     // Scheme comparison is case-insensitive: a pasted "HTTPS://…" must still open.
     val scheme = uri.scheme?.lowercase()
     if (scheme != "http" && scheme != "https") return
