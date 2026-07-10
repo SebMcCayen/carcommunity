@@ -611,6 +611,7 @@
     "settingsPushGrantedBody": "Push-notiser är aktiverade. Du kan ändra dina val nedan.",
     "settingsPushDeniedBody": "Push-notiser är inaktiverade. Du kan ändra detta i systeminställningarna. Du kan ändra dina val senare under Inställningar.",
     "settingsPushUndeterminedBody": "Tillåt notiser för att få påminnelser om event och viktiga meddelanden. Notiser är valfria. Du kan ändra dina val senare under Inställningar.",
+    "settingsPushAllow": "Tillåt notiser",
     "settingsOpenSystemSettings": "Öppna systeminställningar",
     "settingsCategoriesTitle": "Notiskategorier",
     "settingsInApp": "I appen",

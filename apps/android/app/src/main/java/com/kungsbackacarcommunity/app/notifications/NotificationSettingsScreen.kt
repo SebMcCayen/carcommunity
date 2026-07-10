@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -18,8 +23,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -52,7 +62,26 @@ fun NotificationSettingsScreen(
                 color = MaterialTheme.colorScheme.onBackground,
             )
 
-            PushPermissionCard(pushPermission, onOpenSystemSettings)
+            // Runtime request: on Android 13+ an in-context prompt is far better
+            // than only deep-linking to system settings. Keep a local status so
+            // the card reflects the grant immediately after the dialog.
+            val context = LocalContext.current
+            var permissionStatus by remember(pushPermission) { mutableStateOf(pushPermission) }
+            val canRequestInApp = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            val requestLauncher =
+                rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) { permissionStatus = currentPushPermissionStatus(context) }
+            PushPermissionCard(
+                status = permissionStatus,
+                onRequestPermission =
+                    if (canRequestInApp && permissionStatus != PushPermissionStatus.GRANTED) {
+                        { requestLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                    } else {
+                        null
+                    },
+                onOpenSystemSettings = onOpenSystemSettings,
+            )
 
             Text(
                 text = stringResource(R.string.notifications_settingsCategoriesTitle),
@@ -83,7 +112,11 @@ fun NotificationSettingsScreen(
 }
 
 @Composable
-private fun PushPermissionCard(status: PushPermissionStatus, onOpenSystemSettings: () -> Unit) {
+private fun PushPermissionCard(
+    status: PushPermissionStatus,
+    onRequestPermission: (() -> Unit)?,
+    onOpenSystemSettings: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -105,6 +138,13 @@ private fun PushPermissionCard(status: PushPermissionStatus, onOpenSystemSetting
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (status != PushPermissionStatus.GRANTED) {
+                // Prefer the in-app system prompt (Android 13+); fall back to
+                // system settings, which also covers a permanent "don't ask again".
+                if (onRequestPermission != null) {
+                    Button(onClick = onRequestPermission) {
+                        Text(text = stringResource(R.string.notifications_settingsPushAllow))
+                    }
+                }
                 OutlinedButton(onClick = onOpenSystemSettings) {
                     Text(text = stringResource(R.string.notifications_settingsOpenSystemSettings))
                 }

@@ -558,6 +558,7 @@
     <string name="notifications_settingsPushGrantedBody">Push notifications are enabled. You can change your preferences below.</string>
     <string name="notifications_settingsPushDeniedBody">Push notifications are disabled. You can change this in system settings. You can update your preferences later under Settings.</string>
     <string name="notifications_settingsPushUndeterminedBody">Allow notifications to receive event reminders and important messages. Notifications are optional. You can change your preferences later under Settings.</string>
+    <string name="notifications_settingsPushAllow">Allow notifications</string>
     <string name="notifications_settingsOpenSystemSettings">Open system settings</string>
     <string name="notifications_settingsCategoriesTitle">Notification categories</string>
     <string name="notifications_settingsInApp">In-app</string>

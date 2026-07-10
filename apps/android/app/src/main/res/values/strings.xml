@@ -558,6 +558,7 @@
     <string name="notifications_settingsPushGrantedBody">Push-notiser är aktiverade. Du kan ändra dina val nedan.</string>
     <string name="notifications_settingsPushDeniedBody">Push-notiser är inaktiverade. Du kan ändra detta i systeminställningarna. Du kan ändra dina val senare under Inställningar.</string>
     <string name="notifications_settingsPushUndeterminedBody">Tillåt notiser för att få påminnelser om event och viktiga meddelanden. Notiser är valfria. Du kan ändra dina val senare under Inställningar.</string>
+    <string name="notifications_settingsPushAllow">Tillåt notiser</string>
     <string name="notifications_settingsOpenSystemSettings">Öppna systeminställningar</string>
     <string name="notifications_settingsCategoriesTitle">Notiskategorier</string>
     <string name="notifications_settingsInApp">I appen</string>
