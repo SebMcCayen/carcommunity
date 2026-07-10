@@ -38,10 +38,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -64,6 +66,9 @@ const val MAP_HOME_TEST_TAG = "map_home"
  *   to the real live-location state).
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
+ * @param avatarUrl resolved download URL for the signed-in user's profile
+ *   picture, shown in the top-right profile button; null falls back to the
+ *   generic account icon.
  */
 @Composable
 fun MapHome(
@@ -71,6 +76,7 @@ fun MapHome(
     isLiveSharing: Boolean,
     participantCount: Int,
     userLabel: String,
+    avatarUrl: String? = null,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
@@ -114,6 +120,7 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SearchBarRow(
+                avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onVoiceSearch = onVoiceSearch,
                 onOpenMore = onOpenMore,
@@ -191,6 +198,7 @@ fun MapHome(
 
 @Composable
 private fun SearchBarRow(
+    avatarUrl: String?,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
@@ -242,13 +250,25 @@ private fun SearchBarRow(
             tonalElevation = 3.dp,
             shadowElevation = 3.dp,
             onClick = onOpenMore,
+            modifier = Modifier.size(48.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.AccountCircle,
-                contentDescription = stringResource(R.string.shell_menu),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(10.dp).size(28.dp),
-            )
+            if (avatarUrl != null) {
+                // The user's profile picture, circular; Coil renders nothing
+                // (leaving the surface tint) until the URL resolves.
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = stringResource(R.string.shell_menu),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.AccountCircle,
+                    contentDescription = stringResource(R.string.shell_menu),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(10.dp).size(28.dp),
+                )
+            }
         }
     }
 }

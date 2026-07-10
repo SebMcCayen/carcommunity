@@ -109,6 +109,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -243,6 +244,9 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Resolved avatar download URL for the map-home top-right profile
+            // button (null → falls back to the generic account icon).
+            val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -428,6 +432,7 @@ fun AuthenticatedApp(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
                                         participantCount = mapParticipantUids.size,
+                                        avatarUrl = mapAvatarUrl,
                                         userLabel =
                                             stringResource(R.string.shell_userMarkerLabel),
                                         onSearch = { showComingSoon() },
@@ -860,9 +865,12 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        val imageId = MediaUpload.newImageId(picked.contentType)
+                        // Downscale + JPEG-re-encode before upload so avatars stay
+                        // small (Storage cost + well under the byte cap).
+                        val compressed = ImageCompressor.compress(picked)
+                        val imageId = MediaUpload.newImageId(compressed.contentType)
                         val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(picked, path) { storedPath ->
+                        avatarCoordinator.upload(compressed, path) { storedPath ->
                             repo.updateAvatarPath(uid, storedPath)
                         }
                     }
