@@ -303,10 +303,9 @@ fun AuthenticatedApp(
                 // so production back behaviour and its tests can't drift. Nested
                 // route BackHandlers compose deeper and take priority while
                 // enabled, so this only fires at a route's own root.
-                BackHandler(
-                    enabled = ShellNavigation.onBack(selectedTab, route) != ShellBackResult.Exit,
-                ) {
-                    when (ShellNavigation.onBack(selectedTab, route)) {
+                val backResult = ShellNavigation.onBack(selectedTab, route)
+                BackHandler(enabled = backResult != ShellBackResult.Exit) {
+                    when (backResult) {
                         ShellBackResult.CloseRoute -> closeRoute()
                         ShellBackResult.GoToMapTab -> selectedTab = ShellTab.Map
                         // Enabled is false in the Exit case, so this is unreachable;

@@ -85,7 +85,9 @@ fun MapHome(
     val marker by mapSurface.userMarker.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
-    LaunchedEffect(userLabel, isLiveSharing) {
+    // Keyed on mapSurface too so the marker is re-pushed if the surface instance
+    // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
+    LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, online = isLiveSharing))
     }
 
