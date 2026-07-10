@@ -202,8 +202,14 @@ is utility, not gamification, so it fits the safety-first product posture
 
 1. Member opens a vehicle in the garage → new "Bilkalender" section.
 2. Enters: last approved inspection month (or "first inspection not yet done"
-   + first-in-traffic month), and optionally tire info (current set mounted,
-   sets owned, storage note, tread measurements).
+   + first-in-traffic month); which inspection this is — first / second /
+   subsequent — which sets `inspectionCount` (0/1/2+) and thereby selects the
+   36/24/14-month rule (§3.1); whether the car is inspection-exempt
+   (`inspectionExempt`, user-declared, pre-suggested from `modelYear` for 50+
+   vehicles); and optionally tire info (current set mounted, sets owned,
+   storage note, tread measurements). Both `inspectionCount` and
+   `inspectionExempt` are user-entered here — see open question §8.3 on whether
+   the exemption should instead be auto-derived from `modelYear`.
 3. Client calls a new callable; backend validates, computes
    `nextInspectionDeadline` from the config rules table, and stores the care
    doc (owner-only).
