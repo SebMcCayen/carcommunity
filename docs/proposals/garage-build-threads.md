@@ -129,8 +129,11 @@ The entire UGC-safety loop exists for event chat and ports 1:1:
   idempotent delivery via deterministic IDs. A new **non-essential**
   category (e.g. `followed_build_update`) is added to
   `NOTIFICATION_CATEGORIES` in `notifications-core.ts`. Note the code
-  comment there: new categories **must not be activated without product and
-  security review** — this proposal is that review's input.
+  comment there: it names specific **FUTURE** placeholder categories
+  (`partner_offer`, `event_chat`, `nearby_event`) that are deliberately **not
+  accepted** pending product and security review. Adding
+  `followed_build_update` is that same kind of new-category change, so this
+  proposal is intended to serve as its product/security review input.
 - `functions/src/notifications/pushTokens.ts` + FCM push and the Android
   inbox/prefs UI (`apps/android/.../notifications/`,
   `NotificationSettingsScreen.kt`) — the prefs UI does **not** auto-surface a
