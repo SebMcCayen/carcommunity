@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -25,6 +26,36 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import kotlin.random.Random
+
+/**
+ * Car quotes shown under the sign-in form — one is picked at random per
+ * screen display. The quotes are verbatim (attributed) and deliberately
+ * English-only: the localization contract carries the same English text in
+ * every locale. Kept internal so tests can assert on the list.
+ */
+internal val signInCarQuoteResIds = listOf(
+    R.string.auth_carQuote01,
+    R.string.auth_carQuote02,
+    R.string.auth_carQuote03,
+    R.string.auth_carQuote04,
+    R.string.auth_carQuote05,
+    R.string.auth_carQuote06,
+    R.string.auth_carQuote07,
+    R.string.auth_carQuote08,
+    R.string.auth_carQuote09,
+    R.string.auth_carQuote10,
+    R.string.auth_carQuote11,
+    R.string.auth_carQuote12,
+    R.string.auth_carQuote13,
+    R.string.auth_carQuote14,
+    R.string.auth_carQuote15,
+    R.string.auth_carQuote16,
+    R.string.auth_carQuote17,
+    R.string.auth_carQuote18,
+    R.string.auth_carQuote19,
+    R.string.auth_carQuote20,
+)
 
 /**
  * Minimal sign-in scaffold (migration plan Phase 7, PR 7c).
@@ -40,6 +71,11 @@ fun SignInScreen(
     status: SignInStatus,
     onSignInClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // Pins the car quote shown under the form (index into
+    // [signInCarQuoteResIds]) so previews/screenshot tests are deterministic.
+    // null (production) = random pick per screen display, stable across
+    // recomposition and rotation via rememberSaveable.
+    quoteIndex: Int? = null,
 ) {
     // The sign-in screen is a brand moment shown over Ink Black art, so it
     // always renders light-on-dark (light content over the dark background)
@@ -118,8 +154,15 @@ fun SignInScreen(
                     }
 
                     Spacer(Modifier.height(24.dp))
+                    // Random car quote in place of the old privacy note.
+                    // rememberSaveable keeps the pick stable across
+                    // recomposition and rotation; a new one is drawn each
+                    // time the screen enters composition. No maxLines: the
+                    // longest quote wraps to 2-3 centered lines.
+                    val randomQuoteIndex =
+                        rememberSaveable { Random.nextInt(signInCarQuoteResIds.size) }
                     Text(
-                        text = stringResource(R.string.auth_privacyNote),
+                        text = stringResource(signInCarQuoteResIds[quoteIndex ?: randomQuoteIndex]),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -143,15 +186,19 @@ private fun GoogleSignInButton(onClick: () -> Unit) {
 @Composable
 private fun SignInScreenPreviewIdle() {
     // SignInScreen applies its own KccTheme — do not wrap it again.
-    SignInScreen(status = SignInStatus.Idle, onSignInClick = {})
+    // quoteIndex is pinned so the preview is deterministic.
+    SignInScreen(status = SignInStatus.Idle, onSignInClick = {}, quoteIndex = 0)
 }
 
 @Preview(name = "Failed (forced dark)", showBackground = true)
 @Composable
 private fun SignInScreenPreviewFailed() {
     // SignInScreen applies its own KccTheme — do not wrap it again.
+    // quoteIndex 12 pins the longest quote (Bobby Unser) to preview how
+    // multi-line quotes wrap.
     SignInScreen(
         status = SignInStatus.Failed(SignInFailure.GENERIC),
         onSignInClick = {},
+        quoteIndex = 12,
     )
 }
