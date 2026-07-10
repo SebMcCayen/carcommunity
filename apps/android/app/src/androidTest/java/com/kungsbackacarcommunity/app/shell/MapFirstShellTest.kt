@@ -79,7 +79,7 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun mapHome_showsSearchBarFloatingControlsAndCta() {
+    fun mapHome_showsSearchBarAndFloatingControls() {
         setShell()
         // Map-first home renders (MapSurface stub behind the shell).
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
