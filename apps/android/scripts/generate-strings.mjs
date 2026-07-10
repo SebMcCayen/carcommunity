@@ -77,7 +77,16 @@ for (const { source, out } of targets) {
   ];
 
   for (const [dotPath, value] of entries) {
-    const formatted = value.includes('%') ? ' formatted="false"' : '';
+    // Android's aapt2 only accepts `formatted="false"` for strings that
+    // contain a literal `%` which is NOT a positional format argument
+    // (e.g. "50% off"). Strings that use positional args like `%1$d` /
+    // `%2$s` must stay format-validated (default formatted="true"), so that
+    // stringResource(id, args) substitutes correctly and lint stays happy.
+    // Strip out any positional specifiers first; only a leftover bare `%`
+    // requires disabling format validation.
+    const positional = /%(\d+\$)?[-#+ 0,(]*\d*(?:\.\d+)?[a-zA-Z]/g;
+    const hasLiteralPercent = value.replace(positional, '').includes('%');
+    const formatted = hasLiteralPercent ? ' formatted="false"' : '';
     lines.push(`    <string name="${toResourceName(dotPath)}"${formatted}>${escapeAndroid(value)}</string>`);
   }
 

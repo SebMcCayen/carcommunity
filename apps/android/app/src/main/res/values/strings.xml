@@ -592,8 +592,8 @@
     <string name="shell_voiceSearch">Röstsökning</string>
     <string name="shell_loadingRoads">Laddar vägar…</string>
     <string name="shell_mapPlaceholder">Karta</string>
-    <string name="shell_userMarkerLabel">Du / Online</string>
-    <string name="shell_participantsSharing" formatted="false">%1$d delar</string>
+    <string name="shell_userMarkerLabel">Du</string>
+    <string name="shell_participantsSharing">%1$d delar</string>
     <string name="shell_liveShareOn">Delar liveplats</string>
     <string name="shell_liveShareOff">Dela liveplats</string>
     <string name="shell_mapLayers">Kartlager</string>

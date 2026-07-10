@@ -130,6 +130,8 @@ import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.ShellBackResult
+import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
 import com.kungsbackacarcommunity.app.shell.rememberStubMapSurface
@@ -277,18 +279,27 @@ fun AuthenticatedApp(
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
                 // System Back: close an open route first; from a non-Map tab
-                // return to the Map tab; from Map exit the app (no handler).
-                // Nested route BackHandlers compose deeper and take priority
-                // while enabled, so this only fires at a route's own root.
-                BackHandler(enabled = route != null) {
-                    if (route == ShellRoute.LiveLocation) {
-                        liveLocationCoordinator?.reset()
-                        BackgroundLocationController.stop(context)
+                // return to the Map tab; from Map exit the app (no handler). The
+                // decision is delegated to the unit-tested ShellNavigation.onBack
+                // so production back behaviour and its tests can't drift. Nested
+                // route BackHandlers compose deeper and take priority while
+                // enabled, so this only fires at a route's own root.
+                BackHandler(
+                    enabled = ShellNavigation.onBack(selectedTab, route) != ShellBackResult.Exit,
+                ) {
+                    when (ShellNavigation.onBack(selectedTab, route)) {
+                        ShellBackResult.CloseRoute -> {
+                            if (route == ShellRoute.LiveLocation) {
+                                liveLocationCoordinator?.reset()
+                                BackgroundLocationController.stop(context)
+                            }
+                            route = null
+                        }
+                        ShellBackResult.GoToMapTab -> selectedTab = ShellTab.Map
+                        // Enabled is false in the Exit case, so this is unreachable;
+                        // returning here lets the system perform the default exit.
+                        ShellBackResult.Exit -> Unit
                     }
-                    route = null
-                }
-                BackHandler(enabled = route == null && selectedTab != ShellTab.Map) {
-                    selectedTab = ShellTab.Map
                 }
 
                 if (route != null) {

@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -81,7 +82,7 @@ class MapFirstShellTest {
     fun mapHome_showsSearchBarFloatingControlsAndCta() {
         setShell()
         // Map-first home renders (MapSurface stub behind the shell).
-        composeTestRule.onNodeWithContentDescription(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // Prominent "Where to?" search bar.
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
         // Floating controls (broadcast toggle off + recenter) and the CTA.
@@ -101,10 +102,10 @@ class MapFirstShellTest {
 
         // Switching to History leaves the map home.
         composeTestRule.onNodeWithText(str(R.string.shell_tabHistory)).performClick()
-        composeTestRule.onNodeWithContentDescription(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab restores the map home.
         composeTestRule.onNodeWithText(str(R.string.shell_tabMap)).performClick()
-        composeTestRule.onNodeWithContentDescription(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 }

@@ -40,9 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -58,10 +57,12 @@ const val MAP_HOME_TEST_TAG = "map_home"
  * route" pill. The user is drawn as a labeled "You / Online" pin over the map.
  *
  * All map interaction is routed through [mapSurface] (currently a stub); the
- * real Mapbox render + GPS land later behind that same seam.
+ * real Mapbox render + GPS land later behind that same seam. The user is drawn
+ * as a labeled "You" pin; a green dot next to the label signals live sharing.
  *
  * @param isLiveSharing whether the live-location session is currently sharing —
- *   turns the broadcast control GREEN (wired to the real live-location state).
+ *   turns the broadcast control GREEN and shows the marker's online dot (wired
+ *   to the real live-location state).
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
  */
@@ -89,11 +90,13 @@ fun MapHome(
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, online = isLiveSharing))
     }
 
-    Box(modifier = modifier.fillMaxSize().semantics { contentDescription = MAP_HOME_TEST_TAG }) {
+    // Test hook only — a testTag (not contentDescription) so the internal tag
+    // string never leaks into TalkBack. The container itself is decorative.
+    Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
         // Full-bleed map (behind everything).
         mapSurface.Content(Modifier.fillMaxSize())
 
-        // Centre "You / Online" pin overlay.
+        // Centre "You" pin overlay (green online dot when live-sharing).
         UserMarkerPin(
             marker = marker,
             modifier = Modifier.align(Alignment.Center),
@@ -275,7 +278,7 @@ private fun ParticipantChip(count: Int) {
 }
 
 /**
- * The "You / Online" callout above a dot with an accuracy halo. The palette has
+ * The "You" callout above a dot with an accuracy halo. The palette has
  * no blue token, so the dot uses the brand primary; the online indicator uses
  * the success-green status colour.
  */
