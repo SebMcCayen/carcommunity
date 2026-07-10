@@ -714,6 +714,59 @@
     "alreadyProcessed": "The request was already processed – no change was made.",
     "markProcessedError": "Could not mark the request as processed."
   },
+  "moderationReports": {
+    "title": "Moderation reports",
+    "subtitle": "Queue of user reports of content and behaviour. Newest first per status. Only the status field can be changed – reporter, target, and reason are immutable.",
+    "tabs": {
+      "pending": "Pending",
+      "reviewed": "Reviewed",
+      "dismissed": "Dismissed",
+      "all": "All"
+    },
+    "loading": "Loading…",
+    "loadingMore": "Loading more…",
+    "loadMore": "Show more",
+    "loadError": "Could not load reports.",
+    "empty": "No reports to show.",
+    "tableLabel": "Moderation reports",
+    "table": {
+      "reportedBy": "Reported by",
+      "target": "Target",
+      "reason": "Reason",
+      "details": "Details",
+      "createdAt": "Reported",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "targetType": {
+      "user": "User",
+      "message": "Message",
+      "event": "Event",
+      "unknown": "Unknown"
+    },
+    "status": {
+      "pending": "Pending",
+      "reviewed": "Reviewed",
+      "dismissed": "Dismissed"
+    },
+    "noDetails": "No details given",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "markReviewed": "Mark as reviewed",
+    "dismiss": "Dismiss",
+    "reopen": "Reopen",
+    "resolvePending": "Updating…",
+    "confirmReviewed": "Mark this report as reviewed?",
+    "confirmDismissed": "Dismiss this report? It will be marked dismissed with no action taken.",
+    "confirmReopen": "Reopen this report? It will move back to pending.",
+    "resolveSuccess": {
+      "reviewed": "Report marked as reviewed.",
+      "dismissed": "Report dismissed.",
+      "pending": "Report reopened."
+    },
+    "alreadyResolved": "The report already had that status – no change was made.",
+    "resolveError": "Could not update the report status."
+  },
   "errorReports": {
     "title": "Error reports",
     "subtitle": "Crash and error telemetry from the apps. Read-only view — reports are created by the backend only and are purged after 90 days.",

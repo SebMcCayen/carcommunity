@@ -789,6 +789,59 @@
     "alreadyProcessed": "Begäran var redan behandlad – ingen ändring gjordes.",
     "markProcessedError": "Kunde inte markera begäran som behandlad."
   },
+  "moderationReports": {
+    "title": "Moderationsanmälningar",
+    "subtitle": "Kö över användares anmälningar av innehåll och beteende. Nyaste först per status. Endast statusfältet kan ändras – anmälare, mål och orsak är oföränderliga.",
+    "tabs": {
+      "pending": "Väntande",
+      "reviewed": "Granskade",
+      "dismissed": "Avfärdade",
+      "all": "Alla"
+    },
+    "loading": "Hämtar…",
+    "loadingMore": "Hämtar fler…",
+    "loadMore": "Visa fler",
+    "loadError": "Kunde inte hämta anmälningar.",
+    "empty": "Inga anmälningar att visa.",
+    "tableLabel": "Moderationsanmälningar",
+    "table": {
+      "reportedBy": "Anmäld av",
+      "target": "Mål",
+      "reason": "Orsak",
+      "details": "Detaljer",
+      "createdAt": "Anmäld",
+      "status": "Status",
+      "actions": "Åtgärder"
+    },
+    "targetType": {
+      "user": "Användare",
+      "message": "Meddelande",
+      "event": "Event",
+      "unknown": "Okänt"
+    },
+    "status": {
+      "pending": "Väntande",
+      "reviewed": "Granskad",
+      "dismissed": "Avfärdad"
+    },
+    "noDetails": "Inga detaljer angivna",
+    "showMore": "Visa mer",
+    "showLess": "Visa mindre",
+    "markReviewed": "Markera som granskad",
+    "dismiss": "Avfärda",
+    "reopen": "Återöppna",
+    "resolvePending": "Uppdaterar…",
+    "confirmReviewed": "Markera anmälan som granskad?",
+    "confirmDismissed": "Avfärda anmälan? Den markeras som avfärdad utan åtgärd.",
+    "confirmReopen": "Återöppna anmälan? Den flyttas tillbaka till väntande.",
+    "resolveSuccess": {
+      "reviewed": "Anmälan markerad som granskad.",
+      "dismissed": "Anmälan avfärdad.",
+      "pending": "Anmälan återöppnad."
+    },
+    "alreadyResolved": "Anmälan hade redan den statusen – ingen ändring gjordes.",
+    "resolveError": "Kunde inte uppdatera anmälans status."
+  },
   "errorReports": {
     "title": "Felrapporter",
     "subtitle": "Krasch- och feltelemetri från apparna. Skrivskyddad vy — rapporter skapas endast via backend och rensas efter 90 dagar.",
