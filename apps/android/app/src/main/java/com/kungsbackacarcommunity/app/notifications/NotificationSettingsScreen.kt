@@ -128,9 +128,15 @@ private fun PushPermissionCard(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             val body =
-                when (status) {
-                    PushPermissionStatus.GRANTED -> R.string.notifications_settingsPushGrantedBody
-                    PushPermissionStatus.DENIED -> R.string.notifications_settingsPushDeniedBody
+                when {
+                    status == PushPermissionStatus.GRANTED ->
+                        R.string.notifications_settingsPushGrantedBody
+                    // An in-app prompt is available (Android 13+): we can still ask,
+                    // so use the "undetermined" copy rather than telling the user to
+                    // fix it in system settings.
+                    onRequestPermission != null ->
+                        R.string.notifications_settingsPushUndeterminedBody
+                    else -> R.string.notifications_settingsPushDeniedBody
                 }
             Text(
                 text = stringResource(body),
