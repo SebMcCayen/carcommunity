@@ -23,7 +23,7 @@ app, besiktningstid-style lookup sites, and phone-calendar entries.
    studded-tire dates, plus optional per-car tire-set tracking (which set is
    mounted, tread-depth log, storage-location note).
 3. **"Innan besiktning" checklist** — a community prep checklist (static
-   content in Phase 1) that de-fuses the besiktning anxiety that fills
+   content in Phase 1) that defuses the besiktning anxiety that fills
    garaget.org threads.
 
 No competitor community app has this. It works for **all powertrains and all
