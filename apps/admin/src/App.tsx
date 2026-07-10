@@ -1,39 +1,45 @@
+import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
-// Public pages
+// Public pages — kept in the entry chunk so the login screen renders without
+// an extra network round-trip. The entry graph only needs firebase app/auth/
+// app-check; everything heavier loads with the protected routes below.
 import LoginPage from '@/app/login/page';
 import UnauthorizedPage from '@/app/unauthorized/page';
 
-// Protected pages
-import DashboardPage from '@/app/page';
-import UsersPage from '@/app/users/page';
-import UserDetailPage from '@/app/users/[id]/page';
-import EventsPage from '@/app/events/page';
-import NewEventPage from '@/app/events/new/page';
-import EventDetailPage from '@/app/events/[eventId]/page';
-import NotificationsPage from '@/app/notifications/page';
-import PartnersPage from '@/app/partners/page';
-import PartnerApplicationsPage from '@/app/partners/applications/page';
-import PartnerOffersPage from '@/app/partners/offers/page';
-import PartnerInsightsPage from '@/app/partners/[partnerId]/insights/page';
-import BillboardsPage from '@/app/billboards/page';
-import KronjaktPage from '@/app/kronjakt/page';
-import BadgesPage from '@/app/badges/page';
-import ReportsPage from '@/app/reports/page';
-import ErrorReportsPage from '@/app/error-reports/page';
-import ModerationReportsPage from '@/app/moderation-reports/page';
-import AnnouncementsPage from '@/app/announcements/page';
-import AccountDeletionsPage from '@/app/account-deletions/page';
-import EventChatPage from '@/app/event-chat/page';
-import LiveLocationPage from '@/app/live-location/page';
-import SupportPage from '@/app/support/page';
-import AuditLogPage from '@/app/audit-log/page';
-import FeatureFlagsPage from '@/app/feature-flags/page';
-import CredentialsPage from '@/app/credentials/page';
-import SubscriptionPage from '@/app/subscription/page';
-import SettingsPage from '@/app/settings/page';
+// Protected pages — lazy-loaded (route-level code splitting) so page code and
+// its heavy dependencies (Firestore, feature modules, i18n dictionaries) stay
+// out of the initial bundle. The Suspense boundary lives in AdminLayout so the
+// sidebar stays visible while a page chunk is fetched.
+const DashboardPage = lazy(() => import('@/app/page'));
+const UsersPage = lazy(() => import('@/app/users/page'));
+const UserDetailPage = lazy(() => import('@/app/users/[id]/page'));
+const EventsPage = lazy(() => import('@/app/events/page'));
+const NewEventPage = lazy(() => import('@/app/events/new/page'));
+const EventDetailPage = lazy(() => import('@/app/events/[eventId]/page'));
+const NotificationsPage = lazy(() => import('@/app/notifications/page'));
+const PartnersPage = lazy(() => import('@/app/partners/page'));
+const PartnerApplicationsPage = lazy(() => import('@/app/partners/applications/page'));
+const PartnerOffersPage = lazy(() => import('@/app/partners/offers/page'));
+const PartnerInsightsPage = lazy(() => import('@/app/partners/[partnerId]/insights/page'));
+const BillboardsPage = lazy(() => import('@/app/billboards/page'));
+const KronjaktPage = lazy(() => import('@/app/kronjakt/page'));
+const BadgesPage = lazy(() => import('@/app/badges/page'));
+const ReportsPage = lazy(() => import('@/app/reports/page'));
+const ErrorReportsPage = lazy(() => import('@/app/error-reports/page'));
+const ModerationReportsPage = lazy(() => import('@/app/moderation-reports/page'));
+const AnnouncementsPage = lazy(() => import('@/app/announcements/page'));
+const AccountDeletionsPage = lazy(() => import('@/app/account-deletions/page'));
+const EventChatPage = lazy(() => import('@/app/event-chat/page'));
+const LiveLocationPage = lazy(() => import('@/app/live-location/page'));
+const SupportPage = lazy(() => import('@/app/support/page'));
+const AuditLogPage = lazy(() => import('@/app/audit-log/page'));
+const FeatureFlagsPage = lazy(() => import('@/app/feature-flags/page'));
+const CredentialsPage = lazy(() => import('@/app/credentials/page'));
+const SubscriptionPage = lazy(() => import('@/app/subscription/page'));
+const SettingsPage = lazy(() => import('@/app/settings/page'));
 
 export function App() {
   return (

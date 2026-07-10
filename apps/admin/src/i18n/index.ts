@@ -1,13 +1,35 @@
-import en from './en.json';
 import sv from './sv.json';
 
-const dictionaries = {
-  en,
-  sv,
-} as const;
-
-type Locale = keyof typeof dictionaries;
+type Locale = 'en' | 'sv';
 type TranslationDictionary = Record<string, unknown>;
+
+/**
+ * Swedish is the default (and currently only) active locale, so it is bundled
+ * eagerly — every translated string is available on first paint with no
+ * language flash. English is only ever consulted as a fallback dictionary, so
+ * it is code-split and loaded on demand (see loadEnglishDictionary below).
+ */
+const dictionaries: { sv: TranslationDictionary; en?: TranslationDictionary } = { sv };
+
+let englishDictionaryLoad: Promise<TranslationDictionary> | undefined;
+
+/**
+ * Lazily loads the English dictionary into the fallback slot.
+ *
+ * Triggered automatically the first time `translate` is asked for the `en`
+ * locale; exported so callers (and tests) can await deterministic loading.
+ * Until it resolves, lookups fall back to Swedish, whose key set is a strict
+ * superset of the English one.
+ */
+export const loadEnglishDictionary = (): Promise<TranslationDictionary> => {
+  englishDictionaryLoad ??= import('./en.json').then((module) => {
+    const dictionary = module.default as TranslationDictionary;
+    dictionaries.en = dictionary;
+    return dictionary;
+  });
+
+  return englishDictionaryLoad;
+};
 
 const getNestedValue = (dictionary: TranslationDictionary, path: string): string | undefined => {
   let current: unknown = dictionary;
@@ -24,8 +46,18 @@ const getNestedValue = (dictionary: TranslationDictionary, path: string): string
 };
 
 export const translate = (locale: Locale, key: string): string => {
+  if (locale === 'en' && !dictionaries.en) {
+    // Kick off the fetch; this render falls back to Swedish below.
+    void loadEnglishDictionary();
+  }
+
   const currentDictionary = dictionaries[locale] ?? dictionaries.sv;
   const fallbackDictionary = dictionaries.en;
 
-  return getNestedValue(currentDictionary, key) ?? getNestedValue(fallbackDictionary, key) ?? key;
+  return (
+    getNestedValue(currentDictionary, key) ??
+    (fallbackDictionary ? getNestedValue(fallbackDictionary, key) : undefined) ??
+    getNestedValue(dictionaries.sv, key) ??
+    key
+  );
 };
