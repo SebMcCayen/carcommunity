@@ -333,6 +333,7 @@
     "detailTitle": "Drive details",
     "empty": "No saved drives yet.",
     "error": "Could not load drives. Please try again.",
+    "retry": "Try again",
     "errorDetail": "Could not load drive details.",
     "distance": "Distance",
     "duration": "Drive time",
