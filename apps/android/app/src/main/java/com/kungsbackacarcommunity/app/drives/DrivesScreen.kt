@@ -7,10 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -27,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.AeroPageTitle
+import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import java.text.DateFormat
 import java.util.Date
 
@@ -45,15 +47,12 @@ fun DrivesListScreen(
         // LazyColumn so an unbounded drive history only composes visible rows
         // (mirrors NotificationsScreen for durable lists).
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
+            contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.savedDrives_screenTitle),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                AeroPageTitle(stringResource(R.string.savedDrives_screenTitle))
             }
 
             item {
@@ -96,12 +95,6 @@ fun DrivesListScreen(
                             DriveCard(drive, onSelect)
                         }
                     }
-            }
-
-            item {
-                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.profile_back))
-                }
             }
         }
     }
@@ -155,21 +148,7 @@ fun SavedDriveDetailScreen(
 ) {
     var showConfirm by remember { mutableStateOf(false) }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.savedDrives_detailTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
+    AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -225,11 +204,6 @@ fun SavedDriveDetailScreen(
             ) {
                 Text(text = stringResource(R.string.savedDrives_deleteAction))
             }
-
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.savedDrives_closeButton))
-            }
-        }
     }
 
     if (showConfirm) {
