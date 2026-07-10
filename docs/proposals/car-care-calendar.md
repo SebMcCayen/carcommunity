@@ -150,9 +150,10 @@ Enthusiast-relevant special cases (this community skews classic-heavy):
   previous one.
 - Vehicles **50+ years old**: currently **exempt** ("besiktningsbefriade")
   given a valid approved inspection — **but Transportstyrelsen has announced a
-  rework** (decision expected early 2026, in force ~3 months later) that would
-  re-introduce biennial inspection for cars manufactured 1960+ and change the
-  exemption model. **Conclusion: interval logic must live in server config,
+  rework** (exact decision date and in-force timeline unverified — **must be
+  confirmed against current Transportstyrelsen guidance before implementation**)
+  that would re-introduce biennial inspection for cars manufactured 1960+ and
+  change the exemption model. **Conclusion: interval logic must live in server config,
   not in code or clients** (§4.5).
 
 Sources: [Transportstyrelsen — besiktningsregler personbil/lätt lastbil ≤3500 kg](https://www.transportstyrelsen.se/sv/vagtrafik/fordon/aga-kopa-eller-salja-fordon/fordonsbesiktning/besiktningsregler/personbil-och-lastbil-som-inte-overstiger-3500-kg-i-totalvikt/),
