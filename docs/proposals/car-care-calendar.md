@@ -17,7 +17,7 @@ app, besiktningstid-style lookup sites, and phone-calendar entries.
 "Bilkalendern" adds a per-vehicle care layer on top of the existing garage:
 
 1. **Besiktning countdown** — the member enters the last approved inspection
-   date (and, for new cars, the first-registration date); the backend computes
+   month (and, for new cars, the first-registration month); the backend computes
    the legal deadline window and sends escalating reminders.
 2. **Däckbyte assistant** — season reminders derived from the legal winter- and
    studded-tire dates, plus optional per-car tire-set tracking (which set is
@@ -254,7 +254,7 @@ New domain `functions/src/carCare/` mirroring the garage layout:
   algorithm `computeNextInspectionDeadline(careDoc, rulesConfig, now)`
   (month arithmetic incl. 36/24/14 selection, age-based 24-month override,
   exemption), and reminder-stage selection
-  `dueReminderStages(deadline, now)` → e.g. `T-60d`, `T-30d`, `T-14d`,
+  `dueReminderStages(deadline, now)` → e.g. `T-60d`, `T-30d`, `T-7d`,
   `deadline month`, `overdue`. Fully unit-testable, no Admin SDK — same
   pattern as `garage-core.ts` / `events-core.ts`.
 - `manageCare.ts` — callable `carCare.setVehicleCare` (member-only,
