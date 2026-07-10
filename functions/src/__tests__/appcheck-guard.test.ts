@@ -22,7 +22,15 @@ const ENFORCE_PATTERN = "enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'tr
  * neither enforces NOR is the vetted opt-out.
  */
 const NON_ENFORCING_EXEMPTIONS = new Set(['diagnostics/submitReport.ts']);
-const NON_ENFORCING_PATTERN = 'enforceAppCheck: false';
+/**
+ * Detect the non-enforcing opt-out `enforceAppCheck: false`. A literal
+ * substring match is fragile — trivial formatting variations that TypeScript
+ * treats identically (`enforceAppCheck:false`, `enforceAppCheck : false`,
+ * `enforceAppCheck:  false`) would evade it, letting an un-attested callable
+ * slip past the guard or the exemption assertion. A whitespace-tolerant regex
+ * keeps the guard robust regardless of spacing around the colon or the value.
+ */
+const NON_ENFORCING_REGEX = /enforceAppCheck\s*:\s*false\b/;
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -58,7 +66,7 @@ describe('App Check enforcement (Phase 15d)', () => {
         const window = source.slice(match.index ?? 0, (match.index ?? 0) + 600);
         const usesSharedOpts = firstArg.startsWith('CALLABLE_OPTS') && fileHasEnforcingOpts;
         const usesInlinePattern =
-          window.includes('enforceAppCheck') && !window.includes(NON_ENFORCING_PATTERN);
+          window.includes('enforceAppCheck') && !NON_ENFORCING_REGEX.test(window);
         if (!usesSharedOpts && !usesInlinePattern) {
           offenders.push(`${file} @ ${firstArg.slice(0, 40)}`);
         }
@@ -73,14 +81,28 @@ describe('App Check enforcement (Phase 15d)', () => {
     // enforcing pattern. If someone re-enables enforcement here (breaking the
     // pre-auth path again) or another file starts opting out, this fails.
     const submit = readFileSync(join(SRC, 'diagnostics/submitReport.ts'), 'utf8');
-    expect(submit).toContain(NON_ENFORCING_PATTERN);
+    expect(NON_ENFORCING_REGEX.test(submit)).toBe(true);
     expect(submit).not.toContain(ENFORCE_PATTERN);
 
     // No file OTHER than the exemption may use the non-enforcing pattern.
     const stragglers = walk(SRC)
       .filter((file) => !NON_ENFORCING_EXEMPTIONS.has(relPath(file)))
-      .filter((file) => readFileSync(file, 'utf8').includes(NON_ENFORCING_PATTERN))
+      .filter((file) => NON_ENFORCING_REGEX.test(readFileSync(file, 'utf8')))
       .map(relPath);
     expect(stragglers).toEqual([]);
+  });
+
+  it('non-enforcing regex is whitespace-tolerant (guard cannot be evaded by formatting)', () => {
+    // All of these are what TypeScript treats as the same opt-out; the guard
+    // must catch every spacing variant, otherwise a reformat could sneak an
+    // un-attested callable past the checks above.
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck: false')).toBe(true);
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck:false')).toBe(true);
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck : false')).toBe(true);
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck:  false')).toBe(true);
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck:\tfalse')).toBe(true);
+    // Enforcing values must NOT match the non-enforcing pattern.
+    expect(NON_ENFORCING_REGEX.test('enforceAppCheck: true')).toBe(false);
+    expect(NON_ENFORCING_REGEX.test(ENFORCE_PATTERN)).toBe(false);
   });
 });
