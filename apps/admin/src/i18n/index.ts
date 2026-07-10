@@ -13,6 +13,9 @@ const dictionaries: { sv: TranslationDictionary; en?: TranslationDictionary } = 
 
 let englishDictionaryLoad: Promise<TranslationDictionary> | undefined;
 
+/** Whether an English-dictionary load is currently in flight. */
+const isEnglishDictionaryLoading = (): boolean => englishDictionaryLoad !== undefined;
+
 /**
  * Lazily loads the English dictionary into the fallback slot.
  *
@@ -59,11 +62,14 @@ export const translate = (locale: Locale, key: string): string => {
   // `en` lookups, with `sv` as the fallback for any key `en` is missing (its
   // key set is a strict subset of `sv`).
   if (locale === 'en') {
-    if (!dictionaries.en) {
-      // Kick off the fetch; this render falls back to Swedish below. Handle
-      // rejection here so a failed chunk fetch cannot surface as an unhandled
-      // promise rejection — the Swedish fallback already covers this render,
-      // and loadEnglishDictionary clears its memo so a later lookup retries.
+    if (!dictionaries.en && !isEnglishDictionaryLoading()) {
+      // Kick off the fetch; this render falls back to Swedish below. Only the
+      // call that initiates the load attaches the rejection handler — repeat
+      // lookups while the chunk is in flight skip this branch entirely, so a
+      // single failure warns once. Handling rejection here keeps a failed
+      // chunk fetch from surfacing as an unhandled promise rejection, and
+      // loadEnglishDictionary clears its memo on failure so a later lookup
+      // retries (re-entering this branch with its own handler).
       loadEnglishDictionary().catch((error: unknown) => {
         console.warn('[i18n] Failed to load English dictionary; using Swedish fallback.', error);
       });
