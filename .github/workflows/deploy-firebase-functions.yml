@@ -66,6 +66,13 @@ jobs:
         working-directory: functions
         run: pnpm install --frozen-lockfile
 
+      - name: Check deploy lockfile
+        # Last line of defence before upload: the Cloud Build for this deploy
+        # runs `npm ci` against functions/package-lock.json, so refuse to
+        # deploy if that lockfile does not pin the CI-tested versions.
+        working-directory: functions
+        run: pnpm run lockfile:check
+
       - name: Build
         working-directory: functions
         run: pnpm run build
