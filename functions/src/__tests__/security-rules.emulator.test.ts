@@ -1654,7 +1654,7 @@ describe('Firestore – moderation actions', () => {
 
 describe('Firestore – suspension enforcement', () => {
   const SUSPENDED = 'suspended-user';
-  const ACTIVE_SENDER = 'active-friend-sender';
+  const ACTIVE_MEMBER = 'active-member';
 
   beforeAll(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -1678,7 +1678,7 @@ describe('Firestore – suspension enforcement', () => {
         { offerId: 'suspended-offer' },
       );
       await setDoc(
-        doc(ctx.firestore(), 'users', ACTIVE_SENDER, 'savedOffers', 'active-offer'),
+        doc(ctx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
         { offerId: 'active-offer' },
       );
       // Published event where the (now suspended) member had RSVP'd — chat
@@ -1744,10 +1744,10 @@ describe('Firestore – suspension enforcement', () => {
     // would be a false signal, since neither has any client delete at all
     // (garage.* / friend.* callables own those mutations), so *every* client is
     // denied regardless of suspension.
-    const activeCtx = testEnv.authenticatedContext(ACTIVE_SENDER, { activeMember: true });
+    const activeCtx = testEnv.authenticatedContext(ACTIVE_MEMBER, { activeMember: true });
     await assertSucceeds(
       deleteDoc(
-        doc(activeCtx.firestore(), 'users', ACTIVE_SENDER, 'savedOffers', 'active-offer'),
+        doc(activeCtx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
       ),
     );
 
