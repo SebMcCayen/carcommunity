@@ -94,18 +94,19 @@ class MapFirstShellTest {
     @Test
     fun bottomNav_switchesTabsAndBack() {
         setShell()
-        // All five tabs are present.
-        composeTestRule.onNodeWithText(str(R.string.shell_tabHistory)).assertExists()
-        composeTestRule.onNodeWithText(str(R.string.shell_tabCreate)).assertExists()
-        composeTestRule.onNodeWithText(str(R.string.shell_tabSocial)).assertExists()
-        composeTestRule.onNodeWithText(str(R.string.shell_tabGarage)).assertExists()
+        // All five tabs are present. Icon-only bottom nav: labels are null and the
+        // tab name lives on the icon's contentDescription, so select by that.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).assertExists()
 
         // Switching to History leaves the map home.
-        composeTestRule.onNodeWithText(str(R.string.shell_tabHistory)).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab restores the map home.
-        composeTestRule.onNodeWithText(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 }

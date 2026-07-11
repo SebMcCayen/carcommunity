@@ -149,7 +149,7 @@
     <string name="profile_badges">Utmärkelser</string>
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
-    <string name="profile_points">Kronpoäng</string>
+    <string name="profile_points">Poäng</string>
     <string name="profile_displayNameLabel">Visningsnamn</string>
     <string name="profile_bioLabel">Presentation</string>
     <string name="profile_saveButton">Spara</string>
@@ -315,7 +315,7 @@
     <string name="groupDrive_countArrived">Framme</string>
     <string name="groupDrive_goToLiveLocation">Hantera liveposition</string>
     <string name="groupDrive_showOnMap">Visa gruppen på kartan</string>
-    <string name="savedDrives_screenTitle">Mina körningar</string>
+    <string name="savedDrives_screenTitle">Historik</string>
     <string name="savedDrives_loading">Laddar körningar...</string>
     <string name="savedDrives_detailTitle">Körningsdetaljer</string>
     <string name="savedDrives_empty">Inga sparade körningar ännu.</string>
@@ -419,14 +419,14 @@
     <string name="badges_badgeNames_helpful_member">Hjälpsam medlem</string>
     <string name="badges_badgeNames_early_member">Tidig medlem</string>
     <string name="badges_badgeNames_garage_created">Garageprofil skapad</string>
-    <string name="points_screenTitle">Kronpoäng</string>
+    <string name="points_screenTitle">Poäng</string>
     <string name="points_balanceLabel">Ditt saldo</string>
     <string name="points_shortForm">KP</string>
-    <string name="points_disclaimer">Kronpoäng är digitala poäng utan kontantvärde.</string>
+    <string name="points_disclaimer">Poäng är en digital belöning utan kontantvärde.</string>
     <string name="points_noTransfer">Poängen kan inte köpas, säljas, överföras eller växlas till pengar.</string>
     <string name="points_recentTransactions">Senaste transaktionerna</string>
-    <string name="points_loading">Laddar Kronpoäng...</string>
-    <string name="points_error">Kunde inte hämta Kronpoäng. Försök igen.</string>
+    <string name="points_loading">Laddar Poäng...</string>
+    <string name="points_error">Kunde inte hämta Poäng. Försök igen.</string>
     <string name="points_retry">Försök igen</string>
     <string name="points_empty">Inga transaktioner ännu.</string>
     <string name="points_loadMore">Ladda fler</string>
@@ -447,7 +447,7 @@
     <string name="crownHunt_errorClaim">Något gick fel. Försök igen.</string>
     <string name="crownHunt_errorLocationPermission">Platstillstånd krävs för att samla in.</string>
     <string name="crownHunt_retry">Försök igen</string>
-    <string name="crownHunt_resultAwarded">Belöningen har lagts till i ditt Kronpoäng-saldo.</string>
+    <string name="crownHunt_resultAwarded">Belöningen har lagts till i ditt Poäng-saldo.</string>
     <string name="crownHunt_resultAlreadyClaimed">Du har redan samlat in denna belöning.</string>
     <string name="crownHunt_resultOutsideGeofence">Du är för långt från platsen.</string>
     <string name="crownHunt_resultMovingTooFast">Du rör dig för snabbt för att samla in.</string>
