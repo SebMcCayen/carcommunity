@@ -619,10 +619,13 @@
     <string name="shell_socialPartners">Partners</string>
     <string name="shell_socialBillboards">Anslagstavlor</string>
     <string name="shell_garageTitle">Garage</string>
+    <string name="shell_garageFriends">Vänner</string>
     <string name="shell_garageVehicles">Mitt garage</string>
     <string name="shell_garageBadges">Utmärkelser</string>
     <string name="shell_garagePoints">Poäng</string>
     <string name="shell_garageSubscription">Medlemskap</string>
+    <string name="shell_friendsTitle">Vänner</string>
+    <string name="shell_friendsComingSoon">Vänner kommer snart. Här kommer du att kunna få kontakt med andra medlemmar.</string>
     <string name="shell_moreTitle">Mer</string>
     <string name="shell_moreProfile">Profil</string>
     <string name="shell_moreNotificationSettings">Aviseringsinställningar</string>

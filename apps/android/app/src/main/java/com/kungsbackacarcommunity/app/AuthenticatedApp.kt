@@ -133,6 +133,8 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
+import com.kungsbackacarcommunity.app.shell.FriendsComingSoonScreen
+import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
@@ -660,21 +662,29 @@ fun AuthenticatedApp(
                                     )
 
                                 ShellTab.Garage ->
-                                    HubScreen(
+                                    GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
-                                        entries =
+                                        avatarUrl =
+                                            rememberStorageImageUrl(
+                                                context,
+                                                profile?.avatarPath,
+                                            ),
+                                        avatarContentDescription =
+                                            stringResource(R.string.profile_avatarAlt),
+                                        friendsLabel = stringResource(R.string.shell_garageFriends),
+                                        vehiclesLabel =
+                                            stringResource(R.string.shell_garageVehicles),
+                                        onFriends = { route = ShellRoute.Friends },
+                                        onVehicles =
+                                            if (garageRepository != null &&
+                                                profile?.activeMember == true
+                                            ) {
+                                                { route = ShellRoute.Garage }
+                                            } else {
+                                                null
+                                            },
+                                        secondaryEntries =
                                             listOf(
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garageVehicles),
-                                                    Icons.Filled.DirectionsCar,
-                                                    if (garageRepository != null &&
-                                                        profile?.activeMember == true
-                                                    ) {
-                                                        { route = ShellRoute.Garage }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
                                                 HubEntry(
                                                     stringResource(R.string.shell_garageBadges),
                                                     Icons.Filled.MilitaryTech,
@@ -1144,6 +1154,14 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        // Placeholder: a real Friends feature needs backend work outside this
+        // Android lane (friend graph, requests, presence). See GarageHubScreen.
+        ShellRoute.Friends ->
+            FriendsComingSoonScreen(
+                title = stringResource(R.string.shell_friendsTitle),
+                message = stringResource(R.string.shell_friendsComingSoon),
+            )
 
         ShellRoute.Badges ->
             if (badgesRepository != null) {
