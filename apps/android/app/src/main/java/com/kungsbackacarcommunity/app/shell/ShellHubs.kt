@@ -48,7 +48,7 @@ fun HubScreen(
 }
 
 @Composable
-private fun HubRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+internal fun HubRow(label: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,

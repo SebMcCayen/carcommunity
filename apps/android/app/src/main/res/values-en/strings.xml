@@ -620,10 +620,13 @@
     <string name="shell_socialPartners">Partners</string>
     <string name="shell_socialBillboards">Billboards</string>
     <string name="shell_garageTitle">Garage</string>
+    <string name="shell_garageFriends">Friends</string>
     <string name="shell_garageVehicles">My garage</string>
     <string name="shell_garageBadges">Badges</string>
     <string name="shell_garagePoints">Points</string>
     <string name="shell_garageSubscription">Membership</string>
+    <string name="shell_friendsTitle">Friends</string>
+    <string name="shell_friendsComingSoon">Friends are coming soon. You\'ll be able to connect with other members here.</string>
     <string name="shell_moreTitle">More</string>
     <string name="shell_moreProfile">Profile</string>
     <string name="shell_moreNotificationSettings">Notification settings</string>
