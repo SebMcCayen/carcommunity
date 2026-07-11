@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -109,16 +110,17 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
-import com.kungsbackacarcommunity.app.navigation.CurrentLocation
-import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
-import com.kungsbackacarcommunity.app.navigation.LatLng
-import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
+import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -247,6 +249,9 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Resolved avatar download URL for the map-home top-right profile
+            // button (null → falls back to the generic account icon).
+            val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -464,6 +469,7 @@ fun AuthenticatedApp(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
                                         participantCount = mapParticipantUids.size,
+                                        avatarUrl = mapAvatarUrl,
                                         userLabel =
                                             stringResource(R.string.shell_userMarkerLabel),
                                         // Tapping "Where to?" opens the address
@@ -515,10 +521,6 @@ fun AuthenticatedApp(
                                             )
                                         },
                                         onRecenter = { mapSurface.recenter() },
-                                        onMusic = { showComingSoon() },
-                                        // "Create route" opens the Create hub
-                                        // (create event / share live location).
-                                        onCreateRoute = { selectedTab = ShellTab.Create },
                                         onOpenMore = { route = ShellRoute.More },
                                     )
 
@@ -810,7 +812,6 @@ private fun RouteHost(
         ShellRoute.More ->
             HubScreen(
                 title = stringResource(R.string.shell_moreTitle),
-                onBack = onClose,
                 entries =
                     listOf(
                         HubEntry(
@@ -900,28 +901,40 @@ private fun RouteHost(
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             val avatarPicker =
                 rememberImagePickLauncher(
-                    maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                    // Read with a higher cap than the 5 MB upload cap so the raw
+                    // pick reaches ImageCompressor (which shrinks it below the
+                    // upload cap). Still bounded to avoid OOM; the upload precheck
+                    // on the compressed result enforces PROFILE_IMAGE_MAX_BYTES.
+                    maxBytes = MediaUpload.PROFILE_IMAGE_READ_MAX_BYTES,
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        val imageId = MediaUpload.newImageId(picked.contentType)
+                        // Downscale + JPEG-re-encode before upload so avatars stay
+                        // small (Storage cost + well under the byte cap).
+                        val compressed = ImageCompressor.compress(picked)
+                        val imageId = MediaUpload.newImageId(compressed.contentType)
                         val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(picked, path) { storedPath ->
+                        avatarCoordinator.upload(compressed, path) { storedPath ->
                             repo.updateAvatarPath(uid, storedPath)
                         }
                     }
                 }
+            // The on-screen Back button is gone (system Back closes the route),
+            // so its former coordinator cleanup now runs when the Profile route
+            // leaves composition — regardless of how it was dismissed.
+            DisposableEffect(profileEditCoordinator, avatarCoordinator) {
+                onDispose {
+                    profileEditCoordinator?.reset()
+                    avatarCoordinator?.reset()
+                }
+            }
             ProfileScreen(
                 profile = profile,
                 saveStatus = saveStatus,
                 onSave = { name, bio ->
                     profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
                 },
-                onBack = {
-                    onClose()
-                    profileEditCoordinator?.reset()
-                    avatarCoordinator?.reset()
-                },
+                onBack = onClose,
                 onSignOut = onSignOut,
                 avatarUrl = avatarUrl,
                 avatarUploadStatus = avatarStatus,

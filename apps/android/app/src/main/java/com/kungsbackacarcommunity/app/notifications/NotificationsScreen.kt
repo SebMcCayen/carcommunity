@@ -13,14 +13,15 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroLazyPage
+import com.kungsbackacarcommunity.app.shell.AeroPageTitle
+import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 
 /**
  * In-app notification inbox (Phase 12 slice 21). Stateless: renders [state],
@@ -36,17 +37,14 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    AeroLazyPage(modifier = modifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.notifications_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                AeroPageTitle(stringResource(R.string.notifications_title))
             }
 
             when (state) {
@@ -85,12 +83,6 @@ fun NotificationsScreen(
                             NotificationCard(item = item, onMarkRead = { onMarkRead(item.id) })
                         }
                     }
-                }
-            }
-
-            item {
-                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.profile_back))
                 }
             }
         }

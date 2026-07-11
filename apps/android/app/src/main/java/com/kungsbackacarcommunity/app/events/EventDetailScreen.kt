@@ -4,20 +4,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -28,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.util.Date
 
@@ -56,15 +52,7 @@ fun EventDetailScreen(
     onOpenGroupDrive: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+    AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
                     text =
@@ -84,17 +72,9 @@ fun EventDetailScreen(
                         Text(text = stringResource(R.string.events_retry))
                     }
                 }
-                TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.profile_back))
-                }
-                return@Column
+                return@AeroPage
             }
 
-            Text(
-                text = event.title,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
             if (event.isOfficial) {
                 Text(
                     text = stringResource(R.string.events_officialBadge),
@@ -180,11 +160,6 @@ fun EventDetailScreen(
                     Text(text = stringResource(R.string.groupDrive_screenTitle))
                 }
             }
-
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_back))
-            }
-        }
     }
 }
 

@@ -8,20 +8,15 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /** Notification settings screen: push-permission status + per-category toggles. */
 @Composable
@@ -47,21 +43,7 @@ fun NotificationSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.notifications_settingsTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
+    AeroPage(title = stringResource(R.string.notifications_settingsTitle), modifier = modifier) {
             // Runtime request: on Android 13+ an in-context prompt is far better
             // than only deep-linking to system settings. Keep a local status so
             // the card reflects the grant immediately after the dialog.
@@ -103,11 +85,6 @@ fun NotificationSettingsScreen(
             NotificationCategories.ACTIVE.forEach { category ->
                 CategoryRow(category, preferences.effective(category), onToggle)
             }
-
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_back))
-            }
-        }
     }
 }
 
