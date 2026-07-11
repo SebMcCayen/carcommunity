@@ -629,6 +629,42 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.sendMessage",
+      "domain": "dm",
+      "description": "Sends a 1:1 direct message to an ESTABLISHED friend ({ toUid, text }, text 1..2000). Requires an established friendship (users/{uid}/friends/{friendUid}) — else failed-precondition NOT_FRIENDS; rejects self (invalid-argument) and either-way blocks (failed-precondition, neutral). Creates or updates the canonical conversations/{pairId} (pairId = the two UIDs sorted + joined by `__`), appends conversations/{pairId}/messages/{id} {senderUid,text,createdAt}, bumps the recipient's per-member unread AND the userPrivate/{recipient}.dmUnreadTotal aggregate in one transaction. Returns { conversationId, messageId }. FCM push deferred to end-of-MVP. Deployed via grouped export as dm-sendMessage (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.listConversations",
+      "domain": "dm",
+      "description": "Lists the caller's DM conversations newest-first ({} input). Returns { conversations:[{ conversationId, otherUser:{uid,displayName,avatarPath}, lastMessage:{text,senderUid,createdAt}|null, unreadCount, lastReadAt }], totalUnread }. otherUser + lastMessage are denormalized on conversations/{pairId}; unreadCount/lastReadAt are the caller's own per-member values. totalUnread mirrors userPrivate/{uid}.dmUnreadTotal (the badge source). Deployed via grouped export as dm-listConversations (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.getMessages",
+      "domain": "dm",
+      "description": "Paginated newest-first messages for a conversation ({ conversationId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only a member of the pair may read; a non-member or missing conversation is not-found (never permission-denied, so conversations can't be probed). Returns { conversationId, messages:[{id,senderUid,text,createdAt}], nextBefore, hasMore } (page size 30). Deployed via grouped export as dm-getMessages (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.markRead",
+      "domain": "dm",
+      "description": "Clears the caller's unread for a conversation ({ conversationId }). Sets conversations/{pairId}.unread[caller]=0 + lastReadAt[caller]=now and decrements userPrivate/{caller}.dmUnreadTotal by exactly the cleared amount (never underflows) in one transaction. Non-member/missing → not-found. Returns { conversationId, cleared }. Deployed via grouped export as dm-markRead (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }
