@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -38,7 +41,9 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
-import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.AeroLazyPage
+import com.kungsbackacarcommunity.app.shell.AeroPageTitle
+import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 
 /**
  * The Friends surface: add-by-nickname (with an ambiguity picker), incoming and
@@ -55,6 +60,7 @@ fun FriendsScreen(
     status: FriendsStatus,
     addState: AddFriendState,
     actionError: FriendActionError?,
+    busyRows: Set<String>,
     onSend: (String) -> Unit,
     onChooseCandidate: (String) -> Unit,
     onDismissAdd: () -> Unit,
@@ -62,75 +68,115 @@ fun FriendsScreen(
     onDecline: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
     var removeTarget by remember { mutableStateOf<FriendSummary?>(null) }
 
-    AeroPage(title = stringResource(R.string.shell_friendsTitle), modifier = modifier) {
-        AddFriendSection(
-            nickname = nickname,
-            onNicknameChange = {
-                nickname = it
-                // Clear a stale result/error as soon as the caller edits the field.
-                if (addState !is AddFriendState.Idle && addState !is AddFriendState.Working) {
-                    onDismissAdd()
-                }
-            },
-            addState = addState,
-            onSubmit = {
-                if (nickname.isNotBlank()) onSend(nickname)
-            },
-            onDismissResult = {
-                nickname = ""
-                onDismissAdd()
-            },
-        )
+    // Durable list: a LazyColumn so only visible rows compose. Static sections
+    // (title, add-friend, headers, banners) are `item {}` blocks; the request and
+    // friend rows are keyed so recomposition/scroll state is stable.
+    AeroLazyPage(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = aeroLazyContentPadding(),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+        ) {
+            item(key = "title") {
+                AeroPageTitle(stringResource(R.string.shell_friendsTitle))
+            }
 
-        actionError?.let { error ->
-            ErrorBanner(text = stringResource(error.messageRes()), onDismiss = onClearActionError)
-        }
-
-        when (status) {
-            FriendsStatus.Loading -> CircularProgressIndicator()
-
-            FriendsStatus.Error ->
-                Text(
-                    text = stringResource(R.string.friends_loadError),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
+            item(key = "add-friend") {
+                AddFriendSection(
+                    nickname = nickname,
+                    onNicknameChange = {
+                        nickname = it
+                        // Clear a stale result/error as soon as the caller edits the field.
+                        if (addState !is AddFriendState.Idle && addState !is AddFriendState.Working) {
+                            onDismissAdd()
+                        }
+                    },
+                    addState = addState,
+                    onSubmit = {
+                        if (nickname.isNotBlank()) onSend(nickname)
+                    },
+                    onDismissResult = {
+                        nickname = ""
+                        onDismissAdd()
+                    },
                 )
+            }
 
-            is FriendsStatus.Loaded -> {
-                if (status.incoming.isNotEmpty()) {
-                    SectionHeader(stringResource(R.string.friends_incomingTitle))
-                    status.incoming.forEach { request ->
-                        IncomingRequestRow(
-                            request = request,
-                            onAccept = { onAccept(request.requestId) },
-                            onDecline = { onDecline(request.requestId) },
-                        )
-                    }
-                }
-
-                if (status.outgoing.isNotEmpty()) {
-                    SectionHeader(stringResource(R.string.friends_outgoingTitle))
-                    status.outgoing.forEach { request -> OutgoingRequestRow(request) }
-                }
-
-                SectionHeader(stringResource(R.string.friends_listTitle))
-                if (status.friends.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.friends_emptyFriends),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            actionError?.let { error ->
+                item(key = "action-error") {
+                    ErrorBanner(
+                        text = stringResource(error.messageRes()),
+                        onDismiss = onClearActionError,
                     )
-                } else {
-                    status.friends.forEach { friend ->
-                        FriendRow(
-                            friend = friend,
-                            onRemove = { removeTarget = friend },
-                        )
+                }
+            }
+
+            when (status) {
+                FriendsStatus.Loading -> item(key = "loading") { CircularProgressIndicator() }
+
+                is FriendsStatus.Error ->
+                    item(key = "load-error") {
+                        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                            Text(
+                                text = stringResource(status.error.messageRes()),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                                Text(stringResource(R.string.friends_retry))
+                            }
+                        }
+                    }
+
+                is FriendsStatus.Loaded -> {
+                    if (status.incoming.isNotEmpty()) {
+                        item(key = "incoming-header") {
+                            SectionHeader(stringResource(R.string.friends_incomingTitle))
+                        }
+                        items(status.incoming, key = { "incoming-${it.requestId}" }) { request ->
+                            IncomingRequestRow(
+                                request = request,
+                                working = request.requestId in busyRows,
+                                onAccept = { onAccept(request.requestId) },
+                                onDecline = { onDecline(request.requestId) },
+                            )
+                        }
+                    }
+
+                    if (status.outgoing.isNotEmpty()) {
+                        item(key = "outgoing-header") {
+                            SectionHeader(stringResource(R.string.friends_outgoingTitle))
+                        }
+                        items(status.outgoing, key = { "outgoing-${it.requestId}" }) { request ->
+                            OutgoingRequestRow(request)
+                        }
+                    }
+
+                    item(key = "friends-header") {
+                        SectionHeader(stringResource(R.string.friends_listTitle))
+                    }
+                    if (status.friends.isEmpty()) {
+                        item(key = "friends-empty") {
+                            Text(
+                                text = stringResource(R.string.friends_emptyFriends),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        items(status.friends, key = { "friend-${it.uid}" }) { friend ->
+                            FriendRow(
+                                friend = friend,
+                                working = friend.uid in busyRows,
+                                onRemove = { removeTarget = friend },
+                            )
+                        }
                     }
                 }
             }
@@ -252,6 +298,7 @@ private fun AddFriendSection(
 @Composable
 private fun IncomingRequestRow(
     request: FriendRequestSummary,
+    working: Boolean,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
@@ -262,8 +309,14 @@ private fun IncomingRequestRow(
         ) {
             MemberHeader(user = request.otherUser)
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                Button(onClick = onAccept) { Text(stringResource(R.string.friends_accept)) }
-                OutlinedButton(onClick = onDecline) { Text(stringResource(R.string.friends_decline)) }
+                // Disabled while this row's accept/decline callable is in flight,
+                // so rapid taps can't start overlapping mutations.
+                Button(onClick = onAccept, enabled = !working) {
+                    Text(stringResource(R.string.friends_accept))
+                }
+                OutlinedButton(onClick = onDecline, enabled = !working) {
+                    Text(stringResource(R.string.friends_decline))
+                }
             }
         }
     }
@@ -290,6 +343,7 @@ private fun OutgoingRequestRow(request: FriendRequestSummary) {
 @Composable
 private fun FriendRow(
     friend: FriendSummary,
+    working: Boolean,
     onRemove: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -306,7 +360,8 @@ private fun FriendRow(
                 OutlinedButton(onClick = {}, enabled = false) {
                     Text(stringResource(R.string.friends_message))
                 }
-                OutlinedButton(onClick = onRemove) {
+                // Disabled while this friend's removal callable is in flight.
+                OutlinedButton(onClick = onRemove, enabled = !working) {
                     Text(stringResource(R.string.friends_remove))
                 }
             }

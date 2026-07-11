@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.friends
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -55,11 +58,11 @@ class FriendsCoordinatorTest {
     }
 
     @Test
-    fun `load failure surfaces Error`() = runTest {
+    fun `load failure surfaces Error carrying the mapped code`() = runTest {
         val repo = FakeRepo().apply { listResult = FriendsResult.Failed(FriendActionError.NotMember) }
         val coordinator = FriendsCoordinator(repo)
         coordinator.load()
-        assertEquals(FriendsStatus.Error, coordinator.status.value)
+        assertEquals(FriendsStatus.Error(FriendActionError.NotMember), coordinator.status.value)
     }
 
     @Test
@@ -154,6 +157,47 @@ class FriendsCoordinatorTest {
         val coordinator = FriendsCoordinator(repo)
         coordinator.remove("f1")
         assertEquals(FriendActionError.Generic, coordinator.actionError.value)
+    }
+
+    @Test
+    fun `a second remove for the same uid is ignored while one is in flight`() = runTest {
+        // Gate the first remove inside the repository so it stays in flight while
+        // we fire a second one for the same uid.
+        val gate = CompletableDeferred<Unit>()
+        val repo =
+            object : FriendsRepository {
+                var removeCalls = 0
+
+                override suspend fun list(): FriendsResult =
+                    FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList()))
+
+                override suspend fun sendRequestByNickname(nickname: String) = SendRequestResult.Requested
+
+                override suspend fun sendRequestToUid(toUid: String) = SendRequestResult.Requested
+
+                override suspend fun respond(requestId: String, accept: Boolean) = RespondResult.Accepted
+
+                override suspend fun remove(friendUid: String): RemoveResult {
+                    removeCalls++
+                    gate.await()
+                    return RemoveResult.Removed
+                }
+            }
+        val coordinator = FriendsCoordinator(repo)
+
+        val first = launch { coordinator.remove("f1") }
+        // Let the launched coroutine run up to its gate suspension.
+        runCurrent()
+        // The first call is now parked on the gate and marked in flight.
+        assertTrue("f1" in coordinator.busyRows.value)
+        // A second call for the same uid must be dropped, not started.
+        coordinator.remove("f1")
+        assertEquals(1, repo.removeCalls)
+
+        gate.complete(Unit)
+        first.join()
+        // The guard is released once the mutation finishes.
+        assertTrue(coordinator.busyRows.value.isEmpty())
     }
 
     @Test
