@@ -233,6 +233,19 @@ fun AuthenticatedApp(
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
             var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
 
+            // Defensive migration: selectedTab is rememberSaveable, so a session
+            // saved by an older app version (when Create was a real content
+            // destination) could restore it as ShellTab.Create — which now
+            // renders as blank Unit, stranding the app on an empty content area.
+            // Coerce any such restored Create back to Map on first composition.
+            // This is safe against the live action path: tapping Create never
+            // sets selectedTab to Create (ShellBottomBar.onSelect switches to Map
+            // and raises the prompt), so this only ever rescues a stale restored
+            // value and never interferes with the Create tab's action behaviour.
+            LaunchedEffect(Unit) {
+                if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
+            }
+
             // Tapping the bottom-nav "Create" tab (or the map's "Create route"
             // affordance) opens the Map and raises this transparent prompt asking
             // whether to start sharing live location — Create never becomes a
