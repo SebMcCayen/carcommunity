@@ -1,0 +1,141 @@
+package com.kungsbackacarcommunity.app.navigation
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * Immutable UI state for the address-search + directions flow.
+ *
+ * Three phases share one state:
+ * - typing → [suggestions] (+ [searching] while a lookup is in flight),
+ * - a picked [destination] with its [route] (+ [routeLoading]),
+ * - an inline [error] hint (search/route/no-origin) that clears on the next input.
+ */
+data class NavUiState(
+    val query: String = "",
+    val suggestions: List<PlaceSuggestion> = emptyList(),
+    val searching: Boolean = false,
+    val destination: PlaceSuggestion? = null,
+    val route: RouteSummary? = null,
+    val routeLoading: Boolean = false,
+    val error: NavError? = null,
+)
+
+/**
+ * Drives the "Where to?" search: debounced autocomplete, destination selection,
+ * and driving-route retrieval. Holds no Android/Compose types — only coroutines
+ * and the [MapboxSearchClient] seam — so the debounce, selection, and route
+ * logic are unit-testable with a fake client and virtual time.
+ *
+ * The current-location [originProvider] supplies both the proximity bias for
+ * autocomplete and the route origin; it returns null when no location is
+ * available (permission denied / no fix), which surfaces as [NavError.NoOrigin]
+ * when a route is requested.
+ *
+ * @param scope the coroutine scope the search/route jobs run in (the screen's).
+ */
+class NavigationController(
+    private val client: MapboxSearchClient,
+    private val originProvider: suspend () -> LatLng?,
+    private val scope: CoroutineScope,
+) {
+    private val stateFlow = MutableStateFlow(NavUiState())
+    val state: StateFlow<NavUiState> = stateFlow.asStateFlow()
+
+    // Cached once per screen open; used for proximity bias and route origin.
+    private var cachedOrigin: LatLng? = null
+
+    private var searchJob: Job? = null
+    private var routeJob: Job? = null
+
+    /** Fetches the current location up-front so autocomplete can bias by it. */
+    fun refreshOrigin() {
+        scope.launch { cachedOrigin = runCatching { originProvider() }.getOrNull() }
+    }
+
+    /**
+     * Handles a query edit. Clears results immediately on an empty field;
+     * otherwise (re)starts a debounced geocoding lookup, cancelling any prior
+     * one so only the latest keystroke hits the network.
+     */
+    fun onQueryChange(query: String) {
+        stateFlow.value = stateFlow.value.copy(query = query, error = null)
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            stateFlow.value = stateFlow.value.copy(suggestions = emptyList(), searching = false)
+            return
+        }
+        searchJob =
+            scope.launch {
+                delay(DEBOUNCE_MS)
+                stateFlow.value = stateFlow.value.copy(searching = true)
+                val results = client.geocode(query, cachedOrigin)
+                stateFlow.value =
+                    stateFlow.value.copy(suggestions = results, searching = false)
+            }
+    }
+
+    /**
+     * Picks [suggestion] as the destination and fetches the driving route from
+     * the current location. Missing origin → [NavError.NoOrigin]; a failed or
+     * empty directions response → [NavError.Route].
+     */
+    fun select(suggestion: PlaceSuggestion) {
+        searchJob?.cancel()
+        routeJob?.cancel()
+        stateFlow.value =
+            stateFlow.value.copy(
+                query = suggestion.name,
+                destination = suggestion,
+                suggestions = emptyList(),
+                searching = false,
+                route = null,
+                routeLoading = true,
+                error = null,
+            )
+        routeJob =
+            scope.launch {
+                val origin = cachedOrigin ?: runCatching { originProvider() }.getOrNull()?.also {
+                    cachedOrigin = it
+                }
+                if (origin == null) {
+                    stateFlow.value =
+                        stateFlow.value.copy(routeLoading = false, error = NavError.NoOrigin)
+                    return@launch
+                }
+                val summary = client.route(origin, suggestion.point)
+                if (summary == null) {
+                    stateFlow.value =
+                        stateFlow.value.copy(routeLoading = false, error = NavError.Route)
+                } else {
+                    stateFlow.value =
+                        stateFlow.value.copy(route = summary, routeLoading = false, error = null)
+                }
+            }
+    }
+
+    /**
+     * Clears the picked destination + route, returning to the search field. The
+     * host observes [state] and wipes the map overlay when the route is gone.
+     */
+    fun clearDestination() {
+        routeJob?.cancel()
+        stateFlow.value =
+            stateFlow.value.copy(
+                query = "",
+                destination = null,
+                route = null,
+                routeLoading = false,
+                error = null,
+            )
+    }
+
+    private companion object {
+        const val DEBOUNCE_MS = 300L
+    }
+}

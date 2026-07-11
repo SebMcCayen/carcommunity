@@ -11,6 +11,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
@@ -22,6 +23,13 @@ import com.mapbox.maps.extension.style.layers.generated.LineLayer
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
+import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,10 +74,15 @@ class MapboxMapSurface : MapSurface {
     private val trafficFlow = MutableStateFlow(false)
     override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
 
+    private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
+    override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
+
     // Live references, held only while the map is composed (cleared in
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+    private var routeLineManager: PolylineAnnotationManager? = null
+    private var destMarkerManager: CircleAnnotationManager? = null
 
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
@@ -79,6 +92,12 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and applies the layer's
         // visibility, so flipping the flow is enough to toggle the overlay.
         trafficFlow.value = enabled
+    }
+
+    override fun setRouteOverlay(overlay: MapRouteOverlay?) {
+        // The Content update lambda observes this flow and (re)draws the line +
+        // destination marker, so publishing the value is enough.
+        routeOverlayFlow.value = overlay
     }
 
     override fun recenter() {
@@ -107,6 +126,7 @@ class MapboxMapSurface : MapSurface {
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
+        val overlay by routeOverlayFlow.collectAsState()
         // Recreate the position listener once; it just records the last fix so
         // recenter() can jump the camera to it.
         val positionListener =
@@ -139,6 +159,15 @@ class MapboxMapSurface : MapSurface {
                         loadStateFlow.value = MapLoadState.Loaded
                         runCatching { addTrafficLayer(style) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
+                        // Route line + destination marker managers, created once
+                        // the style is ready. Drawn from the current flow value
+                        // so a route picked while the style was still loading is
+                        // rendered (not lost).
+                        runCatching {
+                            routeLineManager = annotations.createPolylineAnnotationManager()
+                            destMarkerManager = annotations.createCircleAnnotationManager()
+                            applyRouteOverlay(this, routeOverlayFlow.value)
+                        }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
                         // hidden without error.
@@ -157,11 +186,16 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
                 }
+                // (Re)draw the route line + destination marker when the overlay
+                // changes; a no-op until the managers exist (style loaded).
+                runCatching { applyRouteOverlay(mapView, overlay) }
             },
             onRelease = { mapView ->
                 runCatching {
                     mapView.location.removeOnIndicatorPositionChangedListener(positionListener)
                 }
+                routeLineManager = null
+                destMarkerManager = null
                 mapViewRef = null
                 lastPoint = null
                 mapView.onDestroy()
@@ -169,7 +203,86 @@ class MapboxMapSurface : MapSurface {
         )
     }
 
+    /**
+     * Redraws the destination marker + route line for [overlay] (clearing both
+     * when null) and fits the camera to the route. A no-op until the annotation
+     * managers exist (style loaded). Every native call is wrapped defensively so
+     * a partial/failed draw degrades rather than crashing.
+     *
+     * On-device verification note: the camera-fit (`cameraForCoordinates`) and
+     * annotation rendering run only on a token-provisioned device, so they are
+     * verified on device; the fit falls back to centring on the destination if
+     * the SDK call throws.
+     */
+    private fun applyRouteOverlay(mapView: MapView, overlay: MapRouteOverlay?) {
+        val lineManager = routeLineManager
+        val markerManager = destMarkerManager
+        runCatching { lineManager?.deleteAll() }
+        runCatching { markerManager?.deleteAll() }
+        if (overlay == null || lineManager == null || markerManager == null) return
+
+        val dest = Point.fromLngLat(overlay.destination.longitude, overlay.destination.latitude)
+        val linePoints = overlay.path.map { Point.fromLngLat(it.longitude, it.latitude) }
+
+        if (linePoints.size >= 2) {
+            runCatching {
+                lineManager.create(
+                    PolylineAnnotationOptions()
+                        .withPoints(linePoints)
+                        .withLineColor(ROUTE_LINE_COLOR)
+                        .withLineWidth(ROUTE_LINE_WIDTH),
+                )
+            }
+        }
+        runCatching {
+            markerManager.create(
+                CircleAnnotationOptions()
+                    .withPoint(dest)
+                    .withCircleRadius(DEST_MARKER_RADIUS)
+                    .withCircleColor(DEST_MARKER_COLOR)
+                    .withCircleStrokeWidth(DEST_MARKER_STROKE)
+                    .withCircleStrokeColor(DEST_MARKER_STROKE_COLOR),
+            )
+        }
+
+        // Fit the camera to the whole route (origin→destination), falling back
+        // to centring on the destination if the fit call is unavailable.
+        val fitPoints = if (linePoints.size >= 2) linePoints else listOf(dest)
+        runCatching {
+            val camera =
+                mapView.mapboxMap.cameraForCoordinates(
+                    fitPoints,
+                    cameraOptions {},
+                    EdgeInsets(ROUTE_PAD_TOP, ROUTE_PAD_SIDE, ROUTE_PAD_BOTTOM, ROUTE_PAD_SIDE),
+                    null,
+                    null,
+                )
+            mapView.mapboxMap.setCamera(camera)
+        }.onFailure {
+            runCatching {
+                mapView.mapboxMap.setCamera(
+                    cameraOptions {
+                        center(dest)
+                        zoom(MapMarkers.OWN_MARKER_ZOOM)
+                    },
+                )
+            }
+        }
+    }
+
     private companion object {
+        const val ROUTE_LINE_COLOR = 0xFF1A73E8.toInt()
+        const val ROUTE_LINE_WIDTH = 6.0
+        const val DEST_MARKER_COLOR = 0xFFD32F2F.toInt()
+        const val DEST_MARKER_RADIUS = 9.0
+        const val DEST_MARKER_STROKE = 2.0
+        const val DEST_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+
+        // Camera-fit padding (px): extra room at the bottom for the summary sheet.
+        const val ROUTE_PAD_TOP = 140.0
+        const val ROUTE_PAD_SIDE = 80.0
+        const val ROUTE_PAD_BOTTOM = 320.0
+
         const val TRAFFIC_SOURCE_ID = "kcc-traffic-source"
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"

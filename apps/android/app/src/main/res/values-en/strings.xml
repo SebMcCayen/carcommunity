@@ -636,4 +636,20 @@
     <string name="shell_unavailable">Not available right now.</string>
     <string name="shell_trafficOn">Traffic layer on</string>
     <string name="shell_trafficOff">Show traffic</string>
+    <string name="addressSearch_searchPlaceholder">Search address or place</string>
+    <string name="addressSearch_back">Back</string>
+    <string name="addressSearch_clearQuery">Clear search</string>
+    <string name="addressSearch_close">Close</string>
+    <string name="addressSearch_noResults">No matching places</string>
+    <string name="addressSearch_searchError">Couldn\'t load results. Check your connection and try again.</string>
+    <string name="addressSearch_routeError">Couldn\'t find a route to that place.</string>
+    <string name="addressSearch_noOrigin">Your location isn\'t available. Turn on location to get directions.</string>
+    <string name="addressSearch_routeSummary">%1$s · %2$s</string>
+    <string name="addressSearch_directionsTitle">Directions</string>
+    <string name="addressSearch_clearRoute">Clear route</string>
+    <string name="addressSearch_loading">Loading…</string>
+    <string name="addressSearch_unitMeters">m</string>
+    <string name="addressSearch_unitKilometers">km</string>
+    <string name="addressSearch_unitMinutes">min</string>
+    <string name="addressSearch_unitHours">h</string>
 </resources>

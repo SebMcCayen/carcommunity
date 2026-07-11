@@ -636,4 +636,20 @@
     <string name="shell_unavailable">Inte tillgängligt just nu.</string>
     <string name="shell_trafficOn">Trafiklager på</string>
     <string name="shell_trafficOff">Visa trafik</string>
+    <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
+    <string name="addressSearch_back">Tillbaka</string>
+    <string name="addressSearch_clearQuery">Rensa sökning</string>
+    <string name="addressSearch_close">Stäng</string>
+    <string name="addressSearch_noResults">Inga matchande platser</string>
+    <string name="addressSearch_searchError">Kunde inte hämta resultat. Kontrollera anslutningen och försök igen.</string>
+    <string name="addressSearch_routeError">Kunde inte hitta en rutt till platsen.</string>
+    <string name="addressSearch_noOrigin">Din plats är inte tillgänglig. Aktivera plats för att få vägbeskrivning.</string>
+    <string name="addressSearch_routeSummary">%1$s · %2$s</string>
+    <string name="addressSearch_directionsTitle">Vägbeskrivning</string>
+    <string name="addressSearch_clearRoute">Rensa rutt</string>
+    <string name="addressSearch_loading">Laddar…</string>
+    <string name="addressSearch_unitMeters">m</string>
+    <string name="addressSearch_unitKilometers">km</string>
+    <string name="addressSearch_unitMinutes">min</string>
+    <string name="addressSearch_unitHours">tim</string>
 </resources>

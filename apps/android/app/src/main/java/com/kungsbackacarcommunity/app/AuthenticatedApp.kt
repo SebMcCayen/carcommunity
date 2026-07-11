@@ -109,6 +109,10 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
+import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -248,6 +252,21 @@ fun AuthenticatedApp(
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
 
+            // Address-search + directions overlay ("Where to?"). The Mapbox
+            // search/directions client is guarded: with a blank token (CI / no
+            // token) every call no-ops to empty/null and never hits the network
+            // (see HttpMapboxSearchClient). Origin comes from the fused-location
+            // provider, degrading to null (→ inline hint) without a fix/permission.
+            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+            val mapboxToken = stringResource(R.string.mapbox_access_token)
+            val searchLanguage = remember { java.util.Locale.getDefault().language }
+            val searchClient =
+                remember(mapboxToken, searchLanguage) {
+                    HttpMapboxSearchClient(mapboxToken, searchLanguage)
+                }
+            val originProvider: suspend () -> LatLng? =
+                remember(context) { { CurrentLocation.lastKnown(context) } }
+
             // Flag-gated (not member-gated) reach to the live-location feature.
             val liveLocationEnabled =
                 FeatureGate.isAvailable(
@@ -334,7 +353,24 @@ fun AuthenticatedApp(
                     }
                 }
 
-                if (route != null) {
+                if (navSearchOpen) {
+                    // Full-screen address-search + directions overlay. Renders
+                    // the same map surface behind it (MapHome is not composed
+                    // while this is open, so the single MapView is free), draws
+                    // the picked route on it, and owns its own Back handling.
+                    // Closing wipes the route overlay so nothing lingers on the
+                    // map-home map afterwards.
+                    NavigationSearchScreen(
+                        mapSurface = mapSurface,
+                        searchClient = searchClient,
+                        originProvider = originProvider,
+                        onClose = {
+                            mapSurface.setRouteOverlay(null)
+                            navSearchOpen = false
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (route != null) {
                     RouteHost(
                         route = route!!,
                         uid = uid,
@@ -430,7 +466,11 @@ fun AuthenticatedApp(
                                         participantCount = mapParticipantUids.size,
                                         userLabel =
                                             stringResource(R.string.shell_userMarkerLabel),
-                                        onSearch = { showComingSoon() },
+                                        // Tapping "Where to?" opens the address
+                                        // search + directions overlay.
+                                        onSearch = { navSearchOpen = true },
+                                        // Voice search (speech-to-text) is a
+                                        // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
                                         onToggleLiveShare = {
                                             when (
