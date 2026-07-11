@@ -110,7 +110,6 @@ fun AeroPageTitle(
 }
 
 /** Shared content padding for `LazyColumn`-backed Aero pages (see [AeroPage]). */
-@Composable
 fun aeroLazyContentPadding(): PaddingValues =
     PaddingValues(
         start = AeroPageHorizontalPadding,
