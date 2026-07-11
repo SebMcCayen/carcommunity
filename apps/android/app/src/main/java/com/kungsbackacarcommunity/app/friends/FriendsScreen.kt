@@ -237,12 +237,20 @@ private fun AddFriendSection(
                 else -> Unit
             }
 
+            val isSent = addState is AddFriendState.Sent
+            val isWorking = addState is AddFriendState.Working
+            val buttonLabel =
+                when {
+                    isSent -> stringResource(R.string.friends_addDone)
+                    isWorking -> stringResource(R.string.friends_addWorking)
+                    else -> stringResource(R.string.friends_addAction)
+                }
             Button(
-                onClick = if (addState is AddFriendState.Sent) onDismissResult else onSubmit,
-                enabled = addState is AddFriendState.Sent || nickname.isNotBlank(),
+                onClick = if (isSent) onDismissResult else onSubmit,
+                enabled = !isWorking && (isSent || nickname.isNotBlank()),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.friends_addAction))
+                Text(buttonLabel)
             }
         }
     }
@@ -418,7 +426,7 @@ private fun ErrorBanner(text: String, onDismiss: () -> Unit) {
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(end = KccSpacing.s3),
             )
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.friends_chooseCancel)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.friends_close)) }
         }
     }
 }

@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun FriendsRoute(
     repository: FriendsRepository,
-    onBack: () -> Unit,
     onMessageFriend: (FriendSummary) -> Unit,
     onOpenMessages: () -> Unit,
 ) {

@@ -630,6 +630,9 @@
     <string name="friends_addSectionTitle">Add a friend</string>
     <string name="friends_nicknameLabel">Nickname</string>
     <string name="friends_addAction">Send request</string>
+    <string name="friends_addWorking">Sending…</string>
+    <string name="friends_addDone">Done</string>
+    <string name="friends_close">Close</string>
     <string name="friends_incomingTitle">Friend requests</string>
     <string name="friends_outgoingTitle">Pending requests</string>
     <string name="friends_listTitle">Your friends</string>
