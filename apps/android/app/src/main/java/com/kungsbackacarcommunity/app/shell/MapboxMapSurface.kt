@@ -177,7 +177,13 @@ class MapboxMapSurface : MapSurface {
                             location.updateSettings {
                                 enabled = true
                                 pulsingEnabled = true
-                                pulsingColor = pulseColorFor(marker)
+                                // This runs asynchronously when the style finishes
+                                // loading — not at composition — and loadStateFlow
+                                // changes don't recompose Content, so the captured
+                                // `marker` can be stale here. Read the backing
+                                // flow's current value to apply the latest
+                                // live-sharing state when the puck is enabled.
+                                pulsingColor = pulseColorFor(userMarkerFlow.value)
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
                         }

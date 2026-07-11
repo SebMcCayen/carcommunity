@@ -52,7 +52,9 @@ data class MapUserMarker(
  *
  * Hooks:
  * - [recenter] — recentre the camera on the user (stub records the request).
- * - [setUserMarker] — supply/clear the "You / Online" pin.
+ * - [setUserMarker] — supply/clear the caller's live-sharing marker state
+ *   ([MapUserMarker]: a label plus [MapUserMarker.isLiveSharing], which drives
+ *   the puck's green/blue pulse).
  * - [loadState] — drives the shell's "Loading roads…" indicator.
  * - [trafficEnabled] / [setTrafficEnabled] — the optional traffic-congestion
  *   overlay the layers control toggles. A surface that cannot draw traffic
