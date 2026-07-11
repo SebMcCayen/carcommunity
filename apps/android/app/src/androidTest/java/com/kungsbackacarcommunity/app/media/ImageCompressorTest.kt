@@ -39,13 +39,14 @@ class ImageCompressorTest {
 
     /** A colourful gradient so the PNG payload is large yet JPEG-compressible. */
     private fun gradientBitmap(width: Int, height: Int): Bitmap {
-        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(width * height)
         for (y in 0 until height) {
+            val rowOffset = y * width
             for (x in 0 until width) {
-                bmp.setPixel(x, y, Color.rgb(x * 255 / width, y * 255 / height, (x + y) % 256))
+                pixels[rowOffset + x] = Color.rgb(x * 255 / width, y * 255 / height, (x + y) % 256)
             }
         }
-        return bmp
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
     }
 
     /**
@@ -55,14 +56,16 @@ class ImageCompressorTest {
      * genuinely fire. Seeded so the payload is deterministic across runs.
      */
     private fun noisyBitmap(width: Int, height: Int): Bitmap {
-        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val rng = Random(0xC0FFEE)
+        val pixels = IntArray(width * height)
         for (y in 0 until height) {
+            val rowOffset = y * width
             for (x in 0 until width) {
-                bmp.setPixel(x, y, Color.rgb(rng.nextInt(256), rng.nextInt(256), rng.nextInt(256)))
+                pixels[rowOffset + x] =
+                    Color.rgb(rng.nextInt(256), rng.nextInt(256), rng.nextInt(256))
             }
         }
-        return bmp
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
     }
 
     private fun decodeBounds(bytes: ByteArray): BitmapFactory.Options =
@@ -82,6 +85,7 @@ class ImageCompressorTest {
             }
         }
         val source = jpegBytes(noise, 80)
+        noise.recycle()
         val picked = PickedImage(bytes = source, contentType = "image/jpeg")
 
         val result = ImageCompressor.compress(picked)
@@ -102,6 +106,7 @@ class ImageCompressorTest {
         // compressor — correctly — keeps the original PNG unchanged.)
         val big = noisyBitmap(2000, 1500)
         val source = pngBytes(big)
+        big.recycle()
         val picked = PickedImage(bytes = source, contentType = "image/png")
 
         val result = ImageCompressor.compress(picked)
@@ -122,16 +127,21 @@ class ImageCompressorTest {
         val landscape = gradientBitmap(2000, 1000)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File.createTempFile("exif-rotate", ".jpg", context.cacheDir)
-        file.writeBytes(jpegBytes(landscape, 100))
-        ExifInterface(file.absolutePath).apply {
-            setAttribute(
-                ExifInterface.TAG_ORIENTATION,
-                ExifInterface.ORIENTATION_ROTATE_90.toString(),
-            )
-            saveAttributes()
-        }
-        val source = file.readBytes()
-        file.delete()
+        val source =
+            try {
+                file.writeBytes(jpegBytes(landscape, 100))
+                ExifInterface(file.absolutePath).apply {
+                    setAttribute(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_ROTATE_90.toString(),
+                    )
+                    saveAttributes()
+                }
+                file.readBytes()
+            } finally {
+                file.delete()
+                landscape.recycle()
+            }
         val picked = PickedImage(bytes = source, contentType = "image/jpeg")
 
         val result = ImageCompressor.compress(picked)
