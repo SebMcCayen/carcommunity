@@ -49,6 +49,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.kungsbackacarcommunity.app.R
@@ -251,7 +252,10 @@ private fun ChatCircleControl(
                 }
             }
         },
-        modifier = Modifier.testTag(MAP_HOME_CHAT_TAG),
+        // Merge the descendant CircleControl's click/label semantics into this
+        // tagged node so onNodeWithTag(MAP_HOME_CHAT_TAG) exposes the click action
+        // (the clickable Surface is a child of the BadgedBox).
+        modifier = Modifier.testTag(MAP_HOME_CHAT_TAG).semantics(mergeDescendants = true) {},
     ) {
         CircleControl(
             icon = Icons.AutoMirrored.Filled.Chat,
