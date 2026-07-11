@@ -662,7 +662,13 @@ fun AuthenticatedApp(
                     LiveSharePromptDialog(
                         onConfirm = {
                             showLiveSharePrompt = false
-                            toggleLiveShare()
+                            // The prompt only ever asks to START sharing, but
+                            // toggleLiveShare() maps to Stop while a session is
+                            // active. Guard on the live-time isSharing so
+                            // confirming can never stop an active session; the
+                            // Start / open-screen fallbacks still run when not
+                            // already sharing.
+                            if (!isSharing) toggleLiveShare()
                         },
                         onDismiss = { showLiveSharePrompt = false },
                     )
