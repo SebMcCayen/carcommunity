@@ -1,0 +1,152 @@
+package com.kungsbackacarcommunity.app.friends
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** UI-facing status of the friends snapshot (list + pending requests). */
+sealed interface FriendsStatus {
+    data object Loading : FriendsStatus
+
+    data class Loaded(
+        val friends: List<FriendSummary>,
+        val incoming: List<FriendRequestSummary>,
+        val outgoing: List<FriendRequestSummary>,
+    ) : FriendsStatus
+
+    data object Error : FriendsStatus
+}
+
+/** Sub-state of the "add friend by nickname" flow. */
+sealed interface AddFriendState {
+    data object Idle : AddFriendState
+
+    data object Working : AddFriendState
+
+    /** The nickname was ambiguous — the screen shows a member picker. */
+    data class Chooser(val candidates: List<FriendUser>) : AddFriendState
+
+    data class Error(val error: FriendActionError) : AddFriendState
+
+    /** The request landed. [nowFriends] is true when it auto-accepted an inbound one. */
+    data class Sent(val nowFriends: Boolean) : AddFriendState
+}
+
+/**
+ * Orchestrates the friends screen (load + add + respond + remove). Pure Kotlin
+ * so it is unit-testable with a fake repository. There is no live listener, so
+ * every successful mutation re-fetches the snapshot via [load].
+ */
+class FriendsCoordinator(
+    private val repository: FriendsRepository,
+) {
+    private val statusState = MutableStateFlow<FriendsStatus>(FriendsStatus.Loading)
+    val status: StateFlow<FriendsStatus> = statusState.asStateFlow()
+
+    private val addState = MutableStateFlow<AddFriendState>(AddFriendState.Idle)
+    val add: StateFlow<AddFriendState> = addState.asStateFlow()
+
+    // Failures of a row action (accept/decline/remove) — surfaced once, then
+    // cleared. Success is reflected by the reloaded snapshot, not a status.
+    private val rowError = MutableStateFlow<FriendActionError?>(null)
+    val actionError: StateFlow<FriendActionError?> = rowError.asStateFlow()
+
+    suspend fun load() {
+        try {
+            when (val result = repository.list()) {
+                is FriendsResult.Loaded ->
+                    statusState.value =
+                        FriendsStatus.Loaded(
+                            friends = result.data.friends,
+                            incoming = result.data.incoming,
+                            outgoing = result.data.outgoing,
+                        )
+                is FriendsResult.Failed -> statusState.value = FriendsStatus.Error
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            statusState.value = FriendsStatus.Error
+        }
+    }
+
+    suspend fun sendRequestByNickname(nickname: String) {
+        val trimmed = nickname.trim()
+        if (trimmed.isEmpty()) {
+            addState.value = AddFriendState.Error(FriendActionError.Invalid)
+            return
+        }
+        runSend { repository.sendRequestByNickname(trimmed) }
+    }
+
+    /** Resolves an ambiguous nickname by re-sending to the chosen candidate. */
+    suspend fun chooseCandidate(uid: String) = runSend { repository.sendRequestToUid(uid) }
+
+    private suspend fun runSend(action: suspend () -> SendRequestResult) {
+        if (addState.value == AddFriendState.Working) return
+        addState.value = AddFriendState.Working
+        try {
+            addState.value =
+                when (val result = action()) {
+                    SendRequestResult.Requested -> AddFriendState.Sent(nowFriends = false)
+                    SendRequestResult.NowFriends -> AddFriendState.Sent(nowFriends = true)
+                    is SendRequestResult.Ambiguous -> AddFriendState.Chooser(result.candidates)
+                    is SendRequestResult.Failed -> AddFriendState.Error(result.error)
+                }
+            // A landed request/friendship changes the pending lists — refresh.
+            if (addState.value is AddFriendState.Sent) load()
+        } catch (cancellation: CancellationException) {
+            addState.value = AddFriendState.Idle
+            throw cancellation
+        } catch (_: Exception) {
+            addState.value = AddFriendState.Error(FriendActionError.Generic)
+        }
+    }
+
+    suspend fun accept(requestId: String) = respond(requestId, accept = true)
+
+    suspend fun decline(requestId: String) = respond(requestId, accept = false)
+
+    private suspend fun respond(requestId: String, accept: Boolean) {
+        rowError.value = null
+        try {
+            when (val result = repository.respond(requestId, accept)) {
+                RespondResult.Accepted, RespondResult.Declined -> load()
+                is RespondResult.Failed -> {
+                    rowError.value = result.error
+                    // The request may be gone/handled server-side — resync so the
+                    // stale row disappears rather than lingering.
+                    load()
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            rowError.value = FriendActionError.Generic
+        }
+    }
+
+    suspend fun remove(friendUid: String) {
+        rowError.value = null
+        try {
+            when (val result = repository.remove(friendUid)) {
+                RemoveResult.Removed -> load()
+                is RemoveResult.Failed -> rowError.value = result.error
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            rowError.value = FriendActionError.Generic
+        }
+    }
+
+    /** Clears the add-friend sub-state (e.g. after dismissing a picker/result). */
+    fun resetAdd() {
+        addState.value = AddFriendState.Idle
+    }
+
+    fun clearActionError() {
+        rowError.value = null
+    }
+}

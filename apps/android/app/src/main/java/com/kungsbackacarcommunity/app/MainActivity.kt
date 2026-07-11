@@ -21,6 +21,7 @@ import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
+import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
 import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
@@ -130,6 +131,7 @@ class MainActivity : ComponentActivity() {
         val mediaUploader = FirebaseMediaUploader.createIfAvailable(applicationContext)
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
+        val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
@@ -216,6 +218,7 @@ class MainActivity : ComponentActivity() {
                         mediaUploader = mediaUploader,
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
+                        friendsRepository = friendsRepository,
                         drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
