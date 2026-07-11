@@ -39,7 +39,7 @@ fun PartnerDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AeroPage(title = company?.name.orEmpty(), modifier = modifier) {
+    AeroPage(title = company?.name ?: stringResource(R.string.partners_detailTitle), modifier = modifier) {
             if (company == null) {
                 Text(
                     text = stringResource(R.string.partners_error),

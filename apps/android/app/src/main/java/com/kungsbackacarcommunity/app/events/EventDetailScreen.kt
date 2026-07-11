@@ -52,7 +52,7 @@ fun EventDetailScreen(
     onOpenGroupDrive: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
-    AeroPage(title = event?.title.orEmpty(), modifier = modifier) {
+    AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
                     text =

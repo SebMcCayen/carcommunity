@@ -33,6 +33,8 @@ fun EventsListScreen(
     onBack: (() -> Unit)? = null,
     // Re-invokes the list load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
+    // Opens the create-event form; when null the button is hidden.
+    onCreateEvent: (() -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.events_title), modifier = modifier) {
             Text(
@@ -40,6 +42,12 @@ fun EventsListScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            if (onCreateEvent != null) {
+                Button(onClick = onCreateEvent, modifier = Modifier.fillMaxWidth()) {
+                    Text(text = stringResource(R.string.events_createButton))
+                }
+            }
 
             when (state) {
                 EventsListState.Loading ->

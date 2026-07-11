@@ -54,6 +54,7 @@ enum class ShellRoute {
     PartnerStats,
     Feedback,
     Subscription,
+    Settings,
     More,
 }
 
