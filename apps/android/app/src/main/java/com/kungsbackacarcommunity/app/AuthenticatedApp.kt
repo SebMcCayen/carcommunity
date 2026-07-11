@@ -482,6 +482,13 @@ fun AuthenticatedApp(
                                         },
                                         onRecenter = { mapSurface.recenter() },
                                         onOpenMore = { route = ShellRoute.More },
+                                        // Placeholder: chat is per-event only
+                                        // (EventChatRepository) — there is no
+                                        // global/community unread-count source
+                                        // client-side. Wire a real "missed
+                                        // chats" count here once a backend
+                                        // inbox exists (out of the Android lane).
+                                        unreadChatCount = 0,
                                     )
 
                                 ShellTab.History ->

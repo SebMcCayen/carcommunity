@@ -634,4 +634,10 @@
     <string name="shell_unavailable">Inte tillgängligt just nu.</string>
     <string name="shell_trafficOn">Trafiklager på</string>
     <string name="shell_trafficOff">Visa trafik</string>
+    <string name="shell_chat">Chatt</string>
+    <string name="shell_chatUnread">%1$d olästa chattmeddelanden</string>
+    <string name="shell_chatTitle">Gemenskapschatt</string>
+    <string name="shell_chatClose">Stäng chatt</string>
+    <string name="shell_chatEmpty">Du är ikapp — inga nya meddelanden.</string>
+    <string name="shell_chatComingSoon">Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.</string>
 </resources>
