@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -40,7 +41,13 @@ object ImageCompressor {
         maxDimension: Int = AVATAR_MAX_DIMENSION,
         quality: Int = DEFAULT_JPEG_QUALITY,
     ): PickedImage = withContext(Dispatchers.Default) {
-        runCatching { compressBlocking(picked, maxDimension, quality) }.getOrDefault(picked)
+        try {
+            compressBlocking(picked, maxDimension, quality)
+        } catch (e: CancellationException) {
+            throw e // never swallow cancellation — keep structured concurrency intact
+        } catch (_: Throwable) {
+            picked // any real failure: fall back to the original pick
+        }
     }
 
     private fun compressBlocking(
