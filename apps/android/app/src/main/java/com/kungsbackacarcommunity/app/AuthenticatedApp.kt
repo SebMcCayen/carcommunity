@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -110,6 +111,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -263,6 +265,9 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Resolved avatar download URL for the map-home top-right profile
+            // button (null → falls back to the generic account icon).
+            val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -486,6 +491,7 @@ fun AuthenticatedApp(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
                                         participantCount = mapParticipantUids.size,
+                                        avatarUrl = mapAvatarUrl,
                                         userLabel =
                                             stringResource(R.string.shell_userMarkerLabel),
                                         onSearch = { showComingSoon() },
@@ -500,11 +506,6 @@ fun AuthenticatedApp(
                                             )
                                         },
                                         onRecenter = { mapSurface.recenter() },
-                                        onMusic = { showComingSoon() },
-                                        // "Create route" raises the live-share
-                                        // prompt over the map (same flow as the
-                                        // bottom-nav Create tab).
-                                        onCreateRoute = { showLiveSharePrompt = true },
                                         onOpenMore = { route = ShellRoute.More },
                                     )
 
@@ -691,36 +692,40 @@ private fun ShellBottomBar(
     selected: ShellTab,
     onSelect: (ShellTab) -> Unit,
 ) {
-    NavigationBar {
+    // 50%-alpha surface container so the map shows through the bar; icon-only
+    // items (no labels) keep the tabs compact over the semi-transparent map.
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+    ) {
         NavigationBarItem(
             selected = selected == ShellTab.Map,
             onClick = { onSelect(ShellTab.Map) },
-            icon = { Icon(Icons.Filled.Map, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabMap)) },
+            icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.History,
             onClick = { onSelect(ShellTab.History) },
-            icon = { Icon(Icons.Filled.History, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabHistory)) },
+            icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Create,
             onClick = { onSelect(ShellTab.Create) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabCreate)) },
+            icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.shell_tabCreate)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Social,
             onClick = { onSelect(ShellTab.Social) },
-            icon = { Icon(Icons.Filled.Groups, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabSocial)) },
+            icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
             onClick = { onSelect(ShellTab.Garage) },
-            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabGarage)) },
+            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
+            label = null,
         )
     }
 }
@@ -816,7 +821,6 @@ private fun RouteHost(
         ShellRoute.More ->
             HubScreen(
                 title = stringResource(R.string.shell_moreTitle),
-                onBack = onClose,
                 entries =
                     listOf(
                         HubEntry(
@@ -906,28 +910,40 @@ private fun RouteHost(
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             val avatarPicker =
                 rememberImagePickLauncher(
-                    maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                    // Read with a higher cap than the 5 MB upload cap so the raw
+                    // pick reaches ImageCompressor (which shrinks it below the
+                    // upload cap). Still bounded to avoid OOM; the upload precheck
+                    // on the compressed result enforces PROFILE_IMAGE_MAX_BYTES.
+                    maxBytes = MediaUpload.PROFILE_IMAGE_READ_MAX_BYTES,
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        val imageId = MediaUpload.newImageId(picked.contentType)
+                        // Downscale + JPEG-re-encode before upload so avatars stay
+                        // small (Storage cost + well under the byte cap).
+                        val compressed = ImageCompressor.compress(picked)
+                        val imageId = MediaUpload.newImageId(compressed.contentType)
                         val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(picked, path) { storedPath ->
+                        avatarCoordinator.upload(compressed, path) { storedPath ->
                             repo.updateAvatarPath(uid, storedPath)
                         }
                     }
                 }
+            // The on-screen Back button is gone (system Back closes the route),
+            // so its former coordinator cleanup now runs when the Profile route
+            // leaves composition — regardless of how it was dismissed.
+            DisposableEffect(profileEditCoordinator, avatarCoordinator) {
+                onDispose {
+                    profileEditCoordinator?.reset()
+                    avatarCoordinator?.reset()
+                }
+            }
             ProfileScreen(
                 profile = profile,
                 saveStatus = saveStatus,
                 onSave = { name, bio ->
                     profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
                 },
-                onBack = {
-                    onClose()
-                    profileEditCoordinator?.reset()
-                    avatarCoordinator?.reset()
-                },
+                onBack = onClose,
                 onSignOut = onSignOut,
                 avatarUrl = avatarUrl,
                 avatarUploadStatus = avatarStatus,

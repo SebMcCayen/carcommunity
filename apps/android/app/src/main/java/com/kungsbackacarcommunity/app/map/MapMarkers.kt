@@ -43,14 +43,15 @@ data class MapMarker(
 object MapMarkers {
     /**
      * Default camera when no live fix is available: centered on Kungsbacka
-     * (the community's home town) at a town-level zoom. Longitude first to
-     * match Mapbox's lng/lat ordering.
+     * (the community's home town) at a neighbourhood-level zoom so the map
+     * opens close to the user rather than surveying the whole town. Longitude
+     * first to match Mapbox's lng/lat ordering.
      */
     val DEFAULT_CAMERA: MapCameraPosition =
-        MapCameraPosition(longitude = 12.0757, latitude = 57.4874, zoom = 11.0)
+        MapCameraPosition(longitude = 12.0757, latitude = 57.4874, zoom = 15.0)
 
-    /** Zoom used once we have a position to focus on. */
-    const val OWN_MARKER_ZOOM: Double = 14.0
+    /** Zoom used once we have a position to focus on (street/neighbourhood level). */
+    const val OWN_MARKER_ZOOM: Double = 16.0
 
     /**
      * Marker model for the caller's own position, or null when no coordinate
