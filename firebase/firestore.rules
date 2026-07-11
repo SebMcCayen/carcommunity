@@ -373,6 +373,34 @@ service cloud.firestore {
       // No client writes: blocking.block / blocking.unblock callables only.
     }
 
+    // -------------------------------------------------------------------------
+    // Friends – friend graph (friend.sendRequest / respondRequest / remove /
+    // list). Messaging/DMs are a SEPARATE follow-up, not modelled here.
+    //
+    // users/{uid}/friends/{friendUid}: an established friendship, written for
+    // BOTH sides on accept. The owner reads their own friends list; a
+    // friendship never leaks who else a user is friends with. All writes go
+    // through the friend.* callables so the denormalized displayName/avatarPath
+    // and the two-sided invariant stay backend-controlled.
+    //
+    // friendRequests/{fromUid__toUid}: a directional request. Readable by the
+    // sender (fromUid) and the recipient (toUid) only — a request never leaks
+    // to third parties. All writes go through the friend.* callables (nickname
+    // resolution, block checks, auto-accept, status transitions).
+    // -------------------------------------------------------------------------
+    match /users/{userId}/friends/{friendId} {
+      allow read: if isOwner(userId);
+      // No client writes: friend.respondRequest / friend.remove callables only.
+    }
+
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid);
+      // No client writes: friend.sendRequest / friend.respondRequest callables
+      // only.
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------

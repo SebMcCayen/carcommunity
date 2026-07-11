@@ -66,6 +66,12 @@ import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
+import {
+  list as listFriends,
+  remove as removeFriend,
+  respondRequest as respondFriendRequest,
+  sendRequest as sendFriendRequest,
+} from './friends/manageFriends';
 
 /**
  * GET /health
@@ -437,4 +443,29 @@ export const groupDrive = {
   join: joinGroupDrive,
   updateStatus: updateDriveStatus,
   leave: leaveGroupDrive,
+};
+
+/**
+ * Friends domain (grouped export → deployed as `friend-sendRequest`,
+ * `friend-respondRequest`, `friend-remove`, `friend-list`).
+ *
+ * The friend-GRAPH foundation (contracts/functions/functions.json:
+ * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
+ * separate follow-up and are NOT part of this domain. Model:
+ * friendRequests/{fromUid__toUid} (one directional request per ordered pair)
+ * and the per-side users/{uid}/friends/{friendUid} subcollection written for
+ * BOTH parties on accept. Owner-readable, callable-only writes
+ * (firebase/firestore.rules). sendRequest resolves a nickname (displayName,
+ * NOT unique): 0 matches → not-found, 1 → proceed, >1 → failed-precondition
+ * (AMBIGUOUS_NICKNAME) carrying a candidate list in the error details for
+ * client disambiguation via { toUid }. Blocking is honoured both ways
+ * (neutral NOT_ADDABLE); an incoming pending request is auto-accepted when
+ * the caller sends the reverse. Established friendship — not request status —
+ * is the source of truth for "already friends".
+ */
+export const friend = {
+  sendRequest: sendFriendRequest,
+  respondRequest: respondFriendRequest,
+  remove: removeFriend,
+  list: listFriends,
 };
