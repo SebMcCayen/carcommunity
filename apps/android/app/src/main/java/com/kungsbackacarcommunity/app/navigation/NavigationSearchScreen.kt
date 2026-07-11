@@ -140,7 +140,13 @@ fun NavigationSearchScreen(
                     controller.onQueryChange(new)
                 },
                 onBack = onClose,
-                onClear = { controller.onQueryChange("") },
+                onClear = {
+                    // Clearing (the X) fully returns to the search state: drop the
+                    // picked destination + route first (like editing the query
+                    // does), then wipe the query text so the sheet doesn't linger.
+                    if (state.destination != null) controller.clearDestination()
+                    controller.onQueryChange("")
+                },
                 searching = state.searching,
             )
 
@@ -402,7 +408,9 @@ private fun RouteDetails(route: RouteSummary) {
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = stringResource(R.string.addressSearch_routeSummary, eta, distance),
+            // Distance first, then duration/ETA — matching the app convention
+            // (e.g. DrivesScreen): "4.5 km · 12 min".
+            text = stringResource(R.string.addressSearch_routeSummary, distance, eta),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.primary,
         )
