@@ -26,6 +26,8 @@ class RsvpCoordinatorTest {
             failWith?.let { throw it }
             writes += Triple(eventId, uid, status)
         }
+
+        override suspend fun createEvent(input: CreateEventInput): String = "unused"
     }
 
     @Test
