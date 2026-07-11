@@ -332,8 +332,9 @@ already built:
   save button already uses haptics) when the response carries
   `newMilestones` or a streak advance. **No top speed anywhere, ever.**
 - **Route persistence (the enabling chore):** after a successful save,
-  serialize the recorded points to `route.bin` (simple length-prefixed
-  lat/lng/timestamp binary, documented in `contracts/`), render the preview
+  serialize the recorded points to `route.bin` (polyline-encoded, optionally
+  gzipped — matching the established contract in `firebase/storage.rules` and
+  `docs/firebase-data-model.md`, NOT a new custom format), render the preview
   bitmap, upload both via `MediaUploader` to the paths the callable returned.
   Upload failure degrades gracefully (retry from detail screen); the ride
   doc exists regardless.
