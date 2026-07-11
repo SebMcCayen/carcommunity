@@ -1,16 +1,18 @@
 package com.kungsbackacarcommunity.app
 
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
 import com.kungsbackacarcommunity.app.design.KccDarkColors
 import com.kungsbackacarcommunity.app.design.KccLightColors
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
@@ -76,12 +78,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Draw edge-to-edge so map/content renders behind the system bars, then
-        // tint the OS navigation bar with the theme surface at 25% opacity (75%
-        // transparent) so the map shows through it. isNavigationBarContrastEnforced
-        // is disabled so the platform does not overlay its own opaque scrim.
+        // Draw edge-to-edge so map/content renders behind the system bars. The
+        // OS navigation bar is tinted with the theme surface at 25% opacity (75%
+        // transparent) so the map shows through it; that tint — and the bar icon
+        // light/dark contrast — is applied from a theme-reactive effect in
+        // setContent below, so it tracks auth-state navigation (e.g. the
+        // forced-dark sign-in screen) rather than only the launch configuration.
+        // isNavigationBarContrastEnforced is disabled (theme-independent) so the
+        // platform does not overlay its own opaque scrim.
         enableEdgeToEdge()
-        window.navigationBarColor = translucentSystemNavBarColor()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
@@ -192,6 +197,28 @@ class MainActivity : ComponentActivity() {
                 signInCoordinator?.status?.collectAsState()?.value ?: SignInStatus.Idle
             val flags by featureFlagsStore.flags.collectAsState()
 
+            // Tint the OS bars from the CURRENTLY displayed theme, not once in
+            // onCreate: auth-state navigation swaps screens without recreating
+            // the Activity, and SignInScreen (signed-out) forces KccTheme's dark
+            // scheme regardless of the system setting, while the authed /
+            // unavailable shells follow the system theme (KccTheme default). So
+            // the rendered surface is dark whenever the system is dark OR we are
+            // on the forced-dark sign-in screen. Keying the effect on that
+            // resolved darkness recomputes the nav-bar tint and the bar icon
+            // (light/dark) contrast on every sign-in/out, so the OS bars always
+            // match the surface actually drawn behind them.
+            val displayDark = authState == AuthState.SignedOut || isSystemInDarkTheme()
+            val window = window
+            DisposableEffect(displayDark) {
+                window.navigationBarColor = translucentSystemNavBarColor(displayDark)
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    // Dark surface -> light (non-light) bar icons, and vice versa.
+                    isAppearanceLightStatusBars = !displayDark
+                    isAppearanceLightNavigationBars = !displayDark
+                }
+                onDispose {}
+            }
+
             AppRoot(
                 authState = authState,
                 signInStatus = signInStatus,
@@ -256,16 +283,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The theme surface color at 25% alpha, chosen for the current (light/dark)
-     * configuration so the OS navigation bar is 75% transparent. A config change
-     * recreates the Activity, so re-reading night mode here in onCreate is enough.
+     * The theme surface color at 25% alpha (75% transparent) for the given
+     * darkness, so the OS navigation bar lets the map/surface behind it show
+     * through. Called from a theme-reactive effect (see setContent) rather than
+     * onCreate so it tracks auth-state navigation — e.g. the forced-dark sign-in
+     * screen — not just configuration changes.
      */
-    private fun translucentSystemNavBarColor(): Int {
-        val isNight =
-            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                Configuration.UI_MODE_NIGHT_YES
+    private fun translucentSystemNavBarColor(darkTheme: Boolean): Int {
         val surface =
-            if (isNight) KccDarkColors.surfaceBackground else KccLightColors.surfaceBackground
+            if (darkTheme) KccDarkColors.surfaceBackground else KccLightColors.surfaceBackground
         return surface.copy(alpha = 0.25f).toArgb()
     }
 }
