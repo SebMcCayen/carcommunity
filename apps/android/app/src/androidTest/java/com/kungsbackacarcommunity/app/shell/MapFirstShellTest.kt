@@ -85,8 +85,9 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // Prominent "Where to?" search bar.
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
-        // Floating controls (broadcast toggle off + recenter).
+        // Floating controls (broadcast toggle off + traffic/layers toggle off + recenter).
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_trafficOff)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()
     }
 
