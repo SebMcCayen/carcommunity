@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
@@ -23,6 +24,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 class FirebaseEventsRepository private constructor(
     private val firestore: FirebaseFirestore,
+    private val functions: FirebaseFunctions,
 ) : EventsRepository {
 
     override fun observePublishedEvents(): Flow<EventsListState> = callbackFlow {
@@ -114,15 +116,46 @@ class FirebaseEventsRepository private constructor(
         }
     }
 
+    override suspend fun createEvent(input: CreateEventInput): String =
+        suspendCancellableCoroutine { continuation ->
+            functions
+                .getHttpsCallable(CREATE)
+                .call(Events.createPayload(input))
+                .addOnCompleteListener { task ->
+                    if (!continuation.isActive) return@addOnCompleteListener
+                    if (task.isSuccessful) {
+                        @Suppress("UNCHECKED_CAST")
+                        val data = task.result?.data as? Map<String, Any?>
+                        val eventId = data?.get("eventId") as? String
+                        if (eventId != null) {
+                            continuation.resume(eventId)
+                        } else {
+                            continuation.resumeWithException(
+                                IllegalStateException("events-create returned no eventId"),
+                            )
+                        }
+                    } else {
+                        continuation.resumeWithException(
+                            task.exception ?: IllegalStateException("events-create failed without a cause"),
+                        )
+                    }
+                }
+        }
+
     companion object {
         private const val EVENTS = "events"
         private const val DETAILS = "details"
         private const val PRIVATE = "private"
         private const val RSVPS = "rsvps"
+        private const val REGION = "europe-west1"
+        private const val CREATE = "events-create"
 
         fun createIfAvailable(context: Context): EventsRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseEventsRepository(FirebaseFirestore.getInstance())
+            return FirebaseEventsRepository(
+                FirebaseFirestore.getInstance(),
+                FirebaseFunctions.getInstance(REGION),
+            )
         }
     }
 }

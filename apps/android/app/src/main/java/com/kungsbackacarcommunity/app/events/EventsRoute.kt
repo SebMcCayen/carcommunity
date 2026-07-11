@@ -60,15 +60,24 @@ fun EventsRoute(
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showGroupDrive by rememberSaveable { mutableStateOf(false) }
+    var showCreate by rememberSaveable { mutableStateOf(false) }
     // Bumped by the "try again" affordance to re-subscribe the observe flows.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     val selected = selectedEventId
 
+    // Owns the create-event write status; built here (a thin wrapper over the
+    // repository) so AuthenticatedApp does not have to thread another coordinator.
+    val createCoordinator = remember(repository) { CreateEventCoordinator(repository) }
+
     // System/gesture Back unwinds one internal level (chat/group-drive -> detail,
     // detail -> list); at the list root it is disabled so the shell's BackHandler
     // returns to Home. Mirrors the in-screen Back buttons' reset behaviour.
-    BackHandler(enabled = selected != null) {
+    BackHandler(enabled = selected != null || showCreate) {
         when {
+            showCreate -> {
+                showCreate = false
+                createCoordinator.reset()
+            }
             showChat -> showChat = false
             showGroupDrive -> showGroupDrive = false
             else -> {
@@ -79,6 +88,34 @@ fun EventsRoute(
     }
 
     if (selected == null) {
+        if (showCreate) {
+            val createStatus by
+                createCoordinator.status.collectAsState(initial = CreateEventStatusUi.Idle)
+
+            // On a successful create, surface a snackbar and return to the list.
+            // (The new event is a draft until an admin publishes it, so it won't
+            // appear in the published-only list yet.)
+            val snackbarHostState = LocalSnackbarHostState.current
+            val createdMessage = stringResource(R.string.events_createSuccess)
+            LaunchedEffect(createStatus, snackbarHostState, createdMessage) {
+                if (createStatus is CreateEventStatusUi.Success) {
+                    snackbarHostState?.showSnackbar(createdMessage)
+                    showCreate = false
+                    createCoordinator.reset()
+                }
+            }
+
+            CreateEventScreen(
+                status = createStatus,
+                onSubmit = { input -> scope.launch { createCoordinator.submit(input) } },
+                onCancel = {
+                    showCreate = false
+                    createCoordinator.reset()
+                },
+            )
+            return
+        }
+
         val listState by
             remember(repository, reloadKey) { repository.observePublishedEvents() }
                 .collectAsState(initial = EventsListState.Loading)
@@ -87,6 +124,7 @@ fun EventsRoute(
             onOpenEvent = { selectedEventId = it },
             onRetry = { reloadKey++ },
             onBack = onBack,
+            onCreateEvent = { showCreate = true },
         )
         return
     }
