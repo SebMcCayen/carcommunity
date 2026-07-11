@@ -480,10 +480,6 @@ fun AuthenticatedApp(
                                             )
                                         },
                                         onRecenter = { mapSurface.recenter() },
-                                        onMusic = { showComingSoon() },
-                                        // "Create route" opens the Create hub
-                                        // (create event / share live location).
-                                        onCreateRoute = { selectedTab = ShellTab.Create },
                                         onOpenMore = { route = ShellRoute.More },
                                     )
 
