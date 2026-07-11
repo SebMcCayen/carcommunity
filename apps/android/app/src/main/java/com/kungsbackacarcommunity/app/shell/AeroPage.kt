@@ -94,6 +94,41 @@ fun AeroPage(
 }
 
 /**
+ * A `LazyColumn`-backed Aero page. Mirrors [AeroPage]'s fixed-chrome structure:
+ * the page background, the status-bar inset and the top breathing room live on a
+ * fixed outer [Column] OUTSIDE the scroll viewport, so they stay pinned exactly
+ * like [AeroPage]. The caller supplies its own `LazyColumn` as [content] (with
+ * [AeroPageTitle] as the first item and [aeroLazyContentPadding] for gutters), so
+ * only the list — title included — scrolls.
+ *
+ * Use this instead of hand-rolling a `Surface` + `statusBarsPadding()` around a
+ * `LazyColumn`: doing so would only pin the status-bar inset, and the top
+ * breathing room (previously baked into [aeroLazyContentPadding]'s `top`) would
+ * scroll away, letting list content slide under the status bar — inconsistent
+ * with [AeroPage].
+ */
+@Composable
+fun AeroLazyPage(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        // Fixed chrome: status-bar inset + top breathing room, OUTSIDE the
+        // caller's LazyColumn scroll viewport, so they stay pinned (parity with
+        // AeroPage). The caller's list then scrolls beneath this fixed top inset.
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(top = AeroPageTopSpacing),
+        ) {
+            content()
+        }
+    }
+}
+
+/**
  * The shared frosted title header: the page title on a rounded, tonally-elevated
  * surface, matching the map-first home's floating controls. Exposed on its own
  * so `LazyColumn`-backed pages can drop it in as their first item and stay
@@ -120,11 +155,16 @@ fun AeroPageTitle(
     }
 }
 
-/** Shared content padding for `LazyColumn`-backed Aero pages (see [AeroPage]). */
+/**
+ * Shared content padding for the `LazyColumn` inside an [AeroLazyPage]: the
+ * horizontal gutters and the bottom padding only. The top breathing room is
+ * deliberately NOT included here — [AeroLazyPage] applies it to its fixed outer
+ * chrome so it stays pinned, instead of scrolling away as `contentPadding.top`
+ * would.
+ */
 fun aeroLazyContentPadding(): PaddingValues =
     PaddingValues(
         start = AeroPageHorizontalPadding,
         end = AeroPageHorizontalPadding,
-        top = AeroPageTopSpacing,
         bottom = AeroPageBottomPadding,
     )
