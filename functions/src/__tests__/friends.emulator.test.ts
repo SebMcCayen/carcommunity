@@ -384,6 +384,18 @@ describe('friends Firestore rules', () => {
         status: 'pending',
       }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+    // Legacy-forge vector: a removed senderId/receiverId scaffold rule once
+    // let a client create a friendRequests doc by setting senderId to itself.
+    // The callable-only model must reject this even with those fields present.
+    await expect(
+      setDoc(doc(firestore, 'friendRequests', `forged__${outsider.uid}`), {
+        senderId: mona.uid,
+        receiverId: outsider.uid,
+        fromUid: mona.uid,
+        toUid: outsider.uid,
+        status: 'pending',
+      }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(
       setDoc(doc(firestore, 'users', mona.uid, 'friends', outsider.uid), { friendUid: outsider.uid }),
     ).rejects.toMatchObject({ code: 'permission-denied' });

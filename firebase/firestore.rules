@@ -342,23 +342,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // -------------------------------------------------------------------------
-    // friendRequests – pending friend requests
-    // Document carries `senderId` and `receiverId`.
-    // -------------------------------------------------------------------------
-    match /friendRequests/{requestId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow create: if isAuthenticated() && isNotSuspended()
-        && request.resource.data.senderId == request.auth.uid;
-      // Receiver may accept or decline.
-      allow update: if isAuthenticated() && isNotSuspended()
-        && resource.data.receiverId == request.auth.uid;
-      // Sender may cancel.
-      allow delete: if isAuthenticated() && isNotSuspended()
-        && resource.data.senderId == request.auth.uid;
-      allow read, write: if isAdmin();
-    }
+    // friendRequests – the ONLY match block for this collection is the
+    // callable-only friend-graph model below (fromUid/toUid). An earlier
+    // senderId/receiverId scaffold that granted direct client create/update/
+    // delete was removed: Firestore rules are ADDITIVE, so leaving it in place
+    // gave clients a path to forge/modify friendRequests (setting senderId to
+    // themselves) and bypass the friend.* callables — breaking the
+    // callable-only-write invariant of the new model. No production code (app,
+    // admin web, or functions) ever used the senderId/receiverId shape.
 
     // -------------------------------------------------------------------------
     // userBlocks – directional user blocking (blocking.block / blocking.unblock)

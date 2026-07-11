@@ -2,8 +2,9 @@
  * friend.sendRequest / friend.respondRequest / friend.remove / friend.list —
  * member-gated callables (contracts/functions/functions.json).
  *
- * Deployed via the `friends` export group as `friend-sendRequest`,
- * `friend-respondRequest`, `friend-remove`, `friend-list`. This is the
+ * Deployed via the `friend` export group (functions/src/index.ts) as
+ * `friend-sendRequest`, `friend-respondRequest`, `friend-remove`,
+ * `friend-list`. This is the
  * friend-GRAPH foundation only — direct messaging/DMs are a separate
  * follow-up and are intentionally NOT built here.
  *
@@ -295,11 +296,24 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
       return { status: 'declined' };
     }
 
-    // action === 'accept' — read both live profiles (freshness) before writing.
-    const [callerSnap, fromSnap] = await Promise.all([
+    // action === 'accept' — read both live profiles (freshness) and the block
+    // state in BOTH directions before writing. Reads must precede writes in a
+    // Firestore transaction, so the block docs are read in the same batch.
+    const [callerSnap, fromSnap, callerBlockedFrom, fromBlockedCaller] = await Promise.all([
       tx.get(db.collection('users').doc(actor.uid)),
       tx.get(db.collection('users').doc(fromUid)),
+      tx.get(blockRef(actor.uid, fromUid)),
+      tx.get(blockRef(fromUid, actor.uid)),
     ]);
+
+    // Blocking is honoured in BOTH directions: if either party has blocked the
+    // other since the request was sent, the friendship must not be created.
+    // Neutral failed-precondition (never reveals who blocked whom), matching
+    // sendRequest's block handling.
+    if (callerBlockedFrom.exists || fromBlockedCaller.exists) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    }
+
     const callerProfile = toProfileProjection(callerSnap.data());
     const fromProfile = toProfileProjection(fromSnap.data());
 
