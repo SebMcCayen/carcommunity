@@ -159,9 +159,10 @@ than quietly relaxed.
 
 ### 3.1 The competitive case (why now, why this shape)
 
-Competitor X turned the recorded, shareable drive into 187K+ drivers in
-under 18 months, largely via TikTok ads of its share cards and replays
-leaning on racing-game comparisons. Three facts from the teardown
+Competitor X turned the recorded, shareable drive into a large US user
+base in a short window (specific growth figures kept to the private
+analysis rather than this public repo), largely via social-video ads of
+its share cards and replays leaning on racing-game comparisons. Three facts from the teardown
 (`docs/competitor-analysis/competitor-x.md`) shape this proposal:
 
 1. **The loop is the product.** Users do not rave about GPS accuracy in the
