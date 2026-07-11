@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.navigation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,6 +82,11 @@ class NavigationController(
                 stateFlow.value = stateFlow.value.copy(searching = true)
                 try {
                     val results = client.geocode(query, cachedOrigin)
+                    // The geocode call blocks in a non-cooperative network layer
+                    // (HttpURLConnection), so a job cancelled mid-flight — e.g. the
+                    // user kept typing — still returns here. Bail before writing so
+                    // stale suggestions never overwrite the latest keystroke's state.
+                    coroutineContext.ensureActive()
                     stateFlow.value =
                         stateFlow.value.copy(suggestions = results, searching = false)
                 } catch (e: CancellationException) {
@@ -124,6 +130,11 @@ class NavigationController(
                 }
                 try {
                     val summary = client.route(origin, suggestion.point)
+                    // The route call blocks in a non-cooperative network layer
+                    // (HttpURLConnection), so a job cancelled mid-flight — e.g. the
+                    // user picked a different destination or cleared — still returns
+                    // here. Bail before writing so a stale route never lands in state.
+                    coroutineContext.ensureActive()
                     if (summary == null) {
                         stateFlow.value =
                             stateFlow.value.copy(routeLoading = false, error = NavError.Route)

@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.navigation
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -238,6 +240,68 @@ class NavigationControllerTest {
         state = controller.state.value
         assertFalse(state.searching)
         assertTrue(state.suggestions.isEmpty())
+    }
+
+    @Test
+    fun `a cancelled geocode that still returns does not write stale suggestions`() = runTest {
+        // Model a non-cooperative blocking network call (HttpURLConnection):
+        // cancellation can't interrupt it, so the geocode still returns a result
+        // after the job was cancelled. The controller's `ensureActive()` guard
+        // must stop that result from leaking into state.
+        val gate = CompletableDeferred<Unit>()
+        val client =
+            object : MapboxSearchClient {
+                override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
+                    withContext(NonCancellable) { gate.await() }
+                    return listOf(suggestion)
+                }
+
+                override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? = null
+            }
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.onQueryChange("kung")
+        advanceTimeBy(300)
+        runCurrent()
+        assertTrue(controller.state.value.searching)
+
+        // Cancel the in-flight lookup, then let the non-cooperative call complete.
+        controller.clearDestination()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(controller.state.value.suggestions.isEmpty())
+        assertFalse(controller.state.value.searching)
+    }
+
+    @Test
+    fun `a cancelled route that still returns does not write a stale route`() = runTest {
+        // Same non-cooperative model for the directions call: a route that
+        // returns after the job was cancelled must not overwrite cleared state.
+        val gate = CompletableDeferred<Unit>()
+        val client =
+            object : MapboxSearchClient {
+                override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> = emptyList()
+
+                override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? {
+                    withContext(NonCancellable) { gate.await() }
+                    return routeSummary
+                }
+            }
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+        controller.refreshOrigin()
+        advanceUntilIdle()
+
+        controller.select(suggestion)
+        assertTrue(controller.state.value.routeLoading)
+
+        // Cancel the in-flight route, then let the non-cooperative call complete.
+        controller.clearDestination()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(controller.state.value.route)
+        assertFalse(controller.state.value.routeLoading)
     }
 
     @Test
