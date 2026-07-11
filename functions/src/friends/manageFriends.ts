@@ -249,6 +249,18 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
       tx.set(callerFriendRef, buildFriendshipDocument(targetUid, targetProfile, () => Timestamp.fromDate(now)));
       tx.set(targetFriendRef, buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)));
       tx.set(incomingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      // Concurrency guard: under a "both users send at the same time" race BOTH
+      // directional request docs can exist as pending. We accept the incoming
+      // (target→caller) side above; the caller's own outgoing (caller→target)
+      // doc — read in the same batch — must be resolved in the SAME transaction
+      // too, using the identical status='accepted' merge the normal accept path
+      // (respondRequest) applies, so friend.list (which only surfaces pending
+      // docs) can't keep showing a stale outgoing/incoming request now that the
+      // friendship exists. Guarded on the snapshot: in the non-race path the
+      // outgoing doc doesn't exist and nothing is written.
+      if (outgoing.exists) {
+        tx.set(outgoingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      }
       return {
         status: 'friends',
         friend: toFriendSummary(targetUid, { displayName: targetProfile.displayName, avatarPath: targetProfile.avatarPath }, now.toISOString()),

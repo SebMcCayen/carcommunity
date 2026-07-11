@@ -138,6 +138,33 @@ async function friendshipExists(ownerUid: string, friendUid: string): Promise<bo
   return snap.exists;
 }
 
+/** Status of a directional friendRequests doc, or undefined when it doesn't exist. */
+async function requestStatus(fromUid: string, toUid: string): Promise<string | undefined> {
+  const snap = await adminDb
+    .collection('friendRequests')
+    .doc(friendRequestId(fromUid, toUid))
+    .get();
+  return snap.exists ? (snap.data()?.status as string | undefined) : undefined;
+}
+
+/** Seeds a pending directional friendRequests doc (used to simulate the mutual-send race). */
+async function seedPendingRequest(from: TestUser, to: TestUser, fromName: string, toName: string): Promise<void> {
+  await adminDb
+    .collection('friendRequests')
+    .doc(friendRequestId(from.uid, to.uid))
+    .set({
+      fromUid: from.uid,
+      toUid: to.uid,
+      status: 'pending',
+      fromDisplayName: fromName,
+      fromAvatarPath: null,
+      toDisplayName: toName,
+      toAvatarPath: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+}
+
 beforeAll(async () => {
   app = initializeApp(
     { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
@@ -384,6 +411,51 @@ describe('friend request lifecycle', () => {
     expect(await callableErrorCode(call('friend-sendRequest', { toUid: ivy.uid }))).toBe(
       'functions/already-exists',
     );
+  });
+
+  it('mutual-pending race auto-accept leaves NO pending request docs for either direction', async () => {
+    const mia = await newMember('MiaLC');
+    const nia = await newMember('NiaLC');
+
+    // Simulate the "both users send at the same time" race: BOTH directional
+    // request docs already exist as pending before the auto-accept runs.
+    await seedPendingRequest(mia, nia, 'MiaLC', 'NiaLC'); // Mia → Nia (caller's outgoing)
+    await seedPendingRequest(nia, mia, 'NiaLC', 'MiaLC'); // Nia → Mia (caller's incoming)
+
+    // Mia sends to Nia → reverse-pending auto-accept branch fires.
+    await signInAs(mia);
+    const result = (await call('friend-sendRequest', { toUid: nia.uid })).data as {
+      status: string;
+      friend?: { uid: string };
+    };
+    expect(result.status).toBe('friends');
+    expect(result.friend?.uid).toBe(nia.uid);
+
+    // Friendship exists on both sides.
+    expect(await friendshipExists(mia.uid, nia.uid)).toBe(true);
+    expect(await friendshipExists(nia.uid, mia.uid)).toBe(true);
+
+    // Neither directional request doc is still pending — the incoming (Nia→Mia)
+    // AND the caller's own outgoing (Mia→Nia) were both resolved in-transaction,
+    // so friend.list (pending-only) can't surface a stale request.
+    expect(await requestStatus(mia.uid, nia.uid)).not.toBe('pending');
+    expect(await requestStatus(nia.uid, mia.uid)).not.toBe('pending');
+
+    // And neither user's friend.list shows a lingering pending request.
+    const miaList = (await call('friend-list', {})).data as {
+      incoming: unknown[];
+      outgoing: unknown[];
+    };
+    expect(miaList.outgoing).toHaveLength(0);
+    expect(miaList.incoming).toHaveLength(0);
+
+    await signInAs(nia);
+    const niaList = (await call('friend-list', {})).data as {
+      incoming: unknown[];
+      outgoing: unknown[];
+    };
+    expect(niaList.outgoing).toHaveLength(0);
+    expect(niaList.incoming).toHaveLength(0);
   });
 
   it('honours blocking in both directions with a neutral error', async () => {
