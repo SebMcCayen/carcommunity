@@ -374,9 +374,11 @@ service cloud.firestore {
     // through the friend.* callables so the denormalized displayName/avatarPath
     // and the two-sided invariant stay backend-controlled.
     //
-    // friendRequests/{fromUid__toUid}: a directional request. Readable by the
-    // sender (fromUid) and the recipient (toUid) only — a request never leaks
-    // to third parties. All writes go through the friend.* callables (nickname
+    // friendRequests/{requestId}: a directional request whose id is a
+    // deterministic hash of the (fromUid, toUid) pair (friendRequestId in
+    // friends-core.ts), matched below as {requestId}. Readable by the sender
+    // (fromUid) and the recipient (toUid) only — a request never leaks to third
+    // parties. All writes go through the friend.* callables (nickname
     // resolution, block checks, auto-accept, status transitions).
     // -------------------------------------------------------------------------
     match /users/{userId}/friends/{friendId} {

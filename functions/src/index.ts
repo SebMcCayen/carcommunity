@@ -452,8 +452,10 @@ export const groupDrive = {
  * The friend-GRAPH foundation (contracts/functions/functions.json:
  * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
  * separate follow-up and are NOT part of this domain. Model:
- * friendRequests/{fromUid__toUid} (one directional request per ordered pair)
- * and the per-side users/{uid}/friends/{friendUid} subcollection written for
+ * friendRequests/{requestId} — one directional request per ordered pair, keyed
+ * by a deterministic hash of the (fromUid, toUid) pair (friendRequestId in
+ * friends-core.ts), NOT the literal `fromUid__toUid` string — and the per-side
+ * users/{uid}/friends/{friendUid} subcollection written for
  * BOTH parties on accept. Owner-readable, callable-only writes
  * (firebase/firestore.rules). sendRequest resolves a nickname (displayName,
  * NOT unique): 0 matches → not-found, 1 → proceed, >1 → failed-precondition

@@ -64,6 +64,18 @@ const CALLABLE_OPTS = {
 /** Cap on candidates returned for an ambiguous nickname. */
 const AMBIGUOUS_CANDIDATE_LIMIT = 10;
 
+/**
+ * Bounded reads for friend.list. Each of the three queries (friends,
+ * incoming/outgoing pending requests) is capped so the callable can never fan
+ * out into an unbounded read as the friend graph grows — matching the fixed
+ * `.limit(MAX_*)` convention used elsewhere (e.g. MAX_REPORT_SCAN in
+ * events/moderateReports.ts). These are generous safety ceilings, not a UI
+ * page size; cursor pagination (a pageToken/startAfter follow-up) can layer on
+ * later without changing the response shape.
+ */
+const MAX_FRIENDS_RETURNED = 1000;
+const MAX_PENDING_REQUESTS_RETURNED = 500;
+
 // ---------------------------------------------------------------------------
 // Firestore references
 // ---------------------------------------------------------------------------
@@ -414,17 +426,27 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsRe
     throw new HttpsError('invalid-argument', parsed.message);
   }
 
+  // Every query is bounded so a large friend graph can't turn this callable
+  // into an unbounded read (cost/latency guard). The caps are generous safety
+  // ceilings; results are still sorted in memory below.
   const [friendsSnap, incomingSnap, outgoingSnap] = await Promise.all([
-    db.collection('users').doc(actor.uid).collection('friends').get(),
+    db
+      .collection('users')
+      .doc(actor.uid)
+      .collection('friends')
+      .limit(MAX_FRIENDS_RETURNED)
+      .get(),
     db
       .collection('friendRequests')
       .where('toUid', '==', actor.uid)
       .where('status', '==', 'pending')
+      .limit(MAX_PENDING_REQUESTS_RETURNED)
       .get(),
     db
       .collection('friendRequests')
       .where('fromUid', '==', actor.uid)
       .where('status', '==', 'pending')
+      .limit(MAX_PENDING_REQUESTS_RETURNED)
       .get(),
   ]);
 

@@ -624,7 +624,7 @@
     {
       "name": "friend.list",
       "domain": "friend",
-      "description": "Lists the caller's established friends plus incoming and outgoing PENDING requests ({} input). Returns { friends:[{uid,displayName,avatarPath,friendsSince}], incoming:[FriendRequestSummary], outgoing:[FriendRequestSummary] } where each FriendRequestSummary is { requestId, fromUid, toUid, direction, otherUser:{uid,displayName,avatarPath}, createdAt } with the OTHER party projected for the UI. Owner-only server reads; friends are also directly owner-readable at users/{uid}/friends. Deployed via grouped export as friend-list (functions/src/friends/manageFriends.ts).",
+      "description": "Lists the caller's established friends plus incoming and outgoing PENDING requests ({} input). Returns { friends:[{uid,displayName,avatarPath,friendsSince}], incoming:[FriendRequestSummary], outgoing:[FriendRequestSummary] } where each FriendRequestSummary is { requestId, fromUid, toUid, direction, otherUser:{uid,displayName,avatarPath}, createdAt } with the OTHER party projected for the UI. Owner-only server reads; friends are also directly owner-readable at users/{uid}/friends. Each of the three queries is bounded (friends capped at 1000, incoming/outgoing pending each capped at 500) so a large friend graph can't cause an unbounded read; cursor pagination is a possible follow-up without changing the response shape. Deployed via grouped export as friend-list (functions/src/friends/manageFriends.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
