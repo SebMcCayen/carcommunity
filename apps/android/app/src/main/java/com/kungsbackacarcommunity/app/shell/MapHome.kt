@@ -259,10 +259,9 @@ private fun SearchBarRow(
             // paint anything until the image is ready). Once the avatar bitmap is
             // displayed, the cropped AsyncImage fills the button and hides it.
             Box(
-                // Circular clip lives on the container so the avatar image (drawn
-                // on top) is cropped to the round button without clipping the
-                // AsyncImage directly.
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                // No clip needed here: the enclosing Surface(shape = CircleShape)
+                // already crops its content (icon + avatar) to the round button.
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
