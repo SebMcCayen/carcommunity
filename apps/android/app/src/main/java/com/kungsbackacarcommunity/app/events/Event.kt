@@ -72,6 +72,29 @@ data class EventDetail(
     val longitude: Double?,
 )
 
+/**
+ * Client input for creating an event — mirrors the backend `createEventRequest`
+ * (contracts/schemas/events.schema.json): required `title`, `startsAt`,
+ * `approximateArea`, plus the optional teaser/detail fields a user-facing form
+ * exposes. Times are carried as epoch millis and serialized to ISO-8601 UTC by
+ * the repository ([Events.toIsoUtc]).
+ *
+ * NOTE: the deployed `events-create` callable is admin-only (requireAdminActor)
+ * and Firestore rules forbid client writes to `events/{id}`, so submitting this
+ * as a non-admin returns permission-denied. Enabling genuine user-created events
+ * needs a member-callable createEvent + rules change (backend lane).
+ */
+data class CreateEventInput(
+    val title: String,
+    val approximateArea: String,
+    val startsAtMillis: Long,
+    val summary: String? = null,
+    val description: String? = null,
+    val endsAtMillis: Long? = null,
+    val locationName: String? = null,
+    val address: String? = null,
+)
+
 object Events {
     /**
      * RSVP is allowed only for active members on a published event — mirrors
@@ -90,4 +113,60 @@ object Events {
         events.sortedWith(
             compareBy(nullsLast<Long>()) { it.startsAtMillis },
         )
+
+    /** Backend field limits (events-core.ts eventFieldsSchema). */
+    const val TITLE_MAX = 200
+    const val AREA_MAX = 200
+    const val SUMMARY_MAX = 2000
+    const val DESCRIPTION_MAX = 10000
+    const val LOCATION_NAME_MAX = 200
+    const val ADDRESS_MAX = 400
+
+    /**
+     * Whether a [CreateEventInput] satisfies the backend's required-field and
+     * length rules — a title and area that are non-blank and within bounds, and
+     * (when present) an end no earlier than the start. Pure so the form and the
+     * coordinator can gate submission without Firebase.
+     */
+    fun isValidForCreate(input: CreateEventInput): Boolean {
+        val title = input.title.trim()
+        val area = input.approximateArea.trim()
+        if (title.isEmpty() || title.length > TITLE_MAX) return false
+        if (area.isEmpty() || area.length > AREA_MAX) return false
+        if ((input.summary?.length ?: 0) > SUMMARY_MAX) return false
+        if ((input.description?.length ?: 0) > DESCRIPTION_MAX) return false
+        if ((input.locationName?.length ?: 0) > LOCATION_NAME_MAX) return false
+        if ((input.address?.length ?: 0) > ADDRESS_MAX) return false
+        input.endsAtMillis?.let { if (it < input.startsAtMillis) return false }
+        return true
+    }
+
+    /**
+     * Serializes epoch millis to the ISO-8601 UTC form the backend's
+     * `z.string().datetime()` accepts (e.g. `2026-07-11T18:30:00Z`), truncated
+     * to whole seconds so no fractional part is emitted.
+     */
+    fun toIsoUtc(millis: Long): String =
+        java.time.Instant.ofEpochMilli(millis)
+            .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+            .toString()
+
+    /**
+     * Builds the `events-create` callable payload from a validated input,
+     * omitting blank/absent optional fields (the callable schema is `.strict()`,
+     * so only known keys are sent). Optional text is trimmed; blanks are dropped.
+     */
+    fun createPayload(input: CreateEventInput): Map<String, Any> {
+        val payload = mutableMapOf<String, Any>(
+            "title" to input.title.trim(),
+            "approximateArea" to input.approximateArea.trim(),
+            "startsAt" to toIsoUtc(input.startsAtMillis),
+        )
+        input.endsAtMillis?.let { payload["endsAt"] = toIsoUtc(it) }
+        input.summary?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["summary"] = it }
+        input.description?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["description"] = it }
+        input.locationName?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["locationName"] = it }
+        input.address?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["address"] = it }
+        return payload
+    }
 }

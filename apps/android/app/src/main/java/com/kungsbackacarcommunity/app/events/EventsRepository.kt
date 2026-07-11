@@ -35,4 +35,12 @@ interface EventsRepository {
 
     /** Writes/updates the caller's RSVP answer (rules-validated). */
     suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus)
+
+    /**
+     * Creates a new event via the `events-create` callable and returns the new
+     * event id. NOTE: that callable is currently admin-only (requireAdminActor),
+     * so a non-admin caller gets a permission-denied failure — enabling
+     * user-created events needs a backend/rules change (out of the Android lane).
+     */
+    suspend fun createEvent(input: CreateEventInput): String
 }

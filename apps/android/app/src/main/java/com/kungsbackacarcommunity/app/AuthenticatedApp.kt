@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CardMembership
-import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
@@ -24,11 +21,11 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +36,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -112,12 +110,17 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
+import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -132,6 +135,7 @@ import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
+import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.shell.MapHome
@@ -237,6 +241,25 @@ fun AuthenticatedApp(
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
             var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
 
+            // Defensive migration: selectedTab is rememberSaveable, so a session
+            // saved by an older app version (when Create was a real content
+            // destination) could restore it as ShellTab.Create — which now
+            // renders as blank Unit, stranding the app on an empty content area.
+            // Coerce any such restored Create back to Map on first composition.
+            // This is safe against the live action path: tapping Create never
+            // sets selectedTab to Create (ShellBottomBar.onSelect switches to Map
+            // and raises the prompt), so this only ever rescues a stale restored
+            // value and never interferes with the Create tab's action behaviour.
+            LaunchedEffect(Unit) {
+                if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
+            }
+
+            // Tapping the bottom-nav "Create" tab opens the Map and raises this
+            // transparent prompt asking whether to start sharing live location —
+            // Create never becomes a selected tab of its own (see
+            // ShellBottomBar.onSelect below).
+            var showLiveSharePrompt by rememberSaveable { mutableStateOf(false) }
+
             // Group-drive "show on map": stash roster uids, switch to the Map
             // tab. Preserved for the real Mapbox impl (the stub surfaces only a
             // count); mirrors the old MapRoute participant wiring.
@@ -248,10 +271,28 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Resolved avatar download URL for the map-home top-right profile
+            // button (null → falls back to the generic account icon).
+            val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+
+            // Address-search + directions overlay ("Where to?"). The Mapbox
+            // search/directions client is guarded: with a blank token (CI / no
+            // token) every call no-ops to empty/null and never hits the network
+            // (see HttpMapboxSearchClient). Origin comes from the fused-location
+            // provider, degrading to null (→ inline hint) without a fix/permission.
+            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+            val mapboxToken = stringResource(R.string.mapbox_access_token)
+            val searchLanguage = remember { java.util.Locale.getDefault().language }
+            val searchClient =
+                remember(mapboxToken, searchLanguage) {
+                    HttpMapboxSearchClient(mapboxToken, searchLanguage)
+                }
+            val originProvider: suspend () -> LatLng? =
+                remember(context) { { CurrentLocation.lastKnown(context) } }
 
             // Flag-gated (not member-gated) reach to the live-location feature.
             val liveLocationEnabled =
@@ -301,6 +342,42 @@ fun AuthenticatedApp(
                 }
             }
 
+            // Single live-share entry point shared by the map's broadcast toggle
+            // and the Create-tab prompt, so both honour the same member-gating and
+            // "open the live screen when not permitted/unwired" fallback.
+            fun toggleLiveShare() {
+                when (
+                    LiveShareToggle.action(
+                        isSharing = isSharing,
+                        canShare = canShareLive,
+                        wired = liveLocationCoordinator != null,
+                    )
+                ) {
+                    LiveShareAction.Start -> {
+                        liveLocationCoordinator?.let { c ->
+                            scope.launch {
+                                c.start(LiveSessionDuration.ONE_HOUR)
+                            }
+                            BackgroundLocationController.start(context)
+                        }
+                    }
+                    LiveShareAction.Stop -> {
+                        liveLocationCoordinator?.let { c ->
+                            scope.launch { c.stop() }
+                            BackgroundLocationController.stop(context)
+                        }
+                    }
+                    LiveShareAction.OpenScreen ->
+                        if (liveLocationRepository != null) {
+                            route = ShellRoute.LiveLocation
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(unavailableText)
+                            }
+                        }
+                }
+            }
+
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
                 // Single close path for the currently-open route, shared by
@@ -339,7 +416,24 @@ fun AuthenticatedApp(
                     }
                 }
 
-                if (route != null) {
+                if (navSearchOpen) {
+                    // Full-screen address-search + directions overlay. Renders
+                    // the same map surface behind it (MapHome is not composed
+                    // while this is open, so the single MapView is free), draws
+                    // the picked route on it, and owns its own Back handling.
+                    // Closing wipes the route overlay so nothing lingers on the
+                    // map-home map afterwards.
+                    NavigationSearchScreen(
+                        mapSurface = mapSurface,
+                        searchClient = searchClient,
+                        originProvider = originProvider,
+                        onClose = {
+                            mapSurface.setRouteOverlay(null)
+                            navSearchOpen = false
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (route != null) {
                     RouteHost(
                         route = route!!,
                         uid = uid,
@@ -423,7 +517,17 @@ fun AuthenticatedApp(
                         bottomBar = {
                             ShellBottomBar(
                                 selected = selectedTab,
-                                onSelect = { selectedTab = it },
+                                onSelect = { tab ->
+                                    // Create is an action, not a destination: open
+                                    // the Map and raise the live-share prompt rather
+                                    // than letting Create become the selected tab.
+                                    if (tab == ShellTab.Create) {
+                                        selectedTab = ShellTab.Map
+                                        showLiveSharePrompt = true
+                                    } else {
+                                        selectedTab = tab
+                                    }
+                                },
                             )
                         },
                     ) { padding ->
@@ -434,44 +538,16 @@ fun AuthenticatedApp(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
                                         participantCount = mapParticipantUids.size,
+                                        avatarUrl = mapAvatarUrl,
                                         userLabel =
                                             stringResource(R.string.shell_userMarkerLabel),
-                                        onSearch = { showComingSoon() },
+                                        // Tapping "Where to?" opens the address
+                                        // search + directions overlay.
+                                        onSearch = { navSearchOpen = true },
+                                        // Voice search (speech-to-text) is a
+                                        // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
-                                        onToggleLiveShare = {
-                                            when (
-                                                LiveShareToggle.action(
-                                                    isSharing = isSharing,
-                                                    canShare = canShareLive,
-                                                    wired = liveLocationCoordinator != null,
-                                                )
-                                            ) {
-                                                LiveShareAction.Start -> {
-                                                    liveLocationCoordinator?.let { c ->
-                                                        scope.launch {
-                                                            c.start(LiveSessionDuration.ONE_HOUR)
-                                                        }
-                                                        BackgroundLocationController.start(context)
-                                                    }
-                                                }
-                                                LiveShareAction.Stop -> {
-                                                    liveLocationCoordinator?.let { c ->
-                                                        scope.launch { c.stop() }
-                                                        BackgroundLocationController.stop(context)
-                                                    }
-                                                }
-                                                LiveShareAction.OpenScreen ->
-                                                    if (liveLocationRepository != null) {
-                                                        route = ShellRoute.LiveLocation
-                                                    } else {
-                                                        scope.launch {
-                                                            snackbarHostState.showSnackbar(
-                                                                unavailableText,
-                                                            )
-                                                        }
-                                                    }
-                                            }
-                                        },
+                                        onToggleLiveShare = { toggleLiveShare() },
                                         // Layers control toggles the traffic
                                         // overlay (visible only on the real
                                         // Mapbox surface; a no-op on the stub).
@@ -481,11 +557,14 @@ fun AuthenticatedApp(
                                             )
                                         },
                                         onRecenter = { mapSurface.recenter() },
-                                        onMusic = { showComingSoon() },
-                                        // "Create route" opens the Create hub
-                                        // (create event / share live location).
-                                        onCreateRoute = { selectedTab = ShellTab.Create },
                                         onOpenMore = { route = ShellRoute.More },
+                                        // Placeholder: chat is per-event only
+                                        // (EventChatRepository) — there is no
+                                        // global/community unread-count source
+                                        // client-side. Wire a real "missed
+                                        // chats" count here once a backend
+                                        // inbox exists (out of the Android lane).
+                                        unreadChatCount = 0,
                                     )
 
                                 ShellTab.History ->
@@ -503,36 +582,11 @@ fun AuthenticatedApp(
                                         )
                                     }
 
-                                ShellTab.Create ->
-                                    HubScreen(
-                                        title = stringResource(R.string.shell_createTitle),
-                                        entries =
-                                            listOf(
-                                                HubEntry(
-                                                    label = stringResource(R.string.shell_createEvent),
-                                                    icon = Icons.Filled.Event,
-                                                    onClick =
-                                                        if (eventsRepository != null) {
-                                                            { route = ShellRoute.Events }
-                                                        } else {
-                                                            null
-                                                        },
-                                                ),
-                                                HubEntry(
-                                                    label =
-                                                        stringResource(R.string.shell_startLiveLocation),
-                                                    icon = Icons.Filled.Podcasts,
-                                                    onClick =
-                                                        if (liveLocationRepository != null &&
-                                                            liveLocationEnabled
-                                                        ) {
-                                                            { route = ShellRoute.LiveLocation }
-                                                        } else {
-                                                            null
-                                                        },
-                                                ),
-                                            ),
-                                    )
+                                // Create is intercepted in ShellBottomBar.onSelect
+                                // (switches to Map + raises the live-share prompt),
+                                // so it never renders as its own tab. This branch
+                                // exists only for `when` exhaustiveness.
+                                ShellTab.Create -> Unit
 
                                 ShellTab.Social ->
                                     HubScreen(
@@ -668,6 +722,25 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // Transparent prompt raised by the Create tab: Confirm starts
+                // live sharing via the shared toggle path; Cancel or an outside
+                // tap dismisses it, staying on the map.
+                if (showLiveSharePrompt) {
+                    LiveSharePromptDialog(
+                        onConfirm = {
+                            showLiveSharePrompt = false
+                            // The prompt only ever asks to START sharing, but
+                            // toggleLiveShare() maps to Stop while a session is
+                            // active. Guard on the live-time isSharing so
+                            // confirming can never stop an active session; the
+                            // Start / open-screen fallbacks still run when not
+                            // already sharing.
+                            if (!isSharing) toggleLiveShare()
+                        },
+                        onDismiss = { showLiveSharePrompt = false },
+                    )
+                }
+
                 SnackbarHost(
                     hostState = snackbarHostState,
                     modifier =
@@ -685,38 +758,72 @@ private fun ShellBottomBar(
     selected: ShellTab,
     onSelect: (ShellTab) -> Unit,
 ) {
-    NavigationBar {
+    // 50%-alpha surface container so the map shows through the bar; icon-only
+    // items (no labels) keep the tabs compact over the semi-transparent map.
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+    ) {
         NavigationBarItem(
             selected = selected == ShellTab.Map,
             onClick = { onSelect(ShellTab.Map) },
-            icon = { Icon(Icons.Filled.Map, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabMap)) },
+            icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.History,
             onClick = { onSelect(ShellTab.History) },
-            icon = { Icon(Icons.Filled.History, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabHistory)) },
+            icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Create,
             onClick = { onSelect(ShellTab.Create) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabCreate)) },
+            icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.shell_tabCreate)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Social,
             onClick = { onSelect(ShellTab.Social) },
-            icon = { Icon(Icons.Filled.Groups, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabSocial)) },
+            icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
             onClick = { onSelect(ShellTab.Garage) },
-            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabGarage)) },
+            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
+            label = null,
         )
     }
+}
+
+/**
+ * Transparent confirmation prompt shown over the map when the user taps the
+ * "Create" tab: a translucent-surfaced [AlertDialog] asking whether to start
+ * sharing live location. [onConfirm] runs the shared live-share toggle;
+ * [onDismiss] (Cancel or an outside tap) leaves the user on the map.
+ */
+@Composable
+private fun LiveSharePromptDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // Translucent surface so the map stays visible behind the prompt.
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        title = { Text(stringResource(R.string.shell_startLiveLocation)) },
+        text = { Text(stringResource(R.string.shell_liveSharePromptBody)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.shell_liveSharePromptConfirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.shell_liveSharePromptCancel))
+            }
+        },
+    )
 }
 
 /**
@@ -802,15 +909,6 @@ private fun RouteHost(
                             },
                         ),
                         HubEntry(
-                            stringResource(R.string.shell_moreNotificationSettings),
-                            Icons.Filled.NotificationsActive,
-                            if (notificationSettingsRepository != null) {
-                                { onOpenRoute(ShellRoute.NotificationSettings) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
                             stringResource(R.string.shell_moreBlocked),
                             Icons.Filled.Block,
                             if (blockingRepository != null) {
@@ -829,31 +927,9 @@ private fun RouteHost(
                             },
                         ),
                         HubEntry(
-                            stringResource(R.string.shell_morePartnerStats),
-                            Icons.Filled.BarChart,
-                            if (partnerStatsRepository != null && partnerStatsEnabled) {
-                                { onOpenRoute(ShellRoute.PartnerStats) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreFeedback),
-                            Icons.Filled.BugReport,
-                            if (feedbackCoordinator != null) {
-                                { onOpenRoute(ShellRoute.Feedback) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreAccountDeletion),
-                            Icons.Filled.DeleteForever,
-                            if (accountDeletionCoordinator != null) {
-                                { onOpenRoute(ShellRoute.AccountDeletion) }
-                            } else {
-                                null
-                            },
+                            stringResource(R.string.shell_moreSettings),
+                            Icons.Filled.Settings,
+                            { onOpenRoute(ShellRoute.Settings) },
                         ),
                         HubEntry(
                             stringResource(R.string.shell_moreSignOut),
@@ -879,13 +955,20 @@ private fun RouteHost(
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             val avatarPicker =
                 rememberImagePickLauncher(
-                    maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                    // Read with a higher cap than the 5 MB upload cap so the raw
+                    // pick reaches ImageCompressor (which shrinks it below the
+                    // upload cap). Still bounded to avoid OOM; the upload precheck
+                    // on the compressed result enforces PROFILE_IMAGE_MAX_BYTES.
+                    maxBytes = MediaUpload.PROFILE_IMAGE_READ_MAX_BYTES,
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        val imageId = MediaUpload.newImageId(picked.contentType)
+                        // Downscale + JPEG-re-encode before upload so avatars stay
+                        // small (Storage cost + well under the byte cap).
+                        val compressed = ImageCompressor.compress(picked)
+                        val imageId = MediaUpload.newImageId(compressed.contentType)
                         val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(picked, path) { storedPath ->
+                        avatarCoordinator.upload(compressed, path) { storedPath ->
                             repo.updateAvatarPath(uid, storedPath)
                         }
                     }
@@ -1147,6 +1230,40 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        ShellRoute.Settings ->
+            SettingsScreen(
+                onManageSubscription =
+                    if (billingRepository != null && subscriptionVerifier != null) {
+                        { onOpenRoute(ShellRoute.Subscription) }
+                    } else {
+                        null
+                    },
+                onNotificationSettings =
+                    if (notificationSettingsRepository != null) {
+                        { onOpenRoute(ShellRoute.NotificationSettings) }
+                    } else {
+                        null
+                    },
+                onPartnerStats =
+                    if (partnerStatsRepository != null && partnerStatsEnabled) {
+                        { onOpenRoute(ShellRoute.PartnerStats) }
+                    } else {
+                        null
+                    },
+                onFeedback =
+                    if (feedbackCoordinator != null) {
+                        { onOpenRoute(ShellRoute.Feedback) }
+                    } else {
+                        null
+                    },
+                onDeleteAccount =
+                    if (accountDeletionCoordinator != null) {
+                        { onOpenRoute(ShellRoute.AccountDeletion) }
+                    } else {
+                        null
+                    },
+            )
 
         ShellRoute.Subscription ->
             if (billingRepository != null && subscriptionVerifier != null) {
