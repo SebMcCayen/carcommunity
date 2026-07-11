@@ -5,9 +5,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
@@ -175,7 +177,7 @@ class MapboxMapSurface : MapSurface {
                             location.updateSettings {
                                 enabled = true
                                 pulsingEnabled = true
-                                pulsingColor = pulseColorFor(userMarkerFlow.value)
+                                pulsingColor = pulseColorFor(marker)
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
                         }
@@ -210,15 +212,19 @@ class MapboxMapSurface : MapSurface {
         const val TRAFFIC_SOURCE_LAYER = "traffic"
         const val TRAFFIC_TILESET = "mapbox://mapbox.mapbox-traffic-v1"
 
-        /** Puck pulse ARGB while live-sharing (success green, matches the shell). */
-        const val LIVE_SHARE_PULSE_COLOR: Int = 0xFF43A047.toInt()
+        /**
+         * Puck pulse ARGB while live-sharing. Sourced from the shell's success
+         * green design token ([KccPalette.successGreen], 0xFF1E8E3E) so it stays
+         * the single source of truth for the status/success green.
+         */
+        val LIVE_SHARE_PULSE_COLOR: Int = KccPalette.successGreen.toArgb()
 
         /** Puck pulse ARGB when not sharing (neutral blue). */
         const val DEFAULT_PULSE_COLOR: Int = 0xFF1A73E8.toInt()
 
         /** Green pulse when the caller is live-sharing, blue otherwise. */
         fun pulseColorFor(marker: MapUserMarker?): Int =
-            if (marker?.online == true) LIVE_SHARE_PULSE_COLOR else DEFAULT_PULSE_COLOR
+            if (marker?.isLiveSharing == true) LIVE_SHARE_PULSE_COLOR else DEFAULT_PULSE_COLOR
 
         /**
          * Adds the Mapbox traffic vector source + a congestion-coloured line

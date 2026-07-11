@@ -29,10 +29,14 @@ enum class MapLoadState {
     Loaded,
 }
 
-/** The caller's own marker to render as a labeled "You / Online" pin. */
+/**
+ * The caller's own marker state. [label] is the display name; [isLiveSharing]
+ * is true while the user is actively live-sharing their location (drives the
+ * green puck pulse), false otherwise.
+ */
 data class MapUserMarker(
     val label: String,
-    val online: Boolean,
+    val isLiveSharing: Boolean,
 )
 
 /**

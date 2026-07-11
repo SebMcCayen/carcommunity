@@ -89,7 +89,7 @@ fun MapHome(
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
     // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
-        mapSurface.setUserMarker(MapUserMarker(label = userLabel, online = isLiveSharing))
+        mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
