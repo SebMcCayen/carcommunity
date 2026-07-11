@@ -149,7 +149,7 @@
     <string name="profile_badges">Awards</string>
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>
-    <string name="profile_points">Kronpoäng</string>
+    <string name="profile_points">Points</string>
     <string name="profile_displayNameLabel">Display name</string>
     <string name="profile_bioLabel">Bio</string>
     <string name="profile_saveButton">Save</string>
@@ -315,7 +315,7 @@
     <string name="groupDrive_countArrived">Arrived</string>
     <string name="groupDrive_goToLiveLocation">Manage live location</string>
     <string name="groupDrive_showOnMap">Show group on map</string>
-    <string name="savedDrives_screenTitle">My drives</string>
+    <string name="savedDrives_screenTitle">History</string>
     <string name="savedDrives_loading">Loading drives...</string>
     <string name="savedDrives_detailTitle">Drive details</string>
     <string name="savedDrives_empty">No saved drives yet.</string>
@@ -419,14 +419,14 @@
     <string name="badges_badgeNames_helpful_member">Helpful member</string>
     <string name="badges_badgeNames_early_member">Early member</string>
     <string name="badges_badgeNames_garage_created">Garage profile created</string>
-    <string name="points_screenTitle">Kronpoäng</string>
+    <string name="points_screenTitle">Points</string>
     <string name="points_balanceLabel">Your balance</string>
     <string name="points_shortForm">KP</string>
-    <string name="points_disclaimer">Kronpoäng are digital points with no cash value.</string>
+    <string name="points_disclaimer">Points are a digital reward with no cash value.</string>
     <string name="points_noTransfer">Points cannot be purchased, sold, transferred, or exchanged for money.</string>
     <string name="points_recentTransactions">Recent transactions</string>
-    <string name="points_loading">Loading Kronpoäng...</string>
-    <string name="points_error">Could not load Kronpoäng. Please try again.</string>
+    <string name="points_loading">Loading Points...</string>
+    <string name="points_error">Could not load Points. Please try again.</string>
     <string name="points_retry">Try again</string>
     <string name="points_empty">No transactions yet.</string>
     <string name="points_loadMore">Load more</string>
@@ -447,7 +447,7 @@
     <string name="crownHunt_errorClaim">Something went wrong. Please try again.</string>
     <string name="crownHunt_errorLocationPermission">Location permission is required to collect.</string>
     <string name="crownHunt_retry">Try again</string>
-    <string name="crownHunt_resultAwarded">The reward has been added to your Kronpoäng balance.</string>
+    <string name="crownHunt_resultAwarded">The reward has been added to your Points balance.</string>
     <string name="crownHunt_resultAlreadyClaimed">You have already collected this reward.</string>
     <string name="crownHunt_resultOutsideGeofence">You are too far from the location.</string>
     <string name="crownHunt_resultMovingTooFast">You are moving too fast to collect.</string>

@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.shell
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +33,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -53,15 +51,18 @@ const val MAP_HOME_TEST_TAG = "map_home"
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
  * prominent "Where to?" search bar, a transient "Loading roads…" status line,
  * a right-side stack of floating circular controls, and a bottom-right "Create
- * route" pill. The user is drawn as a labeled "You / Online" pin over the map.
+ * route" pill. The user's own position is drawn by the surface itself (the
+ * Mapbox location puck at the real GPS location), so it stays anchored to the
+ * ground when the map pans rather than sliding with the screen centre.
  *
- * All map interaction is routed through [mapSurface] (currently a stub); the
- * real Mapbox render + GPS land later behind that same seam. The user is drawn
- * as a labeled "You" pin; a green dot next to the label signals live sharing.
+ * All map interaction is routed through [mapSurface]; the real Mapbox render +
+ * GPS puck sit behind that same seam (the stub renders a neutral placeholder).
+ * The caller's marker model is still pushed via [MapSurface.setUserMarker] so
+ * the surface can reflect live-sharing state on the puck.
  *
  * @param isLiveSharing whether the live-location session is currently sharing —
- *   turns the broadcast control GREEN and shows the marker's online dot (wired
- *   to the real live-location state).
+ *   turns the broadcast control GREEN and is pushed to the surface so the puck
+ *   can signal live sharing (wired to the real live-location state).
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
  */
@@ -82,27 +83,23 @@ fun MapHome(
     modifier: Modifier = Modifier,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
-    val marker by mapSurface.userMarker.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
     // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
-        mapSurface.setUserMarker(MapUserMarker(label = userLabel, online = isLiveSharing))
+        mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
     Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
-        // Full-bleed map (behind everything).
+        // Full-bleed map (behind everything). The user's own position is drawn
+        // by the surface itself (the Mapbox location puck at the real GPS
+        // location), so it stays put when the map pans — there is deliberately
+        // no centre-locked Compose "You" overlay here.
         mapSurface.Content(Modifier.fillMaxSize())
-
-        // Centre "You" pin overlay (green online dot when live-sharing).
-        UserMarkerPin(
-            marker = marker,
-            modifier = Modifier.align(Alignment.Center),
-        )
 
         // Top: search bar + avatar/menu, then the loading status line.
         Column(
@@ -292,70 +289,6 @@ private fun ParticipantChip(count: Int) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
-    }
-}
-
-/**
- * The "You" callout above a dot with an accuracy halo. The palette has
- * no blue token, so the dot uses the brand primary; the online indicator uses
- * the success-green status colour.
- */
-@Composable
-private fun UserMarkerPin(
-    marker: MapUserMarker?,
-    modifier: Modifier = Modifier,
-) {
-    marker ?: return
-    val statusColors = LocalKccStatusColors.current
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(KccRadius.full),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 4.dp,
-            shadowElevation = 4.dp,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (marker.online) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(statusColors.success),
-                    )
-                }
-                Text(
-                    text = marker.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        // Accuracy halo + dot.
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            )
-            Box(
-                modifier =
-                    Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-            )
-        }
     }
 }
 
