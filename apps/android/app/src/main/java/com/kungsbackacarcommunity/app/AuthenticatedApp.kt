@@ -672,36 +672,40 @@ private fun ShellBottomBar(
     selected: ShellTab,
     onSelect: (ShellTab) -> Unit,
 ) {
-    NavigationBar {
+    // 50%-alpha surface container so the map shows through the bar; icon-only
+    // items (no labels) keep the tabs compact over the semi-transparent map.
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+    ) {
         NavigationBarItem(
             selected = selected == ShellTab.Map,
             onClick = { onSelect(ShellTab.Map) },
-            icon = { Icon(Icons.Filled.Map, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabMap)) },
+            icon = { Icon(Icons.Filled.Map, contentDescription = stringResource(R.string.shell_tabMap)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.History,
             onClick = { onSelect(ShellTab.History) },
-            icon = { Icon(Icons.Filled.History, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabHistory)) },
+            icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Create,
             onClick = { onSelect(ShellTab.Create) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabCreate)) },
+            icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.shell_tabCreate)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Social,
             onClick = { onSelect(ShellTab.Social) },
-            icon = { Icon(Icons.Filled.Groups, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabSocial)) },
+            icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
+            label = null,
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
             onClick = { onSelect(ShellTab.Garage) },
-            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = null) },
-            label = { Text(stringResource(R.string.shell_tabGarage)) },
+            icon = { Icon(Icons.Filled.DirectionsCar, contentDescription = stringResource(R.string.shell_tabGarage)) },
+            label = null,
         )
     }
 }

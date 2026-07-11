@@ -29,10 +29,14 @@ enum class MapLoadState {
     Loaded,
 }
 
-/** The caller's own marker to render as a labeled "You / Online" pin. */
+/**
+ * The caller's own marker state. [label] is the display name; [isLiveSharing]
+ * is true while the user is actively live-sharing their location (drives the
+ * green puck pulse), false otherwise.
+ */
 data class MapUserMarker(
     val label: String,
-    val online: Boolean,
+    val isLiveSharing: Boolean,
 )
 
 /**
@@ -48,7 +52,9 @@ data class MapUserMarker(
  *
  * Hooks:
  * - [recenter] — recentre the camera on the user (stub records the request).
- * - [setUserMarker] — supply/clear the "You / Online" pin.
+ * - [setUserMarker] — supply/clear the caller's live-sharing marker state
+ *   ([MapUserMarker]: a label plus [MapUserMarker.isLiveSharing], which drives
+ *   the puck's green/blue pulse).
  * - [loadState] — drives the shell's "Loading roads…" indicator.
  * - [trafficEnabled] / [setTrafficEnabled] — the optional traffic-congestion
  *   overlay the layers control toggles. A surface that cannot draw traffic
