@@ -45,8 +45,8 @@ object ImageCompressor {
             compressBlocking(picked, maxDimension, quality)
         } catch (e: CancellationException) {
             throw e // never swallow cancellation — keep structured concurrency intact
-        } catch (_: Throwable) {
-            picked // any real failure: fall back to the original pick
+        } catch (_: Exception) {
+            picked // best-effort: fall back to the original pick (Errors like OOM propagate)
         }
     }
 
