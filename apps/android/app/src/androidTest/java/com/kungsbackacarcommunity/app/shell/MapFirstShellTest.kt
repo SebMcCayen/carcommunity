@@ -60,6 +60,7 @@ class MapFirstShellTest {
                     mediaUploader = null,
                     badgesRepository = null,
                     blockingRepository = null,
+                    friendsRepository = null,
                     drivesRepository = null,
                     pointsRepository = null,
                     partnerApplicationCoordinator = null,

@@ -112,26 +112,6 @@ private fun GarageAvatar(avatarUrl: String?, contentDescription: String) {
     }
 }
 
-/**
- * Placeholder destination for the not-yet-built Friends feature. A real Friends
- * experience needs a backend (friend graph, requests, presence) that lives
- * outside this Android lane — this screen only reserves the entry point.
- */
-@Composable
-fun FriendsComingSoonScreen(
-    title: String,
-    message: String,
-    modifier: Modifier = Modifier,
-) {
-    AeroPage(title = title, modifier = modifier) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
 @Composable
 private fun PrimaryGarageButton(
     label: String,

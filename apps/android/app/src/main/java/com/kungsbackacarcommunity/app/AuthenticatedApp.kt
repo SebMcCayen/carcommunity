@@ -77,6 +77,8 @@ import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
+import com.kungsbackacarcommunity.app.friends.FriendsRepository
+import com.kungsbackacarcommunity.app.friends.FriendsRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
@@ -130,7 +132,6 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
-import com.kungsbackacarcommunity.app.shell.FriendsComingSoonScreen
 import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
@@ -187,6 +188,7 @@ fun AuthenticatedApp(
     mediaUploader: MediaUploader?,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
+    friendsRepository: FriendsRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -488,6 +490,7 @@ fun AuthenticatedApp(
                         garageCoordinator = garageCoordinator,
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
+                        friendsRepository = friendsRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
@@ -868,6 +871,7 @@ private fun RouteHost(
     garageCoordinator: GarageCoordinator?,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
+    friendsRepository: FriendsRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
@@ -891,6 +895,15 @@ private fun RouteHost(
                             Icons.Filled.Person,
                             if (profileEditCoordinator != null) {
                                 { onOpenRoute(ShellRoute.Profile) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.shell_friendsTitle),
+                            Icons.Filled.Groups,
+                            if (friendsRepository != null) {
+                                { onOpenRoute(ShellRoute.Friends) }
                             } else {
                                 null
                             },
@@ -1122,13 +1135,14 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        // Placeholder: a real Friends feature needs backend work outside this
-        // Android lane (friend graph, requests, presence). See GarageHubScreen.
         ShellRoute.Friends ->
-            FriendsComingSoonScreen(
-                title = stringResource(R.string.shell_friendsTitle),
-                message = stringResource(R.string.shell_friendsComingSoon),
-            )
+            if (friendsRepository != null) {
+                FriendsRoute(
+                    repository = friendsRepository,
+                )
+            } else {
+                LoadingScreen()
+            }
 
         ShellRoute.Badges ->
             if (badgesRepository != null) {
