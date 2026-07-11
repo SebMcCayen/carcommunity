@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -771,7 +772,6 @@ private fun RouteHost(
         ShellRoute.More ->
             HubScreen(
                 title = stringResource(R.string.shell_moreTitle),
-                onBack = onClose,
                 entries =
                     listOf(
                         HubEntry(
@@ -879,17 +879,22 @@ private fun RouteHost(
                         }
                     }
                 }
+            // The on-screen Back button is gone (system Back closes the route),
+            // so its former coordinator cleanup now runs when the Profile route
+            // leaves composition — regardless of how it was dismissed.
+            DisposableEffect(profileEditCoordinator, avatarCoordinator) {
+                onDispose {
+                    profileEditCoordinator?.reset()
+                    avatarCoordinator?.reset()
+                }
+            }
             ProfileScreen(
                 profile = profile,
                 saveStatus = saveStatus,
                 onSave = { name, bio ->
                     profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
                 },
-                onBack = {
-                    onClose()
-                    profileEditCoordinator?.reset()
-                    avatarCoordinator?.reset()
-                },
+                onBack = onClose,
                 onSignOut = onSignOut,
                 avatarUrl = avatarUrl,
                 avatarUploadStatus = avatarStatus,
