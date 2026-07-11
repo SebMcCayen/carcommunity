@@ -28,7 +28,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { toUserAccessState } from '../shared/access';
+import { isRestricted, toUserAccessState } from '../shared/access';
 import {
   ALREADY_FRIENDS_MESSAGE,
   AMBIGUOUS_NICKNAME_MESSAGE,
@@ -203,14 +203,28 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
   const targetFriendRef = friendshipRef(targetUid, actor.uid);
 
   return db.runTransaction<SendRequestResult>(async (tx) => {
-    const [alreadyFriend, outgoing, incoming] = await Promise.all([
-      tx.get(callerFriendRef),
-      tx.get(outgoingRef),
-      tx.get(incomingRef),
-    ]);
+    // Reads must precede writes. Re-read the block state in BOTH directions
+    // INSIDE the transaction: the outside-transaction check above is a cheap
+    // fast-fail, but block state can change between it and these writes
+    // (TOCTOU), so the authoritative guarantee lives here — guarding both the
+    // new-request write and the reverse auto-accept path below.
+    const [alreadyFriend, outgoing, incoming, callerBlockedTarget, targetBlockedCaller] =
+      await Promise.all([
+        tx.get(callerFriendRef),
+        tx.get(outgoingRef),
+        tx.get(incomingRef),
+        tx.get(blockRef(actor.uid, targetUid)),
+        tx.get(blockRef(targetUid, actor.uid)),
+      ]);
 
     if (alreadyFriend.exists) {
       throw new HttpsError('already-exists', ALREADY_FRIENDS_MESSAGE);
+    }
+
+    // Blocking is honoured in BOTH directions. Neutral failed-precondition
+    // (never reveals who blocked whom), matching respondRequest's accept path.
+    if (callerBlockedTarget.exists || targetBlockedCaller.exists) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
     }
 
     // The other party already has a pending request to the caller → befriend
@@ -311,6 +325,21 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
     // Neutral failed-precondition (never reveals who blocked whom), matching
     // sendRequest's block handling.
     if (callerBlockedFrom.exists || fromBlockedCaller.exists) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    }
+
+    // Both parties must still exist and be non-restricted (not soft-deleted or
+    // suspended) at write time — either could have been deleted/suspended
+    // between requireMemberActor and this transaction. Otherwise we would write
+    // friendship docs with null projections for a ghost/restricted account.
+    // Neutral failed-precondition (never reveals which side / why), matching the
+    // block handling above.
+    if (
+      !callerSnap.exists ||
+      !fromSnap.exists ||
+      isRestricted(toUserAccessState(callerSnap.data())) ||
+      isRestricted(toUserAccessState(fromSnap.data()))
+    ) {
       throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
     }
 

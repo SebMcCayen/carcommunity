@@ -4,8 +4,10 @@
  * (friend.sendRequest / friend.respondRequest / friend.remove / friend.list).
  *
  * Data model (all owner-readable, backend-only writes — firebase/firestore.rules):
- *  - friendRequests/{requestId} where requestId = `${fromUid}__${toUid}`
- *    (one directional request per ordered pair). Fields: fromUid, toUid,
+ *  - friendRequests/{requestId} where requestId = friendRequestId(fromUid,
+ *    toUid), a collision-resistant length-prefixed SHA-256 over the ordered
+ *    (fromUid, toUid) pair (one directional request per ordered pair). Fields:
+ *    fromUid, toUid,
  *    status ('pending' | 'accepted' | 'declined'), denormalized display
  *    names + avatar paths for both parties, createdAt, updatedAt.
  *  - users/{uid}/friends/{friendUid}: an established friendship, written for
@@ -19,6 +21,7 @@
  * Firestore I/O, block-graph checks, and transactions.
  */
 
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 /** Terminal + pending states a friend request can be in. */
@@ -154,12 +157,31 @@ export const REQUEST_NOT_FOUND_MESSAGE = 'Friend request not found.';
 export const REQUEST_NOT_PENDING_MESSAGE = 'This friend request has already been handled.';
 
 /**
- * Deterministic, directional request id. `A__B` (A sent to B) is distinct
- * from `B__A`, so each direction has at most one request document and a
- * re-sent request upserts the same doc (no duplicate pending records).
+ * Length-prefixed SHA-256 over a tuple → a collision-resistant, Firestore-safe
+ * (hex) document ID. Length-prefixing makes the encoding injective: no input
+ * value can forge a field boundary, so distinct tuples never map to the same
+ * digest regardless of which characters the parts contain. Mirrors
+ * crownHunt/crownhunt-core.ts hashDocId.
+ */
+function hashDocId(parts: readonly string[]): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(`${part.length}:${part}`);
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Deterministic, directional request id. friendRequestId(A, B) (A sent to B)
+ * is distinct from friendRequestId(B, A), so each direction has at most one
+ * request document and a re-sent request upserts the same doc (no duplicate
+ * pending records). Derived via length-prefixed SHA-256 over the ordered pair
+ * so it can never collide even when a uid contains separator substrings (a
+ * naive `${fromUid}__${toUid}` join collides, e.g. ('a','b__c') vs
+ * ('a__b','c')).
  */
 export function friendRequestId(fromUid: string, toUid: string): string {
-  return `${fromUid}__${toUid}`;
+  return hashDocId([fromUid, toUid]);
 }
 
 /** Reads a profile doc into the minimal safe projection (missing → null). */

@@ -51,10 +51,17 @@ describe('friends-core parsing', () => {
 });
 
 describe('friends-core id + projection', () => {
-  it('derives a directional request id', () => {
-    expect(friendRequestId('a', 'b')).toBe('a__b');
-    expect(friendRequestId('b', 'a')).toBe('b__a');
+  it('derives a deterministic, directional request id (64-hex, collision-resistant)', () => {
+    // Deterministic: same ordered pair → same id.
+    expect(friendRequestId('a', 'b')).toBe(friendRequestId('a', 'b'));
+    // Length-prefixed SHA-256 → 64 lowercase hex chars.
+    expect(friendRequestId('a', 'b')).toMatch(/^[0-9a-f]{64}$/);
+    // Directional: A→B is distinct from B→A.
     expect(friendRequestId('a', 'b')).not.toBe(friendRequestId('b', 'a'));
+    // Collision-resistant across the historical `__` separator: a naive
+    // `${fromUid}__${toUid}` join maps both of these to 'a__b__c'; the
+    // length-prefixed hash keeps them distinct.
+    expect(friendRequestId('a', 'b__c')).not.toBe(friendRequestId('a__b', 'c'));
   });
 
   it('projects a profile, coalescing missing/non-string fields to null', () => {

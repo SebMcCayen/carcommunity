@@ -46,6 +46,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { friendRequestId } from '../friends/friends-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -213,7 +214,7 @@ describe('friend request lifecycle', () => {
       request: { requestId: string; direction: string; otherUser: { uid: string } };
     };
     expect(sent.status).toBe('requested');
-    expect(sent.request.requestId).toBe(`${alice.uid}__${bob.uid}`);
+    expect(sent.request.requestId).toBe(friendRequestId(alice.uid, bob.uid));
     expect(sent.request.direction).toBe('outgoing');
     expect(sent.request.otherUser.uid).toBe(bob.uid);
 
@@ -238,7 +239,7 @@ describe('friend request lifecycle', () => {
     expect(bobList.incoming.map((r) => r.otherUser.uid)).toContain(alice.uid);
 
     const accepted = (await call('friend-respondRequest', {
-      requestId: `${alice.uid}__${bob.uid}`,
+      requestId: friendRequestId(alice.uid, bob.uid),
       action: 'accept',
     })).data as { status: string; friend: { uid: string } };
     expect(accepted.status).toBe('accepted');
@@ -275,8 +276,9 @@ describe('friend request lifecycle', () => {
     await call('friend-sendRequest', { toUid: dave.uid });
 
     await signInAs(dave);
+    const carolDaveRequestId = friendRequestId(carol.uid, dave.uid);
     const declined = (await call('friend-respondRequest', {
-      requestId: `${carol.uid}__${dave.uid}`,
+      requestId: carolDaveRequestId,
       action: 'decline',
     })).data as { status: string };
     expect(declined.status).toBe('declined');
@@ -285,7 +287,7 @@ describe('friend request lifecycle', () => {
     // A handled request can't be responded to again.
     expect(
       await callableErrorCode(
-        call('friend-respondRequest', { requestId: `${carol.uid}__${dave.uid}`, action: 'accept' }),
+        call('friend-respondRequest', { requestId: carolDaveRequestId, action: 'accept' }),
       ),
     ).toBe('functions/failed-precondition');
 
@@ -293,9 +295,34 @@ describe('friend request lifecycle', () => {
     await signInAs(carol);
     expect(
       await callableErrorCode(
-        call('friend-respondRequest', { requestId: `${carol.uid}__${dave.uid}`, action: 'accept' }),
+        call('friend-respondRequest', { requestId: carolDaveRequestId, action: 'accept' }),
       ),
     ).toBe('functions/not-found');
+  });
+
+  it('rejects accept when the requester became restricted, writing no friendship', async () => {
+    const rob = await newMember('RobLC');
+    const sue = await newMember('SueLC');
+
+    await signInAs(rob);
+    await call('friend-sendRequest', { toUid: sue.uid });
+
+    // Rob is soft-deleted/suspended after sending but before Sue accepts.
+    await adminDb.collection('users').doc(rob.uid).set({ suspended: true }, { merge: true });
+
+    await signInAs(sue);
+    expect(
+      await callableErrorCode(
+        call('friend-respondRequest', {
+          requestId: friendRequestId(rob.uid, sue.uid),
+          action: 'accept',
+        }),
+      ),
+    ).toBe('functions/failed-precondition');
+
+    // No friendship doc was created on either side.
+    expect(await friendshipExists(rob.uid, sue.uid)).toBe(false);
+    expect(await friendshipExists(sue.uid, rob.uid)).toBe(false);
   });
 
   it('auto-befriends when the reverse request is already pending', async () => {
@@ -348,7 +375,7 @@ describe('friends Firestore rules', () => {
 
     await signInAs(mona);
     await call('friend-sendRequest', { toUid: nils.uid });
-    const requestId = `${mona.uid}__${nils.uid}`;
+    const requestId = friendRequestId(mona.uid, nils.uid);
 
     // Sender reads their own request.
     const asMona = await getDoc(doc(firestore, 'friendRequests', requestId));
