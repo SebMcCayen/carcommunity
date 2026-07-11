@@ -66,6 +66,18 @@ import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
+import {
+  list as listFriends,
+  remove as removeFriend,
+  respondRequest as respondFriendRequest,
+  sendRequest as sendFriendRequest,
+} from './friends/manageFriends';
+import {
+  getMessages as dmGetMessages,
+  listConversations as dmListConversations,
+  markRead as dmMarkRead,
+  sendMessage as dmSendMessage,
+} from './dm/manageDirectMessages';
 
 /**
  * GET /health
@@ -437,4 +449,57 @@ export const groupDrive = {
   join: joinGroupDrive,
   updateStatus: updateDriveStatus,
   leave: leaveGroupDrive,
+};
+
+/**
+ * Friends domain (grouped export → deployed as `friend-sendRequest`,
+ * `friend-respondRequest`, `friend-remove`, `friend-list`).
+ *
+ * The friend-GRAPH foundation (contracts/functions/functions.json:
+ * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
+ * separate follow-up and are NOT part of this domain. Model:
+ * friendRequests/{requestId} — one directional request per ordered pair, keyed
+ * by a deterministic hash of the (fromUid, toUid) pair (friendRequestId in
+ * friends-core.ts), NOT the literal `fromUid__toUid` string — and the per-side
+ * users/{uid}/friends/{friendUid} subcollection written for
+ * BOTH parties on accept. Owner-readable, callable-only writes
+ * (firebase/firestore.rules). sendRequest resolves a nickname (displayName,
+ * NOT unique): 0 matches → not-found, 1 → proceed, >1 → failed-precondition
+ * (AMBIGUOUS_NICKNAME) carrying a candidate list in the error details for
+ * client disambiguation via { toUid }. Blocking is honoured both ways
+ * (neutral NOT_ADDABLE); an incoming pending request is auto-accepted when
+ * the caller sends the reverse. Established friendship — not request status —
+ * is the source of truth for "already friends".
+ */
+export const friend = {
+  sendRequest: sendFriendRequest,
+  respondRequest: respondFriendRequest,
+  remove: removeFriend,
+  list: listFriends,
+};
+
+/**
+ * Direct messaging domain (grouped export → deployed as `dm-sendMessage`,
+ * `dm-listConversations`, `dm-getMessages`, `dm-markRead`).
+ *
+ * 1:1 DMs between ESTABLISHED friends (contracts/functions/functions.json:
+ * dm.sendMessage/listConversations/getMessages/markRead), stacked on the
+ * friend-graph backend. Model: a single canonical conversations/{pairId}
+ * (pairId = the two UIDs sorted + joined by `__`) with members[], denormalized
+ * memberProfiles, a lastMessage preview + lastMessageAt ordering key, and
+ * per-member unread + lastReadAt maps; messages live at
+ * conversations/{pairId}/messages/{id} {senderUid,text,createdAt}. Member reads,
+ * callable-only writes (firebase/firestore.rules). sendMessage requires an
+ * established friendship (users/{uid}/friends/{friendUid}) and honours blocking
+ * both ways (neutral failed-precondition). The per-member unread counters are
+ * kept in lock-step with a per-user aggregate at
+ * userPrivate/{uid}.dmUnreadTotal (owner-only read) so the map-home chat bubble
+ * binds ONE document listener for its badge. FCM push on a new message is
+ * deferred to the end-of-MVP Firebase console setup (as with notifications).
+ */
+export const dm = {
+  sendMessage: dmSendMessage,
+  listConversations: dmListConversations,
+  getMessages: dmGetMessages,
+  markRead: dmMarkRead,
 };

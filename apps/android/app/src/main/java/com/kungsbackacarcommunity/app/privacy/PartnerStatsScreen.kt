@@ -3,18 +3,13 @@ package com.kungsbackacarcommunity.app.privacy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +23,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Anonymised partner-statistics opt-in (Phase 12 slice 19). Stateless apart
@@ -53,20 +49,11 @@ fun PartnerStatsScreen(
         }
     }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.privacySettings_title),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+    AeroPage(
+        title = stringResource(R.string.privacySettings_title),
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
             Text(
                 text = stringResource(R.string.privacySettings_partnerStatsTitle),
                 style = MaterialTheme.typography.titleMedium,
@@ -138,9 +125,5 @@ fun PartnerStatsScreen(
             ) {
                 Text(text = stringResource(R.string.privacySettings_saveButton))
             }
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_back))
-            }
-        }
     }
 }

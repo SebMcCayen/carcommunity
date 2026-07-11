@@ -1,19 +1,12 @@
 package com.kungsbackacarcommunity.app.partners
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Partner-application form (Phase 12 slice 18). Owns its field state; validates
@@ -47,21 +41,11 @@ fun PartnerApplicationScreen(
     val form =
         PartnerApplicationForm(companyName, category, contactName, contactEmail, contactPhone, website, message)
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.partners_applicationTitle),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
+    AeroPage(
+        title = stringResource(R.string.partners_applicationTitle),
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
             if (status == PartnerApplicationStatus.Done) {
                 Text(
                     text = stringResource(R.string.partners_submitSuccess),
@@ -71,7 +55,7 @@ fun PartnerApplicationScreen(
                 Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.partners_close))
                 }
-                return@Column
+                return@AeroPage
             }
 
             Text(
@@ -135,10 +119,6 @@ fun PartnerApplicationScreen(
             ) {
                 Text(text = stringResource(R.string.partners_submitButton))
             }
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.partners_close))
-            }
-        }
     }
 }
 

@@ -13,6 +13,7 @@ import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
+import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
@@ -24,6 +25,13 @@ import com.mapbox.maps.extension.style.layers.generated.LineLayer
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
+import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
@@ -70,10 +78,24 @@ class MapboxMapSurface : MapSurface {
     private val trafficFlow = MutableStateFlow(false)
     override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
 
+    private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
+    override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
+
     // Live references, held only while the map is composed (cleared in
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+    private var routeLineManager: PolylineAnnotationManager? = null
+    private var destMarkerManager: CircleAnnotationManager? = null
+
+    // The overlay currently drawn on the map, so the recomposition-driven update
+    // block only clears/recreates the annotations and re-fits the camera when the
+    // overlay ACTUALLY changes — unrelated recompositions (traffic toggle,
+    // live-sharing pulse) no longer cause the route to flicker or the camera to
+    // snap back. Reset to null whenever the annotation managers are (re)created or
+    // torn down, so the overlay is redrawn against fresh managers (the cache must
+    // never claim "already applied" when the annotations were actually cleared).
+    private var lastAppliedOverlay: MapRouteOverlay? = null
 
     // One-shot guard so the camera auto-centres on the FIRST GPS fix only,
     // opening close to the user; afterwards it leaves the camera alone so it
@@ -88,6 +110,12 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and applies the layer's
         // visibility, so flipping the flow is enough to toggle the overlay.
         trafficFlow.value = enabled
+    }
+
+    override fun setRouteOverlay(overlay: MapRouteOverlay?) {
+        // The Content update lambda observes this flow and (re)draws the line +
+        // destination marker, so publishing the value is enough.
+        routeOverlayFlow.value = overlay
     }
 
     override fun recenter() {
@@ -116,6 +144,7 @@ class MapboxMapSurface : MapSurface {
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
+        val overlay by routeOverlayFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -170,6 +199,19 @@ class MapboxMapSurface : MapSurface {
                         loadStateFlow.value = MapLoadState.Loaded
                         runCatching { addTrafficLayer(style) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
+                        // Route line + destination marker managers, created once
+                        // the style is ready. Drawn from the current flow value
+                        // so a route picked while the style was still loading is
+                        // rendered (not lost).
+                        runCatching {
+                            routeLineManager = annotations.createPolylineAnnotationManager()
+                            destMarkerManager = annotations.createCircleAnnotationManager()
+                            // Fresh managers ⇒ any previously-drawn annotations are
+                            // gone, so drop the cache to force a redraw of the
+                            // current overlay against the new managers.
+                            lastAppliedOverlay = null
+                            applyRouteOverlayIfChanged(this, routeOverlayFlow.value)
+                        }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
                         // hidden without error.
@@ -195,6 +237,12 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
                 }
+                // (Re)draw the route line + destination marker only when the
+                // overlay actually changes; unrelated recompositions (traffic
+                // toggle, live-sharing pulse) must not re-clear/redraw the route
+                // or re-fit the camera. A no-op until the managers exist (style
+                // loaded).
+                runCatching { applyRouteOverlayIfChanged(mapView, overlay) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -204,6 +252,10 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.location.removeOnIndicatorPositionChangedListener(positionListener)
                 }
+                routeLineManager = null
+                destMarkerManager = null
+                // Managers are gone, so a later re-init must redraw the overlay.
+                lastAppliedOverlay = null
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
@@ -212,7 +264,110 @@ class MapboxMapSurface : MapSurface {
         )
     }
 
+    /**
+     * Draws [overlay] only when it differs from the last one actually applied,
+     * caching the new value so unrelated recompositions don't re-clear/redraw the
+     * route or re-fit the camera (which would flicker the line and snap the camera
+     * back while the user is looking at the route). [MapRouteOverlay] is a data
+     * class, so `==` compares the destination + path by value. The cache is reset
+     * to null wherever the annotation managers are (re)created or torn down, so a
+     * cleared-then-recreated map always redraws rather than trusting a stale hit.
+     */
+    private fun applyRouteOverlayIfChanged(mapView: MapView, overlay: MapRouteOverlay?) {
+        if (overlay == lastAppliedOverlay) return
+        applyRouteOverlay(mapView, overlay)
+        lastAppliedOverlay = overlay
+    }
+
+    /**
+     * Redraws the destination marker + route line for [overlay] (clearing both
+     * when null) and fits the camera to the route. A no-op until the annotation
+     * managers exist (style loaded). Every native call is wrapped defensively so
+     * a partial/failed draw degrades rather than crashing.
+     *
+     * On-device verification note: the camera-fit (`cameraForCoordinates`) and
+     * annotation rendering run only on a token-provisioned device, so they are
+     * verified on device; the fit falls back to centring on the destination if
+     * the SDK call throws.
+     */
+    private fun applyRouteOverlay(mapView: MapView, overlay: MapRouteOverlay?) {
+        val lineManager = routeLineManager
+        val markerManager = destMarkerManager
+        runCatching { lineManager?.deleteAll() }
+        runCatching { markerManager?.deleteAll() }
+        if (overlay == null || lineManager == null || markerManager == null) return
+
+        val dest = Point.fromLngLat(overlay.destination.longitude, overlay.destination.latitude)
+        val linePoints = overlay.path.map { Point.fromLngLat(it.longitude, it.latitude) }
+
+        if (linePoints.size >= 2) {
+            runCatching {
+                lineManager.create(
+                    PolylineAnnotationOptions()
+                        .withPoints(linePoints)
+                        .withLineColor(ROUTE_LINE_COLOR)
+                        .withLineWidth(ROUTE_LINE_WIDTH),
+                )
+            }
+        }
+        runCatching {
+            markerManager.create(
+                CircleAnnotationOptions()
+                    .withPoint(dest)
+                    .withCircleRadius(DEST_MARKER_RADIUS)
+                    .withCircleColor(DEST_MARKER_COLOR)
+                    .withCircleStrokeWidth(DEST_MARKER_STROKE)
+                    .withCircleStrokeColor(DEST_MARKER_STROKE_COLOR),
+            )
+        }
+
+        // Fit the camera to the whole route (origin→destination), falling back
+        // to centring on the destination if the fit call is unavailable.
+        val fitPoints = if (linePoints.size >= 2) linePoints else listOf(dest)
+        // Convert the dp padding to px so the camera fit is consistent across
+        // screen densities (EdgeInsets expects device pixels).
+        val density = mapView.resources.displayMetrics.density
+        runCatching {
+            val camera =
+                mapView.mapboxMap.cameraForCoordinates(
+                    fitPoints,
+                    cameraOptions {},
+                    EdgeInsets(
+                        ROUTE_PAD_TOP * density,
+                        ROUTE_PAD_SIDE * density,
+                        ROUTE_PAD_BOTTOM * density,
+                        ROUTE_PAD_SIDE * density,
+                    ),
+                    null,
+                    null,
+                )
+            mapView.mapboxMap.setCamera(camera)
+        }.onFailure {
+            runCatching {
+                mapView.mapboxMap.setCamera(
+                    cameraOptions {
+                        center(dest)
+                        zoom(MapMarkers.OWN_MARKER_ZOOM)
+                    },
+                )
+            }
+        }
+    }
+
     private companion object {
+        const val ROUTE_LINE_COLOR = 0xFF1A73E8.toInt()
+        const val ROUTE_LINE_WIDTH = 6.0
+        const val DEST_MARKER_COLOR = 0xFFD32F2F.toInt()
+        const val DEST_MARKER_RADIUS = 9.0
+        const val DEST_MARKER_STROKE = 2.0
+        const val DEST_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+
+        // Camera-fit padding (dp; multiplied by display density → px before use):
+        // extra room at the bottom for the summary sheet.
+        const val ROUTE_PAD_TOP = 140.0
+        const val ROUTE_PAD_SIDE = 80.0
+        const val ROUTE_PAD_BOTTOM = 320.0
+
         const val TRAFFIC_SOURCE_ID = "kcc-traffic-source"
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"

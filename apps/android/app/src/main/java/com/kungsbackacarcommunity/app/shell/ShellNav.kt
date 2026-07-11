@@ -40,6 +40,7 @@ enum class ShellRoute {
     Notifications,
     NotificationSettings,
     Garage,
+    Friends,
     Badges,
     Blocked,
     Points,
@@ -49,6 +50,7 @@ enum class ShellRoute {
     PartnerStats,
     Feedback,
     Subscription,
+    Settings,
     More,
 }
 

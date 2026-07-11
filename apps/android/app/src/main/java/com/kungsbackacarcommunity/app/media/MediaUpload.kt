@@ -20,6 +20,18 @@ object MediaUpload {
     const val VEHICLE_IMAGE_MAX_BYTES: Long = 10L * 1024 * 1024
 
     /**
+     * Higher cap for the avatar PICKER read only. The raw pick may legitimately
+     * exceed [PROFILE_IMAGE_MAX_BYTES] because [com.kungsbackacarcommunity.app.media.ImageCompressor]
+     * downscales + re-encodes it before upload, so reading it at the 5 MB upload
+     * cap would reject full-resolution phone photos (commonly 3-8 MB, sometimes
+     * more) BEFORE compression can run. This is still bounded — not unlimited —
+     * so an absurdly large pick can't OOM the bounded read. The 5 MB upload cap
+     * remains the source of truth: it is enforced by the upload precheck on the
+     * *compressed* result, so a pick that still won't fit surfaces TooLarge.
+     */
+    const val PROFILE_IMAGE_READ_MAX_BYTES: Long = 25L * 1024 * 1024
+
+    /**
      * Content types the Storage rules accept
      * (`image/(jpeg|png|webp|gif)`). Anything else is rejected client-side so
      * the write never reaches the bucket.

@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DM_MESSAGE_MAX_LENGTH,
+  DM_MESSAGE_PREVIEW_LENGTH,
+  buildMessageDocument,
+  buildNewConversationDocument,
+  dmMembers,
+  dmPairId,
+  isConversationMember,
+  messagePreview,
+  parseGetMessagesInput,
+  parseListConversationsInput,
+  parseMarkReadInput,
+  parseSendMessageInput,
+  toConversationSummary,
+  toMessageSummary,
+  toProfileProjection,
+} from './dm-core';
+
+describe('dm-core parsing', () => {
+  it('parses sendMessage strictly', () => {
+    expect(parseSendMessageInput({ toUid: '  u-2  ', text: 'hi' })).toEqual({
+      ok: true,
+      input: { toUid: 'u-2', text: 'hi' },
+    });
+    expect(parseSendMessageInput({ toUid: '', text: 'hi' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: '' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'x'.repeat(DM_MESSAGE_MAX_LENGTH + 1) }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', extra: 1 }).ok).toBe(false);
+    expect(parseSendMessageInput(null).ok).toBe(false);
+  });
+
+  it('parses getMessages with an optional ISO cursor', () => {
+    expect(parseGetMessagesInput({ conversationId: 'a__b' }).ok).toBe(true);
+    expect(
+      parseGetMessagesInput({ conversationId: 'a__b', before: '2026-07-11T00:00:00.000Z' }).ok,
+    ).toBe(true);
+    expect(parseGetMessagesInput({ conversationId: 'a__b', before: 'not-a-date' }).ok).toBe(false);
+    expect(parseGetMessagesInput({ conversationId: '' }).ok).toBe(false);
+    expect(parseGetMessagesInput({ conversationId: 'a__b', extra: 1 }).ok).toBe(false);
+  });
+
+  it('parses markRead + listConversations strictly', () => {
+    expect(parseMarkReadInput({ conversationId: 'a__b' }).ok).toBe(true);
+    expect(parseMarkReadInput({}).ok).toBe(false);
+    expect(parseListConversationsInput({}).ok).toBe(true);
+    expect(parseListConversationsInput(undefined).ok).toBe(true);
+    expect(parseListConversationsInput({ foo: 1 }).ok).toBe(false);
+  });
+});
+
+describe('dm-core canonical pair id', () => {
+  it('is order-independent (canonical 1:1 doc)', () => {
+    expect(dmPairId('a', 'b')).toBe('a__b');
+    expect(dmPairId('b', 'a')).toBe('a__b');
+    expect(dmPairId('b', 'a')).toBe(dmPairId('a', 'b'));
+  });
+
+  it('returns a sorted member pair', () => {
+    expect(dmMembers('b', 'a')).toEqual(['a', 'b']);
+    expect(dmMembers('a', 'b')).toEqual(['a', 'b']);
+  });
+});
+
+describe('dm-core projections + preview', () => {
+  it('projects a profile, coalescing missing/non-string to null', () => {
+    expect(toProfileProjection({ displayName: 'Bob', avatarPath: 'p' })).toEqual({
+      displayName: 'Bob',
+      avatarPath: 'p',
+    });
+    expect(toProfileProjection(undefined)).toEqual({ displayName: null, avatarPath: null });
+    expect(toProfileProjection({ displayName: 42 })).toEqual({ displayName: null, avatarPath: null });
+  });
+
+  it('trims + truncates the preview', () => {
+    expect(messagePreview('  hello  ')).toBe('hello');
+    expect(messagePreview('x'.repeat(DM_MESSAGE_PREVIEW_LENGTH + 50)).length).toBe(
+      DM_MESSAGE_PREVIEW_LENGTH,
+    );
+  });
+});
+
+describe('dm-core builders', () => {
+  it('builds a message doc (trimmed)', () => {
+    expect(buildMessageDocument({ senderUid: 'a', text: '  hi  ' }, () => 'TS')).toEqual({
+      senderUid: 'a',
+      text: 'hi',
+      createdAt: 'TS',
+    });
+  });
+
+  it('builds a new conversation with recipient unread seeded to 1', () => {
+    const doc = buildNewConversationDocument(
+      {
+        senderUid: 'b',
+        recipientUid: 'a',
+        senderProfile: { displayName: 'Bob', avatarPath: null },
+        recipientProfile: { displayName: 'Alice', avatarPath: 'pa' },
+        text: '  hey  ',
+      },
+      () => 'TS',
+    );
+    expect(doc.members).toEqual(['a', 'b']);
+    expect(doc.unread).toEqual({ b: 0, a: 1 });
+    expect(doc.lastReadAt).toEqual({ b: null, a: null });
+    expect(doc.lastMessage).toEqual({ text: 'hey', senderUid: 'b', createdAt: 'TS' });
+    expect(doc.lastMessageAt).toBe('TS');
+    expect(doc.memberProfiles).toEqual({
+      b: { displayName: 'Bob', avatarPath: null },
+      a: { displayName: 'Alice', avatarPath: 'pa' },
+    });
+  });
+});
+
+describe('dm-core summaries', () => {
+  const iso = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+  it('projects the OTHER member + the caller own unread/read state', () => {
+    const summary = toConversationSummary(
+      'a__b',
+      {
+        members: ['a', 'b'],
+        memberProfiles: { a: { displayName: 'Alice', avatarPath: 'pa' }, b: { displayName: 'Bob', avatarPath: null } },
+        lastMessage: { text: 'hey', senderUid: 'b', createdAt: 'T1' },
+        unread: { a: 3, b: 0 },
+        lastReadAt: { a: null, b: 'T0' },
+      },
+      'a',
+      iso,
+    );
+    expect(summary).toEqual({
+      conversationId: 'a__b',
+      otherUser: { uid: 'b', displayName: 'Bob', avatarPath: null },
+      lastMessage: { text: 'hey', senderUid: 'b', createdAt: 'T1' },
+      unreadCount: 3,
+      lastReadAt: null,
+    });
+  });
+
+  it('coalesces missing/negative unread to 0 and null lastMessage', () => {
+    const summary = toConversationSummary(
+      'a__b',
+      { members: ['a', 'b'], unread: {}, lastMessage: null },
+      'b',
+      iso,
+    );
+    expect(summary.unreadCount).toBe(0);
+    expect(summary.lastMessage).toBeNull();
+    expect(summary.otherUser.uid).toBe('a');
+  });
+
+  it('maps a message summary', () => {
+    expect(toMessageSummary('m1', { senderUid: 'a', text: 'hi' }, 'T1')).toEqual({
+      id: 'm1',
+      senderUid: 'a',
+      text: 'hi',
+      createdAt: 'T1',
+    });
+  });
+});
+
+describe('dm-core membership predicate', () => {
+  it('checks conversation membership', () => {
+    expect(isConversationMember({ members: ['a', 'b'] }, 'a')).toBe(true);
+    expect(isConversationMember({ members: ['a', 'b'] }, 'c')).toBe(false);
+    expect(isConversationMember(undefined, 'a')).toBe(false);
+    expect(isConversationMember({}, 'a')).toBe(false);
+  });
+});
