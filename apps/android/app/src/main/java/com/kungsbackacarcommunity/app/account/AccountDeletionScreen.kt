@@ -1,19 +1,13 @@
 package com.kungsbackacarcommunity.app.account
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +21,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Account-deletion confirmation (Phase 12 slice 25). A two-step confirm before
@@ -43,20 +38,7 @@ fun AccountDeletionScreen(
     var confirming by remember { mutableStateOf(false) }
     val busy = status == AccountDeletionStatus.Deleting
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.settings_deleteAccount),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+    AeroPage(title = stringResource(R.string.settings_deleteAccount), modifier = modifier) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -86,10 +68,6 @@ fun AccountDeletionScreen(
             ) {
                 Text(text = stringResource(R.string.settings_deleteAccount))
             }
-            TextButton(onClick = onBack, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_cancelButton))
-            }
-        }
     }
 
     if (confirming) {

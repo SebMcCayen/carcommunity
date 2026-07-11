@@ -1,13 +1,10 @@
 package com.kungsbackacarcommunity.app.shell
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -15,13 +12,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
@@ -42,16 +37,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -62,18 +58,24 @@ const val MAP_HOME_TEST_TAG = "map_home"
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
  * prominent "Where to?" search bar, a transient "Loading roads…" status line,
- * a right-side stack of floating circular controls, and a bottom-right "Create
- * route" pill. The user is drawn as a labeled "You / Online" pin over the map.
+ * and a right-side stack of floating circular controls. The user's own position
+ * is drawn by the surface itself (the Mapbox location puck at the real GPS
+ * location), so it stays anchored to the ground when the map pans rather than
+ * sliding with the screen centre.
  *
- * All map interaction is routed through [mapSurface] (currently a stub); the
- * real Mapbox render + GPS land later behind that same seam. The user is drawn
- * as a labeled "You" pin; a green dot next to the label signals live sharing.
+ * All map interaction is routed through [mapSurface]; the real Mapbox render +
+ * GPS puck sit behind that same seam (the stub renders a neutral placeholder).
+ * The caller's marker model is still pushed via [MapSurface.setUserMarker] so
+ * the surface can reflect live-sharing state on the puck.
  *
  * @param isLiveSharing whether the live-location session is currently sharing —
- *   turns the broadcast control GREEN and shows the marker's online dot (wired
- *   to the real live-location state).
+ *   turns the broadcast control GREEN and is pushed to the surface so the puck
+ *   can signal live sharing (wired to the real live-location state).
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
+ * @param avatarUrl resolved download URL for the signed-in user's profile
+ *   picture, shown in the top-right profile button; null falls back to the
+ *   generic account icon.
  * @param unreadChatCount number of unread ("missed") chat messages shown as a
  *   badge on the floating chat control. There is no global/community-chat
  *   inbox client-side yet (chat is per-event only), so callers pass 0 as a
@@ -85,26 +87,24 @@ fun MapHome(
     isLiveSharing: Boolean,
     participantCount: Int,
     userLabel: String,
+    avatarUrl: String? = null,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
     onLayers: () -> Unit,
     onRecenter: () -> Unit,
-    onMusic: () -> Unit,
-    onCreateRoute: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
-    val marker by mapSurface.userMarker.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
     // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
-        mapSurface.setUserMarker(MapUserMarker(label = userLabel, online = isLiveSharing))
+        mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
     // Chat popup open/close is local UI state: tapping the bubble opens the
@@ -114,14 +114,11 @@ fun MapHome(
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
     Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
-        // Full-bleed map (behind everything).
+        // Full-bleed map (behind everything). The user's own position is drawn
+        // by the surface itself (the Mapbox location puck at the real GPS
+        // location), so it stays put when the map pans — there is deliberately
+        // no centre-locked Compose "You" overlay here.
         mapSurface.Content(Modifier.fillMaxSize())
-
-        // Centre "You" pin overlay (green online dot when live-sharing).
-        UserMarkerPin(
-            marker = marker,
-            modifier = Modifier.align(Alignment.Center),
-        )
 
         // Top: search bar + avatar/menu, then the loading status line.
         Column(
@@ -133,6 +130,7 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SearchBarRow(
+                avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onVoiceSearch = onVoiceSearch,
                 onOpenMore = onOpenMore,
@@ -145,7 +143,7 @@ fun MapHome(
             }
         }
 
-        // Right-side floating controls + Create-route CTA, bottom-right.
+        // Right-side floating controls, bottom-right.
         Column(
             modifier =
                 Modifier
@@ -202,14 +200,6 @@ fun MapHome(
                 unreadCount = unreadChatCount,
                 onClick = { chatOpen = true },
             )
-            // 5. Music control (stub entry point).
-            CircleControl(
-                icon = Icons.Filled.MusicNote,
-                contentDescription = stringResource(R.string.shell_music),
-                onClick = onMusic,
-            )
-            Spacer(Modifier.height(4.dp))
-            CreateRoutePill(onClick = onCreateRoute)
         }
 
         // Chat overlay: tapping outside the card dismisses it (back to bubble).
@@ -335,6 +325,7 @@ private fun ChatPopup(
 
 @Composable
 private fun SearchBarRow(
+    avatarUrl: String?,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
@@ -386,13 +377,39 @@ private fun SearchBarRow(
             tonalElevation = 3.dp,
             shadowElevation = 3.dp,
             onClick = onOpenMore,
+            modifier = Modifier.size(48.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.AccountCircle,
-                contentDescription = stringResource(R.string.shell_menu),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(10.dp).size(28.dp),
-            )
+            // Always render the AccountCircle fallback so the button never
+            // shows a blank circle: it covers both the window while the Storage
+            // download URL resolves (avatarUrl == null, rememberStorageImageUrl)
+            // and the window while Coil fetches/decodes the bitmap (Coil doesn't
+            // paint anything until the image is ready). Once the avatar bitmap is
+            // displayed, the cropped AsyncImage fills the button and hides it.
+            Box(
+                // No clip needed here: the enclosing Surface(shape = CircleShape)
+                // already crops its content (icon + avatar) to the round button.
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AccountCircle,
+                    contentDescription = stringResource(R.string.shell_menu),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(10.dp).size(28.dp),
+                )
+                if (avatarUrl != null) {
+                    // The user's profile picture, drawn on top of the fallback
+                    // icon once the bitmap is ready. Decorative: the fallback Icon
+                    // underneath already labels the button, so the control keeps
+                    // one stable content description in every state.
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         }
     }
 }
@@ -439,70 +456,6 @@ private fun ParticipantChip(count: Int) {
     }
 }
 
-/**
- * The "You" callout above a dot with an accuracy halo. The palette has
- * no blue token, so the dot uses the brand primary; the online indicator uses
- * the success-green status colour.
- */
-@Composable
-private fun UserMarkerPin(
-    marker: MapUserMarker?,
-    modifier: Modifier = Modifier,
-) {
-    marker ?: return
-    val statusColors = LocalKccStatusColors.current
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(KccRadius.full),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 4.dp,
-            shadowElevation = 4.dp,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (marker.online) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(statusColors.success),
-                    )
-                }
-                Text(
-                    text = marker.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        // Accuracy halo + dot.
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            )
-            Box(
-                modifier =
-                    Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-            )
-        }
-    }
-}
-
 @Composable
 private fun CircleControl(
     icon: ImageVector,
@@ -526,37 +479,6 @@ private fun CircleControl(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = contentDescription)
-        }
-    }
-}
-
-@Composable
-private fun CreateRoutePill(onClick: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    Surface(
-        shape = RoundedCornerShape(KccRadius.full),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.AltRoute,
-                contentDescription = null,
-            )
-            Text(
-                text = stringResource(R.string.shell_createRoute),
-                style = MaterialTheme.typography.labelLarge,
-            )
         }
     }
 }

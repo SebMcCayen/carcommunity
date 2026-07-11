@@ -3,17 +3,13 @@ package com.kungsbackacarcommunity.app.garage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Garage list (Phase 12 slice 13). Stateless apart from the delete-confirm
@@ -44,21 +41,7 @@ fun GarageScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.garage_screenTitle),
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
+    AeroPage(title = stringResource(R.string.garage_screenTitle), modifier = modifier) {
             if (!isActiveMember) {
                 Text(
                     text = stringResource(R.string.garage_memberRequiredBody),
@@ -113,11 +96,6 @@ fun GarageScreen(
                     }
                 }
             }
-
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.profile_back))
-            }
-        }
     }
 
     val deleteId = pendingDelete

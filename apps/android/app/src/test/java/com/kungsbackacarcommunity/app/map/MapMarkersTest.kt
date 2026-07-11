@@ -9,11 +9,11 @@ import org.junit.Test
 class MapMarkersTest {
 
     @Test
-    fun `default camera is Kungsbacka at town zoom`() {
+    fun `default camera is Kungsbacka at neighbourhood zoom`() {
         val c = MapMarkers.DEFAULT_CAMERA
         assertEquals(12.0757, c.longitude, 1e-6)
         assertEquals(57.4874, c.latitude, 1e-6)
-        assertEquals(11.0, c.zoom, 1e-6)
+        assertEquals(15.0, c.zoom, 1e-6)
     }
 
     @Test
