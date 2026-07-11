@@ -248,10 +248,10 @@ fun AuthenticatedApp(
                 if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
             }
 
-            // Tapping the bottom-nav "Create" tab (or the map's "Create route"
-            // affordance) opens the Map and raises this transparent prompt asking
-            // whether to start sharing live location — Create never becomes a
-            // selected tab of its own (see ShellBottomBar.onSelect below).
+            // Tapping the bottom-nav "Create" tab opens the Map and raises this
+            // transparent prompt asking whether to start sharing live location —
+            // Create never becomes a selected tab of its own (see
+            // ShellBottomBar.onSelect below).
             var showLiveSharePrompt by rememberSaveable { mutableStateOf(false) }
 
             // Group-drive "show on map": stash roster uids, switch to the Map
@@ -656,9 +656,9 @@ fun AuthenticatedApp(
                     }
                 }
 
-                // Transparent prompt raised by the Create tab / "Create route":
-                // Confirm starts live sharing via the shared toggle path; Cancel
-                // or an outside tap dismisses it, staying on the map.
+                // Transparent prompt raised by the Create tab: Confirm starts
+                // live sharing via the shared toggle path; Cancel or an outside
+                // tap dismisses it, staying on the map.
                 if (showLiveSharePrompt) {
                     LiveSharePromptDialog(
                         onConfirm = {
