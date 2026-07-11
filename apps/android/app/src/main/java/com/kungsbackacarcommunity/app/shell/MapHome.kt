@@ -259,7 +259,10 @@ private fun SearchBarRow(
             // paint anything until the image is ready). Once the avatar bitmap is
             // displayed, the cropped AsyncImage fills the button and hides it.
             Box(
-                modifier = Modifier.fillMaxSize(),
+                // Circular clip lives on the container so the avatar image (drawn
+                // on top) is cropped to the round button without clipping the
+                // AsyncImage directly.
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -269,18 +272,15 @@ private fun SearchBarRow(
                     modifier = Modifier.padding(10.dp).size(28.dp),
                 )
                 if (avatarUrl != null) {
-                    // The user's profile picture, circular, drawn on top of the
-                    // fallback icon once the bitmap is ready. Decorative: the
-                    // fallback Icon underneath already labels the button, so the
-                    // control keeps one stable content description in every state.
+                    // The user's profile picture, drawn on top of the fallback
+                    // icon once the bitmap is ready. Decorative: the fallback Icon
+                    // underneath already labels the button, so the control keeps
+                    // one stable content description in every state.
                     AsyncImage(
                         model = avatarUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
