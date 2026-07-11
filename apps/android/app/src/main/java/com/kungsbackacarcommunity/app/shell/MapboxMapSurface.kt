@@ -248,12 +248,20 @@ class MapboxMapSurface : MapSurface {
         // Fit the camera to the whole route (origin→destination), falling back
         // to centring on the destination if the fit call is unavailable.
         val fitPoints = if (linePoints.size >= 2) linePoints else listOf(dest)
+        // Convert the dp padding to px so the camera fit is consistent across
+        // screen densities (EdgeInsets expects device pixels).
+        val density = mapView.resources.displayMetrics.density
         runCatching {
             val camera =
                 mapView.mapboxMap.cameraForCoordinates(
                     fitPoints,
                     cameraOptions {},
-                    EdgeInsets(ROUTE_PAD_TOP, ROUTE_PAD_SIDE, ROUTE_PAD_BOTTOM, ROUTE_PAD_SIDE),
+                    EdgeInsets(
+                        ROUTE_PAD_TOP * density,
+                        ROUTE_PAD_SIDE * density,
+                        ROUTE_PAD_BOTTOM * density,
+                        ROUTE_PAD_SIDE * density,
+                    ),
                     null,
                     null,
                 )
@@ -278,7 +286,8 @@ class MapboxMapSurface : MapSurface {
         const val DEST_MARKER_STROKE = 2.0
         const val DEST_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
 
-        // Camera-fit padding (px): extra room at the bottom for the summary sheet.
+        // Camera-fit padding (dp; multiplied by display density → px before use):
+        // extra room at the bottom for the summary sheet.
         const val ROUTE_PAD_TOP = 140.0
         const val ROUTE_PAD_SIDE = 80.0
         const val ROUTE_PAD_BOTTOM = 320.0

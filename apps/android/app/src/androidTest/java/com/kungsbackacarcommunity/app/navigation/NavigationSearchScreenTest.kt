@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.navigation
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -82,12 +83,24 @@ class NavigationSearchScreenTest {
         composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder))
             .performTextInput("kung")
 
-        // Debounced lookup resolves (auto-advancing clock) → suggestion appears.
+        // The lookup is debounced by a real-time delay() on the screen's
+        // coroutine scope; a suspended delay does not keep Compose "busy", so
+        // waitForIdle/assertIsDisplayed alone would race ahead of the debounce.
+        // Poll until the debounced geocode has emitted the suggestion.
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithText(suggestion.name).fetchSemanticsNodes().isNotEmpty()
+        }
         composeTestRule.onNodeWithText(suggestion.name).assertIsDisplayed()
 
         composeTestRule.onNodeWithText(suggestion.name).performClick()
 
         // Route resolved → the directions list + first maneuver are shown.
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule
+                .onAllNodesWithText(str(R.string.addressSearch_directionsTitle))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
         composeTestRule.onNodeWithText(str(R.string.addressSearch_directionsTitle))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Head north on Main Street").assertIsDisplayed()

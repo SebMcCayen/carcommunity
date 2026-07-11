@@ -32,9 +32,13 @@ object CurrentLocation {
                 suspendCancellableCoroutine<LatLng?> { cont ->
                     client.lastLocation
                         .addOnSuccessListener { loc ->
+                            if (!cont.isActive) return@addOnSuccessListener
                             cont.resume(loc?.let { LatLng(it.longitude, it.latitude) })
                         }
-                        .addOnFailureListener { cont.resume(null) }
+                        .addOnFailureListener {
+                            if (!cont.isActive) return@addOnFailureListener
+                            cont.resume(null)
+                        }
                 }
             }.getOrNull()
         if (last != null) return last
@@ -45,9 +49,13 @@ object CurrentLocation {
             suspendCancellableCoroutine<LatLng?> { cont ->
                 client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
                     .addOnSuccessListener { loc ->
+                        if (!cont.isActive) return@addOnSuccessListener
                         cont.resume(loc?.let { LatLng(it.longitude, it.latitude) })
                     }
-                    .addOnFailureListener { cont.resume(null) }
+                    .addOnFailureListener {
+                        if (!cont.isActive) return@addOnFailureListener
+                        cont.resume(null)
+                    }
             }
         }.getOrNull()
     }

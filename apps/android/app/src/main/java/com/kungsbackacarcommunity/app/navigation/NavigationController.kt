@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Immutable UI state for the address-search + directions flow.
@@ -74,9 +75,18 @@ class NavigationController(
             scope.launch {
                 delay(DEBOUNCE_MS)
                 stateFlow.value = stateFlow.value.copy(searching = true)
-                val results = client.geocode(query, cachedOrigin)
-                stateFlow.value =
-                    stateFlow.value.copy(suggestions = results, searching = false)
+                try {
+                    val results = client.geocode(query, cachedOrigin)
+                    stateFlow.value =
+                        stateFlow.value.copy(suggestions = results, searching = false)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Geocoding failed (network/HTTP/parse) — surface an inline
+                    // hint and stop the spinner instead of hanging on `searching`.
+                    stateFlow.value =
+                        stateFlow.value.copy(searching = false, error = NavError.Search)
+                }
             }
     }
 
@@ -108,13 +118,26 @@ class NavigationController(
                         stateFlow.value.copy(routeLoading = false, error = NavError.NoOrigin)
                     return@launch
                 }
-                val summary = client.route(origin, suggestion.point)
-                if (summary == null) {
+                try {
+                    val summary = client.route(origin, suggestion.point)
+                    if (summary == null) {
+                        stateFlow.value =
+                            stateFlow.value.copy(routeLoading = false, error = NavError.Route)
+                    } else {
+                        stateFlow.value =
+                            stateFlow.value.copy(
+                                route = summary,
+                                routeLoading = false,
+                                error = null,
+                            )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Directions request failed — surface the route error and
+                    // stop the spinner instead of hanging on `routeLoading`.
                     stateFlow.value =
                         stateFlow.value.copy(routeLoading = false, error = NavError.Route)
-                } else {
-                    stateFlow.value =
-                        stateFlow.value.copy(route = summary, routeLoading = false, error = null)
                 }
             }
     }

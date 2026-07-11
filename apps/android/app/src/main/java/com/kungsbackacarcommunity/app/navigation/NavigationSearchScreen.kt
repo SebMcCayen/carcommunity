@@ -36,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapRouteOverlay
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -84,8 +86,14 @@ fun NavigationSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    // Keep the controller stable across recompositions (keyed only by the search
+    // client) while always invoking the latest origin provider — otherwise a
+    // changed originProvider lambda would be ignored and the stale one called.
+    val currentOriginProvider by rememberUpdatedState(originProvider)
     val controller =
-        remember(searchClient) { NavigationController(searchClient, originProvider, scope) }
+        remember(searchClient) {
+            NavigationController(searchClient, { currentOriginProvider() }, scope)
+        }
     val state by controller.state.collectAsState()
 
     // Fetch the origin up-front so the first suggestions are location-biased.
@@ -121,8 +129,8 @@ fun NavigationSearchScreen(
                 Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s3),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
             SearchField(
                 query = state.query,
