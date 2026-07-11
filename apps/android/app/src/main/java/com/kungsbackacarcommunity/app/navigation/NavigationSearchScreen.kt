@@ -17,8 +17,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.CircularProgressIndicator
@@ -139,7 +139,11 @@ fun NavigationSearchScreen(
                     if (state.destination != null) controller.clearDestination()
                     controller.onQueryChange(new)
                 },
-                onBack = onClose,
+                onBack = {
+                    // Mirror the system BackHandler: a picked destination/route is
+                    // closed first (return to search); only with none do we leave.
+                    if (state.destination != null) controller.clearDestination() else onClose()
+                },
                 onClear = {
                     // Clearing (the X) fully returns to the search state: drop the
                     // picked destination + route first (like editing the query
@@ -429,7 +433,7 @@ private fun RouteDetails(route: RouteSummary) {
                     verticalAlignment = Alignment.Top,
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                        imageVector = Icons.Filled.DirectionsCar,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
