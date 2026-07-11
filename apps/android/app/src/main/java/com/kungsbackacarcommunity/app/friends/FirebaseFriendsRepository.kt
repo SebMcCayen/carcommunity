@@ -59,7 +59,7 @@ class FirebaseFriendsRepository private constructor(
     private suspend fun callForData(
         name: String,
         payload: Map<String, Any?>,
-    ): Result<Map<String, Any?>?> =
+    ): Result<Map<String, Any?>> =
         suspendCancellableCoroutine { continuation ->
             functions
                 .getHttpsCallable(name)
@@ -69,7 +69,18 @@ class FirebaseFriendsRepository private constructor(
                     if (task.isSuccessful) {
                         @Suppress("UNCHECKED_CAST")
                         val data = task.result?.getData() as? Map<String, Any?>
-                        continuation.resume(Result.success(data))
+                        // A successful callable that returns no Map payload is an
+                        // unexpected response — surface it as an error rather than
+                        // letting friend-list silently render empty.
+                        if (data == null) {
+                            continuation.resume(
+                                Result.failure(
+                                    IllegalStateException("$name returned an unexpected or empty payload"),
+                                ),
+                            )
+                        } else {
+                            continuation.resume(Result.success(data))
+                        }
                     } else {
                         continuation.resume(
                             Result.failure(

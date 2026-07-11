@@ -432,7 +432,7 @@ private fun MemberAvatar(avatarPath: String?) {
     Box(
         modifier =
             Modifier
-                .size(40.dp)
+                .size(KccSpacing.s10)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
