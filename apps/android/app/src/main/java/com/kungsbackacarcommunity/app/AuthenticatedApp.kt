@@ -9,13 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CardMembership
-import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
@@ -24,8 +21,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
@@ -137,6 +134,7 @@ import com.kungsbackacarcommunity.app.shell.FriendsComingSoonScreen
 import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
+import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.shell.MapHome
@@ -898,15 +896,6 @@ private fun RouteHost(
                             },
                         ),
                         HubEntry(
-                            stringResource(R.string.shell_moreNotificationSettings),
-                            Icons.Filled.NotificationsActive,
-                            if (notificationSettingsRepository != null) {
-                                { onOpenRoute(ShellRoute.NotificationSettings) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
                             stringResource(R.string.shell_moreBlocked),
                             Icons.Filled.Block,
                             if (blockingRepository != null) {
@@ -925,31 +914,9 @@ private fun RouteHost(
                             },
                         ),
                         HubEntry(
-                            stringResource(R.string.shell_morePartnerStats),
-                            Icons.Filled.BarChart,
-                            if (partnerStatsRepository != null && partnerStatsEnabled) {
-                                { onOpenRoute(ShellRoute.PartnerStats) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreFeedback),
-                            Icons.Filled.BugReport,
-                            if (feedbackCoordinator != null) {
-                                { onOpenRoute(ShellRoute.Feedback) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreAccountDeletion),
-                            Icons.Filled.DeleteForever,
-                            if (accountDeletionCoordinator != null) {
-                                { onOpenRoute(ShellRoute.AccountDeletion) }
-                            } else {
-                                null
-                            },
+                            stringResource(R.string.shell_moreSettings),
+                            Icons.Filled.Settings,
+                            { onOpenRoute(ShellRoute.Settings) },
                         ),
                         HubEntry(
                             stringResource(R.string.shell_moreSignOut),
@@ -1248,6 +1215,40 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        ShellRoute.Settings ->
+            SettingsScreen(
+                onManageSubscription =
+                    if (billingRepository != null && subscriptionVerifier != null) {
+                        { onOpenRoute(ShellRoute.Subscription) }
+                    } else {
+                        null
+                    },
+                onNotificationSettings =
+                    if (notificationSettingsRepository != null) {
+                        { onOpenRoute(ShellRoute.NotificationSettings) }
+                    } else {
+                        null
+                    },
+                onPartnerStats =
+                    if (partnerStatsRepository != null && partnerStatsEnabled) {
+                        { onOpenRoute(ShellRoute.PartnerStats) }
+                    } else {
+                        null
+                    },
+                onFeedback =
+                    if (feedbackCoordinator != null) {
+                        { onOpenRoute(ShellRoute.Feedback) }
+                    } else {
+                        null
+                    },
+                onDeleteAccount =
+                    if (accountDeletionCoordinator != null) {
+                        { onOpenRoute(ShellRoute.AccountDeletion) }
+                    } else {
+                        null
+                    },
+            )
 
         ShellRoute.Subscription ->
             if (billingRepository != null && subscriptionVerifier != null) {
