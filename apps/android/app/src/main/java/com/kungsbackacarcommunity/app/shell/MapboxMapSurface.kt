@@ -226,7 +226,7 @@ class MapboxMapSurface : MapSurface {
         val LIVE_SHARE_PULSE_COLOR: Int = KccPalette.successGreen.toArgb()
 
         /** Puck pulse ARGB when not sharing (neutral blue). */
-        const val DEFAULT_PULSE_COLOR: Int = 0xFF1A73E8.toInt()
+        val DEFAULT_PULSE_COLOR: Int = 0xFF1A73E8.toInt()
 
         /** Green pulse when the caller is live-sharing, blue otherwise. */
         fun pulseColorFor(marker: MapUserMarker?): Int =
