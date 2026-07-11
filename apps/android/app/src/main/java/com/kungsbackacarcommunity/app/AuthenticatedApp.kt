@@ -1139,7 +1139,6 @@ private fun RouteHost(
             if (friendsRepository != null) {
                 FriendsRoute(
                     repository = friendsRepository,
-                    onBack = onClose,
                 )
             } else {
                 LoadingScreen()

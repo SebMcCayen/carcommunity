@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun FriendsRoute(
     repository: FriendsRepository,
-    onBack: () -> Unit,
 ) {
     val coordinator = remember(repository) { FriendsCoordinator(repository) }
     val status by coordinator.status.collectAsState()

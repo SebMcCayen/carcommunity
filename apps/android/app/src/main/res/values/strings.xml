@@ -630,6 +630,9 @@
     <string name="friends_addSectionTitle">Lägg till en vän</string>
     <string name="friends_nicknameLabel">Smeknamn</string>
     <string name="friends_addAction">Skicka förfrågan</string>
+    <string name="friends_addWorking">Skickar…</string>
+    <string name="friends_addDone">Klar</string>
+    <string name="friends_close">Stäng</string>
     <string name="friends_incomingTitle">Vänförfrågningar</string>
     <string name="friends_outgoingTitle">Väntande förfrågningar</string>
     <string name="friends_listTitle">Dina vänner</string>
@@ -653,7 +656,7 @@
     <string name="friends_retry">Försök igen</string>
     <string name="friends_unknownMember">Medlem</string>
     <string name="friends_errorSignedOut">Logga in för att hantera vänner.</string>
-    <string name="friends_errorNotMember">Vänner är tillgängligt för aktiva medlemmar.</string>
+    <string name="friends_errorNotMember">Vänner är tillgängliga för aktiva medlemmar.</string>
     <string name="friends_errorInvalid">Ange ett giltigt smeknamn.</string>
     <string name="friends_errorNotFound">Ingen medlem hittades med det smeknamnet.</string>
     <string name="friends_errorAlreadyFriends">Du är redan ansluten till den här medlemmen, eller så finns redan en väntande förfrågan.</string>
