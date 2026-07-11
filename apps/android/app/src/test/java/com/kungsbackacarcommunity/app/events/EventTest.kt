@@ -54,6 +54,49 @@ class EventTest {
         assertEquals(listOf("b", "d", "a", "c"), sorted)
     }
 
+    @Test
+    fun `isValidForCreate enforces required fields and bounds`() {
+        val ok = createInput()
+        assertTrue(Events.isValidForCreate(ok))
+        assertFalse(Events.isValidForCreate(ok.copy(title = "   ")))
+        assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "")))
+        assertFalse(Events.isValidForCreate(ok.copy(title = "x".repeat(201))))
+        assertFalse(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis - 1)))
+        assertTrue(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis + 1)))
+    }
+
+    @Test
+    fun `toIsoUtc emits a whole-second UTC instant`() {
+        // 2026-07-11T18:30:00Z with a stray 750ms that must be truncated.
+        assertEquals("2026-07-11T18:30:00Z", Events.toIsoUtc(1_783_794_600_750L))
+    }
+
+    @Test
+    fun `createPayload includes required fields and drops blank optionals`() {
+        val payload =
+            Events.createPayload(
+                createInput().copy(
+                    summary = "  hi  ",
+                    description = "   ",
+                    endsAtMillis = 1_783_794_600_000L + 3_600_000L,
+                ),
+            )
+        assertEquals("Cars & Coffee", payload["title"])
+        assertEquals("Kungsbacka", payload["approximateArea"])
+        assertEquals("2026-07-11T18:30:00Z", payload["startsAt"])
+        assertEquals("hi", payload["summary"]) // trimmed
+        assertFalse(payload.containsKey("description")) // blank dropped
+        assertTrue(payload.containsKey("endsAt"))
+        assertFalse(payload.containsKey("locationName"))
+    }
+
+    private fun createInput() =
+        CreateEventInput(
+            title = "Cars & Coffee",
+            approximateArea = "Kungsbacka",
+            startsAtMillis = 1_783_794_600_000L,
+        )
+
     private fun event(id: String, startsAtMillis: Long?) =
         EventSummary(
             id = id,
