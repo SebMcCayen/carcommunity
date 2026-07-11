@@ -1,0 +1,529 @@
+/**
+ * friend.sendRequest / friend.respondRequest / friend.remove / friend.list —
+ * member-gated callables (contracts/functions/functions.json).
+ *
+ * Deployed via the `friend` export group (functions/src/index.ts) as
+ * `friend-sendRequest`, `friend-respondRequest`, `friend-remove`,
+ * `friend-list`. This is the
+ * friend-GRAPH foundation only — direct messaging/DMs are a separate
+ * follow-up and are intentionally NOT built here.
+ *
+ * Invariants:
+ *  - Backend is the sole writer of friendRequests and users/{uid}/friends
+ *    (firebase/firestore.rules grants owner reads, denies all client writes).
+ *  - Established friendship (users/{uid}/friends/{friendUid}) — not request
+ *    status — is the source of truth for "already friends", so re-friending
+ *    after a decline or a removal always works.
+ *  - Blocking is honoured in BOTH directions: if either party has blocked the
+ *    other, a request is rejected with a neutral failed-precondition
+ *    (NOT_ADDABLE) that never reveals who blocked whom.
+ *  - Nickname (displayName) is NOT unique: sendRequest resolves an exact
+ *    match; 0 → not-found, 1 → proceed, >1 → failed-precondition
+ *    (AMBIGUOUS_NICKNAME) carrying a candidate list in the error details so
+ *    the client can re-call with a resolved { toUid }.
+ */
+
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { Timestamp } from 'firebase-admin/firestore';
+import type { DocumentSnapshot } from 'firebase-admin/firestore';
+import { db } from '../firebase';
+import { requireMemberActor } from '../shared/memberActor';
+import { isRestricted, toUserAccessState } from '../shared/access';
+import {
+  ALREADY_FRIENDS_MESSAGE,
+  AMBIGUOUS_NICKNAME_MESSAGE,
+  NICKNAME_NOT_FOUND_MESSAGE,
+  NOT_ADDABLE_MESSAGE,
+  REQUEST_ALREADY_SENT_MESSAGE,
+  REQUEST_NOT_FOUND_MESSAGE,
+  REQUEST_NOT_PENDING_MESSAGE,
+  SELF_REQUEST_MESSAGE,
+  buildFriendRequestDocument,
+  buildFriendshipDocument,
+  friendRequestId,
+  parseListInput,
+  parseRemoveFriendInput,
+  parseRespondRequestInput,
+  parseSendRequestInput,
+  toFriendRequestSummary,
+  toFriendSummary,
+  toProfileProjection,
+  type FriendRequestSummary,
+  type FriendSummary,
+  type NicknameCandidate,
+  type ProfileProjection,
+} from './friends-core';
+
+const CALLABLE_OPTS = {
+  region: 'europe-west1',
+  memory: '256MiB' as const,
+  timeoutSeconds: 30,
+  enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+};
+
+/** Cap on candidates returned for an ambiguous nickname. */
+const AMBIGUOUS_CANDIDATE_LIMIT = 10;
+
+/**
+ * Raw page size for the displayName lookup in resolveTarget. The `.limit()` is
+ * applied by Firestore BEFORE we drop the caller's own row and restricted
+ * (suspended/deleted) same-name accounts, so the fetched page has to be large
+ * enough to (a) still yield a full AMBIGUOUS_CANDIDATE_LIMIT candidate list and
+ * (b) leave headroom for the caller + a few restricted duplicates that get
+ * filtered out — otherwise a page filled by filtered-out rows could hide
+ * additional ACTIVE matches beyond it and be mistaken for a unique match.
+ * The +5 headroom covers the caller's row plus up to four restricted same-name
+ * accounts while keeping the read bounded at 15 documents. If the raw page
+ * SATURATES this cap we cannot prove uniqueness (more same-name rows may exist
+ * beyond it), so resolveTarget deliberately degrades to AMBIGUOUS_NICKNAME
+ * rather than risk resolving to the wrong person.
+ */
+export const NICKNAME_SCAN_LIMIT = AMBIGUOUS_CANDIDATE_LIMIT + 5;
+
+/**
+ * Bounded reads for friend.list. Each of the three queries (friends,
+ * incoming/outgoing pending requests) is capped so the callable can never fan
+ * out into an unbounded read as the friend graph grows — matching the fixed
+ * `.limit(MAX_*)` convention used elsewhere (e.g. MAX_REPORT_SCAN in
+ * events/moderateReports.ts). These are generous safety ceilings, not a UI
+ * page size; cursor pagination (a pageToken/startAfter follow-up) can layer on
+ * later without changing the response shape.
+ */
+const MAX_FRIENDS_RETURNED = 1000;
+const MAX_PENDING_REQUESTS_RETURNED = 500;
+
+// ---------------------------------------------------------------------------
+// Firestore references
+// ---------------------------------------------------------------------------
+
+function friendRequestRef(fromUid: string, toUid: string) {
+  return db.collection('friendRequests').doc(friendRequestId(fromUid, toUid));
+}
+
+function friendRequestRefById(requestId: string) {
+  return db.collection('friendRequests').doc(requestId);
+}
+
+function friendshipRef(ownerUid: string, friendUid: string) {
+  return db.collection('users').doc(ownerUid).collection('friends').doc(friendUid);
+}
+
+function blockRef(blockerUid: string, blockedUid: string) {
+  return db.collection('userBlocks').doc(blockerUid).collection('blocked').doc(blockedUid);
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function isoFrom(value: unknown, fallback: Date): string {
+  return value instanceof Timestamp ? value.toDate().toISOString() : fallback.toISOString();
+}
+
+/**
+ * Reads a users/{uid} profile. Returns null when the user is missing or
+ * restricted — soft-deleted OR suspended (callers surface not-found so neither
+ * deletion nor suspension can be probed, and no pending request can be created
+ * for an account that respondRequest's accept guard would later reject).
+ */
+async function loadProfile(uid: string): Promise<ProfileProjection | null> {
+  const snap = await db.collection('users').doc(uid).get();
+  if (!snap.exists || isRestricted(toUserAccessState(snap.data()))) {
+    return null;
+  }
+  return toProfileProjection(snap.data());
+}
+
+/** True when either party has blocked the other (block honoured both ways). */
+async function isBlockedEitherWay(a: string, b: string): Promise<boolean> {
+  const [aBlockedB, bBlockedA] = await Promise.all([
+    blockRef(a, b).get(),
+    blockRef(b, a).get(),
+  ]);
+  return aBlockedB.exists || bBlockedA.exists;
+}
+
+/**
+ * Resolves the sendRequest target to a concrete, addable uid + profile.
+ * Throws the appropriate HttpsError for not-found / ambiguous nickname / self.
+ */
+async function resolveTarget(
+  callerUid: string,
+  input: { nickname?: string; toUid?: string },
+): Promise<{ uid: string; profile: ProfileProjection }> {
+  if (input.toUid !== undefined) {
+    const profile = await loadProfile(input.toUid);
+    if (!profile) {
+      throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
+    }
+    if (input.toUid === callerUid) {
+      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+    }
+    return { uid: input.toUid, profile };
+  }
+
+  // Nickname path: displayName is NOT unique. Exact match, then filter out the
+  // caller and restricted accounts — soft-deleted OR suspended — so a request
+  // can't be created for, nor a restricted user surfaced by nickname resolution
+  // as, a target that respondRequest's accept guard would later reject.
+  const nickname = input.nickname as string;
+  const query = await db
+    .collection('users')
+    .where('displayName', '==', nickname)
+    .limit(NICKNAME_SCAN_LIMIT)
+    .get();
+
+  // Firestore applies `.limit()` BEFORE we filter, so a page that fills up to
+  // the cap may hide further ACTIVE same-name matches beyond it. When the raw
+  // page saturates the cap we cannot prove uniqueness → treat as ambiguous
+  // rather than risk resolving to a single wrong target.
+  const saturated = query.size >= NICKNAME_SCAN_LIMIT;
+  // Did the caller's own account match the nickname? Tracked before filtering it
+  // out so a self-only match can surface the dedicated self error, not not-found.
+  const callerMatched = query.docs.some((doc) => doc.id === callerUid);
+  const matches = query.docs.filter(
+    (doc) => doc.id !== callerUid && !isRestricted(toUserAccessState(doc.data())),
+  );
+
+  // >1 active match, OR a saturated page we can't prove is unique → ambiguous.
+  if (matches.length > 1 || saturated) {
+    const candidates: NicknameCandidate[] = matches.slice(0, AMBIGUOUS_CANDIDATE_LIMIT).map((doc) => {
+      const projection = toProfileProjection(doc.data());
+      return { uid: doc.id, displayName: projection.displayName, avatarPath: projection.avatarPath };
+    });
+    throw new HttpsError('failed-precondition', AMBIGUOUS_NICKNAME_MESSAGE, {
+      reason: 'AMBIGUOUS_NICKNAME',
+      candidates,
+    });
+  }
+  if (matches.length === 0) {
+    // The nickname matched only the caller themselves (an unsaturated page with
+    // no other active match) → dedicated self error, mirroring the by-uid path,
+    // so the client shows "you can't friend yourself" instead of a generic
+    // not-found. Otherwise it truly resolves to nobody addressable.
+    if (callerMatched) {
+      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+    }
+    throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
+  }
+  const only = matches[0]!;
+  return { uid: only.id, profile: toProfileProjection(only.data()) };
+}
+
+// ---------------------------------------------------------------------------
+// friend.sendRequest
+// ---------------------------------------------------------------------------
+
+export type SendRequestResult =
+  | { status: 'requested'; request: FriendRequestSummary }
+  | { status: 'friends'; friend: FriendSummary };
+
+export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRequestResult> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseSendRequestInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+
+  const { uid: targetUid, profile: targetProfile } = await resolveTarget(actor.uid, parsed.input);
+
+  if (targetUid === actor.uid) {
+    throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+  }
+
+  if (await isBlockedEitherWay(actor.uid, targetUid)) {
+    // Neutral — never reveals which side blocked (privacy).
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+  }
+
+  const callerProfile = await loadProfile(actor.uid);
+  if (!callerProfile) {
+    // The actor gate already loaded users/{caller}; a missing profile here is
+    // an inconsistent state rather than a client error.
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+  }
+
+  const now = new Date();
+  const outgoingRef = friendRequestRef(actor.uid, targetUid);
+  const incomingRef = friendRequestRef(targetUid, actor.uid);
+  const callerFriendRef = friendshipRef(actor.uid, targetUid);
+  const targetFriendRef = friendshipRef(targetUid, actor.uid);
+
+  return db.runTransaction<SendRequestResult>(async (tx) => {
+    // Reads must precede writes. Re-read the block state in BOTH directions
+    // INSIDE the transaction: the outside-transaction check above is a cheap
+    // fast-fail, but block state can change between it and these writes
+    // (TOCTOU), so the authoritative guarantee lives here — guarding both the
+    // new-request write and the reverse auto-accept path below.
+    const [alreadyFriend, outgoing, incoming, callerBlockedTarget, targetBlockedCaller] =
+      await Promise.all([
+        tx.get(callerFriendRef),
+        tx.get(outgoingRef),
+        tx.get(incomingRef),
+        tx.get(blockRef(actor.uid, targetUid)),
+        tx.get(blockRef(targetUid, actor.uid)),
+      ]);
+
+    if (alreadyFriend.exists) {
+      throw new HttpsError('already-exists', ALREADY_FRIENDS_MESSAGE);
+    }
+
+    // Blocking is honoured in BOTH directions. Neutral failed-precondition
+    // (never reveals who blocked whom), matching respondRequest's accept path.
+    if (callerBlockedTarget.exists || targetBlockedCaller.exists) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    }
+
+    // The other party already has a pending request to the caller → befriend
+    // immediately instead of stacking a mirror request (no stuck state).
+    if (incoming.exists && incoming.data()?.status === 'pending') {
+      tx.set(callerFriendRef, buildFriendshipDocument(targetUid, targetProfile, () => Timestamp.fromDate(now)));
+      tx.set(targetFriendRef, buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)));
+      tx.set(incomingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      // Concurrency guard: under a "both users send at the same time" race BOTH
+      // directional request docs can exist as pending. We accept the incoming
+      // (target→caller) side above; the caller's own outgoing (caller→target)
+      // doc — read in the same batch — must be resolved in the SAME transaction
+      // too, using the identical status='accepted' merge the normal accept path
+      // (respondRequest) applies, so friend.list (which only surfaces pending
+      // docs) can't keep showing a stale outgoing/incoming request now that the
+      // friendship exists. Guarded on the snapshot: in the non-race path the
+      // outgoing doc doesn't exist and nothing is written.
+      if (outgoing.exists) {
+        tx.set(outgoingRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      }
+      return {
+        status: 'friends',
+        friend: toFriendSummary(targetUid, { displayName: targetProfile.displayName, avatarPath: targetProfile.avatarPath }, now.toISOString()),
+      };
+    }
+
+    if (outgoing.exists && outgoing.data()?.status === 'pending') {
+      throw new HttpsError('already-exists', REQUEST_ALREADY_SENT_MESSAGE);
+    }
+
+    // New request, or re-opening a previously declined/accepted (now unfriended)
+    // record — upsert to pending with a fresh timestamp.
+    tx.set(
+      outgoingRef,
+      buildFriendRequestDocument(actor.uid, targetUid, callerProfile, targetProfile, () => Timestamp.fromDate(now)),
+    );
+    return {
+      status: 'requested',
+      request: toFriendRequestSummary(
+        outgoingRef.id,
+        {
+          fromUid: actor.uid,
+          toUid: targetUid,
+          fromDisplayName: callerProfile.displayName,
+          fromAvatarPath: callerProfile.avatarPath,
+          toDisplayName: targetProfile.displayName,
+          toAvatarPath: targetProfile.avatarPath,
+        },
+        actor.uid,
+        now.toISOString(),
+      ),
+    };
+  });
+});
+
+// ---------------------------------------------------------------------------
+// friend.respondRequest
+// ---------------------------------------------------------------------------
+
+export type RespondRequestResult =
+  | { status: 'accepted'; friend: FriendSummary }
+  | { status: 'declined' };
+
+export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<RespondRequestResult> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseRespondRequestInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { requestId, action } = parsed.input;
+
+  const reqRef = friendRequestRefById(requestId);
+  const now = new Date();
+
+  return db.runTransaction<RespondRequestResult>(async (tx) => {
+    const reqSnap = await tx.get(reqRef);
+    if (!reqSnap.exists) {
+      throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
+    }
+    const data = reqSnap.data()!;
+    // Only the addressee may respond; not-found (never permission-denied) so
+    // a request's existence can't be probed by a non-recipient.
+    if (data.toUid !== actor.uid) {
+      throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
+    }
+    if (data.status !== 'pending') {
+      throw new HttpsError('failed-precondition', REQUEST_NOT_PENDING_MESSAGE);
+    }
+
+    const fromUid = String(data.fromUid);
+
+    if (action === 'decline') {
+      tx.set(reqRef, { status: 'declined', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+      return { status: 'declined' };
+    }
+
+    // action === 'accept' — read both live profiles (freshness) and the block
+    // state in BOTH directions before writing. Reads must precede writes in a
+    // Firestore transaction, so the block docs are read in the same batch.
+    const [callerSnap, fromSnap, callerBlockedFrom, fromBlockedCaller] = await Promise.all([
+      tx.get(db.collection('users').doc(actor.uid)),
+      tx.get(db.collection('users').doc(fromUid)),
+      tx.get(blockRef(actor.uid, fromUid)),
+      tx.get(blockRef(fromUid, actor.uid)),
+    ]);
+
+    // Blocking is honoured in BOTH directions: if either party has blocked the
+    // other since the request was sent, the friendship must not be created.
+    // Neutral failed-precondition (never reveals who blocked whom), matching
+    // sendRequest's block handling.
+    if (callerBlockedFrom.exists || fromBlockedCaller.exists) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    }
+
+    // Both parties must still exist and be non-restricted (not soft-deleted or
+    // suspended) at write time — either could have been deleted/suspended
+    // between requireMemberActor and this transaction. Otherwise we would write
+    // friendship docs with null projections for a ghost/restricted account.
+    // Neutral failed-precondition (never reveals which side / why), matching the
+    // block handling above.
+    if (
+      !callerSnap.exists ||
+      !fromSnap.exists ||
+      isRestricted(toUserAccessState(callerSnap.data())) ||
+      isRestricted(toUserAccessState(fromSnap.data()))
+    ) {
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    }
+
+    const callerProfile = toProfileProjection(callerSnap.data());
+    const fromProfile = toProfileProjection(fromSnap.data());
+
+    tx.set(
+      friendshipRef(actor.uid, fromUid),
+      buildFriendshipDocument(fromUid, fromProfile, () => Timestamp.fromDate(now)),
+    );
+    tx.set(
+      friendshipRef(fromUid, actor.uid),
+      buildFriendshipDocument(actor.uid, callerProfile, () => Timestamp.fromDate(now)),
+    );
+    tx.set(reqRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
+
+    return {
+      status: 'accepted',
+      friend: toFriendSummary(fromUid, { displayName: fromProfile.displayName, avatarPath: fromProfile.avatarPath }, now.toISOString()),
+    };
+  });
+});
+
+// ---------------------------------------------------------------------------
+// friend.remove
+// ---------------------------------------------------------------------------
+
+export interface RemoveFriendResult {
+  removed: boolean;
+}
+
+export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveFriendResult> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseRemoveFriendInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { friendUid } = parsed.input;
+
+  if (friendUid === actor.uid) {
+    return { removed: false };
+  }
+
+  const callerRef = friendshipRef(actor.uid, friendUid);
+  const otherRef = friendshipRef(friendUid, actor.uid);
+
+  return db.runTransaction<RemoveFriendResult>(async (tx) => {
+    const callerSnap = await tx.get(callerRef);
+    // Delete BOTH sides (idempotent). removed reflects the caller's own side.
+    tx.delete(callerRef);
+    tx.delete(otherRef);
+    return { removed: callerSnap.exists };
+  });
+});
+
+// ---------------------------------------------------------------------------
+// friend.list
+// ---------------------------------------------------------------------------
+
+export interface ListFriendsResult {
+  friends: FriendSummary[];
+  incoming: FriendRequestSummary[];
+  outgoing: FriendRequestSummary[];
+}
+
+export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsResult> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseListInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+
+  // Every query is bounded so a large friend graph can't turn this callable
+  // into an unbounded read (cost/latency guard). The caps are generous safety
+  // ceilings; results are still sorted in memory below.
+  const [friendsSnap, incomingSnap, outgoingSnap] = await Promise.all([
+    // orderBy BEFORE limit so that, if a cap is ever hit, the truncation is
+    // deterministic and keeps the SAME items the presented order surfaces
+    // (rather than an arbitrary document-ID-ordered subset). The friend doc's
+    // timestamp field is `createdAt` (friends-core buildFriendshipDocument);
+    // the output's `friendsSince` is derived from it and sorted ascending, so
+    // truncation keeps the oldest friendships — matching the presented order.
+    // No where clause → covered by Firestore's automatic single-field index.
+    db
+      .collection('users')
+      .doc(actor.uid)
+      .collection('friends')
+      .orderBy('createdAt', 'asc')
+      .limit(MAX_FRIENDS_RETURNED)
+      .get(),
+    // Pending requests are presented most-recent-first; orderBy createdAt desc
+    // BEFORE limit so a hit cap keeps the NEWEST requests instead of an
+    // arbitrary subset that could drop them. Needs the composite index
+    // [toUid ASC, status ASC, createdAt DESC] (firebase/firestore.indexes.json).
+    db
+      .collection('friendRequests')
+      .where('toUid', '==', actor.uid)
+      .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
+      .limit(MAX_PENDING_REQUESTS_RETURNED)
+      .get(),
+    // Same as incoming, for outgoing requests. Needs the composite index
+    // [fromUid ASC, status ASC, createdAt DESC].
+    db
+      .collection('friendRequests')
+      .where('fromUid', '==', actor.uid)
+      .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
+      .limit(MAX_PENDING_REQUESTS_RETURNED)
+      .get(),
+  ]);
+
+  const fallback = new Date(0);
+  const toRequest = (doc: DocumentSnapshot): FriendRequestSummary =>
+    toFriendRequestSummary(doc.id, doc.data()!, actor.uid, isoFrom(doc.data()?.createdAt, fallback));
+
+  const friends = friendsSnap.docs
+    .map((doc) => toFriendSummary(doc.id, doc.data(), isoFrom(doc.data()?.createdAt, fallback)))
+    .sort((a, b) => a.friendsSince.localeCompare(b.friendsSince));
+
+  const incoming = incomingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const outgoing = outgoingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  return { friends, incoming, outgoing };
+});

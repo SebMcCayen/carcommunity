@@ -593,6 +593,42 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
+    },
+    {
+      "name": "friend.sendRequest",
+      "domain": "friend",
+      "description": "Sends a friend request to a user resolved by nickname (displayName, NOT unique) or by a resolved toUid. Nickname resolution: 0 matches → not-found, 1 → proceed, >1 → failed-precondition with reason AMBIGUOUS_NICKNAME and a candidates:[{uid,displayName,avatarPath}] list in the error details, so the client re-calls with { toUid }. Rejects self (invalid-argument), already-friends and an existing pending outgoing request (already-exists), and either-way blocks (failed-precondition NOT_ADDABLE, neutral so the block direction is never revealed). If the target already has a PENDING request to the caller, the two are befriended immediately (returns status 'friends'). Writes friendRequests/{requestId} where requestId is a collision-resistant length-prefixed SHA-256 over the ordered (fromUid, toUid) pair. Deployed via grouped export as friend-sendRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.respondRequest",
+      "domain": "friend",
+      "description": "Accepts or declines a PENDING friend request addressed to the caller ({ requestId, action: 'accept'|'decline' }). Only the recipient (toUid) may respond; a non-recipient or missing request is not-found (never permission-denied, so requests can't be probed); an already-handled request is failed-precondition. Accept writes users/{uid}/friends/{friendUid} for BOTH sides (re-reading live profiles) and marks the request accepted; decline marks it declined. Deployed via grouped export as friend-respondRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.remove",
+      "domain": "friend",
+      "description": "Removes an established friend ({ friendUid }). Idempotent: deletes users/{caller}/friends/{friendUid} and the mirror users/{friendUid}/friends/{caller}; returns { removed } reflecting whether the caller's own side existed (self is always { removed: false }). Established friendship — not request status — is the source of truth, so a later friend.sendRequest can re-friend. Deployed via grouped export as friend-remove (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.list",
+      "domain": "friend",
+      "description": "Lists the caller's established friends plus incoming and outgoing PENDING requests ({} input). Returns { friends:[{uid,displayName,avatarPath,friendsSince}], incoming:[FriendRequestSummary], outgoing:[FriendRequestSummary] } where each FriendRequestSummary is { requestId, fromUid, toUid, direction, otherUser:{uid,displayName,avatarPath}, createdAt } with the OTHER party projected for the UI. Owner-only server reads; friends are also directly owner-readable at users/{uid}/friends. Each of the three queries is bounded (friends capped at 1000, incoming/outgoing pending each capped at 500) so a large friend graph can't cause an unbounded read; cursor pagination is a possible follow-up without changing the response shape. Deployed via grouped export as friend-list (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }

@@ -61,7 +61,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "receiverId",
+          "fieldPath": "toUid",
           "order": "ASCENDING"
         },
         {
@@ -79,7 +79,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "senderId",
+          "fieldPath": "fromUid",
           "order": "ASCENDING"
         },
         {
