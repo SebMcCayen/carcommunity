@@ -124,7 +124,7 @@ object PolylineCodec {
 
     /** Decodes a polyline-6 string to lng/lat points. Returns empty on blank. */
     fun decode(encoded: String, precision: Double = PRECISION_6): List<LatLng> {
-        if (encoded.isEmpty()) return emptyList()
+        if (encoded.isBlank()) return emptyList()
         val points = ArrayList<LatLng>()
         var index = 0
         var lat = 0

@@ -65,10 +65,14 @@ class NavigationController(
      * one so only the latest keystroke hits the network.
      */
     fun onQueryChange(query: String) {
-        stateFlow.value = stateFlow.value.copy(query = query, error = null)
         searchJob?.cancel()
+        // Reset `searching` up front: cancelling the prior job doesn't clear the
+        // spinner it may have set, so without this it would linger through the
+        // pre-lookup debounce window even though no lookup is running. The
+        // launched job below flips it true again once the actual geocode starts.
+        stateFlow.value = stateFlow.value.copy(query = query, searching = false, error = null)
         if (query.isBlank()) {
-            stateFlow.value = stateFlow.value.copy(suggestions = emptyList(), searching = false)
+            stateFlow.value = stateFlow.value.copy(suggestions = emptyList())
             return
         }
         searchJob =

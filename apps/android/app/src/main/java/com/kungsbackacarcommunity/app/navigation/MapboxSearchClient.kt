@@ -27,11 +27,12 @@ interface MapboxSearchClient {
  * Directions v5) over [HttpURLConnection].
  *
  * ## Token guard (config-less CI / no network)
- * Constructed only with a non-blank public `pk.` token (the caller checks the
- * `mapbox_access_token` resource, mirroring [com.kungsbackacarcommunity.app.shell.rememberMapSurface]).
- * As a belt-and-braces guard every call also short-circuits to empty/null when
- * the token is blank, so no request is ever issued without a token — the
- * no-token build never touches the network.
+ * May be constructed with a blank `mapbox_access_token` (the wiring builds this
+ * client unconditionally, mirroring [com.kungsbackacarcommunity.app.shell.rememberMapSurface]);
+ * there is no construction-time token validation. Instead every call guards at
+ * call time, short-circuiting to empty/null when the token is blank, so no
+ * request is ever issued without a token — the no-token build never touches the
+ * network.
  *
  * ## Offline-verification note
  * The request *shape* is built by the pure [MapboxRequests] (unit-tested); the

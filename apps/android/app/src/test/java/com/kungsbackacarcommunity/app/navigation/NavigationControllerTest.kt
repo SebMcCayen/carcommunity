@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.navigation
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -79,6 +80,43 @@ class NavigationControllerTest {
 
         assertEquals(1, client.geocodeCalls)
         assertEquals("kun", client.lastQuery)
+    }
+
+    @Test
+    fun `a new keystroke clears the spinner during the next debounce window`() = runTest {
+        // Gate the first lookup so it stays in-flight with `searching = true`.
+        val gate = CompletableDeferred<Unit>()
+        val client =
+            object : MapboxSearchClient {
+                override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
+                    gate.await()
+                    return listOf(suggestion)
+                }
+
+                override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? = null
+            }
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.onQueryChange("kung")
+        advanceTimeBy(300)
+        runCurrent()
+        // Lookup is now running and the spinner is up.
+        assertTrue(controller.state.value.searching)
+
+        // Next keystroke cancels the in-flight lookup; the spinner must clear
+        // immediately rather than linger through the new debounce window.
+        controller.onQueryChange("kungs")
+        assertFalse(controller.state.value.searching)
+
+        advanceTimeBy(299)
+        runCurrent()
+        // Still pre-lookup: no spinner while merely debouncing.
+        assertFalse(controller.state.value.searching)
+
+        // Let the latest (gated) lookup finish so no coroutine is left dangling.
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(controller.state.value.searching)
     }
 
     @Test
