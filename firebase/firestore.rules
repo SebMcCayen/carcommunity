@@ -329,20 +329,6 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // friends – accepted friendship records
-    // Document carries `userId` (list owner) and `friendId`.
-    // -------------------------------------------------------------------------
-    match /friends/{friendId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.userId == request.auth.uid || resource.data.friendId == request.auth.uid);
-      allow create: if isAuthenticated() && isNotSuspended()
-        && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && isNotSuspended()
-        && resource.data.userId == request.auth.uid;
-      allow read, write: if isAdmin();
-    }
-
-    // -------------------------------------------------------------------------
     // friendRequests – pending friend requests
     // Document carries `senderId` and `receiverId`.
     // -------------------------------------------------------------------------

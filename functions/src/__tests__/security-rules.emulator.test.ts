@@ -1667,10 +1667,6 @@ describe('Firestore – suspension enforcement', () => {
       await setDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED), {
         email: 'suspended@example.com',
       });
-      await setDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship'), {
-        userId: SUSPENDED,
-        friendId: 'some-friend',
-      });
       await setDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request'), {
         senderId: SUSPENDED,
         receiverId: 'some-friend',
@@ -1735,9 +1731,8 @@ describe('Firestore – suspension enforcement', () => {
     );
   });
 
-  it('suspension blocks deletes too (friends, friend requests, vehicles)', async () => {
+  it('suspension blocks deletes too (friend requests, vehicles)', async () => {
     const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship')));
     await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
     await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
   });
