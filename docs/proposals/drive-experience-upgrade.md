@@ -191,7 +191,8 @@ speed-colored; it has "speed traps" (save your fastest moment at a point).
 This proposal copies **none** of it, and not merely because of MVP scoping:
 
 - **Legal exposure (Sweden).** A feature that celebrates top speed on public
-  roads invites *vårdslöshet i trafik* framing (Trafikbrottslagen 1951:649)
+  roads invites *vårdslöshet i trafik* (careless/reckless driving) framing
+  (Trafikbrottslagen 1951:649)
   and hands prosecutors, insurers, and journalists a self-incriminating
   record with the club's branding on it. A speed-colored route shared to
   Instagram is evidence with a logo. Competitor X carries this risk with a
