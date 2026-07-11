@@ -76,10 +76,17 @@ fun ChatRoute(
     }
 
     // Re-subscribe once the first send creates the conversation document (the
-    // initial listen was denied for the not-yet-existing doc).
+    // initial listen was denied for the not-yet-existing doc). Gated to AT MOST
+    // ONCE per conversationId via [resubscribed]: a burst of quick sends (before
+    // the first snapshot arrives, so liveMessages is still empty) must not
+    // repeatedly tear down and recreate the Firestore listener.
+    var resubscribed by remember(conversationId) { mutableStateOf(false) }
     val liveEmpty = rememberUpdatedState(liveMessages.isEmpty())
     LaunchedEffect(sentCount) {
-        if (sentCount > 0 && liveEmpty.value) threadKey++
+        if (sentCount > 0 && liveEmpty.value && !resubscribed) {
+            resubscribed = true
+            threadKey++
+        }
     }
 
     ChatScreen(

@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
@@ -59,13 +60,30 @@ class FirebaseDmRepository private constructor(
                 .limit(DM_MESSAGES_PAGE_SIZE.toLong())
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
+                        // Firestore can deliver cached data ALONGSIDE an error;
+                        // prefer that over collapsing the thread to empty.
+                        if (snapshot != null) {
+                            val cached =
+                                snapshot.documents.mapNotNull { it.toMessage() }.asReversed()
+                            trySend(DmThreadState.Loaded(cached))
+                            return@addSnapshotListener
+                        }
                         // A self-derived pairId whose conversation doc doesn't
                         // exist yet denies the messages listen (the rule get()s
-                        // the missing parent). That's an empty, not-yet-started
-                        // thread — surface it as such so the caller can send the
-                        // first message; the route re-subscribes once the doc
-                        // exists.
-                        trySend(DmThreadState.Loaded(emptyList()))
+                        // the missing parent) with PERMISSION_DENIED. That's an
+                        // empty, not-yet-started thread — surface it as such so
+                        // the caller can send the first message; the route
+                        // re-subscribes once the doc exists.
+                        if ((error as? FirebaseFirestoreException)?.code ==
+                            FirebaseFirestoreException.Code.PERMISSION_DENIED
+                        ) {
+                            trySend(DmThreadState.Loaded(emptyList()))
+                            return@addSnapshotListener
+                        }
+                        // Any OTHER error (UNAVAILABLE, network, etc.) is
+                        // transient: keep the last emitted state instead of
+                        // misrendering it as "no messages". Don't close the flow
+                        // — the SDK retries and will deliver a fresh snapshot.
                         return@addSnapshotListener
                     }
                     val messages =
