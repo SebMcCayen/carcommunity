@@ -62,22 +62,33 @@ fun AeroPage(
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val scrollState = rememberScrollState()
+        // Fixed chrome: the status-bar inset and the top breathing room live on
+        // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
+        // the title/content can never scroll up under the status bar.
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .padding(top = AeroPageTopSpacing)
-                    .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
-                    .padding(
-                        start = horizontalPadding,
-                        end = horizontalPadding,
-                        bottom = AeroPageBottomPadding,
-                    ),
-            verticalArrangement = verticalArrangement,
+                    .padding(top = AeroPageTopSpacing),
         ) {
-            AeroPageTitle(title)
-            content()
+            // Scrollable content: only the title + caller content (and the gutter /
+            // bottom padding around them) move when the user scrolls.
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
+                        .padding(
+                            start = horizontalPadding,
+                            end = horizontalPadding,
+                            bottom = AeroPageBottomPadding,
+                        ),
+                verticalArrangement = verticalArrangement,
+            ) {
+                AeroPageTitle(title)
+                content()
+            }
         }
     }
 }
