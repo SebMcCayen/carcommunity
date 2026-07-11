@@ -26,9 +26,9 @@ import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +39,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -238,6 +239,25 @@ fun AuthenticatedApp(
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
             var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
 
+            // Defensive migration: selectedTab is rememberSaveable, so a session
+            // saved by an older app version (when Create was a real content
+            // destination) could restore it as ShellTab.Create — which now
+            // renders as blank Unit, stranding the app on an empty content area.
+            // Coerce any such restored Create back to Map on first composition.
+            // This is safe against the live action path: tapping Create never
+            // sets selectedTab to Create (ShellBottomBar.onSelect switches to Map
+            // and raises the prompt), so this only ever rescues a stale restored
+            // value and never interferes with the Create tab's action behaviour.
+            LaunchedEffect(Unit) {
+                if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
+            }
+
+            // Tapping the bottom-nav "Create" tab opens the Map and raises this
+            // transparent prompt asking whether to start sharing live location —
+            // Create never becomes a selected tab of its own (see
+            // ShellBottomBar.onSelect below).
+            var showLiveSharePrompt by rememberSaveable { mutableStateOf(false) }
+
             // Group-drive "show on map": stash roster uids, switch to the Map
             // tab. Preserved for the real Mapbox impl (the stub surfaces only a
             // count); mirrors the old MapRoute participant wiring.
@@ -317,6 +337,42 @@ fun AuthenticatedApp(
             fun showComingSoon() {
                 scope.launch {
                     snackbarHostState.showSnackbar(comingSoonText)
+                }
+            }
+
+            // Single live-share entry point shared by the map's broadcast toggle
+            // and the Create-tab prompt, so both honour the same member-gating and
+            // "open the live screen when not permitted/unwired" fallback.
+            fun toggleLiveShare() {
+                when (
+                    LiveShareToggle.action(
+                        isSharing = isSharing,
+                        canShare = canShareLive,
+                        wired = liveLocationCoordinator != null,
+                    )
+                ) {
+                    LiveShareAction.Start -> {
+                        liveLocationCoordinator?.let { c ->
+                            scope.launch {
+                                c.start(LiveSessionDuration.ONE_HOUR)
+                            }
+                            BackgroundLocationController.start(context)
+                        }
+                    }
+                    LiveShareAction.Stop -> {
+                        liveLocationCoordinator?.let { c ->
+                            scope.launch { c.stop() }
+                            BackgroundLocationController.stop(context)
+                        }
+                    }
+                    LiveShareAction.OpenScreen ->
+                        if (liveLocationRepository != null) {
+                            route = ShellRoute.LiveLocation
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(unavailableText)
+                            }
+                        }
                 }
             }
 
@@ -458,7 +514,17 @@ fun AuthenticatedApp(
                         bottomBar = {
                             ShellBottomBar(
                                 selected = selectedTab,
-                                onSelect = { selectedTab = it },
+                                onSelect = { tab ->
+                                    // Create is an action, not a destination: open
+                                    // the Map and raise the live-share prompt rather
+                                    // than letting Create become the selected tab.
+                                    if (tab == ShellTab.Create) {
+                                        selectedTab = ShellTab.Map
+                                        showLiveSharePrompt = true
+                                    } else {
+                                        selectedTab = tab
+                                    }
+                                },
                             )
                         },
                     ) { padding ->
@@ -478,40 +544,7 @@ fun AuthenticatedApp(
                                         // Voice search (speech-to-text) is a
                                         // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
-                                        onToggleLiveShare = {
-                                            when (
-                                                LiveShareToggle.action(
-                                                    isSharing = isSharing,
-                                                    canShare = canShareLive,
-                                                    wired = liveLocationCoordinator != null,
-                                                )
-                                            ) {
-                                                LiveShareAction.Start -> {
-                                                    liveLocationCoordinator?.let { c ->
-                                                        scope.launch {
-                                                            c.start(LiveSessionDuration.ONE_HOUR)
-                                                        }
-                                                        BackgroundLocationController.start(context)
-                                                    }
-                                                }
-                                                LiveShareAction.Stop -> {
-                                                    liveLocationCoordinator?.let { c ->
-                                                        scope.launch { c.stop() }
-                                                        BackgroundLocationController.stop(context)
-                                                    }
-                                                }
-                                                LiveShareAction.OpenScreen ->
-                                                    if (liveLocationRepository != null) {
-                                                        route = ShellRoute.LiveLocation
-                                                    } else {
-                                                        scope.launch {
-                                                            snackbarHostState.showSnackbar(
-                                                                unavailableText,
-                                                            )
-                                                        }
-                                                    }
-                                            }
-                                        },
+                                        onToggleLiveShare = { toggleLiveShare() },
                                         // Layers control toggles the traffic
                                         // overlay (visible only on the real
                                         // Mapbox surface; a no-op on the stub).
@@ -546,36 +579,11 @@ fun AuthenticatedApp(
                                         )
                                     }
 
-                                ShellTab.Create ->
-                                    HubScreen(
-                                        title = stringResource(R.string.shell_createTitle),
-                                        entries =
-                                            listOf(
-                                                HubEntry(
-                                                    label = stringResource(R.string.shell_createEvent),
-                                                    icon = Icons.Filled.Event,
-                                                    onClick =
-                                                        if (eventsRepository != null) {
-                                                            { route = ShellRoute.Events }
-                                                        } else {
-                                                            null
-                                                        },
-                                                ),
-                                                HubEntry(
-                                                    label =
-                                                        stringResource(R.string.shell_startLiveLocation),
-                                                    icon = Icons.Filled.Podcasts,
-                                                    onClick =
-                                                        if (liveLocationRepository != null &&
-                                                            liveLocationEnabled
-                                                        ) {
-                                                            { route = ShellRoute.LiveLocation }
-                                                        } else {
-                                                            null
-                                                        },
-                                                ),
-                                            ),
-                                    )
+                                // Create is intercepted in ShellBottomBar.onSelect
+                                // (switches to Map + raises the live-share prompt),
+                                // so it never renders as its own tab. This branch
+                                // exists only for `when` exhaustiveness.
+                                ShellTab.Create -> Unit
 
                                 ShellTab.Social ->
                                     HubScreen(
@@ -703,6 +711,25 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // Transparent prompt raised by the Create tab: Confirm starts
+                // live sharing via the shared toggle path; Cancel or an outside
+                // tap dismisses it, staying on the map.
+                if (showLiveSharePrompt) {
+                    LiveSharePromptDialog(
+                        onConfirm = {
+                            showLiveSharePrompt = false
+                            // The prompt only ever asks to START sharing, but
+                            // toggleLiveShare() maps to Stop while a session is
+                            // active. Guard on the live-time isSharing so
+                            // confirming can never stop an active session; the
+                            // Start / open-screen fallbacks still run when not
+                            // already sharing.
+                            if (!isSharing) toggleLiveShare()
+                        },
+                        onDismiss = { showLiveSharePrompt = false },
+                    )
+                }
+
                 SnackbarHost(
                     hostState = snackbarHostState,
                     modifier =
@@ -756,6 +783,36 @@ private fun ShellBottomBar(
             label = null,
         )
     }
+}
+
+/**
+ * Transparent confirmation prompt shown over the map when the user taps the
+ * "Create" tab: a translucent-surfaced [AlertDialog] asking whether to start
+ * sharing live location. [onConfirm] runs the shared live-share toggle;
+ * [onDismiss] (Cancel or an outside tap) leaves the user on the map.
+ */
+@Composable
+private fun LiveSharePromptDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // Translucent surface so the map stays visible behind the prompt.
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        title = { Text(stringResource(R.string.shell_startLiveLocation)) },
+        text = { Text(stringResource(R.string.shell_liveSharePromptBody)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.shell_liveSharePromptConfirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.shell_liveSharePromptCancel))
+            }
+        },
+    )
 }
 
 /**

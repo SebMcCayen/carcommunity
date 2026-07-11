@@ -608,9 +608,10 @@
     <string name="shell_tabSocial">Social</string>
     <string name="shell_tabGarage">Garage</string>
     <string name="shell_comingSoon">Coming soon</string>
-    <string name="shell_createTitle">Create</string>
-    <string name="shell_createEvent">Create event</string>
     <string name="shell_startLiveLocation">Share live location</string>
+    <string name="shell_liveSharePromptBody">Start sharing your live location with the community?</string>
+    <string name="shell_liveSharePromptConfirm">Share</string>
+    <string name="shell_liveSharePromptCancel">Cancel</string>
     <string name="shell_socialTitle">Social</string>
     <string name="shell_socialEvents">Events</string>
     <string name="shell_socialNotifications">Notifications</string>

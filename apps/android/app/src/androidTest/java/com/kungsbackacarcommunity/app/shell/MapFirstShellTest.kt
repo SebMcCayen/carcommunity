@@ -123,4 +123,25 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
+
+    @Test
+    fun createTab_raisesLiveSharePrompt_thenDismisses() {
+        setShell()
+        // The Create tab is an action, not a destination: tapping it switches to
+        // the Map and raises the transparent live-share prompt. Icon-only bottom
+        // nav (labels are null), so the tab name lives on the contentDescription.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).performClick()
+        // The prompt dialog appears — asserted via its unique body text.
+        composeTestRule
+            .onNodeWithText(str(R.string.shell_liveSharePromptBody))
+            .assertIsDisplayed()
+        // Cancel dismisses the prompt and leaves the user on the map home.
+        composeTestRule
+            .onNodeWithText(str(R.string.shell_liveSharePromptCancel))
+            .performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.shell_liveSharePromptBody))
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
 }

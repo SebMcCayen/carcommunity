@@ -608,9 +608,10 @@
     <string name="shell_tabSocial">Socialt</string>
     <string name="shell_tabGarage">Garage</string>
     <string name="shell_comingSoon">Kommer snart</string>
-    <string name="shell_createTitle">Skapa</string>
-    <string name="shell_createEvent">Skapa event</string>
     <string name="shell_startLiveLocation">Dela liveplats</string>
+    <string name="shell_liveSharePromptBody">Vill du börja dela din liveplats med gemenskapen?</string>
+    <string name="shell_liveSharePromptConfirm">Dela</string>
+    <string name="shell_liveSharePromptCancel">Avbryt</string>
     <string name="shell_socialTitle">Socialt</string>
     <string name="shell_socialEvents">Event</string>
     <string name="shell_socialNotifications">Aviseringar</string>
