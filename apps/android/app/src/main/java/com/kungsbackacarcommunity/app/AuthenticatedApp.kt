@@ -861,7 +861,11 @@ private fun RouteHost(
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
             val avatarPicker =
                 rememberImagePickLauncher(
-                    maxBytes = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+                    // Read with a higher cap than the 5 MB upload cap so the raw
+                    // pick reaches ImageCompressor (which shrinks it below the
+                    // upload cap). Still bounded to avoid OOM; the upload precheck
+                    // on the compressed result enforces PROFILE_IMAGE_MAX_BYTES.
+                    maxBytes = MediaUpload.PROFILE_IMAGE_READ_MAX_BYTES,
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {

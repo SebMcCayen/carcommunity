@@ -85,14 +85,20 @@ object ImageCompressor {
         }
     }
 
-    /** Largest power of two that keeps both dimensions above [maxDimension]. */
+    /**
+     * Largest power-of-two [BitmapFactory.Options.inSampleSize] that brings the
+     * LONGEST side to at most [maxDimension]. Basing the decision on the longest
+     * side (not requiring BOTH sides to shrink) means a very wide/tall image —
+     * e.g. 4000x500 with maxDimension 1024 — still down-samples (to 1000x125 at
+     * sample 4) instead of decoding at full resolution and spiking peak memory.
+     * The result is a power of two; the later exact [scaleToMax] step trims any
+     * remainder so the longest side lands exactly on [maxDimension].
+     */
     private fun sampleSizeFor(width: Int, height: Int, maxDimension: Int): Int {
         var sample = 1
-        var w = width
-        var h = height
-        while (w / 2 >= maxDimension && h / 2 >= maxDimension) {
-            w /= 2
-            h /= 2
+        var longest = maxOf(width, height)
+        while (longest > maxDimension) {
+            longest /= 2
             sample *= 2
         }
         return sample
@@ -133,6 +139,17 @@ object ImageCompressor {
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
             ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
             ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            // Transpose = rotate 90 then flip horizontally; transverse = rotate
+            // 270 then flip horizontally. Same postRotate-then-postScale order as
+            // the branches above so the combined transform is applied correctly.
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                matrix.postRotate(90f)
+                matrix.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                matrix.postRotate(270f)
+                matrix.postScale(-1f, 1f)
+            }
             else -> return bitmap
         }
         val rotated =
