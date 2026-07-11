@@ -1654,6 +1654,7 @@ describe('Firestore – moderation actions', () => {
 
 describe('Firestore – suspension enforcement', () => {
   const SUSPENDED = 'suspended-user';
+  const ACTIVE_SENDER = 'active-friend-sender';
 
   beforeAll(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -1671,10 +1672,12 @@ describe('Firestore – suspension enforcement', () => {
         senderId: SUSPENDED,
         receiverId: 'some-friend',
       });
-      await setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle'), {
-        userId: SUSPENDED,
-        make: 'Volvo',
-        model: '240',
+      // A friend request owned by a non-suspended sender, used to prove the
+      // suspension gate on friendRequests deletes is meaningful (a non-suspended
+      // sender may delete their own request; a suspended one may not).
+      await setDoc(doc(ctx.firestore(), 'friendRequests', 'active-request'), {
+        senderId: ACTIVE_SENDER,
+        receiverId: 'some-friend',
       });
       // Published event where the (now suspended) member had RSVP'd — chat
       // read eligibility must still be revoked by suspension.
@@ -1731,10 +1734,24 @@ describe('Firestore – suspension enforcement', () => {
     );
   });
 
-  it('suspension blocks deletes too (friend requests, vehicles)', async () => {
-    const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
+  it('suspension blocks an otherwise-permitted client delete (friend requests)', async () => {
+    // friendRequests is one of the few docs a client may delete directly, and
+    // only while not suspended. Prove the gate both ways so the assertion is
+    // meaningful — asserting a vehicle delete would be a false signal, since
+    // vehicles have no client delete at all (garage.* callables own vehicle
+    // mutations), so *every* client is denied regardless of suspension.
+    const activeCtx = testEnv.authenticatedContext(ACTIVE_SENDER, { activeMember: true });
+    await assertSucceeds(
+      deleteDoc(doc(activeCtx.firestore(), 'friendRequests', 'active-request')),
+    );
+
+    const suspendedCtx = testEnv.authenticatedContext(SUSPENDED, {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(
+      deleteDoc(doc(suspendedCtx.firestore(), 'friendRequests', 'suspended-request')),
+    );
   });
 
   it('suspended user retains read access to their own data', async () => {
