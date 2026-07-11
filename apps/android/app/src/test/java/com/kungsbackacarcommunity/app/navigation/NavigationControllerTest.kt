@@ -147,6 +147,28 @@ class NavigationControllerTest {
     }
 
     @Test
+    fun `a failing origin provider leaves the geocode proximity unbiased`() = runTest {
+        // A real (non-cancellation) failure resolving the origin must still
+        // degrade to null via runCatchingCancellable's failure branch, exactly
+        // as the old swallowing runCatching did — so autocomplete is simply
+        // unbiased rather than crashing.
+        val client = FakeClient(suggestions = listOf(suggestion))
+        val controller =
+            NavigationController(
+                client,
+                originProvider = { throw RuntimeException("no fix") },
+                scope = this,
+            )
+        controller.refreshOrigin()
+        advanceUntilIdle()
+
+        controller.onQueryChange("torg")
+        advanceUntilIdle()
+        assertEquals(listOf(suggestion), controller.state.value.suggestions)
+        assertNull(client.lastProximity)
+    }
+
+    @Test
     fun `selecting a suggestion fetches the route`() = runTest {
         val client = FakeClient(route = routeSummary)
         val controller = NavigationController(client, originProvider = { origin }, scope = this)

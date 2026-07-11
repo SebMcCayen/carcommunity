@@ -50,14 +50,14 @@ class HttpMapboxSearchClient(
     override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
         if (token.isBlank()) return emptyList()
         val url = MapboxRequests.forwardGeocode(query, token, proximity, language) ?: return emptyList()
-        val body = runCatching { get(url) }.getOrNull() ?: return emptyList()
+        val body = runCatchingCancellable { get(url) }.getOrNull() ?: return emptyList()
         return runCatching { parseSuggestions(body) }.getOrDefault(emptyList())
     }
 
     override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? {
         if (token.isBlank()) return null
         val url = MapboxRequests.directions(origin, destination, token, language)
-        val body = runCatching { get(url) }.getOrNull() ?: return null
+        val body = runCatchingCancellable { get(url) }.getOrNull() ?: return null
         return runCatching { parseRoute(body) }.getOrNull()
     }
 

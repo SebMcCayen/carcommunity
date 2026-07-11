@@ -28,7 +28,7 @@ object CurrentLocation {
             }.getOrNull() ?: return null
 
         val last =
-            runCatching {
+            runCatchingCancellable {
                 suspendCancellableCoroutine<LatLng?> { cont ->
                     client.lastLocation
                         .addOnSuccessListener { loc ->
@@ -44,8 +44,9 @@ object CurrentLocation {
         if (last != null) return last
 
         // No cached fix — ask for a single current fix (may still be null if the
-        // permission is absent; the SecurityException is swallowed by runCatching).
-        return runCatching {
+        // permission is absent; the SecurityException is swallowed by
+        // runCatchingCancellable, which still rethrows CancellationException).
+        return runCatchingCancellable {
             suspendCancellableCoroutine<LatLng?> { cont ->
                 client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
                     .addOnSuccessListener { loc ->

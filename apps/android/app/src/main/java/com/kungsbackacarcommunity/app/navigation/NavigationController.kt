@@ -57,7 +57,7 @@ class NavigationController(
 
     /** Fetches the current location up-front so autocomplete can bias by it. */
     fun refreshOrigin() {
-        scope.launch { cachedOrigin = runCatching { originProvider() }.getOrNull() }
+        scope.launch { cachedOrigin = runCatchingCancellable { originProvider() }.getOrNull() }
     }
 
     /**
