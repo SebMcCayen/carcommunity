@@ -593,6 +593,78 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
+    },
+    {
+      "name": "friend.sendRequest",
+      "domain": "friend",
+      "description": "Sends a friend request to a user resolved by nickname (displayName, NOT unique) or by a resolved toUid. Nickname resolution: 0 matches → not-found, 1 → proceed, >1 → failed-precondition with reason AMBIGUOUS_NICKNAME and a candidates:[{uid,displayName,avatarPath}] list in the error details, so the client re-calls with { toUid }. Rejects self (invalid-argument), already-friends and an existing pending outgoing request (already-exists), and either-way blocks (failed-precondition NOT_ADDABLE, neutral so the block direction is never revealed). If the target already has a PENDING request to the caller, the two are befriended immediately (returns status 'friends'). Writes friendRequests/{requestId} where requestId is a collision-resistant length-prefixed SHA-256 over the ordered (fromUid, toUid) pair. Deployed via grouped export as friend-sendRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.respondRequest",
+      "domain": "friend",
+      "description": "Accepts or declines a PENDING friend request addressed to the caller ({ requestId, action: 'accept'|'decline' }). Only the recipient (toUid) may respond; a non-recipient or missing request is not-found (never permission-denied, so requests can't be probed); an already-handled request is failed-precondition. Accept writes users/{uid}/friends/{friendUid} for BOTH sides (re-reading live profiles) and marks the request accepted; decline marks it declined. Deployed via grouped export as friend-respondRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.remove",
+      "domain": "friend",
+      "description": "Removes an established friend ({ friendUid }). Idempotent: deletes users/{caller}/friends/{friendUid} and the mirror users/{friendUid}/friends/{caller}; returns { removed } reflecting whether the caller's own side existed (self is always { removed: false }). Established friendship — not request status — is the source of truth, so a later friend.sendRequest can re-friend. Deployed via grouped export as friend-remove (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "friend.list",
+      "domain": "friend",
+      "description": "Lists the caller's established friends plus incoming and outgoing PENDING requests ({} input). Returns { friends:[{uid,displayName,avatarPath,friendsSince}], incoming:[FriendRequestSummary], outgoing:[FriendRequestSummary] } where each FriendRequestSummary is { requestId, fromUid, toUid, direction, otherUser:{uid,displayName,avatarPath}, createdAt } with the OTHER party projected for the UI. Owner-only server reads; friends are also directly owner-readable at users/{uid}/friends. Each of the three queries is bounded (friends capped at 1000, incoming/outgoing pending each capped at 500) so a large friend graph can't cause an unbounded read; cursor pagination is a possible follow-up without changing the response shape. Deployed via grouped export as friend-list (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.sendMessage",
+      "domain": "dm",
+      "description": "Sends a 1:1 direct message to an ESTABLISHED friend ({ toUid, text }, text 1..2000). Requires an established friendship (users/{uid}/friends/{friendUid}) — else failed-precondition NOT_FRIENDS; rejects self (invalid-argument) and either-way blocks (failed-precondition, neutral). Creates or updates the canonical conversations/{pairId} (pairId = the two UIDs sorted + joined by `__`), appends conversations/{pairId}/messages/{id} {senderUid,text,createdAt}, bumps the recipient's per-member unread AND the userPrivate/{recipient}.dmUnreadTotal aggregate in one transaction. Returns { conversationId, messageId }. FCM push deferred to end-of-MVP. Deployed via grouped export as dm-sendMessage (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.listConversations",
+      "domain": "dm",
+      "description": "Lists the caller's DM conversations newest-first ({} input). Returns { conversations:[{ conversationId, otherUser:{uid,displayName,avatarPath}, lastMessage:{text,senderUid,createdAt}|null, unreadCount, lastReadAt }], totalUnread }. otherUser + lastMessage are denormalized on conversations/{pairId}; unreadCount/lastReadAt are the caller's own per-member values. totalUnread mirrors userPrivate/{uid}.dmUnreadTotal (the badge source). Deployed via grouped export as dm-listConversations (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.getMessages",
+      "domain": "dm",
+      "description": "Paginated newest-first messages for a conversation ({ conversationId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only a member of the pair may read; a non-member or missing conversation is not-found (never permission-denied, so conversations can't be probed). Returns { conversationId, messages:[{id,senderUid,text,createdAt}], nextBefore, hasMore } (page size 30). Deployed via grouped export as dm-getMessages (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "dm.markRead",
+      "domain": "dm",
+      "description": "Clears the caller's unread for a conversation ({ conversationId }). Sets conversations/{pairId}.unread[caller]=0 + lastReadAt[caller]=now and decrements userPrivate/{caller}.dmUnreadTotal by exactly the cleared amount (never underflows) in one transaction. Non-member/missing → not-found. Returns { conversationId, cleared }. Deployed via grouped export as dm-markRead (functions/src/dm/manageDirectMessages.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }

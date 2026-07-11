@@ -342,23 +342,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // -------------------------------------------------------------------------
-    // friendRequests – pending friend requests
-    // Document carries `senderId` and `receiverId`.
-    // -------------------------------------------------------------------------
-    match /friendRequests/{requestId} {
-      allow read: if isAuthenticated() &&
-        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow create: if isAuthenticated() && isNotSuspended()
-        && request.resource.data.senderId == request.auth.uid;
-      // Receiver may accept or decline.
-      allow update: if isAuthenticated() && isNotSuspended()
-        && resource.data.receiverId == request.auth.uid;
-      // Sender may cancel.
-      allow delete: if isAuthenticated() && isNotSuspended()
-        && resource.data.senderId == request.auth.uid;
-      allow read, write: if isAdmin();
-    }
+    // friendRequests – the ONLY match block for this collection is the
+    // callable-only friend-graph model below (fromUid/toUid). An earlier
+    // senderId/receiverId scaffold that granted direct client create/update/
+    // delete was removed: Firestore rules are ADDITIVE, so leaving it in place
+    // gave clients a path to forge/modify friendRequests (setting senderId to
+    // themselves) and bypass the friend.* callables — breaking the
+    // callable-only-write invariant of the new model. No production code (app,
+    // admin web, or functions) ever used the senderId/receiverId shape.
 
     // -------------------------------------------------------------------------
     // userBlocks – directional user blocking (blocking.block / blocking.unblock)
@@ -371,6 +362,61 @@ service cloud.firestore {
     match /userBlocks/{blockerId}/blocked/{blockedId} {
       allow read: if isOwner(blockerId);
       // No client writes: blocking.block / blocking.unblock callables only.
+    }
+
+    // -------------------------------------------------------------------------
+    // Friends – friend graph (friend.sendRequest / respondRequest / remove /
+    // list). Messaging/DMs are a SEPARATE follow-up, not modelled here.
+    //
+    // users/{uid}/friends/{friendUid}: an established friendship, written for
+    // BOTH sides on accept. The owner reads their own friends list; a
+    // friendship never leaks who else a user is friends with. All writes go
+    // through the friend.* callables so the denormalized displayName/avatarPath
+    // and the two-sided invariant stay backend-controlled.
+    //
+    // friendRequests/{requestId}: a directional request whose id is a
+    // deterministic hash of the (fromUid, toUid) pair (friendRequestId in
+    // friends-core.ts), matched below as {requestId}. Readable by the sender
+    // (fromUid) and the recipient (toUid) only — a request never leaks to third
+    // parties. All writes go through the friend.* callables (nickname
+    // resolution, block checks, auto-accept, status transitions).
+    // -------------------------------------------------------------------------
+    match /users/{userId}/friends/{friendId} {
+      allow read: if isOwner(userId);
+      // No client writes: friend.respondRequest / friend.remove callables only.
+    }
+
+    match /friendRequests/{requestId} {
+      allow read: if isAuthenticated()
+        && (resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid);
+      // No client writes: friend.sendRequest / friend.respondRequest callables
+      // only.
+    }
+
+    // -------------------------------------------------------------------------
+    // conversations – 1:1 direct messages between FRIENDS (dm.sendMessage /
+    // dm.listConversations / dm.getMessages / dm.markRead).
+    //
+    // conversations/{pairId} (pairId = the two participant UIDs sorted +
+    // joined by `__`) carries members:[uidLow,uidHigh], denormalized
+    // memberProfiles, a lastMessage preview, per-member unread + lastReadAt
+    // maps. A member of the pair reads their own conversation; it never leaks
+    // to a third party. All writes go through the dm.* callables (friendship +
+    // block checks, unread accounting, the userPrivate/{uid}.dmUnreadTotal
+    // aggregate) — no client writes. Messages inherit the same member gate via
+    // a parent lookup.
+    // -------------------------------------------------------------------------
+    match /conversations/{pairId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      // No client writes: dm.* callables only.
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+        // No client writes: dm.sendMessage callable only.
+      }
     }
 
     // (events rules live in the Phase 9b block above — teaser/detail split.)
