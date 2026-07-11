@@ -47,6 +47,7 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { friendRequestId } from '../friends/friends-core';
+import { NICKNAME_SCAN_LIMIT } from '../friends/manageFriends';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -165,6 +166,23 @@ async function seedPendingRequest(from: TestUser, to: TestUser, fromName: string
     });
 }
 
+/**
+ * Seeds `count` restricted (suspended) users/{uid} docs that all share the same
+ * displayName. No auth account is created — nickname resolution only reads the
+ * user documents by displayName — so this cheaply fills the raw scan page with
+ * rows that get filtered out, used to exercise the limit-before-filter guard.
+ */
+async function seedRestrictedProfiles(displayName: string, count: number): Promise<void> {
+  await Promise.all(
+    Array.from({ length: count }, (_, i) =>
+      adminDb
+        .collection('users')
+        .doc(`restricted-${displayName}-${i}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`)
+        .set({ displayName, suspended: true }),
+    ),
+  );
+}
+
 beforeAll(async () => {
   app = initializeApp(
     { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
@@ -264,6 +282,37 @@ describe('friend-sendRequest gating + resolution', () => {
     expect(sent.status).toBe('requested');
     expect(sent.request.otherUser.uid).toBe(active.uid);
     expect(sent.request.otherUser.uid).not.toBe(suspended.uid);
+  });
+
+  it('returns the self error (not not-found) when the caller enters their OWN nickname', async () => {
+    const solo = await newMember('SoloSelfNick');
+    await signInAs(solo);
+    // By nickname, the only match is the caller themselves. The caller is
+    // filtered out, but this must surface the dedicated self error
+    // (invalid-argument, mirroring the by-uid self case) rather than a generic
+    // not-found — you can't friend yourself.
+    expect(await callableErrorCode(call('friend-sendRequest', { nickname: 'SoloSelfNick' }))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it('returns AMBIGUOUS_NICKNAME when a saturated page of restricted same-name accounts could hide active matches', async () => {
+    const searcher = await newMember('SatSearcher');
+    const nickname = 'SaturatedNick';
+    // One genuinely addressable active member holds the shared nickname...
+    await newMember(nickname);
+    // ...plus enough restricted (suspended) same-name accounts to fill the raw
+    // scan page. Because Firestore applies `.limit()` BEFORE the restricted
+    // filter, the page can be packed with these filtered-out rows — previously
+    // leaving a single active row that was mistaken for a UNIQUE match (a
+    // request sent to the wrong person) or a false not-found. With a saturated
+    // page uniqueness is unprovable, so resolution must degrade to ambiguous.
+    await seedRestrictedProfiles(nickname, NICKNAME_SCAN_LIMIT);
+
+    await signInAs(searcher);
+    expect(await callableErrorCode(call('friend-sendRequest', { nickname }))).toBe(
+      'functions/failed-precondition',
+    );
   });
 });
 

@@ -65,6 +65,22 @@ const CALLABLE_OPTS = {
 const AMBIGUOUS_CANDIDATE_LIMIT = 10;
 
 /**
+ * Raw page size for the displayName lookup in resolveTarget. The `.limit()` is
+ * applied by Firestore BEFORE we drop the caller's own row and restricted
+ * (suspended/deleted) same-name accounts, so the fetched page has to be large
+ * enough to (a) still yield a full AMBIGUOUS_CANDIDATE_LIMIT candidate list and
+ * (b) leave headroom for the caller + a few restricted duplicates that get
+ * filtered out — otherwise a page filled by filtered-out rows could hide
+ * additional ACTIVE matches beyond it and be mistaken for a unique match.
+ * The +5 headroom covers the caller's row plus up to four restricted same-name
+ * accounts while keeping the read bounded at 15 documents. If the raw page
+ * SATURATES this cap we cannot prove uniqueness (more same-name rows may exist
+ * beyond it), so resolveTarget deliberately degrades to AMBIGUOUS_NICKNAME
+ * rather than risk resolving to the wrong person.
+ */
+export const NICKNAME_SCAN_LIMIT = AMBIGUOUS_CANDIDATE_LIMIT + 5;
+
+/**
  * Bounded reads for friend.list. Each of the three queries (friends,
  * incoming/outgoing pending requests) is capped so the callable can never fan
  * out into an unbounded read as the friend graph grows — matching the fixed
@@ -154,17 +170,23 @@ async function resolveTarget(
   const query = await db
     .collection('users')
     .where('displayName', '==', nickname)
-    .limit(AMBIGUOUS_CANDIDATE_LIMIT + 2)
+    .limit(NICKNAME_SCAN_LIMIT)
     .get();
 
+  // Firestore applies `.limit()` BEFORE we filter, so a page that fills up to
+  // the cap may hide further ACTIVE same-name matches beyond it. When the raw
+  // page saturates the cap we cannot prove uniqueness → treat as ambiguous
+  // rather than risk resolving to a single wrong target.
+  const saturated = query.size >= NICKNAME_SCAN_LIMIT;
+  // Did the caller's own account match the nickname? Tracked before filtering it
+  // out so a self-only match can surface the dedicated self error, not not-found.
+  const callerMatched = query.docs.some((doc) => doc.id === callerUid);
   const matches = query.docs.filter(
     (doc) => doc.id !== callerUid && !isRestricted(toUserAccessState(doc.data())),
   );
 
-  if (matches.length === 0) {
-    throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
-  }
-  if (matches.length > 1) {
+  // >1 active match, OR a saturated page we can't prove is unique → ambiguous.
+  if (matches.length > 1 || saturated) {
     const candidates: NicknameCandidate[] = matches.slice(0, AMBIGUOUS_CANDIDATE_LIMIT).map((doc) => {
       const projection = toProfileProjection(doc.data());
       return { uid: doc.id, displayName: projection.displayName, avatarPath: projection.avatarPath };
@@ -173,6 +195,16 @@ async function resolveTarget(
       reason: 'AMBIGUOUS_NICKNAME',
       candidates,
     });
+  }
+  if (matches.length === 0) {
+    // The nickname matched only the caller themselves (an unsaturated page with
+    // no other active match) → dedicated self error, mirroring the by-uid path,
+    // so the client shows "you can't friend yourself" instead of a generic
+    // not-found. Otherwise it truly resolves to nobody addressable.
+    if (callerMatched) {
+      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+    }
+    throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
   }
   const only = matches[0]!;
   return { uid: only.id, profile: toProfileProjection(only.data()) };
