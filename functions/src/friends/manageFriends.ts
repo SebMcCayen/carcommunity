@@ -478,22 +478,38 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsRe
   // into an unbounded read (cost/latency guard). The caps are generous safety
   // ceilings; results are still sorted in memory below.
   const [friendsSnap, incomingSnap, outgoingSnap] = await Promise.all([
+    // orderBy BEFORE limit so that, if a cap is ever hit, the truncation is
+    // deterministic and keeps the SAME items the presented order surfaces
+    // (rather than an arbitrary document-ID-ordered subset). The friend doc's
+    // timestamp field is `createdAt` (friends-core buildFriendshipDocument);
+    // the output's `friendsSince` is derived from it and sorted ascending, so
+    // truncation keeps the oldest friendships — matching the presented order.
+    // No where clause → covered by Firestore's automatic single-field index.
     db
       .collection('users')
       .doc(actor.uid)
       .collection('friends')
+      .orderBy('createdAt', 'asc')
       .limit(MAX_FRIENDS_RETURNED)
       .get(),
+    // Pending requests are presented most-recent-first; orderBy createdAt desc
+    // BEFORE limit so a hit cap keeps the NEWEST requests instead of an
+    // arbitrary subset that could drop them. Needs the composite index
+    // [toUid ASC, status ASC, createdAt DESC] (firebase/firestore.indexes.json).
     db
       .collection('friendRequests')
       .where('toUid', '==', actor.uid)
       .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
       .limit(MAX_PENDING_REQUESTS_RETURNED)
       .get(),
+    // Same as incoming, for outgoing requests. Needs the composite index
+    // [fromUid ASC, status ASC, createdAt DESC].
     db
       .collection('friendRequests')
       .where('fromUid', '==', actor.uid)
       .where('status', '==', 'pending')
+      .orderBy('createdAt', 'desc')
       .limit(MAX_PENDING_REQUESTS_RETURNED)
       .get(),
   ]);
