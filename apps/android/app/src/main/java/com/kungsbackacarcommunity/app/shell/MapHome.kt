@@ -253,8 +253,10 @@ private fun SearchBarRow(
             modifier = Modifier.size(48.dp),
         ) {
             if (avatarUrl != null) {
-                // The user's profile picture, circular; Coil renders nothing
-                // (leaving the surface tint) until the URL resolves.
+                // The user's profile picture, circular. avatarUrl is null while
+                // the Storage download URL resolves (rememberStorageImageUrl), so
+                // this branch renders only once resolved; the else-branch Icon
+                // covers the resolving window — Coil isn't doing the placeholder.
                 AsyncImage(
                     model = avatarUrl,
                     contentDescription = stringResource(R.string.shell_menu),
