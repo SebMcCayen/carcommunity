@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.friends
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -15,7 +16,12 @@ sealed interface FriendsStatus {
         val outgoing: List<FriendRequestSummary>,
     ) : FriendsStatus
 
-    data object Error : FriendsStatus
+    /**
+     * The snapshot failed to load. Carries the mapped [error] so the screen can
+     * surface the specific auth/member-gating message (via its `friends.*`
+     * mapping) rather than a single generic load-error string.
+     */
+    data class Error(val error: FriendActionError) : FriendsStatus
 }
 
 /** Sub-state of the "add friend by nickname" flow. */
@@ -52,6 +58,12 @@ class FriendsCoordinator(
     private val rowError = MutableStateFlow<FriendActionError?>(null)
     val actionError: StateFlow<FriendActionError?> = rowError.asStateFlow()
 
+    // Keys (requestId / friendUid) of rows whose accept/decline/remove callable
+    // is currently in flight. Guards against overlapping invocations from rapid
+    // taps and lets the UI disable that row's action buttons while it runs.
+    private val inFlightRows = MutableStateFlow<Set<String>>(emptySet())
+    val busyRows: StateFlow<Set<String>> = inFlightRows.asStateFlow()
+
     suspend fun load() {
         try {
             when (val result = repository.list()) {
@@ -62,12 +74,12 @@ class FriendsCoordinator(
                             incoming = result.data.incoming,
                             outgoing = result.data.outgoing,
                         )
-                is FriendsResult.Failed -> statusState.value = FriendsStatus.Error
+                is FriendsResult.Failed -> statusState.value = FriendsStatus.Error(result.error)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            statusState.value = FriendsStatus.Error
+            statusState.value = FriendsStatus.Error(FriendActionError.Generic)
         }
     }
 
@@ -109,6 +121,9 @@ class FriendsCoordinator(
     suspend fun decline(requestId: String) = respond(requestId, accept = false)
 
     private suspend fun respond(requestId: String, accept: Boolean) {
+        // Ignore a second tap on a row whose accept/decline is already running.
+        if (requestId in inFlightRows.value) return
+        inFlightRows.update { it + requestId }
         rowError.value = null
         try {
             when (val result = repository.respond(requestId, accept)) {
@@ -124,10 +139,15 @@ class FriendsCoordinator(
             throw cancellation
         } catch (_: Exception) {
             rowError.value = FriendActionError.Generic
+        } finally {
+            inFlightRows.update { it - requestId }
         }
     }
 
     suspend fun remove(friendUid: String) {
+        // Ignore a second tap on a friend whose removal is already running.
+        if (friendUid in inFlightRows.value) return
+        inFlightRows.update { it + friendUid }
         rowError.value = null
         try {
             when (val result = repository.remove(friendUid)) {
@@ -138,6 +158,8 @@ class FriendsCoordinator(
             throw cancellation
         } catch (_: Exception) {
             rowError.value = FriendActionError.Generic
+        } finally {
+            inFlightRows.update { it - friendUid }
         }
     }
 

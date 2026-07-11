@@ -23,6 +23,7 @@ fun FriendsRoute(
     val status by coordinator.status.collectAsState()
     val addState by coordinator.add.collectAsState()
     val actionError by coordinator.actionError.collectAsState()
+    val busyRows by coordinator.busyRows.collectAsState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(coordinator) { coordinator.load() }
@@ -31,6 +32,7 @@ fun FriendsRoute(
         status = status,
         addState = addState,
         actionError = actionError,
+        busyRows = busyRows,
         onSend = { nickname -> scope.launch { coordinator.sendRequestByNickname(nickname) } },
         onChooseCandidate = { uid -> scope.launch { coordinator.chooseCandidate(uid) } },
         onDismissAdd = { coordinator.resetAdd() },
@@ -38,6 +40,7 @@ fun FriendsRoute(
         onDecline = { requestId -> scope.launch { coordinator.decline(requestId) } },
         onRemove = { friendUid -> scope.launch { coordinator.remove(friendUid) } },
         onClearActionError = { coordinator.clearActionError() },
+        onRetry = { scope.launch { coordinator.load() } },
         onMessageFriend = onMessageFriend,
         onOpenMessages = onOpenMessages,
     )

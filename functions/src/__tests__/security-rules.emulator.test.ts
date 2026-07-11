@@ -1654,6 +1654,7 @@ describe('Firestore – moderation actions', () => {
 
 describe('Firestore – suspension enforcement', () => {
   const SUSPENDED = 'suspended-user';
+  const ACTIVE_MEMBER = 'active-member';
 
   beforeAll(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -1667,19 +1668,19 @@ describe('Firestore – suspension enforcement', () => {
       await setDoc(doc(ctx.firestore(), 'userPrivate', SUSPENDED), {
         email: 'suspended@example.com',
       });
-      await setDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship'), {
-        userId: SUSPENDED,
-        friendId: 'some-friend',
-      });
-      await setDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request'), {
-        senderId: SUSPENDED,
-        receiverId: 'some-friend',
-      });
-      await setDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle'), {
-        userId: SUSPENDED,
-        make: 'Volvo',
-        model: '240',
-      });
+      // savedOffers is a member bookmark a client may delete directly, but
+      // only while an active (non-suspended) member — the delete rule is
+      // `isOwner(userId) && isActiveMember()`, and isActiveMember() folds in
+      // isNotSuspended(). Seed one for the suspended user and one for a
+      // non-suspended member to prove the suspension gate both ways below.
+      await setDoc(
+        doc(ctx.firestore(), 'users', SUSPENDED, 'savedOffers', 'suspended-offer'),
+        { offerId: 'suspended-offer' },
+      );
+      await setDoc(
+        doc(ctx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
+        { offerId: 'active-offer' },
+      );
       // Published event where the (now suspended) member had RSVP'd — chat
       // read eligibility must still be revoked by suspension.
       await setDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event'), {
@@ -1735,11 +1736,30 @@ describe('Firestore – suspension enforcement', () => {
     );
   });
 
-  it('suspension blocks deletes too (friends, friend requests, vehicles)', async () => {
-    const ctx = testEnv.authenticatedContext(SUSPENDED, { activeMember: true, suspended: true });
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'friends', 'suspended-friendship')));
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'friendRequests', 'suspended-request')));
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'vehicles', 'suspended-owned-vehicle')));
+  it('suspension blocks an otherwise-permitted client delete (saved offers)', async () => {
+    // savedOffers is one of the few docs a client may delete directly, and only
+    // while an active (non-suspended) member — the delete rule folds in
+    // isNotSuspended() via isActiveMember(). Prove the gate both ways so the
+    // assertion is meaningful — asserting a vehicle or friendRequests delete
+    // would be a false signal, since neither has any client delete at all
+    // (garage.* / friend.* callables own those mutations), so *every* client is
+    // denied regardless of suspension.
+    const activeCtx = testEnv.authenticatedContext(ACTIVE_MEMBER, { activeMember: true });
+    await assertSucceeds(
+      deleteDoc(
+        doc(activeCtx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
+      ),
+    );
+
+    const suspendedCtx = testEnv.authenticatedContext(SUSPENDED, {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(
+      deleteDoc(
+        doc(suspendedCtx.firestore(), 'users', SUSPENDED, 'savedOffers', 'suspended-offer'),
+      ),
+    );
   });
 
   it('suspended user retains read access to their own data', async () => {
