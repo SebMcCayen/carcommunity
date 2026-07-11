@@ -106,11 +106,13 @@ function isoFrom(value: unknown, fallback: Date): string {
 
 /**
  * Reads a users/{uid} profile. Returns null when the user is missing or
- * soft-deleted (callers surface not-found so deletion can't be probed).
+ * restricted — soft-deleted OR suspended (callers surface not-found so neither
+ * deletion nor suspension can be probed, and no pending request can be created
+ * for an account that respondRequest's accept guard would later reject).
  */
 async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   const snap = await db.collection('users').doc(uid).get();
-  if (!snap.exists || toUserAccessState(snap.data()).deleted) {
+  if (!snap.exists || isRestricted(toUserAccessState(snap.data()))) {
     return null;
   }
   return toProfileProjection(snap.data());
@@ -145,7 +147,9 @@ async function resolveTarget(
   }
 
   // Nickname path: displayName is NOT unique. Exact match, then filter out the
-  // caller and soft-deleted accounts.
+  // caller and restricted accounts — soft-deleted OR suspended — so a request
+  // can't be created for, nor a restricted user surfaced by nickname resolution
+  // as, a target that respondRequest's accept guard would later reject.
   const nickname = input.nickname as string;
   const query = await db
     .collection('users')
@@ -154,7 +158,7 @@ async function resolveTarget(
     .get();
 
   const matches = query.docs.filter(
-    (doc) => doc.id !== callerUid && !toUserAccessState(doc.data()).deleted,
+    (doc) => doc.id !== callerUid && !isRestricted(toUserAccessState(doc.data())),
   );
 
   if (matches.length === 0) {

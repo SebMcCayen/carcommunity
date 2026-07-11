@@ -201,6 +201,43 @@ describe('friend-sendRequest gating + resolution', () => {
       expect(fe.details?.candidates?.length).toBe(2);
     }
   });
+
+  it('rejects a request to a suspended target the same as a deleted/unknown one', async () => {
+    const sender = await newMember('SenderSusp');
+    const suspended = await newMember('SuspendedTarget');
+    // Restrict the target AFTER creation (suspended, not deleted).
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+
+    await signInAs(sender);
+    // By resolved uid → not-found (neutral; never reveals the account exists or
+    // is suspended), exactly as for a soft-deleted or nonexistent user.
+    expect(await callableErrorCode(call('friend-sendRequest', { toUid: suspended.uid }))).toBe(
+      'functions/not-found',
+    );
+    // By nickname, when the ONLY match is suspended → not-found (no request can
+    // be created for an account respondRequest's accept guard would reject).
+    expect(
+      await callableErrorCode(call('friend-sendRequest', { nickname: 'SuspendedTarget' })),
+    ).toBe('functions/not-found');
+  });
+
+  it('excludes suspended users from nickname resolution candidates', async () => {
+    const searcher = await newMember('NickSearcher');
+    const active = await newMember('SharedNickSusp');
+    const suspended = await newMember('SharedNickSusp');
+    // Suspend one of the two shared-nickname holders; only the active one
+    // remains a resolvable candidate, so resolution is no longer ambiguous.
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+
+    await signInAs(searcher);
+    const sent = (await call('friend-sendRequest', { nickname: 'SharedNickSusp' })).data as {
+      status: string;
+      request: { otherUser: { uid: string } };
+    };
+    expect(sent.status).toBe('requested');
+    expect(sent.request.otherUser.uid).toBe(active.uid);
+    expect(sent.request.otherUser.uid).not.toBe(suspended.uid);
+  });
 });
 
 describe('friend request lifecycle', () => {
