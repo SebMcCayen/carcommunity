@@ -88,6 +88,15 @@ class MapboxMapSurface : MapSurface {
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
 
+    // The overlay currently drawn on the map, so the recomposition-driven update
+    // block only clears/recreates the annotations and re-fits the camera when the
+    // overlay ACTUALLY changes — unrelated recompositions (traffic toggle,
+    // live-sharing pulse) no longer cause the route to flicker or the camera to
+    // snap back. Reset to null whenever the annotation managers are (re)created or
+    // torn down, so the overlay is redrawn against fresh managers (the cache must
+    // never claim "already applied" when the annotations were actually cleared).
+    private var lastAppliedOverlay: MapRouteOverlay? = null
+
     // One-shot guard so the camera auto-centres on the FIRST GPS fix only,
     // opening close to the user; afterwards it leaves the camera alone so it
     // never fights the user panning (recenter() is still available on demand).
@@ -197,7 +206,11 @@ class MapboxMapSurface : MapSurface {
                         runCatching {
                             routeLineManager = annotations.createPolylineAnnotationManager()
                             destMarkerManager = annotations.createCircleAnnotationManager()
-                            applyRouteOverlay(this, routeOverlayFlow.value)
+                            // Fresh managers ⇒ any previously-drawn annotations are
+                            // gone, so drop the cache to force a redraw of the
+                            // current overlay against the new managers.
+                            lastAppliedOverlay = null
+                            applyRouteOverlayIfChanged(this, routeOverlayFlow.value)
                         }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
@@ -224,9 +237,12 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
                 }
-                // (Re)draw the route line + destination marker when the overlay
-                // changes; a no-op until the managers exist (style loaded).
-                runCatching { applyRouteOverlay(mapView, overlay) }
+                // (Re)draw the route line + destination marker only when the
+                // overlay actually changes; unrelated recompositions (traffic
+                // toggle, live-sharing pulse) must not re-clear/redraw the route
+                // or re-fit the camera. A no-op until the managers exist (style
+                // loaded).
+                runCatching { applyRouteOverlayIfChanged(mapView, overlay) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -238,12 +254,29 @@ class MapboxMapSurface : MapSurface {
                 }
                 routeLineManager = null
                 destMarkerManager = null
+                // Managers are gone, so a later re-init must redraw the overlay.
+                lastAppliedOverlay = null
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
                 mapView.onDestroy()
             },
         )
+    }
+
+    /**
+     * Draws [overlay] only when it differs from the last one actually applied,
+     * caching the new value so unrelated recompositions don't re-clear/redraw the
+     * route or re-fit the camera (which would flicker the line and snap the camera
+     * back while the user is looking at the route). [MapRouteOverlay] is a data
+     * class, so `==` compares the destination + path by value. The cache is reset
+     * to null wherever the annotation managers are (re)created or torn down, so a
+     * cleared-then-recreated map always redraws rather than trusting a stale hit.
+     */
+    private fun applyRouteOverlayIfChanged(mapView: MapView, overlay: MapRouteOverlay?) {
+        if (overlay == lastAppliedOverlay) return
+        applyRouteOverlay(mapView, overlay)
+        lastAppliedOverlay = overlay
     }
 
     /**
