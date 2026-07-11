@@ -20,7 +20,6 @@ fun ConversationListRoute(
     repository: DmRepository,
     uid: String,
     onOpenConversation: (DmConversation) -> Unit,
-    onBack: () -> Unit,
 ) {
     val state by
         remember(repository, uid) { repository.observeConversations(uid) }
@@ -48,7 +47,6 @@ fun ChatRoute(
     uid: String,
     otherUid: String,
     otherName: String?,
-    onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }

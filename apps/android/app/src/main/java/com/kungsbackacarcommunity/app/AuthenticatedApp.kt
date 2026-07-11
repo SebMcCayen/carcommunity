@@ -1192,7 +1192,6 @@ private fun RouteHost(
                     onOpenConversation = { conversation ->
                         onOpenChat(conversation.otherUser.uid, conversation.otherUser.displayName)
                     },
-                    onBack = onClose,
                 )
             } else {
                 LoadingScreen()
@@ -1205,7 +1204,6 @@ private fun RouteHost(
                     uid = uid,
                     otherUid = dmChatOtherUid,
                     otherName = dmChatOtherName,
-                    onBack = onClose,
                 )
             } else {
                 LoadingScreen()
