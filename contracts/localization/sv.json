@@ -692,7 +692,13 @@
     "moreSignOut": "Logga ut",
     "unavailable": "Inte tillgängligt just nu.",
     "trafficOn": "Trafiklager på",
-    "trafficOff": "Visa trafik"
+    "trafficOff": "Visa trafik",
+    "chat": "Chatt",
+    "chatUnread": "%1$d olästa chattmeddelanden",
+    "chatTitle": "Gemenskapschatt",
+    "chatClose": "Stäng chatt",
+    "chatEmpty": "Du är ikapp — inga nya meddelanden.",
+    "chatComingSoon": "Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på."
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

@@ -8,15 +8,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +32,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,7 +44,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -66,6 +76,10 @@ const val MAP_HOME_TEST_TAG = "map_home"
  * @param avatarUrl resolved download URL for the signed-in user's profile
  *   picture, shown in the top-right profile button; null falls back to the
  *   generic account icon.
+ * @param unreadChatCount number of unread ("missed") chat messages shown as a
+ *   badge on the floating chat control. There is no global/community-chat
+ *   inbox client-side yet (chat is per-event only), so callers pass 0 as a
+ *   placeholder until a global unread-count source exists. See the chat popup.
  */
 @Composable
 fun MapHome(
@@ -81,6 +95,7 @@ fun MapHome(
     onRecenter: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
+    unreadChatCount: Int = 0,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -91,6 +106,10 @@ fun MapHome(
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
+
+    // Chat popup open/close is local UI state: tapping the bubble opens the
+    // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
+    var chatOpen by remember { mutableStateOf(false) }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
@@ -175,6 +194,131 @@ fun MapHome(
                 contentDescription = stringResource(R.string.shell_recenter),
                 onClick = onRecenter,
             )
+            // 4. Chat bubble — opens the community-chat popup; shows a badge
+            //    with the unread ("missed") message count when > 0.
+            ChatCircleControl(
+                unreadCount = unreadChatCount,
+                onClick = { chatOpen = true },
+            )
+        }
+
+        // Chat overlay: tapping outside the card dismisses it (back to bubble).
+        if (chatOpen) {
+            ChatPopup(
+                unreadCount = unreadChatCount,
+                onDismiss = { chatOpen = false },
+            )
+        }
+    }
+}
+
+/** Test tag on the floating chat control (bubble). */
+const val MAP_HOME_CHAT_TAG = "map_home_chat"
+
+/** Test tag on the chat overlay/popup card. */
+const val MAP_HOME_CHAT_POPUP_TAG = "map_home_chat_popup"
+
+/**
+ * A [CircleControl]-styled chat bubble with an unread-count badge. Matches the
+ * other floating controls (size/shape/elevation/haptics); the badge is hidden
+ * when [unreadCount] is 0.
+ */
+@Composable
+private fun ChatCircleControl(
+    unreadCount: Int,
+    onClick: () -> Unit,
+) {
+    val description =
+        if (unreadCount > 0) {
+            stringResource(R.string.shell_chatUnread, unreadCount)
+        } else {
+            stringResource(R.string.shell_chat)
+        }
+    BadgedBox(
+        badge = {
+            if (unreadCount > 0) {
+                Badge {
+                    Text(if (unreadCount > 99) "99+" else unreadCount.toString())
+                }
+            }
+        },
+        // Merge the descendant CircleControl's click/label semantics into this
+        // tagged node so onNodeWithTag(MAP_HOME_CHAT_TAG) exposes the click action
+        // (the clickable Surface is a child of the BadgedBox).
+        modifier = Modifier.testTag(MAP_HOME_CHAT_TAG).semantics(mergeDescendants = true) {},
+    ) {
+        CircleControl(
+            icon = Icons.AutoMirrored.Filled.Chat,
+            contentDescription = description,
+            onClick = onClick,
+        )
+    }
+}
+
+/**
+ * The community-chat overlay shown when the bubble is tapped. Rendered as a
+ * [Dialog] so tapping outside the card (or Back) minimizes it back to the
+ * bubble. Content is a placeholder: there is no global/community-chat inbox
+ * client-side yet (chat is per-event only), so this explains where chat lives
+ * and shows the caught-up empty state. Wire real messages here once a global
+ * unread-count + conversation source exists (backend, out of this lane).
+ */
+@Composable
+private fun ChatPopup(
+    unreadCount: Int,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.widthIn(max = 360.dp).testTag(MAP_HOME_CHAT_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(R.string.shell_chatTitle),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.shell_chatClose),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    text =
+                        if (unreadCount > 0) {
+                            stringResource(R.string.shell_chatUnread, unreadCount)
+                        } else {
+                            stringResource(R.string.shell_chatEmpty)
+                        },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.shell_chatComingSoon),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
