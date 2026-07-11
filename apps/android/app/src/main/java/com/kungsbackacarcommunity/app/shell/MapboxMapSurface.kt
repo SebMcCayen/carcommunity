@@ -5,9 +5,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
@@ -24,6 +26,7 @@ import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
+import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,11 +49,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * existing `map/MapRoute` guard — so tile loads work on device without ever
  * committing the token.
  *
- * ## Why the "You / Online" pin is not drawn here
- * The shell overlays a centred Compose [MapUserMarker] pin over the surface
- * (Waze-style: the camera follows the user, who stays screen-centred), so this
- * surface only needs to render the map + the location puck and recentre on
- * demand — it deliberately does not draw the label bubble itself.
+ * ## How the user's own position is drawn
+ * The user is shown by the Mapbox location-component puck at the real GPS
+ * position, so it stays anchored to the ground when the map pans (there is no
+ * centre-locked Compose overlay). The [MapUserMarker] pushed via
+ * [setUserMarker] now only carries live-sharing state: the puck pulses green
+ * while sharing and blue otherwise.
  *
  * Every native-map mutation is wrapped defensively: a missing token, a style
  * that has not finished loading, or an absent location permission degrades to a
@@ -70,6 +74,11 @@ class MapboxMapSurface : MapSurface {
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+
+    // One-shot guard so the camera auto-centres on the FIRST GPS fix only,
+    // opening close to the user; afterwards it leaves the camera alone so it
+    // never fights the user panning (recenter() is still available on demand).
+    private var centeredOnFirstFix: Boolean = false
 
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
@@ -107,11 +116,30 @@ class MapboxMapSurface : MapSurface {
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
+        // The caller's marker only carries live-sharing state now (its position
+        // is the device puck): a green pulse signals sharing, blue otherwise.
+        val marker by userMarkerFlow.collectAsState()
         // Recreate the position listener once; it just records the last fix so
         // recenter() can jump the camera to it.
         val positionListener =
             remember {
-                OnIndicatorPositionChangedListener { point -> lastPoint = point }
+                OnIndicatorPositionChangedListener { point ->
+                    lastPoint = point
+                    // Auto-centre on the first valid fix so the map opens close
+                    // to the user rather than on the default town camera. Once
+                    // only, so later fixes don't yank the camera while panning.
+                    if (!centeredOnFirstFix) {
+                        centeredOnFirstFix = true
+                        runCatching {
+                            mapViewRef?.mapboxMap?.setCamera(
+                                cameraOptions {
+                                    center(point)
+                                    zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                },
+                            )
+                        }
+                    }
+                }
             }
 
         AndroidView(
@@ -123,7 +151,10 @@ class MapboxMapSurface : MapSurface {
                 }
                 MapView(context).apply {
                     mapViewRef = this
-                    // Default town camera until the first GPS fix arrives.
+                    // Drop the scale bar (distance/km ruler, upper-left); the
+                    // map-first shell has no room for it.
+                    runCatching { scalebar.updateSettings { enabled = false } }
+                    // Default camera until the first GPS fix arrives.
                     mapboxMap.setCamera(
                         cameraOptions {
                             center(
@@ -146,6 +177,13 @@ class MapboxMapSurface : MapSurface {
                             location.updateSettings {
                                 enabled = true
                                 pulsingEnabled = true
+                                // This runs asynchronously when the style finishes
+                                // loading — not at composition — and loadStateFlow
+                                // changes don't recompose Content, so the captured
+                                // `marker` can be stale here. Read the backing
+                                // flow's current value to apply the latest
+                                // live-sharing state when the puck is enabled.
+                                pulsingColor = pulseColorFor(userMarkerFlow.value)
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
                         }
@@ -157,6 +195,10 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
                 }
+                // Reflect live-sharing on the puck: green pulse while sharing.
+                runCatching {
+                    mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
+                }
             },
             onRelease = { mapView ->
                 runCatching {
@@ -164,6 +206,7 @@ class MapboxMapSurface : MapSurface {
                 }
                 mapViewRef = null
                 lastPoint = null
+                centeredOnFirstFix = false
                 mapView.onDestroy()
             },
         )
@@ -174,6 +217,20 @@ class MapboxMapSurface : MapSurface {
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"
         const val TRAFFIC_TILESET = "mapbox://mapbox.mapbox-traffic-v1"
+
+        /**
+         * Puck pulse ARGB while live-sharing. Sourced from the shell's success
+         * green design token ([KccPalette.successGreen], 0xFF1E8E3E) so it stays
+         * the single source of truth for the status/success green.
+         */
+        val LIVE_SHARE_PULSE_COLOR: Int = KccPalette.successGreen.toArgb()
+
+        /** Puck pulse ARGB when not sharing (neutral blue). */
+        val DEFAULT_PULSE_COLOR: Int = 0xFF1A73E8.toInt()
+
+        /** Green pulse when the caller is live-sharing, blue otherwise. */
+        fun pulseColorFor(marker: MapUserMarker?): Int =
+            if (marker?.isLiveSharing == true) LIVE_SHARE_PULSE_COLOR else DEFAULT_PULSE_COLOR
 
         /**
          * Adds the Mapbox traffic vector source + a congestion-coloured line
