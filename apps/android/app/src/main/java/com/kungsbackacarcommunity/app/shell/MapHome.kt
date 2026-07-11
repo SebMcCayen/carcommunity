@@ -36,10 +36,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -65,6 +67,9 @@ const val MAP_HOME_TEST_TAG = "map_home"
  *   can signal live sharing (wired to the real live-location state).
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
+ * @param avatarUrl resolved download URL for the signed-in user's profile
+ *   picture, shown in the top-right profile button; null falls back to the
+ *   generic account icon.
  */
 @Composable
 fun MapHome(
@@ -72,6 +77,7 @@ fun MapHome(
     isLiveSharing: Boolean,
     participantCount: Int,
     userLabel: String,
+    avatarUrl: String? = null,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
@@ -111,6 +117,7 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             SearchBarRow(
+                avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onVoiceSearch = onVoiceSearch,
                 onOpenMore = onOpenMore,
@@ -188,6 +195,7 @@ fun MapHome(
 
 @Composable
 private fun SearchBarRow(
+    avatarUrl: String?,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
@@ -239,13 +247,39 @@ private fun SearchBarRow(
             tonalElevation = 3.dp,
             shadowElevation = 3.dp,
             onClick = onOpenMore,
+            modifier = Modifier.size(48.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.AccountCircle,
-                contentDescription = stringResource(R.string.shell_menu),
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(10.dp).size(28.dp),
-            )
+            // Always render the AccountCircle fallback so the button never
+            // shows a blank circle: it covers both the window while the Storage
+            // download URL resolves (avatarUrl == null, rememberStorageImageUrl)
+            // and the window while Coil fetches/decodes the bitmap (Coil doesn't
+            // paint anything until the image is ready). Once the avatar bitmap is
+            // displayed, the cropped AsyncImage fills the button and hides it.
+            Box(
+                // No clip needed here: the enclosing Surface(shape = CircleShape)
+                // already crops its content (icon + avatar) to the round button.
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AccountCircle,
+                    contentDescription = stringResource(R.string.shell_menu),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(10.dp).size(28.dp),
+                )
+                if (avatarUrl != null) {
+                    // The user's profile picture, drawn on top of the fallback
+                    // icon once the bitmap is ready. Decorative: the fallback Icon
+                    // underneath already labels the button, so the control keeps
+                    // one stable content description in every state.
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         }
     }
 }
