@@ -72,6 +72,12 @@ import {
   respondRequest as respondFriendRequest,
   sendRequest as sendFriendRequest,
 } from './friends/manageFriends';
+import {
+  getMessages as dmGetMessages,
+  listConversations as dmListConversations,
+  markRead as dmMarkRead,
+  sendMessage as dmSendMessage,
+} from './dm/manageDirectMessages';
 
 /**
  * GET /health
@@ -470,4 +476,30 @@ export const friend = {
   respondRequest: respondFriendRequest,
   remove: removeFriend,
   list: listFriends,
+};
+
+/**
+ * Direct messaging domain (grouped export → deployed as `dm-sendMessage`,
+ * `dm-listConversations`, `dm-getMessages`, `dm-markRead`).
+ *
+ * 1:1 DMs between ESTABLISHED friends (contracts/functions/functions.json:
+ * dm.sendMessage/listConversations/getMessages/markRead), stacked on the
+ * friend-graph backend. Model: a single canonical conversations/{pairId}
+ * (pairId = the two UIDs sorted + joined by `__`) with members[], denormalized
+ * memberProfiles, a lastMessage preview + lastMessageAt ordering key, and
+ * per-member unread + lastReadAt maps; messages live at
+ * conversations/{pairId}/messages/{id} {senderUid,text,createdAt}. Member reads,
+ * callable-only writes (firebase/firestore.rules). sendMessage requires an
+ * established friendship (users/{uid}/friends/{friendUid}) and honours blocking
+ * both ways (neutral failed-precondition). The per-member unread counters are
+ * kept in lock-step with a per-user aggregate at
+ * userPrivate/{uid}.dmUnreadTotal (owner-only read) so the map-home chat bubble
+ * binds ONE document listener for its badge. FCM push on a new message is
+ * deferred to the end-of-MVP Firebase console setup (as with notifications).
+ */
+export const dm = {
+  sendMessage: dmSendMessage,
+  listConversations: dmListConversations,
+  getMessages: dmGetMessages,
+  markRead: dmMarkRead,
 };

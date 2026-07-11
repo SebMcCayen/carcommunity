@@ -394,6 +394,31 @@ service cloud.firestore {
       // only.
     }
 
+    // -------------------------------------------------------------------------
+    // conversations – 1:1 direct messages between FRIENDS (dm.sendMessage /
+    // dm.listConversations / dm.getMessages / dm.markRead).
+    //
+    // conversations/{pairId} (pairId = the two participant UIDs sorted +
+    // joined by `__`) carries members:[uidLow,uidHigh], denormalized
+    // memberProfiles, a lastMessage preview, per-member unread + lastReadAt
+    // maps. A member of the pair reads their own conversation; it never leaks
+    // to a third party. All writes go through the dm.* callables (friendship +
+    // block checks, unread accounting, the userPrivate/{uid}.dmUnreadTotal
+    // aggregate) — no client writes. Messages inherit the same member gate via
+    // a parent lookup.
+    // -------------------------------------------------------------------------
+    match /conversations/{pairId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      // No client writes: dm.* callables only.
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+        // No client writes: dm.sendMessage callable only.
+      }
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
