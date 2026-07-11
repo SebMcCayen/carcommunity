@@ -99,15 +99,20 @@ fun NavigationSearchScreen(
     // Fetch the origin up-front so the first suggestions are location-biased.
     LaunchedEffect(controller) { controller.refreshOrigin() }
 
-    // Mirror the resolved route onto the map surface behind (cleared when gone).
+    // Mirror the picked destination onto the map surface behind (cleared when
+    // gone). The destination marker shows as soon as a destination is selected —
+    // an empty path is a valid marker-only overlay (see MapRouteOverlay) — so the
+    // marker is visible while the route is still loading or when routing fails
+    // (NavError.NoOrigin / NavError.Route). The route line is added only once the
+    // route has resolved.
     LaunchedEffect(state.destination, state.route) {
         val dest = state.destination
         val route = state.route
         mapSurface.setRouteOverlay(
-            if (dest != null && route != null) {
+            if (dest != null) {
                 MapRouteOverlay(
                     destination = MapPoint(dest.point.longitude, dest.point.latitude),
-                    path = route.geometry.map { MapPoint(it.longitude, it.latitude) },
+                    path = route?.geometry?.map { MapPoint(it.longitude, it.latitude) } ?: emptyList(),
                 )
             } else {
                 null
