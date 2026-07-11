@@ -48,6 +48,12 @@ object ImageCompressor {
         maxDimension: Int,
         quality: Int,
     ): PickedImage {
+        // Guard against invalid tuning params before touching any pixels: a
+        // non-positive maxDimension would make sampleSizeFor() loop forever, and
+        // Bitmap.compress only defines JPEG quality over 0..100. In either case
+        // there is nothing sensible to do, so fall back to the original pick.
+        if (maxDimension <= 0 || quality !in 0..100) return picked
+
         val source = picked.bytes
 
         // 1. Read bounds only (no pixels) to compute an efficient sample size.
@@ -70,12 +76,15 @@ object ImageCompressor {
             bitmap = scaleToMax(bitmap, maxDimension)
 
             val out = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            val ok = bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
             val encoded = out.toByteArray()
 
-            // Only adopt the re-encode when it actually shrinks the payload
-            // (a small, already-optimised JPEG may round-trip larger).
-            return if (encoded.size < source.size) {
+            // Only adopt the re-encode when it succeeded AND actually shrinks the
+            // payload. Bitmap.compress returns false on failure and can leave an
+            // empty/partial buffer; a 0-byte JPEG would otherwise look "smaller"
+            // than the source. A small, already-optimised JPEG may also round-trip
+            // larger, so both conditions must hold before we swap the bytes.
+            return if (ok && encoded.isNotEmpty() && encoded.size < source.size) {
                 PickedImage(bytes = encoded, contentType = "image/jpeg")
             } else {
                 picked

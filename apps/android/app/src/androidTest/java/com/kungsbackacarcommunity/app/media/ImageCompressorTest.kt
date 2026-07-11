@@ -48,6 +48,23 @@ class ImageCompressorTest {
         return bmp
     }
 
+    /**
+     * A large, high-entropy image: random per-pixel RGB defeats PNG's DEFLATE so
+     * the source stays multi-megabyte, while the compressor's downscale + JPEG
+     * re-encode lands far smaller — making the "recompress large images" path
+     * genuinely fire. Seeded so the payload is deterministic across runs.
+     */
+    private fun noisyBitmap(width: Int, height: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val rng = Random(0xC0FFEE)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                bmp.setPixel(x, y, Color.rgb(rng.nextInt(256), rng.nextInt(256), rng.nextInt(256)))
+            }
+        }
+        return bmp
+    }
+
     private fun decodeBounds(bytes: ByteArray): BitmapFactory.Options =
         BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -77,9 +94,13 @@ class ImageCompressorTest {
 
     @Test
     fun compress_largeImage_recompressesToSmallerJpeg() = runBlocking {
-        // A large PNG far exceeds the downscaled JPEG re-encode, so compression
-        // both shrinks it and switches the content type to image/jpeg.
-        val big = gradientBitmap(2000, 1500)
+        // A large, high-entropy PNG cannot be DEFLATE-compressed, so the source
+        // stays multi-megabyte while the downscaled JPEG re-encode is a fraction
+        // of that. The compressor therefore both shrinks the payload and switches
+        // the content type to image/jpeg. (A smooth gradient would NOT work here:
+        // PNG compresses it so well that the re-encode is not smaller, and the
+        // compressor — correctly — keeps the original PNG unchanged.)
+        val big = noisyBitmap(2000, 1500)
         val source = pngBytes(big)
         val picked = PickedImage(bytes = source, contentType = "image/png")
 
