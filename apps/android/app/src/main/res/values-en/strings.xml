@@ -603,7 +603,6 @@
     <string name="friends_decline">Decline</string>
     <string name="friends_remove">Remove</string>
     <string name="friends_message">Message</string>
-    <string name="friends_messageComingSoon">Messaging is coming soon.</string>
     <string name="friends_requestSent">Friend request sent.</string>
     <string name="friends_nowFriends">You\'re now friends!</string>
     <string name="friends_chooseMember">Choose a member</string>
@@ -624,6 +623,19 @@
     <string name="friends_errorNotAddable">This member can\'t be added right now.</string>
     <string name="friends_errorRequestGone">That request is no longer available.</string>
     <string name="friends_errorGeneric">Something went wrong. Please try again.</string>
+    <string name="dm_title">Messages</string>
+    <string name="dm_empty">You have no messages yet.</string>
+    <string name="dm_loadError">Couldn\'t load your messages.</string>
+    <string name="dm_unknownMember">Member</string>
+    <string name="dm_emptyThread">No messages yet — say hi!</string>
+    <string name="dm_inputPlaceholder">Write a message…</string>
+    <string name="dm_send">Send</string>
+    <string name="dm_loadOlder">Load earlier messages</string>
+    <string name="dm_sendErrorSignedOut">Please sign in to send messages.</string>
+    <string name="dm_sendErrorNotMember">Direct messages are available to active members.</string>
+    <string name="dm_sendErrorInvalid">Enter a message to send.</string>
+    <string name="dm_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
+    <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
     <string name="shell_searchHint">Where to?</string>
     <string name="shell_searchIcon">Search</string>
     <string name="shell_voiceSearch">Voice search</string>

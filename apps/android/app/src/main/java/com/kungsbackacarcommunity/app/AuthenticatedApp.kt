@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
@@ -74,6 +75,9 @@ import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.dm.ChatRoute
+import com.kungsbackacarcommunity.app.dm.ConversationListRoute
+import com.kungsbackacarcommunity.app.dm.DmRepository
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
@@ -185,6 +189,7 @@ fun AuthenticatedApp(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    dmRepository: DmRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -242,6 +247,17 @@ fun AuthenticatedApp(
             // count); mirrors the old MapRoute participant wiring.
             var mapParticipantUids by
                 rememberSaveable { mutableStateOf<ArrayList<String>>(ArrayList()) }
+
+            // DM thread target (the other member) carried alongside ShellRoute.Chat,
+            // which — like every ShellRoute — is a payload-free enum. Set by the
+            // Friends "Message" button and by tapping an inbox row.
+            var dmChatOtherUid by rememberSaveable { mutableStateOf<String?>(null) }
+            var dmChatOtherName by rememberSaveable { mutableStateOf<String?>(null) }
+            val openChat = { otherUid: String, otherName: String? ->
+                dmChatOtherUid = otherUid
+                dmChatOtherName = otherName
+                route = ShellRoute.Chat
+            }
 
             val snackbarHostState = remember { SnackbarHostState() }
             // Real Mapbox surface when a token is configured (on device),
@@ -397,6 +413,10 @@ fun AuthenticatedApp(
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        dmRepository = dmRepository,
+                        dmChatOtherUid = dmChatOtherUid,
+                        dmChatOtherName = dmChatOtherName,
+                        onOpenChat = openChat,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
@@ -765,6 +785,10 @@ private fun RouteHost(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    dmRepository: DmRepository?,
+    dmChatOtherUid: String?,
+    dmChatOtherName: String?,
+    onOpenChat: (String, String?) -> Unit,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
@@ -797,6 +821,15 @@ private fun RouteHost(
                             Icons.Filled.Groups,
                             if (friendsRepository != null) {
                                 { onOpenRoute(ShellRoute.Friends) }
+                            } else {
+                                null
+                            },
+                        ),
+                        HubEntry(
+                            stringResource(R.string.dm_title),
+                            Icons.AutoMirrored.Filled.Message,
+                            if (dmRepository != null) {
+                                { onOpenRoute(ShellRoute.Conversations) }
                             } else {
                                 null
                             },
@@ -1056,6 +1089,40 @@ private fun RouteHost(
             if (friendsRepository != null) {
                 FriendsRoute(
                     repository = friendsRepository,
+                    onBack = onClose,
+                    onMessageFriend = { friend ->
+                        // Guarded: only offer to open a thread when DM is wired.
+                        if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
+                    },
+                    onOpenMessages = {
+                        if (dmRepository != null) onOpenRoute(ShellRoute.Conversations)
+                    },
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Conversations ->
+            if (dmRepository != null) {
+                ConversationListRoute(
+                    repository = dmRepository,
+                    uid = uid,
+                    onOpenConversation = { conversation ->
+                        onOpenChat(conversation.otherUser.uid, conversation.otherUser.displayName)
+                    },
+                    onBack = onClose,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Chat ->
+            if (dmRepository != null && dmChatOtherUid != null) {
+                ChatRoute(
+                    repository = dmRepository,
+                    uid = uid,
+                    otherUid = dmChatOtherUid,
+                    otherName = dmChatOtherName,
                     onBack = onClose,
                 )
             } else {

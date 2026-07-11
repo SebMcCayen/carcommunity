@@ -662,7 +662,6 @@
     "decline": "Avböj",
     "remove": "Ta bort",
     "message": "Meddelande",
-    "messageComingSoon": "Meddelanden kommer snart.",
     "requestSent": "Vänförfrågan skickad.",
     "nowFriends": "Ni är nu vänner!",
     "chooseMember": "Välj en medlem",
@@ -683,6 +682,21 @@
     "errorNotAddable": "Den här medlemmen kan inte läggas till just nu.",
     "errorRequestGone": "Förfrågan är inte längre tillgänglig.",
     "errorGeneric": "Något gick fel. Försök igen."
+  },
+  "dm": {
+    "title": "Meddelanden",
+    "empty": "Du har inga meddelanden än.",
+    "loadError": "Kunde inte ladda dina meddelanden.",
+    "unknownMember": "Medlem",
+    "emptyThread": "Inga meddelanden än — säg hej!",
+    "inputPlaceholder": "Skriv ett meddelande…",
+    "send": "Skicka",
+    "loadOlder": "Ladda tidigare meddelanden",
+    "sendErrorSignedOut": "Logga in för att skicka meddelanden.",
+    "sendErrorNotMember": "Direktmeddelanden är tillgängliga för aktiva medlemmar.",
+    "sendErrorInvalid": "Skriv ett meddelande att skicka.",
+    "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
+    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
   },
   "shell": {
     "searchHint": "Vart vill du?",

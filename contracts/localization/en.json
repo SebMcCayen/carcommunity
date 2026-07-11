@@ -662,7 +662,6 @@
     "decline": "Decline",
     "remove": "Remove",
     "message": "Message",
-    "messageComingSoon": "Messaging is coming soon.",
     "requestSent": "Friend request sent.",
     "nowFriends": "You're now friends!",
     "chooseMember": "Choose a member",
@@ -683,6 +682,21 @@
     "errorNotAddable": "This member can't be added right now.",
     "errorRequestGone": "That request is no longer available.",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "dm": {
+    "title": "Messages",
+    "empty": "You have no messages yet.",
+    "loadError": "Couldn't load your messages.",
+    "unknownMember": "Member",
+    "emptyThread": "No messages yet — say hi!",
+    "inputPlaceholder": "Write a message…",
+    "send": "Send",
+    "loadOlder": "Load earlier messages",
+    "sendErrorSignedOut": "Please sign in to send messages.",
+    "sendErrorNotMember": "Direct messages are available to active members.",
+    "sendErrorInvalid": "Enter a message to send.",
+    "sendErrorCannotDeliver": "This message can't be delivered right now.",
+    "sendErrorGeneric": "Couldn't send your message. Please try again."
   },
   "shell": {
     "searchHint": "Where to?",
