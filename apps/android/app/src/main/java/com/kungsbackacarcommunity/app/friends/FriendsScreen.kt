@@ -250,7 +250,7 @@ private fun AddFriendSection(
             )
 
             when (addState) {
-                is AddFriendState.Working -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                is AddFriendState.Working -> CircularProgressIndicator(modifier = Modifier.size(KccSpacing.s6))
 
                 is AddFriendState.Sent -> {
                     val text =
@@ -442,14 +442,14 @@ private fun MemberAvatar(avatarPath: String?) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(KccSpacing.s10),
             )
         } else {
             Icon(
                 imageVector = Icons.Filled.Person,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(KccSpacing.s6),
             )
         }
     }
