@@ -229,8 +229,9 @@ the default mechanic, with daily streaks an explicit product question.
 record drive (existing, unchanged)
       │ stop → explicit save (existing product rule)
       ▼
-drives.save (existing callable, extended §4.3)
-      │ response: stats + streak/milestone payload
+drives.save (existing callable — unchanged in Phase 1;
+             streak/milestone extension is Phase 2, §4.3)
+      │ response: save result now; + streak/milestone payload once Phase 2 lands
       ├── client uploads route.bin + preview.png  ← NEW (contract already exists)
       ▼
 POST-DRIVE STAT CARD (new UI, replaces the "saved" text)
