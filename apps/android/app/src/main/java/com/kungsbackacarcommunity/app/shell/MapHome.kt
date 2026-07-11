@@ -252,24 +252,34 @@ private fun SearchBarRow(
             onClick = onOpenMore,
             modifier = Modifier.size(48.dp),
         ) {
-            if (avatarUrl != null) {
-                // The user's profile picture, circular. avatarUrl is null while
-                // the Storage download URL resolves (rememberStorageImageUrl), so
-                // this branch renders only once resolved; the else-branch Icon
-                // covers the resolving window — Coil isn't doing the placeholder.
-                AsyncImage(
-                    model = avatarUrl,
-                    contentDescription = stringResource(R.string.shell_menu),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
-            } else {
+            // Always render the AccountCircle fallback so the button never
+            // shows a blank circle: it covers both the window while the Storage
+            // download URL resolves (avatarUrl == null, rememberStorageImageUrl)
+            // and the window while Coil fetches/decodes the bitmap (Coil doesn't
+            // paint anything until the image is ready). Once the avatar bitmap is
+            // displayed, the cropped AsyncImage fills the button and hides it.
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     imageVector = Icons.Filled.AccountCircle,
                     contentDescription = stringResource(R.string.shell_menu),
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(10.dp).size(28.dp),
                 )
+                if (avatarUrl != null) {
+                    // The user's profile picture, circular, drawn on top of the
+                    // fallback icon once the bitmap is ready. Decorative: the
+                    // fallback Icon underneath already labels the button, so the
+                    // control keeps one stable content description in every state.
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                }
             }
         }
     }
