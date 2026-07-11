@@ -100,8 +100,9 @@ object ImageCompressor {
      * side (not requiring BOTH sides to shrink) means a very wide/tall image —
      * e.g. 4000x500 with maxDimension 1024 — still down-samples (to 1000x125 at
      * sample 4) instead of decoding at full resolution and spiking peak memory.
-     * The result is a power of two; the later exact [scaleToMax] step trims any
-     * remainder so the longest side lands exactly on [maxDimension].
+     * The result is a power of two; the later [scaleToMax] step downscales the
+     * longest side to at most [maxDimension] (it never scales up, and leaves the
+     * bitmap smaller when inSampleSize already brought it below [maxDimension]).
      */
     private fun sampleSizeFor(width: Int, height: Int, maxDimension: Int): Int {
         var sample = 1
@@ -113,7 +114,8 @@ object ImageCompressor {
         return sample
     }
 
-    /** Exactly scales [bitmap] so its longest side equals [maxDimension] (never up). */
+    /** Downscales [bitmap] so its longest side is at most [maxDimension] (returns it
+     * unchanged when already smaller; never scales up). */
     private fun scaleToMax(bitmap: Bitmap, maxDimension: Int): Bitmap {
         val longest = maxOf(bitmap.width, bitmap.height)
         if (longest <= maxDimension) return bitmap
