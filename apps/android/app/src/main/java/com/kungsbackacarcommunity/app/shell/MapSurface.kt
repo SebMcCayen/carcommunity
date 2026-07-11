@@ -39,6 +39,23 @@ data class MapUserMarker(
     val isLiveSharing: Boolean,
 )
 
+/** A single lng/lat vertex of a drawn route line. */
+data class MapPoint(
+    val longitude: Double,
+    val latitude: Double,
+)
+
+/**
+ * A destination + the route line to draw for it. Owned by the shell (kept free
+ * of the navigation package's types) so the [MapSurface] seam stays
+ * self-contained; the host maps a resolved route onto this. An empty [path]
+ * still marks the destination (line simply not drawn).
+ */
+data class MapRouteOverlay(
+    val destination: MapPoint,
+    val path: List<MapPoint>,
+)
+
 /**
  * Seam between the map-first shell and the actual map renderer.
  *
@@ -71,6 +88,9 @@ interface MapSurface {
     /** Whether the traffic-congestion overlay is currently shown. */
     val trafficEnabled: StateFlow<Boolean>
 
+    /** The destination + route line to draw, or null when none is set. */
+    val routeOverlay: StateFlow<MapRouteOverlay?>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
@@ -79,6 +99,12 @@ interface MapSurface {
 
     /** Show or hide the traffic-congestion overlay (no visible effect on the stub). */
     fun setTrafficEnabled(enabled: Boolean)
+
+    /**
+     * Draw (or clear, with null) a destination marker + route line and fit the
+     * camera to it. A no-op beyond storing the value on the stub.
+     */
+    fun setRouteOverlay(overlay: MapRouteOverlay?)
 
     /** The map view itself, filling [modifier]. */
     @Composable
@@ -107,6 +133,9 @@ class StubMapSurface(
     private val trafficFlow = MutableStateFlow(false)
     override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
 
+    private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
+    override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
@@ -121,6 +150,10 @@ class StubMapSurface(
 
     override fun setTrafficEnabled(enabled: Boolean) {
         trafficFlow.value = enabled
+    }
+
+    override fun setRouteOverlay(overlay: MapRouteOverlay?) {
+        routeOverlayFlow.value = overlay
     }
 
     /** Test/impl hook to force the load state (e.g. after tiles finish). */

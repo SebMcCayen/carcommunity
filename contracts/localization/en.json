@@ -693,6 +693,30 @@
     "moreSignOut": "Sign out",
     "unavailable": "Not available right now.",
     "trafficOn": "Traffic layer on",
-    "trafficOff": "Show traffic"
+    "trafficOff": "Show traffic",
+    "chat": "Chat",
+    "chatUnread": "%1$d unread chat messages",
+    "chatTitle": "Community chat",
+    "chatClose": "Close chat",
+    "chatEmpty": "You're all caught up — no new messages.",
+    "chatComingSoon": "Community chat isn't available yet. For now, chat lives inside each event you're going to."
+  },
+  "addressSearch": {
+    "searchPlaceholder": "Search address or place",
+    "back": "Back",
+    "clearQuery": "Clear search",
+    "close": "Close",
+    "noResults": "No matching places",
+    "searchError": "Couldn't load results. Check your connection and try again.",
+    "routeError": "Couldn't find a route to that place.",
+    "noOrigin": "Your location isn't available. Turn on location to get directions.",
+    "routeSummary": "%1$s · %2$s",
+    "directionsTitle": "Directions",
+    "clearRoute": "Clear route",
+    "loading": "Loading…",
+    "unitMeters": "m",
+    "unitKilometers": "km",
+    "unitMinutes": "min",
+    "unitHours": "h"
   }
 }

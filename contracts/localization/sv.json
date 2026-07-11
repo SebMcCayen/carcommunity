@@ -693,6 +693,30 @@
     "moreSignOut": "Logga ut",
     "unavailable": "Inte tillgängligt just nu.",
     "trafficOn": "Trafiklager på",
-    "trafficOff": "Visa trafik"
+    "trafficOff": "Visa trafik",
+    "chat": "Chatt",
+    "chatUnread": "%1$d olästa chattmeddelanden",
+    "chatTitle": "Gemenskapschatt",
+    "chatClose": "Stäng chatt",
+    "chatEmpty": "Du är ikapp — inga nya meddelanden.",
+    "chatComingSoon": "Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på."
+  },
+  "addressSearch": {
+    "searchPlaceholder": "Sök adress eller plats",
+    "back": "Tillbaka",
+    "clearQuery": "Rensa sökning",
+    "close": "Stäng",
+    "noResults": "Inga matchande platser",
+    "searchError": "Kunde inte hämta resultat. Kontrollera anslutningen och försök igen.",
+    "routeError": "Kunde inte hitta en rutt till platsen.",
+    "noOrigin": "Din plats är inte tillgänglig. Aktivera plats för att få vägbeskrivning.",
+    "routeSummary": "%1$s · %2$s",
+    "directionsTitle": "Vägbeskrivning",
+    "clearRoute": "Rensa rutt",
+    "loading": "Laddar…",
+    "unitMeters": "m",
+    "unitKilometers": "km",
+    "unitMinutes": "min",
+    "unitHours": "tim"
   }
 }
