@@ -159,7 +159,9 @@ object DmMapper {
     /** The caller's own unread count, clamped to a non-negative Int. */
     fun unreadFor(unread: Map<String, Long>, callerUid: String): Int {
         val raw = unread[callerUid] ?: 0L
-        return if (raw > 0L) raw.toInt() else 0
+        // Clamp in Long space before narrowing: a large backend value would
+        // otherwise overflow toInt() and wrap negative, hiding the badge.
+        return raw.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     }
 
     /**

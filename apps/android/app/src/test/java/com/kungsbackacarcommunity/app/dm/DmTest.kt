@@ -41,6 +41,9 @@ class DmTest {
         assertEquals(0, DmMapper.unreadFor(mapOf("me" to 0L), "me"))
         assertEquals(0, DmMapper.unreadFor(mapOf("me" to -1L), "me"))
         assertEquals(0, DmMapper.unreadFor(emptyMap(), "me"))
+        // A value beyond Int range must saturate, not overflow negative.
+        assertEquals(Int.MAX_VALUE, DmMapper.unreadFor(mapOf("me" to Int.MAX_VALUE.toLong() + 1L), "me"))
+        assertEquals(Int.MAX_VALUE, DmMapper.unreadFor(mapOf("me" to Long.MAX_VALUE), "me"))
     }
 
     @Test
