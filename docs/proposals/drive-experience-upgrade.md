@@ -79,9 +79,10 @@ on callables); Android is Kotlin/Compose under
   proposal that shows a map — stat card thumbnail, replay, heatmap, share
   card — depends on finally landing that upload. It is Phase 1's first task
   and needs no new backend: the callable contract and Storage rules are done.
-- **Android write side** — `drives/DriveRecorder.kt` (pure recorder, backend
-  parity constants), `DriveRecordingCoordinator.kt` (state machine:
-  `Recording → PromptSave → Saving → Saved`), `RecordDriveScreen.kt`. The
+- **Android write side** — `drives/DriveRecording.kt` (defines the pure
+  `DriveRecorder`, backend parity constants), `DriveRecordingCoordinator.kt`
+  (state machine: `Recording → PromptSave → Saving → Saved`),
+  `RecordDriveScreen.kt`. The
   `RecordingState.Saved` branch — today a single line of body text — is
   exactly where the stat card replaces a sentence with a moment.
 - **Android read side** — `drives/SavedDrive.kt` + `DriveFormatters`
@@ -199,7 +200,8 @@ This proposal copies **none** of it, and not merely because of MVP scoping:
   read public share cards. "12,3 km · 24 min · Kustvägen" is charming;
   "topp 187 km/h" is a cancelled policy and a partner meeting.
 - **It is already locked.** `docs/product-decisions.md`: "Ingen
-  toppfarts-/speedranking i MVP"; badges must not reward risky driving;
+  toppfarts-/speedranking i MVP" ("No top-speed / speed-ranking in the MVP");
+  badges must not reward risky driving;
   Kronjakt may not encourage speeding. The backend enforces the stance
   structurally: `drive-calculations.ts` computes no top speed and
   `saveDrive.ts` stores none, and `road-ratings-map.md` §3.1 already declared
@@ -395,7 +397,8 @@ already built:
 An exported card is the single place recorded location leaves the member's
 own account — voluntarily, but people under-estimate route inference.
 `docs/product-decisions.md` locks "Delning av saved drives ska inte inkludera
-exakt rutt som standard", so:
+exakt rutt som standard" ("Sharing of saved drives must not include the exact
+route by default"), so:
 
 - The card's route outline applies **the endpoint-trim + fuzz design already
   specified in `docs/proposals/road-ratings-map.md` §5.1** — ≥500 m trimmed
