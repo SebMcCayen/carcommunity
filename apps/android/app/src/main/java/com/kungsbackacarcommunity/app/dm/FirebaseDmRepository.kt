@@ -81,14 +81,16 @@ class FirebaseDmRepository private constructor(
             onFailure = { DmSendResult.Failed(DmErrorMapper.mapSend(it.toDmErrorCode())) },
         )
 
-    override suspend fun loadOlder(conversationId: String, before: String): DmMessagesPage =
+    override suspend fun loadOlder(conversationId: String, before: String): DmOlderResult =
         callForData(
             GET_MESSAGES,
             mapOf("conversationId" to conversationId, "before" to before),
         ).fold(
-            onSuccess = { DmResponseParser.parseMessagesPage(it) },
-            // A failed older-page just means "no more to show right now".
-            onFailure = { DmMessagesPage(emptyList(), nextBefore = null, hasMore = false) },
+            onSuccess = { DmOlderResult.Loaded(DmResponseParser.parseMessagesPage(it)) },
+            // A failed older-page is a TRANSIENT error, not end-of-pagination:
+            // report it as such so the coordinator keeps the "load older"
+            // affordance for a retry instead of permanently ending the thread.
+            onFailure = { DmOlderResult.Failed },
         )
 
     override suspend fun markRead(conversationId: String) {

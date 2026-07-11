@@ -41,8 +41,13 @@ interface DmRepository {
     /** `dm-sendMessage` — sends to [toUid], creating the conversation on the first message. */
     suspend fun sendMessage(toUid: String, text: String): DmSendResult
 
-    /** `dm-getMessages` — an older page before the [before] ISO cursor (page 30). */
-    suspend fun loadOlder(conversationId: String, before: String): DmMessagesPage
+    /**
+     * `dm-getMessages` — an older page before the [before] ISO cursor (page 30).
+     * Returns [DmOlderResult.Failed] on a transient callable failure so the
+     * caller can distinguish it from a genuine end-of-pagination
+     * ([DmMessagesPage.hasMore] == false) and offer a retry.
+     */
+    suspend fun loadOlder(conversationId: String, before: String): DmOlderResult
 
     /** `dm-markRead` — clears the caller's unread counter for the conversation. Idempotent. */
     suspend fun markRead(conversationId: String)

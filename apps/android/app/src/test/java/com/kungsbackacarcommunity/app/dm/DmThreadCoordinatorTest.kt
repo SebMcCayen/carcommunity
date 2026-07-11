@@ -11,11 +11,13 @@ class DmThreadCoordinatorTest {
 
     private class FakeRepo : DmRepository {
         var sendResult: DmSendResult = DmSendResult.Sent("me__friend", "m1")
-        var olderPage: DmMessagesPage = DmMessagesPage(emptyList(), nextBefore = null, hasMore = false)
+        var olderResult: DmOlderResult =
+            DmOlderResult.Loaded(DmMessagesPage(emptyList(), nextBefore = null, hasMore = false))
         var sendCalls = 0
         var lastSendToUid: String? = null
         var lastSendText: String? = null
         var markReadCalls = 0
+        var loadOlderCalls = 0
         var lastBefore: String? = null
 
         override fun observeConversations(uid: String): Flow<DmConversationsState> = emptyFlow()
@@ -29,9 +31,10 @@ class DmThreadCoordinatorTest {
             return sendResult
         }
 
-        override suspend fun loadOlder(conversationId: String, before: String): DmMessagesPage {
+        override suspend fun loadOlder(conversationId: String, before: String): DmOlderResult {
+            loadOlderCalls++
             lastBefore = before
-            return olderPage
+            return olderResult
         }
 
         override suspend fun markRead(conversationId: String) {
@@ -86,11 +89,13 @@ class DmThreadCoordinatorTest {
     fun `loadOlder accumulates messages and marks End when there is no more`() = runTest {
         val repo =
             FakeRepo().apply {
-                olderPage =
-                    DmMessagesPage(
-                        messages = listOf(msg("m1", 100L), msg("m2", 200L)),
-                        nextBefore = null,
-                        hasMore = false,
+                olderResult =
+                    DmOlderResult.Loaded(
+                        DmMessagesPage(
+                            messages = listOf(msg("m1", 100L), msg("m2", 200L)),
+                            nextBefore = null,
+                            hasMore = false,
+                        ),
                     )
             }
         val c = coordinator(repo)
@@ -104,10 +109,34 @@ class DmThreadCoordinatorTest {
     fun `loadOlder keeps paging Idle when more remain`() = runTest {
         val repo =
             FakeRepo().apply {
-                olderPage = DmMessagesPage(listOf(msg("m1", 100L)), nextBefore = "cursor", hasMore = true)
+                olderResult =
+                    DmOlderResult.Loaded(
+                        DmMessagesPage(listOf(msg("m1", 100L)), nextBefore = "cursor", hasMore = true),
+                    )
             }
         val c = coordinator(repo)
         c.loadOlder("2026-07-11T00:00:03Z")
+        assertEquals(DmPageStatus.Idle, c.pageStatus.value)
+    }
+
+    @Test
+    fun `a transient loadOlder failure surfaces Error, not End, and stays retryable`() = runTest {
+        val repo = FakeRepo().apply { olderResult = DmOlderResult.Failed }
+        val c = coordinator(repo)
+        c.loadOlder("2026-07-11T00:00:03Z")
+        // A failure must NOT permanently end pagination.
+        assertEquals(DmPageStatus.Error, c.pageStatus.value)
+        assertTrue(c.olderMessages.value.isEmpty())
+
+        // The Error state is retryable: a second attempt actually calls through,
+        // and a now-successful page recovers to Idle (more remain).
+        repo.olderResult =
+            DmOlderResult.Loaded(
+                DmMessagesPage(listOf(msg("m1", 100L)), nextBefore = "cursor", hasMore = true),
+            )
+        c.loadOlder("2026-07-11T00:00:03Z")
+        assertEquals(2, repo.loadOlderCalls)
+        assertEquals(listOf("m1"), c.olderMessages.value.map { it.id })
         assertEquals(DmPageStatus.Idle, c.pageStatus.value)
     }
 
@@ -128,6 +157,32 @@ class DmThreadCoordinatorTest {
         assertEquals(1, repo.markReadCalls)
     }
 
-    private fun msg(id: String, millis: Long) =
-        DmMessage(id = id, senderUid = "friend", text = id, createdAtMillis = millis, createdAtIso = null)
+    @Test
+    fun `markReadIfIncoming marks read for a message from the other party`() = runTest {
+        val repo = FakeRepo()
+        val c = coordinator(repo)
+        c.markReadIfIncoming(msg("m1", 100L, sender = "friend"))
+        assertEquals(1, repo.markReadCalls)
+    }
+
+    @Test
+    fun `markReadIfIncoming does NOT mark read for the caller's own message`() = runTest {
+        val repo = FakeRepo()
+        val c = coordinator(repo)
+        // "me" is the caller here (otherUid is "friend"); an own send must not
+        // trigger a needless markRead callable.
+        c.markReadIfIncoming(msg("m1", 100L, sender = "me"))
+        assertEquals(0, repo.markReadCalls)
+    }
+
+    @Test
+    fun `markReadIfIncoming is a no-op for a null newest message`() = runTest {
+        val repo = FakeRepo()
+        val c = coordinator(repo)
+        c.markReadIfIncoming(null)
+        assertEquals(0, repo.markReadCalls)
+    }
+
+    private fun msg(id: String, millis: Long, sender: String = "friend") =
+        DmMessage(id = id, senderUid = sender, text = id, createdAtMillis = millis, createdAtIso = null)
 }

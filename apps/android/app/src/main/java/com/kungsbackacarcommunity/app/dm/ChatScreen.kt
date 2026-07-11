@@ -143,9 +143,21 @@ private fun MessageList(
     onLoadOlder: () -> Unit,
 ) {
     val listState = rememberLazyListState()
-    // Keep the newest message in view as the thread grows / on first load.
+    // Auto-scroll to the newest message only when it won't fight the reader:
+    // either the new message is the user's OWN send (always follow your own
+    // message), or the user is already at/near the bottom. If they've scrolled
+    // up to read older messages and an incoming message arrives, leave them put.
     LaunchedEffect(messages.lastOrNull()?.id) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        val newest = messages.lastOrNull() ?: return@LaunchedEffect
+        val layoutInfo = listState.layoutInfo
+        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val totalItems = layoutInfo.totalItemsCount
+        // Not laid out yet (first load) → scroll; otherwise near the bottom.
+        val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
+        val isOwnSend = newest.senderUid == currentUid
+        if (isOwnSend || nearBottom) {
+            listState.animateScrollToItem(messages.lastIndex)
+        }
     }
 
     LazyColumn(

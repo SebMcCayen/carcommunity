@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -31,7 +34,9 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
-import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.AeroLazyPage
+import com.kungsbackacarcommunity.app.shell.AeroPageTitle
+import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 
 /**
  * The DM inbox: one row per conversation (avatar, other member's name,
@@ -44,32 +49,53 @@ fun ConversationListScreen(
     onOpenConversation: (DmConversation) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AeroPage(title = stringResource(R.string.dm_title), modifier = modifier) {
-        when (state) {
-            DmConversationsState.Loading -> CircularProgressIndicator()
+    // Durable list: a LazyColumn so only visible rows compose. The title is the
+    // first `item {}`; conversation rows are keyed by conversationId so
+    // recomposition/scroll state stays stable as the live inbox updates.
+    AeroLazyPage(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = aeroLazyContentPadding(),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+        ) {
+            item(key = "title") {
+                AeroPageTitle(stringResource(R.string.dm_title))
+            }
 
-            DmConversationsState.Error ->
-                Text(
-                    text = stringResource(R.string.dm_loadError),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
+            when (state) {
+                DmConversationsState.Loading ->
+                    item(key = "loading") { CircularProgressIndicator() }
 
-            is DmConversationsState.Loaded ->
-                if (state.conversations.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.dm_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    state.conversations.forEach { conversation ->
-                        ConversationRow(
-                            conversation = conversation,
-                            onClick = { onOpenConversation(conversation) },
+                DmConversationsState.Error ->
+                    item(key = "error") {
+                        Text(
+                            text = stringResource(R.string.dm_loadError),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
-                }
+
+                is DmConversationsState.Loaded ->
+                    if (state.conversations.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                text = stringResource(R.string.dm_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        items(
+                            state.conversations,
+                            key = { it.conversationId },
+                        ) { conversation ->
+                            ConversationRow(
+                                conversation = conversation,
+                                onClick = { onOpenConversation(conversation) },
+                            )
+                        }
+                    }
+            }
         }
     }
 }

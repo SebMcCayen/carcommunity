@@ -23,6 +23,12 @@ sealed interface DmPageStatus {
 
     /** Reached the beginning of the conversation — no older pages. */
     data object End : DmPageStatus
+
+    /**
+     * The last older-page load failed transiently. NOT terminal: the "load
+     * older" affordance stays visible so the user can retry (unlike [End]).
+     */
+    data object Error : DmPageStatus
 }
 
 /**
@@ -85,24 +91,45 @@ class DmThreadCoordinator(
     }
 
     /**
+     * Marks the conversation read only when [newest] is an INCOMING message
+     * (sent by the other party). A newest message that is the caller's OWN send
+     * carries no unread to clear, so this skips the callable — avoiding a
+     * needless `dm-markRead` invocation on every self-send.
+     */
+    suspend fun markReadIfIncoming(newest: DmMessage?) {
+        if (newest != null && newest.senderUid == otherUid) markRead()
+    }
+
+    /**
      * Loads the page of messages older than [beforeIso] and accumulates them.
      * No-op when there is no cursor, a page is already loading, or the beginning
-     * has been reached.
+     * has been reached ([DmPageStatus.End]). A previous [DmPageStatus.Error] is
+     * retryable, so it does NOT block a fresh attempt.
+     *
+     * A transient failure ends in [DmPageStatus.Error] (retryable), and ONLY a
+     * genuine end-of-pagination (`hasMore == false` from the backend) ends in
+     * [DmPageStatus.End] — so a transient error can never permanently hide the
+     * "load older" affordance.
      */
     suspend fun loadOlder(beforeIso: String?) {
         if (beforeIso == null) return
-        if (page.value != DmPageStatus.Idle) return
+        if (page.value == DmPageStatus.Loading || page.value == DmPageStatus.End) return
         page.value = DmPageStatus.Loading
         try {
-            val result = repository.loadOlder(conversationId, beforeIso)
-            older.value = DmThread.merge(older.value, result.messages)
-            page.value = if (result.hasMore) DmPageStatus.Idle else DmPageStatus.End
+            when (val result = repository.loadOlder(conversationId, beforeIso)) {
+                is DmOlderResult.Loaded -> {
+                    older.value = DmThread.merge(older.value, result.page.messages)
+                    page.value = if (result.page.hasMore) DmPageStatus.Idle else DmPageStatus.End
+                }
+                // Transient failure: surface a retryable error, NOT End.
+                DmOlderResult.Failed -> page.value = DmPageStatus.Error
+            }
         } catch (cancellation: CancellationException) {
             page.value = DmPageStatus.Idle
             throw cancellation
         } catch (_: Exception) {
-            // Allow a retry on a transient failure.
-            page.value = DmPageStatus.Idle
+            // An unexpected throw is transient too — stay retryable, not End.
+            page.value = DmPageStatus.Error
         }
     }
 

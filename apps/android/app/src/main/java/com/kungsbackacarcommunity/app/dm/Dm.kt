@@ -115,6 +115,19 @@ data class DmMessagesPage(
 )
 
 /**
+ * Outcome of an older-page load ([DmRepository.loadOlder]). A [Loaded] page
+ * carries the backend's own `hasMore` (a genuine end-of-pagination signal),
+ * whereas [Failed] means the callable itself errored — a transient failure that
+ * must NOT be conflated with "no more messages", so the caller can offer a
+ * retry instead of permanently ending pagination.
+ */
+sealed interface DmOlderResult {
+    data class Loaded(val page: DmMessagesPage) : DmOlderResult
+
+    data object Failed : DmOlderResult
+}
+
+/**
  * Canonical, order-independent conversation id for a pair of users: the two
  * UIDs sorted lexicographically and joined with `__`. Mirrors the backend
  * `dmPairId`, so `dmPairId(a, b) == dmPairId(b, a)` and the client can resolve

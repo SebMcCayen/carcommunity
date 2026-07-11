@@ -69,10 +69,12 @@ fun ChatRoute(
     val pageStatus by coordinator.pageStatus.collectAsState()
     val sentCount by coordinator.sentCount.collectAsState()
 
-    // Mark read on open and whenever a new message lands while the thread is open.
+    // Mark read on open, and again whenever a NEW INCOMING message lands while
+    // the thread is open. A newest message that is the caller's own send carries
+    // no unread to clear, so it must not trigger a needless markRead callable.
     LaunchedEffect(conversationId) { coordinator.markRead() }
     LaunchedEffect(liveMessages.lastOrNull()?.id) {
-        if (liveMessages.isNotEmpty()) coordinator.markRead()
+        coordinator.markReadIfIncoming(liveMessages.lastOrNull())
     }
 
     // Re-subscribe once the first send creates the conversation document (the
