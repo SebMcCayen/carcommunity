@@ -151,10 +151,13 @@ class NavigationController(
      * host observes [state] and wipes the map overlay when the route is gone.
      */
     fun clearDestination() {
+        searchJob?.cancel()
         routeJob?.cancel()
         stateFlow.value =
             stateFlow.value.copy(
                 query = "",
+                suggestions = emptyList(),
+                searching = false,
                 destination = null,
                 route = null,
                 routeLoading = false,

@@ -202,4 +202,59 @@ class NavigationControllerTest {
         assertNull(state.route)
         assertEquals("", state.query)
     }
+
+    @Test
+    fun `clearing cancels an in-flight lookup and no stale suggestions reappear`() = runTest {
+        // Gate the geocode so the lookup stays in-flight while we clear.
+        val gate = CompletableDeferred<Unit>()
+        val client =
+            object : MapboxSearchClient {
+                override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
+                    gate.await()
+                    return listOf(suggestion)
+                }
+
+                override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? = null
+            }
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.onQueryChange("kung")
+        advanceTimeBy(300)
+        runCurrent()
+        // Lookup is running and the spinner is up.
+        assertTrue(controller.state.value.searching)
+
+        // Clearing must cancel the in-flight geocode and wipe search state.
+        controller.clearDestination()
+        var state = controller.state.value
+        assertFalse(state.searching)
+        assertTrue(state.suggestions.isEmpty())
+        assertEquals("", state.query)
+
+        // Even if the cancelled geocode's body were to complete, its result must
+        // not leak back into state as stale suggestions.
+        gate.complete(Unit)
+        advanceUntilIdle()
+        state = controller.state.value
+        assertFalse(state.searching)
+        assertTrue(state.suggestions.isEmpty())
+    }
+
+    @Test
+    fun `search still works after clearing the destination`() = runTest {
+        val client = FakeClient(suggestions = listOf(suggestion), route = routeSummary)
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+        controller.refreshOrigin()
+        advanceUntilIdle()
+        controller.select(suggestion)
+        advanceUntilIdle()
+
+        controller.clearDestination()
+        assertTrue(controller.state.value.suggestions.isEmpty())
+
+        // A fresh query re-creates the search job and emits suggestions again.
+        controller.onQueryChange("torg")
+        advanceUntilIdle()
+        assertEquals(listOf(suggestion), controller.state.value.suggestions)
+    }
 }
