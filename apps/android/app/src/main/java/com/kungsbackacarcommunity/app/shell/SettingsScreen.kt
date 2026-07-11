@@ -159,7 +159,12 @@ private fun openPlayStoreListing(context: Context) {
     val marketUri = Uri.parse("market://details?id=$packageName")
     try {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, marketUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            // Target the Play Store explicitly so the market:// intent can't be
+            // hijacked by another app registering the scheme; the catch below
+            // falls back to the https listing when Play Store is unavailable.
+            Intent(Intent.ACTION_VIEW, marketUri)
+                .setPackage("com.android.vending")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     } catch (_: ActivityNotFoundException) {
         openExternalUrl(

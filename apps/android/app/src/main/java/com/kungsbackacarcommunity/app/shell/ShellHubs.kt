@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /** A single entry in a hub screen; [onClick] null hides the row (unavailable). */
 data class HubEntry(
@@ -61,15 +62,15 @@ internal fun HubRow(label: String, icon: ImageVector, onClick: () -> Unit) {
         onClick = onClick,
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(KccSpacing.s6),
             )
             Text(
                 text = label,
