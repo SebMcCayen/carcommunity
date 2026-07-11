@@ -120,9 +120,18 @@ class NavigationController(
             )
         routeJob =
             scope.launch {
-                val origin = cachedOrigin ?: runCatching { originProvider() }.getOrNull()?.also {
-                    cachedOrigin = it
-                }
+                val origin =
+                    cachedOrigin
+                        ?: try {
+                            originProvider()?.also { cachedOrigin = it }
+                        } catch (e: CancellationException) {
+                            throw e // never swallow cancellation while fetching the origin
+                        } catch (_: Exception) {
+                            null // real failure resolving the origin → NoOrigin below
+                        }
+                // The origin fetch may block non-cooperatively; bail if the job was
+                // cancelled (e.g. the user cleared the destination) before writing.
+                coroutineContext.ensureActive()
                 if (origin == null) {
                     stateFlow.value =
                         stateFlow.value.copy(routeLoading = false, error = NavError.NoOrigin)
