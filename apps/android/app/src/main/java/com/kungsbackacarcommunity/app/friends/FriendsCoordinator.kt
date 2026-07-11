@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.friends
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -122,7 +123,7 @@ class FriendsCoordinator(
     private suspend fun respond(requestId: String, accept: Boolean) {
         // Ignore a second tap on a row whose accept/decline is already running.
         if (requestId in inFlightRows.value) return
-        inFlightRows.value = inFlightRows.value + requestId
+        inFlightRows.update { it + requestId }
         rowError.value = null
         try {
             when (val result = repository.respond(requestId, accept)) {
@@ -139,14 +140,14 @@ class FriendsCoordinator(
         } catch (_: Exception) {
             rowError.value = FriendActionError.Generic
         } finally {
-            inFlightRows.value = inFlightRows.value - requestId
+            inFlightRows.update { it - requestId }
         }
     }
 
     suspend fun remove(friendUid: String) {
         // Ignore a second tap on a friend whose removal is already running.
         if (friendUid in inFlightRows.value) return
-        inFlightRows.value = inFlightRows.value + friendUid
+        inFlightRows.update { it + friendUid }
         rowError.value = null
         try {
             when (val result = repository.remove(friendUid)) {
@@ -158,7 +159,7 @@ class FriendsCoordinator(
         } catch (_: Exception) {
             rowError.value = FriendActionError.Generic
         } finally {
-            inFlightRows.value = inFlightRows.value - friendUid
+            inFlightRows.update { it - friendUid }
         }
     }
 
