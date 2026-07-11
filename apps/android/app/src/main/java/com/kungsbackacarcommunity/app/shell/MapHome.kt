@@ -277,7 +277,10 @@ private fun SearchBarRow(
                         model = avatarUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
                     )
                 }
             }
