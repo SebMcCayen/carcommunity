@@ -14,10 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
@@ -712,9 +710,9 @@ fun AuthenticatedApp(
                                         moreMenuEntries =
                                             profileMenuEntries(
                                                 profileEditCoordinator = profileEditCoordinator,
-                                                friendsRepository = friendsRepository,
                                                 dmRepository = dmRepository,
-                                                blockingRepository = blockingRepository,
+                                                pointsRepository = pointsRepository,
+                                                badgesRepository = badgesRepository,
                                                 partnerApplicationCoordinator =
                                                     partnerApplicationCoordinator,
                                                 onOpenRoute = { route = it },
@@ -753,6 +751,15 @@ fun AuthenticatedApp(
                                         title = stringResource(R.string.shell_socialTitle),
                                         entries =
                                             listOf(
+                                                HubEntry(
+                                                    stringResource(R.string.shell_friendsTitle),
+                                                    Icons.Filled.Groups,
+                                                    if (friendsRepository != null) {
+                                                        { route = ShellRoute.Friends }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
                                                 HubEntry(
                                                     stringResource(R.string.shell_socialEvents),
                                                     Icons.Filled.Event,
@@ -836,12 +843,15 @@ fun AuthenticatedApp(
                                                 mainCarImagePath(garageState)
                                                     ?: profile?.avatarPath,
                                             ),
+                                        // The header image can be the main car's
+                                        // photo or the user's profile picture (or
+                                        // neither), so use a neutral description
+                                        // that stays accurate for both sources and
+                                        // the fallback person icon.
                                         avatarContentDescription =
-                                            stringResource(R.string.profile_avatarAlt),
-                                        friendsLabel = stringResource(R.string.shell_garageFriends),
+                                            stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =
                                             stringResource(R.string.shell_garageVehicles),
-                                        onFriends = { route = ShellRoute.Friends },
                                         onVehicles =
                                             if (garageRepository != null &&
                                                 profile?.activeMember == true
@@ -850,38 +860,6 @@ fun AuthenticatedApp(
                                             } else {
                                                 null
                                             },
-                                        secondaryEntries =
-                                            listOf(
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garageBadges),
-                                                    Icons.Filled.MilitaryTech,
-                                                    if (badgesRepository != null) {
-                                                        { route = ShellRoute.Badges }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garagePoints),
-                                                    Icons.Filled.Stars,
-                                                    if (pointsRepository != null) {
-                                                        { route = ShellRoute.Points }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garageSubscription),
-                                                    Icons.Filled.CardMembership,
-                                                    if (billingRepository != null &&
-                                                        subscriptionVerifier != null
-                                                    ) {
-                                                        { route = ShellRoute.Subscription }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                            ),
                                     )
                             }
                         }
@@ -1402,6 +1380,12 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                onBlockedUsers =
+                    if (blockingRepository != null) {
+                        { onOpenRoute(ShellRoute.Blocked) }
+                    } else {
+                        null
+                    },
                 onPartnerStats =
                     if (partnerStatsRepository != null && partnerStatsEnabled) {
                         { onOpenRoute(ShellRoute.PartnerStats) }
@@ -1466,9 +1450,9 @@ private fun LoadingScreen() {
 @Composable
 private fun profileMenuEntries(
     profileEditCoordinator: ProfileEditCoordinator?,
-    friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
-    blockingRepository: BlockingRepository?,
+    pointsRepository: PointsRepository?,
+    badgesRepository: BadgesRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     onOpenRoute: (ShellRoute) -> Unit,
     onSignOut: () -> Unit,
@@ -1484,15 +1468,6 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_friendsTitle),
-            Icons.Filled.Groups,
-            if (friendsRepository != null) {
-                { onOpenRoute(ShellRoute.Friends) }
-            } else {
-                null
-            },
-        ),
-        HubEntry(
             stringResource(R.string.dm_title),
             Icons.AutoMirrored.Filled.Message,
             if (dmRepository != null) {
@@ -1502,10 +1477,19 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_moreBlocked),
-            Icons.Filled.Block,
-            if (blockingRepository != null) {
-                { onOpenRoute(ShellRoute.Blocked) }
+            stringResource(R.string.profile_points),
+            Icons.Filled.Stars,
+            if (pointsRepository != null) {
+                { onOpenRoute(ShellRoute.Points) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.profile_badges),
+            Icons.Filled.MilitaryTech,
+            if (badgesRepository != null) {
+                { onOpenRoute(ShellRoute.Badges) }
             } else {
                 null
             },

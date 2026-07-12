@@ -473,6 +473,7 @@
     <string name="garage_mainCarBadge">Huvudbil</string>
     <string name="garage_setMainCar">Ange som huvudbil</string>
     <string name="garage_unsetMainCar">Ta bort huvudbil</string>
+    <string name="garage_headerImageAlt">Garagets rubrikbild</string>
     <string name="garage_photoAlt">Fordonsbild</string>
     <string name="garage_photoAdd">Lägg till bild</string>
     <string name="garage_photoChange">Byt bild</string>
