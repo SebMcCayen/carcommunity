@@ -18,6 +18,8 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
+import com.mapbox.maps.plugin.animation.MapAnimationOptions.Companion.mapAnimationOptions
+import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.extension.style.expressions.generated.Expression
 import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
@@ -178,7 +180,7 @@ class MapboxMapSurface : MapSurface {
         val map = mapViewRef ?: return
         val target = lastPoint
         runCatching {
-            map.mapboxMap.setCamera(
+            val destination =
                 cameraOptions {
                     if (target != null) {
                         center(target)
@@ -194,7 +196,13 @@ class MapboxMapSurface : MapSurface {
                     }
                     // Keep the 3D tilt when the user re-centres.
                     pitch(this@MapboxMapSurface.pitch)
-                },
+                }
+            // Smoothly glide to the target rather than jumping instantly, via the
+            // camera-animations plugin. A pleasant ~1s ease reads as intentional
+            // and avoids the disorienting snap of setCamera().
+            map.camera.easeTo(
+                destination,
+                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
             )
         }
     }
@@ -438,6 +446,13 @@ class MapboxMapSurface : MapSurface {
         const val ROUTE_PAD_TOP = 140.0
         const val ROUTE_PAD_SIDE = 80.0
         const val ROUTE_PAD_BOTTOM = 320.0
+
+        /**
+         * Duration (ms) of the smooth camera glide used by [recenter] when the
+         * user taps the recenter button. Short enough to feel responsive, long
+         * enough to read as an intentional animation rather than a jarring snap.
+         */
+        const val RECENTER_ANIMATION_MS = 1000L
 
         /**
          * Import id of the Mapbox Standard style's basemap, used to set config
