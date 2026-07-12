@@ -381,6 +381,13 @@ class MapboxMapSurface : MapSurface {
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }
                 cameraChangeListener = null
+                // Reset the mirrored bearing now that the camera-change listener is
+                // detached. This surface outlives the MapView (it's remembered across
+                // tab switches while the MapView is destroyed/recreated), so without
+                // this the compass would briefly render the stale bearing from the
+                // old map while the recreated map's camera starts at north (0). The
+                // fresh map's camera-change listener re-populates this once it emits.
+                bearingFlow.value = 0f
                 routeLineManager = null
                 destMarkerManager = null
                 // Managers are gone, so a later re-init must redraw the overlay.

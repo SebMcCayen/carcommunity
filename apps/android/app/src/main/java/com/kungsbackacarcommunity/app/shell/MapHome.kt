@@ -193,13 +193,17 @@ fun MapHome(
         mapSurface.Content(Modifier.fillMaxSize())
 
         // Transparent outside-tap catcher, shown only while the search bar is
-        // expanded: a tap anywhere off the bar collapses it back to the round
-        // icon. Sits above the map but below the search row (composed next), so
-        // tapping the bar itself still triggers search rather than collapsing.
-        // A raw pointerInput tap handler (no ripple, no clickable role) plus
-        // clearAndSetSemantics keeps this invisible dismiss layer out of the
-        // accessibility tree — otherwise it exposes an unlabeled focusable
-        // "Button" node over the whole map to TalkBack.
+        // expanded: a tap on the open map area collapses it back to the round
+        // icon. It's composed here, above the map but below every later overlay
+        // (the search row and the right-side floating controls composed next),
+        // so it only catches taps that fall through to the map. Taps on the bar
+        // itself, or on the floating controls, are consumed by those overlays
+        // (composed above the scrim) and don't collapse via this layer — the
+        // controls just do their own thing. A raw pointerInput tap handler (no
+        // ripple, no clickable role) plus clearAndSetSemantics keeps this
+        // invisible dismiss layer out of the accessibility tree — otherwise it
+        // exposes an unlabeled focusable "Button" node over the whole map to
+        // TalkBack.
         if (searchExpanded) {
             Box(
                 modifier =
