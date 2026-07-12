@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.shell
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -67,7 +68,7 @@ class ShellNavTest {
         // destinations the shell navigates to.
         val reachable = ShellRoute.entries.filter { it != ShellRoute.More }
         assertEquals(ShellRoute.entries.size - 1, reachable.size)
-        assert(!reachable.contains(ShellRoute.More))
+        assertFalse(reachable.contains(ShellRoute.More))
     }
 
     // --- live-share toggle decision --------------------------------------

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,13 +41,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -149,6 +154,12 @@ fun MapHome(
                 onSearch = onSearch,
                 onVoiceSearch = onVoiceSearch,
                 onOpenMore = { moreOpen = true },
+                // The profile/account menu popup is composed next to the profile
+                // button (inside SearchBarRow) so the Popup anchors to the
+                // button's real measured bounds instead of a hard-coded offset.
+                moreMenuEntries = moreMenuEntries,
+                moreMenuOpen = moreOpen,
+                onDismissMore = { moreOpen = false },
             )
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
@@ -225,15 +236,8 @@ fun MapHome(
             )
         }
 
-        // Profile/account menu: a transparent Popup anchored under the top-right
-        // profile button. No dimming scrim, so the map stays visible behind it;
-        // tapping outside (or Back) dismisses.
-        if (moreOpen) {
-            ProfileMenuPopup(
-                entries = moreMenuEntries,
-                onDismiss = { moreOpen = false },
-            )
-        }
+        // The profile/account menu popup itself lives inside SearchBarRow,
+        // anchored to the profile button's measured bounds (see ProfileMenuPopup).
     }
 }
 
@@ -247,6 +251,14 @@ const val MAP_HOME_MORE_POPUP_TAG = "map_home_more_popup"
  * rather than navigating to a full-screen hub. `focusable = true` lets an
  * outside tap (or the Back gesture) dismiss it via [onDismiss].
  *
+ * Must be composed next to the profile button (its direct layout parent is the
+ * anchor): the [PopupPositionProvider] then receives the button's real measured
+ * bounds and drops the card just below its bottom edge, end-aligned — so the
+ * position holds up under font scaling, status-bar/display-cutout insets, and
+ * search-row layout changes instead of relying on a hard-coded offset.
+ * `anchorBounds` is already in window coordinates, so no extra insets padding
+ * is applied here (that would double-count the status bar).
+ *
  * Reuses the shared [HubRow] so each row matches the hub landings; unavailable
  * entries (null [HubEntry.onClick]) are omitted. Tapping an entry runs its
  * action — navigating to that destination's full route, or signing out — and
@@ -257,37 +269,56 @@ private fun ProfileMenuPopup(
     entries: List<HubEntry>,
     onDismiss: () -> Unit,
 ) {
+    val density = LocalDensity.current
+    val positionProvider =
+        remember(density) {
+            val gapPx = with(density) { 8.dp.roundToPx() }
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset {
+                    // End-align the card to the button (its trailing edge in the
+                    // current layout direction), clamped so the card never leaves
+                    // the window on narrow screens.
+                    val x =
+                        when (layoutDirection) {
+                            LayoutDirection.Ltr -> anchorBounds.right - popupContentSize.width
+                            LayoutDirection.Rtl -> anchorBounds.left
+                        }.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
+                    val y =
+                        (anchorBounds.bottom + gapPx)
+                            .coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
+                    return IntOffset(x, y)
+                }
+            }
+        }
     Popup(
-        alignment = Alignment.TopEnd,
+        popupPositionProvider = positionProvider,
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
-        // Push the card down below the status bar + search row so it reads as a
-        // dropdown from the profile button rather than a floating panel.
-        Column(
-            modifier =
-                Modifier
-                    .statusBarsPadding()
-                    .padding(top = 64.dp, end = 16.dp, start = 16.dp),
+        Surface(
+            // Cap (rather than fix) the width so the card can shrink on narrow
+            // windows; the Popup itself constrains content to the window size.
+            modifier = Modifier.widthIn(max = 280.dp).testTag(MAP_HOME_MORE_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
         ) {
-            Surface(
-                modifier = Modifier.width(280.dp).testTag(MAP_HOME_MORE_POPUP_TAG),
-                shape = RoundedCornerShape(KccRadius.lg),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp,
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    entries.forEach { entry ->
-                        val onClick = entry.onClick
-                        if (onClick != null) {
-                            HubRow(entry.label, entry.icon) {
-                                onClick()
-                                onDismiss()
-                            }
+                entries.forEach { entry ->
+                    val onClick = entry.onClick
+                    if (onClick != null) {
+                        HubRow(entry.label, entry.icon) {
+                            onClick()
+                            onDismiss()
                         }
                     }
                 }
@@ -416,6 +447,9 @@ private fun SearchBarRow(
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
+    moreMenuEntries: List<HubEntry>,
+    moreMenuOpen: Boolean,
+    onDismissMore: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     Row(
@@ -458,44 +492,59 @@ private fun SearchBarRow(
                 }
             }
         }
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            shadowElevation = 3.dp,
-            onClick = onOpenMore,
-            modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
-        ) {
-            // Always render the AccountCircle fallback so the button never
-            // shows a blank circle: it covers both the window while the Storage
-            // download URL resolves (avatarUrl == null, rememberStorageImageUrl)
-            // and the window while Coil fetches/decodes the bitmap (Coil doesn't
-            // paint anything until the image is ready). Once the avatar bitmap is
-            // displayed, the cropped AsyncImage fills the button and hides it.
-            Box(
-                // No clip needed here: the enclosing Surface(shape = CircleShape)
-                // already crops its content (icon + avatar) to the round button.
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+        // This Box is the popup's anchor: composing ProfileMenuPopup inside it
+        // hands the button's real measured window bounds to the popup's
+        // PopupPositionProvider, so the menu tracks the button wherever the
+        // search row lays it out (font scaling, insets, future layout changes).
+        Box {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                onClick = onOpenMore,
+                modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.AccountCircle,
-                    contentDescription = stringResource(R.string.shell_menu),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(10.dp).size(28.dp),
-                )
-                if (avatarUrl != null) {
-                    // The user's profile picture, drawn on top of the fallback
-                    // icon once the bitmap is ready. Decorative: the fallback Icon
-                    // underneath already labels the button, so the control keeps
-                    // one stable content description in every state.
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                // Always render the AccountCircle fallback so the button never
+                // shows a blank circle: it covers both the window while the Storage
+                // download URL resolves (avatarUrl == null, rememberStorageImageUrl)
+                // and the window while Coil fetches/decodes the bitmap (Coil doesn't
+                // paint anything until the image is ready). Once the avatar bitmap is
+                // displayed, the cropped AsyncImage fills the button and hides it.
+                Box(
+                    // No clip needed here: the enclosing Surface(shape = CircleShape)
+                    // already crops its content (icon + avatar) to the round button.
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AccountCircle,
+                        contentDescription = stringResource(R.string.shell_menu),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(10.dp).size(28.dp),
                     )
+                    if (avatarUrl != null) {
+                        // The user's profile picture, drawn on top of the fallback
+                        // icon once the bitmap is ready. Decorative: the fallback Icon
+                        // underneath already labels the button, so the control keeps
+                        // one stable content description in every state.
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
+            }
+            // Profile/account menu: a transparent Popup (no dimming scrim, the map
+            // stays visible) anchored to this button's measured bounds; tapping
+            // outside (or Back) dismisses.
+            if (moreMenuOpen) {
+                ProfileMenuPopup(
+                    entries = moreMenuEntries,
+                    onDismiss = onDismissMore,
+                )
             }
         }
     }
