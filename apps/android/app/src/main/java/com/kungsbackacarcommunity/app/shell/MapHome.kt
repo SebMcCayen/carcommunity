@@ -92,8 +92,10 @@ const val MAP_HOME_TEST_TAG = "map_home"
  *   rather than toggling sharing directly.
  * @param canShareLive whether the caller may START a session (live-location flag
  *   on AND active member); mirrors the backend member check. When false the
- *   popup shows the membership teaser instead of the duration/start controls,
- *   but Stop / Hide-me-now / details stay reachable.
+ *   popup shows the membership teaser instead of the duration/start controls.
+ *   Stop / Hide-me-now are governed by [isLiveSharing] (not this flag), so they
+ *   appear only while a session is already active; the details entry point
+ *   stays reachable regardless.
  * @param onStartLiveShare start a session for the chosen [LiveSessionDuration]
  *   (wired to LiveLocationCoordinator.start); only offered when [canShareLive].
  * @param onStopLiveShare stop the active session (wired to
