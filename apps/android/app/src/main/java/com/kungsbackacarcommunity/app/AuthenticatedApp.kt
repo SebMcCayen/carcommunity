@@ -291,6 +291,29 @@ fun AuthenticatedApp(
             // Resolved avatar download URL for the map-home top-right profile
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+
+            // Single shared vehicles stream for the whole garage section: the
+            // garage hub header (main-car avatar) and the Cars sub-page both
+            // derive from THIS state, so at most one Firestore snapshot
+            // listener exists while the user is anywhere in the garage section
+            // — and none at all outside it (the flow degrades to a constant
+            // Loading). Because the remember keys don't change when moving
+            // hub ↔ Cars, the listener survives that transition instead of
+            // tearing down and re-attaching. garageReloadKey is bumped by the
+            // Cars page's "try again" affordance to force a re-subscribe after
+            // a listener error.
+            var garageReloadKey by rememberSaveable { mutableStateOf(0) }
+            val inGarageSection =
+                selectedTab == ShellTab.Garage || route == ShellRoute.Garage
+            val garageState by
+                remember(garageRepository, uid, inGarageSection, garageReloadKey) {
+                    if (garageRepository != null && inGarageSection) {
+                        garageRepository.observeGarage(uid)
+                    } else {
+                        flowOf(GarageState.Loading)
+                    }
+                }
+                    .collectAsState(initial = GarageState.Loading)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -505,6 +528,8 @@ fun AuthenticatedApp(
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
+                        garageState = garageState,
+                        onGarageRetry = { garageReloadKey++ },
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
@@ -689,10 +714,12 @@ fun AuthenticatedApp(
                                         // The main car's photo replaces the profile
                                         // picture at the top of the garage; fall back
                                         // to the user's avatar when no main car is set.
+                                        // Derived from the hoisted shared garage
+                                        // stream — no listener of its own.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                rememberMainCarImagePath(garageRepository, uid)
+                                                mainCarImagePath(garageState)
                                                     ?: profile?.avatarPath,
                                             ),
                                         avatarContentDescription =
@@ -894,6 +921,8 @@ private fun RouteHost(
     notificationSettingsCoordinator: NotificationSettingsCoordinator?,
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
+    garageState: GarageState,
+    onGarageRetry: () -> Unit,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
@@ -1166,6 +1195,8 @@ private fun RouteHost(
                     coordinator = garageCoordinator,
                     uid = uid,
                     isActiveMember = profileActiveMember,
+                    garageState = garageState,
+                    onRetry = onGarageRetry,
                     onBack = onClose,
                     mediaUploader = mediaUploader,
                 )
@@ -1364,19 +1395,13 @@ private fun LoadingScreen() {
 
 /**
  * The Cloud Storage path of the user's main car photo, or null when there is no
- * main car (or no garage repository / no photo). Observes the owner's garage so
- * the garage header updates live as the main car (or its photo) changes.
- * [repository] is a stable dependency for the life of the signed-in session, so
- * the early null return keeps a consistent hook shape across recompositions.
+ * main car (or the garage is not loaded / the car has no photo). A pure
+ * derivation over the single hoisted garage stream — it deliberately opens no
+ * listener of its own, so the hub header and the Cars sub-page share one
+ * Firestore snapshot listener for the whole garage section.
  */
-@Composable
-private fun rememberMainCarImagePath(repository: GarageRepository?, uid: String): String? {
-    if (repository == null) return null
-    val state by
-        remember(repository, uid) { repository.observeGarage(uid) }
-            .collectAsState(initial = GarageState.Loading)
-    return (state as? GarageState.Loaded)
+private fun mainCarImagePath(state: GarageState): String? =
+    (state as? GarageState.Loaded)
         ?.vehicles
         ?.firstOrNull { it.isMainCar }
         ?.imagePath
-}

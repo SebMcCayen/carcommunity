@@ -157,7 +157,14 @@ export const setMainVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Veh
         }
       });
     }
-    tx.update(target.ref, { isMainCar: isMain, updatedAt: FieldValue.serverTimestamp() });
+    // Idempotent: only touch the target when its flag actually changes
+    // (legacy docs omit isMainCar — treat missing as false). Re-affirming an
+    // existing state is a no-op that neither writes nor bumps updatedAt; the
+    // other-main sweep above still runs, so the max-1 invariant is restored
+    // even if stray extra mains exist.
+    if ((target.data().isMainCar === true) !== isMain) {
+      tx.update(target.ref, { isMainCar: isMain, updatedAt: FieldValue.serverTimestamp() });
+    }
   });
 
   return { vehicleId };

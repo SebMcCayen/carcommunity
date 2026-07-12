@@ -238,6 +238,24 @@ describe('garage-updateVehicle / garage-deleteVehicle', () => {
     await call('garage-setMainVehicle', { vehicleId: first, isMain: true });
     expect((await adminDb.collection('vehicles').doc(first).get()).data()!.isMainCar).toBe(true);
 
+    // Idempotent no-ops: re-affirming an existing state must not rewrite the
+    // doc (updatedAt stays put) — both setting an already-main vehicle and
+    // clearing one that was never main.
+    const firstUpdatedAt = (
+      await adminDb.collection('vehicles').doc(first).get()
+    ).data()!.updatedAt;
+    const secondUpdatedAt = (
+      await adminDb.collection('vehicles').doc(second).get()
+    ).data()!.updatedAt;
+    await call('garage-setMainVehicle', { vehicleId: first, isMain: true });
+    await call('garage-setMainVehicle', { vehicleId: second, isMain: false });
+    expect((await adminDb.collection('vehicles').doc(first).get()).data()!.updatedAt).toEqual(
+      firstUpdatedAt,
+    );
+    expect((await adminDb.collection('vehicles').doc(second).get()).data()!.updatedAt).toEqual(
+      secondUpdatedAt,
+    );
+
     // Setting a second main clears the first (max 1 per user).
     await call('garage-setMainVehicle', { vehicleId: second, isMain: true });
     expect((await adminDb.collection('vehicles').doc(first).get()).data()!.isMainCar).toBe(false);
