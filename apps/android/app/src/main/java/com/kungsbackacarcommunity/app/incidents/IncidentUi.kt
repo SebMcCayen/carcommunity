@@ -21,8 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
  * Category colours for incidents — the single source of truth used both for the
@@ -80,12 +80,12 @@ fun IncidentTypePickerDialog(
         },
         title = { Text(stringResource(R.string.incidents_reportTitle)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
                 Text(
                     text = stringResource(R.string.incidents_reportSubtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    modifier = Modifier.padding(bottom = KccSpacing.s2),
                 )
                 for (type in IncidentType.entries) {
                     IncidentTypeRow(type = type, onClick = { onPick(type) })
@@ -104,15 +104,15 @@ private fun IncidentTypeRow(type: IncidentType, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.medium)
                 .clickable(onClick = onClick)
-                .padding(vertical = 12.dp)
+                .padding(vertical = KccSpacing.s3)
                 .semantics { contentDescription = label },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4),
     ) {
         Column(
             modifier =
                 Modifier
-                    .size(20.dp)
+                    .size(KccSpacing.s5)
                     .clip(CircleShape)
                     .background(IncidentPalette.color(type)),
         ) {}

@@ -1,5 +1,5 @@
 /**
- * incident.report — member-gated create of a crowd-sourced incident
+ * incidents.report — member-gated create of a crowd-sourced incident
  * (contracts/functions/functions.json: incidents.report).
  *
  * Deployed via the `incidents` export group as `incidents-report`

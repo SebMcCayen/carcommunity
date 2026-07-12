@@ -1,5 +1,5 @@
 /**
- * incident.remove — the reporter (or an admin) clears an incident they no
+ * incidents.remove — the reporter (or an admin) clears an incident they no
  * longer stand behind (contracts/functions/functions.json: incidents.remove).
  *
  * Deployed via the `incidents` export group as `incidents-remove`

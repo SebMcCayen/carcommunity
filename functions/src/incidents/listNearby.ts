@@ -1,5 +1,5 @@
 /**
- * incident.listNearby — read of ACTIVE, unexpired incidents near a point,
+ * incidents.listNearby — read of ACTIVE, unexpired incidents near a point,
  * open to ANY active signed-in user (contracts/functions/functions.json:
  * incidents.listNearby).
  *
