@@ -292,6 +292,13 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Same condition rememberMapSurface uses to pick the real Mapbox
+            // surface over the config-less/CI StubMapSurface. Only the real
+            // surface has a GPS puck, so only it needs the runtime location
+            // permission; the stub never does. Gating on this keeps a tokenless
+            // build (CI, instrumented UI tests) from raising a system
+            // permission prompt on the Map tab.
+            val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
 
             // Runtime fine-location permission for the map home. The Mapbox
             // location component (the blue GPS puck) is enabled at style-load but
@@ -310,8 +317,10 @@ fun AuthenticatedApp(
                     if (granted) mapSurface.refreshLocationComponent()
                 }
             var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
-            LaunchedEffect(selectedTab, mapSurface) {
-                if (selectedTab != ShellTab.Map) return@LaunchedEffect
+            LaunchedEffect(selectedTab, mapSurface, hasMapboxToken) {
+                // Never on the config-less/CI stub: it has no puck and must not
+                // trigger a system location-permission prompt (stub-map contract).
+                if (selectedTab != ShellTab.Map || !hasMapboxToken) return@LaunchedEffect
                 val granted =
                     ContextCompat.checkSelfPermission(
                         context,
