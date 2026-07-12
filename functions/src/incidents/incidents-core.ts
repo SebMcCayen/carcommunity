@@ -219,7 +219,18 @@ const listNearbyInputSchema = z
   })
   .strict();
 
-const removeInputSchema = z.object({ incidentId: z.string().min(1).max(200) }).strict();
+// Firestore-safe document id: reject path separators and the `.`/`..` segments
+// so `incidents.doc(incidentId)` can't throw and turn a bad request into an
+// internal error (mirrors vehicleIdSchema in garage/garage-core.ts).
+const incidentIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .refine((id) => id !== '.' && id !== '..');
+
+const removeInputSchema = z.object({ incidentId: incidentIdSchema }).strict();
 
 export type ReportInput = z.infer<typeof reportInputSchema>;
 export type ListNearbyInput = z.infer<typeof listNearbyInputSchema>;

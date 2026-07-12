@@ -76,6 +76,9 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         .where('geoCell', 'in', cellGroup)
         .where('status', '==', INCIDENT_ACTIVE_STATUS)
         .where('expiresAt', '>', now)
+        // Bound worst-case reads per chunk: the whole response is capped to
+        // MAX_RESULTS, so no single cell-group ever needs to return more.
+        .limit(MAX_RESULTS)
         .get(),
     ),
   );
