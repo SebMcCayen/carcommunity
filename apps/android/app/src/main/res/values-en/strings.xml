@@ -710,7 +710,7 @@
     <string name="shell_garagePoints">Points</string>
     <string name="shell_garageSubscription">Membership</string>
     <string name="shell_friendsTitle">Friends</string>
-    <string name="shell_moreTitle">More</string>
+    <string name="shell_moreTitle">Profile</string>
     <string name="shell_moreProfile">Profile</string>
     <string name="shell_moreNotificationSettings">Notification settings</string>
     <string name="shell_moreBlocked">Blocked users</string>
