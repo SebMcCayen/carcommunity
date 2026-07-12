@@ -14,8 +14,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [GarageRepository] backed by an owner Firestore query on `vehicles` plus the
- * garage-addVehicle / updateVehicle / deleteVehicle callables (europe-west1),
- * Phase 12 slice 13. Guarded ([createIfAvailable]).
+ * garage-addVehicle / updateVehicle / setMainVehicle / deleteVehicle callables
+ * (europe-west1), Phase 12 slice 13. Guarded ([createIfAvailable]).
  */
 class FirebaseGarageRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -52,6 +52,10 @@ class FirebaseGarageRepository private constructor(
         call(UPDATE_VEHICLE, mapOf("vehicleId" to vehicleId, "imagePath" to imagePath))
     }
 
+    override suspend fun setMainVehicle(vehicleId: String, isMain: Boolean) {
+        call(SET_MAIN_VEHICLE, mapOf("vehicleId" to vehicleId, "isMain" to isMain))
+    }
+
     override suspend fun deleteVehicle(vehicleId: String) {
         call(DELETE_VEHICLE, mapOf<String, Any?>("vehicleId" to vehicleId))
     }
@@ -78,6 +82,7 @@ class FirebaseGarageRepository private constructor(
         private const val REGION = "europe-west1"
         private const val ADD_VEHICLE = "garage-addVehicle"
         private const val UPDATE_VEHICLE = "garage-updateVehicle"
+        private const val SET_MAIN_VEHICLE = "garage-setMainVehicle"
         private const val DELETE_VEHICLE = "garage-deleteVehicle"
 
         fun createIfAvailable(context: Context): GarageRepository? {
@@ -99,6 +104,9 @@ private fun VehicleInput.toData(): Map<String, Any?> =
         // Always sent (possibly null) so an edit can CLEAR the description —
         // the backend accepts explicit null for engineDescription.
         "engineDescription" to engineDescription,
+        // "modifications" is stored in the existing free-text `description`
+        // field (garage-core); always sent (possibly null) so an edit can clear.
+        "description" to modifications,
     )
 
 private fun DocumentSnapshot.toVehicle(): Vehicle? {
@@ -114,6 +122,8 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         modelYear = modelYear,
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),
+        modifications = getString("description"),
         imagePath = getString("imagePath"),
+        isMainCar = getBoolean("isMainCar") ?: false,
     )
 }

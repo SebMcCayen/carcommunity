@@ -14,6 +14,7 @@ class GarageCoordinatorTest {
         val added = mutableListOf<VehicleInput>()
         val updated = mutableListOf<Pair<String, VehicleInput>>()
         val deleted = mutableListOf<String>()
+        val mainSet = mutableListOf<Pair<String, Boolean>>()
         var failWith: Exception? = null
 
         override fun observeGarage(uid: String): Flow<GarageState> = flowOf(GarageState.Loading)
@@ -32,13 +33,18 @@ class GarageCoordinatorTest {
             failWith?.let { throw it }
         }
 
+        override suspend fun setMainVehicle(vehicleId: String, isMain: Boolean) {
+            failWith?.let { throw it }
+            mainSet += vehicleId to isMain
+        }
+
         override suspend fun deleteVehicle(vehicleId: String) {
             failWith?.let { throw it }
             deleted += vehicleId
         }
     }
 
-    private val input = VehicleInput("Volvo", "240", 1988, VehiclePowertrain.PETROL, null)
+    private val input = VehicleInput("Volvo", "240", 1988, VehiclePowertrain.PETROL, null, null)
 
     @Test
     fun `save with null id adds and ends Saved`() = runTest {
@@ -88,5 +94,14 @@ class GarageCoordinatorTest {
         val coordinator = GarageCoordinator(repo)
         coordinator.delete("v9")
         assertEquals(listOf("v9"), repo.deleted)
+    }
+
+    @Test
+    fun `setMain calls through with the flag`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = GarageCoordinator(repo)
+        coordinator.setMain("v3", isMain = true)
+        coordinator.setMain("v3", isMain = false)
+        assertEquals(listOf("v3" to true, "v3" to false), repo.mainSet)
     }
 }

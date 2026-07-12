@@ -218,6 +218,61 @@ describe('garage-updateVehicle / garage-deleteVehicle', () => {
     );
   });
 
+  it('marks one main car and enforces at most one per user', async () => {
+    // A fresh member so the max-1 assertions are isolated from other tests.
+    const owner = await createProvisionedUser('garage-main');
+    await adminDb.collection('users').doc(owner.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(owner);
+
+    const first = (
+      (await call('garage-addVehicle', { ...validAdd, model: 'First' })).data as {
+        vehicleId: string;
+      }
+    ).vehicleId;
+    const second = (
+      (await call('garage-addVehicle', { ...validAdd, model: 'Second' })).data as {
+        vehicleId: string;
+      }
+    ).vehicleId;
+
+    await call('garage-setMainVehicle', { vehicleId: first, isMain: true });
+    expect((await adminDb.collection('vehicles').doc(first).get()).data()!.isMainCar).toBe(true);
+
+    // Idempotent no-ops: re-affirming an existing state must not rewrite the
+    // doc (updatedAt stays put) — both setting an already-main vehicle and
+    // clearing one that was never main.
+    const firstUpdatedAt = (
+      await adminDb.collection('vehicles').doc(first).get()
+    ).data()!.updatedAt;
+    const secondUpdatedAt = (
+      await adminDb.collection('vehicles').doc(second).get()
+    ).data()!.updatedAt;
+    await call('garage-setMainVehicle', { vehicleId: first, isMain: true });
+    await call('garage-setMainVehicle', { vehicleId: second, isMain: false });
+    expect((await adminDb.collection('vehicles').doc(first).get()).data()!.updatedAt).toEqual(
+      firstUpdatedAt,
+    );
+    expect((await adminDb.collection('vehicles').doc(second).get()).data()!.updatedAt).toEqual(
+      secondUpdatedAt,
+    );
+
+    // Setting a second main clears the first (max 1 per user).
+    await call('garage-setMainVehicle', { vehicleId: second, isMain: true });
+    expect((await adminDb.collection('vehicles').doc(first).get()).data()!.isMainCar).toBe(false);
+    expect((await adminDb.collection('vehicles').doc(second).get()).data()!.isMainCar).toBe(true);
+
+    // Clearing the flag leaves no main car.
+    await call('garage-setMainVehicle', { vehicleId: second, isMain: false });
+    expect((await adminDb.collection('vehicles').doc(second).get()).data()!.isMainCar).toBe(false);
+  });
+
+  it("returns not-found when setting another member's vehicle as main", async () => {
+    await signInAs(otherMember);
+    expect(
+      await callableErrorCode(call('garage-setMainVehicle', { vehicleId, isMain: true })),
+    ).toBe('functions/not-found');
+  });
+
   it('deletes an owned vehicle together with its image files', async () => {
     const imagePath = `vehicleImages/${member.uid}/${vehicleId}/front.jpg`;
     await adminBucket.file(imagePath).save(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), {

@@ -24,7 +24,11 @@ import kotlinx.coroutines.launch
 
 /**
  * Garage integration route (Phase 12 slice 13): owns the list ↔ form selection
- * and wires the repository flow + coordinator into the stateless screens.
+ * and wires the coordinator into the stateless screens. [garageState] is the
+ * single garage stream hoisted to the shell (shared with the garage hub's
+ * main-car header avatar) so the whole garage section holds exactly one
+ * vehicles snapshot listener; [onRetry] asks that owner to re-subscribe after
+ * a listener error. [repository] remains for the photo-path update callable.
  */
 @Composable
 fun GarageRoute(
@@ -32,6 +36,8 @@ fun GarageRoute(
     coordinator: GarageCoordinator?,
     uid: String,
     isActiveMember: Boolean,
+    garageState: GarageState,
+    onRetry: () -> Unit,
     onBack: () -> Unit,
     mediaUploader: MediaUploader? = null,
     currentYear: Int = Year.now().value,
@@ -39,12 +45,7 @@ fun GarageRoute(
     val scope = rememberCoroutineScope()
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
-    // Bumped by the "try again" affordance to re-subscribe the observe flow.
-    var reloadKey by rememberSaveable { mutableStateOf(0) }
 
-    val garageState by
-        remember(repository, uid, reloadKey) { repository.observeGarage(uid) }
-            .collectAsState(initial = GarageState.Loading)
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
             .collectAsState(initial = VehicleSaveStatus.Idle)
@@ -72,6 +73,7 @@ fun GarageRoute(
                     modelYear = it.modelYear.toString(),
                     powertrain = it.powertrain,
                     engineDescription = it.engineDescription ?: "",
+                    modifications = it.modifications ?: "",
                 )
             } ?: VehicleForm()
 
@@ -138,7 +140,7 @@ fun GarageRoute(
         GarageScreen(
             state = garageState,
             isActiveMember = isActiveMember,
-            onRetry = { reloadKey++ },
+            onRetry = onRetry,
             onAdd = {
                 editingVehicleId = null
                 coordinator?.reset()
@@ -154,6 +156,19 @@ fun GarageRoute(
                     scope.launch {
                         try {
                             c.delete(id)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation // never swallow coroutine cancellation
+                        } catch (failure: Exception) {
+                            // Fire-and-forget: the list observer reflects the result.
+                        }
+                    }
+                }
+            },
+            onSetMain = { id, isMain ->
+                coordinator?.let { c ->
+                    scope.launch {
+                        try {
+                            c.setMain(id, isMain)
                         } catch (cancellation: CancellationException) {
                             throw cancellation // never swallow coroutine cancellation
                         } catch (failure: Exception) {
