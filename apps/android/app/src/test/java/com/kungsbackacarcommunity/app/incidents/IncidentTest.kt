@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.incidents
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -175,6 +176,49 @@ class IncidentReportControllerTest {
         assertEquals(seeded, controller.nearbyIncidents.value)
         assertEquals(1, controller.nearbyIncidents.value.size)
     }
+
+    @Test
+    fun `report propagates cancellation from the location provider instead of NoLocation`() = runTest {
+        val fake = FakeIncidentRepository()
+        val controller = IncidentReportController(fake) { throw CancellationException("cancelled") }
+
+        val thrown = catchCancellation { controller.report(IncidentType.HAZARD) }
+        assertTrue("cancellation must propagate, not become NoLocation", thrown is CancellationException)
+        assertTrue(fake.reported.isEmpty())
+    }
+
+    @Test
+    fun `report propagates cancellation from the backend instead of failing`() = runTest {
+        val fake = FakeIncidentRepository(reportError = CancellationException("cancelled"))
+        val controller = IncidentReportController(fake) { here }
+
+        val thrown = catchCancellation { controller.report(IncidentType.HAZARD) }
+        assertTrue("cancellation must propagate, not become Failed", thrown is CancellationException)
+    }
+
+    @Test
+    fun `refresh propagates cancellation instead of retaining the previous list`() = runTest {
+        val repo =
+            object : IncidentRepository {
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) = Unit
+                override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> =
+                    throw CancellationException("cancelled")
+                override suspend fun remove(incidentId: String) = Unit
+            }
+        val controller = IncidentReportController(repo) { here }
+
+        val thrown = catchCancellation { controller.refresh(here) }
+        assertTrue("cancellation must propagate", thrown is CancellationException)
+    }
+
+    /** Runs [block], returning the thrown [Throwable] (or null) without letting it cancel the test. */
+    private suspend fun catchCancellation(block: suspend () -> Unit): Throwable? =
+        try {
+            block()
+            null
+        } catch (t: Throwable) {
+            t
+        }
 
     @Test
     fun `refreshAroundCurrent is a no-op without a fix`() = runTest {

@@ -66,7 +66,10 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<IncidentVie
     source: fields.source,
     reporterUid: fields.reporterUid,
     note: fields.note,
-    createdAt: now.toISOString(),
+    // The stored createdAt is a server timestamp resolved by Firestore, which
+    // may not equal `now`; returning `now` here would be misleading. Clients
+    // read the authoritative value via listNearby / Firestore reads.
+    createdAt: null,
     expiresAt: expiresAt.toISOString(),
   };
 });

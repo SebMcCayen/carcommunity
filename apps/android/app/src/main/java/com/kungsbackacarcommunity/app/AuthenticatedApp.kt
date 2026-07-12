@@ -770,9 +770,14 @@ fun AuthenticatedApp(
                                         // Crowd-sourced incidents layer: draw the
                                         // fetched markers for everyone, and show the
                                         // report control only when a repository is
-                                        // configured (guarded off in CI/no-Firebase).
+                                        // configured (guarded off in CI/no-Firebase)
+                                        // AND the user is an active member — the
+                                        // `incidents-report` callable is member-gated
+                                        // (requireMemberActor), so non-members must not
+                                        // see an action that would fail on submit.
                                         incidentMarkers = incidentMarkers,
-                                        incidentReportingEnabled = incidentController != null,
+                                        incidentReportingEnabled =
+                                            incidentController != null && profile?.activeMember == true,
                                         onReportIncident = { type ->
                                             incidentController?.let { controller ->
                                                 scope.launch {

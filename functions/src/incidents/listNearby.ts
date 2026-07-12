@@ -63,12 +63,20 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
   const cellChunks = chunk(cells, FIRESTORE_IN_CHUNK);
 
   // One `geoCell in [...]` query per chunk of covering cells, run in parallel.
-  // A single-field `in` needs no composite index; status/expiry/exact-radius
-  // are filtered in memory below. Bounded by the covering cells — never a
-  // full-collection scan.
+  // Bound reads server-side to ACTIVE, still-unexpired docs so we do not pay for
+  // expired/inactive rows in-cell; the exact Haversine radius and a Timestamp-
+  // type guard for expiresAt are still applied in memory below (defense in
+  // depth). The `in` on geoCell + `==` on status + range on expiresAt needs the
+  // composite index in firebase/firestore.indexes.json. Bounded by the covering
+  // cells — never a full-collection scan.
   const snapshots = await Promise.all(
     cellChunks.map((cellGroup) =>
-      db.collection('incidents').where('geoCell', 'in', cellGroup).get(),
+      db
+        .collection('incidents')
+        .where('geoCell', 'in', cellGroup)
+        .where('status', '==', INCIDENT_ACTIVE_STATUS)
+        .where('expiresAt', '>', now)
+        .get(),
     ),
   );
 

@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.incidents
 import android.content.Context
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,12 +49,23 @@ class IncidentReportController(
      * refreshes the nearby list on success so the new marker appears at once.
      */
     suspend fun report(type: IncidentType, note: String? = null): ReportOutcome {
-        val here = runCatching { locationProvider() }.getOrNull() ?: return ReportOutcome.NoLocation
+        // Rethrow cancellation so structured concurrency is honoured; only a real
+        // location failure (permission off / no fix) degrades to NoLocation.
+        val here =
+            try {
+                locationProvider()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            } ?: return ReportOutcome.NoLocation
         return try {
             repository.report(type, here, note)
-            runCatching { refresh(here) }
+            // refresh() handles its own non-cancellation failures internally, so a
+            // failed refresh never fails the report; cancellation still propagates.
+            refresh(here)
             ReportOutcome.Success
-        } catch (cancellation: kotlinx.coroutines.CancellationException) {
+        } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
             ReportOutcome.Failed(error)
@@ -66,8 +78,17 @@ class IncidentReportController(
      * clearing it.
      */
     suspend fun refresh(center: LatLng, radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS) {
-        val result = runCatching { repository.listNearby(center, radiusMeters) }
-        result.getOrNull()?.let { nearbyFlow.value = it }
+        val fetched =
+            try {
+                repository.listNearby(center, radiusMeters)
+            } catch (cancellation: CancellationException) {
+                // Propagate cancellation instead of silently keeping the old list.
+                throw cancellation
+            } catch (_: Throwable) {
+                // Any real fetch failure leaves the previous list intact.
+                return
+            }
+        nearbyFlow.value = fetched
     }
 
     /**
@@ -76,7 +97,14 @@ class IncidentReportController(
      * markers). The nav feature can call this on a cadence as the route moves.
      */
     suspend fun refreshAroundCurrent(radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS) {
-        val here = runCatching { locationProvider() }.getOrNull() ?: return
+        val here =
+            try {
+                locationProvider()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            } ?: return
         refresh(here, radiusMeters)
     }
 
