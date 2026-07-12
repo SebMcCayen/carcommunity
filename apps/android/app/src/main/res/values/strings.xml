@@ -740,6 +740,8 @@
     <string name="shell_layersTraffic">Trafik</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
+    <string name="shell_compass">Återställ till norr</string>
+    <string name="shell_searchExpand">Sök</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

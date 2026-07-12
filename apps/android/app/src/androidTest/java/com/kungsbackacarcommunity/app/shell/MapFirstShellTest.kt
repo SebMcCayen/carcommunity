@@ -85,12 +85,28 @@ class MapFirstShellTest {
         setShell()
         // Map-first home renders (MapSurface stub behind the shell).
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
-        // Prominent "Where to?" search bar.
-        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
-        // Floating controls (broadcast toggle off + layers control + recenter).
+        // The search bar starts COLLAPSED to a round icon button (upper-left), so
+        // the "Where to?" hint is hidden until the button is tapped.
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertExists()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
+        // Floating controls: compass (top) + broadcast toggle off + layers +
+        // recenter.
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()
+    }
+
+    @Test
+    fun searchButton_expandsToFullBar() {
+        setShell()
+        // Collapsed by default: the round search button is shown, the full bar is
+        // not.
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertExists()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
+        // Tapping the round button expands the full-width "Where to?" bar.
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
     }
 
     @Test
