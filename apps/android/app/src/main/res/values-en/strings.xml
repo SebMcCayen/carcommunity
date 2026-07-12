@@ -419,7 +419,6 @@
     <string name="savedDrives_saveSuccess">Drive saved.</string>
     <string name="savedDrives_closeButton">Close</string>
     <string name="savedDrives_memberRequired">An active membership is required to save drives.</string>
-    <string name="savedDrives_recordAction">Record drive</string>
     <string name="savedDrives_recordTitle">Record drive</string>
     <string name="savedDrives_recordStart">Start recording</string>
     <string name="savedDrives_recordStop">Stop recording</string>
