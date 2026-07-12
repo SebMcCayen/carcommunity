@@ -63,8 +63,9 @@ enum class ShellRoute {
      * the profile menu. The constant is retained ONLY for backward-compatible
      * state restore: `rememberSaveable` persists `ShellRoute` by name, so an
      * older build could have saved `route = More`; dropping the constant would
-     * throw during restore. [RouteHost] handles it with a migration-safe branch
-     * that returns to the home hub instead of rendering blank. Do not reuse.
+     * throw during restore. The route host in AuthenticatedApp handles it with a
+     * migration-safe branch that returns to the home hub instead of rendering
+     * blank. Do not reuse.
      */
     More,
 }
