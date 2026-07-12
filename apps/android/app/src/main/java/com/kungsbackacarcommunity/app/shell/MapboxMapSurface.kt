@@ -290,6 +290,7 @@ class MapboxMapSurface : MapSurface {
                     // compass control rotates to keep pointing at true north.
                     val camListener =
                         object : OnCameraChangeListener {
+                            @Suppress("UNUSED_PARAMETER")
                             override fun onCameraChanged(eventData: CameraChangedEventData) {
                                 // Round to the nearest whole degree before emitting:
                                 // the raw camera bearing changes by tiny fractions on

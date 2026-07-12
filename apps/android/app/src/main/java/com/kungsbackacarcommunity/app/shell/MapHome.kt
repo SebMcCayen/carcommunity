@@ -935,7 +935,7 @@ private fun SearchBarRow(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onExpandSearch()
                 },
-                modifier = Modifier.size(48.dp).testTag(MAP_HOME_SEARCH_TAG),
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -961,7 +961,7 @@ private fun SearchBarRow(
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
                 onClick = onOpenMore,
-                modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_MORE_TAG),
             ) {
                 // Always render the AccountCircle fallback so the button never
                 // shows a blank circle: it covers both the window while the Storage
@@ -1071,7 +1071,7 @@ private fun CircleControl(
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             onClick()
         },
-        modifier = modifier.size(48.dp),
+        modifier = modifier.size(KccSpacing.s12),
     ) {
         Box(contentAlignment = Alignment.Center) {
             // Rotate only the glyph (e.g. the compass north-arrow), not the whole
