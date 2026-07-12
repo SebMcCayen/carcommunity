@@ -61,6 +61,7 @@ import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
@@ -598,13 +599,13 @@ private fun SearchBarRow(
     val haptics = LocalHapticFeedback.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         Surface(
             // Keep a >= 48dp touch target even though the visual content is
             // slimmed: heightIn guarantees the accessibility minimum hit area
             // while the inner padding stays small.
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+            modifier = Modifier.weight(1f).heightIn(min = KccSpacing.s12),
             shape = RoundedCornerShape(KccRadius.full),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 3.dp,
@@ -617,9 +618,11 @@ private fun SearchBarRow(
             Row(
                 // fillMaxHeight so the slim content stays centered within the
                 // 48dp minimum touch target rather than pinning to the top.
-                modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier =
+                    Modifier.fillMaxHeight()
+                        .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
