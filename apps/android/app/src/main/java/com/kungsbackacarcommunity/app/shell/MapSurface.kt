@@ -94,6 +94,15 @@ interface MapSurface {
     /** Recentre the camera on the user's position. */
     fun recenter()
 
+    /**
+     * Re-apply the device-location component after the runtime fine-location
+     * permission is granted, so the blue puck appears without recreating the
+     * map (the component is enabled at style-load, before the grant, and the
+     * Mapbox location provider does not retroactively start once permission is
+     * granted). A no-op on the stub, which has no device/GPS.
+     */
+    fun refreshLocationComponent()
+
     /** Set (or clear, with null) the caller's own marker. */
     fun setUserMarker(marker: MapUserMarker?)
 
@@ -143,6 +152,9 @@ class StubMapSurface(
     override fun recenter() {
         recenterCount += 1
     }
+
+    /** No device/GPS on the stub, so there is no location component to refresh. */
+    override fun refreshLocationComponent() = Unit
 
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker

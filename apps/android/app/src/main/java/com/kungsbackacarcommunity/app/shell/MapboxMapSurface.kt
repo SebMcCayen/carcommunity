@@ -118,6 +118,24 @@ class MapboxMapSurface : MapSurface {
         routeOverlayFlow.value = overlay
     }
 
+    override fun refreshLocationComponent() {
+        // Called after the runtime fine-location permission is granted. The puck
+        // was enabled at style-load (before the grant), but the Mapbox location
+        // provider does not retroactively start once permission arrives, so we
+        // re-apply the settings to (re)initialise it and make the puck appear.
+        // The position listener added at style-load stays attached, so the
+        // first-fix auto-centre still fires off this refresh. A no-op until the
+        // map is composed; wrapped defensively like every other native call.
+        val map = mapViewRef ?: return
+        runCatching {
+            map.location.updateSettings {
+                enabled = true
+                pulsingEnabled = true
+                pulsingColor = pulseColorFor(userMarkerFlow.value)
+            }
+        }
+    }
+
     override fun recenter() {
         val map = mapViewRef ?: return
         val target = lastPoint
