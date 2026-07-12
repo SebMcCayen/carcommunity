@@ -36,6 +36,9 @@ fun GarageScreen(
     onDelete: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Sets (true) or clears (false) a car as the user's main car; max 1 enforced
+    // by the backend. No-op wiring in previews/tests when the coordinator is absent.
+    onSetMain: (vehicleId: String, isMain: Boolean) -> Unit = { _, _ -> },
     // Re-invokes the garage load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
 ) {
@@ -85,6 +88,7 @@ fun GarageScreen(
                                 isActiveMember = isActiveMember,
                                 onEdit = { onEdit(vehicle) },
                                 onDelete = { pendingDelete = vehicle.id },
+                                onSetMain = { isMain -> onSetMain(vehicle.id, isMain) },
                             )
                         }
                     }
@@ -127,6 +131,7 @@ private fun VehicleCard(
     isActiveMember: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onSetMain: (isMain: Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -143,6 +148,13 @@ private fun VehicleCard(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
+            if (vehicle.isMainCar) {
+                Text(
+                    text = stringResource(R.string.garage_mainCarBadge),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
                 Text(
                     text = engine,
@@ -150,7 +162,31 @@ private fun VehicleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
+                Text(
+                    text = mods,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (isActiveMember) {
+                // Main-car toggle: filled when this car is the main car (tapping
+                // clears it), outlined otherwise (tapping makes it the main car).
+                if (vehicle.isMainCar) {
+                    Button(
+                        onClick = { onSetMain(false) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.garage_unsetMainCar))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onSetMain(true) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.garage_setMainCar))
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

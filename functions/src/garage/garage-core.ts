@@ -88,6 +88,13 @@ export type UpdateVehicleInput = Partial<AddVehicleInput> & {
 
 export type DeleteVehicleInput = { vehicleId: string };
 
+/**
+ * Sets or clears the caller's "main car" flag on one owned vehicle. The
+ * callable enforces the max-1 constraint transactionally (setting one main
+ * clears any other), so this input only carries the target + the desired flag.
+ */
+export type SetMainVehicleInput = { vehicleId: string; isMain: boolean };
+
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
@@ -151,6 +158,14 @@ export function parseDeleteVehicleInput(data: unknown): ParseResult<DeleteVehicl
   );
 }
 
+export function parseSetMainVehicleInput(data: unknown): ParseResult<SetMainVehicleInput> {
+  return parse(
+    z.object({ vehicleId: vehicleIdSchema, isMain: z.boolean() }).strict(),
+    data,
+    'Expected { vehicleId, isMain }.',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Canonical Cloud Storage paths (backend-domain-mapping.md Storage table)
 // ---------------------------------------------------------------------------
@@ -198,6 +213,9 @@ export function buildVehicleDocument(
     description: input.description ?? null,
     color: input.color ?? null,
     imagePath: null,
+    // Main-car flag (max 1 per user, enforced by garage.setMainVehicle). New
+    // vehicles are never the main car until the owner marks them.
+    isMainCar: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };

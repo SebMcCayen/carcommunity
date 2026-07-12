@@ -253,6 +253,15 @@
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
     },
     {
+      "name": "garage.setMainVehicle",
+      "domain": "garage",
+      "description": "Marks (or clears) one owned vehicle as the caller's main car. At most one main car per user is enforced transactionally — setting one clears any other. Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-setMainVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
       "name": "garage.deleteVehicle",
       "domain": "garage",
       "description": "Deletes an owned vehicle: removes the vehicleImages/{uid}/{vehicleId}/ storage prefix first, then the document. Deployed via grouped export as garage-deleteVehicle (functions/src/garage/manageVehicle.ts).",

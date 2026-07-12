@@ -86,6 +86,7 @@ import com.kungsbackacarcommunity.app.friends.FriendsRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
+import com.kungsbackacarcommunity.app.garage.GarageState
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
@@ -685,10 +686,14 @@ fun AuthenticatedApp(
                                 ShellTab.Garage ->
                                     GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
+                                        // The main car's photo replaces the profile
+                                        // picture at the top of the garage; fall back
+                                        // to the user's avatar when no main car is set.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                profile?.avatarPath,
+                                                rememberMainCarImagePath(garageRepository, uid)
+                                                    ?: profile?.avatarPath,
                                             ),
                                         avatarContentDescription =
                                             stringResource(R.string.profile_avatarAlt),
@@ -1355,4 +1360,23 @@ private fun LoadingScreen() {
             CircularProgressIndicator()
         }
     }
+}
+
+/**
+ * The Cloud Storage path of the user's main car photo, or null when there is no
+ * main car (or no garage repository / no photo). Observes the owner's garage so
+ * the garage header updates live as the main car (or its photo) changes.
+ * [repository] is a stable dependency for the life of the signed-in session, so
+ * the early null return keeps a consistent hook shape across recompositions.
+ */
+@Composable
+private fun rememberMainCarImagePath(repository: GarageRepository?, uid: String): String? {
+    if (repository == null) return null
+    val state by
+        remember(repository, uid) { repository.observeGarage(uid) }
+            .collectAsState(initial = GarageState.Loading)
+    return (state as? GarageState.Loaded)
+        ?.vehicles
+        ?.firstOrNull { it.isMainCar }
+        ?.imagePath
 }

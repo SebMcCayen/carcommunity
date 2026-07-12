@@ -72,6 +72,7 @@ fun GarageRoute(
                     modelYear = it.modelYear.toString(),
                     powertrain = it.powertrain,
                     engineDescription = it.engineDescription ?: "",
+                    modifications = it.modifications ?: "",
                 )
             } ?: VehicleForm()
 
@@ -154,6 +155,19 @@ fun GarageRoute(
                     scope.launch {
                         try {
                             c.delete(id)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation // never swallow coroutine cancellation
+                        } catch (failure: Exception) {
+                            // Fire-and-forget: the list observer reflects the result.
+                        }
+                    }
+                }
+            },
+            onSetMain = { id, isMain ->
+                coordinator?.let { c ->
+                    scope.launch {
+                        try {
+                            c.setMain(id, isMain)
                         } catch (cancellation: CancellationException) {
                             throw cancellation // never swallow coroutine cancellation
                         } catch (failure: Exception) {

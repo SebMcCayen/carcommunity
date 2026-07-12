@@ -30,6 +30,7 @@ import {
   isValidVehicleImagePath,
   parseAddVehicleInput,
   parseDeleteVehicleInput,
+  parseSetMainVehicleInput,
   parseUpdateVehicleInput,
   vehicleImagePrefix,
 } from './garage-core';
@@ -120,6 +121,46 @@ export const updateVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
   });
 
   return { vehicleId: input.vehicleId };
+});
+
+/**
+ * garage.setMainVehicle — marks (or clears) one owned vehicle as the caller's
+ * "main car". At most one main car per user is enforced transactionally: when
+ * setting a car main, any other main car the caller owns is cleared in the same
+ * transaction. The caller's whole garage is capped at 5, so reading the owned
+ * set (by userId, single-field index) is cheap and needs no composite index.
+ * Ownership failures return not-found (no existence probing), matching the
+ * other garage callables.
+ */
+export const setMainVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseSetMainVehicleInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { vehicleId, isMain } = parsed.input;
+
+  const vehiclesRef = db.collection('vehicles');
+  await db.runTransaction(async (tx) => {
+    const ownedSnap = await tx.get(vehiclesRef.where('userId', '==', actor.uid));
+    const target = ownedSnap.docs.find((doc) => doc.id === vehicleId);
+    // not-found for both missing and foreign vehicles (no existence probing).
+    if (!target) {
+      throw new HttpsError('not-found', 'Vehicle not found.');
+    }
+    if (isMain) {
+      // Enforce max-1: clear the flag on every other currently-main vehicle.
+      ownedSnap.docs.forEach((doc) => {
+        if (doc.id !== vehicleId && doc.data().isMainCar === true) {
+          tx.update(doc.ref, { isMainCar: false, updatedAt: FieldValue.serverTimestamp() });
+        }
+      });
+    }
+    tx.update(target.ref, { isMainCar: isMain, updatedAt: FieldValue.serverTimestamp() });
+  });
+
+  return { vehicleId };
 });
 
 export const deleteVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {

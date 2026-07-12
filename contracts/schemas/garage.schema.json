@@ -30,6 +30,10 @@
           "maxLength": 500,
           "description": "Cloud Storage path under vehicleImages/{uid}/{vehicleId}/; null until an image is uploaded."
         },
+        "isMainCar": {
+          "type": "boolean",
+          "description": "True for the caller's single main car (at most one per user, enforced by garage.setMainVehicle). Its photo is shown as the garage header image."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
@@ -43,6 +47,7 @@
         "description",
         "color",
         "imagePath",
+        "isMainCar",
         "createdAt",
         "updatedAt"
       ],

@@ -27,4 +27,5 @@ fun VehicleFieldError.messageRes(): Int =
         VehicleFieldError.MODEL_YEAR_INVALID -> R.string.garage_validationModelYearInvalid
         VehicleFieldError.POWERTRAIN_REQUIRED -> R.string.garage_validationPowertrainRequired
         VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG -> R.string.garage_validationEngineDescriptionTooLong
+        VehicleFieldError.MODIFICATIONS_TOO_LONG -> R.string.garage_validationModificationsTooLong
     }

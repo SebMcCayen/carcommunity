@@ -24,7 +24,7 @@ enum class VehiclePowertrain(val wire: String) {
     }
 }
 
-/** A garage vehicle (vehicles/{id}). */
+/** A garage vehicle / car profile (vehicles/{id}). */
 data class Vehicle(
     val id: String,
     val make: String,
@@ -33,11 +33,23 @@ data class Vehicle(
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
     /**
+     * Free-text "modifications" note for the car profile. Backed by the
+     * vehicles/{id}.description field (garage-core), which is the existing
+     * ≤500-char free-text field — reused here so no new backend field is needed.
+     */
+    val modifications: String? = null,
+    /**
      * Cloud Storage path of the vehicle photo
      * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. The path
      * is stored; a URL is resolved lazily for rendering.
      */
     val imagePath: String? = null,
+    /**
+     * True for the user's single "main car" (at most one per user, enforced by
+     * the garage-setMainVehicle callable). The main car's photo replaces the
+     * profile picture at the top of the garage.
+     */
+    val isMainCar: Boolean = false,
 )
 
 /** Editable form state (modelYear is text while typing). */
@@ -47,6 +59,7 @@ data class VehicleForm(
     val modelYear: String = "",
     val powertrain: VehiclePowertrain? = null,
     val engineDescription: String = "",
+    val modifications: String = "",
 )
 
 /** The validated add/update payload. */
@@ -56,6 +69,7 @@ data class VehicleInput(
     val modelYear: Int,
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
+    val modifications: String?,
 )
 
 /** First validation problem, or null when valid. */
@@ -68,6 +82,7 @@ enum class VehicleFieldError {
     MODEL_YEAR_INVALID,
     POWERTRAIN_REQUIRED,
     ENGINE_DESCRIPTION_TOO_LONG,
+    MODIFICATIONS_TOO_LONG,
 }
 
 object VehicleValidation {
@@ -78,6 +93,9 @@ object VehicleValidation {
     /** Backend bounds (garage-core): make/model ≤80, engineDescription ≤120. */
     const val MAKE_MODEL_MAX_LENGTH = 80
     const val ENGINE_DESCRIPTION_MAX_LENGTH = 120
+
+    /** Backend bound (garage-core VEHICLE_DESCRIPTION_MAX_LENGTH) for modifications. */
+    const val MODIFICATIONS_MAX_LENGTH = 500
 
     /** Returns the first validation error, or null when the form is valid. */
     fun validate(form: VehicleForm, currentYear: Int): VehicleFieldError? {
@@ -97,6 +115,9 @@ object VehicleValidation {
         if (form.engineDescription.trim().length > ENGINE_DESCRIPTION_MAX_LENGTH) {
             return VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG
         }
+        if (form.modifications.trim().length > MODIFICATIONS_MAX_LENGTH) {
+            return VehicleFieldError.MODIFICATIONS_TOO_LONG
+        }
         return null
     }
 
@@ -109,6 +130,7 @@ object VehicleValidation {
             modelYear = form.modelYear.trim().toInt(),
             powertrain = form.powertrain!!,
             engineDescription = form.engineDescription.trim().takeIf { it.isNotEmpty() },
+            modifications = form.modifications.trim().takeIf { it.isNotEmpty() },
         )
     }
 }
