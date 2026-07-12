@@ -90,6 +90,21 @@
       "required": ["vehicleId"],
       "additionalProperties": false
     },
+    "setMainVehicleRequest": {
+      "type": "object",
+      "description": "Input for garage.setMainVehicle. Sets or clears the caller's main-car flag on one owned vehicle; setting also clears the flag on any other currently-main vehicle (max-1 invariant). Re-affirming the existing state is a write-free no-op.",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "isMain": { "type": "boolean" }
+      },
+      "required": ["vehicleId", "isMain"],
+      "additionalProperties": false
+    },
     "deleteVehicleRequest": {
       "type": "object",
       "description": "Input for garage.deleteVehicle. Removes the vehicleImages/{uid}/{vehicleId}/ storage prefix together with the document.",
