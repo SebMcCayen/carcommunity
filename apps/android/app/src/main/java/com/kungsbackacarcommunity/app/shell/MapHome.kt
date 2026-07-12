@@ -17,7 +17,6 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
@@ -106,7 +105,6 @@ fun MapHome(
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
     onRecenter: () -> Unit,
     moreMenuEntries: List<HubEntry>,
@@ -159,7 +157,6 @@ fun MapHome(
             SearchBarRow(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
-                onVoiceSearch = onVoiceSearch,
                 onOpenMore = { moreOpen = true },
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
@@ -591,7 +588,6 @@ private fun ChatPopup(
 private fun SearchBarRow(
     avatarUrl: String?,
     onSearch: () -> Unit,
-    onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
@@ -614,7 +610,7 @@ private fun SearchBarRow(
             },
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -629,13 +625,6 @@ private fun SearchBarRow(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                IconButton(onClick = onVoiceSearch) {
-                    Icon(
-                        imageVector = Icons.Filled.Mic,
-                        contentDescription = stringResource(R.string.shell_voiceSearch),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it
