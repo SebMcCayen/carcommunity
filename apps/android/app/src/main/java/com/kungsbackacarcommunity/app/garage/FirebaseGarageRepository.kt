@@ -14,8 +14,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [GarageRepository] backed by an owner Firestore query on `vehicles` plus the
- * garage-addVehicle / updateVehicle / deleteVehicle callables (europe-west1),
- * Phase 12 slice 13. Guarded ([createIfAvailable]).
+ * garage-addVehicle / updateVehicle / setMainVehicle / deleteVehicle callables
+ * (europe-west1), Phase 12 slice 13. Guarded ([createIfAvailable]).
  */
 class FirebaseGarageRepository private constructor(
     private val firestore: FirebaseFirestore,

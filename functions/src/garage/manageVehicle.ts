@@ -1,11 +1,11 @@
 /**
- * garage.addVehicle / garage.updateVehicle / garage.deleteVehicle —
- * member callables (contracts/functions/functions.json).
+ * garage.addVehicle / garage.updateVehicle / garage.setMainVehicle /
+ * garage.deleteVehicle — member callables (contracts/functions/functions.json).
  *
  * Deployed via the `garage` export group as `garage-addVehicle`,
- * `garage-updateVehicle`, and `garage-deleteVehicle`.
+ * `garage-updateVehicle`, `garage-setMainVehicle`, and `garage-deleteVehicle`.
  *
- * All three require an active member (legacy canAccessGarage: garage
+ * All four require an active member (legacy canAccessGarage: garage
  * features are member-only, including deletion). Vehicles documents are
  * authenticated-readable by design (docs/firebase-data-model.md), so all
  * writes go through these callables: the strict schemas make registration
