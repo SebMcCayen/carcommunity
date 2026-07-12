@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +48,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -76,6 +79,13 @@ const val MAP_HOME_TEST_TAG = "map_home"
  * @param avatarUrl resolved download URL for the signed-in user's profile
  *   picture, shown in the top-right profile button; null falls back to the
  *   generic account icon.
+ * @param moreMenuEntries the profile/account menu items (Profile, Friends,
+ *   Settings, Sign out, …). Tapping the top-right profile button opens these in
+ *   a transparent [Popup] *over* the map (no dimming scrim, so the map stays
+ *   visible) rather than navigating to a full-screen hub. Unavailable entries
+ *   (null [HubEntry.onClick]) are omitted; tapping an available entry runs its
+ *   action (which navigates to that destination, or signs out) and closes the
+ *   popup, and tapping outside the popup dismisses it.
  * @param unreadChatCount number of unread ("missed") chat messages shown as a
  *   badge on the floating chat control. There is no global/community-chat
  *   inbox client-side yet (chat is per-event only), so callers pass 0 as a
@@ -93,7 +103,7 @@ fun MapHome(
     onToggleLiveShare: () -> Unit,
     onLayers: () -> Unit,
     onRecenter: () -> Unit,
-    onOpenMore: () -> Unit,
+    moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
 ) {
@@ -110,6 +120,11 @@ fun MapHome(
     // Chat popup open/close is local UI state: tapping the bubble opens the
     // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
     var chatOpen by remember { mutableStateOf(false) }
+
+    // Profile/account menu open/close is local UI state too: tapping the
+    // top-right profile button opens the menu as a transparent Popup *over* the
+    // map (so the map stays visible), tapping outside it dismisses.
+    var moreOpen by remember { mutableStateOf(false) }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
@@ -133,7 +148,7 @@ fun MapHome(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onVoiceSearch = onVoiceSearch,
-                onOpenMore = onOpenMore,
+                onOpenMore = { moreOpen = true },
             )
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
@@ -209,8 +224,80 @@ fun MapHome(
                 onDismiss = { chatOpen = false },
             )
         }
+
+        // Profile/account menu: a transparent Popup anchored under the top-right
+        // profile button. No dimming scrim, so the map stays visible behind it;
+        // tapping outside (or Back) dismisses.
+        if (moreOpen) {
+            ProfileMenuPopup(
+                entries = moreMenuEntries,
+                onDismiss = { moreOpen = false },
+            )
+        }
     }
 }
+
+/** Test tag on the profile/account menu popup card. */
+const val MAP_HOME_MORE_POPUP_TAG = "map_home_more_popup"
+
+/**
+ * The profile/account menu shown when the top-right profile button is tapped.
+ * Rendered as a [Popup] (not a [Dialog]) so there is no dimming scrim — the map
+ * stays fully visible behind the menu, which is the whole point of overlaying it
+ * rather than navigating to a full-screen hub. `focusable = true` lets an
+ * outside tap (or the Back gesture) dismiss it via [onDismiss].
+ *
+ * Reuses the shared [HubRow] so each row matches the hub landings; unavailable
+ * entries (null [HubEntry.onClick]) are omitted. Tapping an entry runs its
+ * action — navigating to that destination's full route, or signing out — and
+ * then closes the popup.
+ */
+@Composable
+private fun ProfileMenuPopup(
+    entries: List<HubEntry>,
+    onDismiss: () -> Unit,
+) {
+    Popup(
+        alignment = Alignment.TopEnd,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        // Push the card down below the status bar + search row so it reads as a
+        // dropdown from the profile button rather than a floating panel.
+        Column(
+            modifier =
+                Modifier
+                    .statusBarsPadding()
+                    .padding(top = 64.dp, end = 16.dp, start = 16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.width(280.dp).testTag(MAP_HOME_MORE_POPUP_TAG),
+                shape = RoundedCornerShape(KccRadius.lg),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    entries.forEach { entry ->
+                        val onClick = entry.onClick
+                        if (onClick != null) {
+                            HubRow(entry.label, entry.icon) {
+                                onClick()
+                                onDismiss()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Test tag on the top-right profile/account menu button. */
+const val MAP_HOME_MORE_TAG = "map_home_more"
 
 /** Test tag on the floating chat control (bubble). */
 const val MAP_HOME_CHAT_TAG = "map_home_chat"
@@ -377,7 +464,7 @@ private fun SearchBarRow(
             tonalElevation = 3.dp,
             shadowElevation = 3.dp,
             onClick = onOpenMore,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
         ) {
             // Always render the AccountCircle fallback so the button never
             // shows a blank circle: it covers both the window while the Storage

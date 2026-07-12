@@ -520,7 +520,7 @@ fun AuthenticatedApp(
                         feedbackCoordinator = feedbackCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
-                        // gates for the More hub
+                        // gates for sub-routes (e.g. the Settings hub)
                         partnerStatsEnabled =
                             FeatureGate.isAvailable(
                                 flags = flags,
@@ -577,7 +577,23 @@ fun AuthenticatedApp(
                                             )
                                         },
                                         onRecenter = { mapSurface.recenter() },
-                                        onOpenMore = { route = ShellRoute.More },
+                                        // The top-right profile button opens the
+                                        // account menu as a transparent Popup
+                                        // *over* the map (map stays visible)
+                                        // rather than navigating to a full-screen
+                                        // hub. Each entry still navigates to its
+                                        // own full route (or signs out).
+                                        moreMenuEntries =
+                                            profileMenuEntries(
+                                                profileEditCoordinator = profileEditCoordinator,
+                                                friendsRepository = friendsRepository,
+                                                dmRepository = dmRepository,
+                                                blockingRepository = blockingRepository,
+                                                partnerApplicationCoordinator =
+                                                    partnerApplicationCoordinator,
+                                                onOpenRoute = { route = it },
+                                                onSignOut = onSignOut,
+                                            ),
                                         // Placeholder: chat is per-event only
                                         // (EventChatRepository) — there is no
                                         // global/community unread-count source
@@ -909,69 +925,6 @@ private fun RouteHost(
 ) {
     val context = LocalContext.current
     when (route) {
-        ShellRoute.More ->
-            HubScreen(
-                title = stringResource(R.string.shell_moreTitle),
-                entries =
-                    listOf(
-                        HubEntry(
-                            stringResource(R.string.shell_moreProfile),
-                            Icons.Filled.Person,
-                            if (profileEditCoordinator != null) {
-                                { onOpenRoute(ShellRoute.Profile) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_friendsTitle),
-                            Icons.Filled.Groups,
-                            if (friendsRepository != null) {
-                                { onOpenRoute(ShellRoute.Friends) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.dm_title),
-                            Icons.AutoMirrored.Filled.Message,
-                            if (dmRepository != null) {
-                                { onOpenRoute(ShellRoute.Conversations) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreBlocked),
-                            Icons.Filled.Block,
-                            if (blockingRepository != null) {
-                                { onOpenRoute(ShellRoute.Blocked) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_morePartnerApplication),
-                            Icons.Filled.BusinessCenter,
-                            if (partnerApplicationCoordinator != null) {
-                                { onOpenRoute(ShellRoute.PartnerApplication) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreSettings),
-                            Icons.Filled.Settings,
-                            { onOpenRoute(ShellRoute.Settings) },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreSignOut),
-                            Icons.AutoMirrored.Filled.Logout,
-                            onSignOut,
-                        ),
-                    ),
-            )
-
         ShellRoute.Profile -> {
             val saveStatus by
                 (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
@@ -1356,3 +1309,78 @@ private fun LoadingScreen() {
         }
     }
 }
+
+/**
+ * The profile/account menu shown by the map-home top-right button. Rendered as a
+ * transparent [com.kungsbackacarcommunity.app.shell.MapHome] popup over the map
+ * (not a full-screen hub), but the entries themselves still navigate to full
+ * routes via [onOpenRoute] (or sign out). Unavailable entries carry a null
+ * `onClick` and are omitted by the popup / [HubScreen].
+ */
+@Composable
+private fun profileMenuEntries(
+    profileEditCoordinator: ProfileEditCoordinator?,
+    friendsRepository: FriendsRepository?,
+    dmRepository: DmRepository?,
+    blockingRepository: BlockingRepository?,
+    partnerApplicationCoordinator: PartnerApplicationCoordinator?,
+    onOpenRoute: (ShellRoute) -> Unit,
+    onSignOut: () -> Unit,
+): List<HubEntry> =
+    listOf(
+        HubEntry(
+            stringResource(R.string.shell_moreProfile),
+            Icons.Filled.Person,
+            if (profileEditCoordinator != null) {
+                { onOpenRoute(ShellRoute.Profile) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_friendsTitle),
+            Icons.Filled.Groups,
+            if (friendsRepository != null) {
+                { onOpenRoute(ShellRoute.Friends) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.dm_title),
+            Icons.AutoMirrored.Filled.Message,
+            if (dmRepository != null) {
+                { onOpenRoute(ShellRoute.Conversations) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreBlocked),
+            Icons.Filled.Block,
+            if (blockingRepository != null) {
+                { onOpenRoute(ShellRoute.Blocked) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_morePartnerApplication),
+            Icons.Filled.BusinessCenter,
+            if (partnerApplicationCoordinator != null) {
+                { onOpenRoute(ShellRoute.PartnerApplication) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreSettings),
+            Icons.Filled.Settings,
+            { onOpenRoute(ShellRoute.Settings) },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreSignOut),
+            Icons.AutoMirrored.Filled.Logout,
+            onSignOut,
+        ),
+    )

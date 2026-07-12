@@ -24,7 +24,7 @@ enum class ShellTab {
 }
 
 /**
- * Sub-routes reachable from a tab hub or the top-bar "More" menu. Rendered
+ * Sub-routes reachable from a tab hub or the map-home profile menu. Rendered
  * full-screen over the tab shell; each carries its own back affordance that
  * returns to the current tab hub. Enum (not a class) so it survives
  * `rememberSaveable` without a custom Saver.
@@ -55,7 +55,6 @@ enum class ShellRoute {
     Feedback,
     Subscription,
     Settings,
-    More,
 }
 
 /** Outcome of a system-Back press in the shell. */

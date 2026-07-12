@@ -108,6 +108,23 @@ class MapFirstShellTest {
     }
 
     @Test
+    fun profileButton_opensAccountMenuPopupOverMap() {
+        setShell()
+        // The top-right profile/account button is present.
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).assertExists()
+        // Tapping it opens the account menu as a popup (not a full-screen hub).
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertIsDisplayed()
+        // The always-available entries are shown (every repo is null in this
+        // no-Firebase config, so the gated entries are omitted).
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSignOut)).assertIsDisplayed()
+        // The whole point: the map stays visible behind the popup (transparent
+        // Popup, no dimming scrim, no navigation to a separate page).
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    @Test
     fun bottomNav_switchesTabsAndBack() {
         setShell()
         // All five tabs are present. Icon-only bottom nav: labels are null and the
