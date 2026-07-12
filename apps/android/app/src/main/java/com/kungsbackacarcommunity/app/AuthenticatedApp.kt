@@ -139,6 +139,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
+import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
@@ -209,6 +210,7 @@ fun AuthenticatedApp(
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     pushRegistrationCoordinator: PushRegistrationCoordinator?,
+    loginRecordCoordinator: LoginRecordCoordinator?,
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -219,6 +221,13 @@ fun AuthenticatedApp(
     // uid; failures stay inside the coordinator and never block the UI.
     LaunchedEffect(uid, pushRegistrationCoordinator) {
         pushRegistrationCoordinator?.registerCurrentToken()
+    }
+
+    // Sign-in-time last-login recording: best-effort auth-recordLogin, once per
+    // signed-in uid, keeping users/{uid}.lastLoginAt fresh for the inactive-
+    // account sweep. Failures stay inside the coordinator and never block the UI.
+    LaunchedEffect(uid, loginRecordCoordinator) {
+        loginRecordCoordinator?.recordLogin()
     }
 
     val profileFlow =

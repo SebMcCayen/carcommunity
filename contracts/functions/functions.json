@@ -19,6 +19,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "auth.recordLogin",
+      "domain": "auth",
+      "description": "Stamps users/{uid}.lastLoginAt = serverTimestamp() on each successful sign-in (trusted server write; lastLoginAt is omitted from the users owner-write whitelist so clients can never set it). The Firestore field — not Firebase Auth's non-queryable lastSignInTime — is the queryable, admin-displayable last-activity source consumed by the scheduled account-cleanupInactive sweep. Member-gated: a non-member never records a lastLoginAt and is covered by the sweep's lastLoginAt ?? createdAt fallback. Idempotent (a repeat call refreshes the timestamp); the Android client calls it best-effort after auth completes. Deployed via grouped export as auth-recordLogin (functions/src/auth/recordLogin.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (users — last login / inactivity)"
+    },
+    {
       "name": "subscription.verify",
       "domain": "subscription",
       "description": "Receipt-verification entry point (authenticated). FAILS CLOSED with failed-precondition until config/subscriptionProviders.{apple|google}.enabled is set with real store credentials (end-of-MVP console setup; the legacy endpoint was itself a placeholder) - no code path grants entitlement from an unverified receipt. Raw purchase tokens are hashed (SHA-256) immediately and never stored, logged, or returned. Deployed via grouped export as subscription-verify (functions/src/subscription/verify.ts).",

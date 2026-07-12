@@ -13,6 +13,7 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { handleHealth } from './health';
 import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
+import { recordLogin } from './auth/recordLogin';
 import { restoreAccess } from './admin/restoreAccess';
 import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
@@ -61,6 +62,7 @@ import {
 } from './groupDrive/participants';
 import { deleteAccount } from './account/deleteAccount';
 import { purgeDeleted } from './account/scheduled';
+import { cleanupInactive } from './account/inactivityCleanup';
 import { submitReport } from './diagnostics/submitReport';
 import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
@@ -109,6 +111,10 @@ export const health = onRequest(
 export const auth = {
   completeOnboarding,
   onUserCreate,
+  // Records users/{uid}.lastLoginAt (serverTimestamp) on each sign-in — the
+  // queryable, admin-displayable last-activity source used by the scheduled
+  // account-cleanupInactive sweep.
+  recordLogin,
 };
 
 /**
@@ -395,6 +401,12 @@ export const feedback = {
 export const account = {
   deleteAccount,
   purgeDeleted,
+  // Daily inactive-account sweep (account lifecycle): warns accounts inactive
+  // >= 11 months (email + in-app; email degrades to a no-op until wired) and,
+  // ONLY when the hard-delete gate is open (config flag AND email available),
+  // hard-deletes them 30 days later by reusing the account-deletion routine.
+  // Deletes NOTHING today — the gate is closed until email works.
+  cleanupInactive,
 };
 
 /**
