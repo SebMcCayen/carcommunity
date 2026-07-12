@@ -729,6 +729,12 @@
     <string name="shell_chatClose">Stäng chatt</string>
     <string name="shell_chatEmpty">Du är ikapp — inga nya meddelanden.</string>
     <string name="shell_chatComingSoon">Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.</string>
+    <string name="shell_layersButton">Kartlager</string>
+    <string name="shell_layersTitle">Kartlager</string>
+    <string name="shell_layersClose">Stäng kartlager</string>
+    <string name="shell_layersTraffic">Trafik</string>
+    <string name="shell_layersNightMode">Nattläge</string>
+    <string name="shell_layers3d">3D-byggnader</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

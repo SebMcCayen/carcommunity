@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +49,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -91,7 +95,6 @@ fun MapHome(
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
-    onLayers: () -> Unit,
     onRecenter: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
@@ -99,6 +102,8 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
+    val mapMode by mapSurface.mapMode.collectAsState()
+    val is3d by mapSurface.is3d.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
@@ -110,6 +115,10 @@ fun MapHome(
     // Chat popup open/close is local UI state: tapping the bubble opens the
     // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
     var chatOpen by remember { mutableStateOf(false) }
+
+    // Map-layers popup open/close is local UI state: tapping the layers control
+    // opens the transparent toggle sheet, tapping outside it dismisses it.
+    var layersOpen by remember { mutableStateOf(false) }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
@@ -166,27 +175,28 @@ fun MapHome(
                     if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
                 onClick = onToggleLiveShare,
             )
-            // 2. Traffic-overlay toggle — highlighted when the congestion
-            //    layer is on (visible only on the real Mapbox surface).
+            // 2. Map-layers control — opens the transparent layers popup
+            //    (traffic / day-night / 3D toggles). Highlighted while any of
+            //    those non-default layers is active, so an enabled overlay is
+            //    still discoverable from the collapsed control.
+            val layersActive = trafficOn || mapMode == MapMode.Night || !is3d
             CircleControl(
                 icon = Icons.Filled.Layers,
-                contentDescription =
-                    stringResource(
-                        if (trafficOn) R.string.shell_trafficOn else R.string.shell_trafficOff,
-                    ),
+                contentDescription = stringResource(R.string.shell_layersButton),
                 containerColor =
-                    if (trafficOn) {
+                    if (layersActive) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surface
                     },
                 contentColor =
-                    if (trafficOn) {
+                    if (layersActive) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
-                onClick = onLayers,
+                onClick = { layersOpen = true },
+                modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
             )
             // 3. Recenter / my-location — calls MapSurface.recenter().
             CircleControl(
@@ -209,6 +219,139 @@ fun MapHome(
                 onDismiss = { chatOpen = false },
             )
         }
+
+        // Map-layers overlay: a transparent popup (no scrim) so the map stays
+        // visible behind it while the user flips the traffic / day-night / 3D
+        // toggles. Each toggle reads and writes the surface state live.
+        if (layersOpen) {
+            MapLayersPopup(
+                trafficOn = trafficOn,
+                nightMode = mapMode == MapMode.Night,
+                is3d = is3d,
+                onTrafficChange = { mapSurface.setTrafficEnabled(it) },
+                onNightModeChange = {
+                    mapSurface.setMapMode(if (it) MapMode.Night else MapMode.Day)
+                },
+                on3dChange = { mapSurface.set3dEnabled(it) },
+                onDismiss = { layersOpen = false },
+            )
+        }
+    }
+}
+
+/** Test tag on the floating map-layers control. */
+const val MAP_HOME_LAYERS_TAG = "map_home_layers"
+
+/** Test tag on the map-layers popup card. */
+const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
+
+/**
+ * The transparent map-layers popup shown when the layers control is tapped.
+ * Rendered as a [Popup] (not a [Dialog]) so there is NO dimming scrim and the
+ * live map stays fully visible behind the toggle card; tapping outside the card
+ * or pressing Back dismisses it (focusable popup). Each row reflects the current
+ * surface state and updates it live:
+ * - Traffic — the congestion overlay ([MapSurface.setTrafficEnabled]).
+ * - Night mode — the Standard style's day/night light preset
+ *   ([MapSurface.setMapMode]).
+ * - 3D buildings — the tilted 3D vs flat 2D camera ([MapSurface.set3dEnabled]).
+ *
+ * The visible effects (traffic lines, light preset, tilt) only render on the
+ * real token-provisioned Mapbox surface; on the stub the switches still move so
+ * the wiring is exercised without a device.
+ */
+@Composable
+private fun MapLayersPopup(
+    trafficOn: Boolean,
+    nightMode: Boolean,
+    is3d: Boolean,
+    onTrafficChange: (Boolean) -> Unit,
+    onNightModeChange: (Boolean) -> Unit,
+    on3dChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                Modifier
+                    .padding(16.dp)
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .testTag(MAP_HOME_LAYERS_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Layers,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(R.string.shell_layersTitle),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.shell_layersClose),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                LayerToggleRow(
+                    label = stringResource(R.string.shell_layersTraffic),
+                    checked = trafficOn,
+                    onCheckedChange = onTrafficChange,
+                )
+                LayerToggleRow(
+                    label = stringResource(R.string.shell_layersNightMode),
+                    checked = nightMode,
+                    onCheckedChange = onNightModeChange,
+                )
+                LayerToggleRow(
+                    label = stringResource(R.string.shell_layers3d),
+                    checked = is3d,
+                    onCheckedChange = on3dChange,
+                )
+            }
+        }
+    }
+}
+
+/** A single labelled toggle row in the map-layers popup. */
+@Composable
+private fun LayerToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -461,6 +604,7 @@ private fun CircleControl(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
@@ -475,7 +619,7 @@ private fun CircleControl(
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             onClick()
         },
-        modifier = Modifier.size(48.dp),
+        modifier = modifier.size(48.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(imageVector = icon, contentDescription = contentDescription)
