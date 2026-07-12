@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -141,8 +142,10 @@ class NavigationSearchScreenTest {
 
         composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).performClick()
 
-        assert(started == suggestion.point to suggestion.name) {
-            "Expected onStartNavigation with the picked destination, got $started"
-        }
+        assertEquals(
+            "Expected onStartNavigation with the picked destination, got $started",
+            suggestion.point to suggestion.name,
+            started,
+        )
     }
 }

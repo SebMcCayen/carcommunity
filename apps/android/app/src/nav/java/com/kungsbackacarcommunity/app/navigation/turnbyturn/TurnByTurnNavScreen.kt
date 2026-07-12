@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -227,8 +229,13 @@ fun TurnByTurnNavScreen(
             }
         MapboxNavigationApp.registerObserver(observer)
         onDispose {
-            MapboxNavigationApp.unregisterObserver(observer)
+            // Order matters: detach the app FIRST so this lifecycle owner leaving
+            // fires the observer's onDetached → TurnByTurnEngine.detach() (which
+            // unregisters the route/location/progress observers AND stops the trip
+            // session). Unregistering the observer before detaching would suppress
+            // onDetached and leak those observers + the running trip session.
             MapboxNavigationApp.detach(lifecycleOwner)
+            MapboxNavigationApp.unregisterObserver(observer)
             engine.cancel()
             mapView.onDestroy()
         }
@@ -259,7 +266,17 @@ fun TurnByTurnNavScreen(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                    // The exit bar is the top-of-screen back affordance: tapping it
+                    // (arrow or label) leaves navigation, same as the back gesture
+                    // and the bottom "Exit" button. Role.Button + the exit label
+                    // make it an announced, activatable control for a11y.
+                    modifier = Modifier
+                        .clickable(
+                            onClickLabel = stringResource(R.string.turnByTurn_exit),
+                            role = Role.Button,
+                            onClick = onExit,
+                        )
+                        .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -459,6 +476,13 @@ private class TurnByTurnEngine(
     private var firstFixReceived = false
     private var routeRequested = false
 
+    // Bounded route-request retries. A failed request resets routeRequested to
+    // false; the next location fix retries (with the explicit origin if we have
+    // one, else the current fix). We cap total attempts so a persistently failing
+    // route doesn't spam the routing service on every ~1 Hz location tick.
+    private var routeRequestAttempts = 0
+    private val maxRouteRequestAttempts = 3
+
     init {
         val density = mapView.resources.displayMetrics.density
         // Extra bottom room for the progress bar; top room for the maneuver banner.
@@ -524,9 +548,18 @@ private class TurnByTurnEngine(
                             NavigationCameraTransitionOptions.Builder().maxDuration(0).build(),
                     )
                 }
-                // If no origin was supplied, request the route from the first fix.
-                if (!routeRequested && origin == null) {
-                    requestRoute(Point.fromLngLat(enhanced.longitude, enhanced.latitude))
+                // Request (or retry) the route on a location fix while none is in
+                // flight and we're under the attempt cap. This covers BOTH the
+                // no-origin case (first request comes from the first fix) AND
+                // retrying a failed explicit-origin request — which attach()'s
+                // immediate request can't retry on its own. We prefer the explicit
+                // origin when set, else the current fix, so a route from the
+                // intended start point is preserved across retries.
+                if (!routeRequested && routeRequestAttempts < maxRouteRequestAttempts) {
+                    val originPoint =
+                        origin?.let { Point.fromLngLat(it.longitude, it.latitude) }
+                            ?: Point.fromLngLat(enhanced.longitude, enhanced.latitude)
+                    requestRoute(originPoint)
                 }
             }
         }
@@ -599,6 +632,11 @@ private class TurnByTurnEngine(
         mapboxNavigation.unregisterRoutesObserver(routesObserver)
         mapboxNavigation.unregisterLocationObserver(locationObserver)
         mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
+        // Mirror attach()'s startTripSession(): stop the live GPS trip session so
+        // exiting the screen ends location updates instead of leaving them running
+        // (battery/GPS drain). stopTripSession() is a safe no-op if not started, so
+        // detach() stays idempotent.
+        runCatching { mapboxNavigation.stopTripSession() }
         this.mapboxNavigation = null
     }
 
@@ -611,6 +649,7 @@ private class TurnByTurnEngine(
         val nav = mapboxNavigation ?: return
         if (routeRequested) return
         routeRequested = true
+        routeRequestAttempts++
         val destinationPoint = Point.fromLngLat(destination.longitude, destination.latitude)
         nav.requestRoutes(
             RouteOptions.builder()
@@ -626,7 +665,10 @@ private class TurnByTurnEngine(
                     reasons: List<RouterFailure>,
                     routeOptions: RouteOptions,
                 ) {
-                    // Allow a retry on the next fix if the origin-based request failed.
+                    // Free the in-flight guard so the next location fix retries
+                    // (bounded by maxRouteRequestAttempts). Works for both the
+                    // explicit-origin and current-location cases; routeRequestAttempts
+                    // was already incremented when this attempt was issued.
                     routeRequested = false
                 }
 

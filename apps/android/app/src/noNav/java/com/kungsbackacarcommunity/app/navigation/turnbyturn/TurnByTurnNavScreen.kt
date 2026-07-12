@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.navigation.LatLng
@@ -69,7 +68,7 @@ fun TurnByTurnNavScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            Button(onClick = onExit, modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = onExit, modifier = Modifier.padding(top = KccSpacing.s2)) {
                 Text(stringResource(R.string.turnByTurn_exit))
             }
         }
