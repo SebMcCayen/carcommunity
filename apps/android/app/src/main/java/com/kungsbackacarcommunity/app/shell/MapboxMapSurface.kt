@@ -94,12 +94,22 @@ class MapboxMapSurface : MapSurface {
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
+    private val incidentMarkersFlow = MutableStateFlow<List<MapIncidentMarker>>(emptyList())
+    override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
+        incidentMarkersFlow.asStateFlow()
+
     // Live references, held only while the map is composed (cleared in
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
+    private var incidentMarkerManager: CircleAnnotationManager? = null
+    // The incident markers currently drawn, so a recomposition only clears and
+    // redraws them when the set ACTUALLY changes (unrelated recompositions must
+    // not flicker the layer). Reset to null whenever the manager is (re)created
+    // or torn down so a cleared-then-recreated map always redraws.
+    private var lastAppliedIncidents: List<MapIncidentMarker>? = null
 
     // The overlay currently drawn on the map, so the recomposition-driven update
     // block only clears/recreates the annotations and re-fits the camera when the
@@ -158,6 +168,12 @@ class MapboxMapSurface : MapSurface {
         routeOverlayFlow.value = overlay
     }
 
+    override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
+        // The Content update lambda observes this flow and (re)draws the incident
+        // circles when the set changes, so publishing the value is enough.
+        incidentMarkersFlow.value = markers
+    }
+
     override fun refreshLocationComponent() {
         // Called after the runtime fine-location permission is granted. The puck
         // was enabled at style-load (before the grant), but the Mapbox location
@@ -212,6 +228,7 @@ class MapboxMapSurface : MapSurface {
         val trafficOn by trafficFlow.collectAsState()
         val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
+        val incidents by incidentMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -287,6 +304,15 @@ class MapboxMapSurface : MapSurface {
                             lastAppliedOverlay = null
                             applyRouteOverlayIfChanged(this, routeOverlayFlow.value)
                         }
+                        // Incident markers manager (the shared incidents layer),
+                        // created once the style is ready. Drawn from the current
+                        // flow value so markers fetched while the style was still
+                        // loading are rendered (not lost).
+                        runCatching {
+                            incidentMarkerManager = annotations.createCircleAnnotationManager()
+                            lastAppliedIncidents = null
+                            applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
+                        }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
                         // hidden without error.
@@ -322,6 +348,9 @@ class MapboxMapSurface : MapSurface {
                 // or re-fit the camera. A no-op until the managers exist (style
                 // loaded).
                 runCatching { applyRouteOverlayIfChanged(mapView, overlay) }
+                // (Re)draw the incident markers only when the set actually
+                // changes; a no-op until the manager exists (style loaded).
+                runCatching { applyIncidentMarkersIfChanged(incidents) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -333,8 +362,11 @@ class MapboxMapSurface : MapSurface {
                 }
                 routeLineManager = null
                 destMarkerManager = null
-                // Managers are gone, so a later re-init must redraw the overlay.
+                incidentMarkerManager = null
+                // Managers are gone, so a later re-init must redraw the overlay
+                // and the incident markers.
                 lastAppliedOverlay = null
+                lastAppliedIncidents = null
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
@@ -356,6 +388,43 @@ class MapboxMapSurface : MapSurface {
         if (overlay == lastAppliedOverlay) return
         applyRouteOverlay(mapView, overlay)
         lastAppliedOverlay = overlay
+    }
+
+    /**
+     * Redraws the incident markers only when the set differs from the last one
+     * applied, so unrelated recompositions (traffic toggle, route redraw,
+     * live-sharing pulse) don't clear/redraw the whole incidents layer. The
+     * cache is reset to null wherever the manager is (re)created or torn down.
+     */
+    private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
+        if (markers == lastAppliedIncidents) return
+        applyIncidentMarkers(markers)
+        lastAppliedIncidents = markers
+    }
+
+    /**
+     * Clears and redraws the incident circles (one coloured circle per marker).
+     * A no-op until the manager exists (style loaded). Every native call is
+     * wrapped defensively so a partial/failed draw degrades rather than crashing.
+     *
+     * On-device verification note: annotation rendering runs only on a
+     * token-provisioned device, so it is verified on device.
+     */
+    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>) {
+        val manager = incidentMarkerManager ?: return
+        runCatching { manager.deleteAll() }
+        for (marker in markers) {
+            runCatching {
+                manager.create(
+                    CircleAnnotationOptions()
+                        .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                        .withCircleRadius(INCIDENT_MARKER_RADIUS)
+                        .withCircleColor(marker.colorArgb)
+                        .withCircleStrokeWidth(INCIDENT_MARKER_STROKE)
+                        .withCircleStrokeColor(INCIDENT_MARKER_STROKE_COLOR),
+                )
+            }
+        }
     }
 
     /**
@@ -440,6 +509,12 @@ class MapboxMapSurface : MapSurface {
         const val DEST_MARKER_RADIUS = 9.0
         const val DEST_MARKER_STROKE = 2.0
         const val DEST_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+
+        // Incident circles: the per-marker fill colour is supplied by the host
+        // (category colour); a white stroke keeps them legible on any basemap.
+        const val INCIDENT_MARKER_RADIUS = 8.0
+        const val INCIDENT_MARKER_STROKE = 2.0
+        const val INCIDENT_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
 
         // Camera-fit padding (dp; multiplied by display density → px before use):
         // extra room at the bottom for the summary sheet.
