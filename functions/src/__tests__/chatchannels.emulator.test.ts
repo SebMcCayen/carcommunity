@@ -199,6 +199,17 @@ describe('communityChat callables + rules', () => {
       messageId: string;
     };
     expect(posted.messageId).toBeTruthy();
+
+    // TTL: the stored message carries expireAt ≈ createdAt + 120 days.
+    const storedComm = (
+      await adminDb.collection('communityChat').doc('global').collection('messages').doc(posted.messageId).get()
+    ).data()!;
+    const commTtlDays =
+      (storedComm.expireAt.toDate().getTime() - storedComm.createdAt.toDate().getTime()) /
+      (24 * 60 * 60 * 1000);
+    expect(commTtlDays).toBeGreaterThan(119.9);
+    expect(commTtlDays).toBeLessThan(120.1);
+
     await call('communityChat-post', { text: `${marker} two` });
 
     // Bob (a different active member) reads the shared channel and sees Alice's
@@ -276,6 +287,16 @@ describe('convoyChat callables + rules', () => {
       messageId: string;
     };
     expect(posted.messageId).toBeTruthy();
+
+    // TTL: the stored convoy message carries expireAt ≈ createdAt + 30 days.
+    const storedConvoy = (
+      await adminDb.collection('convoyChats').doc(convoyId).collection('messages').doc(posted.messageId).get()
+    ).data()!;
+    const convoyTtlDays =
+      (storedConvoy.expireAt.toDate().getTime() - storedConvoy.createdAt.toDate().getTime()) /
+      (24 * 60 * 60 * 1000);
+    expect(convoyTtlDays).toBeGreaterThan(29.9);
+    expect(convoyTtlDays).toBeLessThan(30.1);
 
     // Accepted member can post + list.
     await signInAs(accepted);
