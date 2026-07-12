@@ -72,7 +72,7 @@ fun SettingsScreen(
         }
         if (onBlockedUsers != null) {
             HubRow(
-                stringResource(R.string.shell_moreBlocked),
+                stringResource(R.string.settings_blockedUsers),
                 Icons.Filled.Block,
                 onBlockedUsers,
             )

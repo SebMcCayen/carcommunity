@@ -1429,7 +1429,7 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_garagePoints),
+            stringResource(R.string.profile_points),
             Icons.Filled.Stars,
             if (pointsRepository != null) {
                 { onOpenRoute(ShellRoute.Points) }
@@ -1438,7 +1438,7 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_garageBadges),
+            stringResource(R.string.profile_badges),
             Icons.Filled.MilitaryTech,
             if (badgesRepository != null) {
                 { onOpenRoute(ShellRoute.Badges) }
