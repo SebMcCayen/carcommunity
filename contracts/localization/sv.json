@@ -787,8 +787,8 @@
     "mapPlaceholder": "Karta",
     "userMarkerLabel": "Du",
     "participantsSharing": "%1$d delar",
-    "liveShareOn": "Delar liveplats",
-    "liveShareOff": "Dela liveplats",
+    "liveShareOn": "Liveplats, delar",
+    "liveShareOff": "Liveplats",
     "recenter": "Centrera",
     "menu": "Meny",
     "tabMap": "Karta",
@@ -838,7 +838,10 @@
     "layersClose": "Stäng kartlager",
     "layersTraffic": "Trafik",
     "layersNightMode": "Nattläge",
-    "layers3d": "3D-byggnader"
+    "layers3d": "3D-byggnader",
+    "liveTitle": "Liveplats",
+    "liveClose": "Stäng liveplats",
+    "liveDetails": "Fler alternativ"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

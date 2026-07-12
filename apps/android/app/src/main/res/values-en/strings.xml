@@ -687,8 +687,8 @@
     <string name="shell_mapPlaceholder">Map</string>
     <string name="shell_userMarkerLabel">You</string>
     <string name="shell_participantsSharing">%1$d sharing</string>
-    <string name="shell_liveShareOn">Sharing live location</string>
-    <string name="shell_liveShareOff">Share live location</string>
+    <string name="shell_liveShareOn">Live location, sharing</string>
+    <string name="shell_liveShareOff">Live location</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_menu">Menu</string>
     <string name="shell_tabMap">Map</string>
@@ -739,6 +739,9 @@
     <string name="shell_layersTraffic">Traffic</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_liveTitle">Live location</string>
+    <string name="shell_liveClose">Close live location</string>
+    <string name="shell_liveDetails">More options</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>

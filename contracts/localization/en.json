@@ -787,8 +787,8 @@
     "mapPlaceholder": "Map",
     "userMarkerLabel": "You",
     "participantsSharing": "%1$d sharing",
-    "liveShareOn": "Sharing live location",
-    "liveShareOff": "Share live location",
+    "liveShareOn": "Live location, sharing",
+    "liveShareOff": "Live location",
     "recenter": "Recenter",
     "menu": "Menu",
     "tabMap": "Map",
@@ -838,7 +838,10 @@
     "layersClose": "Close map layers",
     "layersTraffic": "Traffic",
     "layersNightMode": "Night mode",
-    "layers3d": "3D buildings"
+    "layers3d": "3D buildings",
+    "liveTitle": "Live location",
+    "liveClose": "Close live location",
+    "liveDetails": "More options"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",

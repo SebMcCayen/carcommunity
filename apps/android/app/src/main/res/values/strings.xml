@@ -687,8 +687,8 @@
     <string name="shell_mapPlaceholder">Karta</string>
     <string name="shell_userMarkerLabel">Du</string>
     <string name="shell_participantsSharing">%1$d delar</string>
-    <string name="shell_liveShareOn">Delar liveplats</string>
-    <string name="shell_liveShareOff">Dela liveplats</string>
+    <string name="shell_liveShareOn">Liveplats, delar</string>
+    <string name="shell_liveShareOff">Liveplats</string>
     <string name="shell_recenter">Centrera</string>
     <string name="shell_menu">Meny</string>
     <string name="shell_tabMap">Karta</string>
@@ -739,6 +739,9 @@
     <string name="shell_layersTraffic">Trafik</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
+    <string name="shell_liveTitle">Liveplats</string>
+    <string name="shell_liveClose">Stäng liveplats</string>
+    <string name="shell_liveDetails">Fler alternativ</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>
