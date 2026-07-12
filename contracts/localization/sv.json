@@ -833,7 +833,13 @@
     "chatTitle": "Gemenskapschatt",
     "chatClose": "Stäng chatt",
     "chatEmpty": "Du är ikapp — inga nya meddelanden.",
-    "chatComingSoon": "Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på."
+    "chatComingSoon": "Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.",
+    "layersButton": "Kartlager",
+    "layersTitle": "Kartlager",
+    "layersClose": "Stäng kartlager",
+    "layersTraffic": "Trafik",
+    "layersNightMode": "Nattläge",
+    "layers3d": "3D-byggnader"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

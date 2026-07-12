@@ -100,4 +100,24 @@ class ShellNavTest {
         surface.setTrafficEnabled(false)
         assertEquals(false, surface.trafficEnabled.value)
     }
+
+    @Test
+    fun `stub surface starts in day mode and toggles day-night`() {
+        val surface = StubMapSurface(autoLoad = false)
+        assertEquals(MapMode.Day, surface.mapMode.value)
+        surface.setMapMode(MapMode.Night)
+        assertEquals(MapMode.Night, surface.mapMode.value)
+        surface.setMapMode(MapMode.Day)
+        assertEquals(MapMode.Day, surface.mapMode.value)
+    }
+
+    @Test
+    fun `stub surface starts in 3D and toggles 3D-2D`() {
+        val surface = StubMapSurface(autoLoad = false)
+        assertEquals(true, surface.is3d.value)
+        surface.set3dEnabled(false)
+        assertEquals(false, surface.is3d.value)
+        surface.set3dEnabled(true)
+        assertEquals(true, surface.is3d.value)
+    }
 }

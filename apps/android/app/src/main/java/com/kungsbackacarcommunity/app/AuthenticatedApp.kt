@@ -648,14 +648,10 @@ fun AuthenticatedApp(
                                         // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
                                         onToggleLiveShare = { toggleLiveShare() },
-                                        // Layers control toggles the traffic
-                                        // overlay (visible only on the real
-                                        // Mapbox surface; a no-op on the stub).
-                                        onLayers = {
-                                            mapSurface.setTrafficEnabled(
-                                                !mapSurface.trafficEnabled.value,
-                                            )
-                                        },
+                                        // The layers control opens the map-layers
+                                        // popup (traffic / day-night / 3D toggles),
+                                        // handled internally by MapHome against the
+                                        // MapSurface seam.
                                         onRecenter = { mapSurface.recenter() },
                                         onOpenMore = { route = ShellRoute.More },
                                         // Placeholder: chat is per-event only

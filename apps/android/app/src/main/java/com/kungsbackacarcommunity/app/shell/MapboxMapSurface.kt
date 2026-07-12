@@ -11,6 +11,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.map.MapMarkers
+import com.mapbox.bindgen.Value
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
 import com.mapbox.maps.EdgeInsets
@@ -78,6 +79,16 @@ class MapboxMapSurface : MapSurface {
     private val trafficFlow = MutableStateFlow(false)
     override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
 
+    // Day light preset by default (matches the Standard style's own default);
+    // the layers popup flips it to Night via the style's `lightPreset` config.
+    private val mapModeFlow = MutableStateFlow(MapMode.Day)
+    override val mapMode: StateFlow<MapMode> = mapModeFlow.asStateFlow()
+
+    // Camera opens tilted (3D) — see [pitch] below, which defaults to
+    // DEFAULT_PITCH — so the flag starts true and the popup flips it to 2D.
+    private val is3dFlow = MutableStateFlow(true)
+    override val is3d: StateFlow<Boolean> = is3dFlow.asStateFlow()
+
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
@@ -118,6 +129,25 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and applies the layer's
         // visibility, so flipping the flow is enough to toggle the overlay.
         trafficFlow.value = enabled
+    }
+
+    override fun setMapMode(mode: MapMode) {
+        mapModeFlow.value = mode
+        // The Content update lambda re-applies the light preset on recomposition,
+        // but apply eagerly too so the switch is reflected immediately even if no
+        // recomposition is pending. A no-op until the style is loaded.
+        runCatching {
+            mapViewRef?.mapboxMap?.style?.let { applyLightPreset(it, mode) }
+        }
+    }
+
+    override fun set3dEnabled(enabled: Boolean) {
+        is3dFlow.value = enabled
+        // Flip the shared pitch field and re-apply it through recenter(), which
+        // already re-issues the camera with `pitch(this.pitch)`. A no-op until
+        // the map is composed (recenter guards on mapViewRef).
+        pitch = if (enabled) MapMarkers.DEFAULT_PITCH else MapMarkers.FLAT_PITCH
+        recenter()
     }
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {
@@ -172,6 +202,7 @@ class MapboxMapSurface : MapSurface {
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
+        val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
@@ -229,6 +260,10 @@ class MapboxMapSurface : MapSurface {
                     )
                     mapboxMap.loadStyle(Style.STANDARD) { style ->
                         loadStateFlow.value = MapLoadState.Loaded
+                        // Apply the current day/night light preset (read the flow
+                        // directly — this runs async at style-load, not at
+                        // composition, so the captured value can be stale).
+                        runCatching { applyLightPreset(style, mapModeFlow.value) }
                         runCatching { addTrafficLayer(style) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
                         // Route line + destination marker managers, created once
@@ -268,6 +303,10 @@ class MapboxMapSurface : MapSurface {
                 // Apply the current traffic toggle once the style is present.
                 runCatching {
                     mapView.mapboxMap.style?.let { applyTrafficVisibility(it, trafficOn) }
+                }
+                // Apply the current day/night light preset once the style is present.
+                runCatching {
+                    mapView.mapboxMap.style?.let { applyLightPreset(it, mapMode) }
                 }
                 // (Re)draw the route line + destination marker only when the
                 // overlay actually changes; unrelated recompositions (traffic
@@ -400,6 +439,16 @@ class MapboxMapSurface : MapSurface {
         const val ROUTE_PAD_SIDE = 80.0
         const val ROUTE_PAD_BOTTOM = 320.0
 
+        /**
+         * Import id of the Mapbox Standard style's basemap, used to set config
+         * properties such as `lightPreset`. When [Style.STANDARD] is loaded, its
+         * single style import is exposed under this id.
+         */
+        const val STANDARD_IMPORT_ID = "basemap"
+
+        /** Config key on the Standard import controlling the day/night lighting. */
+        const val LIGHT_PRESET_CONFIG = "lightPreset"
+
         const val TRAFFIC_SOURCE_ID = "kcc-traffic-source"
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"
@@ -454,6 +503,18 @@ class MapboxMapSurface : MapSurface {
                     )
                 },
             )
+        }
+
+        /**
+         * Switches the Standard style's `lightPreset` import config between the
+         * "day" and "night" presets, changing the whole basemap's lighting. Only
+         * has an effect on the Standard style (which owns the [STANDARD_IMPORT_ID]
+         * import); callers wrap it in runCatching so a non-Standard style or an
+         * unloaded import degrades to a no-op rather than crashing.
+         */
+        fun applyLightPreset(style: Style, mode: MapMode) {
+            val preset = if (mode == MapMode.Night) "night" else "day"
+            style.setStyleImportConfigProperty(STANDARD_IMPORT_ID, LIGHT_PRESET_CONFIG, Value(preset))
         }
 
         /** Toggles the traffic layer's visibility; a no-op until it is added. */

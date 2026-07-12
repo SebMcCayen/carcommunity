@@ -734,6 +734,12 @@
     <string name="shell_chatClose">Close chat</string>
     <string name="shell_chatEmpty">You\'re all caught up — no new messages.</string>
     <string name="shell_chatComingSoon">Community chat isn\'t available yet. For now, chat lives inside each event you\'re going to.</string>
+    <string name="shell_layersButton">Map layers</string>
+    <string name="shell_layersTitle">Map layers</string>
+    <string name="shell_layersClose">Close map layers</string>
+    <string name="shell_layersTraffic">Traffic</string>
+    <string name="shell_layersNightMode">Night mode</string>
+    <string name="shell_layers3d">3D buildings</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
