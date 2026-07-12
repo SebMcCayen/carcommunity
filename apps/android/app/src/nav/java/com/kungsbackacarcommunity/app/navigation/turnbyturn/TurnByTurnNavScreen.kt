@@ -587,7 +587,11 @@ private class TurnByTurnEngine(
             // Maneuver banner: primary (current) turn + upcoming maneuvers after it.
             runCatching {
                 val maneuvers = maneuverApi.getManeuvers(routeProgress)
-                maneuvers.fold({ /* ignore maneuver errors */ }, {
+                // fold here is only a success-gate: renderManeuvers() takes the
+                // Expected<ManeuverError, List<Maneuver>> itself, so the success
+                // branch deliberately ignores its unwrapped value (`_`) and passes
+                // the outer `maneuvers` through; the error branch is a no-op.
+                maneuvers.fold({ /* ignore maneuver errors */ }, { _ ->
                     maneuverView.renderManeuvers(maneuvers)
                 })
             }
