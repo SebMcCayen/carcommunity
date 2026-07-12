@@ -1,0 +1,108 @@
+/**
+ * incidents-syncTrafikverket — scheduled importer of Swedish roadwork / traffic
+ * situations from the Trafikverket open API into the shared incidents layer.
+ *
+ * GUARDED on the `TRAFIKVERKET_API_KEY` secret: without it the sync no-ops
+ * (logs a skip) so the deploy is safe before the free key is provisioned. When
+ * present, it POSTs the query (trafikverket-core), maps each deviation to an
+ * incident, and upserts it at a deterministic `tv_<id>` doc so re-syncs refresh
+ * rather than duplicate. Imported incidents carry `source: 'trafikverket'`,
+ * `reporterUid: null`, and a rolling import TTL — a situation that vanishes
+ * upstream ages out within one window.
+ *
+ * runTrafikverketSync takes an injectable fetcher so emulator/unit tests drive
+ * it with a mocked response and NEVER hit the live API.
+ */
+
+import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineSecret } from 'firebase-functions/params';
+import { Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
+import { db } from '../firebase';
+import { IMPORT_TTL_MS, buildIncidentFields } from './incidents-core';
+import {
+  TRAFIKVERKET_ENDPOINT,
+  buildTrafikverketRequestBody,
+  importedIncidentDocId,
+  parseTrafikverketResponse,
+  type TrafikverketResponse,
+} from './trafikverket-core';
+
+const TRAFIKVERKET_API_KEY = defineSecret('TRAFIKVERKET_API_KEY');
+
+const UPSERT_BATCH_SIZE = 400;
+
+export type SituationFetcher = (authenticationKey: string) => Promise<TrafikverketResponse>;
+
+/** Live fetcher: POSTs the XML query to the Trafikverket open API. */
+const httpFetcher: SituationFetcher = async (authenticationKey) => {
+  const res = await fetch(TRAFIKVERKET_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/xml' },
+    body: buildTrafikverketRequestBody(authenticationKey),
+  });
+  if (!res.ok) {
+    throw new Error(`Trafikverket API responded ${res.status}`);
+  }
+  return (await res.json()) as TrafikverketResponse;
+};
+
+/**
+ * Runs one import pass. Returns { skipped } when no key is configured, else the
+ * number of incidents upserted. Deterministic doc ids make re-runs idempotent.
+ */
+export async function runTrafikverketSync(
+  now: Date,
+  apiKey: string | undefined,
+  fetcher: SituationFetcher = httpFetcher,
+): Promise<{ skipped: boolean; upserted: number }> {
+  if (!apiKey) {
+    logger.info('Trafikverket sync skipped — no TRAFIKVERKET_API_KEY configured.');
+    return { skipped: true, upserted: 0 };
+  }
+
+  const response = await fetcher(apiKey);
+  const imported = parseTrafikverketResponse(response);
+  const expiresAt = Timestamp.fromDate(new Date(now.getTime() + IMPORT_TTL_MS));
+  const createdAt = Timestamp.fromDate(now);
+
+  let upserted = 0;
+  for (let i = 0; i < imported.length; i += UPSERT_BATCH_SIZE) {
+    const batch = db.batch();
+    for (const item of imported.slice(i, i + UPSERT_BATCH_SIZE)) {
+      const fields = buildIncidentFields({
+        type: item.type,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        source: 'trafikverket',
+        reporterUid: null,
+        note: item.note,
+      });
+      const ref = db.collection('incidents').doc(importedIncidentDocId(item.sourceId));
+      // merge:true keeps the original createdAt on refresh via set-without-merge
+      // being overwritten deliberately — we re-stamp createdAt each pass so the
+      // record reflects the latest confirmation from upstream.
+      batch.set(ref, { ...fields, createdAt, expiresAt });
+      upserted += 1;
+    }
+    await batch.commit();
+  }
+
+  logger.info('Trafikverket sync complete', { upserted, situations: imported.length });
+  return { skipped: false, upserted };
+}
+
+/** Every 30 minutes (the open feed refreshes on that order). */
+export const syncTrafikverket = onSchedule(
+  {
+    region: 'europe-west1',
+    timeZone: 'Europe/Stockholm',
+    memory: '256MiB' as const,
+    timeoutSeconds: 300,
+    schedule: '*/30 * * * *',
+    secrets: [TRAFIKVERKET_API_KEY],
+  },
+  async () => {
+    await runTrafikverketSync(new Date(), TRAFIKVERKET_API_KEY.value() || undefined);
+  },
+);
