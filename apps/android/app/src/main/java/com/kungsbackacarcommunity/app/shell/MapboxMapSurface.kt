@@ -225,9 +225,15 @@ class MapboxMapSurface : MapSurface {
     override fun resetNorth() {
         val map = mapViewRef ?: return
         // Ease the camera bearing back to north-up; other camera props are left
-        // untouched. A no-op until the map is composed; wrapped defensively.
+        // untouched. Uses the camera-animations plugin with the same explicit
+        // duration as recenter(), so the reset is predictable and consistent
+        // across Mapbox default changes. A no-op until the map is composed;
+        // wrapped defensively.
         runCatching {
-            map.mapboxMap.easeTo(cameraOptions { bearing(0.0) })
+            map.camera.easeTo(
+                cameraOptions { bearing(0.0) },
+                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
+            )
         }
     }
 
