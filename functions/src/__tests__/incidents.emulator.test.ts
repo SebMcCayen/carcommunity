@@ -181,6 +181,46 @@ describe('incidents.report + listNearby', () => {
     expect(farAway.incidents.some((i) => i.id === created.id)).toBe(false);
   });
 
+  it('excludes incidents with a missing or malformed expiresAt from listNearby', async () => {
+    // The Admin SDK bypasses Firestore rules, so listNearby must apply the
+    // rules' intent (expiresAt > request.time, which denies a missing/
+    // non-Timestamp value) in memory. Seed active docs whose expiresAt is
+    // absent or the wrong type alongside a valid future one.
+    const now = Date.now();
+    const base = {
+      type: 'hazard' as const,
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active' as const,
+      source: 'user' as const,
+      reporterUid: 'seed',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+    };
+
+    const missingRef = adminDb.collection('incidents').doc();
+    await missingRef.set({ ...base }); // no expiresAt at all
+    const malformedRef = adminDb.collection('incidents').doc();
+    await malformedRef.set({ ...base, expiresAt: 'not-a-timestamp' }); // wrong type
+    const validRef = adminDb.collection('incidents').doc();
+    await validRef.set({ ...base, expiresAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)) });
+
+    await signInAs(member);
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+
+    const ids = new Set(nearby.incidents.map((i) => i.id));
+    expect(ids.has(validRef.id)).toBe(true);
+    expect(ids.has(missingRef.id)).toBe(false);
+    expect(ids.has(malformedRef.id)).toBe(false);
+  });
+
   it('rejects a non-member reporter with permission-denied', async () => {
     const nonMember = await createProvisionedUser('inc-nonmember');
     await signInAs(nonMember);

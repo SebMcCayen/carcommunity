@@ -79,8 +79,13 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
       if (seen.has(doc.id)) continue;
       const data = doc.data();
       if (data.status !== INCIDENT_ACTIVE_STATUS) continue;
+      // Mirror the Firestore read rule (`expiresAt > request.time`), which
+      // denies a missing/non-Timestamp expiresAt. The Admin SDK bypasses
+      // rules, so enforce the same intent here: only a valid, still-future
+      // Timestamp is kept — a doc with no expiresAt or a malformed type is
+      // excluded rather than leaked.
       const expiresAt = data.expiresAt;
-      if (expiresAt instanceof Timestamp && expiresAt.toMillis() <= now.toMillis()) continue;
+      if (!(expiresAt instanceof Timestamp) || expiresAt.toMillis() <= now.toMillis()) continue;
       const lat = data.latitude as number;
       const lng = data.longitude as number;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;
