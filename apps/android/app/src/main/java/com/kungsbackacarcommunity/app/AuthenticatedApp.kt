@@ -436,6 +436,22 @@ fun AuthenticatedApp(
                 }
             }
 
+            // The pre-popup "unwired / not permitted" fallback: open the
+            // (informational) live-location screen, or — when even the repository
+            // is absent — surface the unavailable snackbar. Shared by
+            // toggleLiveShare's OpenScreen branch, the map popup's "More options"
+            // row, and the popup Start/Stop/Hide callbacks, so none of them can
+            // silently no-op when the LiveLocationCoordinator isn't wired.
+            fun openLiveShareFallback() {
+                if (liveLocationRepository != null) {
+                    route = ShellRoute.LiveLocation
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(unavailableText)
+                    }
+                }
+            }
+
             // Single live-share entry point shared by the map's broadcast toggle
             // and the Create-tab prompt, so both honour the same member-gating and
             // "open the live screen when not permitted/unwired" fallback.
@@ -461,14 +477,7 @@ fun AuthenticatedApp(
                             BackgroundLocationController.stop(context)
                         }
                     }
-                    LiveShareAction.OpenScreen ->
-                        if (liveLocationRepository != null) {
-                            route = ShellRoute.LiveLocation
-                        } else {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(unavailableText)
-                            }
-                        }
+                    LiveShareAction.OpenScreen -> openLiveShareFallback()
                 }
             }
 
@@ -652,35 +661,44 @@ fun AuthenticatedApp(
                                         // live-location popup (over the map, no scrim)
                                         // with the session options, wired to the same
                                         // LiveLocationCoordinator as the full screen.
+                                        // Wired: start the session + foreground
+                                        // service. Unwired (no coordinator): fall
+                                        // back to the live screen rather than
+                                        // silently no-op'ing, matching the old
+                                        // toggleLiveShare OpenScreen path.
                                         onStartLiveShare = { d ->
-                                            liveLocationCoordinator?.let { c ->
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
                                                 scope.launch { c.start(d) }
                                                 BackgroundLocationController.start(context)
+                                            } else {
+                                                openLiveShareFallback()
                                             }
                                         },
                                         onStopLiveShare = {
-                                            liveLocationCoordinator?.let { c ->
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
                                                 scope.launch { c.stop() }
-                                                BackgroundLocationController.stop(context)
+                                            } else {
+                                                openLiveShareFallback()
                                             }
+                                            // Always stop the foreground service,
+                                            // even when unwired, so Stop can never
+                                            // leave background location running.
+                                            BackgroundLocationController.stop(context)
                                         },
                                         onHideMeNow = {
-                                            liveLocationCoordinator?.let { c ->
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
                                                 scope.launch { c.hideMeNow() }
+                                            } else {
+                                                openLiveShareFallback()
                                             }
                                             BackgroundLocationController.stop(context)
                                         },
                                         // "More options" opens the full live screen;
                                         // unavailable (no Firebase) → a snackbar.
-                                        onOpenLiveShareDetails = {
-                                            if (liveLocationRepository != null) {
-                                                route = ShellRoute.LiveLocation
-                                            } else {
-                                                scope.launch {
-                                                    snackbarHostState.showSnackbar(unavailableText)
-                                                }
-                                            }
-                                        },
+                                        onOpenLiveShareDetails = { openLiveShareFallback() },
                                         // The layers control opens the map-layers
                                         // popup (traffic / day-night / 3D toggles),
                                         // handled internally by MapHome against the
