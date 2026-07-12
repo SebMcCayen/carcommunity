@@ -87,10 +87,25 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // Prominent "Where to?" search bar.
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
-        // Floating controls (broadcast toggle off + traffic/layers toggle off + recenter).
+        // Floating controls (broadcast toggle off + layers control + recenter).
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_trafficOff)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()
+    }
+
+    @Test
+    fun layersControl_opensAndDismissesLayersPopup() {
+        setShell()
+        // Tapping the layers control opens the transparent map-layers popup.
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
+        // It exposes the traffic / night-mode / 3D toggles.
+        composeTestRule.onNodeWithText(str(R.string.shell_layersTraffic)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layersNightMode)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_layers3d)).assertIsDisplayed()
+        // Closing dismisses the popup.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersClose)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertDoesNotExist()
     }
 
     @Test

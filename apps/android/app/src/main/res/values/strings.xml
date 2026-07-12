@@ -469,6 +469,11 @@
     <string name="garage_validationMakeTooLong">Märket är för långt (max 80 tecken).</string>
     <string name="garage_validationModelTooLong">Modellen är för lång (max 80 tecken).</string>
     <string name="garage_validationEngineDescriptionTooLong">Motorbeskrivningen är för lång (max 120 tecken).</string>
+    <string name="garage_modifications">Modifieringar, valfritt</string>
+    <string name="garage_validationModificationsTooLong">Texten om modifieringar är för lång (max 500 tecken).</string>
+    <string name="garage_mainCarBadge">Huvudbil</string>
+    <string name="garage_setMainCar">Ange som huvudbil</string>
+    <string name="garage_unsetMainCar">Ta bort huvudbil</string>
     <string name="garage_photoAlt">Fordonsbild</string>
     <string name="garage_photoAdd">Lägg till bild</string>
     <string name="garage_photoChange">Byt bild</string>
@@ -705,7 +710,7 @@
     <string name="shell_socialBillboards">Anslagstavlor</string>
     <string name="shell_garageTitle">Garage</string>
     <string name="shell_garageFriends">Vänner</string>
-    <string name="shell_garageVehicles">Mitt garage</string>
+    <string name="shell_garageVehicles">Bilar</string>
     <string name="shell_garageBadges">Utmärkelser</string>
     <string name="shell_garagePoints">Poäng</string>
     <string name="shell_garageSubscription">Medlemskap</string>
@@ -729,6 +734,12 @@
     <string name="shell_chatClose">Stäng chatt</string>
     <string name="shell_chatEmpty">Du är ikapp — inga nya meddelanden.</string>
     <string name="shell_chatComingSoon">Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.</string>
+    <string name="shell_layersButton">Kartlager</string>
+    <string name="shell_layersTitle">Kartlager</string>
+    <string name="shell_layersClose">Stäng kartlager</string>
+    <string name="shell_layersTraffic">Trafik</string>
+    <string name="shell_layersNightMode">Nattläge</string>
+    <string name="shell_layers3d">3D-byggnader</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

@@ -64,13 +64,14 @@ fun VehicleFormScreen(
     var year by rememberSaveable { mutableStateOf(initial.modelYear) }
     var engine by rememberSaveable { mutableStateOf(initial.engineDescription) }
     var powertrain by rememberSaveable { mutableStateOf(initial.powertrain) }
+    var modifications by rememberSaveable { mutableStateOf(initial.modifications) }
     var showError by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(saveStatus) {
         if (saveStatus == VehicleSaveStatus.Saved) onCancel()
     }
 
-    val form = VehicleForm(make, model, year, powertrain, engine)
+    val form = VehicleForm(make, model, year, powertrain, engine, modifications)
     val error = VehicleValidation.validate(form, currentYear)
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -143,6 +144,14 @@ fun VehicleFormScreen(
                 value = engine,
                 onValueChange = { engine = it },
                 label = { Text(text = stringResource(R.string.garage_engineDescription)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = modifications,
+                onValueChange = { modifications = it },
+                label = { Text(text = stringResource(R.string.garage_modifications)) },
+                minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
 

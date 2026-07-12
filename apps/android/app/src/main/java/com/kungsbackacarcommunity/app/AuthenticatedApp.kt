@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
@@ -86,6 +91,7 @@ import com.kungsbackacarcommunity.app.friends.FriendsRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
+import com.kungsbackacarcommunity.app.garage.GarageState
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
@@ -287,9 +293,81 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+            // Same condition rememberMapSurface uses to pick the real Mapbox
+            // surface over the config-less/CI StubMapSurface. Only the real
+            // surface has a GPS puck, so only it needs the runtime location
+            // permission; the stub never does. Gating on this keeps a tokenless
+            // build (CI, instrumented UI tests) from raising a system
+            // permission prompt on the Map tab.
+            val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+
+            // Runtime fine-location permission for the map home. The Mapbox
+            // location component (the blue GPS puck) is enabled at style-load but
+            // silently renders NOTHING until this permission is granted, so we
+            // must request it at runtime — declaring it in the manifest is not
+            // enough on Android 6+. Unlike RecordDriveScreen (which requests on
+            // an explicit user action), the map requests on first Map-tab open,
+            // guarded to once per session (see the saveable flag below).
+            // On grant we refresh the location component so the puck appears
+            // without recreating the map (the provider does not retroactively
+            // start once permission arrives). Requested once per session (a
+            // saveable guard) so returning to the Map tab does not re-nag after a
+            // denial; the stub (config-less / CI) no-ops refreshLocationComponent.
+            val locationPermissionLauncher =
+                rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) { granted ->
+                    if (granted) mapSurface.refreshLocationComponent()
+                }
+            var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(selectedTab, mapSurface, hasMapboxToken) {
+                // Never on the config-less/CI stub: it has no puck and must not
+                // trigger a system location-permission prompt (stub-map contract).
+                if (selectedTab != ShellTab.Map || !hasMapboxToken) return@LaunchedEffect
+                val granted =
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                    ) == PackageManager.PERMISSION_GRANTED
+                when {
+                    // Already granted (this or a previous session): re-apply the
+                    // component so the puck shows the moment the map is on screen.
+                    granted -> mapSurface.refreshLocationComponent()
+                    // Not granted and not yet asked this session: prompt once.
+                    !mapLocationPermissionRequested -> {
+                        mapLocationPermissionRequested = true
+                        locationPermissionLauncher.launch(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                        )
+                    }
+                }
+            }
             // Resolved avatar download URL for the map-home top-right profile
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+
+            // Single shared vehicles stream for the whole garage section: the
+            // garage hub header (main-car avatar) and the Cars sub-page both
+            // derive from THIS state, so at most one Firestore snapshot
+            // listener exists while the user is anywhere in the garage section
+            // — and none at all outside it (the flow degrades to a constant
+            // Loading). Because the remember keys don't change when moving
+            // hub ↔ Cars, the listener survives that transition instead of
+            // tearing down and re-attaching. garageReloadKey is bumped by the
+            // Cars page's "try again" affordance to force a re-subscribe after
+            // a listener error.
+            var garageReloadKey by rememberSaveable { mutableStateOf(0) }
+            val inGarageSection =
+                selectedTab == ShellTab.Garage || route == ShellRoute.Garage
+            val garageState by
+                remember(garageRepository, uid, inGarageSection, garageReloadKey) {
+                    if (garageRepository != null && inGarageSection) {
+                        garageRepository.observeGarage(uid)
+                    } else {
+                        flowOf(GarageState.Loading)
+                    }
+                }
+                    .collectAsState(initial = GarageState.Loading)
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -504,6 +582,8 @@ fun AuthenticatedApp(
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
                         garageRepository = garageRepository,
                         garageCoordinator = garageCoordinator,
+                        garageState = garageState,
+                        onGarageRetry = { garageReloadKey++ },
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
@@ -568,14 +648,10 @@ fun AuthenticatedApp(
                                         // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
                                         onToggleLiveShare = { toggleLiveShare() },
-                                        // Layers control toggles the traffic
-                                        // overlay (visible only on the real
-                                        // Mapbox surface; a no-op on the stub).
-                                        onLayers = {
-                                            mapSurface.setTrafficEnabled(
-                                                !mapSurface.trafficEnabled.value,
-                                            )
-                                        },
+                                        // The layers control opens the map-layers
+                                        // popup (traffic / day-night / 3D toggles),
+                                        // handled internally by MapHome against the
+                                        // MapSurface seam.
                                         onRecenter = { mapSurface.recenter() },
                                         // The top-right profile button opens the
                                         // account menu as a transparent Popup
@@ -701,10 +777,16 @@ fun AuthenticatedApp(
                                 ShellTab.Garage ->
                                     GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
+                                        // The main car's photo replaces the profile
+                                        // picture at the top of the garage; fall back
+                                        // to the user's avatar when no main car is set.
+                                        // Derived from the hoisted shared garage
+                                        // stream — no listener of its own.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                profile?.avatarPath,
+                                                mainCarImagePath(garageState)
+                                                    ?: profile?.avatarPath,
                                             ),
                                         avatarContentDescription =
                                             stringResource(R.string.profile_avatarAlt),
@@ -906,6 +988,8 @@ private fun RouteHost(
     notificationSettingsCoordinator: NotificationSettingsCoordinator?,
     garageRepository: GarageRepository?,
     garageCoordinator: GarageCoordinator?,
+    garageState: GarageState,
+    onGarageRetry: () -> Unit,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
@@ -1115,6 +1199,8 @@ private fun RouteHost(
                     coordinator = garageCoordinator,
                     uid = uid,
                     isActiveMember = profileActiveMember,
+                    garageState = garageState,
+                    onRetry = onGarageRetry,
                     onBack = onClose,
                     mediaUploader = mediaUploader,
                 )
@@ -1396,3 +1482,16 @@ private fun profileMenuEntries(
             onSignOut,
         ),
     )
+
+/**
+ * The Cloud Storage path of the user's main car photo, or null when there is no
+ * main car (or the garage is not loaded / the car has no photo). A pure
+ * derivation over the single hoisted garage stream — it deliberately opens no
+ * listener of its own, so the hub header and the Cars sub-page share one
+ * Firestore snapshot listener for the whole garage section.
+ */
+private fun mainCarImagePath(state: GarageState): String? =
+    (state as? GarageState.Loaded)
+        ?.vehicles
+        ?.firstOrNull { it.isMainCar }
+        ?.imagePath

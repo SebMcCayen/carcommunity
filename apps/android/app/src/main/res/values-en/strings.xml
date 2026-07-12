@@ -469,6 +469,11 @@
     <string name="garage_validationMakeTooLong">Make is too long (max 80 characters).</string>
     <string name="garage_validationModelTooLong">Model is too long (max 80 characters).</string>
     <string name="garage_validationEngineDescriptionTooLong">Engine description is too long (max 120 characters).</string>
+    <string name="garage_modifications">Modifications, optional</string>
+    <string name="garage_validationModificationsTooLong">Modifications text is too long (max 500 characters).</string>
+    <string name="garage_mainCarBadge">Main car</string>
+    <string name="garage_setMainCar">Set as main car</string>
+    <string name="garage_unsetMainCar">Remove main car</string>
     <string name="garage_photoAlt">Vehicle photo</string>
     <string name="garage_photoAdd">Add photo</string>
     <string name="garage_photoChange">Change photo</string>
@@ -705,7 +710,7 @@
     <string name="shell_socialBillboards">Billboards</string>
     <string name="shell_garageTitle">Garage</string>
     <string name="shell_garageFriends">Friends</string>
-    <string name="shell_garageVehicles">My garage</string>
+    <string name="shell_garageVehicles">Cars</string>
     <string name="shell_garageBadges">Badges</string>
     <string name="shell_garagePoints">Points</string>
     <string name="shell_garageSubscription">Membership</string>
@@ -729,6 +734,12 @@
     <string name="shell_chatClose">Close chat</string>
     <string name="shell_chatEmpty">You\'re all caught up — no new messages.</string>
     <string name="shell_chatComingSoon">Community chat isn\'t available yet. For now, chat lives inside each event you\'re going to.</string>
+    <string name="shell_layersButton">Map layers</string>
+    <string name="shell_layersTitle">Map layers</string>
+    <string name="shell_layersClose">Close map layers</string>
+    <string name="shell_layersTraffic">Traffic</string>
+    <string name="shell_layersNightMode">Night mode</string>
+    <string name="shell_layers3d">3D buildings</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>

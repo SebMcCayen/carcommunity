@@ -30,6 +30,11 @@
           "maxLength": 500,
           "description": "Cloud Storage path under vehicleImages/{uid}/{vehicleId}/; null until an image is uploaded."
         },
+        "isMainCar": {
+          "type": "boolean",
+          "default": false,
+          "description": "True for the caller's single main car (at most one per user, enforced by garage.setMainVehicle). Its photo is shown as the garage header image. Optional: legacy vehicle docs created before this field existed omit it and must be treated as false."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
@@ -83,6 +88,21 @@
         "imagePath": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
       },
       "required": ["vehicleId"],
+      "additionalProperties": false
+    },
+    "setMainVehicleRequest": {
+      "type": "object",
+      "description": "Input for garage.setMainVehicle. Sets or clears the caller's main-car flag on one owned vehicle; setting also clears the flag on any other currently-main vehicle (max-1 invariant). Re-affirming the existing state is a write-free no-op.",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "isMain": { "type": "boolean" }
+      },
+      "required": ["vehicleId", "isMain"],
       "additionalProperties": false
     },
     "deleteVehicleRequest": {

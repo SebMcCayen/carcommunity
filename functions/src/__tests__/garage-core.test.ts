@@ -11,6 +11,7 @@ import {
   maxModelYear,
   parseAddVehicleInput,
   parseDeleteVehicleInput,
+  parseSetMainVehicleInput,
   parseUpdateVehicleInput,
   vehicleImagePrefix,
 } from '../garage/garage-core';
@@ -56,6 +57,16 @@ describe('garage-core input parsing', () => {
     expect(parseDeleteVehicleInput({ vehicleId: 'vehicles/other' }).ok).toBe(false);
     expect(parseDeleteVehicleInput({ vehicleId: '..' }).ok).toBe(false);
   });
+
+  it('parses setMainVehicle input and requires a boolean flag', () => {
+    expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: true }).ok).toBe(true);
+    expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: false }).ok).toBe(true);
+    // Missing/malformed flag and a foreign extra field are rejected (strict).
+    expect(parseSetMainVehicleInput({ vehicleId: 'v1' }).ok).toBe(false);
+    expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: 'yes' }).ok).toBe(false);
+    expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: true, extra: 1 }).ok).toBe(false);
+    expect(parseSetMainVehicleInput({ vehicleId: 'vehicles/other', isMain: true }).ok).toBe(false);
+  });
 });
 
 describe('garage-core image path validation', () => {
@@ -83,6 +94,8 @@ describe('garage-core document builders', () => {
     expect(docData.engineDescription).toBeNull();
     expect(docData.color).toBeNull();
     expect(docData.imagePath).toBeNull();
+    // New vehicles are never the main car until the owner marks one.
+    expect(docData.isMainCar).toBe(false);
     expect(docData.createdAt).toBe('SERVER_TS');
   });
 

@@ -50,6 +50,15 @@ class GarageCoordinator(
         repository.deleteVehicle(vehicleId)
     }
 
+    /**
+     * Sets or clears [vehicleId] as the user's main car. Fire-and-forget like
+     * [delete] — the list observer reflects the flip (and the max-1 clear of any
+     * previous main car) once the callable resolves.
+     */
+    suspend fun setMain(vehicleId: String, isMain: Boolean) {
+        repository.setMainVehicle(vehicleId, isMain)
+    }
+
     fun reset() {
         state.value = VehicleSaveStatus.Idle
     }

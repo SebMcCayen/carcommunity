@@ -30,5 +30,12 @@ interface GarageRepository {
      */
     suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String)
 
+    /**
+     * Marks [vehicleId] as the user's main car (or clears it). At most one main
+     * car per user is enforced by the garage-setMainVehicle callable — setting
+     * one clears any other in the same transaction.
+     */
+    suspend fun setMainVehicle(vehicleId: String, isMain: Boolean)
+
     suspend fun deleteVehicle(vehicleId: String)
 }

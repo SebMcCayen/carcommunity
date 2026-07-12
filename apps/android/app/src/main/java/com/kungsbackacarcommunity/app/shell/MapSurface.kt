@@ -30,6 +30,21 @@ enum class MapLoadState {
 }
 
 /**
+ * Which light preset the Mapbox Standard style renders: [Day] (the default,
+ * bright basemap) or [Night] (the dark/dusk preset). Toggled by the map-layers
+ * popup's day/night switch. A surface that cannot re-style (the stub) still
+ * exposes the flag so the shell wiring stays uniform; only the real Mapbox
+ * surface actually swaps the style's `lightPreset`.
+ */
+enum class MapMode {
+    /** Bright/day light preset (default). */
+    Day,
+
+    /** Dark/night light preset. */
+    Night,
+}
+
+/**
  * The caller's own marker state. [label] is the display name; [isLiveSharing]
  * is true while the user is actively live-sharing their location (drives the
  * green puck pulse), false otherwise.
@@ -77,6 +92,11 @@ data class MapRouteOverlay(
  *   overlay the layers control toggles. A surface that cannot draw traffic
  *   (the stub) still exposes the flag so the shell wiring stays uniform; only
  *   the real Mapbox surface renders coloured congestion lines.
+ * - [mapMode] / [setMapMode] — day vs night light preset of the Standard
+ *   style, toggled by the layers popup (stub exposes the flag only).
+ * - [is3d] / [set3dEnabled] — tilted 3D vs flat top-down 2D camera, toggled by
+ *   the layers popup; the real surface flips the camera pitch and re-centres
+ *   (stub exposes the flag only).
  */
 interface MapSurface {
     /** Current load state; the shell shows "Loading roads…" while [MapLoadState.Loading]. */
@@ -88,17 +108,38 @@ interface MapSurface {
     /** Whether the traffic-congestion overlay is currently shown. */
     val trafficEnabled: StateFlow<Boolean>
 
+    /** The current light preset (day/night) of the Standard style. */
+    val mapMode: StateFlow<MapMode>
+
+    /** Whether the camera is in tilted 3D mode (true) or flat 2D (false). */
+    val is3d: StateFlow<Boolean>
+
     /** The destination + route line to draw, or null when none is set. */
     val routeOverlay: StateFlow<MapRouteOverlay?>
 
     /** Recentre the camera on the user's position. */
     fun recenter()
 
+    /**
+     * Re-apply the device-location component after the runtime fine-location
+     * permission is granted, so the blue puck appears without recreating the
+     * map (the component is enabled at style-load, before the grant, and the
+     * Mapbox location provider does not retroactively start once permission is
+     * granted). A no-op on the stub, which has no device/GPS.
+     */
+    fun refreshLocationComponent()
+
     /** Set (or clear, with null) the caller's own marker. */
     fun setUserMarker(marker: MapUserMarker?)
 
     /** Show or hide the traffic-congestion overlay (no visible effect on the stub). */
     fun setTrafficEnabled(enabled: Boolean)
+
+    /** Switch the day/night light preset (no visible effect on the stub). */
+    fun setMapMode(mode: MapMode)
+
+    /** Switch between tilted 3D ([true]) and flat 2D ([false]) (no visible effect on the stub). */
+    fun set3dEnabled(enabled: Boolean)
 
     /**
      * Draw (or clear, with null) a destination marker + route line and fit the
@@ -133,6 +174,13 @@ class StubMapSurface(
     private val trafficFlow = MutableStateFlow(false)
     override val trafficEnabled: StateFlow<Boolean> = trafficFlow.asStateFlow()
 
+    // Mirrors the real surface's defaults: day light preset, 3D camera on.
+    private val mapModeFlow = MutableStateFlow(MapMode.Day)
+    override val mapMode: StateFlow<MapMode> = mapModeFlow.asStateFlow()
+
+    private val is3dFlow = MutableStateFlow(true)
+    override val is3d: StateFlow<Boolean> = is3dFlow.asStateFlow()
+
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
@@ -144,12 +192,23 @@ class StubMapSurface(
         recenterCount += 1
     }
 
+    /** No device/GPS on the stub, so there is no location component to refresh. */
+    override fun refreshLocationComponent() = Unit
+
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
     }
 
     override fun setTrafficEnabled(enabled: Boolean) {
         trafficFlow.value = enabled
+    }
+
+    override fun setMapMode(mode: MapMode) {
+        mapModeFlow.value = mode
+    }
+
+    override fun set3dEnabled(enabled: Boolean) {
+        is3dFlow.value = enabled
     }
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {

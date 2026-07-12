@@ -54,6 +54,19 @@ object MapMarkers {
     const val OWN_MARKER_ZOOM: Double = 16.0
 
     /**
+     * Default camera pitch (degrees) giving the map its tilted, 3D perspective.
+     * The Mapbox Standard style renders 3D buildings/terrain when the camera is
+     * pitched; keeping it here as a single value lets the map surface apply the
+     * same tilt to the initial, first-fix, and recenter cameras — and lets the
+     * layers toggle flip between 3D ([DEFAULT_PITCH]) and flat 2D ([FLAT_PITCH])
+     * at runtime.
+     */
+    const val DEFAULT_PITCH: Double = 45.0
+
+    /** Flat, top-down pitch (2D) for the layers toggle's non-3D mode. */
+    const val FLAT_PITCH: Double = 0.0
+
+    /**
      * Marker model for the caller's own position, or null when no coordinate
      * is available (nothing to draw). Kept trivial and total so the screen can
      * call it unconditionally.
