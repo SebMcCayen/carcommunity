@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -17,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
@@ -60,6 +61,7 @@ import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
@@ -106,7 +108,6 @@ fun MapHome(
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    onVoiceSearch: () -> Unit,
     onToggleLiveShare: () -> Unit,
     onRecenter: () -> Unit,
     moreMenuEntries: List<HubEntry>,
@@ -159,7 +160,6 @@ fun MapHome(
             SearchBarRow(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
-                onVoiceSearch = onVoiceSearch,
                 onOpenMore = { moreOpen = true },
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
@@ -591,7 +591,6 @@ private fun ChatPopup(
 private fun SearchBarRow(
     avatarUrl: String?,
     onSearch: () -> Unit,
-    onVoiceSearch: () -> Unit,
     onOpenMore: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
@@ -600,10 +599,13 @@ private fun SearchBarRow(
     val haptics = LocalHapticFeedback.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         Surface(
-            modifier = Modifier.weight(1f),
+            // Keep a >= 48dp touch target even though the visual content is
+            // slimmed: heightIn guarantees the accessibility minimum hit area
+            // while the inner padding stays small.
+            modifier = Modifier.weight(1f).heightIn(min = KccSpacing.s12),
             shape = RoundedCornerShape(KccRadius.full),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 3.dp,
@@ -614,9 +616,13 @@ private fun SearchBarRow(
             },
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                // fillMaxHeight so the slim content stays centered within the
+                // 48dp minimum touch target rather than pinning to the top.
+                modifier =
+                    Modifier.fillMaxHeight()
+                        .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
@@ -629,13 +635,6 @@ private fun SearchBarRow(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                IconButton(onClick = onVoiceSearch) {
-                    Icon(
-                        imageVector = Icons.Filled.Mic,
-                        contentDescription = stringResource(R.string.shell_voiceSearch),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it

@@ -683,7 +683,6 @@
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
     <string name="shell_searchHint">Where to?</string>
     <string name="shell_searchIcon">Search</string>
-    <string name="shell_voiceSearch">Voice search</string>
     <string name="shell_loadingRoads">Loading roads…</string>
     <string name="shell_mapPlaceholder">Map</string>
     <string name="shell_userMarkerLabel">You</string>
