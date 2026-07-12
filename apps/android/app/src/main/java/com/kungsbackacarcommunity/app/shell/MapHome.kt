@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,11 +46,13 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -163,16 +164,19 @@ fun MapHome(
         // expanded: a tap anywhere off the bar collapses it back to the round
         // icon. Sits above the map but below the search row (composed next), so
         // tapping the bar itself still triggers search rather than collapsing.
-        // No ripple — it is an invisible dismiss layer, not a button.
+        // A raw pointerInput tap handler (no ripple, no clickable role) plus
+        // clearAndSetSemantics keeps this invisible dismiss layer out of the
+        // accessibility tree — otherwise it exposes an unlabeled focusable
+        // "Button" node over the whole map to TalkBack.
         if (searchExpanded) {
             Box(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { searchExpanded = false },
+                        .pointerInput(Unit) {
+                            detectTapGestures { searchExpanded = false }
+                        }
+                        .clearAndSetSemantics {},
             )
         }
 

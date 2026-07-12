@@ -92,6 +92,12 @@ class MapFirstShellTest {
         // Floating controls: compass (top) + broadcast toggle off + layers +
         // recenter.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
+        // Exercise the compass's tap action (reset-north): it has no observable
+        // result in the no-Firebase stub (StubMapSurface.resetNorth is a no-op),
+        // so this just proves the control is clickable and its wiring doesn't
+        // crash the stubbed shell — matching how the other controls are driven.
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()

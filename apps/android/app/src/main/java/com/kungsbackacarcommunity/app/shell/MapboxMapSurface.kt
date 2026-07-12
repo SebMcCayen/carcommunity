@@ -43,6 +43,7 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.roundToInt
 
 /**
  * The real [MapSurface]: a Mapbox v11 [MapView] bridged into Compose, drawing
@@ -276,7 +277,15 @@ class MapboxMapSurface : MapSurface {
                     val camListener =
                         object : OnCameraChangeListener {
                             override fun onCameraChanged(eventData: CameraChangedEventData) {
-                                bearingFlow.value = mapboxMap.cameraState.bearing.toFloat()
+                                // Round to the nearest whole degree before emitting:
+                                // the raw camera bearing changes by tiny fractions on
+                                // every frame while rotating, which would spam the
+                                // flow and re-compose the compass needlessly. 1° steps
+                                // are visually smooth for a compass needle, and the
+                                // MutableStateFlow dedupes consecutive equal values so
+                                // only real 1° changes propagate downstream.
+                                bearingFlow.value =
+                                    mapboxMap.cameraState.bearing.toFloat().roundToInt().toFloat()
                             }
                         }
                     cameraChangeListener = camListener
