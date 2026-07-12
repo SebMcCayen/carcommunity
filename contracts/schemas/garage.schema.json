@@ -32,7 +32,8 @@
         },
         "isMainCar": {
           "type": "boolean",
-          "description": "True for the caller's single main car (at most one per user, enforced by garage.setMainVehicle). Its photo is shown as the garage header image."
+          "default": false,
+          "description": "True for the caller's single main car (at most one per user, enforced by garage.setMainVehicle). Its photo is shown as the garage header image. Optional: legacy vehicle docs created before this field existed omit it and must be treated as false."
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
@@ -47,7 +48,6 @@
         "description",
         "color",
         "imagePath",
-        "isMainCar",
         "createdAt",
         "updatedAt"
       ],

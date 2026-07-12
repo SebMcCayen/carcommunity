@@ -514,7 +514,7 @@
     "validationModificationsTooLong": "Texten om modifieringar är för lång (max 500 tecken).",
     "mainCarBadge": "Huvudbil",
     "setMainCar": "Ange som huvudbil",
-    "unsetMainCar": "Huvudbil",
+    "unsetMainCar": "Ta bort huvudbil",
     "photoAlt": "Fordonsbild",
     "photoAdd": "Lägg till bild",
     "photoChange": "Byt bild",

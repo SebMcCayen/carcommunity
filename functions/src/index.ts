@@ -193,7 +193,7 @@ export const blocking = {
  * `garage-updateVehicle`, `garage-setMainVehicle`, `garage-deleteVehicle`).
  *
  * Member-only vehicle management (contracts/functions/functions.json:
- * garage.addVehicle/updateVehicle/deleteVehicle). Vehicles are
+ * garage.addVehicle/updateVehicle/setMainVehicle/deleteVehicle). Vehicles are
  * authenticated-readable; all writes go through these callables (per-user
  * cap, strict no-plate/no-VIN schemas, storage cleanup on delete).
  */

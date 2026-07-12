@@ -514,7 +514,7 @@
     "validationModificationsTooLong": "Modifications text is too long (max 500 characters).",
     "mainCarBadge": "Main car",
     "setMainCar": "Set as main car",
-    "unsetMainCar": "Main car",
+    "unsetMainCar": "Remove main car",
     "photoAlt": "Vehicle photo",
     "photoAdd": "Add photo",
     "photoChange": "Change photo",
