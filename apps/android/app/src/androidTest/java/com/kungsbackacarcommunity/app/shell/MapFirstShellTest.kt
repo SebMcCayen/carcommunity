@@ -140,6 +140,20 @@ class MapFirstShellTest {
     }
 
     @Test
+    fun profileMenuEntry_navigatesAndDismissesPopup() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertIsDisplayed()
+        // Selecting an entry runs its navigation action AND closes the popup:
+        // Settings opens the full-screen Settings route (replacing the map home)
+        // and the menu popup is gone.
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.settingsMenu_title)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_POPUP_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun bottomNav_switchesTabsAndBack() {
         setShell()
         // All five tabs are present. Icon-only bottom nav: labels are null and the
