@@ -1216,9 +1216,6 @@ private fun RouteHost(
                         // Guarded: only offer to open a thread when DM is wired.
                         if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
                     },
-                    onOpenMessages = {
-                        if (dmRepository != null) onOpenRoute(ShellRoute.Conversations)
-                    },
                 )
             } else {
                 LoadingScreen()
