@@ -24,9 +24,11 @@ import kotlinx.coroutines.flow.callbackFlow
  * stay testable off-device. HttpsError codes (never messages) are translated to
  * the pure [DmErrorCode] and mapped by [DmErrorMapper].
  *
- * The inbox query intentionally omits an `orderBy` (it sorts client-side via
- * [DmMapper.sortConversations]) so the live listener needs only the auto-created
- * single-field `array-contains` index — no composite index at runtime.
+ * The inbox query is bounded newest-first (`lastMessageAt` descending, capped at
+ * [DM_CONVERSATIONS_QUERY_LIMIT]) so the listener never syncs/holds the full
+ * conversation set; this relies on the `members` array-contains + `lastMessageAt`
+ * descending composite index (firebase/firestore.indexes.json). Rows are
+ * additionally sorted client-side via [DmMapper.sortConversations].
  */
 class FirebaseDmRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -38,8 +40,22 @@ class FirebaseDmRepository private constructor(
             firestore
                 .collection(CONVERSATIONS)
                 .whereArrayContains(MEMBERS, uid)
+                .orderBy(LAST_MESSAGE_AT, Query.Direction.DESCENDING)
+                .limit(DM_CONVERSATIONS_QUERY_LIMIT.toLong())
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
+                        // Firestore can deliver cached data ALONGSIDE an error;
+                        // keep the usable inbox instead of flickering to Error on
+                        // a transient failure (mirrors observeThread).
+                        if (snapshot != null) {
+                            val cached =
+                                snapshot.documents.mapNotNull { it.toConversation(uid) }
+                            trySend(
+                                DmConversationsState.Loaded(DmMapper.sortConversations(cached)),
+                            )
+                            return@addSnapshotListener
+                        }
+                        // No snapshot to fall back on — surface the error.
                         trySend(DmConversationsState.Error)
                         return@addSnapshotListener
                     }
@@ -148,6 +164,7 @@ class FirebaseDmRepository private constructor(
         private const val MESSAGES = "messages"
         private const val MEMBERS = "members"
         private const val CREATED_AT = "createdAt"
+        private const val LAST_MESSAGE_AT = "lastMessageAt"
         private const val SEND_MESSAGE = "dm-sendMessage"
         private const val GET_MESSAGES = "dm-getMessages"
         private const val MARK_READ = "dm-markRead"

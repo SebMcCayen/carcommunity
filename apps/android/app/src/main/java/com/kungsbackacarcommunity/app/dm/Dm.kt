@@ -25,6 +25,13 @@ const val DM_MESSAGE_MAX_LENGTH = 2000
 /** Backend DM_MESSAGES_PAGE_SIZE (newest-first window). */
 const val DM_MESSAGES_PAGE_SIZE = 30
 
+/**
+ * Upper bound on the live inbox listener (newest-first by `lastMessageAt`), so
+ * it never syncs/holds the full conversation set. Mirrors the Notifications
+ * inbox bound; rows are additionally sorted client-side ([DmMapper.sortConversations]).
+ */
+const val DM_CONVERSATIONS_QUERY_LIMIT = 50
+
 /** A conversation participant, as surfaced to the caller's UI. */
 data class DmUser(
     val uid: String,
