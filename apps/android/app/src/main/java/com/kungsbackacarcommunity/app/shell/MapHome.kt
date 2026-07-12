@@ -478,7 +478,6 @@ private fun LiveSharePopup(
                 Modifier
                     .padding(16.dp)
                     .widthIn(max = 360.dp)
-                    .fillMaxWidth()
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
             color = MaterialTheme.colorScheme.surface,
