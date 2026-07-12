@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,7 +52,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -68,6 +66,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.live.LiveDurationPicker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
@@ -477,6 +476,10 @@ private fun LiveSharePopup(
             modifier =
                 Modifier
                     .padding(16.dp)
+                    // Fill available width, then cap at 360.dp: keeps the sheet
+                    // width stable across the member-gated (narrow content) and
+                    // normal states instead of shrinking to content width.
+                    .fillMaxWidth()
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
@@ -553,29 +556,13 @@ private fun LiveSharePopup(
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            LiveDurationChip(
-                                labelRes = R.string.liveLocation_duration1h,
-                                duration = LiveSessionDuration.ONE_HOUR,
-                                selected = selectedDuration,
-                                onSelect = { selectedDuration = it },
-                            )
-                            LiveDurationChip(
-                                labelRes = R.string.liveLocation_duration2h,
-                                duration = LiveSessionDuration.TWO_HOURS,
-                                selected = selectedDuration,
-                                onSelect = { selectedDuration = it },
-                            )
-                            LiveDurationChip(
-                                labelRes = R.string.liveLocation_duration4h,
-                                duration = LiveSessionDuration.FOUR_HOURS,
-                                selected = selectedDuration,
-                                onSelect = { selectedDuration = it },
-                            )
-                        }
+                        // Shared with LiveLocationScreen so the duration options
+                        // never drift; the popup has no busy state, so enabled.
+                        LiveDurationPicker(
+                            selected = selectedDuration,
+                            enabled = true,
+                            onSelect = { selectedDuration = it },
+                        )
                         Button(
                             onClick = {
                                 onStart(selectedDuration)
@@ -608,26 +595,6 @@ private fun LiveSharePopup(
                     Text(text = stringResource(R.string.shell_liveDetails))
                 }
             }
-        }
-    }
-}
-
-/** A single selectable session-duration chip in the live-location popup. */
-@Composable
-private fun RowScope.LiveDurationChip(
-    labelRes: Int,
-    duration: LiveSessionDuration,
-    selected: LiveSessionDuration,
-    onSelect: (LiveSessionDuration) -> Unit,
-) {
-    val label = stringResource(labelRes)
-    if (duration == selected) {
-        Button(onClick = { onSelect(duration) }, modifier = Modifier.weight(1f)) {
-            Text(text = label, textAlign = TextAlign.Center)
-        }
-    } else {
-        OutlinedButton(onClick = { onSelect(duration) }, modifier = Modifier.weight(1f)) {
-            Text(text = label, textAlign = TextAlign.Center)
         }
     }
 }
