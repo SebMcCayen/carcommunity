@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -152,6 +153,19 @@ fun MapHome(
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
+    // Day/night follows the Android system Dark theme by default: on open the map
+    // matches the device theme, and it live-updates if the system flips while the
+    // app is open (e.g. Android's scheduled sunset->sunrise dark theme). Once the
+    // user flips day/night manually in the layers popup, [mapModeManuallyOverridden]
+    // latches true and this effect stops overriding their choice for the session.
+    var mapModeManuallyOverridden by remember { mutableStateOf(false) }
+    val systemInDark = isSystemInDarkTheme()
+    LaunchedEffect(systemInDark, mapModeManuallyOverridden) {
+        if (!mapModeManuallyOverridden) {
+            mapSurface.setMapMode(if (systemInDark) MapMode.Night else MapMode.Day)
+        }
+    }
+
     // Chat popup open/close is local UI state: tapping the bubble opens the
     // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
     var chatOpen by remember { mutableStateOf(false) }
@@ -291,6 +305,9 @@ fun MapHome(
                 is3d = is3d,
                 onTrafficChange = { mapSurface.setTrafficEnabled(it) },
                 onNightModeChange = {
+                    // A manual flip latches the override so the system-follow effect
+                    // above stops steering day/night for the rest of the session.
+                    mapModeManuallyOverridden = true
                     mapSurface.setMapMode(if (it) MapMode.Night else MapMode.Day)
                 },
                 on3dChange = { mapSurface.set3dEnabled(it) },
