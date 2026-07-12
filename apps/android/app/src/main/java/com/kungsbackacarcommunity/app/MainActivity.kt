@@ -35,6 +35,7 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
+import com.kungsbackacarcommunity.app.dm.FirebaseDmRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.garage.FirebaseGarageRepository
@@ -152,6 +153,7 @@ class MainActivity : ComponentActivity() {
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
+        val dmRepository = FirebaseDmRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
@@ -261,6 +263,7 @@ class MainActivity : ComponentActivity() {
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        dmRepository = dmRepository,
                         drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,

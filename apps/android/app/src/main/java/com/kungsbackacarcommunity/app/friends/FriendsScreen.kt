@@ -50,9 +50,9 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
  * error is surfaced via a `friends.*` string keyed off the mapped
  * [FriendActionError] — never a raw message.
  *
- * NOTE: direct messaging is not built yet (it needs a separate DM backend +
- * follow-up UI). The per-friend "Message" button is intentionally a disabled
- * "coming soon" affordance — it is never wired to a fake destination.
+ * Direct messaging is now wired: [onOpenMessages] opens the DM inbox and each
+ * friend row's "Message" button opens the 1:1 thread with that friend via
+ * [onMessageFriend] (the conversation is created on the first message).
  */
 @Composable
 fun FriendsScreen(
@@ -68,6 +68,8 @@ fun FriendsScreen(
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
     onRetry: () -> Unit,
+    onMessageFriend: (FriendSummary) -> Unit,
+    onOpenMessages: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
@@ -84,6 +86,13 @@ fun FriendsScreen(
         ) {
             item(key = "title") {
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
+            }
+
+            // Opens the DM inbox (list of 1:1 conversations).
+            item(key = "messages-inbox") {
+                OutlinedButton(onClick = onOpenMessages, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.dm_title))
+                }
             }
 
             item(key = "add-friend") {
@@ -173,6 +182,7 @@ fun FriendsScreen(
                             FriendRow(
                                 friend = friend,
                                 working = friend.uid in busyRows,
+                                onMessage = { onMessageFriend(friend) },
                                 onRemove = { removeTarget = friend },
                             )
                         }
@@ -343,6 +353,7 @@ private fun OutgoingRequestRow(request: FriendRequestSummary) {
 private fun FriendRow(
     friend: FriendSummary,
     working: Boolean,
+    onMessage: () -> Unit,
     onRemove: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -354,9 +365,9 @@ private fun FriendRow(
                 user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                // Messaging is not built yet (needs a DM backend + follow-up UI);
-                // this is a disabled "coming soon" affordance, never a fake action.
-                OutlinedButton(onClick = {}, enabled = false) {
+                // Opens the 1:1 DM thread with this friend; the conversation is
+                // created on the first message (dm-sendMessage).
+                OutlinedButton(onClick = onMessage) {
                     Text(stringResource(R.string.friends_message))
                 }
                 // Disabled while this friend's removal callable is in flight.
@@ -364,11 +375,6 @@ private fun FriendRow(
                     Text(stringResource(R.string.friends_remove))
                 }
             }
-            Text(
-                text = stringResource(R.string.friends_messageComingSoon),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
