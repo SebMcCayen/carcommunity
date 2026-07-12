@@ -71,7 +71,6 @@
     <string name="liveLocation_stop">Stoppa delning</string>
     <string name="liveLocation_hideNow">Dölj mig nu</string>
     <string name="liveLocation_lastUpdated">Senast uppdaterad</string>
-    <string name="liveLocation_safeDrivingWarning">Använd inte appen medan du kör.</string>
     <string name="liveLocation_whoCanSeeTitle">Vem kan se mig?</string>
     <string name="liveLocation_whoCanSeeBody">Backend avgör alltid vem som får dela och se live-positioner.</string>
     <string name="liveLocation_shareOwnFree">Du kan dela din egen position gratis.</string>

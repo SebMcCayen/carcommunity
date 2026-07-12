@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -53,7 +54,6 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
@@ -64,6 +64,13 @@ import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
+
+/**
+ * Shared surface opacity for the map-overlay popups (chat + layers). Slightly
+ * translucent so the live map shows through a little and all the popups read as
+ * one consistent floating layer, while staying opaque enough to be readable.
+ */
+private const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
@@ -310,7 +317,8 @@ private fun MapLayersPopup(
                     .fillMaxWidth()
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            // Slightly translucent so the map shows through (matches the chat popup).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -521,22 +529,40 @@ private fun ChatCircleControl(
 
 /**
  * The community-chat overlay shown when the bubble is tapped. Rendered as a
- * [Dialog] so tapping outside the card (or Back) minimizes it back to the
- * bubble. Content is a placeholder: there is no global/community-chat inbox
- * client-side yet (chat is per-event only), so this explains where chat lives
- * and shows the caught-up empty state. Wire real messages here once a global
- * unread-count + conversation source exists (backend, out of this lane).
+ * [Popup] (not a [Dialog]) anchored to the LOWER part of the screen — just above
+ * the bottom navigation bar — with NO dimming scrim, so the live map stays
+ * visible behind it; its surface is slightly translucent to match the layers
+ * popup. Tapping outside the card (or Back) minimizes it back to the bubble
+ * (focusable popup). Content is a placeholder: there is no global/community-chat
+ * inbox client-side yet (chat is per-event only), so this explains where chat
+ * lives and shows the caught-up empty state. Wire real messages here once a
+ * global unread-count + conversation source exists (backend, out of this lane).
  */
 @Composable
 private fun ChatPopup(
     unreadCount: Int,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
         Surface(
-            modifier = Modifier.widthIn(max = 360.dp).testTag(MAP_HOME_CHAT_POPUP_TAG),
+            modifier =
+                Modifier
+                    // Sit above the system nav-bar inset AND the app's bottom
+                    // navigation bar (~80.dp tall) so the card never hides behind
+                    // the tab bar, with a small breathing gap above it.
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 92.dp)
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .testTag(MAP_HOME_CHAT_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            // Slightly translucent so the map shows through (matches the layers popup).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {

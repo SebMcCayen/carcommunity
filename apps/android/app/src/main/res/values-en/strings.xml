@@ -71,7 +71,6 @@
     <string name="liveLocation_stop">Stop sharing</string>
     <string name="liveLocation_hideNow">Hide me now</string>
     <string name="liveLocation_lastUpdated">Last updated</string>
-    <string name="liveLocation_safeDrivingWarning">Do not use the app while driving.</string>
     <string name="liveLocation_whoCanSeeTitle">Who can see me?</string>
     <string name="liveLocation_whoCanSeeBody">The backend always determines who can share and see live locations.</string>
     <string name="liveLocation_privacyOptional">Sharing is optional and always initiated by you.</string>

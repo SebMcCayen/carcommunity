@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -59,22 +58,6 @@ fun LiveLocationScreen(
     var selectedDuration by rememberSaveable { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
 
     AeroPage(title = stringResource(R.string.liveLocation_screenTitle), modifier = modifier) {
-            // Safety first: never interact with the app while driving.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                    ),
-            ) {
-                Text(
-                    text = stringResource(R.string.liveLocation_safeDrivingWarning),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-
             // Current sharing status.
             Text(
                 text =
