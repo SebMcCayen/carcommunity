@@ -79,9 +79,11 @@ export async function runTrafikverketSync(
         note: item.note,
       });
       const ref = db.collection('incidents').doc(importedIncidentDocId(item.sourceId));
-      // merge:true keeps the original createdAt on refresh via set-without-merge
-      // being overwritten deliberately — we re-stamp createdAt each pass so the
-      // record reflects the latest confirmation from upstream.
+      // Full overwrite (no merge): the tv_ doc is entirely importer-owned —
+      // buildIncidentFields re-derives every field and there are no user-written
+      // fields to preserve — so each pass rewrites the doc as a faithful mirror
+      // of the current upstream situation. createdAt is deliberately re-stamped
+      // to now so the record reflects the latest confirmation from upstream.
       batch.set(ref, { ...fields, createdAt, expiresAt });
       upserted += 1;
     }

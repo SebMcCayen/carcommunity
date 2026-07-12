@@ -203,6 +203,33 @@ describe('incidents.report + listNearby', () => {
       ),
     ).toBe('functions/invalid-argument');
   });
+
+  it('lets a signed-in NON-member call listNearby (readable by all signed-in users)', async () => {
+    // A member seeds an incident so there is something in range to return.
+    await signInAs(member);
+    const created = (
+      await call('incidents-report', {
+        type: 'police',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    // A signed-in non-member (no activeMember entitlement) must NOT be blocked:
+    // listNearby is gated by requireActiveActor, not requireMemberActor.
+    const nonMember = await createProvisionedUser('inc-reader');
+    await signInAs(nonMember);
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+
+    expect(Array.isArray(nearby.incidents)).toBe(true);
+    expect(nearby.incidents.some((i) => i.id === created.id)).toBe(true);
+  });
 });
 
 describe('incidents security rules (direct read)', () => {
@@ -291,6 +318,32 @@ describe('incidents.remove', () => {
       removed: boolean;
     };
     expect(adminRemoved.removed).toBe(true);
+  });
+
+  it('rejects removal of an imported (trafikverket) incident, even for an admin', async () => {
+    // Seed an importer-owned incident (as the sync would) via the Admin SDK.
+    const now = Date.now();
+    const tvRef = adminDb.collection('incidents').doc('tv_reject-remove-1');
+    await tvRef.set({
+      type: 'roadwork',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+      expiresAt: Timestamp.fromDate(new Date(now + 6 * 60 * 60 * 1000)),
+    });
+
+    // An admin cannot hand-remove it — it is sync-managed and would reappear.
+    await signInAs(adminUser);
+    expect(await callableErrorCode(call('incidents-remove', { incidentId: tvRef.id }))).toBe(
+      'functions/failed-precondition',
+    );
+    // Still present.
+    expect((await tvRef.get()).exists).toBe(true);
   });
 });
 

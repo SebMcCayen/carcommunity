@@ -44,7 +44,17 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
       return false; // idempotent no-op
     }
     const data = snap.data()!;
-    const ownsIt = data.source === 'user' && data.reporterUid === actor.uid;
+    // Only user-sourced reports are hand-removable — imported (Trafikverket)
+    // incidents are managed by the sync/sweep. Deleting one here would just make
+    // it reappear on the next deterministic upsert, so reject it for EVERYONE,
+    // admins included.
+    if (data.source !== 'user') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Imported incidents are managed automatically and cannot be removed.',
+      );
+    }
+    const ownsIt = data.reporterUid === actor.uid;
     if (!ownsIt && !isAdmin) {
       throw new HttpsError('permission-denied', 'You can only remove your own report.');
     }

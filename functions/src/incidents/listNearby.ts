@@ -1,6 +1,7 @@
 /**
- * incident.listNearby — member-gated read of ACTIVE, unexpired incidents near
- * a point (contracts/functions/functions.json: incidents.listNearby).
+ * incident.listNearby — read of ACTIVE, unexpired incidents near a point,
+ * open to ANY active signed-in user (contracts/functions/functions.json:
+ * incidents.listNearby).
  *
  * Deployed via the `incidents` export group as `incidents-listNearby`
  * (europe-west1). Mirrors the crownHunt geo approach: the requested radius is
@@ -10,15 +11,16 @@
  * exact Haversine radius (server-computed; a client-supplied distance is never
  * trusted) and capped.
  *
- * Members read incidents directly via security rules too; this callable exists
- * so the map can fetch a bounded, distance-filtered batch in one round-trip
- * without every client running its own geo query.
+ * Any signed-in user reads incidents directly via security rules too (the
+ * shared Waze-style map layer is visible to all users, not only members);
+ * this callable exists so the map can fetch a bounded, distance-filtered batch
+ * in one round-trip without every client running its own geo query.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import {
   FIRESTORE_IN_CHUNK,
   INCIDENT_ACTIVE_STATUS,
@@ -47,7 +49,7 @@ export interface ListNearbyResponse {
 }
 
 export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNearbyResponse> => {
-  await requireMemberActor(request);
+  await requireActiveActor(request);
 
   const parsed = parseListNearbyInput(request.data);
   if (!parsed.ok) {

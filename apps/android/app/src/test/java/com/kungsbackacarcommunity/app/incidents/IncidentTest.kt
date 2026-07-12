@@ -3,7 +3,6 @@ package com.kungsbackacarcommunity.app.incidents
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -151,17 +150,30 @@ class IncidentReportControllerTest {
 
     @Test
     fun `refresh keeps the previous list when the fetch fails`() = runTest {
-        val failing =
+        val seeded = listOf(Incident("seed", IncidentType.ROADWORK, 12.0, 57.5))
+        val repo =
             object : IncidentRepository {
+                var fail = false
                 override suspend fun report(type: IncidentType, location: LatLng, note: String?) = Unit
-                override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> =
-                    throw IllegalStateException("network")
+                override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
+                    if (fail) throw IllegalStateException("network")
+                    return seeded
+                }
                 override suspend fun remove(incidentId: String) = Unit
             }
-        val controller = IncidentReportController(failing) { here }
+        val controller = IncidentReportController(repo) { here }
+
+        // 1) A successful refresh publishes the seeded list.
         controller.refresh(here)
-        assertTrue(controller.nearbyIncidents.value.isEmpty())
-        assertFalse(false)
+        assertEquals(seeded, controller.nearbyIncidents.value)
+
+        // 2) The next fetch fails...
+        repo.fail = true
+        controller.refresh(here)
+
+        // 3) ...and the previously-loaded list is retained, not cleared/emptied.
+        assertEquals(seeded, controller.nearbyIncidents.value)
+        assertEquals(1, controller.nearbyIncidents.value.size)
     }
 
     @Test
