@@ -684,7 +684,6 @@ fun AuthenticatedApp(
                                         DrivesRoute(
                                             repository = drivesRepository,
                                             uid = uid,
-                                            isActiveMember = profile?.activeMember == true,
                                             onBack = { selectedTab = ShellTab.Map },
                                         )
                                     } else {

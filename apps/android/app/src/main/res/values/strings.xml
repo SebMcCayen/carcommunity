@@ -419,7 +419,6 @@
     <string name="savedDrives_saveSuccess">Körningen har sparats.</string>
     <string name="savedDrives_closeButton">Stäng</string>
     <string name="savedDrives_memberRequired">Aktivt medlemskap krävs för att spara körningar.</string>
-    <string name="savedDrives_recordAction">Spela in körning</string>
     <string name="savedDrives_recordTitle">Spela in körning</string>
     <string name="savedDrives_recordStart">Starta inspelning</string>
     <string name="savedDrives_recordStop">Stoppa inspelning</string>
