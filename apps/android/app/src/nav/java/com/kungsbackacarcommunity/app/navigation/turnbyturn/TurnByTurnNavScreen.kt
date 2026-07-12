@@ -377,7 +377,14 @@ private fun NavProgressBar(
                     )
                     Text(
                         text =
-                            NavProgressFormat.remaining(progress, unitM, unitKm, unitMin, unitH),
+                            NavProgressFormat.remaining(
+                                progress,
+                                stringResource(R.string.turnByTurn_remaining),
+                                unitM,
+                                unitKm,
+                                unitMin,
+                                unitH,
+                            ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -424,7 +431,7 @@ private fun NavMessagePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            Button(onClick = onExit, modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = onExit, modifier = Modifier.padding(top = KccSpacing.s2)) {
                 Text(stringResource(R.string.turnByTurn_exit))
             }
         }

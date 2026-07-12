@@ -55,13 +55,19 @@ class NavProgressFormatTest {
     fun `remaining summary is time then distance`() {
         val progress =
             NavProgress(distanceRemainingMeters = 4523.0, durationRemainingSeconds = 12 * 60.0)
-        assertEquals("12 min · 4.5 km", NavProgressFormat.remaining(progress, "m", "km", "min", "h"))
+        assertEquals(
+            "12 min · 4.5 km",
+            NavProgressFormat.remaining(progress, "%1\$s · %2\$s", "m", "km", "min", "h"),
+        )
     }
 
     @Test
     fun `remaining summary uses metres under a kilometre`() {
         val progress =
             NavProgress(distanceRemainingMeters = 320.0, durationRemainingSeconds = 90.0)
-        assertEquals("2 min · 320 m", NavProgressFormat.remaining(progress, "m", "km", "min", "h"))
+        assertEquals(
+            "2 min · 320 m",
+            NavProgressFormat.remaining(progress, "%1\$s · %2\$s", "m", "km", "min", "h"),
+        )
     }
 }

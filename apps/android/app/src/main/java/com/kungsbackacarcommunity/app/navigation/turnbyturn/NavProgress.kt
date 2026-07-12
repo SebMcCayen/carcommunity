@@ -51,10 +51,14 @@ object NavProgressFormat {
     /**
      * The "time · distance" remaining summary, e.g. "12 min · 4.5 km". The unit
      * labels are passed in (from string resources) so the numeric rounding stays
-     * pure while the abbreviations remain localizable.
+     * pure while the abbreviations remain localizable. The [template] is a
+     * positional format string (from `R.string.turnByTurn_remaining`,
+     * `"%1$s · %2$s"`) so the separator and the time/distance order are
+     * localizable too: arg 1 is the duration, arg 2 the distance.
      */
     fun remaining(
         progress: NavProgress,
+        template: String,
         metersLabel: String,
         kilometersLabel: String,
         minutesLabel: String,
@@ -64,7 +68,7 @@ object NavProgressFormat {
             NavFormat.formatDuration(progress.durationRemainingSeconds, minutesLabel, hoursLabel)
         val distance =
             NavFormat.formatDistance(progress.distanceRemainingMeters, metersLabel, kilometersLabel)
-        return String.format(Locale.getDefault(), "%s · %s", duration, distance)
+        return String.format(Locale.getDefault(), template, duration, distance)
     }
 
     private val ARRIVAL_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")

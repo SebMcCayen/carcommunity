@@ -430,7 +430,7 @@ private fun RouteSheet(
                     )
                     Text(
                         text = stringResource(R.string.turnByTurn_start),
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = KccSpacing.s2),
                     )
                 }
             }
