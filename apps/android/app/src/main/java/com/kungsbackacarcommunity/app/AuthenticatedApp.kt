@@ -795,8 +795,13 @@ fun AuthenticatedApp(
                                                 mainCarImagePath(garageState)
                                                     ?: profile?.avatarPath,
                                             ),
+                                        // The header image can be the main car's
+                                        // photo or the user's profile picture (or
+                                        // neither), so use a neutral description
+                                        // that stays accurate for both sources and
+                                        // the fallback person icon.
                                         avatarContentDescription =
-                                            stringResource(R.string.profile_avatarAlt),
+                                            stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =
                                             stringResource(R.string.shell_garageVehicles),
                                         onVehicles =

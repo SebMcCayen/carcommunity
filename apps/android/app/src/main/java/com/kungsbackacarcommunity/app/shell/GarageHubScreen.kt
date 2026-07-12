@@ -34,9 +34,10 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
  * Shares the [AeroPage] chrome with every other sub-route; Back is handled by
  * the shell's system-Back handler, so this renders no Back affordance.
  *
- * @param avatarUrl resolved Storage URL for the main car's photo shown in the
- *   identity header, or null to show the fallback person icon (a config-less
- *   build never crashes on rendering).
+ * @param avatarUrl resolved Storage URL for the identity-header image: the
+ *   main car's photo, falling back to the user's profile picture when no main
+ *   car is set (see the call site in AuthenticatedApp), or null to show the
+ *   fallback person icon (a config-less build never crashes on rendering).
  * @param onVehicles opens the vehicles (My garage) screen, or null when the
  *   destination is unavailable (e.g. non-member) — the button is then hidden,
  *   preserving the previous membership gating.
