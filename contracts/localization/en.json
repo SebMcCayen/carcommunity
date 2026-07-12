@@ -858,5 +858,16 @@
     "unitKilometers": "km",
     "unitMinutes": "min",
     "unitHours": "h"
+  },
+  "turnByTurn": {
+    "start": "Start",
+    "exit": "Exit navigation",
+    "recenter": "Re-centre",
+    "reportIncident": "Report",
+    "arrive": "Arrive %1$s",
+    "remaining": "%1$s · %2$s",
+    "unavailable": "Navigation isn't available here.",
+    "permissionNeeded": "Location access is required to navigate.",
+    "reportComingSoon": "Reporting incidents and roadwork is coming soon."
   }
 }

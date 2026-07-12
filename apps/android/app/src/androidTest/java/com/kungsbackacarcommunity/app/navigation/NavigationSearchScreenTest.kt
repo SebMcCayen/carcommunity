@@ -60,6 +60,7 @@ class NavigationSearchScreenTest {
                     searchClient = FakeClient(emptyList(), null),
                     originProvider = { LatLng(12.0757, 57.4874) },
                     onClose = {},
+                    onStartNavigation = { _, _ -> },
                 )
             }
         }
@@ -76,6 +77,7 @@ class NavigationSearchScreenTest {
                     searchClient = FakeClient(listOf(suggestion), route),
                     originProvider = { LatLng(12.0757, 57.4874) },
                     onClose = {},
+                    onStartNavigation = { _, _ -> },
                 )
             }
         }
@@ -104,5 +106,43 @@ class NavigationSearchScreenTest {
         composeTestRule.onNodeWithText(str(R.string.addressSearch_directionsTitle))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Head north on Main Street").assertIsDisplayed()
+
+        // The "Start" (turn-by-turn) CTA appears once a route is resolved.
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
+    }
+
+    @Test
+    fun startButton_invokesOnStartNavigation_withDestination() {
+        var started: Pair<LatLng, String>? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NavigationSearchScreen(
+                    mapSurface = StubMapSurface(),
+                    searchClient = FakeClient(listOf(suggestion), route),
+                    originProvider = { LatLng(12.0757, 57.4874) },
+                    onClose = {},
+                    onStartNavigation = { dest, label -> started = dest to label },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder))
+            .performTextInput("kung")
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithText(suggestion.name).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithText(suggestion.name).performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule
+                .onAllNodesWithText(str(R.string.turnByTurn_start))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).performClick()
+
+        assert(started == suggestion.point to suggestion.name) {
+            "Expected onStartNavigation with the picked destination, got $started"
+        }
     }
 }
