@@ -665,7 +665,7 @@
     <string name="feedback_success">Thanks! Your report was sent.</string>
     <string name="feedback_successWithIssue">Thanks! Your report was sent and an issue was created.</string>
     <string name="feedback_viewIssue">View issue</string>
-    <string name="feedback_error">Could not send your report. Please try again.</string>
+    <string name="feedback_error">Could not send your report. Please contact us at kontakt@kungsbackacarcommunity.se.</string>
     <string name="feedback_rateLimited">You\'ve sent too many reports. Please wait a while and try again.</string>
     <string name="dm_title">Messages</string>
     <string name="dm_unreadCount">%1$d unread messages</string>
