@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -599,7 +601,10 @@ private fun SearchBarRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Surface(
-            modifier = Modifier.weight(1f),
+            // Keep a >= 48dp touch target even though the visual content is
+            // slimmed: heightIn guarantees the accessibility minimum hit area
+            // while the inner padding stays small.
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
             shape = RoundedCornerShape(KccRadius.full),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 3.dp,
@@ -610,7 +615,9 @@ private fun SearchBarRow(
             },
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                // fillMaxHeight so the slim content stays centered within the
+                // 48dp minimum touch target rather than pinning to the top.
+                modifier = Modifier.fillMaxHeight().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
