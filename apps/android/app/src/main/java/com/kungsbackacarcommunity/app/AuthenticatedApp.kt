@@ -5,11 +5,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Message
@@ -56,8 +59,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
@@ -474,6 +481,13 @@ fun AuthenticatedApp(
 
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
+                // Keep the screen awake (no lock/dim) while the user is actively
+                // sharing live location OR has the turn-by-turn navigation overlay
+                // open — a driver following a route or being tracked shouldn't have
+                // the display sleep. Cleared automatically the moment both stop (see
+                // KeepScreenOn), so the screen sleeps normally the rest of the time.
+                KeepScreenOn(enabled = isSharing || navSearchOpen)
+
                 // Single close path for the currently-open route, shared by
                 // system-Back and each route's in-screen close so their teardown
                 // can't drift. Closing the LiveLocation overlay tears down the
@@ -896,7 +910,28 @@ private fun ShellBottomBar(
         NavigationBarItem(
             selected = selected == ShellTab.Create,
             onClick = { onSelect(ShellTab.Create) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.shell_tabCreate)) },
+            // The Create ("+") tab starts live location / convoys — make it the
+            // standout action: a WHITE plus on a filled primary disc so it reads
+            // as a distinct button and stays high-contrast against the
+            // semi-transparent nav bar in both light and dark (a bare white tint
+            // would wash out over the light 50%-alpha surface). Behaviour is
+            // unchanged — only the icon's appearance differs from the other tabs.
+            icon = {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.shell_tabCreate),
+                        tint = Color.White,
+                    )
+                }
+            },
             label = null,
         )
         NavigationBarItem(
@@ -1395,6 +1430,22 @@ private fun RouteHost(
             LaunchedEffect(Unit) { onClose() }
             LoadingScreen()
         }
+    }
+}
+
+/**
+ * Holds the display awake while [enabled] is true by setting the current view's
+ * `keepScreenOn` (which toggles [android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON]).
+ * The flag is CLEARED whenever [enabled] flips back to false and on dispose, so
+ * the screen dims/locks normally the rest of the time — nothing lingers after
+ * live-share or navigation ends, or when this composable leaves the tree.
+ */
+@Composable
+private fun KeepScreenOn(enabled: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, enabled) {
+        view.keepScreenOn = enabled
+        onDispose { view.keepScreenOn = false }
     }
 }
 
