@@ -663,6 +663,7 @@
     <string name="feedback_error">Kunde inte skicka rapporten. Försök igen.</string>
     <string name="feedback_rateLimited">Du har skickat för många rapporter. Vänta en stund och försök igen.</string>
     <string name="dm_title">Meddelanden</string>
+    <string name="dm_unreadCount">%1$d olästa meddelanden</string>
     <string name="dm_empty">Du har inga meddelanden än.</string>
     <string name="dm_loadError">Kunde inte ladda dina meddelanden.</string>
     <string name="dm_unknownMember">Medlem</string>

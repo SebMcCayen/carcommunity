@@ -28,6 +28,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -140,13 +142,17 @@ private fun ConversationRow(
 
 @Composable
 private fun UnreadBadge(count: Int) {
+    // Expose a localized "N unread messages" label to accessibility services
+    // rather than the bare number; mirrors the MapHome chat bubble's badge.
+    val description = stringResource(R.string.dm_unreadCount, count)
     Box(
         modifier =
             Modifier
                 .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary)
-                .padding(horizontal = KccSpacing.s2),
+                .padding(horizontal = KccSpacing.s2)
+                .clearAndSetSemantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Text(

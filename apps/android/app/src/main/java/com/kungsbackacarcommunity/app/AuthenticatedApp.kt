@@ -1190,7 +1190,12 @@ private fun RouteHost(
                     repository = dmRepository,
                     uid = uid,
                     onOpenConversation = { conversation ->
-                        onOpenChat(conversation.otherUser.uid, conversation.otherUser.displayName)
+                        // DmMapper.conversation can yield an empty other uid when the
+                        // members list is malformed; don't navigate into a broken chat
+                        // route that would later send with an invalid uid.
+                        if (conversation.otherUser.uid.isNotBlank()) {
+                            onOpenChat(conversation.otherUser.uid, conversation.otherUser.displayName)
+                        }
                     },
                 )
             } else {

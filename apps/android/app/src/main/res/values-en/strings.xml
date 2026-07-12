@@ -663,6 +663,7 @@
     <string name="feedback_error">Could not send your report. Please try again.</string>
     <string name="feedback_rateLimited">You\'ve sent too many reports. Please wait a while and try again.</string>
     <string name="dm_title">Messages</string>
+    <string name="dm_unreadCount">%1$d unread messages</string>
     <string name="dm_empty">You have no messages yet.</string>
     <string name="dm_loadError">Couldn\'t load your messages.</string>
     <string name="dm_unknownMember">Member</string>
