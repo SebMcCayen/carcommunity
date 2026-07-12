@@ -659,7 +659,13 @@ private class TurnByTurnEngine(
                 .layersList(listOf(nav.getZLevel(), null))
                 .build(),
             object : NavigationRouterCallback {
-                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) = Unit
+                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
+                    // Mirror onFailure: free the in-flight guard so a cancelled
+                    // request can be retried on the next location fix (bounded by
+                    // maxRouteRequestAttempts) instead of leaving routeRequested
+                    // stuck at true and blocking all further attempts.
+                    routeRequested = false
+                }
 
                 override fun onFailure(
                     reasons: List<RouterFailure>,

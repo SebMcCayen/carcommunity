@@ -758,7 +758,7 @@
     <string name="addressSearch_unitHours">h</string>
     <string name="turnByTurn_start">Start</string>
     <string name="turnByTurn_exit">Exit navigation</string>
-    <string name="turnByTurn_recenter">Re-centre</string>
+    <string name="turnByTurn_recenter">Recenter</string>
     <string name="turnByTurn_reportIncident">Report</string>
     <string name="turnByTurn_arrive">Arrive %1$s</string>
     <string name="turnByTurn_remaining">%1$s · %2$s</string>

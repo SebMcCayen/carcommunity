@@ -862,7 +862,7 @@
   "turnByTurn": {
     "start": "Start",
     "exit": "Exit navigation",
-    "recenter": "Re-centre",
+    "recenter": "Recenter",
     "reportIncident": "Report",
     "arrive": "Arrive %1$s",
     "remaining": "%1$s · %2$s",

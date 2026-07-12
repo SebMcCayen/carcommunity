@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.time.Instant
-import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
 
@@ -36,7 +35,7 @@ class NavProgressFormatTest {
     fun `arrival clock respects the zone offset`() {
         val now = Instant.parse("2024-01-01T13:00:00Z")
         // +2h zone → 15:00 local, plus 30 min → 15:30.
-        val zone = ZoneId.ofOffset("", ZoneOffset.ofHours(2))
+        val zone = ZoneOffset.ofHours(2)
         assertEquals("15:30", NavProgressFormat.arrivalClock(30 * 60.0, now, zone))
     }
 
