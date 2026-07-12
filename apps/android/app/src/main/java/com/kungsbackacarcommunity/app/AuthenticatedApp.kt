@@ -304,7 +304,9 @@ fun AuthenticatedApp(
             // location component (the blue GPS puck) is enabled at style-load but
             // silently renders NOTHING until this permission is granted, so we
             // must request it at runtime — declaring it in the manifest is not
-            // enough on Android 6+. Mirrors RecordDriveScreen's request pattern.
+            // enough on Android 6+. Unlike RecordDriveScreen (which requests on
+            // an explicit user action), the map requests on first Map-tab open,
+            // guarded to once per session (see the saveable flag below).
             // On grant we refresh the location component so the puck appears
             // without recreating the map (the provider does not retroactively
             // start once permission arrives). Requested once per session (a
