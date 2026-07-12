@@ -1322,8 +1322,9 @@ private fun LoadingScreen() {
 }
 
 /**
- * The profile/account menu shown by the map-home top-right button. Rendered as a
- * transparent [com.kungsbackacarcommunity.app.shell.MapHome] popup over the map
+ * The profile/account menu shown by the map-home top-right button. Rendered by
+ * [com.kungsbackacarcommunity.app.shell.MapHome] as a transparent
+ * [androidx.compose.ui.window.Popup] over the map
  * (not a full-screen hub), but the entries themselves still navigate to full
  * routes via [onOpenRoute] (or sign out). Unavailable entries carry a null
  * `onClick` and are omitted by the popup / [HubScreen].

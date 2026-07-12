@@ -280,9 +280,14 @@ private fun ProfileMenuPopup(
                     layoutDirection: LayoutDirection,
                     popupContentSize: IntSize,
                 ): IntOffset {
-                    // End-align the card to the button (its trailing edge in the
-                    // current layout direction), clamped so the card never leaves
-                    // the window on narrow screens.
+                    // End-align the card to the button: the card's trailing edge
+                    // sits on the button's trailing edge so the card grows toward
+                    // the screen center. anchorBounds is in PHYSICAL window
+                    // coordinates (left < right in both directions). LTR: trailing
+                    // = physical right → card.right = anchor.right. RTL: the
+                    // button sits at the physical LEFT (mirrored Row) and trailing
+                    // = physical left → card.left = anchor.left. Clamped so the
+                    // card never leaves the window on narrow screens.
                     val x =
                         when (layoutDirection) {
                             LayoutDirection.Ltr -> anchorBounds.right - popupContentSize.width
