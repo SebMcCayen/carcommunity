@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
@@ -287,6 +292,44 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+
+            // Runtime fine-location permission for the map home. The Mapbox
+            // location component (the blue GPS puck) is enabled at style-load but
+            // silently renders NOTHING until this permission is granted, so we
+            // must request it at runtime — declaring it in the manifest is not
+            // enough on Android 6+. Mirrors RecordDriveScreen's request pattern.
+            // On grant we refresh the location component so the puck appears
+            // without recreating the map (the provider does not retroactively
+            // start once permission arrives). Requested once per session (a
+            // saveable guard) so returning to the Map tab does not re-nag after a
+            // denial; the stub (config-less / CI) no-ops refreshLocationComponent.
+            val locationPermissionLauncher =
+                rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) { granted ->
+                    if (granted) mapSurface.refreshLocationComponent()
+                }
+            var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+            LaunchedEffect(selectedTab, mapSurface) {
+                if (selectedTab != ShellTab.Map) return@LaunchedEffect
+                val granted =
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                    ) == PackageManager.PERMISSION_GRANTED
+                when {
+                    // Already granted (this or a previous session): re-apply the
+                    // component so the puck shows the moment the map is on screen.
+                    granted -> mapSurface.refreshLocationComponent()
+                    // Not granted and not yet asked this session: prompt once.
+                    !mapLocationPermissionRequested -> {
+                        mapLocationPermissionRequested = true
+                        locationPermissionLauncher.launch(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                        )
+                    }
+                }
+            }
             // Resolved avatar download URL for the map-home top-right profile
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
