@@ -683,7 +683,6 @@
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
     <string name="shell_searchHint">Vart vill du?</string>
     <string name="shell_searchIcon">Sök</string>
-    <string name="shell_voiceSearch">Röstsökning</string>
     <string name="shell_loadingRoads">Laddar vägar…</string>
     <string name="shell_mapPlaceholder">Karta</string>
     <string name="shell_userMarkerLabel">Du</string>

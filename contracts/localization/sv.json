@@ -783,7 +783,6 @@
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",
-    "voiceSearch": "Röstsökning",
     "loadingRoads": "Laddar vägar…",
     "mapPlaceholder": "Karta",
     "userMarkerLabel": "Du",

@@ -654,9 +654,6 @@ fun AuthenticatedApp(
                                         // Tapping "Where to?" opens the address
                                         // search + directions overlay.
                                         onSearch = { navSearchOpen = true },
-                                        // Voice search (speech-to-text) is a
-                                        // follow-up; still a coming-soon hint.
-                                        onVoiceSearch = { showComingSoon() },
                                         // The broadcast control opens the transparent
                                         // live-location popup (over the map, no scrim)
                                         // with the session options, wired to the same

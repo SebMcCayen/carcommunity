@@ -783,7 +783,6 @@
   "shell": {
     "searchHint": "Where to?",
     "searchIcon": "Search",
-    "voiceSearch": "Voice search",
     "loadingRoads": "Loading roads…",
     "mapPlaceholder": "Map",
     "userMarkerLabel": "You",
