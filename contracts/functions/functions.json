@@ -674,6 +674,51 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.create",
+      "domain": "convoy",
+      "description": "Creates a convoy and invites a list of the owner's FRIENDS ({ inviteeUids:[uid] (1..50), title? (1..80) }). Each invitee is validated: must be an established friend (users/{owner}/friends/{uid}), not blocked either way, and a non-restricted existing account — non-friend/blocked/missing/self/duplicate invitees are silently SKIPPED (never an error that would reveal a block). Writes convoys/{convoyId} (status 'forming') with the owner seeded as members[owner]={role:'owner',inviteStatus:'accepted'} and each accepted invitee as {role:'member',inviteStatus:'invited'}; memberUids=[owner,...invitees] drives the list read + rules gate; memberProfiles denormalized. Writes a best-effort in-app notification per invitee (system_notice category). Returns { convoy: ConvoySummary, invited:[uid], skipped:[{uid,reason}] } where reason is self|not_friend|blocked|not_found|duplicate. failed-precondition if no invitee is valid. Deployed via grouped export as convoy-create (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.respond",
+      "domain": "convoy",
+      "description": "An invitee accepts or declines their convoy invite ({ convoyId, action:'accept'|'decline' }). Only an invitee (members[caller].role=='member') with a still-pending invite may respond; a non-member or missing convoy is not-found (never permission-denied, so convoys can't be probed); an already-answered invite or an ended convoy is failed-precondition. Accept sets members[caller].inviteStatus='accepted' + joinedAt=now (the green dot); decline sets 'declined'. Returns { convoy: ConvoySummary, inviteStatus }. Deployed via grouped export as convoy-respond (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.start",
+      "domain": "convoy",
+      "description": "The owner transitions a convoy forming → active ({ convoyId }), setting startedAt. Owner-only: a non-owner (including a member) is not-found (can't probe); a convoy not in 'forming' is failed-precondition. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-start (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.end",
+      "domain": "convoy",
+      "description": "The owner ends a convoy ({ convoyId }) → status 'ended', endedAt set, and a summary computed + stored on the doc (durationSeconds from startedAt→endedAt, participantUids/participantCount = accepted members, distanceMeters null — no shared-route aggregation in this foundation). The summary is readable by ALL members (they read the convoy doc). Owner-only (else not-found); an already-ended convoy is failed-precondition. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-end (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.list",
+      "domain": "convoy",
+      "description": "Lists the caller's convoys ({} input): { convoys:[ConvoySummary], pendingInvites:[ConvoySummary] } newest-first (bounded at 200 via the [memberUids CONTAINS, createdAt DESC] index). pendingInvites is the subset the caller still has a pending invite for (non-ended + viewer.inviteStatus=='invited'). ConvoySummary = { convoyId, ownerUid, title, status, members:[{uid,role,inviteStatus,joinedAt,displayName,avatarPath}] (inviteStatus is the green dot), memberUids, viewer:{role,inviteStatus}|null, livePositionUids:[uid] (accepted members — the uids the map subscribes to at RTDB liveLocation/{uid}/latest for live positions), summary:{durationSeconds,participantUids,participantCount,distanceMeters}|null, createdAt, startedAt, endedAt }. Deployed via grouped export as convoy-list (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }

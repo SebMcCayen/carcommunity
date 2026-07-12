@@ -405,6 +405,28 @@ service cloud.firestore {
       }
     }
 
+    // -------------------------------------------------------------------------
+    // convoys – friend convoys (convoy.create / convoy.respond / convoy.start /
+    // convoy.end / convoy.list). The FOUNDATION for the convoy + 3-channel-chat
+    // epic; chat channels are a SEPARATE follow-up, not modelled here.
+    //
+    // convoys/{convoyId} carries ownerUid, status (forming|active|ended), a
+    // memberUids:[owner, ...invitees] array, a members map keyed by uid
+    // ({role, inviteStatus, invitedAt, joinedAt}), denormalized memberProfiles,
+    // and a summary computed on end. Any member of the convoy (owner or invitee,
+    // via memberUids) reads it — so an invitee sees the roster + each member's
+    // inviteStatus (the green dot) and, once ended, the summary. It never leaks
+    // to a third party. ALL writes go through the convoy.* callables (friend +
+    // block checks at invite time, invite responses, lifecycle transitions,
+    // summary computation) — no client writes, so membership and status can
+    // never be forged. Live positions are NOT stored here: accepted members
+    // share GPS through the live-location domain (RTDB liveLocation/{uid}/latest).
+    // -------------------------------------------------------------------------
+    match /convoys/{convoyId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+      // No client writes: convoy.create / respond / start / end callables only.
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
