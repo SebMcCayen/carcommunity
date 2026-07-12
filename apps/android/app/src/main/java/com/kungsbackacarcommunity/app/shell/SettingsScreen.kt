@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.DeleteForever
@@ -41,6 +42,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 fun SettingsScreen(
     onManageSubscription: (() -> Unit)?,
     onNotificationSettings: (() -> Unit)?,
+    onBlockedUsers: (() -> Unit)?,
     onPartnerStats: (() -> Unit)?,
     onFeedback: (() -> Unit)?,
     onDeleteAccount: (() -> Unit)?,
@@ -65,6 +67,13 @@ fun SettingsScreen(
                 stringResource(R.string.settingsMenu_notificationSettings),
                 Icons.Filled.NotificationsActive,
                 onNotificationSettings,
+            )
+        }
+        if (onBlockedUsers != null) {
+            HubRow(
+                stringResource(R.string.shell_moreBlocked),
+                Icons.Filled.Block,
+                onBlockedUsers,
             )
         }
         if (onPartnerStats != null) {
