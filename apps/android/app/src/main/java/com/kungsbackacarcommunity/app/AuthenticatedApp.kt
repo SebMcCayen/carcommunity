@@ -637,6 +637,7 @@ fun AuthenticatedApp(
                                     MapHome(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
+                                        canShareLive = canShareLive,
                                         participantCount = mapParticipantUids.size,
                                         avatarUrl = mapAvatarUrl,
                                         userLabel =
@@ -647,7 +648,39 @@ fun AuthenticatedApp(
                                         // Voice search (speech-to-text) is a
                                         // follow-up; still a coming-soon hint.
                                         onVoiceSearch = { showComingSoon() },
-                                        onToggleLiveShare = { toggleLiveShare() },
+                                        // The broadcast control opens the transparent
+                                        // live-location popup (over the map, no scrim)
+                                        // with the session options, wired to the same
+                                        // LiveLocationCoordinator as the full screen.
+                                        onStartLiveShare = { d ->
+                                            liveLocationCoordinator?.let { c ->
+                                                scope.launch { c.start(d) }
+                                                BackgroundLocationController.start(context)
+                                            }
+                                        },
+                                        onStopLiveShare = {
+                                            liveLocationCoordinator?.let { c ->
+                                                scope.launch { c.stop() }
+                                                BackgroundLocationController.stop(context)
+                                            }
+                                        },
+                                        onHideMeNow = {
+                                            liveLocationCoordinator?.let { c ->
+                                                scope.launch { c.hideMeNow() }
+                                            }
+                                            BackgroundLocationController.stop(context)
+                                        },
+                                        // "More options" opens the full live screen;
+                                        // unavailable (no Firebase) → a snackbar.
+                                        onOpenLiveShareDetails = {
+                                            if (liveLocationRepository != null) {
+                                                route = ShellRoute.LiveLocation
+                                            } else {
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar(unavailableText)
+                                                }
+                                            }
+                                        },
                                         // The layers control opens the map-layers
                                         // popup (traffic / day-night / 3D toggles),
                                         // handled internally by MapHome against the

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,13 +24,16 @@ import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +52,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -61,6 +66,7 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
@@ -80,7 +86,22 @@ const val MAP_HOME_TEST_TAG = "map_home"
  *
  * @param isLiveSharing whether the live-location session is currently sharing —
  *   turns the broadcast control GREEN and is pushed to the surface so the puck
- *   can signal live sharing (wired to the real live-location state).
+ *   can signal live sharing (wired to the real live-location state). Tapping the
+ *   broadcast control opens a transparent [Popup] *over* the map (no dimming
+ *   scrim, same idiom as the layers popup) presenting the live-location options
+ *   rather than toggling sharing directly.
+ * @param canShareLive whether the caller may START a session (live-location flag
+ *   on AND active member); mirrors the backend member check. When false the
+ *   popup shows the membership teaser instead of the duration/start controls,
+ *   but Stop / Hide-me-now / details stay reachable.
+ * @param onStartLiveShare start a session for the chosen [LiveSessionDuration]
+ *   (wired to LiveLocationCoordinator.start); only offered when [canShareLive].
+ * @param onStopLiveShare stop the active session (wired to
+ *   LiveLocationCoordinator.stop); offered while sharing.
+ * @param onHideMeNow privacy stop — remove my position now (wired to
+ *   LiveLocationCoordinator.hideMeNow); offered while sharing.
+ * @param onOpenLiveShareDetails open the full LiveLocationScreen for the
+ *   complete controls + privacy details.
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
  * @param avatarUrl resolved download URL for the signed-in user's profile
@@ -102,12 +123,16 @@ const val MAP_HOME_TEST_TAG = "map_home"
 fun MapHome(
     mapSurface: MapSurface,
     isLiveSharing: Boolean,
+    canShareLive: Boolean,
     participantCount: Int,
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
     onVoiceSearch: () -> Unit,
-    onToggleLiveShare: () -> Unit,
+    onStartLiveShare: (LiveSessionDuration) -> Unit,
+    onStopLiveShare: () -> Unit,
+    onHideMeNow: () -> Unit,
+    onOpenLiveShareDetails: () -> Unit,
     onRecenter: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
@@ -137,6 +162,11 @@ fun MapHome(
     // Map-layers popup open/close is local UI state: tapping the layers control
     // opens the transparent toggle sheet, tapping outside it dismisses it.
     var layersOpen by remember { mutableStateOf(false) }
+
+    // Live-location popup open/close is local UI state: tapping the broadcast
+    // control opens the transparent live-share sheet (over the map, no scrim),
+    // tapping outside it dismisses it.
+    var liveOpen by remember { mutableStateOf(false) }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
@@ -186,7 +216,9 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val statusColors = LocalKccStatusColors.current
-            // 1. Live-location share toggle — GREEN when sharing.
+            // 1. Live-location broadcast control — GREEN when sharing. Opens the
+            //    transparent live-share popup (over the map, no scrim) with the
+            //    session options rather than toggling sharing directly.
             CircleControl(
                 icon = Icons.Filled.Podcasts,
                 contentDescription =
@@ -197,7 +229,8 @@ fun MapHome(
                     if (isLiveSharing) statusColors.success else MaterialTheme.colorScheme.surface,
                 contentColor =
                     if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
-                onClick = onToggleLiveShare,
+                onClick = { liveOpen = true },
+                modifier = Modifier.testTag(MAP_HOME_LIVE_TAG),
             )
             // 2. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
@@ -263,6 +296,22 @@ fun MapHome(
                 onDismiss = { layersOpen = false },
             )
         }
+
+        // Live-location overlay: a transparent popup (no scrim) so the map stays
+        // visible behind it while the user starts/stops sharing, hides now, or
+        // opens the full live-location screen. Reflects the current sharing state
+        // and honours the member gate on starting (canShareLive).
+        if (liveOpen) {
+            LiveSharePopup(
+                isSharing = isLiveSharing,
+                canShareLive = canShareLive,
+                onStart = onStartLiveShare,
+                onStop = onStopLiveShare,
+                onHideMeNow = onHideMeNow,
+                onOpenDetails = onOpenLiveShareDetails,
+                onDismiss = { liveOpen = false },
+            )
+        }
     }
 }
 
@@ -271,6 +320,12 @@ const val MAP_HOME_LAYERS_TAG = "map_home_layers"
 
 /** Test tag on the map-layers popup card. */
 const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
+
+/** Test tag on the floating live-location broadcast control. */
+const val MAP_HOME_LIVE_TAG = "map_home_live"
+
+/** Test tag on the live-location popup card. */
+const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
 
 /**
  * The transparent map-layers popup shown when the layers control is tapped.
@@ -379,6 +434,200 @@ private fun LayerToggleRow(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * The transparent live-location popup shown when the broadcast control is tapped.
+ * Rendered as a [Popup] (not a [Dialog]) so there is NO dimming scrim and the
+ * live map stays fully visible behind the sheet — the same idiom as the
+ * map-layers popup; tapping outside the card or pressing Back dismisses it
+ * (focusable popup). The content reflects the current sharing state and reuses
+ * the existing live-location logic (wired through to LiveLocationCoordinator by
+ * the caller):
+ * - While sharing: a Stop-sharing action and the never-gated Hide-me-now.
+ * - Not sharing and [canShareLive]: a session-duration picker + Start.
+ * - Not sharing and not [canShareLive]: the membership teaser (starting is
+ *   member-gated on the backend), Stop/Hide stay reachable in the sharing state.
+ * A "More options" row always opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
+ * for the complete controls + privacy details. Each action closes the popup.
+ */
+@Composable
+private fun LiveSharePopup(
+    isSharing: Boolean,
+    canShareLive: Boolean,
+    onStart: (LiveSessionDuration) -> Unit,
+    onStop: () -> Unit,
+    onHideMeNow: () -> Unit,
+    onOpenDetails: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val statusColors = LocalKccStatusColors.current
+    // Pending duration selection, mirroring LiveLocationScreen's picker; only
+    // read when starting a fresh session (canShareLive && !isSharing).
+    var selectedDuration by remember { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                Modifier
+                    .padding(16.dp)
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .testTag(MAP_HOME_LIVE_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Podcasts,
+                        contentDescription = null,
+                        tint =
+                            if (isSharing) statusColors.success else MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(R.string.shell_liveTitle),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.shell_liveClose),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Text(
+                    text =
+                        stringResource(
+                            if (isSharing) {
+                                R.string.liveLocation_statusSharing
+                            } else {
+                                R.string.liveLocation_statusNotSharing
+                            },
+                        ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                when {
+                    isSharing -> {
+                        // Stopping is authenticated-gated (not member-gated) on the
+                        // backend, so it is always offered while a session is active.
+                        Button(
+                            onClick = {
+                                onStop()
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(text = stringResource(R.string.liveLocation_stop))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                onHideMeNow()
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(text = stringResource(R.string.liveLocation_hideNow))
+                        }
+                    }
+                    canShareLive -> {
+                        Text(
+                            text = stringResource(R.string.liveLocation_durationLabel),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            LiveDurationChip(
+                                labelRes = R.string.liveLocation_duration1h,
+                                duration = LiveSessionDuration.ONE_HOUR,
+                                selected = selectedDuration,
+                                onSelect = { selectedDuration = it },
+                            )
+                            LiveDurationChip(
+                                labelRes = R.string.liveLocation_duration2h,
+                                duration = LiveSessionDuration.TWO_HOURS,
+                                selected = selectedDuration,
+                                onSelect = { selectedDuration = it },
+                            )
+                            LiveDurationChip(
+                                labelRes = R.string.liveLocation_duration4h,
+                                duration = LiveSessionDuration.FOUR_HOURS,
+                                selected = selectedDuration,
+                                onSelect = { selectedDuration = it },
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                onStart(selectedDuration)
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(text = stringResource(R.string.liveLocation_start))
+                        }
+                    }
+                    else -> {
+                        // Starting is member-gated (backend parity) — show the
+                        // membership teaser instead of the start controls.
+                        Text(
+                            text = stringResource(R.string.liveLocation_memberRequiredToShare),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                // Always offer the full live-location screen for the complete
+                // controls + privacy details.
+                TextButton(
+                    onClick = {
+                        onOpenDetails()
+                        onDismiss()
+                    },
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(text = stringResource(R.string.shell_liveDetails))
+                }
+            }
+        }
+    }
+}
+
+/** A single selectable session-duration chip in the live-location popup. */
+@Composable
+private fun RowScope.LiveDurationChip(
+    labelRes: Int,
+    duration: LiveSessionDuration,
+    selected: LiveSessionDuration,
+    onSelect: (LiveSessionDuration) -> Unit,
+) {
+    val label = stringResource(labelRes)
+    if (duration == selected) {
+        Button(onClick = { onSelect(duration) }, modifier = Modifier.weight(1f)) {
+            Text(text = label, textAlign = TextAlign.Center)
+        }
+    } else {
+        OutlinedButton(onClick = { onSelect(duration) }, modifier = Modifier.weight(1f)) {
+            Text(text = label, textAlign = TextAlign.Center)
+        }
     }
 }
 

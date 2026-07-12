@@ -109,6 +109,28 @@ class MapFirstShellTest {
     }
 
     @Test
+    fun liveControl_opensAndDismissesLivePopup() {
+        setShell()
+        // The broadcast control is present (not sharing → "Share live location").
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
+        // Tapping it opens the transparent live-location popup over the map
+        // (rather than toggling sharing directly).
+        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_liveTitle)).assertIsDisplayed()
+        // No-Firebase config → not an active member, so starting is member-gated:
+        // the popup shows the membership teaser instead of the start controls.
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
+            .assertIsDisplayed()
+        // The map stays visible behind the transparent popup (no navigation).
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        // Closing dismisses the popup.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveClose)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun chatBubble_opensAndDismissesPopup() {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
