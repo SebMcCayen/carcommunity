@@ -419,7 +419,6 @@
     <string name="savedDrives_saveSuccess">Körningen har sparats.</string>
     <string name="savedDrives_closeButton">Stäng</string>
     <string name="savedDrives_memberRequired">Aktivt medlemskap krävs för att spara körningar.</string>
-    <string name="savedDrives_recordAction">Spela in körning</string>
     <string name="savedDrives_recordTitle">Spela in körning</string>
     <string name="savedDrives_recordStart">Starta inspelning</string>
     <string name="savedDrives_recordStop">Stoppa inspelning</string>
@@ -474,6 +473,7 @@
     <string name="garage_mainCarBadge">Huvudbil</string>
     <string name="garage_setMainCar">Ange som huvudbil</string>
     <string name="garage_unsetMainCar">Ta bort huvudbil</string>
+    <string name="garage_headerImageAlt">Garagets rubrikbild</string>
     <string name="garage_photoAlt">Fordonsbild</string>
     <string name="garage_photoAdd">Lägg till bild</string>
     <string name="garage_photoChange">Byt bild</string>
@@ -683,13 +683,12 @@
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
     <string name="shell_searchHint">Vart vill du?</string>
     <string name="shell_searchIcon">Sök</string>
-    <string name="shell_voiceSearch">Röstsökning</string>
     <string name="shell_loadingRoads">Laddar vägar…</string>
     <string name="shell_mapPlaceholder">Karta</string>
     <string name="shell_userMarkerLabel">Du</string>
     <string name="shell_participantsSharing">%1$d delar</string>
-    <string name="shell_liveShareOn">Delar liveplats</string>
-    <string name="shell_liveShareOff">Dela liveplats</string>
+    <string name="shell_liveShareOn">Liveplats, delar</string>
+    <string name="shell_liveShareOff">Liveplats</string>
     <string name="shell_recenter">Centrera</string>
     <string name="shell_menu">Meny</string>
     <string name="shell_tabMap">Karta</string>
@@ -742,6 +741,9 @@
     <string name="shell_layers3d">3D-byggnader</string>
     <string name="shell_compass">Återställ till norr</string>
     <string name="shell_searchExpand">Sök</string>
+    <string name="shell_liveTitle">Liveplats</string>
+    <string name="shell_liveClose">Stäng liveplats</string>
+    <string name="shell_liveDetails">Fler alternativ</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

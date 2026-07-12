@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.DeleteForever
@@ -30,8 +31,9 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 /**
  * The Settings screen reached from the profile-picture ("More") menu. It groups
  * account destinations that used to sit loose in the More hub (subscription,
- * notification settings, partner statistics, feedback, account deletion) plus
- * community/legal external links, and shows the app version at the bottom.
+ * notification settings, blocked users, partner statistics, feedback, account
+ * deletion) plus community/legal external links, and shows the app version at
+ * the bottom.
  *
  * In-app destinations are passed as null-guarded callbacks so an unavailable
  * dependency simply hides its row (mirroring [HubEntry]). External links are
@@ -41,6 +43,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 fun SettingsScreen(
     onManageSubscription: (() -> Unit)?,
     onNotificationSettings: (() -> Unit)?,
+    onBlockedUsers: (() -> Unit)?,
     onPartnerStats: (() -> Unit)?,
     onFeedback: (() -> Unit)?,
     onDeleteAccount: (() -> Unit)?,
@@ -65,6 +68,13 @@ fun SettingsScreen(
                 stringResource(R.string.settingsMenu_notificationSettings),
                 Icons.Filled.NotificationsActive,
                 onNotificationSettings,
+            )
+        }
+        if (onBlockedUsers != null) {
+            HubRow(
+                stringResource(R.string.settings_blockedUsers),
+                Icons.Filled.Block,
+                onBlockedUsers,
             )
         }
         if (onPartnerStats != null) {
