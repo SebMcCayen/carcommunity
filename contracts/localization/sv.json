@@ -460,7 +460,6 @@
     "saveSuccess": "Körningen har sparats.",
     "closeButton": "Stäng",
     "memberRequired": "Aktivt medlemskap krävs för att spara körningar.",
-    "recordAction": "Spela in körning",
     "recordTitle": "Spela in körning",
     "recordStart": "Starta inspelning",
     "recordStop": "Stoppa inspelning",
@@ -517,6 +516,7 @@
     "mainCarBadge": "Huvudbil",
     "setMainCar": "Ange som huvudbil",
     "unsetMainCar": "Ta bort huvudbil",
+    "headerImageAlt": "Garagets rubrikbild",
     "photoAlt": "Fordonsbild",
     "photoAdd": "Lägg till bild",
     "photoChange": "Byt bild",
@@ -748,13 +748,12 @@
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",
-    "voiceSearch": "Röstsökning",
     "loadingRoads": "Laddar vägar…",
     "mapPlaceholder": "Karta",
     "userMarkerLabel": "Du",
     "participantsSharing": "%1$d delar",
-    "liveShareOn": "Delar liveplats",
-    "liveShareOff": "Dela liveplats",
+    "liveShareOn": "Liveplats, delar",
+    "liveShareOff": "Liveplats",
     "recenter": "Centrera",
     "menu": "Meny",
     "tabMap": "Karta",
@@ -804,7 +803,10 @@
     "layersClose": "Stäng kartlager",
     "layersTraffic": "Trafik",
     "layersNightMode": "Nattläge",
-    "layers3d": "3D-byggnader"
+    "layers3d": "3D-byggnader",
+    "liveTitle": "Liveplats",
+    "liveClose": "Stäng liveplats",
+    "liveDetails": "Fler alternativ"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",
