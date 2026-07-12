@@ -25,8 +25,9 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
- * The Garage tab landing, redesigned to lead with the member's identity: their
- * circular profile picture (the main car's photo) centred at the top, then their
+ * The Garage tab landing, redesigned to lead with the member's identity: a
+ * circular identity image — their main car's photo, falling back to their
+ * profile picture — centred at the top, then their
  * cars (My garage) as a prominent button. Friends, Badges, Points and Membership
  * have moved elsewhere (Social tab / profile menu / Settings), so this screen now
  * holds only the identity header and the Cars action.

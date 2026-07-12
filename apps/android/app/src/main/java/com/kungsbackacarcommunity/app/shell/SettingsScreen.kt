@@ -31,8 +31,9 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 /**
  * The Settings screen reached from the profile-picture ("More") menu. It groups
  * account destinations that used to sit loose in the More hub (subscription,
- * notification settings, partner statistics, feedback, account deletion) plus
- * community/legal external links, and shows the app version at the bottom.
+ * notification settings, blocked users, partner statistics, feedback, account
+ * deletion) plus community/legal external links, and shows the app version at
+ * the bottom.
  *
  * In-app destinations are passed as null-guarded callbacks so an unavailable
  * dependency simply hides its row (mirroring [HubEntry]). External links are
