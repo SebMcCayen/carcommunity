@@ -85,6 +85,15 @@ import {
   respond as respondConvoy,
   start as startConvoy,
 } from './convoy/manageConvoy';
+import {
+  list as communityChatList,
+  markRead as communityChatMarkRead,
+  post as communityChatPost,
+} from './chatchannels/communityChat';
+import {
+  list as convoyChatList,
+  post as convoyChatPost,
+} from './chatchannels/convoyChat';
 
 /**
  * GET /health
@@ -540,4 +549,44 @@ export const convoy = {
   start: startConvoy,
   end: endConvoy,
   list: listConvoys,
+};
+
+/**
+ * Community chat domain (grouped export → deployed as `communityChat-post`,
+ * `communityChat-list`, `communityChat-markRead`).
+ *
+ * The single APP-WIDE chat — one of the THREE product chats (community / convoy
+ * / friends-DMs; the friends chat is the existing `dm` domain). Model: a fixed
+ * channel doc `communityChat/global` with a `messages` subcollection
+ * (communityChat/global/messages/{id} {senderUid, text, createdAt,
+ * senderDisplayName, senderAvatarPath}). Any ACTIVE MEMBER reads
+ * (firebase/firestore.rules); writes are callable-only. No fan-out unread
+ * aggregate — a lightweight per-user last-read marker lives at
+ * userPrivate/{uid}.communityChatLastReadAt (owner-only readable) so the client
+ * derives the unread dot from its newest-message live listener (O(1) per user).
+ * Blocking is NOT filtered server-side (global town square — a client display
+ * concern). See functions/src/chatchannels/chat-core.ts.
+ */
+export const communityChat = {
+  post: communityChatPost,
+  list: communityChatList,
+  markRead: communityChatMarkRead,
+};
+
+/**
+ * Convoy chat domain (grouped export → deployed as `convoyChat-post`,
+ * `convoyChat-list`).
+ *
+ * The per-CONVOY chat — one of the THREE product chats. Stacked on the convoy
+ * backend: readable + postable ONLY by ACCEPTED members of `convoys/{convoyId}`
+ * (memberUids + members[uid].inviteStatus === 'accepted', owner included).
+ * Model: convoyChats/{convoyId}/messages/{id} with the same denormalized message
+ * shape as community. Rules gate reads behind a get() of the convoy doc
+ * (firebase/firestore.rules); writes are callable-only, and the callables
+ * re-check accepted membership (missing convoy / outsider → not-found so a
+ * convoy can't be probed). See functions/src/chatchannels/chat-core.ts.
+ */
+export const convoyChat = {
+  post: convoyChatPost,
+  list: convoyChatList,
 };

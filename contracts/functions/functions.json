@@ -719,6 +719,51 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "communityChat.post",
+      "domain": "communityChat",
+      "description": "Posts a message to the single APP-WIDE community chat ({ text }, text 1..2000). Member-gated (active member; else permission-denied); rejects empty/oversize text (invalid-argument). Appends communityChat/global/messages/{id} {senderUid, text, createdAt, senderDisplayName, senderAvatarPath} — the sender's safe profile is denormalized onto the message so the channel renders with no per-message profile lookup. Backend is the sole writer (firebase/firestore.rules grants any active-member read, denies client writes). Returns { messageId }. FCM push deferred to end-of-MVP. Deployed via grouped export as communityChat-post (functions/src/chatchannels/communityChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "communityChat.list",
+      "domain": "communityChat",
+      "description": "Paginated newest-first community messages ({ before? } where before is an ISO-8601 createdAt cursor, exclusive). Any active member reads. Returns { messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,createdAt}], nextBefore, hasMore, lastReadAt } (page size 30). lastReadAt is the caller's own userPrivate/{uid}.communityChatLastReadAt marker (the client derives the unread dot by comparing the newest message's createdAt to it — no fan-out unread aggregate). Blocking is NOT filtered server-side (global town square). Deployed via grouped export as communityChat-list (functions/src/chatchannels/communityChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "communityChat.markRead",
+      "domain": "communityChat",
+      "description": "Stamps the caller's community last-read marker ({} input) at userPrivate/{uid}.communityChatLastReadAt = now (owner-only readable, alongside dmUnreadTotal). The client's newest-message live listener uses it to show/clear the unread dot (O(1) per user, no fan-out). Returns { lastReadAt }. Deployed via grouped export as communityChat-markRead (functions/src/chatchannels/communityChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoyChat.post",
+      "domain": "convoyChat",
+      "description": "Posts a message to a per-CONVOY chat ({ convoyId, text }, text 1..2000). Member-gated AND accepted-convoy-member-gated: the caller must be in convoys/{convoyId}.memberUids with members[caller].inviteStatus=='accepted' (owner seeded accepted). A missing convoy or a total outsider is not-found (never permission-denied, so a convoy can't be probed); a still-invited/declined member is failed-precondition. Appends convoyChats/{convoyId}/messages/{id} {senderUid, text, createdAt, senderDisplayName, senderAvatarPath} (denormalized sender profile). Backend is the sole writer (firebase/firestore.rules grants reads only to accepted convoy members via a get() of the convoy doc, denies client writes). Returns { messageId }. Deployed via grouped export as convoyChat-post (functions/src/chatchannels/convoyChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoyChat.list",
+      "domain": "convoyChat",
+      "description": "Paginated newest-first convoy chat messages ({ convoyId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only an accepted member of the convoy may read (same gate as convoyChat.post; missing convoy/outsider not-found, still-invited/declined failed-precondition). Returns { convoyId, messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,createdAt}], nextBefore, hasMore } (page size 30). Deployed via grouped export as convoyChat-list (functions/src/chatchannels/convoyChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }
