@@ -472,10 +472,12 @@ fun AuthenticatedApp(
                         }
                     }
                     LiveShareAction.Stop -> {
-                        liveLocationCoordinator?.let { c ->
-                            scope.launch { c.stop() }
-                            BackgroundLocationController.stop(context)
-                        }
+                        liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
+                        // Always stop the foreground service, even if the
+                        // coordinator is somehow absent, so Stop can never leave
+                        // background location running — matches the popup Stop
+                        // callback and the LiveLocation route's teardown.
+                        BackgroundLocationController.stop(context)
                     }
                     LiveShareAction.OpenScreen -> openLiveShareFallback()
                 }
