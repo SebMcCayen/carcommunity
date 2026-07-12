@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -177,6 +178,11 @@ fun MapHome(
     // full-width "Where to?" bar, and tapping outside (the transparent scrim
     // below) collapses it back to the icon.
     var searchExpanded by remember { mutableStateOf(false) }
+
+    // Accessible dismiss for the expanded search: the outside-tap scrim is
+    // deliberately invisible to TalkBack/keyboard, so system Back is the
+    // reliable way to collapse the bar (only intercepts Back while expanded).
+    BackHandler(enabled = searchExpanded) { searchExpanded = false }
 
     // Live-location popup open/close is local UI state: tapping the broadcast
     // control opens the transparent live-share sheet (over the map, no scrim),
