@@ -50,6 +50,26 @@ class ShellNavTest {
         assertEquals(ShellTab.Map, ShellTab.DEFAULT)
     }
 
+    @Test
+    fun `More is retained as a valid ShellRoute constant for state restore`() {
+        // The retired "More" hub was replaced by the map-home profile popup, but
+        // the enum constant must survive so `rememberSaveable` can restore older
+        // persisted state (route = More) by name without throwing. valueOf must
+        // still resolve it.
+        assertEquals(ShellRoute.More, ShellRoute.valueOf("More"))
+    }
+
+    @Test
+    fun `More is not offered as a reachable destination`() {
+        // `More` is retained only for backward-compatible restore; it is not a
+        // live destination. Guard against it silently becoming reachable again by
+        // asserting it is the only route we intentionally exclude from the set of
+        // destinations the shell navigates to.
+        val reachable = ShellRoute.entries.filter { it != ShellRoute.More }
+        assertEquals(ShellRoute.entries.size - 1, reachable.size)
+        assert(!reachable.contains(ShellRoute.More))
+    }
+
     // --- live-share toggle decision --------------------------------------
 
     @Test

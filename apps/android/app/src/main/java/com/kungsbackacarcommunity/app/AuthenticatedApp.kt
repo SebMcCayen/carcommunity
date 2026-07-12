@@ -865,9 +865,10 @@ private fun LiveSharePromptDialog(
 /**
  * Renders the currently-open full-screen [route] over the tab shell. Each route
  * keeps the exact repository wiring + null-guards from the previous shell; its
- * own back affordance calls [onClose] to return to the tab hub. The "More" hub
- * (top-bar avatar) lists the profile/settings/account destinations, each of
- * which re-opens via [onOpenRoute].
+ * own back affordance calls [onClose] to return to the tab hub. The map-home
+ * profile menu (top-bar avatar, a transparent popup) opens these
+ * profile/settings/account destinations via [onOpenRoute]. The retired
+ * [ShellRoute.More] hub is handled here only as a migration-safe restore branch.
  */
 @Composable
 private fun RouteHost(
@@ -1298,6 +1299,16 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        // Migration-safe: `More` is the retired full-screen profile hub, kept as
+        // an enum constant only so older persisted state (route = More) still
+        // restores to a valid constant. It's unreachable from the new UI, so if
+        // it's ever restored we immediately return to the home hub via onClose()
+        // (route = null) instead of leaving `route` set and rendering blank.
+        ShellRoute.More -> {
+            LaunchedEffect(Unit) { onClose() }
+            LoadingScreen()
+        }
     }
 }
 
