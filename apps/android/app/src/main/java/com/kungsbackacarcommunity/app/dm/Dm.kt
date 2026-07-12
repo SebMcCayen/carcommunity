@@ -201,7 +201,12 @@ object DmMapper {
         )
     }
 
-    /** Sorts inbox rows newest-first (client-side, so no composite index is needed). */
+    /**
+     * Defensively re-sorts inbox rows newest-first. The server query already
+     * orders by `lastMessageAt` (backed by the `members CONTAINS + lastMessageAt
+     * DESC` composite index); this client-side pass just guards against any
+     * ordering drift after the cached/merged mapping.
+     */
     fun sortConversations(conversations: List<DmConversation>): List<DmConversation> =
         conversations.sortedByDescending { it.lastMessageAtMillis ?: Long.MIN_VALUE }
 }
