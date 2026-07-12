@@ -36,7 +36,6 @@ import java.util.Date
 fun DrivesListScreen(
     state: DrivesState,
     onSelect: (String) -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,

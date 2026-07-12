@@ -684,7 +684,6 @@ fun AuthenticatedApp(
                                         DrivesRoute(
                                             repository = drivesRepository,
                                             uid = uid,
-                                            onBack = { selectedTab = ShellTab.Map },
                                         )
                                     } else {
                                         HubScreen(

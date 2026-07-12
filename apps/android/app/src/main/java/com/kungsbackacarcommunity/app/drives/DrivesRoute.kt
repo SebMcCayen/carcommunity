@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 fun DrivesRoute(
     repository: DrivesRepository,
     uid: String,
-    onBack: () -> Unit,
 ) {
     // Bumped by the "try again" affordance to re-subscribe the observe flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -73,7 +72,6 @@ fun DrivesRoute(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
                 onRetry = { reloadKey++ },
-                onBack = onBack,
             )
     }
 }
