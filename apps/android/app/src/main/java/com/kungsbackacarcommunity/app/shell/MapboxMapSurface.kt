@@ -102,6 +102,14 @@ class MapboxMapSurface : MapSurface {
     // never fights the user panning (recenter() is still available on demand).
     private var centeredOnFirstFix: Boolean = false
 
+    // Camera tilt (degrees) applied to every camera we set — the initial default
+    // camera, the first-GPS-fix auto-centre, and recenter() — so the map opens
+    // and stays in the tilted 3D perspective (the Standard style renders 3D
+    // buildings/terrain when the camera is pitched). Held as a single mutable
+    // field so the follow-up layers toggle can flip it between DEFAULT_PITCH (3D)
+    // and MapMarkers.FLAT_PITCH (2D) and recenter() to re-apply it at runtime.
+    private var pitch: Double = MapMarkers.DEFAULT_PITCH
+
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
     }
@@ -154,6 +162,8 @@ class MapboxMapSurface : MapSurface {
                         )
                         zoom(MapMarkers.DEFAULT_CAMERA.zoom)
                     }
+                    // Keep the 3D tilt when the user re-centres.
+                    pitch(this@MapboxMapSurface.pitch)
                 },
             )
         }
@@ -182,6 +192,8 @@ class MapboxMapSurface : MapSurface {
                                 cameraOptions {
                                     center(point)
                                     zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                    // Open the first fix in the 3D tilt.
+                                    pitch(this@MapboxMapSurface.pitch)
                                 },
                             )
                         }
@@ -211,6 +223,8 @@ class MapboxMapSurface : MapSurface {
                                 ),
                             )
                             zoom(MapMarkers.DEFAULT_CAMERA.zoom)
+                            // Tilt the default camera so the map opens in 3D.
+                            pitch(this@MapboxMapSurface.pitch)
                         },
                     )
                     mapboxMap.loadStyle(Style.STANDARD) { style ->
