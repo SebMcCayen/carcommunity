@@ -687,8 +687,8 @@
     <string name="shell_mapPlaceholder">Map</string>
     <string name="shell_userMarkerLabel">You</string>
     <string name="shell_participantsSharing">%1$d sharing</string>
-    <string name="shell_liveShareOn">Sharing live location</string>
-    <string name="shell_liveShareOff">Share live location</string>
+    <string name="shell_liveShareOn">Live location, sharing</string>
+    <string name="shell_liveShareOff">Live location</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_menu">Menu</string>
     <string name="shell_tabMap">Map</string>

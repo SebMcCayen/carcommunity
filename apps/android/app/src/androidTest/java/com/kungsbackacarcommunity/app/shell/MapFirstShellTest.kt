@@ -111,8 +111,9 @@ class MapFirstShellTest {
     @Test
     fun liveControl_opensAndDismissesLivePopup() {
         setShell()
-        // The broadcast control is present (not sharing → "Share live location").
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
+        // The broadcast control is present. Select by its stable test tag rather
+        // than its a11y label, which is free to change as the UX evolves.
+        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).assertExists()
         // Tapping it opens the transparent live-location popup over the map
         // (rather than toggling sharing directly).
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).performClick()
