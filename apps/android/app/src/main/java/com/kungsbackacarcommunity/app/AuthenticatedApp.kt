@@ -600,7 +600,7 @@ fun AuthenticatedApp(
                         feedbackCoordinator = feedbackCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
-                        // gates for the More hub
+                        // gates for sub-routes (e.g. the Settings hub)
                         partnerStatsEnabled =
                             FeatureGate.isAvailable(
                                 flags = flags,
@@ -653,7 +653,23 @@ fun AuthenticatedApp(
                                         // handled internally by MapHome against the
                                         // MapSurface seam.
                                         onRecenter = { mapSurface.recenter() },
-                                        onOpenMore = { route = ShellRoute.More },
+                                        // The top-right profile button opens the
+                                        // account menu as a transparent Popup
+                                        // *over* the map (map stays visible)
+                                        // rather than navigating to a full-screen
+                                        // hub. Each entry still navigates to its
+                                        // own full route (or signs out).
+                                        moreMenuEntries =
+                                            profileMenuEntries(
+                                                profileEditCoordinator = profileEditCoordinator,
+                                                friendsRepository = friendsRepository,
+                                                dmRepository = dmRepository,
+                                                blockingRepository = blockingRepository,
+                                                partnerApplicationCoordinator =
+                                                    partnerApplicationCoordinator,
+                                                onOpenRoute = { route = it },
+                                                onSignOut = onSignOut,
+                                            ),
                                         // Placeholder: chat is per-event only
                                         // (EventChatRepository) — there is no
                                         // global/community unread-count source
@@ -931,9 +947,10 @@ private fun LiveSharePromptDialog(
 /**
  * Renders the currently-open full-screen [route] over the tab shell. Each route
  * keeps the exact repository wiring + null-guards from the previous shell; its
- * own back affordance calls [onClose] to return to the tab hub. The "More" hub
- * (top-bar avatar) lists the profile/settings/account destinations, each of
- * which re-opens via [onOpenRoute].
+ * own back affordance calls [onClose] to return to the tab hub. The map-home
+ * profile menu (top-bar avatar, a transparent popup) opens these
+ * profile/settings/account destinations via [onOpenRoute]. The retired
+ * [ShellRoute.More] hub is handled here only as a migration-safe restore branch.
  */
 @Composable
 private fun RouteHost(
@@ -993,69 +1010,6 @@ private fun RouteHost(
 ) {
     val context = LocalContext.current
     when (route) {
-        ShellRoute.More ->
-            HubScreen(
-                title = stringResource(R.string.shell_moreTitle),
-                entries =
-                    listOf(
-                        HubEntry(
-                            stringResource(R.string.shell_moreProfile),
-                            Icons.Filled.Person,
-                            if (profileEditCoordinator != null) {
-                                { onOpenRoute(ShellRoute.Profile) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_friendsTitle),
-                            Icons.Filled.Groups,
-                            if (friendsRepository != null) {
-                                { onOpenRoute(ShellRoute.Friends) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.dm_title),
-                            Icons.AutoMirrored.Filled.Message,
-                            if (dmRepository != null) {
-                                { onOpenRoute(ShellRoute.Conversations) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreBlocked),
-                            Icons.Filled.Block,
-                            if (blockingRepository != null) {
-                                { onOpenRoute(ShellRoute.Blocked) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_morePartnerApplication),
-                            Icons.Filled.BusinessCenter,
-                            if (partnerApplicationCoordinator != null) {
-                                { onOpenRoute(ShellRoute.PartnerApplication) }
-                            } else {
-                                null
-                            },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreSettings),
-                            Icons.Filled.Settings,
-                            { onOpenRoute(ShellRoute.Settings) },
-                        ),
-                        HubEntry(
-                            stringResource(R.string.shell_moreSignOut),
-                            Icons.AutoMirrored.Filled.Logout,
-                            onSignOut,
-                        ),
-                    ),
-            )
-
         ShellRoute.Profile -> {
             val saveStatus by
                 (profileEditCoordinator?.status ?: flowOf(ProfileEditStatus.Idle))
@@ -1431,6 +1385,16 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        // Migration-safe: `More` is the retired full-screen profile hub, kept as
+        // an enum constant only so older persisted state (route = More) still
+        // restores to a valid constant. It's unreachable from the new UI, so if
+        // it's ever restored we immediately return to the home hub via onClose()
+        // (route = null) instead of leaving `route` set and rendering blank.
+        ShellRoute.More -> {
+            LaunchedEffect(Unit) { onClose() }
+            LoadingScreen()
+        }
     }
 }
 
@@ -1442,6 +1406,82 @@ private fun LoadingScreen() {
         }
     }
 }
+
+/**
+ * The profile/account menu shown by the map-home top-right button. Rendered by
+ * [com.kungsbackacarcommunity.app.shell.MapHome] as a transparent
+ * [androidx.compose.ui.window.Popup] over the map
+ * (not a full-screen hub), but the entries themselves still navigate to full
+ * routes via [onOpenRoute] (or sign out). Unavailable entries carry a null
+ * `onClick` and are omitted by the popup / [HubScreen].
+ */
+@Composable
+private fun profileMenuEntries(
+    profileEditCoordinator: ProfileEditCoordinator?,
+    friendsRepository: FriendsRepository?,
+    dmRepository: DmRepository?,
+    blockingRepository: BlockingRepository?,
+    partnerApplicationCoordinator: PartnerApplicationCoordinator?,
+    onOpenRoute: (ShellRoute) -> Unit,
+    onSignOut: () -> Unit,
+): List<HubEntry> =
+    listOf(
+        HubEntry(
+            stringResource(R.string.shell_moreProfile),
+            Icons.Filled.Person,
+            if (profileEditCoordinator != null) {
+                { onOpenRoute(ShellRoute.Profile) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_friendsTitle),
+            Icons.Filled.Groups,
+            if (friendsRepository != null) {
+                { onOpenRoute(ShellRoute.Friends) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.dm_title),
+            Icons.AutoMirrored.Filled.Message,
+            if (dmRepository != null) {
+                { onOpenRoute(ShellRoute.Conversations) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreBlocked),
+            Icons.Filled.Block,
+            if (blockingRepository != null) {
+                { onOpenRoute(ShellRoute.Blocked) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_morePartnerApplication),
+            Icons.Filled.BusinessCenter,
+            if (partnerApplicationCoordinator != null) {
+                { onOpenRoute(ShellRoute.PartnerApplication) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreSettings),
+            Icons.Filled.Settings,
+            { onOpenRoute(ShellRoute.Settings) },
+        ),
+        HubEntry(
+            stringResource(R.string.shell_moreSignOut),
+            Icons.AutoMirrored.Filled.Logout,
+            onSignOut,
+        ),
+    )
 
 /**
  * The Cloud Storage path of the user's main car photo, or null when there is no

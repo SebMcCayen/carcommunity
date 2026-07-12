@@ -24,7 +24,7 @@ enum class ShellTab {
 }
 
 /**
- * Sub-routes reachable from a tab hub or the top-bar "More" menu. Rendered
+ * Sub-routes reachable from a tab hub or the map-home profile menu. Rendered
  * full-screen over the tab shell; each carries its own back affordance that
  * returns to the current tab hub. Enum (not a class) so it survives
  * `rememberSaveable` without a custom Saver.
@@ -55,6 +55,18 @@ enum class ShellRoute {
     Feedback,
     Subscription,
     Settings,
+
+    /**
+     * Retired: the old full-screen "More"/profile hub that the top-bar avatar
+     * used to open. The map-home profile menu (a transparent popup) replaced it,
+     * so nothing in the new UI navigates here and it is deliberately absent from
+     * the profile menu. The constant is retained ONLY for backward-compatible
+     * state restore: `rememberSaveable` persists `ShellRoute` by name, so an
+     * older build could have saved `route = More`; dropping the constant would
+     * throw during restore. The route host in AuthenticatedApp handles it with a
+     * migration-safe branch that returns to the home hub instead of rendering
+     * blank. Do not reuse.
+     */
     More,
 }
 
