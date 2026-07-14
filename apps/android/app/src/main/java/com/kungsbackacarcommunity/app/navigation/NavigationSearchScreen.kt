@@ -20,7 +20,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -55,6 +58,9 @@ import com.kungsbackacarcommunity.app.shell.MapSurface
 
 /** Test tag on the whole navigation search overlay, for UI tests. */
 const val NAV_SEARCH_TEST_TAG = "nav_search"
+
+/** Test tag on the route preview's "Start" (turn-by-turn) button. */
+const val NAV_START_TEST_TAG = "nav_start"
 
 /**
  * Full-screen address-search + directions overlay behind the map-home "Where
@@ -76,6 +82,9 @@ const val NAV_SEARCH_TEST_TAG = "nav_search"
  * @param originProvider current-location source for the route origin + proximity
  *   bias; returns null when unavailable (→ an inline "location off" hint).
  * @param onClose leave the overlay (back to the map-home tab).
+ * @param onStartNavigation enter turn-by-turn navigation to the resolved
+ *   destination (invoked from the route preview's "Start" button). Carries the
+ *   destination coordinate + its label; the host supplies the origin/GPS.
  */
 @Composable
 fun NavigationSearchScreen(
@@ -83,6 +92,7 @@ fun NavigationSearchScreen(
     searchClient: MapboxSearchClient,
     originProvider: suspend () -> LatLng?,
     onClose: () -> Unit,
+    onStartNavigation: (destination: LatLng, destinationLabel: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -180,6 +190,10 @@ fun NavigationSearchScreen(
             RouteSheet(
                 state = state,
                 onClear = { controller.clearDestination() },
+                onStart = {
+                    val dest = state.destination
+                    if (dest != null) onStartNavigation(dest.point, dest.name)
+                },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -324,6 +338,7 @@ private fun HintCard(text: String) {
 private fun RouteSheet(
     state: NavUiState,
     onClear: () -> Unit,
+    onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val destination = state.destination ?: return
@@ -400,6 +415,30 @@ private fun RouteSheet(
                     )
 
                 state.route != null -> RouteDetails(route = state.route)
+            }
+
+            // Prominent "Start" CTA once a route is resolved — enters turn-by-turn
+            // navigation (Google-Maps style). Only shown with a usable route AND
+            // in a build that actually bundles the Mapbox Navigation SDK
+            // (BuildConfig.NAV_SDK_ENABLED). Token-less builds compile the
+            // src/noNav stub, whose TurnByTurnNavScreen only reports "navigation
+            // unavailable" — so hide the CTA there rather than advertise a feature
+            // that can't run. Route search + preview stay available in both builds.
+            if (state.route != null && BuildConfig.NAV_SDK_ENABLED) {
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Navigation,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.turnByTurn_start),
+                        modifier = Modifier.padding(start = KccSpacing.s2),
+                    )
+                }
             }
         }
     }

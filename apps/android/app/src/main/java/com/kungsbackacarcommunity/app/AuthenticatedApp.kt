@@ -5,11 +5,14 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Message
@@ -54,10 +57,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
@@ -129,6 +136,7 @@ import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -400,6 +408,9 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            // Shown when the nav view's "Report incident/roadwork" is tapped while
+            // the incidents feature (a sibling PR) is not yet present in this build.
+            val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
             val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
             val incidentReportErrorText = stringResource(R.string.incidents_reportError)
             val incidentLocationUnavailableText =
@@ -419,6 +430,12 @@ fun AuthenticatedApp(
             // (see HttpMapboxSearchClient). Origin comes from the fused-location
             // provider, degrading to null (→ inline hint) without a fix/permission.
             var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+            // Turn-by-turn navigation target. Non-null → the full-screen nav view
+            // is shown (over the search overlay). The origin is left to the nav
+            // view, which navigates from the live GPS fix. Transient by design (a
+            // process-death restart drops you back to the map, not mid-navigation).
+            var navDestination by remember { mutableStateOf<LatLng?>(null) }
+            var navDestinationLabel by remember { mutableStateOf("") }
             val mapboxToken = stringResource(R.string.mapbox_access_token)
             val searchLanguage = remember { java.util.Locale.getDefault().language }
             val searchClient =
@@ -525,6 +542,13 @@ fun AuthenticatedApp(
 
             CompositionLocalProvider(LocalSnackbarHostState provides snackbarHostState) {
               Box(modifier = Modifier.fillMaxSize()) {
+                // Keep the screen awake (no lock/dim) while the user is actively
+                // sharing live location OR has the turn-by-turn navigation overlay
+                // open — a driver following a route or being tracked shouldn't have
+                // the display sleep. Cleared automatically the moment both stop (see
+                // KeepScreenOn), so the screen sleeps normally the rest of the time.
+                KeepScreenOn(enabled = isSharing || navSearchOpen)
+
                 // Single close path for the currently-open route, shared by
                 // system-Back and each route's in-screen close so their teardown
                 // can't drift. Closing the LiveLocation overlay tears down the
@@ -561,7 +585,32 @@ fun AuthenticatedApp(
                     }
                 }
 
-                if (navSearchOpen) {
+                if (navDestination != null) {
+                    // Full-screen turn-by-turn navigation (Google-Maps style),
+                    // entered from the route preview's "Start" button. Owns its own
+                    // Back handling and map surface (its own Nav-SDK MapView). On the
+                    // config-less / CI build this is the no-SDK stub (see the
+                    // src/noNav TurnByTurnNavScreen). The report affordance is wired
+                    // to a "coming soon" snackbar until the incidents feature (a
+                    // sibling PR) lands — swap `onReportIncident` to that feature's
+                    // entry point once it is present in this branch.
+                    TurnByTurnNavScreen(
+                        origin = null,
+                        destination = navDestination!!,
+                        destinationLabel = navDestinationLabel,
+                        onExit = {
+                            navDestination = null
+                            mapSurface.setRouteOverlay(null)
+                            navSearchOpen = false
+                        },
+                        onReportIncident = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(reportComingSoonText)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
                     // the same map surface behind it (MapHome is not composed
                     // while this is open, so the single MapView is free), draws
@@ -575,6 +624,10 @@ fun AuthenticatedApp(
                         onClose = {
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
+                        },
+                        onStartNavigation = { dest, label ->
+                            navDestinationLabel = label
+                            navDestination = dest
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -991,7 +1044,28 @@ private fun ShellBottomBar(
         NavigationBarItem(
             selected = selected == ShellTab.Create,
             onClick = { onSelect(ShellTab.Create) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.shell_tabCreate)) },
+            // The Create ("+") tab starts live location / convoys — make it the
+            // standout action: a WHITE plus on a filled primary disc so it reads
+            // as a distinct button and stays high-contrast against the
+            // semi-transparent nav bar in both light and dark (a bare white tint
+            // would wash out over the light 50%-alpha surface). Behaviour is
+            // unchanged — only the icon's appearance differs from the other tabs.
+            icon = {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(KccSpacing.s8)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = stringResource(R.string.shell_tabCreate),
+                        tint = Color.White,
+                    )
+                }
+            },
             label = null,
         )
         NavigationBarItem(
@@ -1492,6 +1566,30 @@ private fun RouteHost(
         ShellRoute.More -> {
             LaunchedEffect(Unit) { onClose() }
             LoadingScreen()
+        }
+    }
+}
+
+/**
+ * Holds the display awake while [enabled] is true by setting the current view's
+ * `keepScreenOn` (which toggles [android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON]).
+ * When the effect (re)starts it captures the view's PRIOR `keepScreenOn` value and
+ * RESTORES it on dispose (or when [enabled] flips), so the screen dims/locks
+ * normally the rest of the time without clobbering a keepScreenOn that something
+ * else may have set on the same view.
+ */
+@Composable
+private fun KeepScreenOn(enabled: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(view, enabled) {
+        if (enabled) {
+            val previous = view.keepScreenOn
+            view.keepScreenOn = true
+            onDispose { view.keepScreenOn = previous }
+        } else {
+            // Not our turn to keep the screen awake: leave the flag untouched so
+            // we never clear a keepScreenOn that something else set on this view.
+            onDispose {}
         }
     }
 }

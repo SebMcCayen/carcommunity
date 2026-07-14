@@ -8,9 +8,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +63,7 @@ class NavigationSearchScreenTest {
                     searchClient = FakeClient(emptyList(), null),
                     originProvider = { LatLng(12.0757, 57.4874) },
                     onClose = {},
+                    onStartNavigation = { _, _ -> },
                 )
             }
         }
@@ -76,6 +80,7 @@ class NavigationSearchScreenTest {
                     searchClient = FakeClient(listOf(suggestion), route),
                     originProvider = { LatLng(12.0757, 57.4874) },
                     onClose = {},
+                    onStartNavigation = { _, _ -> },
                 )
             }
         }
@@ -104,5 +109,57 @@ class NavigationSearchScreenTest {
         composeTestRule.onNodeWithText(str(R.string.addressSearch_directionsTitle))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Head north on Main Street").assertIsDisplayed()
+
+        // The "Start" (turn-by-turn) CTA is gated on BuildConfig.NAV_SDK_ENABLED:
+        // it appears once a route is resolved ONLY in a build that bundles the
+        // Mapbox Navigation SDK. Token-less builds (the config-less/CI path this
+        // test runs in) compile the noNav stub and hide the CTA.
+        if (BuildConfig.NAV_SDK_ENABLED) {
+            composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
+        } else {
+            composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun startButton_invokesOnStartNavigation_withDestination() {
+        // The Start CTA only exists in a build with the Navigation SDK bundled
+        // (BuildConfig.NAV_SDK_ENABLED). In the token-less noNav config there is
+        // nothing to click, so skip rather than fail (covered by the hidden-CTA
+        // assertion in typingShowsSuggestion_andSelectingShowsDirections).
+        assumeTrue(BuildConfig.NAV_SDK_ENABLED)
+        var started: Pair<LatLng, String>? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NavigationSearchScreen(
+                    mapSurface = StubMapSurface(),
+                    searchClient = FakeClient(listOf(suggestion), route),
+                    originProvider = { LatLng(12.0757, 57.4874) },
+                    onClose = {},
+                    onStartNavigation = { dest, label -> started = dest to label },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(str(R.string.addressSearch_searchPlaceholder))
+            .performTextInput("kung")
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithText(suggestion.name).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithText(suggestion.name).performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule
+                .onAllNodesWithText(str(R.string.turnByTurn_start))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).performClick()
+
+        assertEquals(
+            "Expected onStartNavigation with the picked destination, got $started",
+            suggestion.point to suggestion.name,
+            started,
+        )
     }
 }
