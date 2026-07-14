@@ -13,7 +13,8 @@
  *  - Store refunds/cancellations are provider-side and out of scope.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import {
   adminGetUserSubscription,
@@ -69,7 +70,16 @@ function platformLabel(platform: string): string {
 }
 
 export default function SubscriptionPage() {
-  const [userId, setUserId] = useState('');
+  const [searchParams] = useSearchParams();
+  // When the admin arrives from a specific user's profile
+  // (/subscription?uid=…) the target UID is already known, so it is pre-filled
+  // and locked read-only — a mistyped UID on a destructive grant/revoke is
+  // dangerous. Without the param the page is a standalone lookup (reachable
+  // from the sidebar) and the UID stays manually editable.
+  const presetUid = (searchParams.get('uid') ?? '').trim();
+  const fromProfile = presetUid.length > 0;
+
+  const [userId, setUserId] = useState(presetUid);
   const [summary, setSummary] = useState<AdminUserSubscriptionSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +106,12 @@ export default function SubscriptionPage() {
       setLoading(false);
     }
   }, []);
+
+  // Auto-look-up when a UID arrives via the profile link, so pressing
+  // "Hantera prenumeration" opens the flow already scoped to that user.
+  useEffect(() => {
+    if (presetUid) void load(presetUid);
+  }, [presetUid, load]);
 
   const handleLookup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,6 +173,8 @@ export default function SubscriptionPage() {
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             placeholder={t('subscription.userIdPlaceholder')}
+            readOnly={fromProfile}
+            aria-readonly={fromProfile}
           />
           <button
             type="submit"
@@ -166,6 +184,7 @@ export default function SubscriptionPage() {
             {loading ? t('subscription.lookupLoading') : t('subscription.lookup')}
           </button>
         </div>
+        {fromProfile && <p className={styles.hint}>{t('subscription.fromProfileHint')}</p>}
       </form>
 
       {error && (
