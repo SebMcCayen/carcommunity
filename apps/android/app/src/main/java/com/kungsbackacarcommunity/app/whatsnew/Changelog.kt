@@ -61,14 +61,20 @@ object Changelog {
             val versionCode = obj.optInt("versionCode", -1)
             val versionName = obj.optString("versionName", "")
             val releaseDate = obj.optString("releaseDate", "")
-            if (versionCode <= 0 || versionName.isBlank() || releaseDate.isBlank()) continue
+            val changes = stringList(obj, "changes")
+            // `changes` is required (the maintainer contract): a release with no
+            // changes would render a blank card / empty popup, so treat it as
+            // malformed and skip it alongside the other required-field checks.
+            if (versionCode <= 0 || versionName.isBlank() || releaseDate.isBlank() || changes.isEmpty()) {
+                continue
+            }
             parsed +=
                 ChangelogEntry(
                     versionCode = versionCode,
                     versionName = versionName,
                     releaseDate = releaseDate,
                     highlights = stringList(obj, "highlights"),
-                    changes = stringList(obj, "changes"),
+                    changes = changes,
                 )
         }
         return parsed.sortedByDescending { it.versionCode }.distinctBy { it.versionCode }

@@ -63,6 +63,26 @@ class ChangelogTest {
     }
 
     @Test
+    fun `parse skips entries whose changes list is missing or empty`() {
+        val json =
+            """
+            {
+              "entries": [
+                {"versionCode": 3, "versionName": "0.1.0", "releaseDate": "2026-07-09",
+                 "highlights": ["h"]},
+                {"versionCode": 4, "versionName": "0.2.0", "releaseDate": "2026-07-10",
+                 "highlights": ["h"], "changes": []},
+                {"versionCode": 5, "versionName": "0.3.0", "releaseDate": "2026-07-11",
+                 "highlights": ["h"], "changes": ["", "  "]},
+                {"versionCode": 6, "versionName": "0.4.0", "releaseDate": "2026-07-12",
+                 "highlights": ["h"], "changes": ["real change"]}
+              ]
+            }
+            """.trimIndent()
+        assertEquals(listOf(6), Changelog.parse(json).map { it.versionCode })
+    }
+
+    @Test
     fun `parse de-duplicates entries sharing a versionCode`() {
         val json =
             """
