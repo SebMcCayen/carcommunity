@@ -1,13 +1,19 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -20,6 +26,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -41,29 +48,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -74,6 +86,14 @@ import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
+
+/**
+ * Shared surface opacity for the map-overlay popups (chat, layers, and
+ * live-location). Slightly translucent so the live map shows through a little
+ * and all the popups read as one consistent floating layer, while staying
+ * opaque enough to be readable.
+ */
+private const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
@@ -153,14 +173,51 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
-    val mapMode by mapSurface.mapMode.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
+    val bearing by mapSurface.bearing.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
     // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
+    }
+
+    // Day/night follows the Android system Dark theme by default: on open the map
+    // matches the device theme, and it live-updates if the system flips while the
+    // app is open (e.g. Android's scheduled sunset->sunrise dark theme). Once the
+    // user flips day/night manually in the layers popup, [desiredMapMode] holds
+    // their explicit choice (non-null) and this effect applies it instead of the
+    // system theme for the rest of the session. While [desiredMapMode] is null the
+    // map follows the system default ([systemDefaultMode]).
+    // Keyed on mapSurface too (mirrors the setUserMarker effect above) so the
+    // *effective* mode is re-applied if the surface instance is swapped (e.g.
+    // StubMapSurface -> a real Mapbox-backed surface); a fresh surface starts at
+    // its default MapMode, so without this key it would keep that default —
+    // dropping the user's manual override — until the system theme flipped or the
+    // user toggled manually again. Applying the effective mode here means the
+    // manual choice survives a surface swap.
+    // Persisted with [rememberSaveable] (not plain [remember]) so the user's manual
+    // day/night override survives configuration changes / activity recreation (e.g.
+    // rotation). With plain remember it would reset to null on rotation and the
+    // effect below would immediately snap the map back to [systemDefaultMode],
+    // dropping the manual choice. MapMode is a simple enum, so a name-based Saver
+    // stores the nullable value.
+    var desiredMapMode by rememberSaveable(
+        stateSaver = Saver(
+            save = { it?.name },
+            // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
+            // e.g. after an app update that renames/removes an enum value, or
+            // corrupted saved state — which would crash activity recreation.
+            // entries.find returns null for an unknown name (falls back to
+            // "follow system") instead of throwing.
+            restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
+        ),
+    ) { mutableStateOf<MapMode?>(null) }
+    val systemInDark = isSystemInDarkTheme()
+    val systemDefaultMode = if (systemInDark) MapMode.Night else MapMode.Day
+    LaunchedEffect(mapSurface, systemInDark, desiredMapMode) {
+        mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
     // Push the crowd-sourced incident markers onto the surface whenever they
@@ -186,6 +243,17 @@ fun MapHome(
     // opens the transparent toggle sheet, tapping outside it dismisses it.
     var layersOpen by remember { mutableStateOf(false) }
 
+    // Search bar collapsed/expanded is local UI state: it starts collapsed to a
+    // round search-icon button in the upper-left; tapping it expands the
+    // full-width "Where to?" bar, and tapping outside (the transparent scrim
+    // below) collapses it back to the icon.
+    var searchExpanded by remember { mutableStateOf(false) }
+
+    // Accessible dismiss for the expanded search: the outside-tap scrim is
+    // deliberately invisible to TalkBack/keyboard, so system Back is the
+    // reliable way to collapse the bar (only intercepts Back while expanded).
+    BackHandler(enabled = searchExpanded) { searchExpanded = false }
+
     // Live-location popup open/close is local UI state: tapping the broadcast
     // control opens the transparent live-share sheet (over the map, no scrim),
     // tapping outside it dismisses it.
@@ -200,6 +268,30 @@ fun MapHome(
         // no centre-locked Compose "You" overlay here.
         mapSurface.Content(Modifier.fillMaxSize())
 
+        // Transparent outside-tap catcher, shown only while the search bar is
+        // expanded: a tap on the open map area collapses it back to the round
+        // icon. It's composed here, above the map but below every later overlay
+        // (the search row and the right-side floating controls composed next),
+        // so it only catches taps that fall through to the map. Taps on the bar
+        // itself, or on the floating controls, are consumed by those overlays
+        // (composed above the scrim) and don't collapse via this layer — the
+        // controls just do their own thing. A raw pointerInput tap handler (no
+        // ripple, no clickable role) plus clearAndSetSemantics keeps this
+        // invisible dismiss layer out of the accessibility tree — otherwise it
+        // exposes an unlabeled focusable "Button" node over the whole map to
+        // TalkBack.
+        if (searchExpanded) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures { searchExpanded = false }
+                        }
+                        .clearAndSetSemantics {},
+            )
+        }
+
         // Top: search bar + avatar/menu, then the loading status line.
         Column(
             modifier =
@@ -213,6 +305,8 @@ fun MapHome(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onOpenMore = { moreOpen = true },
+                searchExpanded = searchExpanded,
+                onExpandSearch = { searchExpanded = true },
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
@@ -238,6 +332,18 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val statusColors = LocalKccStatusColors.current
+            // 0. Compass — a north-arrow rotated by the current map bearing so it
+            //    keeps pointing at true north as the map rotates; tapping it eases
+            //    the map back to north-up. Sits at the top of the stack, above the
+            //    live-location control. The built-in Mapbox compass is disabled in
+            //    MapboxMapSurface so this is the only compass shown.
+            CircleControl(
+                icon = Icons.Filled.Navigation,
+                contentDescription = stringResource(R.string.shell_compass),
+                onClick = { mapSurface.resetNorth() },
+                iconRotationDegrees = -bearing,
+                modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
+            )
             // 1. Live-location broadcast control — GREEN when sharing. Opens the
             //    transparent live-share popup (over the map, no scrim) with the
             //    session options rather than toggling sharing directly.
@@ -269,8 +375,15 @@ fun MapHome(
             // 2. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
             //    those non-default layers is active, so an enabled overlay is
-            //    still discoverable from the collapsed control.
-            val layersActive = trafficOn || mapMode == MapMode.Night || !is3d
+            //    still discoverable from the collapsed control. Day/night counts
+            //    as "active" only when the user has manually DEVIATED from the
+            //    system default (desiredMapMode set AND different from the theme
+            //    default) — a system-driven default Night (dark theme, untouched)
+            //    must NOT light up the button.
+            val layersActive =
+                trafficOn ||
+                    (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
+                    !is3d
             CircleControl(
                 icon = Icons.Filled.Layers,
                 contentDescription = stringResource(R.string.shell_layersButton),
@@ -332,11 +445,27 @@ fun MapHome(
         if (layersOpen) {
             MapLayersPopup(
                 trafficOn = trafficOn,
-                nightMode = mapMode == MapMode.Night,
+                // Drive the night Switch off the IMMEDIATE user intent (the
+                // effective desired mode) rather than the SURFACE's mapMode, which
+                // only updates after the LaunchedEffect runs and the surface flow
+                // re-emits. onNightModeChange sets [desiredMapMode] synchronously,
+                // so the Switch flips at once instead of snapping back / jittering
+                // while it waits for the surface to catch up.
+                nightMode = (desiredMapMode ?: systemDefaultMode) == MapMode.Night,
                 is3d = is3d,
                 onTrafficChange = { mapSurface.setTrafficEnabled(it) },
                 onNightModeChange = {
-                    mapSurface.setMapMode(if (it) MapMode.Night else MapMode.Day)
+                    // A manual flip records the user's explicit choice in
+                    // [desiredMapMode]; the system-follow effect above then applies
+                    // this mode (instead of the theme default) for the rest of the
+                    // session — and re-applies it if the surface instance is swapped.
+                    val mode = if (it) MapMode.Night else MapMode.Day
+                    desiredMapMode = mode
+                    // Apply immediately so the map restyles on the same frame the
+                    // user toggles, instead of waiting for the system-follow effect
+                    // coroutine to re-run; that effect stays idempotent and simply
+                    // re-applies this same mode when it next runs.
+                    mapSurface.setMapMode(mode)
                 },
                 on3dChange = { mapSurface.set3dEnabled(it) },
                 onDismiss = { layersOpen = false },
@@ -363,6 +492,12 @@ fun MapHome(
 
 /** Test tag on the floating map-layers control. */
 const val MAP_HOME_LAYERS_TAG = "map_home_layers"
+
+/** Test tag on the floating compass control (top of the right-side stack). */
+const val MAP_HOME_COMPASS_TAG = "map_home_compass"
+
+/** Test tag on the collapsed round search button (upper-left). */
+const val MAP_HOME_SEARCH_TAG = "map_home_search"
 
 /** Test tag on the floating report-incident control. */
 const val MAP_HOME_REPORT_TAG = "map_home_report"
@@ -410,11 +545,14 @@ private fun MapLayersPopup(
             modifier =
                 Modifier
                     .padding(16.dp)
-                    .widthIn(max = 360.dp)
+                    // Fill available width, then cap at 360.dp: full-width on
+                    // phones, capped on tablets (matches LiveSharePopup order).
                     .fillMaxWidth()
+                    .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            // Slightly translucent so the map shows through (matches the chat popup).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -459,6 +597,16 @@ private fun MapLayersPopup(
                     label = stringResource(R.string.shell_layers3d),
                     checked = is3d,
                     onCheckedChange = on3dChange,
+                )
+                // Attribution for the Trafikverket-sourced incidents drawn on the
+                // map layer (product-owner requirement: credit Trafikverket wherever
+                // we show their open data). No per-incident detail sheet exists, so
+                // this general incidents-layer credit is the visible surface.
+                Text(
+                    text = stringResource(R.string.incidents_sourceTrafikverket),
+                    modifier = Modifier.padding(top = KccSpacing.s2),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -531,7 +679,7 @@ private fun LiveSharePopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -786,22 +934,44 @@ private fun ChatCircleControl(
 
 /**
  * The community-chat overlay shown when the bubble is tapped. Rendered as a
- * [Dialog] so tapping outside the card (or Back) minimizes it back to the
- * bubble. Content is a placeholder: there is no global/community-chat inbox
- * client-side yet (chat is per-event only), so this explains where chat lives
- * and shows the caught-up empty state. Wire real messages here once a global
- * unread-count + conversation source exists (backend, out of this lane).
+ * [Popup] (not a [Dialog]) anchored to the LOWER part of the screen — just above
+ * the bottom navigation bar — with NO dimming scrim, so the live map stays
+ * visible behind it; its surface is slightly translucent to match the layers
+ * popup. Tapping outside the card (or Back) minimizes it back to the bubble
+ * (focusable popup). Content is a placeholder: there is no global/community-chat
+ * inbox client-side yet (chat is per-event only), so this explains where chat
+ * lives and shows the caught-up empty state. Wire real messages here once a
+ * global unread-count + conversation source exists (backend, out of this lane).
  */
 @Composable
 private fun ChatPopup(
     unreadCount: Int,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
         Surface(
-            modifier = Modifier.widthIn(max = 360.dp).testTag(MAP_HOME_CHAT_POPUP_TAG),
+            modifier =
+                Modifier
+                    // Sit above the system nav-bar inset AND the app's bottom
+                    // navigation bar so the card never hides behind the tab bar,
+                    // with a small breathing gap above it. Derive the offset from
+                    // the shared bar-height constant so it can't drift if the bar
+                    // changes: ShellBottomBarHeight (80.dp) + KccSpacing.s3 (12.dp).
+                    .navigationBarsPadding()
+                    .padding(horizontal = KccSpacing.s4)
+                    .padding(bottom = ShellBottomBarHeight + KccSpacing.s3)
+                    // Fill available width, then cap at 360.dp: full-width on
+                    // phones, capped on tablets (matches LiveSharePopup order).
+                    .fillMaxWidth()
+                    .widthIn(max = 360.dp)
+                    .testTag(MAP_HOME_CHAT_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            // Slightly translucent so the map shows through (matches the layers popup).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -857,6 +1027,8 @@ private fun SearchBarRow(
     avatarUrl: String?,
     onSearch: () -> Unit,
     onOpenMore: () -> Unit,
+    searchExpanded: Boolean,
+    onExpandSearch: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
     onDismissMore: () -> Unit,
@@ -866,41 +1038,74 @@ private fun SearchBarRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        Surface(
-            // Keep a >= 48dp touch target even though the visual content is
-            // slimmed: heightIn guarantees the accessibility minimum hit area
-            // while the inner padding stays small.
-            modifier = Modifier.weight(1f).heightIn(min = KccSpacing.s12),
-            shape = RoundedCornerShape(KccRadius.full),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            shadowElevation = 3.dp,
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onSearch()
-            },
-        ) {
-            Row(
-                // fillMaxHeight so the slim content stays centered within the
-                // 48dp minimum touch target rather than pinning to the top.
-                modifier =
-                    Modifier.fillMaxHeight()
-                        .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        if (searchExpanded) {
+            // Expanded: the full-width "Where to?" bar. Same search behaviour as
+            // before — tapping it opens the search screen (or lets the user type).
+            Surface(
+                // Fixed 48dp height (matching the profile button) so the expanded
+                // bar only extends horizontally (weight = fill remaining width) and
+                // never grows vertically. A bare heightIn(min=…) let the inner
+                // fillMaxHeight() Row expand to the whole screen, turning the bar
+                // into a full-height pill. 48dp is also the accessibility minimum.
+                modifier = Modifier.weight(1f).height(KccSpacing.s12),
+                shape = RoundedCornerShape(KccRadius.full),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onSearch()
+                },
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.shell_searchIcon),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.shell_searchHint),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    // fillMaxHeight so the slim content stays centered within the
+                    // 48dp minimum touch target rather than pinning to the top.
+                    modifier =
+                        Modifier.fillMaxHeight()
+                            .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.shell_searchIcon),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.shell_searchHint),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+        } else {
+            // Collapsed: a round search-icon button in the upper-left, the same
+            // size as the profile button. Tapping it expands the full bar. The
+            // Spacer pushes the profile button to the upper-right corner.
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onExpandSearch()
+                },
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.shell_searchExpand),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
         }
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it
         // hands the button's real measured window bounds to the popup's
@@ -913,7 +1118,7 @@ private fun SearchBarRow(
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
                 onClick = onOpenMore,
-                modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_MORE_TAG),
             ) {
                 // Always render the AccountCircle fallback so the button never
                 // shows a blank circle: it covers both the window while the Storage
@@ -1010,6 +1215,7 @@ private fun CircleControl(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    iconRotationDegrees: Float = 0f,
 ) {
     val haptics = LocalHapticFeedback.current
     Surface(
@@ -1022,10 +1228,16 @@ private fun CircleControl(
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             onClick()
         },
-        modifier = modifier.size(48.dp),
+        modifier = modifier.size(KccSpacing.s12),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = contentDescription)
+            // Rotate only the glyph (e.g. the compass north-arrow), not the whole
+            // button — a 0 default leaves every other control untouched.
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.rotate(iconRotationDegrees),
+            )
         }
     }
 }

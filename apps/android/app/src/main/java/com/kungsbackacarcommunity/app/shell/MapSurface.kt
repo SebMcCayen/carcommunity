@@ -127,6 +127,14 @@ interface MapSurface {
     /** Whether the camera is in tilted 3D mode (true) or flat 2D (false). */
     val is3d: StateFlow<Boolean>
 
+    /**
+     * The current map bearing in degrees (0 = north-up, clockwise). Observed by
+     * the floating compass control, which rotates its north-arrow by the negative
+     * of this value so the arrow keeps pointing to true north as the map rotates.
+     * A surface that cannot rotate (the stub) exposes a constant 0.
+     */
+    val bearing: StateFlow<Float>
+
     /** The destination + route line to draw, or null when none is set. */
     val routeOverlay: StateFlow<MapRouteOverlay?>
 
@@ -135,6 +143,12 @@ interface MapSurface {
 
     /** Recentre the camera on the user's position. */
     fun recenter()
+
+    /**
+     * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
+     * the stub, which has no rotatable camera.
+     */
+    fun resetNorth()
 
     /**
      * Re-apply the device-location component after the runtime fine-location
@@ -204,6 +218,10 @@ class StubMapSurface(
     private val is3dFlow = MutableStateFlow(true)
     override val is3d: StateFlow<Boolean> = is3dFlow.asStateFlow()
 
+    // The stub has no rotatable camera: bearing is a constant north-up 0.
+    private val bearingFlow = MutableStateFlow(0f)
+    override val bearing: StateFlow<Float> = bearingFlow.asStateFlow()
+
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
@@ -218,6 +236,9 @@ class StubMapSurface(
     override fun recenter() {
         recenterCount += 1
     }
+
+    /** No rotatable camera on the stub, so resetting to north is a no-op. */
+    override fun resetNorth() = Unit
 
     /** No device/GPS on the stub, so there is no location component to refresh. */
     override fun refreshLocationComponent() = Unit

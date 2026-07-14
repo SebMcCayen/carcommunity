@@ -62,7 +62,9 @@ export async function runTrafikverketSync(
   }
 
   const response = await fetcher(apiKey);
-  const imported = parseTrafikverketResponse(response);
+  const imported = parseTrafikverketResponse(response, (code) => {
+    logger.info('Trafikverket: unrecognized MessageCodeValue (imported as hazard)', { code });
+  });
   const expiresAt = Timestamp.fromDate(new Date(now.getTime() + IMPORT_TTL_MS));
   const createdAt = Timestamp.fromDate(now);
 

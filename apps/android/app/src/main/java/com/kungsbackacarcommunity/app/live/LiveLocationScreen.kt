@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -56,122 +55,106 @@ fun LiveLocationScreen(
     var selectedDuration by rememberSaveable { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
 
     AeroPage(title = stringResource(R.string.liveLocation_screenTitle), modifier = modifier) {
-            // Safety first: never interact with the app while driving.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                    ),
-            ) {
-                Text(
-                    text = stringResource(R.string.liveLocation_safeDrivingWarning),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-
-            // Current sharing status.
+        // Current sharing status.
+        Text(
+            text =
+                stringResource(
+                    if (sharing) {
+                        R.string.liveLocation_statusSharing
+                    } else {
+                        R.string.liveLocation_statusNotSharing
+                    },
+                ),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        if (sharing) {
             Text(
-                text =
-                    stringResource(
-                        if (sharing) {
-                            R.string.liveLocation_statusSharing
-                        } else {
-                            R.string.liveLocation_statusNotSharing
-                        },
-                    ),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
+                text = stringResource(R.string.liveLocation_sessionAutoExpires),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (sharing) {
-                Text(
-                    text = stringResource(R.string.liveLocation_sessionAutoExpires),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        }
 
-            if (sharing) {
-                // Stopping an active session is authenticated-gated (not
-                // member-gated) on the backend, so ALWAYS offer Stop while
-                // sharing — even if membership/flag state has lapsed since the
-                // session started. Membership only gates STARTING (below).
-                Button(
-                    onClick = onStop,
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.liveLocation_stop))
-                }
-            } else if (canShare) {
-                Text(
-                    text = stringResource(R.string.liveLocation_durationLabel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                LiveDurationPicker(
-                    selected = selectedDuration,
-                    enabled = !busy,
-                    onSelect = { selectedDuration = it },
-                )
-                Button(
-                    onClick = { onStart(selectedDuration) },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.liveLocation_start))
-                }
-            } else {
-                // Membership gate for STARTING — mirrors the backend member
-                // check on live.startSession. Copy is specific to sharing your
-                // own position; "hide me now" below stays available, and Stop
-                // above stays available whenever a session is active.
-                InfoCard(
-                    title = stringResource(R.string.subscription_teaserTitle),
-                    body = stringResource(R.string.liveLocation_memberRequiredToShare),
-                )
-            }
-
-            // Privacy action — never gated, always offered.
-            OutlinedButton(
-                onClick = onHideMeNow,
+        if (sharing) {
+            // Stopping an active session is authenticated-gated (not
+            // member-gated) on the backend, so ALWAYS offer Stop while
+            // sharing — even if membership/flag state has lapsed since the
+            // session started. Membership only gates STARTING (below).
+            Button(
+                onClick = onStop,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(text = stringResource(R.string.liveLocation_hideNow))
+                Text(text = stringResource(R.string.liveLocation_stop))
             }
-
-            if (actionStatus == LiveActionStatus.Failed) {
-                Text(
-                    text = stringResource(R.string.liveLocation_error),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            InfoCard(
-                title = stringResource(R.string.liveLocation_whoCanSeeTitle),
-                body = stringResource(R.string.liveLocation_whoCanSeeBody),
+        } else if (canShare) {
+            Text(
+                text = stringResource(R.string.liveLocation_durationLabel),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = stringResource(R.string.liveLocation_privacyOptional),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.liveLocation_privacyTimeLimited),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.liveLocation_privacyStopAnytime),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            LiveDurationPicker(
+                selected = selectedDuration,
+                enabled = !busy,
+                onSelect = { selectedDuration = it },
+            )
+            Button(
+                onClick = { onStart(selectedDuration) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.liveLocation_start))
             }
+        } else {
+            // Membership gate for STARTING — mirrors the backend member
+            // check on live.startSession. Copy is specific to sharing your
+            // own position; "hide me now" below stays available, and Stop
+            // above stays available whenever a session is active.
+            InfoCard(
+                title = stringResource(R.string.subscription_teaserTitle),
+                body = stringResource(R.string.liveLocation_memberRequiredToShare),
+            )
+        }
+
+        // Privacy action — never gated, always offered.
+        OutlinedButton(
+            onClick = onHideMeNow,
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(text = stringResource(R.string.liveLocation_hideNow))
+        }
+
+        if (actionStatus == LiveActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.liveLocation_error),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        InfoCard(
+            title = stringResource(R.string.liveLocation_whoCanSeeTitle),
+            body = stringResource(R.string.liveLocation_whoCanSeeBody),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = stringResource(R.string.liveLocation_privacyOptional),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.liveLocation_privacyTimeLimited),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.liveLocation_privacyStopAnytime),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

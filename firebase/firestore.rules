@@ -405,6 +405,81 @@ service cloud.firestore {
       }
     }
 
+    // -------------------------------------------------------------------------
+    // convoys – friend convoys (convoy.create / convoy.respond / convoy.start /
+    // convoy.end / convoy.list). The FOUNDATION for the convoy + 3-channel-chat
+    // epic; chat channels are a SEPARATE follow-up, not modelled here.
+    //
+    // convoys/{convoyId} carries ownerUid, status (forming|active|ended), a
+    // memberUids:[owner, ...invitees] array, a members map keyed by uid
+    // ({role, inviteStatus, invitedAt, joinedAt}), denormalized memberProfiles,
+    // and a summary computed on end. Any member of the convoy (owner or invitee,
+    // via memberUids) reads it — so an invitee sees the roster + each member's
+    // inviteStatus (the green dot) and, once ended, the summary. It never leaks
+    // to a third party. ALL writes go through the convoy.* callables (friend +
+    // block checks at invite time, invite responses, lifecycle transitions,
+    // summary computation) — no client writes, so membership and status can
+    // never be forged. Live positions are NOT stored here: accepted members
+    // share GPS through the live-location domain (RTDB liveLocation/{uid}/latest).
+    // -------------------------------------------------------------------------
+    match /convoys/{convoyId} {
+      // Active members only (isActiveMember carries the suspension override) AND
+      // in the convoy's memberUids — a suspended / no-longer-entitled member
+      // loses read access even while still listed in memberUids.
+      allow read: if isActiveMember()
+        && resource.data.memberUids is list
+        && request.auth.uid in resource.data.memberUids;
+      // No client writes: convoy.create / respond / start / end callables only.
+    }
+
+    // -------------------------------------------------------------------------
+    // communityChat – the single APP-WIDE chat channel (communityChat.post /
+    // communityChat.list / communityChat.markRead). One of the THREE product
+    // chats (community / convoy / friends-DMs; friends chat is the conversations
+    // block above).
+    //
+    // A fixed channel doc communityChat/{channelId} ('global') with a `messages`
+    // subcollection: communityChat/global/messages/{id} {senderUid, text,
+    // createdAt, senderDisplayName, senderAvatarPath}. Any ACTIVE MEMBER reads
+    // the channel (it is the app's town square); ALL writes go through the
+    // communityChat.* callables — no client writes, so authorship + the
+    // denormalized sender profile can't be forged. The per-user unread marker is
+    // NOT here: it lives at userPrivate/{uid}.communityChatLastReadAt
+    // (owner-only, in the userPrivate block).
+    // -------------------------------------------------------------------------
+    match /communityChat/{channelId} {
+      // The channel doc itself carries no member-visible payload; the roster is
+      // the whole membership. Reads happen at the messages level below.
+      allow read: if isActiveMember();
+      // No client writes: communityChat.post callable only.
+
+      match /messages/{messageId} {
+        allow read: if isActiveMember();
+        // No client writes: communityChat.post callable only.
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // convoyChats – the per-CONVOY chat channel (convoyChat.post /
+    // convoyChat.list). One of the THREE product chats. convoyChats/{convoyId}/
+    // messages/{id} carries the same denormalized message shape as community.
+    //
+    // Readable ONLY by an ACCEPTED member of the parent convoy: a get() of
+    // convoys/{convoyId} must show the caller in memberUids AND
+    // members[uid].inviteStatus == 'accepted' (the owner is seeded accepted). A
+    // still-invited / declined member or a third party cannot read the channel,
+    // so it never leaks. ALL writes go through the convoyChat.post callable
+    // (which re-checks accepted membership) — no client writes.
+    // -------------------------------------------------------------------------
+    match /convoyChats/{convoyId}/messages/{messageId} {
+      allow read: if isAuthenticated()
+        && request.auth.uid in
+          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
+        && get(/databases/$(database)/documents/convoys/$(convoyId))
+          .data.members[request.auth.uid].inviteStatus == 'accepted';
+      // No client writes: convoyChat.post callable only.
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------

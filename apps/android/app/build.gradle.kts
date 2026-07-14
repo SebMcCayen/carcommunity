@@ -87,6 +87,27 @@ val mapboxAccessToken: String = (
         ?: ""
     ).trim()
 
+// Build-time Mapbox downloads token (a secret `sk.` token with DOWNLOADS:READ
+// scope). This is DISTINCT from the runtime `mapboxAccessToken` above: it only
+// authenticates the Gradle resolution of the Navigation SDK v3 artifacts
+// (com.mapbox.navigationcore:*), which — unlike the public Maps SDK — sit behind
+// Basic auth (see settings.gradle.kts). Resolved from the MAPBOX_DOWNLOADS_TOKEN
+// Gradle property / env / gitignored mapbox.properties, else empty.
+//
+// When empty (CI and token-less local/dev builds), the Navigation SDK is NOT a
+// dependency and the real turn-by-turn source set (src/nav) is NOT on the
+// compile path; the no-SDK stub (src/noNav) is compiled instead so the whole
+// build resolves and stays green without the secret. A provisioned build with
+// the token compiles the real Nav SDK implementation. This mirrors the app's
+// established "seam + stub, config-less CI compiles the stub" pattern (MapSurface).
+val mapboxDownloadsToken: String = (
+    providers.gradleProperty("MAPBOX_DOWNLOADS_TOKEN").orNull
+        ?: System.getenv("MAPBOX_DOWNLOADS_TOKEN")
+        ?: mapboxProps.getProperty("MAPBOX_DOWNLOADS_TOKEN")
+        ?: ""
+    ).trim()
+val navSdkEnabled: Boolean = mapboxDownloadsToken.isNotEmpty()
+
 // Firebase configuration: google-services.json is intentionally NOT committed
 // (see .gitignore and apps/android/README.md). The plugin is applied only when
 // the file is present so that CI validation builds work without secrets.
@@ -107,10 +128,18 @@ android {
         applicationId = "com.kungsbackacarcommunity.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4.0"
+        versionCode = 8
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Whether the real Mapbox Navigation SDK (turn-by-turn) is on the compile
+        // path. Mirrors the src/nav vs src/noNav source-set swap driven by
+        // navSdkEnabled: true only when a downloads token was present at build
+        // time. The UI reads this to gate the turn-by-turn "Start" CTA so a
+        // token-less build (which compiles the noNav stub) never advertises a
+        // feature that can only reach the "navigation unavailable" stub.
+        buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
     }
 
     signingConfigs {
@@ -161,6 +190,20 @@ android {
         // Phase 15: App Check init reads BuildConfig.DEBUG to pick the provider.
         buildConfig = true
     }
+
+    // Turn-by-turn navigation: exactly ONE of two mutually-exclusive source dirs
+    // is added to `main`, both defining the same TurnByTurnNavScreen entry point
+    // (same package + signature) so the rest of the app calls it uniformly:
+    // - src/nav   — the real Mapbox Navigation SDK v3 implementation, compiled
+    //               ONLY when a downloads token is present (navSdkEnabled).
+    // - src/noNav — a no-SDK stub compiled otherwise (CI / token-less builds), so
+    //               nothing references com.mapbox.navigationcore.* and the build
+    //               resolves without the secret. Never both, so no duplicate class.
+    sourceSets {
+        getByName("main") {
+            java.srcDir(if (navSdkEnabled) "src/nav/java" else "src/noNav/java")
+        }
+    }
 }
 
 // Replaces the removed android.kotlinOptions DSL (error since Kotlin 2.2+).
@@ -198,6 +241,19 @@ dependencies {
 
     // Mapbox Maps
     implementation(libs.mapbox.maps)
+
+    // Mapbox Navigation SDK v3 (turn-by-turn) — added only when a build-time
+    // downloads token is configured (see navSdkEnabled). Token-less builds
+    // compile the src/noNav stub and pull none of these, so resolution/CI stay
+    // green without the secret. The `navigation` artifact brings the core trip
+    // session + routing; `ui-maps` the navigation camera + route line/arrow;
+    // `tripdata` the maneuver API; `ui-components` the maneuver banner view.
+    if (navSdkEnabled) {
+        implementation(libs.mapbox.nav.navigation)
+        implementation(libs.mapbox.nav.ui.maps)
+        implementation(libs.mapbox.nav.tripdata)
+        implementation(libs.mapbox.nav.ui.components)
+    }
 
     // Google Play Services — fused location provider (Phase 12 slice 6)
     implementation(libs.play.services.location)

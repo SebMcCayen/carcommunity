@@ -83,6 +83,22 @@ import {
   markRead as dmMarkRead,
   sendMessage as dmSendMessage,
 } from './dm/manageDirectMessages';
+import {
+  create as createConvoy,
+  end as endConvoy,
+  list as listConvoys,
+  respond as respondConvoy,
+  start as startConvoy,
+} from './convoy/manageConvoy';
+import {
+  list as communityChatList,
+  markRead as communityChatMarkRead,
+  post as communityChatPost,
+} from './chatchannels/communityChat';
+import {
+  list as convoyChatList,
+  post as convoyChatPost,
+} from './chatchannels/convoyChat';
 
 /**
  * GET /health
@@ -534,4 +550,74 @@ export const dm = {
   listConversations: dmListConversations,
   getMessages: dmGetMessages,
   markRead: dmMarkRead,
+};
+
+/**
+ * Convoy domain (grouped export → deployed as `convoy-create`,
+ * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`).
+ *
+ * The convoy FOUNDATION (contracts/functions/functions.json:
+ * convoy.create/respond/start/end/list) for the larger convoy + 3-channel-chat
+ * epic — chat channels are a SEPARATE follow-up and are NOT part of this domain.
+ * Model: `convoys/{convoyId}` with ownerUid, status (forming|active|ended), a
+ * `memberUids` array (owner + invitees; drives the array-contains list read and
+ * the rules membership gate), a `members` map keyed by uid
+ * ({role, inviteStatus:'invited'|'accepted'|'declined', invitedAt, joinedAt}),
+ * denormalized memberProfiles, and a `summary` computed + stored on end
+ * (duration + accepted participants; distance null — no shared-route
+ * aggregation in this foundation). Member-readable, callable-only writes
+ * (firebase/firestore.rules). Only FRIENDS of the owner may be invited
+ * (users/{owner}/friends), blocking honoured both ways (non-friend/blocked
+ * invitees silently skipped). On invite a best-effort in-app notification is
+ * written (writeInAppNotification, 'system_notice' category). LIVE POSITIONS
+ * reuse the live-location domain: the response's livePositionUids (accepted
+ * members) are the uids the convoy map subscribes to at RTDB
+ * liveLocation/{uid}/latest — the convoy never duplicates GPS storage.
+ */
+export const convoy = {
+  create: createConvoy,
+  respond: respondConvoy,
+  start: startConvoy,
+  end: endConvoy,
+  list: listConvoys,
+};
+
+/**
+ * Community chat domain (grouped export → deployed as `communityChat-post`,
+ * `communityChat-list`, `communityChat-markRead`).
+ *
+ * The single APP-WIDE chat — one of the THREE product chats (community / convoy
+ * / friends-DMs; the friends chat is the existing `dm` domain). Model: a fixed
+ * channel doc `communityChat/global` with a `messages` subcollection
+ * (communityChat/global/messages/{id} {senderUid, text, createdAt,
+ * senderDisplayName, senderAvatarPath}). Any ACTIVE MEMBER reads
+ * (firebase/firestore.rules); writes are callable-only. No fan-out unread
+ * aggregate — a lightweight per-user last-read marker lives at
+ * userPrivate/{uid}.communityChatLastReadAt (owner-only readable) so the client
+ * derives the unread dot from its newest-message live listener (O(1) per user).
+ * Blocking is NOT filtered server-side (global town square — a client display
+ * concern). See functions/src/chatchannels/chat-core.ts.
+ */
+export const communityChat = {
+  post: communityChatPost,
+  list: communityChatList,
+  markRead: communityChatMarkRead,
+};
+
+/**
+ * Convoy chat domain (grouped export → deployed as `convoyChat-post`,
+ * `convoyChat-list`).
+ *
+ * The per-CONVOY chat — one of the THREE product chats. Stacked on the convoy
+ * backend: readable + postable ONLY by ACCEPTED members of `convoys/{convoyId}`
+ * (memberUids + members[uid].inviteStatus === 'accepted', owner included).
+ * Model: convoyChats/{convoyId}/messages/{id} with the same denormalized message
+ * shape as community. Rules gate reads behind a get() of the convoy doc
+ * (firebase/firestore.rules); writes are callable-only, and the callables
+ * re-check accepted membership (missing convoy / outsider → not-found so a
+ * convoy can't be probed). See functions/src/chatchannels/chat-core.ts.
+ */
+export const convoyChat = {
+  post: convoyChatPost,
+  list: convoyChatList,
 };

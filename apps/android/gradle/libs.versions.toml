@@ -10,6 +10,9 @@ activityCompose = "1.13.0"
 composeBom = "2026.06.01"
 firebaseBom = "34.16.0"
 mapbox = "11.26.0"
+# Mapbox Navigation SDK v3 — core framework 3.26.0 depends on & is tested with
+# Maps SDK v11.26.0 (the `mapbox` version above), keeping the two aligned.
+mapboxNav = "3.26.0"
 googleServices = "4.5.0"
 credentials = "1.6.0"
 googleid = "1.2.0"
@@ -49,6 +52,16 @@ firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appc
 
 # Mapbox
 mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapbox" }
+
+# Mapbox Navigation SDK v3 (turn-by-turn). These artifacts live in the
+# authenticated Mapbox downloads maven repo (unlike the public Maps SDK), so
+# they are added ONLY when a build-time MAPBOX_DOWNLOADS_TOKEN is configured
+# (see app/build.gradle.kts) — the config-less / CI build compiles the no-SDK
+# navigation stub instead, keeping resolution and CI green without the token.
+mapbox-nav-navigation = { group = "com.mapbox.navigationcore", name = "navigation", version.ref = "mapboxNav" }
+mapbox-nav-ui-maps = { group = "com.mapbox.navigationcore", name = "ui-maps", version.ref = "mapboxNav" }
+mapbox-nav-tripdata = { group = "com.mapbox.navigationcore", name = "tripdata", version.ref = "mapboxNav" }
+mapbox-nav-ui-components = { group = "com.mapbox.navigationcore", name = "ui-components", version.ref = "mapboxNav" }
 
 # Google Play Services — fused location provider (Phase 12 slice 6)
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }

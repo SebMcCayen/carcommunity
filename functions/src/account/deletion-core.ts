@@ -30,9 +30,11 @@
  *   stored, 7-day TTL; nothing to purge.
  * - crownHuntClaims — claim keys are SHA-256-scoped; awarded-claim
  *   records back the points audit trail. The ledger itself is purged.
- * - Event chat messages and RSVPs — community-context records with
+ * - EVENT chat messages and RSVPs — community-context records with
  *   denormalized author names; scrubbing them is the blocking domain's
  *   listed follow-up and is out of the 30-day purge's scope for MVP.
+ *   (NOTE: community, convoy, and 1:1 DM chat ARE purged — see the chat
+ *   erasure step in scheduled.ts; only EVENT chat is retained here.)
  *
  * Pure module — no Firebase Admin SDK imports.
  */

@@ -71,7 +71,6 @@
     <string name="liveLocation_stop">Stop sharing</string>
     <string name="liveLocation_hideNow">Hide me now</string>
     <string name="liveLocation_lastUpdated">Last updated</string>
-    <string name="liveLocation_safeDrivingWarning">Do not use the app while driving.</string>
     <string name="liveLocation_whoCanSeeTitle">Who can see me?</string>
     <string name="liveLocation_whoCanSeeBody">The backend always determines who can share and see live locations.</string>
     <string name="liveLocation_privacyOptional">Sharing is optional and always initiated by you.</string>
@@ -667,7 +666,7 @@
     <string name="feedback_success">Thanks! Your report was sent.</string>
     <string name="feedback_successWithIssue">Thanks! Your report was sent and an issue was created.</string>
     <string name="feedback_viewIssue">View issue</string>
-    <string name="feedback_error">Could not send your report. Please try again.</string>
+    <string name="feedback_error">Could not send your report. Please contact us at kontakt@kungsbackacarcommunity.se.</string>
     <string name="feedback_rateLimited">You\'ve sent too many reports. Please wait a while and try again.</string>
     <string name="dm_title">Messages</string>
     <string name="dm_unreadCount">%1$d unread messages</string>
@@ -741,6 +740,8 @@
     <string name="shell_layersTraffic">Traffic</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_compass">Reset to north</string>
+    <string name="shell_searchExpand">Search</string>
     <string name="shell_liveTitle">Live location</string>
     <string name="shell_liveClose">Close live location</string>
     <string name="shell_liveDetails">More options</string>
@@ -760,6 +761,15 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="turnByTurn_start">Start</string>
+    <string name="turnByTurn_exit">Exit navigation</string>
+    <string name="turnByTurn_recenter">Recenter</string>
+    <string name="turnByTurn_reportIncident">Report</string>
+    <string name="turnByTurn_arrive">Arrive at %1$s</string>
+    <string name="turnByTurn_remaining">%1$s · %2$s</string>
+    <string name="turnByTurn_unavailable">Navigation isn\'t available here.</string>
+    <string name="turnByTurn_permissionNeeded">Location access is required to navigate.</string>
+    <string name="turnByTurn_reportComingSoon">Incident and roadwork reporting is coming soon.</string>
     <string name="incidents_reportButton">Report incident</string>
     <string name="incidents_reportTitle">Report an incident</string>
     <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>
@@ -773,6 +783,7 @@
     <string name="incidents_reportError">Couldn\'t send your report. Try again.</string>
     <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
     <string name="incidents_markerLabel">Incident</string>
+    <string name="incidents_sourceTrafikverket">Source: Trafikverket</string>
     <string name="whatsNew_title">What’s new</string>
     <string name="whatsNew_dialogTitle">What’s new in version %1$s</string>
     <string name="whatsNew_dialogMoreVersions">…and more from earlier updates.</string>
