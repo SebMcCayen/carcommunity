@@ -64,6 +64,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -817,11 +818,13 @@ private fun ChatPopup(
             modifier =
                 Modifier
                     // Sit above the system nav-bar inset AND the app's bottom
-                    // navigation bar (~80.dp tall) so the card never hides behind
-                    // the tab bar, with a small breathing gap above it.
+                    // navigation bar so the card never hides behind the tab bar,
+                    // with a small breathing gap above it. Derive the offset from
+                    // the shared bar-height constant so it can't drift if the bar
+                    // changes: ShellBottomBarHeight (80.dp) + KccSpacing.s3 (12.dp).
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 92.dp)
+                    .padding(horizontal = KccSpacing.s4)
+                    .padding(bottom = ShellBottomBarHeight + KccSpacing.s3)
                     .widthIn(max = 360.dp)
                     .fillMaxWidth()
                     .testTag(MAP_HOME_CHAT_POPUP_TAG),

@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
@@ -964,6 +965,13 @@ fun AuthenticatedApp(
         }
     }
 }
+
+/**
+ * Height of [ShellBottomBar]. Mirrors the Material3 [NavigationBar] container
+ * height (its own token is not public), so overlays that need to sit above the
+ * bar can derive their offset from this single source instead of hard-coding it.
+ */
+internal val ShellBottomBarHeight = 80.dp
 
 /** The 5-tab bottom navigation; Map is the default, highlighted home tab. */
 @Composable
