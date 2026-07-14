@@ -193,8 +193,13 @@ export const CONVOY_NOT_FORMING_MESSAGE = 'This convoy can no longer be started.
 export const CONVOY_ALREADY_ENDED_MESSAGE = 'This convoy has already ended.';
 export const NO_VALID_INVITEES_MESSAGE = 'No one could be added to the convoy.';
 
-/** Why a requested invitee was skipped by convoy.create. */
-export type InviteeSkipReason = 'self' | 'not_friend' | 'blocked' | 'not_found' | 'duplicate';
+/**
+ * Why a requested invitee was skipped by convoy.create. There is deliberately NO
+ * `blocked` reason: a block edge (in either direction) is surfaced as the neutral
+ * `not_found`, identical to a missing/non-member invitee, so the inviter can't
+ * infer who blocked whom (privacy parity with friends/dm).
+ */
+export type InviteeSkipReason = 'self' | 'not_friend' | 'not_found' | 'duplicate';
 
 export interface SkippedInvitee {
   uid: string;

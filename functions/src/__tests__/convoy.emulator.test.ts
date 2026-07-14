@@ -212,7 +212,10 @@ describe('convoy-create gating + friend-only invites', () => {
     expect(result.invited).toEqual([friend.uid]);
     const reasons = Object.fromEntries(result.skipped.map((s) => [s.uid, s.reason]));
     expect(reasons[stranger.uid]).toBe('not_friend');
-    expect(reasons[blockedFriend.uid]).toBe('blocked');
+    // A block edge (either direction) is surfaced as the neutral `not_found`,
+    // never a distinct `blocked` reason, so the inviter can't infer who blocked
+    // whom (privacy parity with friends/dm).
+    expect(reasons[blockedFriend.uid]).toBe('not_found');
     expect(reasons[owner.uid]).toBe('self');
     // Second occurrence of friend.uid is a duplicate.
     expect(result.skipped.some((s) => s.uid === friend.uid && s.reason === 'duplicate')).toBe(true);

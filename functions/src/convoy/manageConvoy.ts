@@ -175,7 +175,12 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
       ]);
 
       if (ownerBlockedThem.exists || theyBlockedOwner.exists) {
-        return { kind: 'skipped', skip: { uid, reason: 'blocked' } };
+        // Neutral reason — never reveals a block edge (privacy parity with
+        // friends/dm, which never distinguish who blocked whom in client-visible
+        // results). A block-related skip is surfaced as `not_found`, identical to
+        // a missing/non-member invitee, so the inviter can't infer that either
+        // party blocked the other. The invitee is still NOT added or notified.
+        return { kind: 'skipped', skip: { uid, reason: 'not_found' } };
       }
       if (!friendSnap.exists) {
         return { kind: 'skipped', skip: { uid, reason: 'not_friend' } };
@@ -320,7 +325,11 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
     if (snap.data()?.status !== 'forming') {
       throw new HttpsError('failed-precondition', CONVOY_NOT_FORMING_MESSAGE);
     }
-    tx.set(ref, { status: 'active', startedAt: FieldValue.serverTimestamp() }, { merge: true });
+    // Stamp with the function's local clock (NOT serverTimestamp) so start and
+    // end use the SAME time source — convoy.end computes the stored duration
+    // from startedAt→endedAt, and mixing a server timestamp here with a
+    // local-clock end could clamp the duration to 0 under clock skew.
+    tx.set(ref, { status: 'active', startedAt: Timestamp.fromDate(new Date()) }, { merge: true });
   });
 
   const fresh = await ref.get();
@@ -348,13 +357,12 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
     if (snap.data()?.status === 'ended') {
       throw new HttpsError('failed-precondition', CONVOY_ALREADY_ENDED_MESSAGE);
     }
-    const endedAt = new Date();
-    const summary = computeConvoySummary(snap.data()!, endedAt, toDate);
-    tx.set(
-      ref,
-      { status: 'ended', endedAt: Timestamp.fromDate(endedAt), summary },
-      { merge: true },
-    );
+    // Single local-clock instant used for BOTH the summary math and the stored
+    // endedAt, matching convoy.start's local-clock startedAt so the duration is
+    // computed from one coherent time source.
+    const endedAt = Timestamp.fromDate(new Date());
+    const summary = computeConvoySummary(snap.data()!, endedAt.toDate(), toDate);
+    tx.set(ref, { status: 'ended', endedAt, summary }, { merge: true });
   });
 
   const fresh = await ref.get();
