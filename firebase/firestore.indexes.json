@@ -421,6 +421,20 @@
       ]
     },
     {
+      "collectionGroup": "convoys",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "memberUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "incidents",
       "queryScope": "COLLECTION",
       "fields": [

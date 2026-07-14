@@ -83,6 +83,13 @@ import {
   markRead as dmMarkRead,
   sendMessage as dmSendMessage,
 } from './dm/manageDirectMessages';
+import {
+  create as createConvoy,
+  end as endConvoy,
+  list as listConvoys,
+  respond as respondConvoy,
+  start as startConvoy,
+} from './convoy/manageConvoy';
 
 /**
  * GET /health
@@ -534,4 +541,34 @@ export const dm = {
   listConversations: dmListConversations,
   getMessages: dmGetMessages,
   markRead: dmMarkRead,
+};
+
+/**
+ * Convoy domain (grouped export → deployed as `convoy-create`,
+ * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`).
+ *
+ * The convoy FOUNDATION (contracts/functions/functions.json:
+ * convoy.create/respond/start/end/list) for the larger convoy + 3-channel-chat
+ * epic — chat channels are a SEPARATE follow-up and are NOT part of this domain.
+ * Model: `convoys/{convoyId}` with ownerUid, status (forming|active|ended), a
+ * `memberUids` array (owner + invitees; drives the array-contains list read and
+ * the rules membership gate), a `members` map keyed by uid
+ * ({role, inviteStatus:'invited'|'accepted'|'declined', invitedAt, joinedAt}),
+ * denormalized memberProfiles, and a `summary` computed + stored on end
+ * (duration + accepted participants; distance null — no shared-route
+ * aggregation in this foundation). Member-readable, callable-only writes
+ * (firebase/firestore.rules). Only FRIENDS of the owner may be invited
+ * (users/{owner}/friends), blocking honoured both ways (non-friend/blocked
+ * invitees silently skipped). On invite a best-effort in-app notification is
+ * written (writeInAppNotification, 'system_notice' category). LIVE POSITIONS
+ * reuse the live-location domain: the response's livePositionUids (accepted
+ * members) are the uids the convoy map subscribes to at RTDB
+ * liveLocation/{uid}/latest — the convoy never duplicates GPS storage.
+ */
+export const convoy = {
+  create: createConvoy,
+  respond: respondConvoy,
+  start: startConvoy,
+  end: endConvoy,
+  list: listConvoys,
 };
