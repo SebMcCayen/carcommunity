@@ -232,6 +232,35 @@ describe('convoy-create gating + friend-only invites', () => {
     expect(items.docs.some((d) => d.data().relatedEntityId === result.convoy.convoyId)).toBe(true);
   });
 
+  it('skips a friend who is not an active member (not_found)', async () => {
+    const owner = await newMember('MemberOwnerC');
+    const friendMember = await newMember('ActiveFriendC');
+    // A friend of the owner who has no active-member entitlement: they could
+    // never accept/see a convoy, so convoy.create must skip them as not_found
+    // rather than writing them into memberUids/members and notifying them.
+    const freeFriend = await newFreeUser();
+    await makeFriends(owner, friendMember);
+    await makeFriends(owner, freeFriend);
+
+    await signInAs(owner);
+    const result = (
+      await call('convoy-create', { inviteeUids: [friendMember.uid, freeFriend.uid] })
+    ).data as { convoy: ConvoySummary; invited: string[]; skipped: Array<{ uid: string; reason: string }> };
+
+    expect(result.invited).toEqual([friendMember.uid]);
+    expect(result.skipped).toEqual([{ uid: freeFriend.uid, reason: 'not_found' }]);
+    // The non-member is not written into the convoy...
+    expect(result.convoy.memberUids).not.toContain(freeFriend.uid);
+    expect(result.convoy.members.some((m) => m.uid === freeFriend.uid)).toBe(false);
+    // ...and receives no invite notification.
+    const items = await adminDb
+      .collection('notifications')
+      .doc(freeFriend.uid)
+      .collection('items')
+      .get();
+    expect(items.docs.some((d) => d.data().relatedEntityId === result.convoy.convoyId)).toBe(false);
+  });
+
   it('fails when no invitee is valid', async () => {
     const owner = await newMember('LonelyC');
     const stranger = await newMember('NoFriendC');
@@ -373,5 +402,29 @@ describe('convoys Firestore rules', () => {
     await expect(
       setDoc(doc(firestore, 'convoys', 'forged'), { ownerUid: owner.uid, memberUids: [owner.uid] }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('denies a suspended member (still in memberUids) from reading', async () => {
+    const owner = await newMember('SuspOwnerC');
+    const member = await newMember('SuspMemberC');
+    await makeFriends(owner, member);
+
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [member.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    // The member can read while active.
+    await signInAs(member);
+    expect((await getDoc(doc(firestore, 'convoys', convoyId))).exists()).toBe(true);
+
+    // Suspend the member: isActiveMember() (suspension override) must now deny
+    // the read even though they remain listed in memberUids.
+    await adminAuth.setCustomUserClaims(member.uid, { activeMember: true, suspended: true });
+    await signInAs(member); // forces a fresh ID token carrying the suspended claim
+    await expect(getDoc(doc(firestore, 'convoys', convoyId))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
   });
 });

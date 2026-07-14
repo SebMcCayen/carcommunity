@@ -33,7 +33,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { isRestricted, toUserAccessState } from '../shared/access';
+import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
   CONVOY_ALREADY_ENDED_MESSAGE,
@@ -98,12 +98,15 @@ function toDate(value: unknown): Date | null {
 
 /**
  * Reads a users/{uid} profile projection. Returns null when the user is missing
- * or restricted — soft-deleted OR suspended (mirrors friends loadProfile) so a
- * restricted account is never invited/denormalized into a convoy.
+ * or cannot access member features — soft-deleted OR suspended OR not an active
+ * member (canAccessMemberFeatures, suspension overrides entitlement). Every
+ * convoy callable is member-gated, so a non-member invitee could never accept /
+ * decline / see the convoy; treating them as null here means they are skipped
+ * (as not_found) rather than written into memberUids/members and notified.
  */
 async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   const snap = await db.collection('users').doc(uid).get();
-  if (!snap.exists || isRestricted(toUserAccessState(snap.data()))) {
+  if (!snap.exists || !canAccessMemberFeatures(toUserAccessState(snap.data()))) {
     return null;
   }
   return toProfileProjection(snap.data());
@@ -139,7 +142,9 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
 
   // De-duplicate the requested list (preserving REQUEST order) and validate
   // each candidate: must be a friend of the owner, not blocked either way, and
-  // a non-restricted existing account. Everything else is silently skipped.
+  // an existing active-member account (a non-member is surfaced as not_found via
+  // loadProfile, since it could never accept/see the convoy). Everything else is
+  // silently skipped.
   //
   // The per-invitee reads run concurrently (Promise.all over the input array,
   // index-aligned outcomes), but the invited/skipped output arrays are then

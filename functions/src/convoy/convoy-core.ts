@@ -186,7 +186,6 @@ export function parseListConvoysInput(data: unknown): ParseResult<Record<string,
 
 /** User-facing messages (clients branch on the HttpsError code, never text). */
 export const CONVOY_NOT_FOUND_MESSAGE = 'Convoy not found.';
-export const NOT_OWNER_MESSAGE = 'Only the convoy owner can do that.';
 export const NOT_INVITED_MESSAGE = 'You have no pending invite for this convoy.';
 export const INVITE_ALREADY_HANDLED_MESSAGE = 'This invite has already been answered.';
 export const CONVOY_ENDED_MESSAGE = 'This convoy has ended.';
