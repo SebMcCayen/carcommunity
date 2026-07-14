@@ -256,6 +256,25 @@ describe('runInactivityCleanup — delete gate CLOSED (MVP default)', () => {
     expect(cursor?.lastCreatedAt).toBeUndefined();
   });
 
+  it('exempts a suspended inactive account (never warned)', async () => {
+    const suffix = `${Date.now()}-susp`;
+    const created14mo = Timestamp.fromDate(subtractMonths(now, 14));
+    // Suspended + inactive 14 months + never warned. Without the exemption this
+    // would WARN, but a suspended user is locked out and cannot call recordLogin
+    // to prove activity, so the sweep must skip them entirely.
+    const suspUid = `sweep-susp-${suffix}`;
+    await seedUser(suspUid, { createdAt: created14mo, suspended: true });
+
+    await runInactivityCleanup(now);
+
+    // No warning fields written — the suspended account was skipped.
+    const lifecycle = (await adminDb.collection('userLifecycle').doc(suspUid).get()).data() ?? {};
+    expect(lifecycle.inactivityWarnedAt).toBeUndefined();
+    expect(lifecycle.inactivityDeleteAfter).toBeUndefined();
+    // Still present (not deleted).
+    expect((await adminDb.collection('users').doc(suspUid).get()).exists).toBe(true);
+  });
+
   it('does NOT start the grace clock when the warning cannot be delivered', async () => {
     const suffix = `${Date.now()}-nodel`;
     const created14mo = Timestamp.fromDate(subtractMonths(now, 14));

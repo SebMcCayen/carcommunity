@@ -273,10 +273,11 @@ async function clearWarning(uid: string): Promise<void> {
  * users/{uid} early (PURGE_DOC_TREES starts with 'users'), and the inactivity
  * sweep only scans users/, so a partial failure would otherwise orphan the account
  * (the sweep never sees the uid again). The standard account-purgeDeleted job picks
- * up any leftover pending record and finishes the purge idempotently — its
- * retention-window filter (createdAt < now-30d) matches immediately because
- * createdAt is set to warnedAt (already ≥ the grace period, i.e. >30d old).
- * accountDeletionRequests is NOT in PURGE_DOC_TREES (it is the retained
+ * up any leftover pending record on a subsequent run and finishes the purge
+ * idempotently — its retention-window filter (strict createdAt < now-30d, at its
+ * own later `now`) is satisfied because createdAt is set to warnedAt, which delete
+ * eligibility already requires to be at least the 30-day grace old (warnedAt ≤
+ * now-30d). accountDeletionRequests is NOT in PURGE_DOC_TREES (it is the retained
  * proof-of-deletion record), so the pending record survives the purge and is
  * flipped to `processed` on success.
  */
@@ -380,6 +381,16 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
     const data = snap.data();
     if (data.deleted === true) {
       // Already on the deletion track (account-purgeDeleted owns it).
+      continue;
+    }
+    if (data.suspended === true) {
+      // Suspended accounts are locked out and cannot call recordLogin
+      // (requireActiveActor treats suspended as restricted), so they can never
+      // refresh lastLoginAt to prove activity — they would inevitably look
+      // inactive. Exempt them from the inactivity lifecycle entirely: they must
+      // not be warned or auto-deleted for an inactivity they cannot remedy while
+      // suspended. Moderation owns a suspended account's fate via the normal
+      // deletion flow.
       continue;
     }
     const createdAt = toDate(data.createdAt);
