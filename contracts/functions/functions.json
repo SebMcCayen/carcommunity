@@ -21,7 +21,7 @@
     {
       "name": "auth.recordLogin",
       "domain": "auth",
-      "description": "Stamps users/{uid}.lastLoginAt = serverTimestamp() on each successful sign-in (trusted server write; lastLoginAt is omitted from the users owner-write whitelist so clients can never set it). The Firestore field — not Firebase Auth's non-queryable lastSignInTime — is the queryable, admin-displayable last-activity source consumed by the scheduled account-cleanupInactive sweep. Member-gated: a non-member never records a lastLoginAt and is covered by the sweep's lastLoginAt ?? createdAt fallback. Idempotent (a repeat call refreshes the timestamp); the Android client calls it best-effort after auth completes. Deployed via grouped export as auth-recordLogin (functions/src/auth/recordLogin.ts).",
+      "description": "Stamps userLifecycle/{uid}.lastLoginAt = serverTimestamp() on each successful sign-in (trusted server write via the Admin SDK; userLifecycle/{uid} is a backend-only side collection — owner+admin read, all client writes denied by rules — so clients can never set it, and a member's activity is not exposed on the public users/{uid} profile). The Firestore field — not Firebase Auth's non-queryable lastSignInTime — is the queryable, admin-displayable last-activity source consumed by the scheduled account-cleanupInactive sweep. Member-gated: a non-member never records a lastLoginAt and is covered by the sweep's lastLoginAt ?? createdAt fallback. Idempotent (a repeat call refreshes the timestamp); the Android client calls it best-effort after auth completes. Deployed via grouped export as auth-recordLogin (functions/src/auth/recordLogin.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
