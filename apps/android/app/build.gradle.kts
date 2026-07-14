@@ -132,6 +132,14 @@ android {
         versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Whether the real Mapbox Navigation SDK (turn-by-turn) is on the compile
+        // path. Mirrors the src/nav vs src/noNav source-set swap driven by
+        // navSdkEnabled: true only when a downloads token was present at build
+        // time. The UI reads this to gate the turn-by-turn "Start" CTA so a
+        // token-less build (which compiles the noNav stub) never advertises a
+        // feature that can only reach the "navigation unavailable" stub.
+        buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
     }
 
     signingConfigs {

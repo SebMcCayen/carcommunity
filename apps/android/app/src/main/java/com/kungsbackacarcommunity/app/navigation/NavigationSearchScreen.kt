@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -417,8 +418,13 @@ private fun RouteSheet(
             }
 
             // Prominent "Start" CTA once a route is resolved — enters turn-by-turn
-            // navigation (Google-Maps style). Only shown with a usable route.
-            if (state.route != null) {
+            // navigation (Google-Maps style). Only shown with a usable route AND
+            // in a build that actually bundles the Mapbox Navigation SDK
+            // (BuildConfig.NAV_SDK_ENABLED). Token-less builds compile the
+            // src/noNav stub, whose TurnByTurnNavScreen only reports "navigation
+            // unavailable" — so hide the CTA there rather than advertise a feature
+            // that can't run. Route search + preview stay available in both builds.
+            if (state.route != null && BuildConfig.NAV_SDK_ENABLED) {
                 Button(
                     onClick = onStart,
                     modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),
