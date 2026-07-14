@@ -482,8 +482,10 @@ private fun MapLayersPopup(
             modifier =
                 Modifier
                     .padding(16.dp)
-                    .widthIn(max = 360.dp)
+                    // Fill available width, then cap at 360.dp: full-width on
+                    // phones, capped on tablets (matches LiveSharePopup order).
                     .fillMaxWidth()
+                    .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
             // Slightly translucent so the map shows through (matches the chat popup).
@@ -889,8 +891,10 @@ private fun ChatPopup(
                     .navigationBarsPadding()
                     .padding(horizontal = KccSpacing.s4)
                     .padding(bottom = ShellBottomBarHeight + KccSpacing.s3)
-                    .widthIn(max = 360.dp)
+                    // Fill available width, then cap at 360.dp: full-width on
+                    // phones, capped on tablets (matches LiveSharePopup order).
                     .fillMaxWidth()
+                    .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_CHAT_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
             // Slightly translucent so the map shows through (matches the layers popup).
