@@ -9,7 +9,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -18,6 +22,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The "Vad är nytt" (changelog) page reached from Settings: the
@@ -28,9 +34,17 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 @Composable
 fun WhatsNewRoute(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val entries =
-        remember(context) { Changelog.latestEntries(ChangelogLoader.load(context)) }
-    WhatsNewScreen(entries = entries, modifier = modifier)
+    // null while the raw-resource read + JSON parse are still running; loading
+    // them off the main thread keeps that blocking IO out of composition.
+    var entries by remember { mutableStateOf<List<ChangelogEntry>?>(null) }
+    LaunchedEffect(context) {
+        entries = withContext(Dispatchers.IO) {
+            Changelog.latestEntries(ChangelogLoader.load(context))
+        }
+    }
+    // Render the empty-safe screen until data arrives (an empty list shows the
+    // "no changes" copy, which is also the correct terminal state).
+    WhatsNewScreen(entries = entries ?: emptyList(), modifier = modifier)
 }
 
 @Composable
