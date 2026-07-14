@@ -53,10 +53,13 @@ export interface AccountEmail {
   kind: string;
 }
 
+/** Why an email was not sent (set on SendEmailResult when sent=false). */
+export type SendEmailFailureReason = 'email_unavailable' | 'no_recipient' | 'not_implemented';
+
 export interface SendEmailResult {
   sent: boolean;
-  /** Set when sent=false: email_unavailable | no_recipient | not_implemented. */
-  reason?: string;
+  /** Set when sent=false. */
+  reason?: SendEmailFailureReason;
 }
 
 /**

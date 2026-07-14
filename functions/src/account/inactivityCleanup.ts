@@ -206,8 +206,10 @@ async function warnAccount(uid: string, now: Date): Promise<boolean> {
           '30 dagar kommer kontot att raderas automatiskt.',
       },
       // Deterministic ID keeps repeated sweeps from stacking duplicate notices
-      // for the same warning window (one notice per UTC day).
-      `inactivity-warn-${uid}-${now.toISOString().slice(0, 10)}`,
+      // for the same warning window (one notice per UTC day). The notice is
+      // already scoped per-user under notifications/{uid}/items, so the uid is
+      // not repeated in the ID (which would needlessly surface it in the inbox).
+      `inactivity-warn-${now.toISOString().slice(0, 10)}`,
     );
     if (result.delivered || result.skippedReason === 'duplicate') delivered = true;
   } catch (error) {
@@ -413,9 +415,12 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
     try {
       await applyDecision(uid, decision.action, warnedAt, now, summary);
     } catch (error) {
-      // One account's failure must not abort the sweep; the next run retries
-      // (all actions are idempotent / purgeUserData is safe to re-run).
-      logger.error('Inactivity action failed; will retry next run', {
+      // One account's failure must not abort the sweep; a subsequent sweep
+      // retries it (all actions are idempotent / purgeUserData is safe to
+      // re-run). The persisted cursor advances past this page after the loop, so
+      // a failed uid is revisited on a later sweep (possibly after a wrap-around),
+      // not necessarily the very next daily run.
+      logger.error('Inactivity action failed; will retry on a subsequent sweep', {
         uid,
         action: decision.action,
         error: String(error),
@@ -466,7 +471,7 @@ async function applyDecision(
         summary.warned += 1;
       } else {
         // Delivery failed on every channel — grace clock not started; retried
-        // next run (the account stays not-yet-warned).
+        // on a subsequent sweep (the account stays not-yet-warned).
         summary.warnDeferred += 1;
       }
       return;
