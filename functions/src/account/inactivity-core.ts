@@ -23,12 +23,20 @@
  * fall back to createdAt, exactly as the design intends.
  *
  * Timeline (all durations are configuration-free constants):
- * - >= 11 months since last activity, not yet warned  → WARN: stamp
- *   inactivityWarnedAt = now, inactivityDeleteAfter = now + 30 days, and attempt
- *   an email warning (degrades to a logged no-op until email is wired).
+ * - >= 11 months since last activity, not yet warned  → WARN: deliver the
+ *   warning first (email — a logged no-op until wired — and the essential in-app
+ *   notice) and ONLY on successful delivery stamp inactivityWarnedAt = now and
+ *   inactivityDeleteAfter = now + 30 days. See the DELIVERY INVARIANT below.
  * - warned, and the user has since signed in           → CLEAR the warning.
  * - warned, past inactivityDeleteAfter, still inactive → DELETE — but ONLY when
  *   deletion is enabled (see the CRITICAL GATE below); otherwise WOULD_DELETE.
+ *
+ * DELIVERY INVARIANT: inactivityWarnedAt is stamped by the sweep's warnAccount
+ * ONLY after a warning was actually delivered on at least one channel. So
+ * "warnedAt !== null" here means "the user was really warned" — this decision
+ * table can therefore treat a present warnedAt as a delivered warning and needs
+ * no separate delivery flag. If delivery fails the account stays warnedAt=null
+ * and this table returns WARN again next run (natural retry).
  *
  * CRITICAL GATE (`deletionEnabled`): the caller computes this as
  *   config/accountLifecycle.inactiveAccountDeletionEnabled (default FALSE)

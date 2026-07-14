@@ -40,6 +40,7 @@ import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/fir
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runInactivityCleanup } from '../account/inactivityCleanup';
 import * as emailModule from '../notifications/email';
+import * as deliverModule from '../notifications/deliver';
 import {
   ACCOUNT_LIFECYCLE_CONFIG_DOC,
   INACTIVE_DELETION_ENABLED_FIELD,
@@ -224,6 +225,10 @@ describe('runInactivityCleanup — delete gate CLOSED (MVP default)', () => {
     expect(summary.warned).toBeGreaterThanOrEqual(1);
     expect(summary.wouldDelete).toBeGreaterThanOrEqual(1);
 
+    // Delivery-gated warn: the in-app notice delivers (essential category) so the
+    // warning is marked, not deferred.
+    expect(summary.warnDeferred).toBe(0);
+
     // Warning fields land in userLifecycle/{uid}, not the public profile.
     const warned = (await adminDb.collection('userLifecycle').doc(warnUid).get()).data()!;
     expect(warned.inactivityWarnedAt).toBeInstanceOf(Timestamp);
@@ -248,6 +253,35 @@ describe('runInactivityCleanup — delete gate CLOSED (MVP default)', () => {
     // Short candidate page (<200) → sweep cursor reset to wrap next run.
     const cursor = (await adminDb.collection('system').doc('inactivitySweepCursor').get()).data();
     expect(cursor?.lastCreatedAt).toBeUndefined();
+  });
+
+  it('does NOT start the grace clock when the warning cannot be delivered', async () => {
+    const suffix = `${Date.now()}-nodel`;
+    const created14mo = Timestamp.fromDate(subtractMonths(now, 14));
+
+    // Inactive 14 months, never warned → WARN, but force delivery to fail on
+    // every channel (email is off by default; stub the in-app writer to report
+    // a non-delivery). The account must be left UNWARNED and retried next run —
+    // deletion can never be predicated on an undelivered warning.
+    const uid = `sweep-nodel-${suffix}`;
+    await seedUser(uid, { createdAt: created14mo });
+
+    const deliverSpy = vi
+      .spyOn(deliverModule, 'writeInAppNotification')
+      .mockResolvedValue({ delivered: false, notificationId: null, skippedReason: 'suspended' });
+
+    try {
+      const summary = await runInactivityCleanup(now);
+      expect(summary.warnDeferred).toBeGreaterThanOrEqual(1);
+    } finally {
+      deliverSpy.mockRestore();
+    }
+
+    // No grace clock started: the lifecycle doc has no warning fields (so the
+    // next sweep sees the account as not-yet-warned and re-attempts the warning).
+    const lifecycle = (await adminDb.collection('userLifecycle').doc(uid).get()).data() ?? {};
+    expect(lifecycle.inactivityWarnedAt).toBeUndefined();
+    expect(lifecycle.inactivityDeleteAfter).toBeUndefined();
   });
 });
 

@@ -22,10 +22,14 @@
  *    public users/{uid} profile — createdAt still comes from the user doc.
  * 2. Per candidate, `decideInactivity` returns one of: skip, warn, clear_warning,
  *    delete, or would_delete.
- *    - warn: stamp inactivityWarnedAt = now and inactivityDeleteAfter = now + 30
- *      days, then attempt an EMAIL warning (degrades to a logged no-op until
- *      email is wired) AND write an essential in-app account_warning notice
- *      through the Phase 9l writer.
+ *    - warn: DELIVERY-GATED. Deliver the warning FIRST — attempt an EMAIL warning
+ *      (degrades to a logged no-op until email is wired) AND write an essential
+ *      in-app account_warning notice through the Phase 9l writer — and ONLY then,
+ *      if at least one channel delivered, stamp inactivityWarnedAt = now and
+ *      inactivityDeleteAfter = now + 30 days (both on the same `now` basis). If
+ *      every channel fails, the account is left UNWARNED (grace clock not
+ *      started) and retried next run, so the grace window — and eventual
+ *      deletion — can never start on a warning the user never received.
  *    - clear_warning: the user signed in again — remove the warning fields.
  *    - delete: DISABLE the Auth user + revoke its refresh tokens FIRST (fail-safe
  *      lockdown, mirroring account.deleteAccount), then REUSE the account-deletion
@@ -150,35 +154,27 @@ function toDate(value: unknown): Date | null {
   return value instanceof Timestamp ? value.toDate() : null;
 }
 
-/** Marks an account warned and attempts the (currently no-op) email + in-app notice. */
-async function warnAccount(uid: string, now: Date): Promise<void> {
-  // Lifecycle state lives in the backend-only userLifecycle/{uid} doc, never on
-  // the public users/{uid} profile — pending-deletion state must not leak to
-  // other signed-in users.
-  await db
-    .collection('userLifecycle')
-    .doc(uid)
-    .set(
-      {
-        // Both timestamps share ONE time basis (the sweep's `now`) so the grace
-        // window is exact: inactivityDeleteAfter === inactivityWarnedAt + grace.
-        // A serverTimestamp() for warnedAt could resolve later than `now`,
-        // shortening the intended 30-day window (and, once the hard-delete gate
-        // is enabled, allowing deletion sooner than specified).
-        inactivityWarnedAt: Timestamp.fromDate(now),
-        inactivityDeleteAfter: Timestamp.fromDate(addDays(now, INACTIVITY_DELETE_GRACE_DAYS)),
-      },
-      { merge: true },
-    );
+/**
+ * Warns an inactive account. DELIVERY-GATED: attempts to deliver the warning
+ * FIRST and only stamps the grace-clock fields (inactivityWarnedAt /
+ * inactivityDeleteAfter) once at least one channel actually delivered. If every
+ * channel fails (transient outage, provider error), the account is left UNWARNED
+ * so the next sweep retries — the grace window (and therefore eventual deletion)
+ * can never start on a warning that never reached the user.
+ *
+ * Returns true when the account was marked warned, false when delivery failed
+ * and the warning is deferred to the next run.
+ */
+async function warnAccount(uid: string, now: Date): Promise<boolean> {
+  let delivered = false;
 
   // Email warning — the primary channel per the lifecycle spec, but not wired
   // yet. While delivery is unavailable (the MVP default) sendAccountEmail is a
   // no-op, so skip the userPrivate/{uid} recipient read entirely rather than
-  // spending a Firestore read per warned account every run. Best-effort: never
-  // fails the sweep.
+  // spending a Firestore read per warned account every run. Never throws.
   if (isEmailDeliveryAvailable()) {
     const email = (await db.collection('userPrivate').doc(uid).get()).data()?.email;
-    await sendAccountEmail({
+    const result = await sendAccountEmail({
       to: typeof email === 'string' ? email : null,
       subject: 'Ditt konto är inaktivt',
       body:
@@ -189,13 +185,17 @@ async function warnAccount(uid: string, now: Date): Promise<void> {
       logger.warn('Inactivity warning email failed', { uid, error: String(error) });
       return { sent: false as const };
     });
+    if (result.sent) delivered = true;
   }
 
-  // Secondary in-app notice through the Phase 9l writer. account_warning is an
-  // essential category (delivered even to suspended users, cannot be opted out).
-  // Best-effort and non-blocking.
+  // In-app notice through the Phase 9l writer — the ALWAYS-AVAILABLE channel
+  // (email is off for the MVP). account_warning is an essential category
+  // (delivered even to suspended users, cannot be opted out), so for a live
+  // candidate account this reliably delivers. A 'duplicate' means the notice is
+  // already in the inbox from an earlier attempt, i.e. the warning genuinely
+  // reached the user — treat that as delivered too (fail-safe).
   try {
-    await writeInAppNotification(
+    const result = await writeInAppNotification(
       uid,
       {
         category: 'account_warning',
@@ -209,9 +209,36 @@ async function warnAccount(uid: string, now: Date): Promise<void> {
       // for the same warning window (one notice per UTC day).
       `inactivity-warn-${uid}-${now.toISOString().slice(0, 10)}`,
     );
+    if (result.delivered || result.skippedReason === 'duplicate') delivered = true;
   } catch (error) {
     logger.warn('Inactivity warning in-app notice failed', { uid, error: String(error) });
   }
+
+  // FAIL-SAFE: no channel delivered → do NOT start the grace clock. Leaving
+  // inactivityWarnedAt unset means the next sweep sees the account as
+  // not-yet-warned and retries the warning, so deletion is never predicated on
+  // an undelivered warning.
+  if (!delivered) {
+    logger.warn('Inactivity warning undelivered on all channels; deferring to next run', { uid });
+    return false;
+  }
+
+  // Delivered — start the grace clock. Lifecycle state lives in the backend-only
+  // userLifecycle/{uid} doc, never on the public users/{uid} profile, so
+  // pending-deletion state does not leak to other signed-in users. Both
+  // timestamps share ONE time basis (the sweep's `now`) so the grace window is
+  // exact: inactivityDeleteAfter === inactivityWarnedAt + grace.
+  await db
+    .collection('userLifecycle')
+    .doc(uid)
+    .set(
+      {
+        inactivityWarnedAt: Timestamp.fromDate(now),
+        inactivityDeleteAfter: Timestamp.fromDate(addDays(now, INACTIVITY_DELETE_GRACE_DAYS)),
+      },
+      { merge: true },
+    );
+  return true;
 }
 
 /** Clears the warning fields when an account has become active again. */
@@ -271,6 +298,9 @@ async function deleteInactiveAccount(uid: string, warnedAt: Date | null): Promis
 export interface InactivityCleanupSummary {
   candidates: number;
   warned: number;
+  /** Warn-eligible accounts whose warning could NOT be delivered on any channel
+   * this run; left unwarned (grace clock not started) and retried next sweep. */
+  warnDeferred: number;
   cleared: number;
   deleted: number;
   /** Delete-eligible accounts skipped this run because MAX_DELETES_PER_RUN was
@@ -321,6 +351,7 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
   const summary: InactivityCleanupSummary = {
     candidates: candidates.size,
     warned: 0,
+    warnDeferred: 0,
     cleared: 0,
     deleted: 0,
     deleteCapped: 0,
@@ -403,8 +434,13 @@ async function applyDecision(
 ): Promise<void> {
   switch (action) {
     case 'warn':
-      await warnAccount(uid, now);
-      summary.warned += 1;
+      if (await warnAccount(uid, now)) {
+        summary.warned += 1;
+      } else {
+        // Delivery failed on every channel — grace clock not started; retried
+        // next run (the account stays not-yet-warned).
+        summary.warnDeferred += 1;
+      }
       return;
     case 'clear_warning':
       await clearWarning(uid);
