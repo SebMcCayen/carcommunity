@@ -111,9 +111,10 @@ export const health = onRequest(
 export const auth = {
   completeOnboarding,
   onUserCreate,
-  // Records userLifecycle/{uid}.lastLoginAt (serverTimestamp) on each sign-in — the
-  // queryable, admin-displayable last-activity source used by the scheduled
-  // account-cleanupInactive sweep.
+  // Records userLifecycle/{uid}.lastLoginAt (serverTimestamp) on each sign-in for
+  // any authenticated, non-suspended, non-deleted account (requireActiveActor —
+  // non-members included) — the queryable, admin-displayable last-activity source
+  // used by the scheduled account-cleanupInactive sweep.
   recordLogin,
 };
 

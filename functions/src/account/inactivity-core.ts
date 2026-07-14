@@ -16,9 +16,11 @@
  *    would-email), clear a stale warning (the user came back), or hard-delete.
  *
  * Activity resolution: `lastLoginAt` when present, otherwise the account
- * creation time (`createdAt`). Accounts that predate this feature — or that
- * never became members and so never called the member-gated recordLogin — have
- * no lastLoginAt and fall back to createdAt, exactly as the design intends.
+ * creation time (`createdAt`). recordLogin is active-actor gated (any
+ * authenticated, non-suspended, non-deleted account records lastLoginAt —
+ * members and non-members alike), so only accounts that have NEVER signed in
+ * since this feature shipped (or predate it entirely) lack a lastLoginAt and
+ * fall back to createdAt, exactly as the design intends.
  *
  * Timeline (all durations are configuration-free constants):
  * - >= 11 months since last activity, not yet warned  → WARN: stamp
