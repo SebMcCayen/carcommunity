@@ -85,9 +85,10 @@ import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 const val MAP_HOME_TEST_TAG = "map_home"
 
 /**
- * Shared surface opacity for the map-overlay popups (chat + layers). Slightly
- * translucent so the live map shows through a little and all the popups read as
- * one consistent floating layer, while staying opaque enough to be readable.
+ * Shared surface opacity for the map-overlay popups (chat, layers, and
+ * live-location). Slightly translucent so the live map shows through a little
+ * and all the popups read as one consistent floating layer, while staying
+ * opaque enough to be readable.
  */
 private const val POPUP_SURFACE_ALPHA = 0.92f
 
@@ -606,7 +607,7 @@ private fun LiveSharePopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
