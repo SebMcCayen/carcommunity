@@ -1,10 +1,12 @@
 package com.kungsbackacarcommunity.app.whatsnew
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -14,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -42,9 +45,22 @@ fun WhatsNewRoute(modifier: Modifier = Modifier) {
             Changelog.latestEntries(ChangelogLoader.load(context))
         }
     }
-    // Render the empty-safe screen until data arrives (an empty list shows the
-    // "no changes" copy, which is also the correct terminal state).
-    WhatsNewScreen(entries = entries ?: emptyList(), modifier = modifier)
+    when (val loaded = entries) {
+        // Still loading: keep the page chrome but show a spinner — NOT the
+        // empty-state copy, which would wrongly claim there are no release notes.
+        null ->
+            AeroPage(title = stringResource(R.string.whatsNew_title), modifier = modifier) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s6),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        // Loaded: WhatsNewScreen renders the cards, or its own empty-state copy
+        // only when the changelog genuinely has no entries.
+        else -> WhatsNewScreen(entries = loaded, modifier = modifier)
+    }
 }
 
 @Composable
