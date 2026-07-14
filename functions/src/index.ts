@@ -66,6 +66,11 @@ import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
+import { report as reportIncident } from './incidents/report';
+import { listNearby as listNearbyIncidents } from './incidents/listNearby';
+import { remove as removeIncident } from './incidents/remove';
+import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
+import { syncTrafikverket } from './incidents/trafikverket';
 import {
   list as listFriends,
   remove as removeFriend,
@@ -385,6 +390,32 @@ export const diagnostics = {
  */
 export const feedback = {
   reportIssue,
+};
+
+/**
+ * Crowd-sourced incidents / roadwork domain (grouped export → deployed as
+ * `incidents-report`, `incidents-listNearby`, `incidents-remove`, the
+ * scheduled `incidents-cleanupExpired`, and the scheduled
+ * `incidents-syncTrafikverket`) — the navigation feature's Waze-style map
+ * layer. NEW additive domain.
+ *
+ * Members report short-lived incidents (accident / roadwork / hazard / police /
+ * road_closed) via `incidents.report`; the write carries a computed `geoCell`
+ * (nearby-query index) and a per-type `expiresAt` TTL. Every signed-in user
+ * reads ACTIVE, unexpired incidents — directly via security rules and, for the
+ * map's bounded batch, via `incidents.listNearby` (chunked `geoCell in`
+ * queries + server-side Haversine radius filter, never a full scan). Reporters
+ * (or admins) clear their own via `incidents.remove`. `incidents-cleanupExpired`
+ * sweeps expired docs every 15 min. `incidents-syncTrafikverket` imports Swedish
+ * roadwork/traffic situations from the Trafikverket open API — GUARDED on the
+ * `TRAFIKVERKET_API_KEY` secret, so it no-ops safely until the free key is set.
+ */
+export const incidents = {
+  report: reportIncident,
+  listNearby: listNearbyIncidents,
+  remove: removeIncident,
+  cleanupExpired: cleanupExpiredIncidents,
+  syncTrafikverket,
 };
 
 /**

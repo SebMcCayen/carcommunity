@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -26,32 +25,31 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
- * The Garage tab landing, redesigned to lead with the member's identity: their
- * circular profile picture centred at the top, then the two primary actions
- * (Friends, then their cars) as prominent buttons, with the remaining garage
- * destinations (Badges, Points, Membership) kept as secondary rows beneath.
+ * The Garage tab landing, redesigned to lead with the member's identity: a
+ * circular identity image — their main car's photo, falling back to their
+ * profile picture — centred at the top, then their
+ * cars (My garage) as a prominent button. Friends, Badges, Points and Membership
+ * have moved elsewhere (Social tab / profile menu / Settings), so this screen now
+ * holds only the identity header and the Cars action.
  *
  * Shares the [AeroPage] chrome with every other sub-route; Back is handled by
  * the shell's system-Back handler, so this renders no Back affordance.
  *
- * @param avatarUrl resolved Storage URL for the profile picture, or null to show
- *   the fallback person icon (a config-less build never crashes on rendering).
+ * @param avatarUrl resolved Storage URL for the identity-header image: the
+ *   main car's photo, falling back to the user's profile picture when no main
+ *   car is set (see the call site in AuthenticatedApp), or null to show the
+ *   fallback person icon (a config-less build never crashes on rendering).
  * @param onVehicles opens the vehicles (My garage) screen, or null when the
  *   destination is unavailable (e.g. non-member) — the button is then hidden,
  *   preserving the previous membership gating.
- * @param secondaryEntries the lower-priority destinations (Badges, Points,
- *   Membership); entries with a null [HubEntry.onClick] are omitted.
  */
 @Composable
 fun GarageHubScreen(
     title: String,
     avatarUrl: String?,
     avatarContentDescription: String,
-    friendsLabel: String,
     vehiclesLabel: String,
-    onFriends: () -> Unit,
     onVehicles: (() -> Unit)?,
-    secondaryEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
 ) {
     AeroPage(title = title, modifier = modifier) {
@@ -59,25 +57,12 @@ fun GarageHubScreen(
             GarageAvatar(avatarUrl = avatarUrl, contentDescription = avatarContentDescription)
         }
 
-        PrimaryGarageButton(
-            label = friendsLabel,
-            icon = Icons.Filled.Group,
-            onClick = onFriends,
-        )
-
         if (onVehicles != null) {
             PrimaryGarageButton(
                 label = vehiclesLabel,
                 icon = Icons.Filled.DirectionsCar,
                 onClick = onVehicles,
             )
-        }
-
-        secondaryEntries.forEach { entry ->
-            val onClick = entry.onClick
-            if (onClick != null) {
-                HubRow(entry.label, entry.icon, onClick)
-            }
         }
     }
 }

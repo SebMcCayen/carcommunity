@@ -458,7 +458,6 @@
     "saveSuccess": "Drive saved.",
     "closeButton": "Close",
     "memberRequired": "An active membership is required to save drives.",
-    "recordAction": "Record drive",
     "recordTitle": "Record drive",
     "recordStart": "Start recording",
     "recordStop": "Stop recording",
@@ -515,6 +514,7 @@
     "mainCarBadge": "Main car",
     "setMainCar": "Set as main car",
     "unsetMainCar": "Remove main car",
+    "headerImageAlt": "Garage header image",
     "photoAlt": "Vehicle photo",
     "photoAdd": "Add photo",
     "photoChange": "Change photo",
@@ -787,8 +787,8 @@
     "mapPlaceholder": "Map",
     "userMarkerLabel": "You",
     "participantsSharing": "%1$d sharing",
-    "liveShareOn": "Sharing live location",
-    "liveShareOff": "Share live location",
+    "liveShareOn": "Live location, sharing",
+    "liveShareOff": "Live location",
     "recenter": "Recenter",
     "menu": "Menu",
     "tabMap": "Map",
@@ -838,7 +838,10 @@
     "layersClose": "Close map layers",
     "layersTraffic": "Traffic",
     "layersNightMode": "Night mode",
-    "layers3d": "3D buildings"
+    "layers3d": "3D buildings",
+    "liveTitle": "Live location",
+    "liveClose": "Close live location",
+    "liveDetails": "More options"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",
@@ -857,5 +860,20 @@
     "unitKilometers": "km",
     "unitMinutes": "min",
     "unitHours": "h"
+  },
+  "incidents": {
+    "reportButton": "Report incident",
+    "reportTitle": "Report an incident",
+    "reportSubtitle": "Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.",
+    "typeAccident": "Accident",
+    "typeRoadwork": "Roadwork",
+    "typeHazard": "Hazard",
+    "typePolice": "Police",
+    "typeRoadClosed": "Road closed",
+    "cancel": "Cancel",
+    "reportSuccess": "Thanks — your report is on the map.",
+    "reportError": "Couldn't send your report. Try again.",
+    "locationUnavailable": "Your location isn't available. Turn on location to report.",
+    "markerLabel": "Incident"
   }
 }
