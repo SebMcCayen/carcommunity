@@ -724,7 +724,7 @@
     "success": "Tack! Din rapport har skickats.",
     "successWithIssue": "Tack! Din rapport har skickats och ett ärende har skapats.",
     "viewIssue": "Visa ärende",
-    "error": "Kunde inte skicka rapporten. Försök igen.",
+    "error": "Kunde inte skicka rapporten. Kontakta oss på kontakt@kungsbackacarcommunity.se.",
     "rateLimited": "Du har skickat för många rapporter. Vänta en stund och försök igen."
   },
   "friends": {
