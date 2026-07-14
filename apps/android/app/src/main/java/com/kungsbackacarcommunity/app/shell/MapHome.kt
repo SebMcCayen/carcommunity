@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -170,7 +173,6 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
-    val mapMode by mapSurface.mapMode.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
     val bearing by mapSurface.bearing.collectAsState()
 
@@ -179,6 +181,43 @@ fun MapHome(
     // is swapped (e.g. StubMapSurface -> a real Mapbox-backed surface).
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
+    }
+
+    // Day/night follows the Android system Dark theme by default: on open the map
+    // matches the device theme, and it live-updates if the system flips while the
+    // app is open (e.g. Android's scheduled sunset->sunrise dark theme). Once the
+    // user flips day/night manually in the layers popup, [desiredMapMode] holds
+    // their explicit choice (non-null) and this effect applies it instead of the
+    // system theme for the rest of the session. While [desiredMapMode] is null the
+    // map follows the system default ([systemDefaultMode]).
+    // Keyed on mapSurface too (mirrors the setUserMarker effect above) so the
+    // *effective* mode is re-applied if the surface instance is swapped (e.g.
+    // StubMapSurface -> a real Mapbox-backed surface); a fresh surface starts at
+    // its default MapMode, so without this key it would keep that default —
+    // dropping the user's manual override — until the system theme flipped or the
+    // user toggled manually again. Applying the effective mode here means the
+    // manual choice survives a surface swap.
+    // Persisted with [rememberSaveable] (not plain [remember]) so the user's manual
+    // day/night override survives configuration changes / activity recreation (e.g.
+    // rotation). With plain remember it would reset to null on rotation and the
+    // effect below would immediately snap the map back to [systemDefaultMode],
+    // dropping the manual choice. MapMode is a simple enum, so a name-based Saver
+    // stores the nullable value.
+    var desiredMapMode by rememberSaveable(
+        stateSaver = Saver(
+            save = { it?.name },
+            // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
+            // e.g. after an app update that renames/removes an enum value, or
+            // corrupted saved state — which would crash activity recreation.
+            // entries.find returns null for an unknown name (falls back to
+            // "follow system") instead of throwing.
+            restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
+        ),
+    ) { mutableStateOf<MapMode?>(null) }
+    val systemInDark = isSystemInDarkTheme()
+    val systemDefaultMode = if (systemInDark) MapMode.Night else MapMode.Day
+    LaunchedEffect(mapSurface, systemInDark, desiredMapMode) {
+        mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
     // Push the crowd-sourced incident markers onto the surface whenever they
@@ -336,8 +375,15 @@ fun MapHome(
             // 2. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
             //    those non-default layers is active, so an enabled overlay is
-            //    still discoverable from the collapsed control.
-            val layersActive = trafficOn || mapMode == MapMode.Night || !is3d
+            //    still discoverable from the collapsed control. Day/night counts
+            //    as "active" only when the user has manually DEVIATED from the
+            //    system default (desiredMapMode set AND different from the theme
+            //    default) — a system-driven default Night (dark theme, untouched)
+            //    must NOT light up the button.
+            val layersActive =
+                trafficOn ||
+                    (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
+                    !is3d
             CircleControl(
                 icon = Icons.Filled.Layers,
                 contentDescription = stringResource(R.string.shell_layersButton),
@@ -399,11 +445,27 @@ fun MapHome(
         if (layersOpen) {
             MapLayersPopup(
                 trafficOn = trafficOn,
-                nightMode = mapMode == MapMode.Night,
+                // Drive the night Switch off the IMMEDIATE user intent (the
+                // effective desired mode) rather than the SURFACE's mapMode, which
+                // only updates after the LaunchedEffect runs and the surface flow
+                // re-emits. onNightModeChange sets [desiredMapMode] synchronously,
+                // so the Switch flips at once instead of snapping back / jittering
+                // while it waits for the surface to catch up.
+                nightMode = (desiredMapMode ?: systemDefaultMode) == MapMode.Night,
                 is3d = is3d,
                 onTrafficChange = { mapSurface.setTrafficEnabled(it) },
                 onNightModeChange = {
-                    mapSurface.setMapMode(if (it) MapMode.Night else MapMode.Day)
+                    // A manual flip records the user's explicit choice in
+                    // [desiredMapMode]; the system-follow effect above then applies
+                    // this mode (instead of the theme default) for the rest of the
+                    // session — and re-applies it if the surface instance is swapped.
+                    val mode = if (it) MapMode.Night else MapMode.Day
+                    desiredMapMode = mode
+                    // Apply immediately so the map restyles on the same frame the
+                    // user toggles, instead of waiting for the system-follow effect
+                    // coroutine to re-run; that effect stays idempotent and simply
+                    // re-applies this same mode when it next runs.
+                    mapSurface.setMapMode(mode)
                 },
                 on3dChange = { mapSurface.set3dEnabled(it) },
                 onDismiss = { layersOpen = false },
