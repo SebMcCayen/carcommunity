@@ -191,7 +191,7 @@ export const INVITE_ALREADY_HANDLED_MESSAGE = 'This invite has already been answ
 export const CONVOY_ENDED_MESSAGE = 'This convoy has ended.';
 export const CONVOY_NOT_FORMING_MESSAGE = 'This convoy can no longer be started.';
 export const CONVOY_ALREADY_ENDED_MESSAGE = 'This convoy has already ended.';
-export const NO_VALID_INVITEES_MESSAGE = 'None of the invitees can be added (must be your friends).';
+export const NO_VALID_INVITEES_MESSAGE = 'No one could be added to the convoy.';
 
 /** Why a requested invitee was skipped by convoy.create. */
 export type InviteeSkipReason = 'self' | 'not_friend' | 'blocked' | 'not_found' | 'duplicate';
