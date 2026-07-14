@@ -31,6 +31,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
+  toLiveMainCar,
   type LiveSession,
   type LiveStopReason,
 } from './live-core';
@@ -63,11 +64,21 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   }
 
   const profile = await db.collection('users').doc(actor.uid).get();
+  // Denormalize the caller's main car onto the session so viewers of the live
+  // share see which car it is. The garage is capped at 5 vehicles, so the
+  // owner query (single-field userId index — no composite index needed) is
+  // cheap; the main car is the one flagged isMainCar (max 1, enforced by
+  // garage.setMainVehicle).
+  const ownedVehicles = await db.collection('vehicles').where('userId', '==', actor.uid).get();
+  const mainCar = toLiveMainCar(
+    ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
+  );
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
     (profile.data()?.displayName as string | undefined) ?? null,
+    mainCar,
   );
   // Starting while a session is active RESTARTS it (fresh id + expiry).
   // Any previous marker is removed immediately — it carries the OLD

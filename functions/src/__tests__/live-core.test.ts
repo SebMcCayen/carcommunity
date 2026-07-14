@@ -13,6 +13,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
+  toLiveMainCar,
 } from '../live/live-core';
 
 const NOW = new Date('2026-07-05T12:00:00Z');
@@ -54,6 +55,36 @@ describe('live-core freshness (contract 60s threshold)', () => {
   });
 });
 
+describe('live-core toLiveMainCar', () => {
+  it('projects only the display-safe car fields', () => {
+    expect(
+      toLiveMainCar({
+        userId: 'u1',
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        powertrain: 'petrol',
+        imagePath: 'vehicleImages/u1/v1/photo.jpg',
+        isMainCar: true,
+      }),
+    ).toEqual({ make: 'Volvo', model: '242', modelYear: 1980, imagePath: 'vehicleImages/u1/v1/photo.jpg' });
+  });
+
+  it('defaults a missing image to null and rejects malformed/absent docs', () => {
+    expect(toLiveMainCar({ make: 'Saab', model: '900', modelYear: 1993 })).toEqual({
+      make: 'Saab',
+      model: '900',
+      modelYear: 1993,
+      imagePath: null,
+    });
+    expect(toLiveMainCar(null)).toBeNull();
+    expect(toLiveMainCar(undefined)).toBeNull();
+    // Malformed: missing model / non-numeric year.
+    expect(toLiveMainCar({ make: 'Saab', modelYear: 1993 })).toBeNull();
+    expect(toLiveMainCar({ make: 'Saab', model: '900', modelYear: '1993' })).toBeNull();
+  });
+});
+
 describe('live-core session lifecycle', () => {
   it('builds sessions with the chosen duration and detects expiry', () => {
     const session = buildSession('s1', '2h', NOW, 'Seb');
@@ -81,7 +112,24 @@ describe('live-core session lifecycle', () => {
       sessionId: 's1',
       expiresAt: session.expiresAt,
       displayName: 'Seb',
+      mainCar: null,
     });
+  });
+
+  it('denormalizes the main car onto the session and marker node', () => {
+    const mainCar = {
+      make: 'Volvo',
+      model: '242',
+      modelYear: 1980,
+      imagePath: 'vehicleImages/u1/v1/photo.jpg',
+    };
+    const session = buildSession('s1', '1h', NOW, 'Seb', mainCar);
+    expect(session.mainCar).toEqual(mainCar);
+    const node = buildLatestNode(
+      { latitude: 59.33, longitude: 18.07, recordedAt: NOW.toISOString() },
+      session,
+    );
+    expect(node.mainCar).toEqual(mainCar);
   });
 
   it('detects silent-stale markers numerically (non-canonical ISO safe)', () => {

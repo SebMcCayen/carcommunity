@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.map
 
+import com.kungsbackacarcommunity.app.live.LiveMainCar
 import com.kungsbackacarcommunity.app.live.LiveMarker
 
 /**
@@ -38,6 +39,12 @@ data class MapMarker(
     val kind: MapMarkerKind = MapMarkerKind.OWN,
     val uid: String? = null,
     val displayName: String? = null,
+    /**
+     * The sharer's main car (denormalized onto the live marker), or null when
+     * they have none. Carried through for a marker callout to show which car the
+     * pin is; the current circle-annotation renderer does not draw it yet.
+     */
+    val mainCar: LiveMainCar? = null,
 )
 
 object MapMarkers {
@@ -85,6 +92,7 @@ object MapMarkers {
             kind = kind,
             uid = marker.uid,
             displayName = marker.displayName,
+            mainCar = marker.mainCar,
         )
     }
 

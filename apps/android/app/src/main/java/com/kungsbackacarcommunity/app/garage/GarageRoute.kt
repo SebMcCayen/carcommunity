@@ -11,6 +11,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -100,9 +101,16 @@ fun GarageRoute(
                 maxBytes = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
             ) { picked ->
                 if (picked != null && photoCoordinator != null && editingId != null) {
-                    val imageId = MediaUpload.newImageId(picked.contentType)
+                    // Strip EXIF/GPS metadata BEFORE upload: car profiles are
+                    // PUBLICLY visible to other members, so a photo taken at the
+                    // owner's home must never leak their coordinates. ImageCompressor
+                    // decodes + re-encodes to JPEG, which drops all EXIF metadata
+                    // (GPS included) — reusing the exact sanitiser the profile-avatar
+                    // upload already runs. The re-encoded bytes are what get uploaded.
+                    val sanitized = ImageCompressor.compress(picked)
+                    val imageId = MediaUpload.newImageId(sanitized.contentType)
                     val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
-                    photoCoordinator.upload(picked, path) { storedPath ->
+                    photoCoordinator.upload(sanitized, path) { storedPath ->
                         repository.updateVehicleImagePath(editingId, storedPath)
                     }
                 }

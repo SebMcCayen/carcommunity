@@ -131,6 +131,40 @@ export function guardPositionFreshness(recordedAt: string, now: Date): GuardResu
   return { ok: true };
 }
 
+/**
+ * A safe, PUBLIC-ish projection of the sharer's main car, denormalized onto the
+ * live session so viewers of the live share can see which car it is. Only
+ * display-safe fields are carried — never registration plates / VIN (which the
+ * vehicles schema makes unrepresentable anyway). imagePath points into the
+ * owner's public-readable vehicleImages/ prefix.
+ */
+export interface LiveMainCar {
+  make: string;
+  model: string;
+  modelYear: number;
+  imagePath: string | null;
+}
+
+/**
+ * Builds a {@link LiveMainCar} from a raw `vehicles/{id}` document's data, or
+ * null when the required display fields are missing/malformed. Pure so the
+ * callable's main-car selection stays testable. Only make/model/modelYear/
+ * imagePath are projected — nothing sensitive.
+ */
+export function toLiveMainCar(data: Record<string, unknown> | undefined | null): LiveMainCar | null {
+  if (!data) {
+    return null;
+  }
+  const make = data.make;
+  const model = data.model;
+  const modelYear = data.modelYear;
+  if (typeof make !== 'string' || typeof model !== 'string' || typeof modelYear !== 'number') {
+    return null;
+  }
+  const imagePath = typeof data.imagePath === 'string' ? data.imagePath : null;
+  return { make, model, modelYear, imagePath };
+}
+
 export interface LiveSession {
   id: string;
   status: LiveSessionStatus;
@@ -141,6 +175,13 @@ export interface LiveSession {
   stopReason?: LiveStopReason;
   /** Denormalized at session start so position updates need no extra read. */
   displayName: string | null;
+  /**
+   * The sharer's main car at session start (or null when they have none), so
+   * viewers see which car the live marker is. Like displayName, it is a
+   * start-time snapshot — changing the main car mid-session takes effect on the
+   * next session start.
+   */
+  mainCar: LiveMainCar | null;
 }
 
 export function buildSession(
@@ -148,6 +189,7 @@ export function buildSession(
   duration: LiveSessionDuration,
   now: Date,
   displayName: string | null,
+  mainCar: LiveMainCar | null = null,
 ): LiveSession {
   const expires = new Date(
     now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000,
@@ -160,6 +202,7 @@ export function buildSession(
     expiresAt: expires.toISOString(),
     stoppedAt: null,
     displayName,
+    mainCar,
   };
 }
 
@@ -175,7 +218,9 @@ export function isSessionActive(
 /** liveLocation/{uid}/latest node — lean, marker-complete. */
 export function buildLatestNode(
   coordinate: LiveCoordinate,
-  session: Pick<LiveSession, 'id' | 'expiresAt' | 'displayName'>,
+  session: Pick<LiveSession, 'id' | 'expiresAt' | 'displayName'> & {
+    mainCar?: LiveMainCar | null;
+  },
 ): Record<string, unknown> {
   return {
     latitude: coordinate.latitude,
@@ -187,6 +232,8 @@ export function buildLatestNode(
     sessionId: session.id,
     expiresAt: session.expiresAt,
     displayName: session.displayName,
+    // Denormalized main car so viewers of the live share see which car it is.
+    mainCar: session.mainCar ?? null,
   };
 }
 

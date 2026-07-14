@@ -972,22 +972,19 @@ fun AuthenticatedApp(
                                 ShellTab.Garage ->
                                     GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
-                                        // The main car's photo replaces the profile
-                                        // picture at the top of the garage; fall back
-                                        // to the user's avatar when no main car is set.
-                                        // Derived from the hoisted shared garage
-                                        // stream — no listener of its own.
+                                        // The garage identity header shows the main
+                                        // car's photo ONLY — the user's profile
+                                        // picture is deliberately NOT shown here (the
+                                        // garage is about cars, not profiles). When no
+                                        // main car is set the hub falls back to the
+                                        // car placeholder icon. Derived from the
+                                        // hoisted shared garage stream — no listener
+                                        // of its own.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                mainCarImagePath(garageState)
-                                                    ?: profile?.avatarPath,
+                                                mainCarImagePath(garageState),
                                             ),
-                                        // The header image can be the main car's
-                                        // photo or the user's profile picture (or
-                                        // neither), so use a neutral description
-                                        // that stays accurate for both sources and
-                                        // the fallback person icon.
                                         avatarContentDescription =
                                             stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =

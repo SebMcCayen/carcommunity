@@ -13,18 +13,34 @@ data class LiveCoordinate(
 )
 
 /**
+ * The sharer's main car, denormalized onto the live marker so a viewer sees
+ * which car it is. Mirrors the backend `LiveMainCar` projection
+ * (functions/src/live/live-core.ts) — only display-safe fields, never plates/VIN.
+ * [imagePath] points into the owner's public-readable vehicleImages/ prefix; a
+ * viewer resolves it to a URL lazily for rendering.
+ */
+data class LiveMainCar(
+    val make: String,
+    val model: String,
+    val modelYear: Int,
+    val imagePath: String? = null,
+)
+
+/**
  * A lean live marker read from `liveLocation/{uid}/latest` — enough to draw a
  * map pin. Mirrors the backend `buildLatestNode` shape
  * (functions/src/live/live-core.ts): latitude/longitude plus the denormalized
- * [displayName]. [uid] is carried so callers can key markers and colour the
- * caller's own differently from other members'. Only members who are actively
- * sharing have a `latest` node, so a null flow value means "not sharing".
+ * [displayName] and [mainCar]. [uid] is carried so callers can key markers and
+ * colour the caller's own differently from other members'. Only members who are
+ * actively sharing have a `latest` node, so a null flow value means "not sharing".
  */
 data class LiveMarker(
     val uid: String,
     val latitude: Double,
     val longitude: Double,
     val displayName: String? = null,
+    /** The sharer's main car at session start, or null when they have none. */
+    val mainCar: LiveMainCar? = null,
 )
 
 /**
