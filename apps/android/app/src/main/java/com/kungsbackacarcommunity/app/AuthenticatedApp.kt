@@ -166,10 +166,12 @@ import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -953,9 +955,12 @@ fun AuthenticatedApp(
                 LaunchedEffect(whatsNewStore) {
                     val current = BuildConfig.VERSION_CODE
                     val lastSeen = whatsNewStore.lastSeenVersionCode()
+                    // Raw-resource read + JSON parse off the main thread; the
+                    // pure decision (announcementFor) then resumes on Main.
+                    val entries = withContext(Dispatchers.IO) { ChangelogLoader.load(context) }
                     val announcement =
                         Changelog.announcementFor(
-                            entries = ChangelogLoader.load(context),
+                            entries = entries,
                             lastSeenVersionCode = lastSeen,
                             currentVersionCode = current,
                         )

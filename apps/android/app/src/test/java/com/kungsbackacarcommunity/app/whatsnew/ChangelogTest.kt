@@ -16,7 +16,7 @@ class ChangelogTest {
     private fun entry(
         versionCode: Int,
         versionName: String = "0.$versionCode.0",
-        releaseDate: String = "2026-07-0$versionCode",
+        releaseDate: String = "2026-07-%02d".format(versionCode),
         highlights: List<String> = listOf("h$versionCode"),
         changes: List<String> = listOf("c$versionCode"),
     ) = ChangelogEntry(versionCode, versionName, releaseDate, highlights, changes)
