@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -210,8 +211,20 @@ fun TurnByTurnNavScreen(
         }
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Pick the navigation style from the app's day/night signal so turn-by-turn
+    // matches the rest of the UI. Keyed on the theme, so a light/dark flip reloads
+    // the map with the matching style.
+    val navStyleUri =
+        if (isSystemInDarkTheme()) {
+            NavigationStyles.NAVIGATION_NIGHT_STYLE
+        } else {
+            NavigationStyles.NAVIGATION_DAY_STYLE
+        }
+    LaunchedEffect(engine, navStyleUri) {
+        engine.loadStyleAndInit(navStyleUri)
+    }
+
     DisposableEffect(engine, lifecycleOwner) {
-        engine.loadStyleAndInit()
         if (!MapboxNavigationApp.isSetup()) {
             MapboxNavigationApp.setup(NavigationOptions.Builder(context).build())
         }
@@ -526,10 +539,13 @@ private class TurnByTurnEngine(
         }
     }
 
-    /** Loads the navigation-day style and initialises the route-line layers. */
-    fun loadStyleAndInit() {
+    /**
+     * Loads the given navigation style (day or night, chosen by the caller from
+     * the app theme) and initialises the route-line layers.
+     */
+    fun loadStyleAndInit(styleUri: String) {
         runCatching {
-            mapView.mapboxMap.loadStyle(NavigationStyles.NAVIGATION_DAY_STYLE) { style ->
+            mapView.mapboxMap.loadStyle(styleUri) { style ->
                 runCatching { routeLineView.initializeLayers(style) }
             }
         }

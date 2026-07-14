@@ -866,7 +866,7 @@
     "exit": "Exit navigation",
     "recenter": "Recenter",
     "reportIncident": "Report",
-    "arrive": "Arrive %1$s",
+    "arrive": "Arrive at %1$s",
     "remaining": "%1$s · %2$s",
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",

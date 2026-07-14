@@ -762,7 +762,7 @@
     <string name="turnByTurn_exit">Exit navigation</string>
     <string name="turnByTurn_recenter">Recenter</string>
     <string name="turnByTurn_reportIncident">Report</string>
-    <string name="turnByTurn_arrive">Arrive %1$s</string>
+    <string name="turnByTurn_arrive">Arrive at %1$s</string>
     <string name="turnByTurn_remaining">%1$s · %2$s</string>
     <string name="turnByTurn_unavailable">Navigation isn\'t available here.</string>
     <string name="turnByTurn_permissionNeeded">Location access is required to navigate.</string>
