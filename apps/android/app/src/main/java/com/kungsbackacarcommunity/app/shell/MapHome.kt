@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -887,10 +887,12 @@ private fun SearchBarRow(
             // Expanded: the full-width "Where to?" bar. Same search behaviour as
             // before — tapping it opens the search screen (or lets the user type).
             Surface(
-                // Keep a >= 48dp touch target even though the visual content is
-                // slimmed: heightIn guarantees the accessibility minimum hit area
-                // while the inner padding stays small.
-                modifier = Modifier.weight(1f).heightIn(min = KccSpacing.s12),
+                // Fixed 48dp height (matching the profile button) so the expanded
+                // bar only extends horizontally (weight = fill remaining width) and
+                // never grows vertically. A bare heightIn(min=…) let the inner
+                // fillMaxHeight() Row expand to the whole screen, turning the bar
+                // into a full-height pill. 48dp is also the accessibility minimum.
+                modifier = Modifier.weight(1f).height(KccSpacing.s12),
                 shape = RoundedCornerShape(KccRadius.full),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 3.dp,
