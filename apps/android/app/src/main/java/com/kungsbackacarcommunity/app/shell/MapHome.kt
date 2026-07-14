@@ -46,6 +46,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -186,7 +188,18 @@ fun MapHome(
     // dropping the user's manual override — until the system theme flipped or the
     // user toggled manually again. Applying the effective mode here means the
     // manual choice survives a surface swap.
-    var desiredMapMode by remember { mutableStateOf<MapMode?>(null) }
+    // Persisted with [rememberSaveable] (not plain [remember]) so the user's manual
+    // day/night override survives configuration changes / activity recreation (e.g.
+    // rotation). With plain remember it would reset to null on rotation and the
+    // effect below would immediately snap the map back to [systemDefaultMode],
+    // dropping the manual choice. MapMode is a simple enum, so a name-based Saver
+    // stores the nullable value.
+    var desiredMapMode by rememberSaveable(
+        stateSaver = Saver(
+            save = { it?.name },
+            restore = { (it as? String)?.let(MapMode::valueOf) },
+        ),
+    ) { mutableStateOf<MapMode?>(null) }
     val systemInDark = isSystemInDarkTheme()
     val systemDefaultMode = if (systemInDark) MapMode.Night else MapMode.Day
     LaunchedEffect(mapSurface, systemInDark, desiredMapMode) {
