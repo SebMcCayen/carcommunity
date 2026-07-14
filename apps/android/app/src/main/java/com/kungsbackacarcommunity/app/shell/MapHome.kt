@@ -1,13 +1,16 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -44,14 +48,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -155,6 +162,7 @@ fun MapHome(
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
     val mapMode by mapSurface.mapMode.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
+    val bearing by mapSurface.bearing.collectAsState()
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
@@ -186,6 +194,17 @@ fun MapHome(
     // opens the transparent toggle sheet, tapping outside it dismisses it.
     var layersOpen by remember { mutableStateOf(false) }
 
+    // Search bar collapsed/expanded is local UI state: it starts collapsed to a
+    // round search-icon button in the upper-left; tapping it expands the
+    // full-width "Where to?" bar, and tapping outside (the transparent scrim
+    // below) collapses it back to the icon.
+    var searchExpanded by remember { mutableStateOf(false) }
+
+    // Accessible dismiss for the expanded search: the outside-tap scrim is
+    // deliberately invisible to TalkBack/keyboard, so system Back is the
+    // reliable way to collapse the bar (only intercepts Back while expanded).
+    BackHandler(enabled = searchExpanded) { searchExpanded = false }
+
     // Live-location popup open/close is local UI state: tapping the broadcast
     // control opens the transparent live-share sheet (over the map, no scrim),
     // tapping outside it dismisses it.
@@ -200,6 +219,30 @@ fun MapHome(
         // no centre-locked Compose "You" overlay here.
         mapSurface.Content(Modifier.fillMaxSize())
 
+        // Transparent outside-tap catcher, shown only while the search bar is
+        // expanded: a tap on the open map area collapses it back to the round
+        // icon. It's composed here, above the map but below every later overlay
+        // (the search row and the right-side floating controls composed next),
+        // so it only catches taps that fall through to the map. Taps on the bar
+        // itself, or on the floating controls, are consumed by those overlays
+        // (composed above the scrim) and don't collapse via this layer — the
+        // controls just do their own thing. A raw pointerInput tap handler (no
+        // ripple, no clickable role) plus clearAndSetSemantics keeps this
+        // invisible dismiss layer out of the accessibility tree — otherwise it
+        // exposes an unlabeled focusable "Button" node over the whole map to
+        // TalkBack.
+        if (searchExpanded) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures { searchExpanded = false }
+                        }
+                        .clearAndSetSemantics {},
+            )
+        }
+
         // Top: search bar + avatar/menu, then the loading status line.
         Column(
             modifier =
@@ -213,6 +256,8 @@ fun MapHome(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onOpenMore = { moreOpen = true },
+                searchExpanded = searchExpanded,
+                onExpandSearch = { searchExpanded = true },
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
@@ -238,6 +283,18 @@ fun MapHome(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val statusColors = LocalKccStatusColors.current
+            // 0. Compass — a north-arrow rotated by the current map bearing so it
+            //    keeps pointing at true north as the map rotates; tapping it eases
+            //    the map back to north-up. Sits at the top of the stack, above the
+            //    live-location control. The built-in Mapbox compass is disabled in
+            //    MapboxMapSurface so this is the only compass shown.
+            CircleControl(
+                icon = Icons.Filled.Navigation,
+                contentDescription = stringResource(R.string.shell_compass),
+                onClick = { mapSurface.resetNorth() },
+                iconRotationDegrees = -bearing,
+                modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
+            )
             // 1. Live-location broadcast control — GREEN when sharing. Opens the
             //    transparent live-share popup (over the map, no scrim) with the
             //    session options rather than toggling sharing directly.
@@ -363,6 +420,12 @@ fun MapHome(
 
 /** Test tag on the floating map-layers control. */
 const val MAP_HOME_LAYERS_TAG = "map_home_layers"
+
+/** Test tag on the floating compass control (top of the right-side stack). */
+const val MAP_HOME_COMPASS_TAG = "map_home_compass"
+
+/** Test tag on the collapsed round search button (upper-left). */
+const val MAP_HOME_SEARCH_TAG = "map_home_search"
 
 /** Test tag on the floating report-incident control. */
 const val MAP_HOME_REPORT_TAG = "map_home_report"
@@ -857,6 +920,8 @@ private fun SearchBarRow(
     avatarUrl: String?,
     onSearch: () -> Unit,
     onOpenMore: () -> Unit,
+    searchExpanded: Boolean,
+    onExpandSearch: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
     onDismissMore: () -> Unit,
@@ -866,41 +931,74 @@ private fun SearchBarRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        Surface(
-            // Keep a >= 48dp touch target even though the visual content is
-            // slimmed: heightIn guarantees the accessibility minimum hit area
-            // while the inner padding stays small.
-            modifier = Modifier.weight(1f).heightIn(min = KccSpacing.s12),
-            shape = RoundedCornerShape(KccRadius.full),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
-            shadowElevation = 3.dp,
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onSearch()
-            },
-        ) {
-            Row(
-                // fillMaxHeight so the slim content stays centered within the
-                // 48dp minimum touch target rather than pinning to the top.
-                modifier =
-                    Modifier.fillMaxHeight()
-                        .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        if (searchExpanded) {
+            // Expanded: the full-width "Where to?" bar. Same search behaviour as
+            // before — tapping it opens the search screen (or lets the user type).
+            Surface(
+                // Fixed 48dp height (matching the profile button) so the expanded
+                // bar only extends horizontally (weight = fill remaining width) and
+                // never grows vertically. A bare heightIn(min=…) let the inner
+                // fillMaxHeight() Row expand to the whole screen, turning the bar
+                // into a full-height pill. 48dp is also the accessibility minimum.
+                modifier = Modifier.weight(1f).height(KccSpacing.s12),
+                shape = RoundedCornerShape(KccRadius.full),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onSearch()
+                },
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.shell_searchIcon),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.shell_searchHint),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    // fillMaxHeight so the slim content stays centered within the
+                    // 48dp minimum touch target rather than pinning to the top.
+                    modifier =
+                        Modifier.fillMaxHeight()
+                            .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.shell_searchIcon),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.shell_searchHint),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
+        } else {
+            // Collapsed: a round search-icon button in the upper-left, the same
+            // size as the profile button. Tapping it expands the full bar. The
+            // Spacer pushes the profile button to the upper-right corner.
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onExpandSearch()
+                },
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = stringResource(R.string.shell_searchExpand),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
         }
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it
         // hands the button's real measured window bounds to the popup's
@@ -913,7 +1011,7 @@ private fun SearchBarRow(
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
                 onClick = onOpenMore,
-                modifier = Modifier.size(48.dp).testTag(MAP_HOME_MORE_TAG),
+                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_MORE_TAG),
             ) {
                 // Always render the AccountCircle fallback so the button never
                 // shows a blank circle: it covers both the window while the Storage
@@ -1010,6 +1108,7 @@ private fun CircleControl(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    iconRotationDegrees: Float = 0f,
 ) {
     val haptics = LocalHapticFeedback.current
     Surface(
@@ -1022,10 +1121,16 @@ private fun CircleControl(
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             onClick()
         },
-        modifier = modifier.size(48.dp),
+        modifier = modifier.size(KccSpacing.s12),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = contentDescription)
+            // Rotate only the glyph (e.g. the compass north-arrow), not the whole
+            // button — a 0 default leaves every other control untouched.
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.rotate(iconRotationDegrees),
+            )
         }
     }
 }

@@ -839,6 +839,8 @@
     "layersTraffic": "Traffic",
     "layersNightMode": "Night mode",
     "layers3d": "3D buildings",
+    "compass": "Reset to north",
+    "searchExpand": "Search",
     "liveTitle": "Live location",
     "liveClose": "Close live location",
     "liveDetails": "More options"

@@ -18,6 +18,7 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
+import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.animation.MapAnimationOptions.Companion.mapAnimationOptions
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.extension.style.expressions.generated.Expression
@@ -35,12 +36,16 @@ import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
+import com.mapbox.maps.plugin.animation.easeTo
+import com.mapbox.maps.plugin.compass.compass
+import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.roundToInt
 
 /**
  * The real [MapSurface]: a Mapbox v11 [MapView] bridged into Compose, drawing
@@ -91,6 +96,12 @@ class MapboxMapSurface : MapSurface {
     private val is3dFlow = MutableStateFlow(true)
     override val is3d: StateFlow<Boolean> = is3dFlow.asStateFlow()
 
+    // Current camera bearing (degrees, 0 = north-up). Updated from the map's
+    // camera-change listener so the floating compass control can rotate its
+    // north-arrow to keep pointing at true north as the user rotates the map.
+    private val bearingFlow = MutableStateFlow(0f)
+    override val bearing: StateFlow<Float> = bearingFlow.asStateFlow()
+
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
@@ -110,6 +121,10 @@ class MapboxMapSurface : MapSurface {
     // not flicker the layer). Reset to null whenever the manager is (re)created
     // or torn down so a cleared-then-recreated map always redraws.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+
+    // Camera-change listener that mirrors the live map bearing into [bearingFlow]
+    // (so the compass control rotates); held so it can be detached in onRelease.
+    private var cameraChangeListener: OnCameraChangeListener? = null
 
     // The overlay currently drawn on the map, so the recomposition-driven update
     // block only clears/recreates the annotations and re-fits the camera when the
@@ -223,6 +238,21 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
+    override fun resetNorth() {
+        val map = mapViewRef ?: return
+        // Ease the camera bearing back to north-up; other camera props are left
+        // untouched. Uses the camera-animations plugin with the same explicit
+        // duration as recenter(), so the reset is predictable and consistent
+        // across Mapbox default changes. A no-op until the map is composed;
+        // wrapped defensively.
+        runCatching {
+            map.camera.easeTo(
+                cameraOptions { bearing(0.0) },
+                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
+            )
+        }
+    }
+
     @Composable
     override fun Content(modifier: Modifier) {
         val trafficOn by trafficFlow.collectAsState()
@@ -269,6 +299,29 @@ class MapboxMapSurface : MapSurface {
                     // Drop the scale bar (distance/km ruler, upper-left); the
                     // map-first shell has no room for it.
                     runCatching { scalebar.updateSettings { enabled = false } }
+                    // Disable the built-in Mapbox compass (which appears top-right
+                    // when the map is rotated); the shell draws its own compass
+                    // control in the right-side floating stack instead.
+                    runCatching { compass.updateSettings { enabled = false } }
+                    // Mirror the live camera bearing into the flow so the shell's
+                    // compass control rotates to keep pointing at true north.
+                    val camListener =
+                        object : OnCameraChangeListener {
+                            @Suppress("UNUSED_PARAMETER")
+                            override fun onCameraChanged(eventData: CameraChangedEventData) {
+                                // Round to the nearest whole degree before emitting:
+                                // the raw camera bearing changes by tiny fractions on
+                                // every frame while rotating, which would spam the
+                                // flow and re-compose the compass needlessly. 1° steps
+                                // are visually smooth for a compass needle, and the
+                                // MutableStateFlow dedupes consecutive equal values so
+                                // only real 1° changes propagate downstream.
+                                bearingFlow.value =
+                                    mapboxMap.cameraState.bearing.toFloat().roundToInt().toFloat()
+                            }
+                        }
+                    cameraChangeListener = camListener
+                    runCatching { mapboxMap.addOnCameraChangeListener(camListener) }
                     // Default camera until the first GPS fix arrives.
                     mapboxMap.setCamera(
                         cameraOptions {
@@ -360,6 +413,17 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.location.removeOnIndicatorPositionChangedListener(positionListener)
                 }
+                cameraChangeListener?.let { l ->
+                    runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
+                }
+                cameraChangeListener = null
+                // Reset the mirrored bearing now that the camera-change listener is
+                // detached. This surface outlives the MapView (it's remembered across
+                // tab switches while the MapView is destroyed/recreated), so without
+                // this the compass would briefly render the stale bearing from the
+                // old map while the recreated map's camera starts at north (0). The
+                // fresh map's camera-change listener re-populates this once it emits.
+                bearingFlow.value = 0f
                 routeLineManager = null
                 destMarkerManager = null
                 incidentMarkerManager = null

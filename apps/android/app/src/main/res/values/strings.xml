@@ -739,6 +739,8 @@
     <string name="shell_layersTraffic">Trafik</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
+    <string name="shell_compass">Återställ till norr</string>
+    <string name="shell_searchExpand">Sök</string>
     <string name="shell_liveTitle">Liveplats</string>
     <string name="shell_liveClose">Stäng liveplats</string>
     <string name="shell_liveDetails">Fler alternativ</string>

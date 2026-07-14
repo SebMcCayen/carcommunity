@@ -739,6 +739,8 @@
     <string name="shell_layersTraffic">Traffic</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_compass">Reset to north</string>
+    <string name="shell_searchExpand">Search</string>
     <string name="shell_liveTitle">Live location</string>
     <string name="shell_liveClose">Close live location</string>
     <string name="shell_liveDetails">More options</string>
