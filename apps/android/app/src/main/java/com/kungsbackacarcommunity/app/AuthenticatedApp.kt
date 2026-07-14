@@ -67,6 +67,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
@@ -920,7 +921,7 @@ private fun ShellBottomBar(
                 Box(
                     modifier =
                         Modifier
-                            .size(32.dp)
+                            .size(KccSpacing.s8)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
@@ -1436,16 +1437,18 @@ private fun RouteHost(
 /**
  * Holds the display awake while [enabled] is true by setting the current view's
  * `keepScreenOn` (which toggles [android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON]).
- * The flag is CLEARED whenever [enabled] flips back to false and on dispose, so
- * the screen dims/locks normally the rest of the time — nothing lingers after
- * live-share or navigation ends, or when this composable leaves the tree.
+ * When the effect (re)starts it captures the view's PRIOR `keepScreenOn` value and
+ * RESTORES it on dispose (or when [enabled] flips), so the screen dims/locks
+ * normally the rest of the time without clobbering a keepScreenOn that something
+ * else may have set on the same view.
  */
 @Composable
 private fun KeepScreenOn(enabled: Boolean) {
     val view = LocalView.current
     DisposableEffect(view, enabled) {
+        val previous = view.keepScreenOn
         view.keepScreenOn = enabled
-        onDispose { view.keepScreenOn = false }
+        onDispose { view.keepScreenOn = previous }
     }
 }
 
