@@ -861,6 +861,17 @@
     "unitMinutes": "min",
     "unitHours": "tim"
   },
+  "turnByTurn": {
+    "start": "Starta",
+    "exit": "Avsluta navigering",
+    "recenter": "Centrera",
+    "reportIncident": "Rapportera",
+    "arrive": "Framme %1$s",
+    "remaining": "%1$s · %2$s",
+    "unavailable": "Navigering är inte tillgänglig här.",
+    "permissionNeeded": "Platsåtkomst krävs för att navigera.",
+    "reportComingSoon": "Rapportering av händelser och vägarbeten kommer snart."
+  },
   "incidents": {
     "reportButton": "Rapportera händelse",
     "reportTitle": "Rapportera en händelse",

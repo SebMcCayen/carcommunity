@@ -758,6 +758,15 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="turnByTurn_start">Start</string>
+    <string name="turnByTurn_exit">Exit navigation</string>
+    <string name="turnByTurn_recenter">Recenter</string>
+    <string name="turnByTurn_reportIncident">Report</string>
+    <string name="turnByTurn_arrive">Arrive at %1$s</string>
+    <string name="turnByTurn_remaining">%1$s · %2$s</string>
+    <string name="turnByTurn_unavailable">Navigation isn\'t available here.</string>
+    <string name="turnByTurn_permissionNeeded">Location access is required to navigate.</string>
+    <string name="turnByTurn_reportComingSoon">Incident and roadwork reporting is coming soon.</string>
     <string name="incidents_reportButton">Report incident</string>
     <string name="incidents_reportTitle">Report an incident</string>
     <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>

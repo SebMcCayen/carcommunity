@@ -129,6 +129,7 @@ import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
@@ -400,6 +401,9 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            // Shown when the nav view's "Report incident/roadwork" is tapped while
+            // the incidents feature (a sibling PR) is not yet present in this build.
+            val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
             val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
             val incidentReportErrorText = stringResource(R.string.incidents_reportError)
             val incidentLocationUnavailableText =
@@ -419,6 +423,12 @@ fun AuthenticatedApp(
             // (see HttpMapboxSearchClient). Origin comes from the fused-location
             // provider, degrading to null (→ inline hint) without a fix/permission.
             var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+            // Turn-by-turn navigation target. Non-null → the full-screen nav view
+            // is shown (over the search overlay). The origin is left to the nav
+            // view, which navigates from the live GPS fix. Transient by design (a
+            // process-death restart drops you back to the map, not mid-navigation).
+            var navDestination by remember { mutableStateOf<LatLng?>(null) }
+            var navDestinationLabel by remember { mutableStateOf("") }
             val mapboxToken = stringResource(R.string.mapbox_access_token)
             val searchLanguage = remember { java.util.Locale.getDefault().language }
             val searchClient =
@@ -561,7 +571,32 @@ fun AuthenticatedApp(
                     }
                 }
 
-                if (navSearchOpen) {
+                if (navDestination != null) {
+                    // Full-screen turn-by-turn navigation (Google-Maps style),
+                    // entered from the route preview's "Start" button. Owns its own
+                    // Back handling and map surface (its own Nav-SDK MapView). On the
+                    // config-less / CI build this is the no-SDK stub (see the
+                    // src/noNav TurnByTurnNavScreen). The report affordance is wired
+                    // to a "coming soon" snackbar until the incidents feature (a
+                    // sibling PR) lands — swap `onReportIncident` to that feature's
+                    // entry point once it is present in this branch.
+                    TurnByTurnNavScreen(
+                        origin = null,
+                        destination = navDestination!!,
+                        destinationLabel = navDestinationLabel,
+                        onExit = {
+                            navDestination = null
+                            mapSurface.setRouteOverlay(null)
+                            navSearchOpen = false
+                        },
+                        onReportIncident = {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(reportComingSoonText)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
                     // the same map surface behind it (MapHome is not composed
                     // while this is open, so the single MapView is free), draws
@@ -575,6 +610,10 @@ fun AuthenticatedApp(
                         onClose = {
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
+                        },
+                        onStartNavigation = { dest, label ->
+                            navDestinationLabel = label
+                            navDestination = dest
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
