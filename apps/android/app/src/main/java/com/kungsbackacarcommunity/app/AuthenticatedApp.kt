@@ -14,10 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
@@ -148,7 +146,12 @@ import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
+import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentPalette
+import com.kungsbackacarcommunity.app.incidents.IncidentReportController
+import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
@@ -158,6 +161,7 @@ import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -293,6 +297,30 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+
+            // Crowd-sourced incidents layer (navigation feature). Guarded:
+            // createIfAvailable returns null in a config-less / CI build, so the
+            // map simply shows no incident markers and the report control is
+            // hidden. The controller is the small API the sibling turn-by-turn
+            // nav PR reuses (report at current location + nearby list).
+            val incidentController =
+                remember(context) { IncidentReportController.createIfAvailable(context) }
+            val incidentsFlow =
+                remember(incidentController) {
+                    incidentController?.nearbyIncidents ?: MutableStateFlow(emptyList<Incident>())
+                }
+            val nearbyIncidents by incidentsFlow.collectAsState()
+            val incidentMarkers =
+                remember(nearbyIncidents) {
+                    nearbyIncidents.map { incident ->
+                        MapIncidentMarker(
+                            id = incident.id,
+                            longitude = incident.longitude,
+                            latitude = incident.latitude,
+                            colorArgb = IncidentPalette.colorArgb(incident.type),
+                        )
+                    }
+                }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -372,6 +400,18 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
+            val incidentReportErrorText = stringResource(R.string.incidents_reportError)
+            val incidentLocationUnavailableText =
+                stringResource(R.string.incidents_locationUnavailable)
+
+            // Refresh the nearby-incidents layer around the user each time the
+            // Map tab is shown (a no-op without a fix; keeps the last markers).
+            LaunchedEffect(selectedTab, incidentController) {
+                if (selectedTab == ShellTab.Map) {
+                    incidentController?.refreshAroundCurrent()
+                }
+            }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
@@ -436,6 +476,22 @@ fun AuthenticatedApp(
                 }
             }
 
+            // The pre-popup "unwired / not permitted" fallback: open the
+            // (informational) live-location screen, or — when even the repository
+            // is absent — surface the unavailable snackbar. Shared by
+            // toggleLiveShare's OpenScreen branch, the map popup's "More options"
+            // row, and the popup Start/Stop/Hide callbacks, so none of them can
+            // silently no-op when the LiveLocationCoordinator isn't wired.
+            fun openLiveShareFallback() {
+                if (liveLocationRepository != null) {
+                    route = ShellRoute.LiveLocation
+                } else {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(unavailableText)
+                    }
+                }
+            }
+
             // Single live-share entry point shared by the map's broadcast toggle
             // and the Create-tab prompt, so both honour the same member-gating and
             // "open the live screen when not permitted/unwired" fallback.
@@ -456,19 +512,14 @@ fun AuthenticatedApp(
                         }
                     }
                     LiveShareAction.Stop -> {
-                        liveLocationCoordinator?.let { c ->
-                            scope.launch { c.stop() }
-                            BackgroundLocationController.stop(context)
-                        }
+                        liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
+                        // Always stop the foreground service, even if the
+                        // coordinator is somehow absent, so Stop can never leave
+                        // background location running — matches the popup Stop
+                        // callback and the LiveLocation route's teardown.
+                        BackgroundLocationController.stop(context)
                     }
-                    LiveShareAction.OpenScreen ->
-                        if (liveLocationRepository != null) {
-                            route = ShellRoute.LiveLocation
-                        } else {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(unavailableText)
-                            }
-                        }
+                    LiveShareAction.OpenScreen -> openLiveShareFallback()
                 }
             }
 
@@ -637,6 +688,7 @@ fun AuthenticatedApp(
                                     MapHome(
                                         mapSurface = mapSurface,
                                         isLiveSharing = isSharing,
+                                        canShareLive = canShareLive,
                                         participantCount = mapParticipantUids.size,
                                         avatarUrl = mapAvatarUrl,
                                         userLabel =
@@ -644,10 +696,48 @@ fun AuthenticatedApp(
                                         // Tapping "Where to?" opens the address
                                         // search + directions overlay.
                                         onSearch = { navSearchOpen = true },
-                                        // Voice search (speech-to-text) is a
-                                        // follow-up; still a coming-soon hint.
-                                        onVoiceSearch = { showComingSoon() },
-                                        onToggleLiveShare = { toggleLiveShare() },
+                                        // The broadcast control opens the transparent
+                                        // live-location popup (over the map, no scrim)
+                                        // with the session options, wired to the same
+                                        // LiveLocationCoordinator as the full screen.
+                                        // Wired: start the session + foreground
+                                        // service. Unwired (no coordinator): fall
+                                        // back to the live screen rather than
+                                        // silently no-op'ing, matching the old
+                                        // toggleLiveShare OpenScreen path.
+                                        onStartLiveShare = { d ->
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
+                                                scope.launch { c.start(d) }
+                                                BackgroundLocationController.start(context)
+                                            } else {
+                                                openLiveShareFallback()
+                                            }
+                                        },
+                                        onStopLiveShare = {
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
+                                                scope.launch { c.stop() }
+                                            } else {
+                                                openLiveShareFallback()
+                                            }
+                                            // Always stop the foreground service,
+                                            // even when unwired, so Stop can never
+                                            // leave background location running.
+                                            BackgroundLocationController.stop(context)
+                                        },
+                                        onHideMeNow = {
+                                            val c = liveLocationCoordinator
+                                            if (c != null) {
+                                                scope.launch { c.hideMeNow() }
+                                            } else {
+                                                openLiveShareFallback()
+                                            }
+                                            BackgroundLocationController.stop(context)
+                                        },
+                                        // "More options" opens the full live screen;
+                                        // unavailable (no Firebase) → a snackbar.
+                                        onOpenLiveShareDetails = { openLiveShareFallback() },
                                         // The layers control opens the map-layers
                                         // popup (traffic / day-night / 3D toggles),
                                         // handled internally by MapHome against the
@@ -662,9 +752,9 @@ fun AuthenticatedApp(
                                         moreMenuEntries =
                                             profileMenuEntries(
                                                 profileEditCoordinator = profileEditCoordinator,
-                                                friendsRepository = friendsRepository,
                                                 dmRepository = dmRepository,
-                                                blockingRepository = blockingRepository,
+                                                pointsRepository = pointsRepository,
+                                                badgesRepository = badgesRepository,
                                                 partnerApplicationCoordinator =
                                                     partnerApplicationCoordinator,
                                                 onOpenRoute = { route = it },
@@ -677,6 +767,33 @@ fun AuthenticatedApp(
                                         // chats" count here once a backend
                                         // inbox exists (out of the Android lane).
                                         unreadChatCount = 0,
+                                        // Crowd-sourced incidents layer: draw the
+                                        // fetched markers for everyone, and show the
+                                        // report control only when a repository is
+                                        // configured (guarded off in CI/no-Firebase)
+                                        // AND the user is an active member — the
+                                        // `incidents-report` callable is member-gated
+                                        // (requireMemberActor), so non-members must not
+                                        // see an action that would fail on submit.
+                                        incidentMarkers = incidentMarkers,
+                                        incidentReportingEnabled =
+                                            incidentController != null && profile?.activeMember == true,
+                                        onReportIncident = { type ->
+                                            incidentController?.let { controller ->
+                                                scope.launch {
+                                                    val text =
+                                                        when (controller.report(type)) {
+                                                            is ReportOutcome.Success ->
+                                                                incidentReportSuccessText
+                                                            ReportOutcome.NoLocation ->
+                                                                incidentLocationUnavailableText
+                                                            is ReportOutcome.Failed ->
+                                                                incidentReportErrorText
+                                                        }
+                                                    snackbarHostState.showSnackbar(text)
+                                                }
+                                            }
+                                        },
                                     )
 
                                 ShellTab.History ->
@@ -684,8 +801,6 @@ fun AuthenticatedApp(
                                         DrivesRoute(
                                             repository = drivesRepository,
                                             uid = uid,
-                                            isActiveMember = profile?.activeMember == true,
-                                            onBack = { selectedTab = ShellTab.Map },
                                         )
                                     } else {
                                         HubScreen(
@@ -705,6 +820,15 @@ fun AuthenticatedApp(
                                         title = stringResource(R.string.shell_socialTitle),
                                         entries =
                                             listOf(
+                                                HubEntry(
+                                                    stringResource(R.string.shell_friendsTitle),
+                                                    Icons.Filled.Groups,
+                                                    if (friendsRepository != null) {
+                                                        { route = ShellRoute.Friends }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
                                                 HubEntry(
                                                     stringResource(R.string.shell_socialEvents),
                                                     Icons.Filled.Event,
@@ -788,12 +912,15 @@ fun AuthenticatedApp(
                                                 mainCarImagePath(garageState)
                                                     ?: profile?.avatarPath,
                                             ),
+                                        // The header image can be the main car's
+                                        // photo or the user's profile picture (or
+                                        // neither), so use a neutral description
+                                        // that stays accurate for both sources and
+                                        // the fallback person icon.
                                         avatarContentDescription =
-                                            stringResource(R.string.profile_avatarAlt),
-                                        friendsLabel = stringResource(R.string.shell_garageFriends),
+                                            stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =
                                             stringResource(R.string.shell_garageVehicles),
-                                        onFriends = { route = ShellRoute.Friends },
                                         onVehicles =
                                             if (garageRepository != null &&
                                                 profile?.activeMember == true
@@ -802,38 +929,6 @@ fun AuthenticatedApp(
                                             } else {
                                                 null
                                             },
-                                        secondaryEntries =
-                                            listOf(
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garageBadges),
-                                                    Icons.Filled.MilitaryTech,
-                                                    if (badgesRepository != null) {
-                                                        { route = ShellRoute.Badges }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garagePoints),
-                                                    Icons.Filled.Stars,
-                                                    if (pointsRepository != null) {
-                                                        { route = ShellRoute.Points }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_garageSubscription),
-                                                    Icons.Filled.CardMembership,
-                                                    if (billingRepository != null &&
-                                                        subscriptionVerifier != null
-                                                    ) {
-                                                        { route = ShellRoute.Subscription }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                            ),
                                     )
                             }
                         }
@@ -1216,9 +1311,6 @@ private fun RouteHost(
                         // Guarded: only offer to open a thread when DM is wired.
                         if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
                     },
-                    onOpenMessages = {
-                        if (dmRepository != null) onOpenRoute(ShellRoute.Conversations)
-                    },
                 )
             } else {
                 LoadingScreen()
@@ -1354,6 +1446,12 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                onBlockedUsers =
+                    if (blockingRepository != null) {
+                        { onOpenRoute(ShellRoute.Blocked) }
+                    } else {
+                        null
+                    },
                 onPartnerStats =
                     if (partnerStatsRepository != null && partnerStatsEnabled) {
                         { onOpenRoute(ShellRoute.PartnerStats) }
@@ -1418,9 +1516,9 @@ private fun LoadingScreen() {
 @Composable
 private fun profileMenuEntries(
     profileEditCoordinator: ProfileEditCoordinator?,
-    friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
-    blockingRepository: BlockingRepository?,
+    pointsRepository: PointsRepository?,
+    badgesRepository: BadgesRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     onOpenRoute: (ShellRoute) -> Unit,
     onSignOut: () -> Unit,
@@ -1436,15 +1534,6 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_friendsTitle),
-            Icons.Filled.Groups,
-            if (friendsRepository != null) {
-                { onOpenRoute(ShellRoute.Friends) }
-            } else {
-                null
-            },
-        ),
-        HubEntry(
             stringResource(R.string.dm_title),
             Icons.AutoMirrored.Filled.Message,
             if (dmRepository != null) {
@@ -1454,10 +1543,19 @@ private fun profileMenuEntries(
             },
         ),
         HubEntry(
-            stringResource(R.string.shell_moreBlocked),
-            Icons.Filled.Block,
-            if (blockingRepository != null) {
-                { onOpenRoute(ShellRoute.Blocked) }
+            stringResource(R.string.profile_points),
+            Icons.Filled.Stars,
+            if (pointsRepository != null) {
+                { onOpenRoute(ShellRoute.Points) }
+            } else {
+                null
+            },
+        ),
+        HubEntry(
+            stringResource(R.string.profile_badges),
+            Icons.Filled.MilitaryTech,
+            if (badgesRepository != null) {
+                { onOpenRoute(ShellRoute.Badges) }
             } else {
                 null
             },

@@ -457,7 +457,6 @@
     "saveSuccess": "Körningen har sparats.",
     "closeButton": "Stäng",
     "memberRequired": "Aktivt medlemskap krävs för att spara körningar.",
-    "recordAction": "Spela in körning",
     "recordTitle": "Spela in körning",
     "recordStart": "Starta inspelning",
     "recordStop": "Stoppa inspelning",
@@ -514,6 +513,7 @@
     "mainCarBadge": "Huvudbil",
     "setMainCar": "Ange som huvudbil",
     "unsetMainCar": "Ta bort huvudbil",
+    "headerImageAlt": "Garagets rubrikbild",
     "photoAlt": "Fordonsbild",
     "photoAdd": "Lägg till bild",
     "photoChange": "Byt bild",
@@ -782,13 +782,12 @@
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",
-    "voiceSearch": "Röstsökning",
     "loadingRoads": "Laddar vägar…",
     "mapPlaceholder": "Karta",
     "userMarkerLabel": "Du",
     "participantsSharing": "%1$d delar",
-    "liveShareOn": "Delar liveplats",
-    "liveShareOff": "Dela liveplats",
+    "liveShareOn": "Liveplats, delar",
+    "liveShareOff": "Liveplats",
     "recenter": "Centrera",
     "menu": "Meny",
     "tabMap": "Karta",
@@ -838,7 +837,10 @@
     "layersClose": "Stäng kartlager",
     "layersTraffic": "Trafik",
     "layersNightMode": "Nattläge",
-    "layers3d": "3D-byggnader"
+    "layers3d": "3D-byggnader",
+    "liveTitle": "Liveplats",
+    "liveClose": "Stäng liveplats",
+    "liveDetails": "Fler alternativ"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",
@@ -857,5 +859,20 @@
     "unitKilometers": "km",
     "unitMinutes": "min",
     "unitHours": "tim"
+  },
+  "incidents": {
+    "reportButton": "Rapportera händelse",
+    "reportTitle": "Rapportera en händelse",
+    "reportSubtitle": "Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.",
+    "typeAccident": "Olycka",
+    "typeRoadwork": "Vägarbete",
+    "typeHazard": "Hinder",
+    "typePolice": "Polis",
+    "typeRoadClosed": "Avstängd väg",
+    "cancel": "Avbryt",
+    "reportSuccess": "Tack – din rapport finns nu på kartan.",
+    "reportError": "Det gick inte att skicka rapporten. Försök igen.",
+    "locationUnavailable": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
+    "markerLabel": "Händelse"
   }
 }

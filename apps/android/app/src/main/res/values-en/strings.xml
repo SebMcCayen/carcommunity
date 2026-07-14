@@ -418,7 +418,6 @@
     <string name="savedDrives_saveSuccess">Drive saved.</string>
     <string name="savedDrives_closeButton">Close</string>
     <string name="savedDrives_memberRequired">An active membership is required to save drives.</string>
-    <string name="savedDrives_recordAction">Record drive</string>
     <string name="savedDrives_recordTitle">Record drive</string>
     <string name="savedDrives_recordStart">Start recording</string>
     <string name="savedDrives_recordStop">Stop recording</string>
@@ -473,6 +472,7 @@
     <string name="garage_mainCarBadge">Main car</string>
     <string name="garage_setMainCar">Set as main car</string>
     <string name="garage_unsetMainCar">Remove main car</string>
+    <string name="garage_headerImageAlt">Garage header image</string>
     <string name="garage_photoAlt">Vehicle photo</string>
     <string name="garage_photoAdd">Add photo</string>
     <string name="garage_photoChange">Change photo</string>
@@ -682,13 +682,12 @@
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
     <string name="shell_searchHint">Where to?</string>
     <string name="shell_searchIcon">Search</string>
-    <string name="shell_voiceSearch">Voice search</string>
     <string name="shell_loadingRoads">Loading roads…</string>
     <string name="shell_mapPlaceholder">Map</string>
     <string name="shell_userMarkerLabel">You</string>
     <string name="shell_participantsSharing">%1$d sharing</string>
-    <string name="shell_liveShareOn">Sharing live location</string>
-    <string name="shell_liveShareOff">Share live location</string>
+    <string name="shell_liveShareOn">Live location, sharing</string>
+    <string name="shell_liveShareOff">Live location</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_menu">Menu</string>
     <string name="shell_tabMap">Map</string>
@@ -739,6 +738,9 @@
     <string name="shell_layersTraffic">Traffic</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_liveTitle">Live location</string>
+    <string name="shell_liveClose">Close live location</string>
+    <string name="shell_liveDetails">More options</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
@@ -755,4 +757,17 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="incidents_reportButton">Report incident</string>
+    <string name="incidents_reportTitle">Report an incident</string>
+    <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>
+    <string name="incidents_typeAccident">Accident</string>
+    <string name="incidents_typeRoadwork">Roadwork</string>
+    <string name="incidents_typeHazard">Hazard</string>
+    <string name="incidents_typePolice">Police</string>
+    <string name="incidents_typeRoadClosed">Road closed</string>
+    <string name="incidents_cancel">Cancel</string>
+    <string name="incidents_reportSuccess">Thanks — your report is on the map.</string>
+    <string name="incidents_reportError">Couldn\'t send your report. Try again.</string>
+    <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
+    <string name="incidents_markerLabel">Incident</string>
 </resources>

@@ -3,8 +3,6 @@ package com.kungsbackacarcommunity.app.live
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -19,7 +17,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -97,7 +94,7 @@ fun LiveLocationScreen(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                DurationPicker(
+                LiveDurationPicker(
                     selected = selectedDuration,
                     enabled = !busy,
                     onSelect = { selectedDuration = it },
@@ -158,42 +155,6 @@ fun LiveLocationScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-    }
-}
-
-@Composable
-private fun DurationPicker(
-    selected: LiveSessionDuration,
-    enabled: Boolean,
-    onSelect: (LiveSessionDuration) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        DurationOption(R.string.liveLocation_duration1h, LiveSessionDuration.ONE_HOUR, selected, enabled, onSelect)
-        DurationOption(R.string.liveLocation_duration2h, LiveSessionDuration.TWO_HOURS, selected, enabled, onSelect)
-        DurationOption(R.string.liveLocation_duration4h, LiveSessionDuration.FOUR_HOURS, selected, enabled, onSelect)
-    }
-}
-
-@Composable
-private fun RowScope.DurationOption(
-    labelRes: Int,
-    duration: LiveSessionDuration,
-    selected: LiveSessionDuration,
-    enabled: Boolean,
-    onSelect: (LiveSessionDuration) -> Unit,
-) {
-    val label = stringResource(labelRes)
-    if (duration == selected) {
-        Button(onClick = { onSelect(duration) }, enabled = enabled, modifier = Modifier.weight(1f)) {
-            Text(text = label, textAlign = TextAlign.Center)
-        }
-    } else {
-        OutlinedButton(onClick = { onSelect(duration) }, enabled = enabled, modifier = Modifier.weight(1f)) {
-            Text(text = label, textAlign = TextAlign.Center)
-        }
     }
 }
 
