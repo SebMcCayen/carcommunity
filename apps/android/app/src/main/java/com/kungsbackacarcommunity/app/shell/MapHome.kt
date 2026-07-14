@@ -460,6 +460,16 @@ private fun MapLayersPopup(
                     checked = is3d,
                     onCheckedChange = on3dChange,
                 )
+                // Attribution for the Trafikverket-sourced incidents drawn on the
+                // map layer (product-owner requirement: credit Trafikverket wherever
+                // we show their open data). No per-incident detail sheet exists, so
+                // this general incidents-layer credit is the visible surface.
+                Text(
+                    text = stringResource(R.string.incidents_sourceTrafikverket),
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

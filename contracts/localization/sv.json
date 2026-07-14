@@ -874,6 +874,7 @@
     "reportSuccess": "Tack – din rapport finns nu på kartan.",
     "reportError": "Det gick inte att skicka rapporten. Försök igen.",
     "locationUnavailable": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
-    "markerLabel": "Händelse"
+    "markerLabel": "Händelse",
+    "sourceTrafikverket": "Källa: Trafikverket"
   }
 }

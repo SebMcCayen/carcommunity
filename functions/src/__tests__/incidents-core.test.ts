@@ -169,7 +169,12 @@ describe('trafikverket-core', () => {
   it('builds a request body with the login key and situation query', () => {
     const body = buildTrafikverketRequestBody('SECRET&KEY');
     expect(body).toContain('objecttype="Situation"');
+    expect(body).toContain('namespace="road.trafficinfo"'); // required for Situation
+    expect(body).toContain('schemaversion="1.6"'); // 1.5 errors + imports nothing
+    expect(body).toContain('<FILTER></FILTER>'); // mandatory but empty
+    expect(body).not.toContain('ManagedCause'); // old over-filter removed
     expect(body).toContain('authenticationkey="SECRET&amp;KEY"'); // XML-escaped
+    expect(body).toContain('Deviation.MessageCodeValue'); // classification key
     expect(body).toContain('Deviation.Geometry.WGS84');
   });
 
@@ -184,15 +189,39 @@ describe('trafikverket-core', () => {
     expect(parseWgs84Point('POINT (999 999)')).toBeNull(); // out of range
   });
 
-  it('classifies Swedish message types', () => {
-    expect(classifyIncidentType('Olycka')).toBe('accident');
-    expect(classifyIncidentType('Vägarbete')).toBe('roadwork');
-    expect(classifyIncidentType('Avstängd väg')).toBe('road_closed');
-    expect(classifyIncidentType('Hinder')).toBe('hazard');
-    expect(classifyIncidentType(undefined)).toBe('roadwork'); // default
+  it('classifies confirmed MessageCodeValue codes', () => {
+    expect(classifyIncidentType('roadworks')).toBe('roadwork');
+    expect(classifyIncidentType('resurfacingWork')).toBe('roadwork');
+    expect(classifyIncidentType('blastingWork')).toBe('roadwork');
+    expect(classifyIncidentType('accident')).toBe('accident');
+    expect(classifyIncidentType('roadClosed')).toBe('road_closed');
+    expect(classifyIncidentType('laneClosures')).toBe('road_closed');
+    expect(classifyIncidentType('severeFrostDamagedRoadway')).toBe('hazard');
+    expect(classifyIncidentType('roadSurfaceInPoorCondition')).toBe('hazard');
+    expect(classifyIncidentType('followDiversionSigns')).toBe('hazard');
   });
 
-  it('flattens a response into importable incidents, skipping bad geometry and dupes', () => {
+  it('SKIPs ferries and standing regulatory restrictions (null → not imported)', () => {
+    expect(classifyIncidentType('ferry')).toBeNull();
+    expect(classifyIncidentType('speedRestrictionInOperation')).toBeNull();
+    expect(classifyIncidentType('noOvertaking')).toBeNull();
+    expect(classifyIncidentType('weightRestrictionInOperation')).toBeNull();
+  });
+
+  it('classification is case-insensitive and defaults unknown codes to hazard', () => {
+    expect(classifyIncidentType('ROADWORKS')).toBe('roadwork');
+    expect(classifyIncidentType('someBrandNewIncidentCode')).toBe('hazard');
+  });
+
+  it('falls back to the Swedish MessageType when MessageCodeValue is absent', () => {
+    expect(classifyIncidentType(undefined, 'Olycka')).toBe('accident');
+    expect(classifyIncidentType('', 'Vägarbete')).toBe('roadwork');
+    expect(classifyIncidentType(undefined, 'Avstängd väg')).toBe('road_closed');
+    expect(classifyIncidentType(undefined, 'Hinder')).toBe('hazard');
+    expect(classifyIncidentType(undefined, undefined)).toBe('hazard'); // default
+  });
+
+  it('flattens a response into importable incidents, excluding ferries/restrictions, bad geometry and dupes', () => {
     const imported = parseTrafikverketResponse({
       RESPONSE: {
         RESULT: [
@@ -203,23 +232,44 @@ describe('trafikverket-core', () => {
                 Deviation: [
                   {
                     Id: 'D1',
+                    MessageCodeValue: 'roadworks',
                     MessageType: 'Vägarbete',
                     Message: 'Vägarbete på E6',
                     Geometry: { WGS84: 'POINT (12.0 57.5)' },
                   },
                   {
                     Id: 'D1', // duplicate id → skipped
-                    MessageType: 'Vägarbete',
+                    MessageCodeValue: 'roadworks',
                     Geometry: { WGS84: 'POINT (12.0 57.5)' },
                   },
                   {
                     Id: 'D2',
-                    MessageType: 'Olycka',
+                    MessageCodeValue: 'accident',
                     Geometry: { WGS84: 'no-point' }, // unparseable → skipped
                   },
                   {
+                    Id: 'FERRY1',
+                    MessageCodeValue: 'ferry', // excluded category → skipped
+                    Geometry: { WGS84: 'POINT (11.9 57.6)' },
+                  },
+                  {
+                    Id: 'SPEED1',
+                    MessageCodeValue: 'speedRestrictionInOperation', // regulatory → skipped
+                    Geometry: { WGS84: 'POINT (11.8 57.7)' },
+                  },
+                  {
+                    Id: 'WEIGHT1',
+                    MessageCodeValue: 'weightRestrictionInOperation', // regulatory → skipped
+                    Geometry: { WGS84: 'POINT (11.7 57.8)' },
+                  },
+                  {
+                    Id: 'D4',
+                    MessageCodeValue: 'laneClosures',
+                    Geometry: { WGS84: 'POINT (13.0 58.0)' },
+                  },
+                  {
                     Id: 'D3',
-                    MessageType: 'Olycka',
+                    MessageCodeValue: 'accident',
                     Message: 'Olycka i korsning',
                     Geometry: { WGS84: 'POINT (18.07 59.33)' },
                   },
@@ -230,7 +280,11 @@ describe('trafikverket-core', () => {
         ],
       },
     });
-    expect(imported).toHaveLength(2);
+    // Ferries + speed/weight restrictions excluded; bad geometry + dupe dropped.
+    expect(imported.map((i) => i.sourceId)).toEqual(['D1', 'D4', 'D3']);
+    expect(imported.some((i) => i.sourceId === 'FERRY1')).toBe(false);
+    expect(imported.some((i) => i.sourceId === 'SPEED1')).toBe(false);
+    expect(imported.some((i) => i.sourceId === 'WEIGHT1')).toBe(false);
     expect(imported[0]).toMatchObject({
       sourceId: 'D1',
       type: 'roadwork',
@@ -238,7 +292,37 @@ describe('trafikverket-core', () => {
       longitude: 12.0,
       note: 'Vägarbete på E6',
     });
-    expect(imported[1]).toMatchObject({ sourceId: 'D3', type: 'accident' });
+    expect(imported[1]).toMatchObject({ sourceId: 'D4', type: 'road_closed' });
+    expect(imported[2]).toMatchObject({ sourceId: 'D3', type: 'accident' });
+  });
+
+  it('reports present-but-unrecognized MessageCodeValues via the onUnknownCode hook', () => {
+    const unknown: string[] = [];
+    const imported = parseTrafikverketResponse(
+      {
+        RESPONSE: {
+          RESULT: [
+            {
+              Situation: [
+                {
+                  Id: 'S1',
+                  Deviation: [
+                    {
+                      Id: 'U1',
+                      MessageCodeValue: 'someBrandNewIncidentCode',
+                      Geometry: { WGS84: 'POINT (12.0 57.5)' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      (code) => unknown.push(code),
+    );
+    expect(unknown).toEqual(['someBrandNewIncidentCode']);
+    expect(imported[0]).toMatchObject({ sourceId: 'U1', type: 'hazard' }); // still imported
   });
 
   it('builds a Firestore-safe deterministic doc id', () => {

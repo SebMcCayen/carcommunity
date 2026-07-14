@@ -771,4 +771,5 @@
     <string name="incidents_reportError">Det gick inte att skicka rapporten. Försök igen.</string>
     <string name="incidents_locationUnavailable">Din position är inte tillgänglig. Slå på platstjänster för att rapportera.</string>
     <string name="incidents_markerLabel">Händelse</string>
+    <string name="incidents_sourceTrafikverket">Källa: Trafikverket</string>
 </resources>

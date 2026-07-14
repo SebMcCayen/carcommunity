@@ -32,12 +32,17 @@ export function buildTrafikverketRequestBody(
   return [
     '<REQUEST>',
     `<LOGIN authenticationkey="${escapeXml(authenticationKey)}" />`,
-    `<QUERY objecttype="Situation" schemaversion="1.5" limit="${limit}">`,
-    '<FILTER>',
-    '<EQ name="Deviation.ManagedCause" value="true" />',
-    '</FILTER>',
+    // namespace + schemaversion 1.6 are REQUIRED for Situation objects — without
+    // them the API errors and imports nothing. The FILTER element is mandatory
+    // but MUST stay empty: any Deviation.ManagedCause filter wrongly drops most
+    // real incidents (lane/road closures, speed restrictions carry ManagedCause=None).
+    `<QUERY objecttype="Situation" namespace="road.trafficinfo" schemaversion="1.6" limit="${limit}">`,
+    '<FILTER></FILTER>',
     '<INCLUDE>Deviation.Id</INCLUDE>',
+    // MessageCodeValue is the stable English machine code used for classification.
+    '<INCLUDE>Deviation.MessageCodeValue</INCLUDE>',
     '<INCLUDE>Deviation.MessageType</INCLUDE>',
+    '<INCLUDE>Deviation.Header</INCLUDE>',
     '<INCLUDE>Deviation.Message</INCLUDE>',
     '<INCLUDE>Deviation.IconId</INCLUDE>',
     '<INCLUDE>Deviation.Geometry.WGS84</INCLUDE>',
@@ -60,7 +65,10 @@ function escapeXml(value: string): string {
 
 export interface TrafikverketDeviation {
   Id?: string;
+  /** Stable English machine code (schemaversion 1.6) — the classification key. */
+  MessageCodeValue?: string;
   MessageType?: string;
+  Header?: string;
   Message?: string;
   IconId?: string;
   Geometry?: { WGS84?: string };
@@ -92,21 +100,99 @@ export function parseWgs84Point(value: string | undefined): { longitude: number;
 }
 
 /**
- * Maps a Trafikverket `MessageType` (Swedish) to an incident type. Defaults to
- * `roadwork` — the API's managed situations are predominantly planned works.
+ * Classifies a lowercased `MessageCodeValue` (the stable English machine code)
+ * into an app IncidentType, `null` when it should be SKIPPED (not imported), or
+ * `undefined` when the code is present but unrecognized (caller decides the
+ * fallback + logs it for review). Substring rules so new upstream codes still
+ * classify robustly.
+ *
+ * Product scope: roadworks + real incidents only. Ferry schedules and standing
+ * regulatory restrictions (speed/overtaking/weight/dimension limits) are SKIPPED.
  */
-export function classifyIncidentType(messageType: string | undefined): IncidentType {
-  const t = (messageType ?? '').toLowerCase();
+function classifyMessageCode(code: string): IncidentType | null | undefined {
+  // SKIP: ferries + standing regulatory restrictions. Checked first so a
+  // restriction never leaks through into another bucket.
+  if (
+    code.includes('ferry') ||
+    code.includes('restriction') ||
+    code.includes('overtaking') ||
+    code.includes('speedlimit') ||
+    code.includes('speedrestriction') ||
+    code.includes('weight') ||
+    code.includes('height') ||
+    code.includes('width') ||
+    code.includes('length') ||
+    code.includes('axle') ||
+    code.includes('dimension')
+  ) {
+    return null;
+  }
+  if (
+    code.includes('roadwork') ||
+    code.includes('resurfac') ||
+    code.includes('blasting') ||
+    code.includes('construction') ||
+    code.includes('paving') ||
+    code.includes('maintenance')
+  ) {
+    return 'roadwork';
+  }
+  if (code.includes('accident') || code.includes('collision') || code.includes('crash')) {
+    return 'accident';
+  }
+  if (code.includes('closed') || code.includes('closure')) return 'road_closed';
+  if (code.includes('police') || code.includes('checkpoint')) return 'police';
+  if (
+    code.includes('frost') ||
+    code.includes('surface') ||
+    code.includes('obstruction') ||
+    code.includes('obstacle') ||
+    code.includes('diversion') ||
+    code.includes('damage') ||
+    code.includes('flood') ||
+    code.includes('ice') ||
+    code.includes('slippery') ||
+    code.includes('snow') ||
+    code.includes('animal') ||
+    code.includes('object') ||
+    code.includes('debris') ||
+    code.includes('fallen') ||
+    code.includes('hinder') ||
+    code.includes('hazard')
+  ) {
+    return 'hazard';
+  }
+  return undefined; // present but unrecognized
+}
+
+/** Swedish `MessageType` fallback used only when `MessageCodeValue` is absent. */
+function classifyMessageType(messageType: string): IncidentType {
+  const t = messageType.toLowerCase();
   if (t.includes('olycka')) return 'accident';
   if (t.includes('vägarbete') || t.includes('vagarbete')) return 'roadwork';
   if (t.includes('avstäng') || t.includes('avstang') || t.includes('stängd') || t.includes('stangd')) {
     return 'road_closed';
   }
-  if (t.includes('hinder') || t.includes('föremål') || t.includes('foremal') || t.includes('halka') || t.includes('viltstängsel')) {
-    return 'hazard';
+  return 'hazard';
+}
+
+/**
+ * Maps a deviation to an app IncidentType, or `null` to SKIP it (ferry /
+ * regulatory restriction). Prefers the stable English `MessageCodeValue`; when
+ * that is missing/empty, falls back to the Swedish `MessageType`; an unknown
+ * (present-but-unrecognized) code surfaces as a generic `hazard` so genuinely
+ * new incident types still reach the map.
+ */
+export function classifyIncidentType(
+  messageCodeValue: string | undefined,
+  messageType?: string,
+): IncidentType | null {
+  const code = (messageCodeValue ?? '').toLowerCase();
+  if (code) {
+    const classified = classifyMessageCode(code);
+    return classified === undefined ? 'hazard' : classified;
   }
-  if (t.includes('restriktion')) return 'road_closed';
-  return 'roadwork';
+  return classifyMessageType(messageType ?? '');
 }
 
 /** A normalized importable incident derived from a Trafikverket deviation. */
@@ -123,24 +209,38 @@ const NOTE_MAX = 200;
 
 /**
  * Flattens a Trafikverket response into importable incidents: one per deviation
- * that has a stable id and a parseable WGS84 point. Deviations without either
- * are skipped. Notes are trimmed/bounded.
+ * that has a stable id, a parseable WGS84 point, and a classifiable type.
+ * Deviations classified as SKIP (ferries / regulatory restrictions), or missing
+ * an id or a valid point, are dropped. Notes are trimmed/bounded.
+ *
+ * `onUnknownCode` is invoked with the raw `MessageCodeValue` of any deviation
+ * whose code is present but unrecognized (still imported as a generic hazard);
+ * the runner wires it to `logger.info` so new codes can be reviewed.
  */
-export function parseTrafikverketResponse(response: TrafikverketResponse): ImportedIncident[] {
+export function parseTrafikverketResponse(
+  response: TrafikverketResponse,
+  onUnknownCode?: (code: string) => void,
+): ImportedIncident[] {
   const results: ImportedIncident[] = [];
   const seen = new Set<string>();
   const situations = response.RESPONSE?.RESULT?.flatMap((r) => r.Situation ?? []) ?? [];
   for (const situation of situations) {
     for (const deviation of situation.Deviation ?? []) {
+      const type = classifyIncidentType(deviation.MessageCodeValue, deviation.MessageType);
+      if (type === null) continue; // SKIP: ferry / regulatory restriction
       const point = parseWgs84Point(deviation.Geometry?.WGS84);
       if (!point) continue;
       const sourceId = deviation.Id ?? situation.Id;
       if (!sourceId || seen.has(sourceId)) continue;
       seen.add(sourceId);
+      const rawCode = deviation.MessageCodeValue;
+      if (onUnknownCode && rawCode && classifyMessageCode(rawCode.toLowerCase()) === undefined) {
+        onUnknownCode(rawCode);
+      }
       const message = deviation.Message?.trim();
       results.push({
         sourceId,
-        type: classifyIncidentType(deviation.MessageType),
+        type,
         latitude: point.latitude,
         longitude: point.longitude,
         note: message && message.length > 0 ? message.slice(0, NOTE_MAX) : null,
