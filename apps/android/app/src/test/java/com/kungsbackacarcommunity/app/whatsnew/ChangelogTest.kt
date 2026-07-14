@@ -63,6 +63,24 @@ class ChangelogTest {
     }
 
     @Test
+    fun `parse de-duplicates entries sharing a versionCode`() {
+        val json =
+            """
+            {
+              "entries": [
+                {"versionCode": 5, "versionName": "0.2.0", "releaseDate": "2026-07-10",
+                 "highlights": ["a"], "changes": ["a"]},
+                {"versionCode": 5, "versionName": "0.2.0-dup", "releaseDate": "2026-07-10",
+                 "highlights": ["b"], "changes": ["b"]},
+                {"versionCode": 7, "versionName": "0.4.0", "releaseDate": "2026-07-12",
+                 "highlights": ["c"], "changes": ["c"]}
+              ]
+            }
+            """.trimIndent()
+        assertEquals(listOf(7, 5), Changelog.parse(json).map { it.versionCode })
+    }
+
+    @Test
     fun `parse of a document without entries yields an empty changelog`() {
         assertTrue(Changelog.parse("""{"note": "x"}""").isEmpty())
     }

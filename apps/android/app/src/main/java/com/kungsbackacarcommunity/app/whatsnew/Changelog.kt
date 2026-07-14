@@ -47,8 +47,11 @@ object Changelog {
     /**
      * Parses the bundled changelog document (`{"note": …, "entries": [...]}`).
      * Entries missing any required field are skipped (a malformed release note
-     * must never crash the app); the result is sorted newest-first. Callers
-     * handle IO/JSON failure — see `ChangelogLoader`.
+     * must never crash the app); the result is sorted newest-first and
+     * de-duplicated by [ChangelogEntry.versionCode] (a versionCode maps to a
+     * single release — accidental duplicates would double-count skipped
+     * versions and render twice, so only the first per versionCode is kept).
+     * Callers handle IO/JSON failure — see `ChangelogLoader`.
      */
     fun parse(json: String): List<ChangelogEntry> {
         val entries = JSONObject(json).optJSONArray("entries") ?: return emptyList()
@@ -68,7 +71,7 @@ object Changelog {
                     changes = stringList(obj, "changes"),
                 )
         }
-        return parsed.sortedByDescending { it.versionCode }
+        return parsed.sortedByDescending { it.versionCode }.distinctBy { it.versionCode }
     }
 
     private fun stringList(obj: JSONObject, key: String): List<String> {
