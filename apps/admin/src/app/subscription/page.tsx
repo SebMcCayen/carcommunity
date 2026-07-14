@@ -107,6 +107,16 @@ export default function SubscriptionPage() {
     }
   }, []);
 
+  // Keep the input in sync with the query param. The initial useState(presetUid)
+  // only runs on first mount; if the admin is already ON /subscription and
+  // navigates to /subscription?uid=… again (e.g. from another user's profile),
+  // presetUid changes but userId would otherwise keep the stale value — leaving
+  // the field locked read-only against the WRONG UID for a destructive
+  // grant/revoke. Mirror presetUid into userId whenever a preset arrives.
+  useEffect(() => {
+    if (presetUid) setUserId(presetUid);
+  }, [presetUid]);
+
   // Auto-look-up when a UID arrives via the profile link, so pressing
   // "Hantera prenumeration" opens the flow already scoped to that user.
   useEffect(() => {
