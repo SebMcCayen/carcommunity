@@ -246,14 +246,14 @@ export function parseTrafikverketResponse(
       if (!sourceId || seen.has(sourceId)) continue;
       seen.add(sourceId);
       const rawCode = deviation.MessageCodeValue;
-      if (
-        onUnknownCode &&
-        rawCode &&
-        classifyMessageCode(rawCode.toLowerCase()) === undefined &&
-        !loggedUnknownCodes.has(rawCode)
-      ) {
-        loggedUnknownCodes.add(rawCode);
-        onUnknownCode(rawCode);
+      if (onUnknownCode && rawCode && classifyMessageCode(rawCode.toLowerCase()) === undefined) {
+        // De-dupe on a normalized key so casing variants of the same code log
+        // once, but pass the original value to the hook for debugging.
+        const key = rawCode.toLowerCase();
+        if (!loggedUnknownCodes.has(key)) {
+          loggedUnknownCodes.add(key);
+          onUnknownCode(rawCode);
+        }
       }
       const message = deviation.Message?.trim();
       results.push({
