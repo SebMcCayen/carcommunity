@@ -851,6 +851,7 @@
     "reportSuccess": "Thanks — your report is on the map.",
     "reportError": "Couldn't send your report. Try again.",
     "locationUnavailable": "Your location isn't available. Turn on location to report.",
-    "markerLabel": "Incident"
+    "markerLabel": "Incident",
+    "sourceTrafikverket": "Source: Trafikverket"
   }
 }

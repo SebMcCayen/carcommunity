@@ -781,4 +781,5 @@
     <string name="incidents_reportError">Couldn\'t send your report. Try again.</string>
     <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
     <string name="incidents_markerLabel">Incident</string>
+    <string name="incidents_sourceTrafikverket">Source: Trafikverket</string>
 </resources>
