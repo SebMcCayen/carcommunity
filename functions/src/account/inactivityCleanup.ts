@@ -160,7 +160,12 @@ async function warnAccount(uid: string, now: Date): Promise<void> {
     .doc(uid)
     .set(
       {
-        inactivityWarnedAt: FieldValue.serverTimestamp(),
+        // Both timestamps share ONE time basis (the sweep's `now`) so the grace
+        // window is exact: inactivityDeleteAfter === inactivityWarnedAt + grace.
+        // A serverTimestamp() for warnedAt could resolve later than `now`,
+        // shortening the intended 30-day window (and, once the hard-delete gate
+        // is enabled, allowing deletion sooner than specified).
+        inactivityWarnedAt: Timestamp.fromDate(now),
         inactivityDeleteAfter: Timestamp.fromDate(addDays(now, INACTIVITY_DELETE_GRACE_DAYS)),
       },
       { merge: true },

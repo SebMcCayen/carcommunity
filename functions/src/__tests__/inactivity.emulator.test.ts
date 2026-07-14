@@ -43,6 +43,7 @@ import * as emailModule from '../notifications/email';
 import {
   ACCOUNT_LIFECYCLE_CONFIG_DOC,
   INACTIVE_DELETION_ENABLED_FIELD,
+  INACTIVITY_DELETE_GRACE_DAYS,
   INACTIVITY_DELETION_REASON,
   addDays,
   subtractMonths,
@@ -227,6 +228,12 @@ describe('runInactivityCleanup — delete gate CLOSED (MVP default)', () => {
     const warned = (await adminDb.collection('userLifecycle').doc(warnUid).get()).data()!;
     expect(warned.inactivityWarnedAt).toBeInstanceOf(Timestamp);
     expect(warned.inactivityDeleteAfter).toBeInstanceOf(Timestamp);
+    // Both timestamps share the sweep's `now` basis, so the grace window is
+    // exact: inactivityDeleteAfter === inactivityWarnedAt + grace (no drift from
+    // a server-resolved warnedAt).
+    const warnedAt = (warned.inactivityWarnedAt as Timestamp).toDate();
+    const deleteAfter = (warned.inactivityDeleteAfter as Timestamp).toDate();
+    expect(deleteAfter.getTime()).toBe(addDays(warnedAt, INACTIVITY_DELETE_GRACE_DAYS).getTime());
     const warnedProfile = (await adminDb.collection('users').doc(warnUid).get()).data()!;
     expect(warnedProfile.inactivityWarnedAt).toBeUndefined();
 
