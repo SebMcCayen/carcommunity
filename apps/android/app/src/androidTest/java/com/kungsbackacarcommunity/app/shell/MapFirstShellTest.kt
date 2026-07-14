@@ -73,6 +73,7 @@ class MapFirstShellTest {
                     billingRepository = null,
                     subscriptionVerifier = null,
                     pushRegistrationCoordinator = null,
+                    loginRecordCoordinator = null,
                     flags = FeatureFlags.DEFAULTS,
                     onSignOut = {},
                 )

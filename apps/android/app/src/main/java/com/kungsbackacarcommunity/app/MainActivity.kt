@@ -19,6 +19,8 @@ import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.FirebaseAccountDeletionRepository
+import com.kungsbackacarcommunity.app.auth.FirebaseLoginRecorder
+import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.auth.NoopSignInFailureReporter
 import com.kungsbackacarcommunity.app.auth.SignInCoordinator
 import com.kungsbackacarcommunity.app.auth.SignInStatus
@@ -119,6 +121,13 @@ class MainActivity : ComponentActivity() {
                     failureReporter = signInFailureReporter ?: NoopSignInFailureReporter,
                 )
             }
+        // Last-login recording: best-effort auth-recordLogin call once a user is
+        // signed in (AuthenticatedApp invokes it), keeping userLifecycle/{uid}.lastLoginAt
+        // fresh for the inactive-account sweep. Guarded like the rest of the
+        // Firebase wiring — null in config-less builds.
+        val loginRecordCoordinator =
+            FirebaseLoginRecorder.createIfAvailable(applicationContext)
+                ?.let { LoginRecordCoordinator(it) }
         val profileRepository = FirebaseProfileRepository.createIfAvailable(applicationContext)
         val onboardingCoordinator =
             FirebaseOnboardingRepository.createIfAvailable(applicationContext)
@@ -275,6 +284,7 @@ class MainActivity : ComponentActivity() {
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
                         pushRegistrationCoordinator = pushRegistrationCoordinator,
+                        loginRecordCoordinator = loginRecordCoordinator,
                         flags = flags,
                         onSignOut = { authRepository?.signOut() },
                     )

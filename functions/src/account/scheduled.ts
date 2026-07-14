@@ -5,7 +5,8 @@
  * accountDeletionRequests older than the 30-day retention window:
  *
  * 1. Firestore document trees (users/{uid} incl. badges,
- *    userPrivate/{uid} incl. pushTokens, notifications/{uid} incl.
+ *    userPrivate/{uid} incl. pushTokens, userLifecycle/{uid}
+ *    (last-login + inactivity state), notifications/{uid} incl.
  *    items, pointsLedger/{uid} incl. entries) via recursiveDelete.
  * 2. Owned documents by query (vehicles, rides where userId == uid).
  * 3. Chat erasure: the user's 1:1 DM conversations (conversation doc +
