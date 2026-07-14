@@ -197,6 +197,22 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // userLifecycle – backend-only account-activity + inactivity state
+    // Document ID == Firebase UID.
+    // Holds lastLoginAt (auth.recordLogin) plus the inactivity-sweep fields
+    // inactivityWarnedAt / inactivityDeleteAfter (account-cleanupInactive).
+    // These are activity/lifecycle signals that MUST NOT leak on the public
+    // users/{uid} profile (readable by any authenticated user), so they live
+    // here instead. Owner + admin may read (the user sees their own last
+    // login; the admin UI can display it); ALL client writes are denied —
+    // every write is a trusted Admin SDK write, which bypasses these rules.
+    // -------------------------------------------------------------------------
+    match /userLifecycle/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // notifications/{uid}/items – durable in-app notification inbox
     // (Phase 9l). Owner-only read; deliberately NOT gated on suspension so
     // suspended users can still see the essential account notices that are

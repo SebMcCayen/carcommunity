@@ -1,10 +1,13 @@
 /**
  * auth.recordLogin — member-gated callable (contracts/functions/functions.json).
  *
- * Stamps `users/{uid}.lastLoginAt = serverTimestamp()` on each successful
- * sign-in. This is a TRUSTED SERVER WRITE via the Admin SDK: `lastLoginAt` is
- * omitted from the users/{uid} owner-write whitelist in firestore.rules, so
- * clients can never set it — only this callable can.
+ * Stamps `userLifecycle/{uid}.lastLoginAt = serverTimestamp()` on each
+ * successful sign-in. This is a TRUSTED SERVER WRITE via the Admin SDK:
+ * userLifecycle/{uid} denies all client writes in firestore.rules (owner +
+ * admin may read, no one may write), so clients can never set it — only this
+ * callable can. lastLoginAt lives in userLifecycle (not the public users/{uid}
+ * profile, which is readable by any authenticated user) so a member's
+ * activity timestamp is never exposed to other signed-in users.
  *
  * Why a Firestore field and not Firebase Auth's built-in lastSignInTime: the
  * Auth metadata timestamp is not queryable, so the scheduled inactive-account
@@ -41,7 +44,7 @@ export const recordLogin = onCall(CALLABLE_OPTS, async (request): Promise<Record
   const actor = await requireMemberActor(request);
 
   await db
-    .collection('users')
+    .collection('userLifecycle')
     .doc(actor.uid)
     .set({ lastLoginAt: FieldValue.serverTimestamp() }, { merge: true });
 

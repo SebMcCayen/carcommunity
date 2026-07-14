@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
         // Last-login recording: best-effort auth-recordLogin call once a user is
-        // signed in (AuthenticatedApp invokes it), keeping users/{uid}.lastLoginAt
+        // signed in (AuthenticatedApp invokes it), keeping userLifecycle/{uid}.lastLoginAt
         // fresh for the inactive-account sweep. Guarded like the rest of the
         // Firebase wiring — null in config-less builds.
         val loginRecordCoordinator =

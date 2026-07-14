@@ -224,7 +224,7 @@ fun AuthenticatedApp(
     }
 
     // Sign-in-time last-login recording: best-effort auth-recordLogin, once per
-    // signed-in uid, keeping users/{uid}.lastLoginAt fresh for the inactive-
+    // signed-in uid, keeping userLifecycle/{uid}.lastLoginAt fresh for the inactive-
     // account sweep. Failures stay inside the coordinator and never block the UI.
     LaunchedEffect(uid, loginRecordCoordinator) {
         loginRecordCoordinator?.recordLogin()

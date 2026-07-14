@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 
 /**
  * Records the current sign-in against the backend so the account's last-activity
- * timestamp (users/{uid}.lastLoginAt) stays fresh — the queryable field the
+ * timestamp (userLifecycle/{uid}.lastLoginAt) stays fresh — the queryable field the
  * scheduled inactive-account cleanup uses. Firebase-free interface for testability.
  */
 interface LoginRecorder {

@@ -4,10 +4,12 @@
  *
  * Two mechanisms sit on top of this module:
  *
- * 1. `auth.recordLogin` stamps `users/{uid}.lastLoginAt` on every sign-in
- *    (functions/src/auth/recordLogin.ts). That Firestore field — NOT Firebase
- *    Auth's built-in lastSignInTime, which is not queryable — is the source of
- *    truth for "when did this account last sign in".
+ * 1. `auth.recordLogin` stamps `userLifecycle/{uid}.lastLoginAt` on every
+ *    sign-in (functions/src/auth/recordLogin.ts). That Firestore field — NOT
+ *    Firebase Auth's built-in lastSignInTime, which is not queryable — is the
+ *    source of truth for "when did this account last sign in". It lives in the
+ *    backend-only userLifecycle/{uid} doc (not the public users/{uid} profile)
+ *    so a member's activity is not exposed to other signed-in users.
  * 2. The scheduled `account-cleanupInactive` sweep
  *    (functions/src/account/inactivityCleanup.ts) resolves each account's last
  *    activity, then asks `decideInactivity` below what to do: skip, warn (mark +
@@ -104,9 +106,9 @@ export interface InactivityDecisionInput {
   now: Date;
   /** Resolved last activity (lastLoginAt ?? createdAt). */
   lastActivityAt: Date;
-  /** users/{uid}.inactivityWarnedAt, or null when never warned. */
+  /** userLifecycle/{uid}.inactivityWarnedAt, or null when never warned. */
   warnedAt: Date | null;
-  /** users/{uid}.inactivityDeleteAfter, or null when never warned. */
+  /** userLifecycle/{uid}.inactivityDeleteAfter, or null when never warned. */
   deleteAfter: Date | null;
   /** The resolved hard-delete gate (config flag AND email available). */
   deletionEnabled: boolean;

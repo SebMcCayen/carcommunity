@@ -3,7 +3,7 @@
  * cross-lane).
  *
  * Covers:
- * - auth-recordLogin: a member's sign-in stamps users/{uid}.lastLoginAt.
+ * - auth-recordLogin: a member's sign-in stamps userLifecycle/{uid}.lastLoginAt.
  * - runInactivityCleanup with the delete gate CLOSED (MVP default): warns an
  *   inactive account (marks + in-app notice), leaves a past-grace account as
  *   would_delete (NOT deleted), and clears the warning for a reactivated user.
@@ -98,15 +98,34 @@ async function signInAs(user: TestUser): Promise<void> {
   await auth.currentUser?.getIdToken(true);
 }
 
-/** Directly seeds a users/{uid} doc for sweep tests (no Auth user needed). */
+/**
+ * Directly seeds a users/{uid} doc for sweep tests (no Auth user needed).
+ * Lifecycle fields (lastLoginAt / inactivityWarnedAt / inactivityDeleteAfter)
+ * now live in the backend-only userLifecycle/{uid} doc, so they are split out
+ * of the profile doc here and written to userLifecycle instead. createdAt and
+ * the profile scalars stay on users/{uid}.
+ */
 async function seedUser(
   uid: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
+  const lifecycleKeys = ['lastLoginAt', 'inactivityWarnedAt', 'inactivityDeleteAfter'] as const;
+  const lifecycle: Record<string, unknown> = {};
+  const profile: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if ((lifecycleKeys as readonly string[]).includes(key)) {
+      lifecycle[key] = value;
+    } else {
+      profile[key] = value;
+    }
+  }
   await adminDb
     .collection('users')
     .doc(uid)
-    .set({ displayName: 'x', role: 'user', activeMember: false, suspended: false, deleted: false, ...fields });
+    .set({ displayName: 'x', role: 'user', activeMember: false, suspended: false, deleted: false, ...profile });
+  if (Object.keys(lifecycle).length > 0) {
+    await adminDb.collection('userLifecycle').doc(uid).set(lifecycle);
+  }
 }
 
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
@@ -129,7 +148,7 @@ afterAll(async () => {
 });
 
 describe('auth-recordLogin', () => {
-  it('stamps users/{uid}.lastLoginAt for a member on sign-in', async () => {
+  it('stamps userLifecycle/{uid}.lastLoginAt for a member on sign-in', async () => {
     const user = await createProvisionedUser('login-member');
     // Member gate: recordLogin requires activeMember on the backend user doc.
     await adminDb.collection('users').doc(user.uid).set({ activeMember: true }, { merge: true });
@@ -138,8 +157,13 @@ describe('auth-recordLogin', () => {
     const result = (await call('auth-recordLogin', {})).data as { recorded: boolean };
     expect(result).toEqual({ recorded: true });
 
-    const lastLoginAt = (await adminDb.collection('users').doc(user.uid).get()).data()!.lastLoginAt;
+    // Written to the backend-only userLifecycle doc, NOT the public profile.
+    const lastLoginAt = (await adminDb.collection('userLifecycle').doc(user.uid).get()).data()
+      ?.lastLoginAt;
     expect(lastLoginAt).toBeInstanceOf(Timestamp);
+    // And never leaked onto the public users/{uid} profile.
+    const profile = (await adminDb.collection('users').doc(user.uid).get()).data()!;
+    expect(profile.lastLoginAt).toBeUndefined();
   });
 
   it('rejects a non-member (member-gated)', async () => {
@@ -183,17 +207,24 @@ describe('runInactivityCleanup — delete gate CLOSED (MVP default)', () => {
     expect(summary.warned).toBeGreaterThanOrEqual(1);
     expect(summary.wouldDelete).toBeGreaterThanOrEqual(1);
 
-    const warned = (await adminDb.collection('users').doc(warnUid).get()).data()!;
+    // Warning fields land in userLifecycle/{uid}, not the public profile.
+    const warned = (await adminDb.collection('userLifecycle').doc(warnUid).get()).data()!;
     expect(warned.inactivityWarnedAt).toBeInstanceOf(Timestamp);
     expect(warned.inactivityDeleteAfter).toBeInstanceOf(Timestamp);
+    const warnedProfile = (await adminDb.collection('users').doc(warnUid).get()).data()!;
+    expect(warnedProfile.inactivityWarnedAt).toBeUndefined();
 
     // Would-delete account is untouched (still present, still warned).
     expect((await adminDb.collection('users').doc(wouldUid).get()).exists).toBe(true);
 
-    // Cleared account keeps existing but the warning fields are gone.
-    const cleared = (await adminDb.collection('users').doc(clearUid).get()).data()!;
+    // Cleared account keeps existing but the warning fields are gone from userLifecycle.
+    const cleared = (await adminDb.collection('userLifecycle').doc(clearUid).get()).data() ?? {};
     expect(cleared.inactivityWarnedAt).toBeUndefined();
     expect(cleared.inactivityDeleteAfter).toBeUndefined();
+
+    // Short candidate page (<200) → sweep cursor reset to wrap next run.
+    const cursor = (await adminDb.collection('system').doc('inactivitySweepCursor').get()).data();
+    expect(cursor?.lastCreatedAt).toBeUndefined();
   });
 });
 

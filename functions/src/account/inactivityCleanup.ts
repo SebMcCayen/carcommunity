@@ -9,7 +9,17 @@
  *    inactive (lastActivity = lastLoginAt ?? createdAt older than 11 months) if
  *    it was created more than 11 months ago, since createdAt <= lastLoginAt
  *    always. Soft-deleted accounts (deleted=true, already on the deletion track)
- *    are skipped.
+ *    are skipped. The scan is paged with a PERSISTED CURSOR
+ *    (system/inactivitySweepCursor holding { lastCreatedAt, lastUid }): each run
+ *    resumes with startAfter(...) past the previous run's last doc and RESETS
+ *    the cursor when a short page signals the end of the collection, wrapping
+ *    back to the start. This guarantees the sweep advances across the whole
+ *    `users` collection over successive days rather than forever re-scanning the
+ *    oldest page — so newer eligible accounts behind a wall of active/warned
+ *    ones can't be starved. The lifecycle fields it reads per candidate
+ *    (lastLoginAt / inactivityWarnedAt / inactivityDeleteAfter) live in the
+ *    backend-only userLifecycle/{uid} doc (batch-read via getAll), NOT on the
+ *    public users/{uid} profile — createdAt still comes from the user doc.
  * 2. Per candidate, `decideInactivity` returns one of: skip, warn, clear_warning,
  *    delete, or would_delete.
  *    - warn: stamp inactivityWarnedAt = now and inactivityDeleteAfter = now + 30
@@ -38,7 +48,7 @@
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { writeInAppNotification } from '../notifications/deliver';
@@ -73,6 +83,53 @@ const MAX_CANDIDATES_PER_RUN = 200;
  */
 const MAX_DELETES_PER_RUN = 25;
 
+/**
+ * Singleton cursor doc that lets the daily sweep advance across the full `users`
+ * collection over successive runs instead of forever re-scanning the same oldest
+ * page. Holds the last processed doc's ordering key { lastCreatedAt, lastUid };
+ * the next run resumes with startAfter(...) and resets (clears) the cursor once a
+ * short page signals the end of the collection, wrapping back to the start.
+ */
+const SWEEP_CURSOR_COLLECTION = 'system';
+const SWEEP_CURSOR_DOC = 'inactivitySweepCursor';
+
+interface SweepCursor {
+  lastCreatedAt: Timestamp;
+  lastUid: string;
+}
+
+/** Reads the persisted scan cursor; null when unset (start from the beginning). */
+async function readSweepCursor(): Promise<SweepCursor | null> {
+  try {
+    const snap = await db.collection(SWEEP_CURSOR_COLLECTION).doc(SWEEP_CURSOR_DOC).get();
+    const data = snap.data();
+    if (data?.lastCreatedAt instanceof Timestamp && typeof data.lastUid === 'string') {
+      return { lastCreatedAt: data.lastCreatedAt, lastUid: data.lastUid };
+    }
+    return null;
+  } catch (error) {
+    // A cursor read failure must not abort the sweep — fall back to a full scan
+    // from the beginning (the delete/warn actions are all idempotent).
+    logger.warn('Inactivity sweep cursor read failed; starting from beginning', {
+      error: String(error),
+    });
+    return null;
+  }
+}
+
+/** Persists the next scan cursor, or clears it to wrap back to the collection start. */
+async function writeSweepCursor(cursor: SweepCursor | null): Promise<void> {
+  const ref = db.collection(SWEEP_CURSOR_COLLECTION).doc(SWEEP_CURSOR_DOC);
+  if (cursor === null) {
+    await ref.set({ lastCreatedAt: FieldValue.delete(), lastUid: FieldValue.delete() }, { merge: true });
+    return;
+  }
+  await ref.set(
+    { lastCreatedAt: cursor.lastCreatedAt, lastUid: cursor.lastUid, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
 /** Reads the hard-delete kill-switch from config/accountLifecycle (default OFF). */
 async function readInactiveDeletionFlag(): Promise<boolean> {
   try {
@@ -93,8 +150,11 @@ function toDate(value: unknown): Date | null {
 
 /** Marks an account warned and attempts the (currently no-op) email + in-app notice. */
 async function warnAccount(uid: string, now: Date): Promise<void> {
+  // Lifecycle state lives in the backend-only userLifecycle/{uid} doc, never on
+  // the public users/{uid} profile — pending-deletion state must not leak to
+  // other signed-in users.
   await db
-    .collection('users')
+    .collection('userLifecycle')
     .doc(uid)
     .set(
       {
@@ -149,8 +209,9 @@ async function warnAccount(uid: string, now: Date): Promise<void> {
 
 /** Clears the warning fields when an account has become active again. */
 async function clearWarning(uid: string): Promise<void> {
+  // Warning fields live in userLifecycle/{uid} (see warnAccount).
   await db
-    .collection('users')
+    .collection('userLifecycle')
     .doc(uid)
     .set(
       {
@@ -202,12 +263,36 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
   // CRITICAL GATE: both the config flag AND real email delivery are required.
   const deletionEnabled = flagEnabled && emailAvailable;
 
-  const candidates = await db
+  // Persisted-cursor scan: resume after the last doc processed by the previous
+  // run so the sweep advances across the whole `users` collection over
+  // successive days instead of forever re-scanning the same oldest page (which
+  // would starve newer eligible accounts sitting behind >MAX active/warned
+  // ones). orderBy(documentId()) is the deterministic tiebreaker the cursor
+  // resumes on; it matches Firestore's automatic single-field index on
+  // createdAt (which orders by __name__ next), so NO composite index is needed.
+  const cursor = await readSweepCursor();
+  let query = db
     .collection('users')
     .where('createdAt', '<=', Timestamp.fromDate(inactivityWarnCutoff(now)))
     .orderBy('createdAt', 'asc')
-    .limit(MAX_CANDIDATES_PER_RUN)
-    .get();
+    .orderBy(FieldPath.documentId());
+  if (cursor !== null) {
+    query = query.startAfter(cursor.lastCreatedAt, cursor.lastUid);
+  }
+  const candidates = await query.limit(MAX_CANDIDATES_PER_RUN).get();
+
+  // Lifecycle fields (lastLoginAt / inactivityWarnedAt / inactivityDeleteAfter)
+  // now live in the backend-only userLifecycle/{uid} doc, not on the public
+  // users/{uid} profile. Batch-read the page's lifecycle docs in one getAll so
+  // the sweep still sources those fields (createdAt stays on the user doc).
+  const lifecycleRefs = candidates.docs.map((snap) =>
+    db.collection('userLifecycle').doc(snap.id),
+  );
+  const lifecycleSnaps =
+    lifecycleRefs.length > 0 ? await db.getAll(...lifecycleRefs) : [];
+  const lifecycleByUid = new Map(
+    lifecycleSnaps.map((snap) => [snap.id, snap.data() ?? {}]),
+  );
 
   const summary: InactivityCleanupSummary = {
     candidates: candidates.size,
@@ -230,16 +315,20 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
       continue;
     }
     const uid = snap.id;
+    // Accounts that never logged in have no userLifecycle doc → lastLoginAt
+    // undefined → resolveLastActivity falls back to createdAt (as before).
+    const lifecycle = lifecycleByUid.get(uid) ?? {};
+    const warnedAt = toDate(lifecycle.inactivityWarnedAt);
     const decision = decideInactivity({
       now,
-      lastActivityAt: resolveLastActivity(toDate(data.lastLoginAt), createdAt),
-      warnedAt: toDate(data.inactivityWarnedAt),
-      deleteAfter: toDate(data.inactivityDeleteAfter),
+      lastActivityAt: resolveLastActivity(toDate(lifecycle.lastLoginAt), createdAt),
+      warnedAt,
+      deleteAfter: toDate(lifecycle.inactivityDeleteAfter),
       deletionEnabled,
     });
 
     try {
-      await applyDecision(uid, decision.action, toDate(data.inactivityWarnedAt), now, summary);
+      await applyDecision(uid, decision.action, warnedAt, now, summary);
     } catch (error) {
       // One account's failure must not abort the sweep; the next run retries
       // (all actions are idempotent / purgeUserData is safe to re-run).
@@ -257,6 +346,24 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
       deleted: summary.deleted,
       deferred: summary.deleteCapped,
     });
+  }
+
+  // Advance the persisted cursor so the next daily run resumes past this page.
+  // A short page (fewer than the limit) means the end of the collection was
+  // reached this run → RESET the cursor so the next run wraps back to the start
+  // (a full pass, so every account is eventually reached — no starvation).
+  const lastDoc = candidates.docs[candidates.docs.length - 1];
+  if (candidates.size < MAX_CANDIDATES_PER_RUN || lastDoc === undefined) {
+    await writeSweepCursor(null);
+  } else {
+    const lastCreatedAt = lastDoc.get('createdAt');
+    if (lastCreatedAt instanceof Timestamp) {
+      await writeSweepCursor({ lastCreatedAt, lastUid: lastDoc.id });
+    } else {
+      // Defensive: a full page whose last doc lacks a Timestamp createdAt can't
+      // seed a valid startAfter cursor — reset rather than persist a bad one.
+      await writeSweepCursor(null);
+    }
   }
 
   logger.info('Inactive-account sweep complete', { ...summary });
