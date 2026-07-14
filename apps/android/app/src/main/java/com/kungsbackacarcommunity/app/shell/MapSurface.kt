@@ -141,8 +141,26 @@ interface MapSurface {
     /** The crowd-sourced incident markers to draw (the shared incidents layer). */
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
 
+    /**
+     * The coordinate of the most recent map long-press (hold), or null when none
+     * is pending. The host observes this to open the navigation preview for the
+     * pressed point (Google-Maps "long-press to navigate here"), then calls
+     * [consumeLongPress] to clear it. The real surface publishes to it from the
+     * map's long-click gesture; the stub exposes it for the same wiring/tests.
+     */
+    val longPress: StateFlow<MapPoint?>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
+
+    /**
+     * Record a long-press at [point]. Called by the real surface's long-click
+     * gesture listener; also drivable by the stub/tests to simulate the gesture.
+     */
+    fun emitLongPress(point: MapPoint)
+
+    /** Clear the pending [longPress] once the host has opened the preview for it. */
+    fun consumeLongPress()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
@@ -229,12 +247,23 @@ class StubMapSurface(
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
 
+    private val longPressFlow = MutableStateFlow<MapPoint?>(null)
+    override val longPress: StateFlow<MapPoint?> = longPressFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
 
     override fun recenter() {
         recenterCount += 1
+    }
+
+    override fun emitLongPress(point: MapPoint) {
+        longPressFlow.value = point
+    }
+
+    override fun consumeLongPress() {
+        longPressFlow.value = null
     }
 
     /** No rotatable camera on the stub, so resetting to north is a no-op. */

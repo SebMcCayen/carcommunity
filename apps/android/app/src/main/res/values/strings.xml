@@ -749,6 +749,9 @@
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>
     <string name="addressSearch_close">Stäng</string>
+    <string name="addressSearch_recentTitle">Senaste</string>
+    <string name="addressSearch_droppedPin">Markerad plats</string>
+    <string name="addressSearch_navAppMissing">Ingen kartapp hittades för att starta navigering.</string>
     <string name="addressSearch_noResults">Inga matchande platser</string>
     <string name="addressSearch_searchError">Kunde inte hämta resultat. Kontrollera anslutningen och försök igen.</string>
     <string name="addressSearch_routeError">Kunde inte hitta en rutt till platsen.</string>

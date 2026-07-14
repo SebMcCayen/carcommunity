@@ -749,6 +749,9 @@
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
     <string name="addressSearch_close">Close</string>
+    <string name="addressSearch_recentTitle">Recent</string>
+    <string name="addressSearch_droppedPin">Dropped pin</string>
+    <string name="addressSearch_navAppMissing">No maps app found to start navigation.</string>
     <string name="addressSearch_noResults">No matching places</string>
     <string name="addressSearch_searchError">Couldn\'t load results. Check your connection and try again.</string>
     <string name="addressSearch_routeError">Couldn\'t find a route to that place.</string>

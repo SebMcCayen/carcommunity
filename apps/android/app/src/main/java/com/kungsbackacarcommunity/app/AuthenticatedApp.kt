@@ -134,9 +134,11 @@ import com.kungsbackacarcommunity.app.media.MediaUploader
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -462,6 +464,25 @@ fun AuthenticatedApp(
                 }
             val originProvider: suspend () -> LatLng? =
                 remember(context) { { CurrentLocation.lastKnown(context) } }
+            // Persists the last few selected places (SharedPreferences) so they
+            // reappear in the search bar's empty state for one-tap re-selection.
+            val recentSearchesStore =
+                remember(context) { PrefsRecentSearchesStore(context) }
+            // Resolved in composition (lint: no resource lookups off the UI thread)
+            // for the "no maps app" handoff fallback below.
+            val navAppMissingText = stringResource(R.string.addressSearch_navAppMissing)
+
+            // Map long-press ("navigate here"): the surface publishes the pressed
+            // coordinate; open the search/route overlay previewing that point.
+            // Cleared on the surface once consumed so a later press re-triggers.
+            var navSearchTarget by remember { mutableStateOf<LatLng?>(null) }
+            val pendingLongPress by mapSurface.longPress.collectAsState()
+            LaunchedEffect(pendingLongPress) {
+                val pressed = pendingLongPress ?: return@LaunchedEffect
+                navSearchTarget = LatLng(pressed.longitude, pressed.latitude)
+                navSearchOpen = true
+                mapSurface.consumeLongPress()
+            }
 
             // Flag-gated (not member-gated) reach to the live-location feature.
             val liveLocationEnabled =
@@ -642,11 +663,35 @@ fun AuthenticatedApp(
                         onClose = {
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
+                            // Drop any long-press target so re-opening via the
+                            // search bar starts in the normal search-first state.
+                            navSearchTarget = null
                         },
                         onStartNavigation = { dest, label ->
-                            navDestinationLabel = label
-                            navDestination = dest
+                            // Real in-app Mapbox turn-by-turn only exists in a build
+                            // that bundles the Navigation SDK (NAV_SDK_ENABLED). The
+                            // token-less noNav build (incl. the current Play release —
+                            // its CI provides no MAPBOX_DOWNLOADS_TOKEN) would only
+                            // show the "unavailable" stub, so there we hand off to the
+                            // device's maps app for genuine turn-by-turn instead.
+                            if (BuildConfig.NAV_SDK_ENABLED) {
+                                navDestinationLabel = label
+                                navDestination = dest
+                            } else {
+                                ExternalNavigation.launch(
+                                    context = context,
+                                    destination = dest,
+                                    label = label,
+                                    onUnavailable = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(navAppMissingText)
+                                        }
+                                    },
+                                )
+                            }
                         },
+                        recentStore = recentSearchesStore,
+                        initialTarget = navSearchTarget,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {

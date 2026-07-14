@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
@@ -48,7 +49,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -84,7 +84,15 @@ const val NAV_START_TEST_TAG = "nav_start"
  * @param onClose leave the overlay (back to the map-home tab).
  * @param onStartNavigation enter turn-by-turn navigation to the resolved
  *   destination (invoked from the route preview's "Start" button). Carries the
- *   destination coordinate + its label; the host supplies the origin/GPS.
+ *   destination coordinate + its label; the host decides HOW to navigate — the
+ *   in-app Mapbox turn-by-turn screen when the Navigation SDK is bundled, else a
+ *   handoff to the device's maps app (see the host wiring).
+ * @param recentStore persistence for recently selected places, shown in the
+ *   empty (pre-typing) search state for one-tap re-selection.
+ * @param initialTarget a raw coordinate to preview immediately on open (a map
+ *   long-press "navigate here"): it is reverse-geocoded for a label and fed into
+ *   the same route preview + Start flow as a searched place. Null for a normal
+ *   search-first open.
  */
 @Composable
 fun NavigationSearchScreen(
@@ -93,21 +101,32 @@ fun NavigationSearchScreen(
     originProvider: suspend () -> LatLng?,
     onClose: () -> Unit,
     onStartNavigation: (destination: LatLng, destinationLabel: String) -> Unit,
+    recentStore: RecentSearchesStore = InMemoryRecentSearchesStore(),
+    initialTarget: LatLng? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    // Keep the controller stable across recompositions (keyed only by the search
-    // client) while always invoking the latest origin provider — otherwise a
-    // changed originProvider lambda would be ignored and the stale one called.
+    // Keep the controller stable across recompositions (keyed on the search
+    // client + recent store) while always invoking the latest origin provider —
+    // otherwise a changed originProvider lambda would be ignored and the stale
+    // one called.
     val currentOriginProvider by rememberUpdatedState(originProvider)
     val controller =
-        remember(searchClient) {
-            NavigationController(searchClient, { currentOriginProvider() }, scope)
+        remember(searchClient, recentStore) {
+            NavigationController(searchClient, { currentOriginProvider() }, scope, recentStore)
         }
     val state by controller.state.collectAsState()
 
     // Fetch the origin up-front so the first suggestions are location-biased.
     LaunchedEffect(controller) { controller.refreshOrigin() }
+
+    // A map long-press "navigate here": immediately preview + route to the pressed
+    // coordinate (reverse-geocoded for its label) through the same flow as a
+    // searched place. Keyed on the target so a new long-press re-previews.
+    val droppedPinLabel = stringResource(R.string.addressSearch_droppedPin)
+    LaunchedEffect(controller, initialTarget) {
+        if (initialTarget != null) controller.selectPoint(initialTarget, droppedPinLabel)
+    }
 
     // Mirror the picked destination onto the map surface behind (cleared when
     // gone). The destination marker shows as soon as a destination is selected —
@@ -177,6 +196,13 @@ fun NavigationSearchScreen(
                     state.suggestions.isNotEmpty() ->
                         SuggestionsCard(
                             suggestions = state.suggestions,
+                            onSelect = { controller.select(it) },
+                        )
+                    // Empty query (search bar just opened): offer the last few
+                    // selected places for one-tap re-selection.
+                    state.query.isBlank() && state.recents.isNotEmpty() ->
+                        RecentsCard(
+                            recents = state.recents,
                             onSelect = { controller.select(it) },
                         )
                     state.query.isNotBlank() && !state.searching ->
@@ -318,6 +344,69 @@ private fun SuggestionsCard(
 }
 
 @Composable
+private fun RecentsCard(
+    recents: List<PlaceSuggestion>,
+    onSelect: (PlaceSuggestion) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(KccRadius.lg),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.addressSearch_recentTitle),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            recents.take(RecentSearches.SHOWN).forEachIndexed { index, place ->
+                if (index > 0) HorizontalDivider()
+                // The whole row is the tap target (re-selects → route preview).
+                Surface(
+                    color = androidx.compose.ui.graphics.Color.Transparent,
+                    onClick = { onSelect(place) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = place.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (place.address != null) {
+                                Text(
+                                    text = place.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun HintCard(text: String) {
     Surface(
         shape = RoundedCornerShape(KccRadius.lg),
@@ -417,14 +506,14 @@ private fun RouteSheet(
                 state.route != null -> RouteDetails(route = state.route)
             }
 
-            // Prominent "Start" CTA once a route is resolved — enters turn-by-turn
-            // navigation (Google-Maps style). Only shown with a usable route AND
-            // in a build that actually bundles the Mapbox Navigation SDK
-            // (BuildConfig.NAV_SDK_ENABLED). Token-less builds compile the
-            // src/noNav stub, whose TurnByTurnNavScreen only reports "navigation
-            // unavailable" — so hide the CTA there rather than advertise a feature
-            // that can't run. Route search + preview stay available in both builds.
-            if (state.route != null && BuildConfig.NAV_SDK_ENABLED) {
+            // Prominent "Start" CTA once a route is resolved — begins turn-by-turn
+            // navigation (Google-Maps style). Always shown with a usable route: the
+            // HOST decides HOW to navigate (see onStartNavigation) — the in-app
+            // Mapbox turn-by-turn screen when the Navigation SDK is bundled
+            // (BuildConfig.NAV_SDK_ENABLED), else a handoff to the device's maps
+            // app. Either way the button is reachable in every build, so the
+            // route preview never dead-ends without a way to start driving.
+            if (state.route != null) {
                 Button(
                     onClick = onStart,
                     modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),

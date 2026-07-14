@@ -26,6 +26,8 @@ data class NavUiState(
     val route: RouteSummary? = null,
     val routeLoading: Boolean = false,
     val error: NavError? = null,
+    /** Previously selected places, shown in the empty (pre-typing) search state. */
+    val recents: List<PlaceSuggestion> = emptyList(),
 )
 
 /**
@@ -40,13 +42,16 @@ data class NavUiState(
  * when a route is requested.
  *
  * @param scope the coroutine scope the search/route jobs run in (the screen's).
+ * @param recentStore persistence for the user's most-recently selected places;
+ *   seeded into the initial state and updated when a destination is picked.
  */
 class NavigationController(
     private val client: MapboxSearchClient,
     private val originProvider: suspend () -> LatLng?,
     private val scope: CoroutineScope,
+    private val recentStore: RecentSearchesStore = InMemoryRecentSearchesStore(),
 ) {
-    private val stateFlow = MutableStateFlow(NavUiState())
+    private val stateFlow = MutableStateFlow(NavUiState(recents = recentStore.recent()))
     val state: StateFlow<NavUiState> = stateFlow.asStateFlow()
 
     // Cached once per screen open; used for proximity bias and route origin.
@@ -108,6 +113,9 @@ class NavigationController(
     fun select(suggestion: PlaceSuggestion) {
         searchJob?.cancel()
         routeJob?.cancel()
+        // Persist the pick as a recent so it reappears in the empty search state
+        // next time; re-read so the promoted+capped list drives the UI too.
+        recentStore.record(suggestion)
         stateFlow.value =
             stateFlow.value.copy(
                 query = suggestion.name,
@@ -117,6 +125,7 @@ class NavigationController(
                 route = null,
                 routeLoading = true,
                 error = null,
+                recents = recentStore.recent(),
             )
         routeJob =
             scope.launch {
@@ -167,6 +176,55 @@ class NavigationController(
     }
 
     /**
+     * Picks a raw map coordinate (a long-press "navigate here") as the
+     * destination: reverse-geocodes it to a place name/address for the preview
+     * label, then routes to it exactly like a selected suggestion. Falls back to
+     * [fallbackLabel] as the name and the raw lat/lng as the address when reverse
+     * geocoding returns nothing (or has no token). The destination stays the
+     * pressed [point] so navigation goes to the tapped spot, not a snapped one.
+     *
+     * @param fallbackLabel localized "Dropped pin" label supplied by the UI (the
+     *   controller holds no Android resources).
+     */
+    fun selectPoint(point: LatLng, fallbackLabel: String) {
+        searchJob?.cancel()
+        routeJob?.cancel()
+        // Show the destination immediately (loading) so the sheet appears the
+        // instant the user lifts their finger, before reverse geocoding resolves.
+        val pending =
+            PlaceSuggestion(
+                id = pinId(point),
+                name = fallbackLabel,
+                address = rawCoordinates(point),
+                point = point,
+            )
+        stateFlow.value =
+            stateFlow.value.copy(
+                query = pending.name,
+                destination = pending,
+                suggestions = emptyList(),
+                searching = false,
+                route = null,
+                routeLoading = true,
+                error = null,
+            )
+        scope.launch {
+            val resolved =
+                runCatchingCancellable { client.reverseGeocode(point) }.getOrNull()
+            // Keep the pressed point as the destination; use the resolved
+            // name/address for the label when available, else the pending fallback.
+            val suggestion =
+                if (resolved != null) {
+                    pending.copy(name = resolved.name, address = resolved.address ?: pending.address)
+                } else {
+                    pending
+                }
+            // Route + record-as-recent go through the same select() path.
+            select(suggestion)
+        }
+    }
+
+    /**
      * Clears the picked destination + route, returning to the search field. The
      * host observes [state] and wipes the map overlay when the route is gone.
      */
@@ -187,5 +245,16 @@ class NavigationController(
 
     private companion object {
         const val DEBOUNCE_MS = 300L
+
+        /** Stable id for a dropped-pin place (so recents de-dupe by coordinate). */
+        fun pinId(point: LatLng): String =
+            "pin:${fmt(point.longitude)},${fmt(point.latitude)}"
+
+        /** Raw "lat, lng" address fallback when reverse geocoding yields nothing. */
+        fun rawCoordinates(point: LatLng): String =
+            "${fmt(point.latitude)}, ${fmt(point.longitude)}"
+
+        private fun fmt(value: Double): String =
+            String.format(java.util.Locale.US, "%.5f", value)
     }
 }
