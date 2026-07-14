@@ -140,7 +140,9 @@
     "legalSection": "Legal",
     "privacy": "Privacy Policy",
     "terms": "Terms of Service",
-    "version": "Version %1$s"
+    "version": "Version %1$s",
+    "aboutSection": "About the app",
+    "whatsNew": "What’s new"
   },
   "privacySettings": {
     "title": "Privacy",
@@ -875,5 +877,14 @@
     "reportError": "Couldn't send your report. Try again.",
     "locationUnavailable": "Your location isn't available. Turn on location to report.",
     "markerLabel": "Incident"
+  },
+  "whatsNew": {
+    "title": "What’s new",
+    "dialogTitle": "What’s new in version %1$s",
+    "dialogMoreVersions": "…and more from earlier updates.",
+    "dialogShowAll": "Show all updates",
+    "dialogClose": "Close",
+    "entryTitle": "Version %1$s · %2$s",
+    "empty": "No release notes yet."
   }
 }

@@ -128,6 +128,8 @@
     <string name="settingsMenu_privacy">Integritetspolicy</string>
     <string name="settingsMenu_terms">Användarvillkor</string>
     <string name="settingsMenu_version">Version %1$s</string>
+    <string name="settingsMenu_aboutSection">Om appen</string>
+    <string name="settingsMenu_whatsNew">Vad är nytt</string>
     <string name="privacySettings_title">Integritet</string>
     <string name="privacySettings_partnerStatsTitle">Anonymiserad partnerstatistik</string>
     <string name="privacySettings_partnerStatsBody">Jag vill bidra med anonymiserad partnerstatistik.</string>
@@ -771,4 +773,11 @@
     <string name="incidents_reportError">Det gick inte att skicka rapporten. Försök igen.</string>
     <string name="incidents_locationUnavailable">Din position är inte tillgänglig. Slå på platstjänster för att rapportera.</string>
     <string name="incidents_markerLabel">Händelse</string>
+    <string name="whatsNew_title">Vad är nytt</string>
+    <string name="whatsNew_dialogTitle">Nyheter i version %1$s</string>
+    <string name="whatsNew_dialogMoreVersions">…och mer från tidigare uppdateringar.</string>
+    <string name="whatsNew_dialogShowAll">Visa alla uppdateringar</string>
+    <string name="whatsNew_dialogClose">Stäng</string>
+    <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
+    <string name="whatsNew_empty">Inga uppdateringsanteckningar ännu.</string>
 </resources>
