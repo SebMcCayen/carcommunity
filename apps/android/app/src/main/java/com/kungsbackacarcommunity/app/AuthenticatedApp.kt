@@ -955,21 +955,37 @@ fun AuthenticatedApp(
                 LaunchedEffect(whatsNewStore) {
                     val current = BuildConfig.VERSION_CODE
                     val lastSeen = whatsNewStore.lastSeenVersionCode()
-                    // Raw-resource read + JSON parse off the main thread; the
-                    // pure decision (announcementFor) then resumes on Main.
-                    val entries = withContext(Dispatchers.IO) { ChangelogLoader.load(context) }
-                    val announcement =
-                        Changelog.announcementFor(
-                            entries = entries,
-                            lastSeenVersionCode = lastSeen,
-                            currentVersionCode = current,
-                        )
-                    if (announcement != null) {
-                        whatsNewAnnouncement = announcement
-                    } else if (lastSeen == null || lastSeen < current) {
-                        // First install, or an update with no changelog entries
-                        // to announce: record the baseline silently.
-                        whatsNewStore.markSeen(current)
+                    when {
+                        lastSeen == null -> {
+                            // First install: stamp the baseline silently so the
+                            // NEXT update shows what's new. No popup on first
+                            // launch, so skip the changelog IO entirely.
+                            whatsNewStore.markSeen(current)
+                        }
+                        lastSeen >= current -> {
+                            // Not an update (same or older): nothing to show, and
+                            // no need to read/parse the changelog.
+                        }
+                        else -> {
+                            // A genuine update (lastSeen < current): only now do
+                            // the raw-resource read + JSON parse off the main
+                            // thread; the pure decision resumes on Main.
+                            val entries =
+                                withContext(Dispatchers.IO) { ChangelogLoader.load(context) }
+                            val announcement =
+                                Changelog.announcementFor(
+                                    entries = entries,
+                                    lastSeenVersionCode = lastSeen,
+                                    currentVersionCode = current,
+                                )
+                            if (announcement != null) {
+                                whatsNewAnnouncement = announcement
+                            } else {
+                                // Update with no changelog entries to announce:
+                                // record the baseline silently.
+                                whatsNewStore.markSeen(current)
+                            }
+                        }
                     }
                 }
                 whatsNewAnnouncement?.let { announcement ->
