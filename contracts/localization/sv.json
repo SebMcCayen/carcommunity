@@ -735,6 +735,7 @@
     "unreadCount": "%1$d olästa meddelanden",
     "empty": "Du har inga meddelanden än.",
     "loadError": "Kunde inte ladda dina meddelanden.",
+    "retry": "Försök igen",
     "unknownMember": "Medlem",
     "emptyThread": "Inga meddelanden än — säg hej!",
     "inputPlaceholder": "Skriv ett meddelande…",

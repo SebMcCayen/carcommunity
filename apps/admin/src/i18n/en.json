@@ -640,6 +640,7 @@
     "action": {
       "adminSetFeatureFlag": "Feature flag changed",
       "badgeAwardHelpfulMember": "Badge awarded (Helpful Member)",
+      "clientError": "App error reported",
       "billboardsActivate": "Billboard activated",
       "billboardsCreate": "Billboard created",
       "billboardsEnd": "Billboard ended",

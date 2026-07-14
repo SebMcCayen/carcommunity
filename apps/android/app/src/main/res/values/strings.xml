@@ -672,6 +672,7 @@
     <string name="dm_unreadCount">%1$d olästa meddelanden</string>
     <string name="dm_empty">Du har inga meddelanden än.</string>
     <string name="dm_loadError">Kunde inte ladda dina meddelanden.</string>
+    <string name="dm_retry">Försök igen</string>
     <string name="dm_unknownMember">Medlem</string>
     <string name="dm_emptyThread">Inga meddelanden än — säg hej!</string>
     <string name="dm_inputPlaceholder">Skriv ett meddelande…</string>

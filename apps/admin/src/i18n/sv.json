@@ -715,6 +715,7 @@
     "action": {
       "adminSetFeatureFlag": "Funktionsflagga ändrad",
       "badgeAwardHelpfulMember": "Utmärkelse tilldelad (Hjälpsam medlem)",
+      "clientError": "Appfel rapporterat",
       "billboardsActivate": "Billboard aktiverad",
       "billboardsCreate": "Billboard skapad",
       "billboardsEnd": "Billboard avslutad",

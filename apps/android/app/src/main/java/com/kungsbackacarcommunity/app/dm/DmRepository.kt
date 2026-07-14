@@ -6,7 +6,13 @@ import kotlinx.coroutines.flow.Flow
 sealed interface DmConversationsState {
     data object Loading : DmConversationsState
 
-    data object Error : DmConversationsState
+    /**
+     * The inbox listener failed with no cached data to fall back on. [code] is
+     * the Firestore error code name when known (e.g. "FAILED_PRECONDITION" for a
+     * missing composite index, "UNAVAILABLE" when offline), used only for
+     * diagnostics/error-reporting — the UI shows the same retryable message.
+     */
+    data class Error(val code: String? = null) : DmConversationsState
 
     data class Loaded(val conversations: List<DmConversation>) : DmConversationsState
 }

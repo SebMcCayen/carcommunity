@@ -735,6 +735,7 @@
     "unreadCount": "%1$d unread messages",
     "empty": "You have no messages yet.",
     "loadError": "Couldn't load your messages.",
+    "retry": "Try again",
     "unknownMember": "Member",
     "emptyThread": "No messages yet — say hi!",
     "inputPlaceholder": "Write a message…",
