@@ -150,7 +150,6 @@ afterAll(async () => {
 describe('auth-recordLogin', () => {
   it('stamps userLifecycle/{uid}.lastLoginAt for a member on sign-in', async () => {
     const user = await createProvisionedUser('login-member');
-    // Member gate: recordLogin requires activeMember on the backend user doc.
     await adminDb.collection('users').doc(user.uid).set({ activeMember: true }, { merge: true });
     await signInAs(user);
 
@@ -166,8 +165,25 @@ describe('auth-recordLogin', () => {
     expect(profile.lastLoginAt).toBeUndefined();
   });
 
-  it('rejects a non-member (member-gated)', async () => {
+  it('also records for an active NON-member (gated on active, not membership)', async () => {
+    // A signed-in non-member must still refresh lastLoginAt — otherwise an
+    // actively signing-in non-member older than 11 months would be wrongly
+    // treated as inactive (lastLoginAt ?? createdAt) and auto-deleted.
     const user = await createProvisionedUser('login-nonmember');
+    await signInAs(user);
+
+    const result = (await call('auth-recordLogin', {})).data as { recorded: boolean };
+    expect(result).toEqual({ recorded: true });
+
+    const lastLoginAt = (await adminDb.collection('userLifecycle').doc(user.uid).get()).data()
+      ?.lastLoginAt;
+    expect(lastLoginAt).toBeInstanceOf(Timestamp);
+  });
+
+  it('rejects a suspended account (active-gated)', async () => {
+    const user = await createProvisionedUser('login-suspended');
+    // Restricted (suspended) accounts are rejected by requireActiveActor.
+    await adminDb.collection('users').doc(user.uid).set({ suspended: true }, { merge: true });
     await signInAs(user);
     await expect(call('auth-recordLogin', {})).rejects.toMatchObject({
       code: 'functions/permission-denied',

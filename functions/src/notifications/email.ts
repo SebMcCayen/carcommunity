@@ -69,7 +69,8 @@ export async function sendAccountEmail(email: AccountEmail): Promise<SendEmailRe
   if (!isEmailDeliveryAvailable()) {
     logger.info('Email delivery unavailable — would-send skipped (no-op)', {
       kind: email.kind,
-      hasRecipient: email.to !== null,
+      // Truthiness, not != null: an empty-string address is not a usable recipient.
+      hasRecipient: Boolean(email.to),
     });
     return { sent: false, reason: 'email_unavailable' };
   }

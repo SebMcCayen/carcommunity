@@ -27,10 +27,12 @@
  *      email is wired) AND write an essential in-app account_warning notice
  *      through the Phase 9l writer.
  *    - clear_warning: the user signed in again — remove the warning fields.
- *    - delete: REUSE the account-deletion routine (purgeUserData from
- *      account/scheduled.ts) to purge Firestore trees, owned docs, storage, and
- *      the Auth user, then retain an accountDeletionRequests proof-of-deletion
- *      record (reason inactivity_auto_cleanup).
+ *    - delete: DISABLE the Auth user + revoke its refresh tokens FIRST (fail-safe
+ *      lockdown, mirroring account.deleteAccount), then REUSE the account-deletion
+ *      routine (purgeUserData from account/scheduled.ts) to purge Firestore trees,
+ *      owned docs, storage, and the Auth user, then retain an
+ *      accountDeletionRequests proof-of-deletion record (reason
+ *      inactivity_auto_cleanup).
  *    - would_delete: the hard-delete gate is closed — logged, no mutation.
  *
  * CRITICAL GATE. `delete` is only ever returned when deletionEnabled is true,
@@ -50,7 +52,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { db } from '../firebase';
+import { adminAuth, db } from '../firebase';
 import { writeInAppNotification } from '../notifications/deliver';
 import { isEmailDeliveryAvailable, sendAccountEmail } from '../notifications/email';
 import { purgeUserData } from './scheduled';
@@ -226,8 +228,25 @@ async function clearWarning(uid: string): Promise<void> {
  * Hard-deletes an inactive account by REUSING the account-deletion routine
  * (purgeUserData), then retains a processed accountDeletionRequests record as
  * the proof-of-deletion (consistent with the account-purgeDeleted sweep).
+ *
+ * Fail-safe ordering mirrors account.deleteAccount: the Auth user is DISABLED
+ * and its refresh tokens revoked BEFORE the purge begins. purgeUserData deletes
+ * Firestore trees first and the Auth user last, so without this lockdown a
+ * transient failure of that final Auth delete would leave a still-sign-in-capable
+ * account whose data is already gone. Locking down first makes any partial
+ * failure fail CLOSED (no further sign-ins, sessions can't renew); the next
+ * daily sweep re-runs deleteInactiveAccount idempotently to finish the purge.
  */
 async function deleteInactiveAccount(uid: string, warnedAt: Date | null): Promise<void> {
+  // Lock down FIRST (fail-safe ordering). Idempotent across retries and tolerant
+  // of an already-removed Auth user (a previous partial run may have deleted it).
+  await adminAuth.updateUser(uid, { disabled: true }).catch((error) => {
+    if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
+  });
+  await adminAuth.revokeRefreshTokens(uid).catch((error) => {
+    if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
+  });
+
   await purgeUserData(uid);
   await db
     .collection('accountDeletionRequests')

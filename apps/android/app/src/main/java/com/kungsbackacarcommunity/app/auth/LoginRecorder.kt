@@ -25,9 +25,12 @@ interface LoginRecorder {
  * best-effort: recording last-login is non-critical and must NEVER block or
  * break the signed-in UI, so every non-cancellation failure is swallowed.
  *
- * A member-gated backend rejects non-members with permission-denied; that too is
- * swallowed — such accounts simply have no lastLoginAt and are covered by the
- * sweep's lastLoginAt ?? createdAt fallback.
+ * The backend records last-login for ANY active (signed-in, non-suspended,
+ * non-deleted) account — not just members — so an actively signing-in
+ * non-member is never mistaken for inactive. A suspended/deleted account is
+ * rejected with permission-denied; that too is swallowed. Accounts that never
+ * sign in have no lastLoginAt and are covered by the sweep's
+ * lastLoginAt ?? createdAt fallback.
  *
  * Pure Kotlin so it is unit-testable with a fake recorder.
  */
