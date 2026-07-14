@@ -862,5 +862,20 @@
     "unitKilometers": "km",
     "unitMinutes": "min",
     "unitHours": "tim"
+  },
+  "incidents": {
+    "reportButton": "Rapportera händelse",
+    "reportTitle": "Rapportera en händelse",
+    "reportSubtitle": "Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.",
+    "typeAccident": "Olycka",
+    "typeRoadwork": "Vägarbete",
+    "typeHazard": "Hinder",
+    "typePolice": "Polis",
+    "typeRoadClosed": "Avstängd väg",
+    "cancel": "Avbryt",
+    "reportSuccess": "Tack – din rapport finns nu på kartan.",
+    "reportError": "Det gick inte att skicka rapporten. Försök igen.",
+    "locationUnavailable": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
+    "markerLabel": "Händelse"
   }
 }

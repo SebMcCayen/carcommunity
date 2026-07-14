@@ -72,6 +72,19 @@ data class MapRouteOverlay(
 )
 
 /**
+ * A crowd-sourced incident marker to draw on the map (the Waze-style layer,
+ * shared by all users). Shell-owned and self-contained so the [MapSurface] seam
+ * stays free of the incidents package's types: [colorArgb] is the category
+ * colour resolved by the host, [id] identifies the marker for de-duplication.
+ */
+data class MapIncidentMarker(
+    val id: String,
+    val longitude: Double,
+    val latitude: Double,
+    val colorArgb: Int,
+)
+
+/**
  * Seam between the map-first shell and the actual map renderer.
  *
  * The entire shell (search bar, "Loading roads…" state, floating controls,
@@ -125,6 +138,9 @@ interface MapSurface {
     /** The destination + route line to draw, or null when none is set. */
     val routeOverlay: StateFlow<MapRouteOverlay?>
 
+    /** The crowd-sourced incident markers to draw (the shared incidents layer). */
+    val incidentMarkers: StateFlow<List<MapIncidentMarker>>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
@@ -160,6 +176,13 @@ interface MapSurface {
      * camera to it. A no-op beyond storing the value on the stub.
      */
     fun setRouteOverlay(overlay: MapRouteOverlay?)
+
+    /**
+     * Replace the set of incident markers drawn on the map. The host fetches
+     * these near the viewport via `incidents.listNearby` and pushes them here so
+     * every user sees them. A no-op beyond storing the value on the stub.
+     */
+    fun setIncidentMarkers(markers: List<MapIncidentMarker>)
 
     /** The map view itself, filling [modifier]. */
     @Composable
@@ -202,6 +225,10 @@ class StubMapSurface(
     private val routeOverlayFlow = MutableStateFlow<MapRouteOverlay?>(null)
     override val routeOverlay: StateFlow<MapRouteOverlay?> = routeOverlayFlow.asStateFlow()
 
+    private val incidentMarkersFlow = MutableStateFlow<List<MapIncidentMarker>>(emptyList())
+    override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
+        incidentMarkersFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
@@ -234,6 +261,10 @@ class StubMapSurface(
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {
         routeOverlayFlow.value = overlay
+    }
+
+    override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
+        incidentMarkersFlow.value = markers
     }
 
     /** Test/impl hook to force the load state (e.g. after tiles finish). */

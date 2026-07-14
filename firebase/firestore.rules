@@ -527,6 +527,24 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // incidents – crowd-sourced incidents / roadwork map layer (navigation)
+    // Any signed-in user reads ACTIVE, unexpired incidents (the shared Waze-
+    // style map layer must be visible to ALL users, not only members). The
+    // read is double-gated: status == 'active' AND expiresAt still in the
+    // future, so an expired doc is hidden immediately even before the sweep
+    // deletes it. ALL writes go through the member-gated incidents.* callables
+    // (report / remove) and the Trafikverket importer via the Admin SDK — no
+    // client writes, so a member cannot forge another user's report, backdate
+    // expiry, or spoof the Trafikverket source.
+    // -------------------------------------------------------------------------
+    match /incidents/{incidentId} {
+      allow read: if isAuthenticated()
+        && resource.data.status == 'active'
+        && resource.data.expiresAt > request.time;
+      // No client writes — incidents.report / incidents.remove (callables).
+    }
+
+    // -------------------------------------------------------------------------
     // crownHuntPoints – Kronjakt reward points (Phase 9h)
     // Members read ACTIVE points (map display); drafts/paused/ended are
     // admin-territory via the Admin SDK. All writes go through the

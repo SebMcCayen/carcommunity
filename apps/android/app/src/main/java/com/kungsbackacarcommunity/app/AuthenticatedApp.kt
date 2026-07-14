@@ -146,7 +146,12 @@ import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
+import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentPalette
+import com.kungsbackacarcommunity.app.incidents.IncidentReportController
+import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
@@ -156,6 +161,7 @@ import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -291,6 +297,30 @@ fun AuthenticatedApp(
             // else the neutral stub (config-less / CI) — see rememberMapSurface.
             val mapSurface = rememberMapSurface()
             val context = LocalContext.current
+
+            // Crowd-sourced incidents layer (navigation feature). Guarded:
+            // createIfAvailable returns null in a config-less / CI build, so the
+            // map simply shows no incident markers and the report control is
+            // hidden. The controller is the small API the sibling turn-by-turn
+            // nav PR reuses (report at current location + nearby list).
+            val incidentController =
+                remember(context) { IncidentReportController.createIfAvailable(context) }
+            val incidentsFlow =
+                remember(incidentController) {
+                    incidentController?.nearbyIncidents ?: MutableStateFlow(emptyList<Incident>())
+                }
+            val nearbyIncidents by incidentsFlow.collectAsState()
+            val incidentMarkers =
+                remember(nearbyIncidents) {
+                    nearbyIncidents.map { incident ->
+                        MapIncidentMarker(
+                            id = incident.id,
+                            longitude = incident.longitude,
+                            latitude = incident.latitude,
+                            colorArgb = IncidentPalette.colorArgb(incident.type),
+                        )
+                    }
+                }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -370,6 +400,18 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
+            val incidentReportErrorText = stringResource(R.string.incidents_reportError)
+            val incidentLocationUnavailableText =
+                stringResource(R.string.incidents_locationUnavailable)
+
+            // Refresh the nearby-incidents layer around the user each time the
+            // Map tab is shown (a no-op without a fix; keeps the last markers).
+            LaunchedEffect(selectedTab, incidentController) {
+                if (selectedTab == ShellTab.Map) {
+                    incidentController?.refreshAroundCurrent()
+                }
+            }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
@@ -725,6 +767,33 @@ fun AuthenticatedApp(
                                         // chats" count here once a backend
                                         // inbox exists (out of the Android lane).
                                         unreadChatCount = 0,
+                                        // Crowd-sourced incidents layer: draw the
+                                        // fetched markers for everyone, and show the
+                                        // report control only when a repository is
+                                        // configured (guarded off in CI/no-Firebase)
+                                        // AND the user is an active member — the
+                                        // `incidents-report` callable is member-gated
+                                        // (requireMemberActor), so non-members must not
+                                        // see an action that would fail on submit.
+                                        incidentMarkers = incidentMarkers,
+                                        incidentReportingEnabled =
+                                            incidentController != null && profile?.activeMember == true,
+                                        onReportIncident = { type ->
+                                            incidentController?.let { controller ->
+                                                scope.launch {
+                                                    val text =
+                                                        when (controller.report(type)) {
+                                                            is ReportOutcome.Success ->
+                                                                incidentReportSuccessText
+                                                            ReportOutcome.NoLocation ->
+                                                                incidentLocationUnavailableText
+                                                            is ReportOutcome.Failed ->
+                                                                incidentReportErrorText
+                                                        }
+                                                    snackbarHostState.showSnackbar(text)
+                                                }
+                                            }
+                                        },
                                     )
 
                                 ShellTab.History ->

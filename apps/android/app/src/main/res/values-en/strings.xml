@@ -760,4 +760,17 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">h</string>
+    <string name="incidents_reportButton">Report incident</string>
+    <string name="incidents_reportTitle">Report an incident</string>
+    <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>
+    <string name="incidents_typeAccident">Accident</string>
+    <string name="incidents_typeRoadwork">Roadwork</string>
+    <string name="incidents_typeHazard">Hazard</string>
+    <string name="incidents_typePolice">Police</string>
+    <string name="incidents_typeRoadClosed">Road closed</string>
+    <string name="incidents_cancel">Cancel</string>
+    <string name="incidents_reportSuccess">Thanks — your report is on the map.</string>
+    <string name="incidents_reportError">Couldn\'t send your report. Try again.</string>
+    <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
+    <string name="incidents_markerLabel">Incident</string>
 </resources>

@@ -760,4 +760,17 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
+    <string name="incidents_reportButton">Rapportera händelse</string>
+    <string name="incidents_reportTitle">Rapportera en händelse</string>
+    <string name="incidents_reportSubtitle">Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.</string>
+    <string name="incidents_typeAccident">Olycka</string>
+    <string name="incidents_typeRoadwork">Vägarbete</string>
+    <string name="incidents_typeHazard">Hinder</string>
+    <string name="incidents_typePolice">Polis</string>
+    <string name="incidents_typeRoadClosed">Avstängd väg</string>
+    <string name="incidents_cancel">Avbryt</string>
+    <string name="incidents_reportSuccess">Tack – din rapport finns nu på kartan.</string>
+    <string name="incidents_reportError">Det gick inte att skicka rapporten. Försök igen.</string>
+    <string name="incidents_locationUnavailable">Din position är inte tillgänglig. Slå på platstjänster för att rapportera.</string>
+    <string name="incidents_markerLabel">Händelse</string>
 </resources>

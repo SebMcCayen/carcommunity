@@ -1,0 +1,471 @@
+/**
+ * Incidents emulator integration tests (navigation feature).
+ *
+ * Exercises the crowd-sourced incidents domain end-to-end: member report →
+ * `incidents/{id}` doc, listNearby radius + geo-cell filtering, member gating,
+ * owner/admin removal, the direct security-rules read (active vs expired), the
+ * TTL sweep (runIncidentsCleanup), and the Trafikverket importer runner with a
+ * MOCKED response (never hits the live API).
+ *
+ * Requires the Functions + Firestore emulators — run via:
+ *   pnpm emulators:test
+ */
+
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099';
+process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+process.env.GCLOUD_PROJECT ??= 'demo-test';
+
+import { deleteApp, FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
+import {
+  connectAuthEmulator,
+  createUserWithEmailAndPassword,
+  getAuth,
+  signInWithEmailAndPassword,
+  type Auth,
+} from 'firebase/auth';
+import {
+  connectFunctionsEmulator,
+  getFunctions,
+  httpsCallable,
+  type Functions,
+} from 'firebase/functions';
+import {
+  connectFirestoreEmulator,
+  doc as clientDoc,
+  getDoc as clientGetDoc,
+  getFirestore as getClientFirestore,
+  type Firestore as ClientFirestore,
+} from 'firebase/firestore';
+import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { runIncidentsCleanup } from '../incidents/scheduled';
+import { runTrafikverketSync } from '../incidents/trafikverket';
+import type { TrafikverketResponse } from '../incidents/trafikverket-core';
+import { importedIncidentDocId } from '../incidents/trafikverket-core';
+
+const PROJECT_ID = 'demo-test';
+const EMULATOR_HOST = '127.0.0.1';
+const REGION = 'europe-west1';
+
+const adminApp =
+  getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'incidents-emulator-tests');
+const adminAuth = getAdminAuth(adminApp);
+const adminDb = getAdminFirestore(adminApp);
+
+let app: FirebaseApp;
+let auth: Auth;
+let functions: Functions;
+let clientDb: ClientFirestore;
+
+interface TestUser {
+  uid: string;
+  email: string;
+  password: string;
+}
+
+async function pollUntil<T>(read: () => Promise<T | undefined>, timeoutMs = 30_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await read();
+    if (value !== undefined) return value;
+    if (Date.now() > deadline) throw new Error('Timed out waiting for condition');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+    return 'no-error';
+  } catch (error) {
+    if (error instanceof FirebaseError) return error.code;
+    throw error;
+  }
+}
+
+async function createProvisionedUser(prefix: string): Promise<TestUser> {
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const password = 'password-123';
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = credential.user.uid;
+  await pollUntil(async () => {
+    const snap = await adminDb.collection('users').doc(uid).get();
+    return snap.exists ? true : undefined;
+  });
+  return { uid, email, password };
+}
+
+async function makeMember(user: TestUser): Promise<void> {
+  await adminDb.collection('users').doc(user.uid).set({ activeMember: true }, { merge: true });
+}
+
+async function signInAs(user: TestUser): Promise<void> {
+  await signInWithEmailAndPassword(auth, user.email, user.password);
+  await auth.currentUser?.getIdToken(true);
+}
+
+const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
+
+// Kungsbacka centre + a point ~30 km away (well outside a 5 km query).
+const KBA = { latitude: 57.4874, longitude: 12.0757 };
+const FAR = { latitude: 57.75, longitude: 12.4 };
+
+let member: TestUser;
+let otherMember: TestUser;
+let adminUser: TestUser;
+
+beforeAll(async () => {
+  app = initializeApp(
+    { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
+    'incidents-emulator-client',
+  );
+  auth = getAuth(app);
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+  functions = getFunctions(app, REGION);
+  connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
+  clientDb = getClientFirestore(app);
+  connectFirestoreEmulator(clientDb, EMULATOR_HOST, 8080);
+
+  member = await createProvisionedUser('inc-member');
+  await makeMember(member);
+  otherMember = await createProvisionedUser('inc-other');
+  await makeMember(otherMember);
+  adminUser = await createProvisionedUser('inc-admin');
+  await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
+  await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
+});
+
+afterAll(async () => {
+  if (app) await deleteApp(app);
+});
+
+describe('incidents.report + listNearby', () => {
+  it('reports an incident and returns it via listNearby within radius, excluding far ones', async () => {
+    await signInAs(member);
+    const created = (
+      await call('incidents-report', {
+        type: 'roadwork',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        note: 'Vägarbete på Storgatan',
+      })
+    ).data as { id: string; type: string; source: string; expiresAt: string };
+
+    expect(created.type).toBe('roadwork');
+    expect(created.source).toBe('user');
+
+    // Persisted with a geoCell + reporterUid + future expiry.
+    const stored = await adminDb.collection('incidents').doc(created.id).get();
+    expect(stored.data()?.geoCell).toBeTypeOf('string');
+    expect(stored.data()?.reporterUid).toBe(member.uid);
+    expect(stored.data()?.status).toBe('active');
+
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+    expect(nearby.incidents.some((i) => i.id === created.id)).toBe(true);
+
+    const farAway = (
+      await call('incidents-listNearby', {
+        latitude: FAR.latitude,
+        longitude: FAR.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+    expect(farAway.incidents.some((i) => i.id === created.id)).toBe(false);
+  });
+
+  it('excludes incidents with a missing or malformed expiresAt from listNearby', async () => {
+    // The Admin SDK bypasses Firestore rules, so listNearby must apply the
+    // rules' intent (expiresAt > request.time, which denies a missing/
+    // non-Timestamp value) in memory. Seed active docs whose expiresAt is
+    // absent or the wrong type alongside a valid future one.
+    const now = Date.now();
+    const base = {
+      type: 'hazard' as const,
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active' as const,
+      source: 'user' as const,
+      reporterUid: 'seed',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+    };
+
+    const missingRef = adminDb.collection('incidents').doc();
+    await missingRef.set({ ...base }); // no expiresAt at all
+    const malformedRef = adminDb.collection('incidents').doc();
+    await malformedRef.set({ ...base, expiresAt: 'not-a-timestamp' }); // wrong type
+    const validRef = adminDb.collection('incidents').doc();
+    await validRef.set({ ...base, expiresAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)) });
+
+    await signInAs(member);
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+
+    const ids = new Set(nearby.incidents.map((i) => i.id));
+    expect(ids.has(validRef.id)).toBe(true);
+    expect(ids.has(missingRef.id)).toBe(false);
+    expect(ids.has(malformedRef.id)).toBe(false);
+  });
+
+  it('rejects a non-member reporter with permission-denied', async () => {
+    const nonMember = await createProvisionedUser('inc-nonmember');
+    await signInAs(nonMember);
+    const code = await callableErrorCode(
+      call('incidents-report', { type: 'hazard', latitude: KBA.latitude, longitude: KBA.longitude }),
+    );
+    expect(code).toBe('functions/permission-denied');
+  });
+
+  it('rejects an invalid type / coordinate with invalid-argument', async () => {
+    await signInAs(member);
+    expect(
+      await callableErrorCode(
+        call('incidents-report', { type: 'nope', latitude: 1, longitude: 1 }),
+      ),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(
+        call('incidents-report', { type: 'accident', latitude: 200, longitude: 1 }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('lets a signed-in NON-member call listNearby (readable by all signed-in users)', async () => {
+    // A member seeds an incident so there is something in range to return.
+    await signInAs(member);
+    const created = (
+      await call('incidents-report', {
+        type: 'police',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    // A signed-in non-member (no activeMember entitlement) must NOT be blocked:
+    // listNearby is gated by requireActiveActor, not requireMemberActor.
+    const nonMember = await createProvisionedUser('inc-reader');
+    await signInAs(nonMember);
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+
+    expect(Array.isArray(nearby.incidents)).toBe(true);
+    expect(nearby.incidents.some((i) => i.id === created.id)).toBe(true);
+  });
+});
+
+describe('incidents security rules (direct read)', () => {
+  it('lets a signed-in user read an ACTIVE incident but denies an EXPIRED one', async () => {
+    // Seed one active and one already-expired incident via the Admin SDK.
+    const now = Date.now();
+    const activeRef = adminDb.collection('incidents').doc();
+    await activeRef.set({
+      type: 'police',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'user',
+      reporterUid: 'someone',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+      expiresAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+    });
+    const expiredRef = adminDb.collection('incidents').doc();
+    await expiredRef.set({
+      type: 'police',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'user',
+      reporterUid: 'someone',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now - 2 * 60 * 60 * 1000)),
+      expiresAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+    });
+
+    await signInAs(member);
+    const activeSnap = await clientGetDoc(clientDoc(clientDb, 'incidents', activeRef.id));
+    expect(activeSnap.exists()).toBe(true);
+
+    await expect(
+      clientGetDoc(clientDoc(clientDb, 'incidents', expiredRef.id)),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+});
+
+describe('incidents.remove', () => {
+  it('lets the reporter remove their own incident and denies others; admin can remove any', async () => {
+    await signInAs(member);
+    const mine = (
+      await call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    // A different member cannot remove it.
+    await signInAs(otherMember);
+    expect(await callableErrorCode(call('incidents-remove', { incidentId: mine.id }))).toBe(
+      'functions/permission-denied',
+    );
+
+    // The owner can.
+    await signInAs(member);
+    const removed = (await call('incidents-remove', { incidentId: mine.id })).data as {
+      removed: boolean;
+    };
+    expect(removed.removed).toBe(true);
+    expect((await adminDb.collection('incidents').doc(mine.id).get()).exists).toBe(false);
+
+    // Removing again is an idempotent no-op success.
+    const again = (await call('incidents-remove', { incidentId: mine.id })).data as {
+      removed: boolean;
+    };
+    expect(again.removed).toBe(false);
+
+    // Admin can remove another member's incident (moderation).
+    await signInAs(otherMember);
+    const theirs = (
+      await call('incidents-report', {
+        type: 'accident',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+    await signInAs(adminUser);
+    const adminRemoved = (await call('incidents-remove', { incidentId: theirs.id })).data as {
+      removed: boolean;
+    };
+    expect(adminRemoved.removed).toBe(true);
+  });
+
+  it('rejects removal of an imported (trafikverket) incident, even for an admin', async () => {
+    // Seed an importer-owned incident (as the sync would) via the Admin SDK.
+    const now = Date.now();
+    const tvRef = adminDb.collection('incidents').doc('tv_reject-remove-1');
+    await tvRef.set({
+      type: 'roadwork',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+      expiresAt: Timestamp.fromDate(new Date(now + 6 * 60 * 60 * 1000)),
+    });
+
+    // An admin cannot hand-remove it — it is sync-managed and would reappear.
+    await signInAs(adminUser);
+    expect(await callableErrorCode(call('incidents-remove', { incidentId: tvRef.id }))).toBe(
+      'functions/failed-precondition',
+    );
+    // Still present.
+    expect((await tvRef.get()).exists).toBe(true);
+  });
+});
+
+describe('incidents cleanup sweep', () => {
+  it('deletes expired incidents and keeps active ones', async () => {
+    const now = Date.now();
+    const expiredRef = adminDb.collection('incidents').doc();
+    await expiredRef.set({
+      type: 'roadwork',
+      latitude: 0,
+      longitude: 0,
+      geoCell: '0_0',
+      status: 'active',
+      source: 'user',
+      reporterUid: 'x',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now - 10 * 60 * 60 * 1000)),
+      expiresAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+    });
+    const activeRef = adminDb.collection('incidents').doc();
+    await activeRef.set({
+      type: 'roadwork',
+      latitude: 0,
+      longitude: 0,
+      geoCell: '0_0',
+      status: 'active',
+      source: 'user',
+      reporterUid: 'x',
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+      expiresAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
+    });
+
+    const result = await runIncidentsCleanup(new Date());
+    expect(result.deletedCount).toBeGreaterThanOrEqual(1);
+    expect((await expiredRef.get()).exists).toBe(false);
+    expect((await activeRef.get()).exists).toBe(true);
+  });
+});
+
+describe('incidents Trafikverket importer', () => {
+  it('skips when no API key is configured', async () => {
+    const result = await runTrafikverketSync(new Date(), undefined);
+    expect(result).toEqual({ skipped: true, upserted: 0 });
+  });
+
+  it('imports mocked situations to deterministic tv_ docs (idempotent)', async () => {
+    const mock: TrafikverketResponse = {
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-1',
+                Deviation: [
+                  {
+                    Id: 'DEV-emu-1',
+                    MessageType: 'Vägarbete',
+                    Message: 'Vägarbete E6',
+                    Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const fetcher = async () => mock;
+
+    const first = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
+    expect(first).toEqual({ skipped: false, upserted: 1 });
+
+    const docId = importedIncidentDocId('DEV-emu-1');
+    const stored = await adminDb.collection('incidents').doc(docId).get();
+    expect(stored.exists).toBe(true);
+    expect(stored.data()?.source).toBe('trafikverket');
+    expect(stored.data()?.reporterUid).toBeNull();
+    expect(stored.data()?.type).toBe('roadwork');
+
+    // Re-run overwrites the same doc (no duplicate).
+    const second = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
+    expect(second.upserted).toBe(1);
+  });
+});

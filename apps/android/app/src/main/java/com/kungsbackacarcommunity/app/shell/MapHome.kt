@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -73,6 +74,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.live.LiveDurationPicker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 
@@ -146,6 +149,14 @@ fun MapHome(
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
+    // Crowd-sourced incidents layer. [incidentMarkers] are drawn on the map so
+    // every user sees them; the report control (opening the type picker) is
+    // shown only when [incidentReportingEnabled] (a repository is configured),
+    // and a pick invokes [onReportIncident]. All default to off so existing
+    // callers/tests are unaffected.
+    incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    incidentReportingEnabled: Boolean = false,
+    onReportIncident: (IncidentType) -> Unit = {},
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -159,6 +170,16 @@ fun MapHome(
     LaunchedEffect(mapSurface, userLabel, isLiveSharing) {
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
+
+    // Push the crowd-sourced incident markers onto the surface whenever they
+    // change (or the surface instance is swapped), so every user sees them.
+    LaunchedEffect(mapSurface, incidentMarkers) {
+        mapSurface.setIncidentMarkers(incidentMarkers)
+    }
+
+    // Incident-report type picker open/close is local UI state: tapping the
+    // report control opens it, picking a type reports and closes it.
+    var reportOpen by remember { mutableStateOf(false) }
 
     // Chat popup open/close is local UI state: tapping the bubble opens the
     // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
@@ -290,6 +311,18 @@ fun MapHome(
                 onClick = { liveOpen = true },
                 modifier = Modifier.testTag(MAP_HOME_LIVE_TAG),
             )
+            // 1b. Report-incident control — opens the type picker. Shown only
+            //     when incident reporting is available (a repository configured).
+            if (incidentReportingEnabled) {
+                CircleControl(
+                    icon = Icons.Filled.Warning,
+                    contentDescription = stringResource(R.string.incidents_reportButton),
+                    containerColor = statusColors.warning,
+                    contentColor = Color.White,
+                    onClick = { reportOpen = true },
+                    modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
+                )
+            }
             // 2. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
             //    those non-default layers is active, so an enabled overlay is
@@ -324,6 +357,18 @@ fun MapHome(
             ChatCircleControl(
                 unreadCount = unreadChatCount,
                 onClick = { chatOpen = true },
+            )
+        }
+
+        // Incident-report type picker. Picking a type reports it (the host
+        // resolves the current location) and closes the dialog.
+        if (reportOpen) {
+            IncidentTypePickerDialog(
+                onPick = { type ->
+                    reportOpen = false
+                    onReportIncident(type)
+                },
+                onDismiss = { reportOpen = false },
             )
         }
 
@@ -381,6 +426,9 @@ const val MAP_HOME_COMPASS_TAG = "map_home_compass"
 
 /** Test tag on the collapsed round search button (upper-left). */
 const val MAP_HOME_SEARCH_TAG = "map_home_search"
+
+/** Test tag on the floating report-incident control. */
+const val MAP_HOME_REPORT_TAG = "map_home_report"
 
 /** Test tag on the map-layers popup card. */
 const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
