@@ -449,7 +449,13 @@ fun MapHome(
                     // [desiredMapMode]; the system-follow effect above then applies
                     // this mode (instead of the theme default) for the rest of the
                     // session — and re-applies it if the surface instance is swapped.
-                    desiredMapMode = if (it) MapMode.Night else MapMode.Day
+                    val mode = if (it) MapMode.Night else MapMode.Day
+                    desiredMapMode = mode
+                    // Apply immediately so the map restyles on the same frame the
+                    // user toggles, instead of waiting for the system-follow effect
+                    // coroutine to re-run; that effect stays idempotent and simply
+                    // re-applies this same mode when it next runs.
+                    mapSurface.setMapMode(mode)
                 },
                 on3dChange = { mapSurface.set3dEnabled(it) },
                 onDismiss = { layersOpen = false },
