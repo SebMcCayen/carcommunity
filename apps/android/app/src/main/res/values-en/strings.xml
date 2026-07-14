@@ -127,6 +127,8 @@
     <string name="settingsMenu_privacy">Privacy Policy</string>
     <string name="settingsMenu_terms">Terms of Service</string>
     <string name="settingsMenu_version">Version %1$s</string>
+    <string name="settingsMenu_aboutSection">About the app</string>
+    <string name="settingsMenu_whatsNew">What’s new</string>
     <string name="privacySettings_title">Privacy</string>
     <string name="privacySettings_partnerStatsTitle">Anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsBody">I want to contribute anonymised partner statistics.</string>
@@ -782,4 +784,11 @@
     <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
     <string name="incidents_markerLabel">Incident</string>
     <string name="incidents_sourceTrafikverket">Source: Trafikverket</string>
+    <string name="whatsNew_title">What’s new</string>
+    <string name="whatsNew_dialogTitle">What’s new in version %1$s</string>
+    <string name="whatsNew_dialogMoreVersions">…and more from earlier updates.</string>
+    <string name="whatsNew_dialogShowAll">Show all updates</string>
+    <string name="whatsNew_dialogClose">Close</string>
+    <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
+    <string name="whatsNew_empty">No release notes yet.</string>
 </resources>

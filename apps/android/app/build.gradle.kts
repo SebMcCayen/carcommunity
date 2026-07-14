@@ -272,6 +272,11 @@ dependencies {
     // Unit tests
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Real org.json so Changelog.parse (whatsnew) is testable on the JVM: the
+    // mockable android.jar's org.json entries are stubs that throw. Listed
+    // before the mockable jar on the unit-test classpath, so it wins there;
+    // devices/instrumented tests still use the platform org.json.
+    testImplementation(libs.org.json)
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)

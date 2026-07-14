@@ -139,7 +139,9 @@
     "legalSection": "Juridik",
     "privacy": "Integritetspolicy",
     "terms": "Användarvillkor",
-    "version": "Version %1$s"
+    "version": "Version %1$s",
+    "aboutSection": "Om appen",
+    "whatsNew": "Vad är nytt"
   },
   "privacySettings": {
     "title": "Integritet",
@@ -853,5 +855,14 @@
     "locationUnavailable": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
     "markerLabel": "Händelse",
     "sourceTrafikverket": "Källa: Trafikverket"
+  },
+  "whatsNew": {
+    "title": "Vad är nytt",
+    "dialogTitle": "Nyheter i version %1$s",
+    "dialogMoreVersions": "…och mer från tidigare uppdateringar.",
+    "dialogShowAll": "Visa alla uppdateringar",
+    "dialogClose": "Stäng",
+    "entryTitle": "Version %1$s · %2$s",
+    "empty": "Inga uppdateringsanteckningar ännu."
   }
 }

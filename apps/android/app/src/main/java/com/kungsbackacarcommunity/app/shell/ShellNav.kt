@@ -55,6 +55,8 @@ enum class ShellRoute {
     Feedback,
     Subscription,
     Settings,
+    /** The "Vad är nytt" changelog page, reached from Settings. */
+    WhatsNew,
 
     /**
      * Retired: the old full-screen "More"/profile hub that the top-bar avatar

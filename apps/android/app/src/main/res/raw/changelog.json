@@ -1,0 +1,107 @@
+{
+  "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
+  "entries": [
+    {
+      "versionCode": 7,
+      "versionName": "0.4.0",
+      "releaseDate": "2026-07-12",
+      "highlights": [
+        "Bilprofiler i garaget",
+        "3D-vy och kartlager på kartan",
+        "Ny profilmeny direkt över kartan"
+      ],
+      "changes": [
+        "Garaget har fått en egen bilsida med bilprofiler – huvudbilen visas högst upp",
+        "Kartan visas nu i lutad 3D-vy som standard",
+        "Nytt kartlagerval: trafik, dag/natt och 3D",
+        "Profilmenyn öppnas som en genomskinlig meny över kartan",
+        "GPS-punkten visas mer tillförlitligt på kartan",
+        "Menyn ”Mer” har bytt namn till ”Profil”"
+      ]
+    },
+    {
+      "versionCode": 6,
+      "versionName": "0.3.0",
+      "releaseDate": "2026-07-12",
+      "highlights": [
+        "Vänner och direktmeddelanden",
+        "Adressökning med vägbeskrivning",
+        "Skapa träffar direkt i appen"
+      ],
+      "changes": [
+        "Lägg till vänner och skicka direktmeddelanden",
+        "Sök adresser och få vägbeskrivning direkt på kartan",
+        "Skapa egna träffar under Socialt",
+        "Ny samlad inställningssida i profilmenyn",
+        "Enhetligt nytt utseende på appens alla undersidor",
+        "Chattbubbla med räknare för olästa meddelanden på kartan",
+        "Profilbilder komprimeras före uppladdning och visas på kartvyn",
+        "Omdesignat garage med snabbare åtkomst till vänner",
+        "Genomskinliga navigeringsfält och renare flikar"
+      ]
+    },
+    {
+      "versionCode": 5,
+      "versionName": "0.2.0",
+      "releaseDate": "2026-07-10",
+      "highlights": [
+        "Ny kartbaserad startsida",
+        "Trafikinformation på kartan",
+        "Smidigare notiser"
+      ],
+      "changes": [
+        "Helt ny startsida med kartan i fokus och fem flikar",
+        "Valbart trafiklager på kartan",
+        "Appen frågar om notisbehörighet direkt i appen",
+        "Snabbare notisinkorg",
+        "Bättre introduktion för nya användare",
+        "Slumpade bilcitat på inloggningsskärmen",
+        "Förbättrad bakåtnavigering, felhantering och haptik"
+      ]
+    },
+    {
+      "versionCode": 3,
+      "versionName": "0.1.0",
+      "releaseDate": "2026-07-09",
+      "highlights": [
+        "Ny grafisk profil",
+        "Stabilare inloggning"
+      ],
+      "changes": [
+        "Appen har fått communityts grafiska profil med nya färger och typsnitt",
+        "Buggfixar för inloggning",
+        "Bättre felsökning vid inloggningsproblem"
+      ]
+    },
+    {
+      "versionCode": 2,
+      "versionName": "0.1.0",
+      "releaseDate": "2026-07-09",
+      "highlights": [
+        "Rapportera problem direkt i appen",
+        "Buggfixar"
+      ],
+      "changes": [
+        "Nytt: ”Rapportera ett problem” i inställningarna",
+        "Rättad poängberäkning i Kronjakten",
+        "Integritetsförbättring för live-positionsdelning",
+        "Stabilitetsförbättringar och bättre kraschrapporter"
+      ]
+    },
+    {
+      "versionCode": 1,
+      "versionName": "0.1.0",
+      "releaseDate": "2026-07-09",
+      "highlights": [
+        "Första testversionen"
+      ],
+      "changes": [
+        "Inloggning med Google samt profil och garage",
+        "Träffar med anmälan och träffchatt",
+        "Live-positionsdelning och gruppkörning",
+        "Kronjakten, poäng och utmärkelser",
+        "Notiser och medlemskap"
+      ]
+    }
+  ]
+}

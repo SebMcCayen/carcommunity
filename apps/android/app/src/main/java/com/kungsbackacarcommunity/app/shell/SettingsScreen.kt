@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ fun SettingsScreen(
     onPartnerStats: (() -> Unit)?,
     onFeedback: (() -> Unit)?,
     onDeleteAccount: (() -> Unit)?,
+    onWhatsNew: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -108,6 +110,16 @@ fun SettingsScreen(
             stringResource(R.string.settingsMenu_reviewPlayStore),
             Icons.Filled.Stars,
         ) { openPlayStoreListing(context) }
+
+        // About the app: the bundled "Vad är nytt" changelog. Always available —
+        // the data ships with the APK, so unlike the rows above this needs no
+        // `if (callback != null)` availability guard.
+        SettingsSectionHeader(stringResource(R.string.settingsMenu_aboutSection))
+        HubRow(
+            stringResource(R.string.settingsMenu_whatsNew),
+            Icons.Filled.NewReleases,
+            onWhatsNew,
+        )
 
         SettingsSectionHeader(stringResource(R.string.settingsMenu_legalSection))
         HubRow(

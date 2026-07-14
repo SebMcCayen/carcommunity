@@ -40,6 +40,10 @@ Google **Play App Signing** re-signs the uploaded bundle, so the keystore here i
 
 Without those files the release build is **unsigned** with a blank-map token — never fatal, so CI/validation builds stay green.
 
+### Changelog ("Vad är nytt")
+
+`app/src/main/res/raw/changelog.json` is the bundled release-notes source for the after-update popup and the Settings → "Vad är nytt" page. **Every release PR that bumps `versionCode`/`versionName` must append an entry** (newest first): `versionCode`, `versionName`, `releaseDate` (ISO `yyyy-MM-dd`), `highlights` (max ~3 short lines, shown in the popup) and `changes` (the full bulleted list). Descriptions are user-facing Swedish — what the user notices, not internal jargon. The page shows the 10 newest entries; the popup shows the newest entry unseen by the device (tracked per `versionCode` in SharedPreferences) and is skipped entirely on first install. Selection logic lives in `whatsnew/Changelog.kt` (unit-tested in `whatsnew/ChangelogTest.kt`).
+
 ## Localization
 
 `res/values/strings.xml` (Swedish, default) and `res/values-en/strings.xml` are **generated** from the canonical contracts:

@@ -170,10 +170,18 @@ import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.whatsnew.Changelog
+import com.kungsbackacarcommunity.app.whatsnew.ChangelogLoader
+import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
+import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
+import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
+import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -998,6 +1006,66 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // After-update "what's new" popup: shown once per version when
+                // the app opens after an UPDATE (never on first install, which
+                // only records the baseline). Every dismissal path records the
+                // current version so the popup can't re-show for it; "show all"
+                // additionally opens the full changelog page. The decision
+                // logic is the unit-tested Changelog.announcementFor.
+                val whatsNewStore = remember(context) { WhatsNewStore(context) }
+                var whatsNewAnnouncement by
+                    remember { mutableStateOf<UpdateAnnouncement?>(null) }
+                LaunchedEffect(whatsNewStore) {
+                    val current = BuildConfig.VERSION_CODE
+                    val lastSeen = whatsNewStore.lastSeenVersionCode()
+                    when {
+                        lastSeen == null -> {
+                            // First install: stamp the baseline silently so the
+                            // NEXT update shows what's new. No popup on first
+                            // launch, so skip the changelog IO entirely.
+                            whatsNewStore.markSeen(current)
+                        }
+                        lastSeen >= current -> {
+                            // Not an update (same or older): nothing to show, and
+                            // no need to read/parse the changelog.
+                        }
+                        else -> {
+                            // A genuine update (lastSeen < current): only now do
+                            // the raw-resource read + JSON parse off the main
+                            // thread; the pure decision resumes on Main.
+                            val entries =
+                                withContext(Dispatchers.IO) { ChangelogLoader.load(context) }
+                            val announcement =
+                                Changelog.announcementFor(
+                                    entries = entries,
+                                    lastSeenVersionCode = lastSeen,
+                                    currentVersionCode = current,
+                                )
+                            if (announcement != null) {
+                                whatsNewAnnouncement = announcement
+                            } else {
+                                // Update with no changelog entries to announce:
+                                // record the baseline silently.
+                                whatsNewStore.markSeen(current)
+                            }
+                        }
+                    }
+                }
+                whatsNewAnnouncement?.let { announcement ->
+                    val acknowledge = {
+                        whatsNewStore.markSeen(BuildConfig.VERSION_CODE)
+                        whatsNewAnnouncement = null
+                    }
+                    WhatsNewDialog(
+                        announcement = announcement,
+                        onShowAll = {
+                            acknowledge()
+                            route = ShellRoute.WhatsNew
+                        },
+                        onDismiss = acknowledge,
+                    )
+                }
+
                 // Transparent prompt raised by the Create tab: Confirm starts
                 // live sharing via the shared toggle path; Cancel or an outside
                 // tap dismisses it, staying on the map.
@@ -1561,7 +1629,11 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                // Always available: the changelog ships bundled with the app.
+                onWhatsNew = { onOpenRoute(ShellRoute.WhatsNew) },
             )
+
+        ShellRoute.WhatsNew -> WhatsNewRoute()
 
         ShellRoute.Subscription ->
             if (billingRepository != null && subscriptionVerifier != null) {

@@ -36,10 +36,12 @@ interface MapboxSearchClient {
  *
  * ## Offline-verification note
  * The request *shape* is built by the pure [MapboxRequests] (unit-tested); the
- * HTTP round-trip and the `org.json` response parsing here run only on device
- * and are therefore verified on device, not in JVM unit tests (org.json is not
- * on the unit-test classpath). Failures degrade to empty/null rather than
- * throwing, so a flaky network or an unexpected payload never crashes the UI.
+ * HTTP round-trip here runs only on device and is therefore verified on device,
+ * not in JVM unit tests. The `org.json` parsing is exercisable on the JVM (the
+ * unit-test classpath now bundles the real `org.json`), but it is only ever fed
+ * live responses, so end-to-end it is verified on device. Failures degrade to
+ * empty/null rather than throwing, so a flaky network or an unexpected payload
+ * never crashes the UI.
  *
  * @param language optional BCP-47 language for localized results/instructions.
  */
