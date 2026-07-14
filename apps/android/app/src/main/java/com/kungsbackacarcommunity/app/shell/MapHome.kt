@@ -169,9 +169,14 @@ fun MapHome(
     // app is open (e.g. Android's scheduled sunset->sunrise dark theme). Once the
     // user flips day/night manually in the layers popup, [mapModeManuallyOverridden]
     // latches true and this effect stops overriding their choice for the session.
+    // Keyed on mapSurface too (mirrors the setUserMarker effect above) so the mode
+    // is re-applied if the surface instance is swapped (e.g. StubMapSurface -> a
+    // real Mapbox-backed surface); a fresh surface starts at its default MapMode,
+    // so without this key it would keep that default until the system theme flipped
+    // or the user toggled manually.
     var mapModeManuallyOverridden by remember { mutableStateOf(false) }
     val systemInDark = isSystemInDarkTheme()
-    LaunchedEffect(systemInDark, mapModeManuallyOverridden) {
+    LaunchedEffect(mapSurface, systemInDark, mapModeManuallyOverridden) {
         if (!mapModeManuallyOverridden) {
             mapSurface.setMapMode(if (systemInDark) MapMode.Night else MapMode.Day)
         }
