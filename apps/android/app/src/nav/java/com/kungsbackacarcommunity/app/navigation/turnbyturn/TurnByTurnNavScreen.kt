@@ -662,42 +662,49 @@ private class TurnByTurnEngine(
         routeRequested = true
         routeRequestAttempts++
         val destinationPoint = Point.fromLngLat(destination.longitude, destination.latitude)
-        nav.requestRoutes(
-            RouteOptions.builder()
-                .applyDefaultNavigationOptions()
-                .applyLanguageAndVoiceUnitOptions(context)
-                .coordinatesList(listOf(originPoint, destinationPoint))
-                .layersList(listOf(nav.getZLevel(), null))
-                .build(),
-            object : NavigationRouterCallback {
-                override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
-                    // Mirror onFailure: free the in-flight guard so a cancelled
-                    // request can be retried on the next location fix (bounded by
-                    // maxRouteRequestAttempts) instead of leaving routeRequested
-                    // stuck at true and blocking all further attempts.
-                    routeRequested = false
-                }
+        // Wrapped defensively (see the class KDoc): a synchronous throw from the
+        // native requestRoutes call would otherwise crash the screen AND leave
+        // routeRequested stuck at true, blocking every future retry. Release the
+        // in-flight guard on failure so the next location fix retries (bounded by
+        // maxRouteRequestAttempts, already incremented above).
+        runCatching {
+            nav.requestRoutes(
+                RouteOptions.builder()
+                    .applyDefaultNavigationOptions()
+                    .applyLanguageAndVoiceUnitOptions(context)
+                    .coordinatesList(listOf(originPoint, destinationPoint))
+                    .layersList(listOf(nav.getZLevel(), null))
+                    .build(),
+                object : NavigationRouterCallback {
+                    override fun onCanceled(routeOptions: RouteOptions, routerOrigin: String) {
+                        // Mirror onFailure: free the in-flight guard so a cancelled
+                        // request can be retried on the next location fix (bounded by
+                        // maxRouteRequestAttempts) instead of leaving routeRequested
+                        // stuck at true and blocking all further attempts.
+                        routeRequested = false
+                    }
 
-                override fun onFailure(
-                    reasons: List<RouterFailure>,
-                    routeOptions: RouteOptions,
-                ) {
-                    // Free the in-flight guard so the next location fix retries
-                    // (bounded by maxRouteRequestAttempts). Works for both the
-                    // explicit-origin and current-location cases; routeRequestAttempts
-                    // was already incremented when this attempt was issued.
-                    routeRequested = false
-                }
+                    override fun onFailure(
+                        reasons: List<RouterFailure>,
+                        routeOptions: RouteOptions,
+                    ) {
+                        // Free the in-flight guard so the next location fix retries
+                        // (bounded by maxRouteRequestAttempts). Works for both the
+                        // explicit-origin and current-location cases; routeRequestAttempts
+                        // was already incremented when this attempt was issued.
+                        routeRequested = false
+                    }
 
-                override fun onRoutesReady(
-                    routes: List<NavigationRoute>,
-                    routerOrigin: String,
-                ) {
-                    nav.setNavigationRoutes(routes)
-                    navigationCamera.requestNavigationCameraToFollowing()
-                }
-            },
-        )
+                    override fun onRoutesReady(
+                        routes: List<NavigationRoute>,
+                        routerOrigin: String,
+                    ) {
+                        nav.setNavigationRoutes(routes)
+                        navigationCamera.requestNavigationCameraToFollowing()
+                    }
+                },
+            )
+        }.onFailure { routeRequested = false }
     }
 
     /** Release the render APIs; call from the composable's onDispose. */
