@@ -64,7 +64,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -1446,9 +1445,15 @@ private fun RouteHost(
 private fun KeepScreenOn(enabled: Boolean) {
     val view = LocalView.current
     DisposableEffect(view, enabled) {
-        val previous = view.keepScreenOn
-        view.keepScreenOn = enabled
-        onDispose { view.keepScreenOn = previous }
+        if (enabled) {
+            val previous = view.keepScreenOn
+            view.keepScreenOn = true
+            onDispose { view.keepScreenOn = previous }
+        } else {
+            // Not our turn to keep the screen awake: leave the flag untouched so
+            // we never clear a keepScreenOn that something else set on this view.
+            onDispose {}
+        }
     }
 }
 
