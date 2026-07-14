@@ -267,11 +267,6 @@ export const GroupDriveScreen = () => {
 
   return (
     <ScreenContainer testID="group-drive-screen">
-      {/* ── Safe driving warning ─────────────────────────────── */}
-      <Text style={[styles.safeDrivingBanner, { color: theme.colors.textSecondary }]}>
-        {t('groupDrive.safeDrivingWarning')}
-      </Text>
-
       {/* ── Participant counts ────────────────────────────────── */}
       <SectionHeader title={t('groupDrive.participantCount')} />
       <CountSummary

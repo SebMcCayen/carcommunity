@@ -276,22 +276,6 @@ export const EventChatScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      {/* Safe-driving warning — always visible */}
-      <View
-        style={[
-          styles.safetyBanner,
-          {
-            backgroundColor: theme.colors.brandPrimary,
-            paddingHorizontal: theme.spacing[3],
-            paddingVertical: theme.spacing[1],
-          },
-        ]}
-      >
-        <Text style={[styles.safetyText, { color: '#FFFFFF' }]}>
-          {t('chat.safeDrivingWarning')}
-        </Text>
-      </View>
-
       {/* Message list */}
       {screenState === 'loading' ? (
         <View style={styles.centeredContent}>

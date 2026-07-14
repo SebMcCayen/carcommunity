@@ -245,26 +245,6 @@ export const LiveLocationScreen = () => {
         </View>
       </View>
 
-      {/* Safe driving warning — shown prominently while sharing */}
-      {isSharing && (
-        <View
-          style={[
-            styles.warningBanner,
-            {
-              backgroundColor: theme.colors.subtleBackground,
-              borderColor: theme.colors.borderDefault,
-              borderRadius: theme.radius.md,
-              padding: theme.spacing[4],
-            },
-          ]}
-          accessibilityRole="alert"
-        >
-          <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
-            {t('liveLocation.safeDrivingWarning')}
-          </Text>
-        </View>
-      )}
-
       {/* Background permission rationale — only shown once, after session starts */}
       {showBackgroundRationale && (
         <View

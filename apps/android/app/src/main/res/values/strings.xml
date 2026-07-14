@@ -257,7 +257,6 @@
     <string name="chat_errorLoading">Kunde inte ladda chatten. Försök igen.</string>
     <string name="chat_errorSending">Kunde inte skicka meddelandet. Försök igen.</string>
     <string name="chat_unknownAuthor">Okänd</string>
-    <string name="chat_safeDrivingWarning">Använd inte chatten medan du kör.</string>
     <string name="chat_drivingDisabled">Chatten är avstängd medan du kör.</string>
     <string name="chat_drivingStopFirst">Stanna säkert innan du använder chatten.</string>
     <string name="chat_reportReasonHarassment">Trakasserier</string>
@@ -368,7 +367,6 @@
     <string name="groupDrive_participantCount">Deltagare</string>
     <string name="groupDrive_setStatus">Uppdatera status</string>
     <string name="groupDrive_liveLocationDisclaimer">Din liveposition delas bara om du själv har startat en aktiv delningssession.</string>
-    <string name="groupDrive_safeDrivingWarning">Använd inte appen medan du kör.</string>
     <string name="groupDrive_safeDrivingStopFirst">Stanna säkert innan du ändrar status.</string>
     <string name="groupDrive_liveLocationSeparate">Livepositionsdelning hanteras separat.</string>
     <string name="groupDrive_mapTitle">Gruppkarta</string>
@@ -514,7 +512,6 @@
     <string name="crownHunt_claiming">Samlar in...</string>
     <string name="crownHunt_rewardLabel">Belöning: {points} KP</string>
     <string name="crownHunt_safetyStop">Stanna säkert innan du samlar in belöningen.</string>
-    <string name="crownHunt_safetyNoDriving">Använd inte appen medan du kör.</string>
     <string name="crownHunt_safetySlowOnly">Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt.</string>
     <string name="crownHunt_movingTooFast">Du rör dig för snabbt för att samla in.</string>
     <string name="crownHunt_tooFarAway">Du är för långt från platsen.</string>
