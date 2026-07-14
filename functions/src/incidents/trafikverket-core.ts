@@ -165,9 +165,17 @@ function classifyMessageCode(code: string): IncidentType | null | undefined {
   return undefined; // present but unrecognized
 }
 
-/** Swedish `MessageType` fallback used only when `MessageCodeValue` is absent. */
-function classifyMessageType(messageType: string): IncidentType {
+/**
+ * Swedish `MessageType` fallback, used only when `MessageCodeValue` is absent
+ * (in practice it always resolves, so this is a rare best-effort path). Returns
+ * `null` to SKIP, matching the code-based classifier's scope. Note: `MessageType`
+ * is a coarse category ("Trafikmeddelande" covers both lane/road closures AND
+ * regulatory restrictions), so this path can reliably skip only ferries — the
+ * specific restriction subtypes live in `MessageCodeValue`, not `MessageType`.
+ */
+function classifyMessageType(messageType: string): IncidentType | null {
   const t = messageType.toLowerCase();
+  if (t.includes('färj') || t.includes('farj')) return null; // ferry — out of scope
   if (t.includes('olycka')) return 'accident';
   if (t.includes('vägarbete') || t.includes('vagarbete')) return 'roadwork';
   if (t.includes('avstäng') || t.includes('avstang') || t.includes('stängd') || t.includes('stangd')) {
@@ -223,6 +231,10 @@ export function parseTrafikverketResponse(
 ): ImportedIncident[] {
   const results: ImportedIncident[] = [];
   const seen = new Set<string>();
+  // De-dupe unknown-code logging: a newly-introduced code can appear in many
+  // deviations, so notify the hook only once per distinct code per sync run to
+  // keep the logs actionable rather than spammy.
+  const loggedUnknownCodes = new Set<string>();
   const situations = response.RESPONSE?.RESULT?.flatMap((r) => r.Situation ?? []) ?? [];
   for (const situation of situations) {
     for (const deviation of situation.Deviation ?? []) {
@@ -234,7 +246,13 @@ export function parseTrafikverketResponse(
       if (!sourceId || seen.has(sourceId)) continue;
       seen.add(sourceId);
       const rawCode = deviation.MessageCodeValue;
-      if (onUnknownCode && rawCode && classifyMessageCode(rawCode.toLowerCase()) === undefined) {
+      if (
+        onUnknownCode &&
+        rawCode &&
+        classifyMessageCode(rawCode.toLowerCase()) === undefined &&
+        !loggedUnknownCodes.has(rawCode)
+      ) {
+        loggedUnknownCodes.add(rawCode);
         onUnknownCode(rawCode);
       }
       const message = deviation.Message?.trim();

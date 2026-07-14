@@ -466,7 +466,7 @@ private fun MapLayersPopup(
                 // this general incidents-layer credit is the visible surface.
                 Text(
                     text = stringResource(R.string.incidents_sourceTrafikverket),
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = KccSpacing.s2),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
