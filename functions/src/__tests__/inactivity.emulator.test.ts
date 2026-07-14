@@ -41,6 +41,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runInactivityCleanup } from '../account/inactivityCleanup';
 import * as emailModule from '../notifications/email';
 import * as deliverModule from '../notifications/deliver';
+import * as scheduledModule from '../account/scheduled';
 import {
   ACCOUNT_LIFECYCLE_CONFIG_DOC,
   INACTIVE_DELETION_ENABLED_FIELD,
@@ -330,6 +331,49 @@ describe('runInactivityCleanup — delete gate OPEN', () => {
     await expect(adminAuth.getUser(delUid)).rejects.toMatchObject({ code: 'auth/user-not-found' });
     const record = (await adminDb.collection('accountDeletionRequests').doc(delUid).get()).data()!;
     expect(record.status).toBe('processed');
+    expect(record.reason).toBe(INACTIVITY_DELETION_REASON);
+  });
+
+  it('leaves a pending deletion request when the purge fails partway (account-purgeDeleted retriable)', async () => {
+    const suffix = `${Date.now()}-purgefail`;
+    const created14mo = Timestamp.fromDate(subtractMonths(now, 14));
+    const delUid = (
+      await adminAuth.createUser({ email: `sweep-purgefail-${suffix}@example.com` })
+    ).uid;
+    await seedUser(delUid, {
+      createdAt: created14mo,
+      inactivityWarnedAt: Timestamp.fromDate(addDays(now, -40)),
+      inactivityDeleteAfter: Timestamp.fromDate(addDays(now, -10)),
+    });
+
+    await adminDb
+      .collection('config')
+      .doc(ACCOUNT_LIFECYCLE_CONFIG_DOC)
+      .set({ [INACTIVE_DELETION_ENABLED_FIELD]: true }, { merge: true });
+    const emailSpy = vi.spyOn(emailModule, 'isEmailDeliveryAvailable').mockReturnValue(true);
+    // Simulate a transient purge failure AFTER the pending request is enqueued.
+    const purgeSpy = vi
+      .spyOn(scheduledModule, 'purgeUserData')
+      .mockRejectedValue(new Error('transient purge failure'));
+
+    try {
+      const summary = await runInactivityCleanup(now);
+      // Every hard-delete failed, so nothing is counted as deleted this run.
+      expect(summary.deleted).toBe(0);
+    } finally {
+      purgeSpy.mockRestore();
+      emailSpy.mockRestore();
+      await adminDb
+        .collection('config')
+        .doc(ACCOUNT_LIFECYCLE_CONFIG_DOC)
+        .set({ [INACTIVE_DELETION_ENABLED_FIELD]: false }, { merge: true });
+    }
+
+    // A PENDING accountDeletionRequests/{uid} was enqueued BEFORE the purge, so
+    // account-purgeDeleted can finish cleanup even though this sweep (which scans
+    // users/) may never see the uid again once users/{uid} is deleted.
+    const record = (await adminDb.collection('accountDeletionRequests').doc(delUid).get()).data()!;
+    expect(record.status).toBe('pending');
     expect(record.reason).toBe(INACTIVITY_DELETION_REASON);
   });
 });

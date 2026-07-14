@@ -266,8 +266,19 @@ async function clearWarning(uid: string): Promise<void> {
  * Firestore trees first and the Auth user last, so without this lockdown a
  * transient failure of that final Auth delete would leave a still-sign-in-capable
  * account whose data is already gone. Locking down first makes any partial
- * failure fail CLOSED (no further sign-ins, sessions can't renew); the next
- * daily sweep re-runs deleteInactiveAccount idempotently to finish the purge.
+ * failure fail CLOSED (no further sign-ins, sessions can't renew).
+ *
+ * A PENDING accountDeletionRequests/{uid} record is enqueued BEFORE the purge so
+ * cleanup is retriable even if purgeUserData throws mid-way: purgeUserData deletes
+ * users/{uid} early (PURGE_DOC_TREES starts with 'users'), and the inactivity
+ * sweep only scans users/, so a partial failure would otherwise orphan the account
+ * (the sweep never sees the uid again). The standard account-purgeDeleted job picks
+ * up any leftover pending record and finishes the purge idempotently — its
+ * retention-window filter (createdAt < now-30d) matches immediately because
+ * createdAt is set to warnedAt (already ≥ the grace period, i.e. >30d old).
+ * accountDeletionRequests is NOT in PURGE_DOC_TREES (it is the retained
+ * proof-of-deletion record), so the pending record survives the purge and is
+ * flipped to `processed` on success.
  */
 async function deleteInactiveAccount(uid: string, warnedAt: Date | null): Promise<void> {
   // Lock down FIRST (fail-safe ordering). Idempotent across retries and tolerant
@@ -279,20 +290,26 @@ async function deleteInactiveAccount(uid: string, warnedAt: Date | null): Promis
     if ((error as { code?: string }).code !== 'auth/user-not-found') throw error;
   });
 
+  const requestRef = db.collection('accountDeletionRequests').doc(uid);
+  // Enqueue the pending request BEFORE the purge (see KDoc): if purgeUserData
+  // fails after removing users/{uid}, account-purgeDeleted still completes cleanup.
+  await requestRef.set(
+    {
+      userId: uid,
+      reason: INACTIVITY_DELETION_REASON,
+      status: 'pending',
+      createdAt: warnedAt ? Timestamp.fromDate(warnedAt) : FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
   await purgeUserData(uid);
-  await db
-    .collection('accountDeletionRequests')
-    .doc(uid)
-    .set(
-      {
-        userId: uid,
-        reason: INACTIVITY_DELETION_REASON,
-        status: 'processed',
-        createdAt: warnedAt ? Timestamp.fromDate(warnedAt) : FieldValue.serverTimestamp(),
-        processedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+
+  // Purge succeeded — flip to the retained processed proof-of-deletion record.
+  await requestRef.set(
+    { status: 'processed', processedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
 }
 
 export interface InactivityCleanupSummary {
