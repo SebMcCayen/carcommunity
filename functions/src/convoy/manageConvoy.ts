@@ -137,22 +137,28 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
     throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
   }
 
-  // De-duplicate the requested list (preserving order) and validate each
-  // candidate: must be a friend of the owner, not blocked either way, and a
-  // non-restricted existing account. Everything else is silently skipped.
-  const invited: Array<{ uid: string; profile: ProfileProjection }> = [];
-  const skipped: SkippedInvitee[] = [];
-  const seen = new Set<string>();
+  // De-duplicate the requested list (preserving REQUEST order) and validate
+  // each candidate: must be a friend of the owner, not blocked either way, and
+  // a non-restricted existing account. Everything else is silently skipped.
+  //
+  // The per-invitee reads run concurrently (Promise.all over the input array,
+  // index-aligned outcomes), but the invited/skipped output arrays are then
+  // assembled sequentially in request order — so the response order is
+  // deterministic and matches the request order, which clients rely on. The
+  // self/duplicate classification runs in each task's synchronous prologue
+  // (before the first await), so `seen` is populated in request order too.
+  type InviteeOutcome =
+    | { kind: 'invited'; uid: string; profile: ProfileProjection }
+    | { kind: 'skipped'; skip: SkippedInvitee };
 
-  await Promise.all(
-    inviteeUids.map(async (uid) => {
+  const seen = new Set<string>();
+  const outcomes = await Promise.all(
+    inviteeUids.map(async (uid): Promise<InviteeOutcome> => {
       if (uid === actor.uid) {
-        skipped.push({ uid, reason: 'self' });
-        return;
+        return { kind: 'skipped', skip: { uid, reason: 'self' } };
       }
       if (seen.has(uid)) {
-        skipped.push({ uid, reason: 'duplicate' });
-        return;
+        return { kind: 'skipped', skip: { uid, reason: 'duplicate' } };
       }
       seen.add(uid);
 
@@ -164,26 +170,35 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
       ]);
 
       if (ownerBlockedThem.exists || theyBlockedOwner.exists) {
-        skipped.push({ uid, reason: 'blocked' });
-        return;
+        return { kind: 'skipped', skip: { uid, reason: 'blocked' } };
       }
       if (!friendSnap.exists) {
-        skipped.push({ uid, reason: 'not_friend' });
-        return;
+        return { kind: 'skipped', skip: { uid, reason: 'not_friend' } };
       }
       if (!profile) {
-        skipped.push({ uid, reason: 'not_found' });
-        return;
+        return { kind: 'skipped', skip: { uid, reason: 'not_found' } };
       }
-      invited.push({ uid, profile });
+      return { kind: 'invited', uid, profile };
     }),
   );
+
+  // Assemble outputs in request order (index-aligned to inviteeUids).
+  const invited: Array<{ uid: string; profile: ProfileProjection }> = [];
+  const skipped: SkippedInvitee[] = [];
+  for (const outcome of outcomes) {
+    if (outcome.kind === 'invited') {
+      invited.push({ uid: outcome.uid, profile: outcome.profile });
+    } else {
+      skipped.push(outcome.skip);
+    }
+  }
 
   if (invited.length === 0) {
     throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
   }
 
-  const ref = convoyRef(db.collection('_ids').doc().id);
+  // Let Firestore generate the convoy id directly on the target collection.
+  const ref = db.collection('convoys').doc();
   const document = buildConvoyDocument(
     { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
     () => FieldValue.serverTimestamp(),
@@ -193,13 +208,13 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   // Best-effort in-app invite notifications (never fail the create). Reuses the
   // existing 'system_notice' category — a dedicated convoy_invite category is a
   // reviewed follow-up.
-  const ownerName = ownerProfile.displayName ?? 'A friend';
+  const ownerName = ownerProfile.displayName ?? 'En vän';
   await Promise.all(
     invited.map((invitee) =>
       writeInAppNotification(invitee.uid, {
         category: 'system_notice',
-        title: 'Convoy invite',
-        previewText: `${ownerName} invited you to a convoy${title ? `: ${title}` : ''}.`,
+        title: 'Konvoj-inbjudan',
+        previewText: `${ownerName} har bjudit in dig till en konvoj${title ? `: ${title}` : ''}.`,
         actionType: 'open_notifications',
         relatedEntityId: ref.id,
       }).catch(() => undefined),
