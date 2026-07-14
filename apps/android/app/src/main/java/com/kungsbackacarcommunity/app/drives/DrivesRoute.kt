@@ -10,24 +10,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import java.util.UUID
 import kotlinx.coroutines.launch
 
 /**
  * Saved-drives integration route (Phase 12 slice 12): observe the owner's
- * drives, drill into a selected drive's detail, delete via the coordinator, and
- * record a new drive (write side). A successful delete returns to the list.
- *
- * Recording is gated on [isActiveMember] (the `drives-save` callable is
- * member-gated backend-side too). Each recording session gets a fresh
- * sourceSessionId UUID so retries are idempotent per recording.
+ * drives, drill into a selected drive's detail, and delete via the coordinator.
+ * A successful delete returns to the list. Drives are recorded and saved at the
+ * end of a live-sharing session, so this read-only history has no manual record
+ * affordance.
  */
 @Composable
 fun DrivesRoute(
     repository: DrivesRepository,
     uid: String,
-    isActiveMember: Boolean,
-    onBack: () -> Unit,
 ) {
     // Bumped by the "try again" affordance to re-subscribe the observe flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -39,9 +34,6 @@ fun DrivesRoute(
     val scope = rememberCoroutineScope()
 
     var selectedRideId by remember { mutableStateOf<String?>(null) }
-    // Bumped each time recording is (re)entered so a new coordinator + fresh
-    // sourceSessionId is minted per recording session.
-    var recordSession by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(deleteStatus) {
         if (deleteStatus == DriveDeleteStatus.Deleted) {
@@ -53,34 +45,17 @@ fun DrivesRoute(
     val selected =
         (state as? DrivesState.Loaded)?.drives?.firstOrNull { it.rideId == selectedRideId }
 
-    // System/gesture Back unwinds one internal level (recorder or detail -> list);
-    // at the list root it is disabled so the shell's BackHandler returns to Home.
+    // System/gesture Back unwinds one internal level (detail -> list); at the
+    // list root it is disabled so the shell's BackHandler returns to Home.
     // Enabling on `selectedRideId != null` alone (not also `selected != null`)
     // ensures a transient null `selected` during a list refresh still unwinds to
     // the list instead of falling through to the shell handler (Home).
-    BackHandler(enabled = recordSession != null || selectedRideId != null) {
-        when {
-            recordSession != null -> recordSession = null
-            else -> {
-                selectedRideId = null
-                coordinator.reset()
-            }
-        }
+    BackHandler(enabled = selectedRideId != null) {
+        selectedRideId = null
+        coordinator.reset()
     }
 
     when {
-        recordSession != null -> {
-            val recordingCoordinator =
-                remember(repository, recordSession) {
-                    DriveRecordingCoordinator(repository, UUID.randomUUID().toString())
-                }
-            RecordDriveScreen(
-                coordinator = recordingCoordinator,
-                isActiveMember = isActiveMember,
-                onBack = { recordSession = null },
-            )
-        }
-
         selectedRideId != null && selected != null ->
             SavedDriveDetailScreen(
                 drive = selected,
@@ -96,9 +71,7 @@ fun DrivesRoute(
             DrivesListScreen(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
-                onRecord = { recordSession = (recordSession ?: 0) + 1 },
                 onRetry = { reloadKey++ },
-                onBack = onBack,
             )
     }
 }

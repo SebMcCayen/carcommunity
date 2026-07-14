@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,9 +51,8 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
  * error is surfaced via a `friends.*` string keyed off the mapped
  * [FriendActionError] — never a raw message.
  *
- * Direct messaging is now wired: [onOpenMessages] opens the DM inbox and each
- * friend row's "Message" button opens the 1:1 thread with that friend via
- * [onMessageFriend] (the conversation is created on the first message).
+ * Each friend row's "Message" button opens the 1:1 DM thread with that friend
+ * via [onMessageFriend] (the conversation is created on the first message).
  */
 @Composable
 fun FriendsScreen(
@@ -67,9 +67,7 @@ fun FriendsScreen(
     onDecline: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
-    onRetry: () -> Unit,
     onMessageFriend: (FriendSummary) -> Unit,
-    onOpenMessages: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
@@ -86,13 +84,6 @@ fun FriendsScreen(
         ) {
             item(key = "title") {
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
-            }
-
-            // Opens the DM inbox (list of 1:1 conversations).
-            item(key = "messages-inbox") {
-                OutlinedButton(onClick = onOpenMessages, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.dm_title))
-                }
             }
 
             item(key = "add-friend") {
@@ -128,18 +119,12 @@ fun FriendsScreen(
             when (status) {
                 FriendsStatus.Loading -> item(key = "loading") { CircularProgressIndicator() }
 
+                // A load failure (including the member gate) is surfaced as a
+                // friendly, neutral info notice — no red error styling and no
+                // retry button; the page just shows add-friend plus this note.
                 is FriendsStatus.Error ->
                     item(key = "load-error") {
-                        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                            Text(
-                                text = stringResource(status.error.messageRes()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
-                                Text(stringResource(R.string.friends_retry))
-                            }
-                        }
+                        InfoNoticeCard(text = stringResource(status.error.messageRes()))
                     }
 
                 is FriendsStatus.Loaded -> {
@@ -455,6 +440,34 @@ private fun MemberAvatar(avatarPath: String?) {
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(KccSpacing.s6),
+            )
+        }
+    }
+}
+
+/**
+ * A soft, neutral notice used for the load-error / member-gate state: an info
+ * icon plus muted text, styled to sit calmly within the Aero theme rather than
+ * shouting in the error colour.
+ */
+@Composable
+private fun InfoNoticeCard(text: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(KccSpacing.s6),
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

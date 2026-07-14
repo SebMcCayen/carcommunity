@@ -36,8 +36,6 @@ import java.util.Date
 fun DrivesListScreen(
     state: DrivesState,
     onSelect: (String) -> Unit,
-    onRecord: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
@@ -52,12 +50,6 @@ fun DrivesListScreen(
         ) {
             item {
                 AeroPageTitle(stringResource(R.string.savedDrives_screenTitle))
-            }
-
-            item {
-                Button(onClick = onRecord, modifier = Modifier.fillMaxWidth()) {
-                    Text(text = stringResource(R.string.savedDrives_recordAction))
-                }
             }
 
             when (state) {
