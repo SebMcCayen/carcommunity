@@ -163,7 +163,6 @@ fun MapHome(
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
-    val mapMode by mapSurface.mapMode.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
     val bearing by mapSurface.bearing.collectAsState()
 
@@ -197,7 +196,12 @@ fun MapHome(
     var desiredMapMode by rememberSaveable(
         stateSaver = Saver(
             save = { it?.name },
-            restore = { (it as? String)?.let(MapMode::valueOf) },
+            // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
+            // e.g. after an app update that renames/removes an enum value, or
+            // corrupted saved state — which would crash activity recreation.
+            // entries.find returns null for an unknown name (falls back to
+            // "follow system") instead of throwing.
+            restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
         ),
     ) { mutableStateOf<MapMode?>(null) }
     val systemInDark = isSystemInDarkTheme()
@@ -431,7 +435,13 @@ fun MapHome(
         if (layersOpen) {
             MapLayersPopup(
                 trafficOn = trafficOn,
-                nightMode = mapMode == MapMode.Night,
+                // Drive the night Switch off the IMMEDIATE user intent (the
+                // effective desired mode) rather than the SURFACE's mapMode, which
+                // only updates after the LaunchedEffect runs and the surface flow
+                // re-emits. onNightModeChange sets [desiredMapMode] synchronously,
+                // so the Switch flips at once instead of snapping back / jittering
+                // while it waits for the surface to catch up.
+                nightMode = (desiredMapMode ?: systemDefaultMode) == MapMode.Night,
                 is3d = is3d,
                 onTrafficChange = { mapSurface.setTrafficEnabled(it) },
                 onNightModeChange = {
