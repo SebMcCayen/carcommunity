@@ -458,9 +458,10 @@ async function applyDecision(
       summary.deleted += 1;
       return;
     case 'would_delete':
-      // Gate closed: log the account that WOULD be deleted once deletion is
-      // enabled, but make no change.
-      logger.info('Inactive account past grace period but delete gate is closed', { uid });
+      // Gate closed: this account WOULD be deleted once deletion is enabled, but
+      // make no change. No per-uid log — with the gate closed (the MVP default)
+      // eligible accounts accumulate and a per-uid line would be high-volume
+      // noise every run; the aggregate summary.wouldDelete covers observability.
       summary.wouldDelete += 1;
       return;
     case 'skip':

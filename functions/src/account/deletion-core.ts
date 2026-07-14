@@ -66,6 +66,7 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
  * The purge plan, in execution order.
  * - `docTree`: delete the document and every subcollection beneath it
  *   (users/{uid} + badges, userPrivate/{uid} + pushTokens,
+ *   userLifecycle/{uid} (last-login + inactivity lifecycle fields),
  *   notifications/{uid} + items, pointsLedger/{uid} + entries).
  * - `ownedQuery`: delete documents matching userId == uid.
  * - Storage prefixes are removed wholesale.
@@ -73,6 +74,10 @@ export function parseDeleteAccountInput(data: unknown): ParseResult<DeleteAccoun
 export const PURGE_DOC_TREES = [
   'users',
   'userPrivate',
+  // Backend-only last-login + inactivity state (auth.recordLogin /
+  // account-cleanupInactive). Must be purged on ALL deletion paths so no
+  // per-user lifecycle data is retained after erasure.
+  'userLifecycle',
   'notifications',
   'pointsLedger',
 ] as const;

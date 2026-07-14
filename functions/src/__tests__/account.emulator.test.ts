@@ -166,6 +166,7 @@ describe('account purge (hard delete after retention)', () => {
     await adminDb.collection('notifications').doc(uid).collection('items').doc('n1')
       .set({ category: 'system_notice', title: 'x', previewText: 'x', read: false, createdAt: Timestamp.now() });
     await adminDb.collection('pointsLedger').doc(uid).set({ balance: 10, updatedAt: Timestamp.now() });
+    await adminDb.collection('userLifecycle').doc(uid).set({ lastLoginAt: Timestamp.now() });
     await adminDb.collection('vehicles').add({ userId: uid, make: 'Volvo' });
     await adminDb.collection('rides').add({ userId: uid, distanceMeters: 1000 });
     await adminBucket.file(`profileImages/${uid}/avatar.png`).save(Buffer.from('img'));
@@ -197,6 +198,7 @@ describe('account purge (hard delete after retention)', () => {
     expect((await adminDb.collection('userPrivate').doc(uid).collection('pushTokens').get()).size).toBe(0);
     expect((await adminDb.collection('notifications').doc(uid).collection('items').get()).size).toBe(0);
     expect((await adminDb.collection('pointsLedger').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('userLifecycle').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('vehicles').where('userId', '==', uid).get()).size).toBe(0);
     expect((await adminDb.collection('rides').where('userId', '==', uid).get()).size).toBe(0);
 

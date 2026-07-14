@@ -324,8 +324,9 @@ describe('runInactivityCleanup — delete gate OPEN', () => {
         .set({ [INACTIVE_DELETION_ENABLED_FIELD]: false }, { merge: true });
     }
 
-    // User doc + Auth user gone; proof-of-deletion record retained.
+    // User doc + userLifecycle + Auth user gone; proof-of-deletion record retained.
     expect((await adminDb.collection('users').doc(delUid).get()).exists).toBe(false);
+    expect((await adminDb.collection('userLifecycle').doc(delUid).get()).exists).toBe(false);
     await expect(adminAuth.getUser(delUid)).rejects.toMatchObject({ code: 'auth/user-not-found' });
     const record = (await adminDb.collection('accountDeletionRequests').doc(delUid).get()).data()!;
     expect(record.status).toBe('processed');
