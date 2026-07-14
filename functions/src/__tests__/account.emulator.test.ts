@@ -171,6 +171,34 @@ describe('account purge (hard delete after retention)', () => {
     await adminBucket.file(`profileImages/${uid}/avatar.png`).save(Buffer.from('img'));
     await adminBucket.file(`rideRoutes/${uid}/ride-1/route.bin`).save(Buffer.from('gps'));
 
+    // Chat footprint to be erased.
+    // (a) A 1:1 DM conversation the user is a member of + a message in it.
+    const convRef = adminDb.collection('conversations').doc(`${uid}__friend`);
+    await convRef.set({ members: [uid, 'friend-uid'], createdAt: Timestamp.now() });
+    await convRef.collection('messages').add({ senderUid: uid, text: 'dm hi', createdAt: Timestamp.now() });
+    await convRef.collection('messages').add({ senderUid: 'friend-uid', text: 'dm reply', createdAt: Timestamp.now() });
+    // (b) A community message authored by the user.
+    const communityMsg = await adminDb
+      .collection('communityChat').doc('global').collection('messages')
+      .add({ senderUid: uid, text: 'community hi', createdAt: Timestamp.now() });
+    // (c) A convoy message authored by the user.
+    const convoyMsg = await adminDb
+      .collection('convoyChats').doc('convoy-1').collection('messages')
+      .add({ senderUid: uid, text: 'convoy hi', createdAt: Timestamp.now() });
+
+    // Controls that must SURVIVE the purge:
+    // - another user's community message,
+    const otherCommunityMsg = await adminDb
+      .collection('communityChat').doc('global').collection('messages')
+      .add({ senderUid: 'other-uid', text: 'keep me', createdAt: Timestamp.now() });
+    // - a DM conversation the user is NOT part of,
+    const otherConvRef = adminDb.collection('conversations').doc('x__y');
+    await otherConvRef.set({ members: ['x-uid', 'y-uid'], createdAt: Timestamp.now() });
+    // - an EVENT chat message authored by the user (keyed on authorUserId; retained).
+    const eventMsg = await adminDb
+      .collection('events').doc('event-1').collection('messages')
+      .add({ authorUserId: uid, text: 'event hi', createdAt: Timestamp.now() });
+
     // A due (31-day-old pending) request and soft-delete state.
     await adminDb.collection('accountDeletionRequests').doc(uid).set({
       userId: uid,
@@ -199,6 +227,19 @@ describe('account purge (hard delete after retention)', () => {
     expect((await adminDb.collection('pointsLedger').doc(uid).get()).exists).toBe(false);
     expect((await adminDb.collection('vehicles').where('userId', '==', uid).get()).size).toBe(0);
     expect((await adminDb.collection('rides').where('userId', '==', uid).get()).size).toBe(0);
+
+    // Chat erased: DM conversation (+messages) gone, authored community + convoy
+    // messages gone.
+    expect((await convRef.get()).exists).toBe(false);
+    expect((await convRef.collection('messages').get()).size).toBe(0);
+    expect((await communityMsg.get()).exists).toBe(false);
+    expect((await convoyMsg.get()).exists).toBe(false);
+
+    // Controls survive: another user's community message, a DM the user isn't in,
+    // and the user's EVENT chat message (authorUserId-keyed, deliberately retained).
+    expect((await otherCommunityMsg.get()).exists).toBe(true);
+    expect((await otherConvRef.get()).exists).toBe(true);
+    expect((await eventMsg.get()).exists).toBe(true);
 
     // Storage prefixes gone.
     const [profileFiles] = await adminBucket.getFiles({ prefix: `profileImages/${uid}/` });

@@ -28,11 +28,13 @@ import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
+  CONVOY_CHAT_RETENTION_DAYS,
   CONVOY_NOT_FOUND_MESSAGE,
   EMPTY_MESSAGE_MESSAGE,
   NOT_CONVOY_MEMBER_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   buildChatMessageDocument,
+  chatMessageExpiry,
   isAcceptedConvoyMember,
   parseListConvoyInput,
   parsePostConvoyInput,
@@ -132,10 +134,17 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
   }
 
+  // TTL: convoy messages are retained CONVOY_CHAT_RETENTION_DAYS days. The
+  // field-scoped Firestore TTL policy on `expireAt` for the `messages` collection
+  // group (see communityChat.ts) auto-deletes them after that.
+  const expireAt = Timestamp.fromDate(
+    chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
+  );
+
   const messageRef = convoyMessagesRef(convoyId).doc();
   await messageRef.set(
     buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile },
+      { senderUid: actor.uid, text, senderProfile, expireAt },
       () => FieldValue.serverTimestamp(),
     ),
   );

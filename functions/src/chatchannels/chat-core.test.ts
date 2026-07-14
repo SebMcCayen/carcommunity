@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHAT_MESSAGE_MAX_LENGTH,
+  COMMUNITY_CHAT_RETENTION_DAYS,
+  CONVOY_CHAT_RETENTION_DAYS,
   buildChatMessageDocument,
+  chatMessageExpiry,
   isAcceptedConvoyMember,
   parseListCommunityInput,
   parseListConvoyInput,
@@ -67,10 +70,15 @@ describe('chat-core projections + builders', () => {
     expect(toProfileProjection({ displayName: 42 })).toEqual({ displayName: null, avatarPath: null });
   });
 
-  it('builds a message doc (trimmed) with denormalized sender profile', () => {
+  it('builds a message doc (trimmed) with denormalized sender profile + expireAt', () => {
     expect(
       buildChatMessageDocument(
-        { senderUid: 'a', text: '  hi  ', senderProfile: { displayName: 'Al', avatarPath: 'pa' } },
+        {
+          senderUid: 'a',
+          text: '  hi  ',
+          senderProfile: { displayName: 'Al', avatarPath: 'pa' },
+          expireAt: 'EXP',
+        },
         () => 'TS',
       ),
     ).toEqual({
@@ -79,7 +87,22 @@ describe('chat-core projections + builders', () => {
       senderDisplayName: 'Al',
       senderAvatarPath: 'pa',
       createdAt: 'TS',
+      expireAt: 'EXP',
     });
+  });
+
+  it('computes the retention TTL instant as now + retentionDays', () => {
+    const now = new Date('2026-07-12T00:00:00.000Z');
+    // Community: 120 days out.
+    expect(chatMessageExpiry(now, COMMUNITY_CHAT_RETENTION_DAYS).toISOString()).toBe(
+      '2026-11-09T00:00:00.000Z',
+    );
+    // Convoy: 30 days out.
+    expect(chatMessageExpiry(now, CONVOY_CHAT_RETENTION_DAYS).toISOString()).toBe(
+      '2026-08-11T00:00:00.000Z',
+    );
+    // Convoy window is shorter than community.
+    expect(CONVOY_CHAT_RETENTION_DAYS).toBeLessThan(COMMUNITY_CHAT_RETENTION_DAYS);
   });
 
   it('maps a message summary, coalescing missing fields', () => {

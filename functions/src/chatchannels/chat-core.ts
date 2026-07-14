@@ -58,6 +58,29 @@ export const CHAT_MESSAGES_PAGE_SIZE = 30;
 export const COMMUNITY_CHANNEL_ID = 'global';
 
 /**
+ * Message retention windows (days), config-driven so they stay tunable without a
+ * schema change: bump the constant and redeploy. Each channel message stores an
+ * `expireAt` Timestamp = createdAt + N days; a Firestore TTL policy on that
+ * field then auto-deletes expired messages (see communityChat.ts / convoyChat.ts
+ * for the one-time `gcloud firestore fields ttls update` setup). DMs deliberately
+ * carry NO expireAt — 1:1 messages are kept until account deletion.
+ */
+export const COMMUNITY_CHAT_RETENTION_DAYS = 120;
+export const CONVOY_CHAT_RETENTION_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The TTL instant for a message created at `now`: `now + retentionDays`. Computed
+ * from a real Date (not the createdAt serverTimestamp sentinel, which has no value
+ * at write time); the sub-second skew against the server-stamped createdAt is
+ * irrelevant at a 30–120 day horizon.
+ */
+export function chatMessageExpiry(now: Date, retentionDays: number): Date {
+  return new Date(now.getTime() + retentionDays * DAY_MS);
+}
+
+/**
  * Minimal safe profile projection denormalized onto each message. Never includes
  * email, provider identity, subscription, moderation, or other sensitive fields
  * (mirrors dm/convoy ProfileProjection).
@@ -177,10 +200,17 @@ export function toProfileProjection(doc: Record<string, unknown> | undefined): P
 /**
  * A channel message document body ({community,convoy}Chats/.../messages/{id}).
  * The sender's safe profile is denormalized so the channel renders with no
- * per-message profile lookup.
+ * per-message profile lookup. `expireAt` is the retention TTL instant (createdAt
+ * + the channel's retention window) that a Firestore TTL policy uses to
+ * auto-delete the message; the caller passes the pre-built Timestamp value.
  */
 export function buildChatMessageDocument(
-  input: { senderUid: string; text: string; senderProfile: ProfileProjection },
+  input: {
+    senderUid: string;
+    text: string;
+    senderProfile: ProfileProjection;
+    expireAt: unknown;
+  },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
   return {
@@ -189,6 +219,7 @@ export function buildChatMessageDocument(
     senderDisplayName: input.senderProfile.displayName,
     senderAvatarPath: input.senderProfile.avatarPath,
     createdAt: serverTimestamp(),
+    expireAt: input.expireAt,
   };
 }
 

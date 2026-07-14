@@ -32,9 +32,11 @@ import { toUserAccessState } from '../shared/access';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   COMMUNITY_CHANNEL_ID,
+  COMMUNITY_CHAT_RETENTION_DAYS,
   EMPTY_MESSAGE_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   buildChatMessageDocument,
+  chatMessageExpiry,
   parseListCommunityInput,
   parseMarkReadCommunityInput,
   parsePostCommunityInput,
@@ -111,10 +113,19 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
   }
 
+  // TTL: community messages are retained COMMUNITY_CHAT_RETENTION_DAYS days. A
+  // Firestore TTL policy on `expireAt` auto-deletes them after that (one-time
+  // setup: `gcloud firestore fields ttls update expireAt \
+  //   --collection-group=messages`; the policy is field-scoped, so it also
+  // covers convoy messages, which share the `messages` collection group).
+  const expireAt = Timestamp.fromDate(
+    chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS),
+  );
+
   const messageRef = communityMessagesRef().doc();
   await messageRef.set(
     buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile },
+      { senderUid: actor.uid, text, senderProfile, expireAt },
       () => FieldValue.serverTimestamp(),
     ),
   );
