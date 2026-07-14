@@ -664,7 +664,7 @@
     <string name="feedback_success">Tack! Din rapport har skickats.</string>
     <string name="feedback_successWithIssue">Tack! Din rapport har skickats och ett ärende har skapats.</string>
     <string name="feedback_viewIssue">Visa ärende</string>
-    <string name="feedback_error">Kunde inte skicka rapporten. Försök igen.</string>
+    <string name="feedback_error">Kunde inte skicka rapporten. Kontakta oss på kontakt@kungsbackacarcommunity.se.</string>
     <string name="feedback_rateLimited">Du har skickat för många rapporter. Vänta en stund och försök igen.</string>
     <string name="dm_title">Meddelanden</string>
     <string name="dm_unreadCount">%1$d olästa meddelanden</string>
@@ -738,6 +738,8 @@
     <string name="shell_layersTraffic">Trafik</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
+    <string name="shell_compass">Återställ till norr</string>
+    <string name="shell_searchExpand">Sök</string>
     <string name="shell_liveTitle">Liveplats</string>
     <string name="shell_liveClose">Stäng liveplats</string>
     <string name="shell_liveDetails">Fler alternativ</string>
@@ -757,6 +759,15 @@
     <string name="addressSearch_unitKilometers">km</string>
     <string name="addressSearch_unitMinutes">min</string>
     <string name="addressSearch_unitHours">tim</string>
+    <string name="turnByTurn_start">Starta</string>
+    <string name="turnByTurn_exit">Avsluta navigering</string>
+    <string name="turnByTurn_recenter">Centrera</string>
+    <string name="turnByTurn_reportIncident">Rapportera</string>
+    <string name="turnByTurn_arrive">Framme %1$s</string>
+    <string name="turnByTurn_remaining">%1$s · %2$s</string>
+    <string name="turnByTurn_unavailable">Navigering är inte tillgänglig här.</string>
+    <string name="turnByTurn_permissionNeeded">Platsåtkomst krävs för att navigera.</string>
+    <string name="turnByTurn_reportComingSoon">Rapportering av händelser och vägarbeten kommer snart.</string>
     <string name="incidents_reportButton">Rapportera händelse</string>
     <string name="incidents_reportTitle">Rapportera en händelse</string>
     <string name="incidents_reportSubtitle">Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.</string>
