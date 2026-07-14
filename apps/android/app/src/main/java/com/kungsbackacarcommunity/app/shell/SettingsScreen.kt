@@ -112,7 +112,8 @@ fun SettingsScreen(
         ) { openPlayStoreListing(context) }
 
         // About the app: the bundled "Vad är nytt" changelog. Always available —
-        // the data ships with the APK, so no repository null-guard is needed.
+        // the data ships with the APK, so unlike the rows above this needs no
+        // `if (callback != null)` availability guard.
         SettingsSectionHeader(stringResource(R.string.settingsMenu_aboutSection))
         HubRow(
             stringResource(R.string.settingsMenu_whatsNew),

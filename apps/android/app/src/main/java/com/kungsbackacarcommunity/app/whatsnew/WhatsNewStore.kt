@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.whatsnew
 import android.content.Context
 import android.util.Log
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 
 /**
  * Loads the bundled changelog from `res/raw/changelog.json`. Failures (missing
@@ -14,13 +15,15 @@ object ChangelogLoader {
     private const val TAG = "ChangelogLoader"
 
     fun load(context: Context): List<ChangelogEntry> =
-        try {
+        runCatchingCancellable {
             context.resources
                 .openRawResource(R.raw.changelog)
                 .bufferedReader()
                 .use { it.readText() }
                 .let(Changelog::parse)
-        } catch (e: Exception) {
+        }.getOrElse { e ->
+            // Cancellation is re-thrown by runCatchingCancellable (structured
+            // concurrency); only real failures reach here and degrade to none.
             Log.w(TAG, "Could not load the bundled changelog; showing none.", e)
             emptyList()
         }
