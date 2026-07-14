@@ -37,8 +37,9 @@ import {
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runInactivityCleanup } from '../account/inactivityCleanup';
+import * as emailModule from '../notifications/email';
 import {
   ACCOUNT_LIFECYCLE_CONFIG_DOC,
   INACTIVE_DELETION_ENABLED_FIELD,
@@ -211,20 +212,24 @@ describe('runInactivityCleanup — delete gate OPEN', () => {
       inactivityDeleteAfter: Timestamp.fromDate(addDays(now, -10)),
     });
 
-    // Open BOTH sides of the gate: config flag + email availability.
+    // Open BOTH sides of the gate: config flag + email availability. Email
+    // availability is stubbed at the module seam (not just the env flag)
+    // because in production isEmailDeliveryAvailable() stays hard-closed until a
+    // real provider is integrated (EMAIL_PROVIDER_INTEGRATED).
     await adminDb
       .collection('config')
       .doc(ACCOUNT_LIFECYCLE_CONFIG_DOC)
       .set({ [INACTIVE_DELETION_ENABLED_FIELD]: true }, { merge: true });
-    const priorEmailEnv = process.env.EMAIL_DELIVERY_ENABLED;
-    process.env.EMAIL_DELIVERY_ENABLED = 'true';
+    const emailSpy = vi
+      .spyOn(emailModule, 'isEmailDeliveryAvailable')
+      .mockReturnValue(true);
 
     try {
       const summary = await runInactivityCleanup(now);
       expect(summary.deletionEnabled).toBe(true);
       expect(summary.deleted).toBeGreaterThanOrEqual(1);
     } finally {
-      process.env.EMAIL_DELIVERY_ENABLED = priorEmailEnv;
+      emailSpy.mockRestore();
       await adminDb
         .collection('config')
         .doc(ACCOUNT_LIFECYCLE_CONFIG_DOC)

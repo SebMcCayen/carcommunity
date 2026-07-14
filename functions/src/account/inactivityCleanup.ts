@@ -63,6 +63,16 @@ import {
  */
 const MAX_CANDIDATES_PER_RUN = 200;
 
+/**
+ * Upper bound of hard-deletes (purgeUserData) performed per sweep. Each delete
+ * recursively purges Firestore trees, owned docs, storage, and the Auth user, so
+ * an unbounded run against a large backlog could exceed the scheduled timeout.
+ * Mirrors MAX_PURGES_PER_RUN in account/scheduled.ts (account-purgeDeleted); the
+ * remainder drains over subsequent daily runs (candidates are oldest-first).
+ * Warnings/clears are cheap and stay bounded only by MAX_CANDIDATES_PER_RUN.
+ */
+const MAX_DELETES_PER_RUN = 25;
+
 /** Reads the hard-delete kill-switch from config/accountLifecycle (default OFF). */
 async function readInactiveDeletionFlag(): Promise<boolean> {
   try {
@@ -95,19 +105,24 @@ async function warnAccount(uid: string, now: Date): Promise<void> {
     );
 
   // Email warning — the primary channel per the lifecycle spec, but not wired
-  // yet, so this degrades to a logged no-op. Best-effort: never fails the sweep.
-  const email = (await db.collection('userPrivate').doc(uid).get()).data()?.email;
-  await sendAccountEmail({
-    to: typeof email === 'string' ? email : null,
-    subject: 'Ditt konto är inaktivt',
-    body:
-      'Ditt konto har varit inaktivt i 11 månader och kommer att raderas om 30 ' +
-      'dagar om du inte loggar in igen.',
-    kind: 'inactivity_warning',
-  }).catch((error) => {
-    logger.warn('Inactivity warning email failed', { uid, error: String(error) });
-    return { sent: false as const };
-  });
+  // yet. While delivery is unavailable (the MVP default) sendAccountEmail is a
+  // no-op, so skip the userPrivate/{uid} recipient read entirely rather than
+  // spending a Firestore read per warned account every run. Best-effort: never
+  // fails the sweep.
+  if (isEmailDeliveryAvailable()) {
+    const email = (await db.collection('userPrivate').doc(uid).get()).data()?.email;
+    await sendAccountEmail({
+      to: typeof email === 'string' ? email : null,
+      subject: 'Ditt konto är inaktivt',
+      body:
+        'Ditt konto har varit inaktivt i 11 månader och kommer att raderas om 30 ' +
+        'dagar om du inte loggar in igen.',
+      kind: 'inactivity_warning',
+    }).catch((error) => {
+      logger.warn('Inactivity warning email failed', { uid, error: String(error) });
+      return { sent: false as const };
+    });
+  }
 
   // Secondary in-app notice through the Phase 9l writer. account_warning is an
   // essential category (delivered even to suspended users, cannot be opted out).
@@ -173,6 +188,9 @@ export interface InactivityCleanupSummary {
   warned: number;
   cleared: number;
   deleted: number;
+  /** Delete-eligible accounts skipped this run because MAX_DELETES_PER_RUN was
+   * reached; they are retried on the next daily sweep. */
+  deleteCapped: number;
   wouldDelete: number;
   deletionEnabled: boolean;
 }
@@ -196,6 +214,7 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
     warned: 0,
     cleared: 0,
     deleted: 0,
+    deleteCapped: 0,
     wouldDelete: 0,
     deletionEnabled,
   };
@@ -232,6 +251,14 @@ export async function runInactivityCleanup(now: Date): Promise<InactivityCleanup
     }
   }
 
+  if (summary.deleteCapped > 0) {
+    logger.warn('Inactive-account delete cap reached; deferring remainder to next run', {
+      maxDeletesPerRun: MAX_DELETES_PER_RUN,
+      deleted: summary.deleted,
+      deferred: summary.deleteCapped,
+    });
+  }
+
   logger.info('Inactive-account sweep complete', { ...summary });
   return summary;
 }
@@ -253,6 +280,13 @@ async function applyDecision(
       summary.cleared += 1;
       return;
     case 'delete':
+      if (summary.deleted >= MAX_DELETES_PER_RUN) {
+        // Per-run hard-delete cap reached — defer this (and any further)
+        // delete to the next daily sweep so a backlog drains over days
+        // instead of pushing this run past its timeout.
+        summary.deleteCapped += 1;
+        return;
+      }
       await deleteInactiveAccount(uid, warnedAt);
       summary.deleted += 1;
       return;

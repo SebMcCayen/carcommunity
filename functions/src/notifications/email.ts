@@ -21,15 +21,27 @@
 import { logger } from 'firebase-functions';
 
 /**
+ * Compile-time guard: TRUE only once a real provider is wired into
+ * `sendAccountEmail` below. While this is false, `isEmailDeliveryAvailable()`
+ * can NEVER report true in production no matter how the env is configured, so a
+ * mere config/env flip cannot open the inactive-account hard-delete gate before
+ * a warning email can actually be delivered. Flip to true in the SAME change
+ * that integrates the provider (see the module TODO above).
+ */
+const EMAIL_PROVIDER_INTEGRATED = false;
+
+/**
  * Whether outbound email can actually be delivered right now. FALSE for the MVP.
  *
- * The env probe is a placeholder: flipping EMAIL_DELIVERY_ENABLED alone does NOT
- * make email work — a real provider must be integrated in `sendAccountEmail`
- * first. It exists so tests can exercise the "email available" branch; in
- * production this returns false until the provider TODO above is done.
+ * Requires BOTH a real integrated provider (EMAIL_PROVIDER_INTEGRATED) AND the
+ * env flag. The env probe alone does NOT make email work, so in production this
+ * stays false until the provider TODO above is done. Tests that need the "email
+ * available" branch stub this function at the module seam
+ * (`vi.spyOn(emailModule, 'isEmailDeliveryAvailable')`) rather than only setting
+ * the env var — keeping production hard-closed while both branches stay covered.
  */
 export function isEmailDeliveryAvailable(): boolean {
-  return process.env.EMAIL_DELIVERY_ENABLED === 'true';
+  return EMAIL_PROVIDER_INTEGRATED && process.env.EMAIL_DELIVERY_ENABLED === 'true';
 }
 
 export interface AccountEmail {
