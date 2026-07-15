@@ -738,6 +738,7 @@
     <string name="shell_layersTitle">Kartlager</string>
     <string name="shell_layersClose">Stäng kartlager</string>
     <string name="shell_layersTraffic">Trafik</string>
+    <string name="shell_layersIncidents">Trafikvarningar</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
     <string name="shell_compass">Återställ till norr</string>

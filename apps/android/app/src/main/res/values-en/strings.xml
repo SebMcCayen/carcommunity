@@ -738,6 +738,7 @@
     <string name="shell_layersTitle">Map layers</string>
     <string name="shell_layersClose">Close map layers</string>
     <string name="shell_layersTraffic">Traffic</string>
+    <string name="shell_layersIncidents">Traffic alerts</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
     <string name="shell_compass">Reset to north</string>

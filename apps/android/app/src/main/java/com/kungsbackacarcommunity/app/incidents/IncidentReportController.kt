@@ -95,8 +95,15 @@ class IncidentReportController(
      * Convenience for the shell/nav: refresh [nearbyIncidents] around the user's
      * CURRENT location. A no-op when no fix is available (the map keeps the last
      * markers). The nav feature can call this on a cadence as the route moves.
+     *
+     * Returns `true` when a location fix was available and a refresh was
+     * performed, `false` when no fix was available (nothing fetched). Callers
+     * that retry a cold-open refresh use this to retry only until a fix arrives,
+     * rather than looping on a legitimately empty result.
      */
-    suspend fun refreshAroundCurrent(radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS) {
+    suspend fun refreshAroundCurrent(
+        radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS
+    ): Boolean {
         val here =
             try {
                 locationProvider()
@@ -104,8 +111,9 @@ class IncidentReportController(
                 throw cancellation
             } catch (_: Throwable) {
                 null
-            } ?: return
+            } ?: return false
         refresh(here, radiusMeters)
+        return true
     }
 
     companion object {

@@ -184,6 +184,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * How many times the Map tab retries the nearby-incidents refresh while no
+ * location fix is available yet, and the delay between attempts. Covers the
+ * common cold-open case where the fused last-known location is momentarily null
+ * (no fix yet), so the first refresh no-ops; a handful of retries lets a real
+ * fix arrive and populate the layer without a busy loop. Once a fix is
+ * available the loop stops after a single refresh, so an area with no active
+ * incidents does not keep retrying.
+ */
+private const val INCIDENTS_REFRESH_ATTEMPTS = 5
+private const val INCIDENTS_REFRESH_RETRY_MS = 3_000L
+
+/**
  * The signed-in experience: observes the profile document to gate onboarding,
  * then renders the **map-first, 5-tab shell** ([mapFirstShell]) once onboarded.
  *
@@ -347,6 +359,13 @@ fun AuthenticatedApp(
                         )
                     }
                 }
+            // Visibility of the "Traffic alerts" layer (Trafikverket + crowd-sourced
+            // incidents) toggled from the map-layers popup. Defaults ON (the shared
+            // road-info layer is visible to all users); persisted so the choice
+            // survives rotation / process death. Gating the fetch below on this flag
+            // means a user who turns the layer off stops polling, and turning it back
+            // on re-fetches immediately.
+            var incidentsLayerEnabled by rememberSaveable { mutableStateOf(true) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -434,11 +453,25 @@ fun AuthenticatedApp(
             val incidentLocationUnavailableText =
                 stringResource(R.string.incidents_locationUnavailable)
 
-            // Refresh the nearby-incidents layer around the user each time the
-            // Map tab is shown (a no-op without a fix; keeps the last markers).
-            LaunchedEffect(selectedTab, incidentController) {
-                if (selectedTab == ShellTab.Map) {
-                    incidentController?.refreshAroundCurrent()
+            // Refresh the nearby-incidents layer around the user whenever the Map
+            // tab is shown AND the "Traffic alerts" layer is enabled. A single
+            // one-shot refresh was unreliable: on a cold open the fused
+            // last-known location is frequently null (no fix yet), so
+            // refreshAroundCurrent no-ops and the layer stays empty — the map
+            // shows nothing even though incidents exist in Firestore. So we retry
+            // a few times with a short backoff until a real location fix arrives
+            // (refreshAroundCurrent returns true → a single refresh ran) or the
+            // attempts are exhausted; failures leave the previous markers intact.
+            // We stop on the first successful fix rather than on a non-empty list,
+            // so an area with no active incidents does not keep re-firing the
+            // callable. Keyed on incidentsLayerEnabled so toggling the layer back
+            // on re-fetches immediately.
+            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled) {
+                val controller = incidentController ?: return@LaunchedEffect
+                if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
+                repeat(INCIDENTS_REFRESH_ATTEMPTS) { attempt ->
+                    if (controller.refreshAroundCurrent()) return@LaunchedEffect
+                    if (attempt < INCIDENTS_REFRESH_ATTEMPTS - 1) delay(INCIDENTS_REFRESH_RETRY_MS)
                 }
             }
 
@@ -847,6 +880,8 @@ fun AuthenticatedApp(
                                         // (requireMemberActor), so non-members must not
                                         // see an action that would fail on submit.
                                         incidentMarkers = incidentMarkers,
+                                        incidentsLayerEnabled = incidentsLayerEnabled,
+                                        onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                                         incidentReportingEnabled =
                                             incidentController != null && profile?.activeMember == true,
                                         onReportIncident = { type ->

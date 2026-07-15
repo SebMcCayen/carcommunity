@@ -803,6 +803,7 @@
     "layersTitle": "Map layers",
     "layersClose": "Close map layers",
     "layersTraffic": "Traffic",
+    "layersIncidents": "Traffic alerts",
     "layersNightMode": "Night mode",
     "layers3d": "3D buildings",
     "compass": "Reset to north",

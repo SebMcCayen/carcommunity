@@ -162,12 +162,18 @@ fun MapHome(
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
-    // Crowd-sourced incidents layer. [incidentMarkers] are drawn on the map so
-    // every user sees them; the report control (opening the type picker) is
+    // Crowd-sourced + Trafikverket incidents layer. [incidentMarkers] are drawn
+    // on the map so every user sees them, BUT only while [incidentsLayerEnabled]
+    // (the "Traffic alerts" toggle in the layers popup) is on — flipping it off
+    // pushes an empty set to the surface, and [onIncidentsLayerEnabledChange]
+    // reports the flip to the host so it can (re)fetch nearby incidents when the
+    // layer is switched back on. The report control (opening the type picker) is
     // shown only when [incidentReportingEnabled] (a repository is configured),
-    // and a pick invokes [onReportIncident]. All default to off so existing
-    // callers/tests are unaffected.
+    // and a pick invokes [onReportIncident]. All default so existing
+    // callers/tests are unaffected (layer on, no reporting).
     incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    incidentsLayerEnabled: Boolean = true,
+    onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
     onReportIncident: (IncidentType) -> Unit = {},
 ) {
@@ -220,10 +226,13 @@ fun MapHome(
         mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
-    // Push the crowd-sourced incident markers onto the surface whenever they
-    // change (or the surface instance is swapped), so every user sees them.
-    LaunchedEffect(mapSurface, incidentMarkers) {
-        mapSurface.setIncidentMarkers(incidentMarkers)
+    // Push the incident markers onto the surface whenever they change (or the
+    // surface instance is swapped), so every user sees them — but ONLY while the
+    // "Traffic alerts" layer is enabled. When it is off we push an empty set so
+    // the surface clears the markers (and the Trafikverket attribution hides),
+    // giving the toggle a real on/off effect on the map.
+    LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled) {
+        mapSurface.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
     }
 
     // Incident-report type picker open/close is local UI state: tapping the
@@ -444,6 +453,8 @@ fun MapHome(
         // toggles. Each toggle reads and writes the surface state live.
         if (layersOpen) {
             MapLayersPopup(
+                incidentsOn = incidentsLayerEnabled,
+                onIncidentsChange = onIncidentsLayerEnabledChange,
                 trafficOn = trafficOn,
                 // Drive the night Switch off the IMMEDIATE user intent (the
                 // effective desired mode) rather than the SURFACE's mapMode, which
@@ -505,6 +516,9 @@ const val MAP_HOME_REPORT_TAG = "map_home_report"
 /** Test tag on the map-layers popup card. */
 const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
 
+/** Test tag on the incidents ("Traffic alerts") layer toggle switch. */
+const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
+
 /** Test tag on the floating live-location broadcast control. */
 const val MAP_HOME_LIVE_TAG = "map_home_live"
 
@@ -517,17 +531,24 @@ const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
  * live map stays fully visible behind the toggle card; tapping outside the card
  * or pressing Back dismisses it (focusable popup). Each row reflects the current
  * surface state and updates it live:
- * - Traffic — the congestion overlay ([MapSurface.setTrafficEnabled]).
+ * - Traffic alerts — the Trafikverket + crowd-sourced incidents layer (accidents,
+ *   roadwork, hazards, police, closures) drawn as coloured markers. This is the
+ *   row wired to the Trafikverket open-data attribution below; the host draws /
+ *   clears the markers as it flips ([onIncidentsChange]).
+ * - Traffic — the Mapbox congestion overlay ([MapSurface.setTrafficEnabled]);
+ *   a DIFFERENT data source from the Trafikverket alerts above.
  * - Night mode — the Standard style's day/night light preset
  *   ([MapSurface.setMapMode]).
  * - 3D buildings — the tilted 3D vs flat 2D camera ([MapSurface.set3dEnabled]).
  *
- * The visible effects (traffic lines, light preset, tilt) only render on the
- * real token-provisioned Mapbox surface; on the stub the switches still move so
- * the wiring is exercised without a device.
+ * The visible effects (incident markers, congestion lines, light preset, tilt)
+ * only render on the real token-provisioned Mapbox surface; on the stub the
+ * switches still move so the wiring is exercised without a device.
  */
 @Composable
 private fun MapLayersPopup(
+    incidentsOn: Boolean,
+    onIncidentsChange: (Boolean) -> Unit,
     trafficOn: Boolean,
     nightMode: Boolean,
     is3d: Boolean,
@@ -583,6 +604,15 @@ private fun MapLayersPopup(
                         )
                     }
                 }
+                // Trafikverket + crowd-sourced incidents layer. Listed first as the
+                // flagship road-info layer; the "Källa: Trafikverket" attribution
+                // below belongs to THIS row and shows only while it is on.
+                LayerToggleRow(
+                    label = stringResource(R.string.shell_layersIncidents),
+                    checked = incidentsOn,
+                    onCheckedChange = onIncidentsChange,
+                    switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
+                )
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersTraffic),
                     checked = trafficOn,
@@ -600,14 +630,16 @@ private fun MapLayersPopup(
                 )
                 // Attribution for the Trafikverket-sourced incidents drawn on the
                 // map layer (product-owner requirement: credit Trafikverket wherever
-                // we show their open data). No per-incident detail sheet exists, so
-                // this general incidents-layer credit is the visible surface.
-                Text(
-                    text = stringResource(R.string.incidents_sourceTrafikverket),
-                    modifier = Modifier.padding(top = KccSpacing.s2),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // we show their open data). Shown only while the incidents layer is
+                // on — with it off, no Trafikverket data is on screen to attribute.
+                if (incidentsOn) {
+                    Text(
+                        text = stringResource(R.string.incidents_sourceTrafikverket),
+                        modifier = Modifier.padding(top = KccSpacing.s2),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -619,6 +651,7 @@ private fun LayerToggleRow(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    switchTestTag: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -630,7 +663,11 @@ private fun LayerToggleRow(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
+        )
     }
 }
 
