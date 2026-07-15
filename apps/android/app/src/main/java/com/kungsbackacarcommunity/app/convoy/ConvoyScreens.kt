@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -366,7 +367,12 @@ private fun SelectableFriendRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .toggleable(value = selected, enabled = enabled, onValueChange = { onToggle() })
+                    .toggleable(
+                        value = selected,
+                        enabled = enabled,
+                        role = Role.Checkbox,
+                        onValueChange = { onToggle() },
+                    )
                     .padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -378,7 +384,10 @@ private fun SelectableFriendRow(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f).padding(horizontal = KccSpacing.s3),
             )
-            Checkbox(checked = selected, onCheckedChange = { onToggle() }, enabled = enabled)
+            // Presentational only — the row's toggleable owns the click +
+            // accessibility semantics (Role.Checkbox), avoiding a duplicate toggle
+            // target. Mirrors the app's established selectable-row pattern.
+            Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
         }
     }
 }
