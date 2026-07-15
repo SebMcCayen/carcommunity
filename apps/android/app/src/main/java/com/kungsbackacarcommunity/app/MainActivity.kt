@@ -35,6 +35,8 @@ import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.FirebaseCommunityChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.FirebaseConvoyChatRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.dm.FirebaseDmRepository
@@ -163,6 +165,10 @@ class MainActivity : ComponentActivity() {
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
         val dmRepository = FirebaseDmRepository.createIfAvailable(applicationContext)
+        val communityChatRepository =
+            FirebaseCommunityChatRepository.createIfAvailable(applicationContext)
+        val convoyChatRepository =
+            FirebaseConvoyChatRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
@@ -273,6 +279,8 @@ class MainActivity : ComponentActivity() {
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
                         dmRepository = dmRepository,
+                        communityChatRepository = communityChatRepository,
+                        convoyChatRepository = convoyChatRepository,
                         drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,

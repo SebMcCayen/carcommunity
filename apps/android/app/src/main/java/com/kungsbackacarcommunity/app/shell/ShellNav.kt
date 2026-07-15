@@ -45,6 +45,8 @@ enum class ShellRoute {
     Conversations,
     /** A single 1:1 DM thread (target carried alongside the route). */
     Chat,
+    /** The 3-channel chat hub (Community / Convoys / Friends + Notifications), opened from the map chat bubble. */
+    ChatHub,
     Badges,
     Blocked,
     Points,
