@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
 import kotlinx.coroutines.launch
 
 /**
@@ -20,12 +23,49 @@ fun ConversationListRoute(
     repository: DmRepository,
     uid: String,
     onOpenConversation: (DmConversation) -> Unit,
+    errorReporter: ClientErrorReporter? = defaultClientErrorReporter(),
 ) {
+    // A retry bumps [retryKey], re-subscribing the inbox listener (a transient
+    // failure — offline, or a not-yet-active composite index — can then recover
+    // without leaving the user on a dead-end error).
+    var retryKey by remember(uid) { mutableStateOf(0) }
     val state by
-        remember(repository, uid) { repository.observeConversations(uid) }
+        remember(repository, uid, retryKey) { repository.observeConversations(uid) }
             .collectAsState(initial = DmConversationsState.Loading)
 
-    ConversationListScreen(state = state, onOpenConversation = onOpenConversation)
+    // Report a GENUINE load failure (never the empty state) to the admin Audit
+    // Log + deduped GitHub-issue pipeline. Keyed so it fires ONCE per entry into
+    // the Error state (and once per retry), not on every recomposition.
+    val error = state as? DmConversationsState.Error
+    LaunchedEffect(error != null, retryKey) {
+        if (error != null) {
+            errorReporter?.report(
+                feature = FEATURE_CONVERSATION_LIST,
+                message = "Conversation inbox listener failed to load",
+                code = error.code,
+            )
+        }
+    }
+
+    ConversationListScreen(
+        state = state,
+        onOpenConversation = onOpenConversation,
+        onRetry = { retryKey++ },
+    )
+}
+
+/** Stable feature key for the Messages inbox (matches the backend fingerprint input). */
+private const val FEATURE_CONVERSATION_LIST = "messages.conversationList"
+
+/**
+ * Builds the Firebase-backed [ClientErrorReporter] from the local context, or
+ * null in a config-less build. Isolated as the route's default so callers don't
+ * have to thread it through, and tests can inject a fake.
+ */
+@Composable
+private fun defaultClientErrorReporter(): ClientErrorReporter? {
+    val context = LocalContext.current
+    return remember(context) { FirebaseClientErrorReporter.createIfAvailable(context) }
 }
 
 /**

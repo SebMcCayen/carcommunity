@@ -12,25 +12,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Client-side image compression + metadata stripping run BEFORE upload so every
- * picked image (avatars, vehicle photos, and any FUTURE image upload) stays
- * small AND carries no identifying metadata: full-resolution phone photos are
- * commonly 3–8 MB and embed EXIF — including precise GPS coordinates — which
- * both risks the [MediaUpload] byte caps and would leak the owner's location.
+ * Client-side image compression (+ EXIF/GPS stripping for public uploads) run
+ * BEFORE upload so every picked image (avatars, vehicle photos, and any FUTURE
+ * image upload) stays small AND — for anything publicly visible — carries no
+ * identifying metadata: full-resolution phone photos are commonly 3–8 MB and
+ * embed EXIF — including precise GPS coordinates — which both risks the
+ * [MediaUpload] byte caps and would leak the owner's location.
  *
- * The happy path decodes the pick, downscales so its longest side is at most
- * [maxDimension]px (aspect preserved), honours the source EXIF orientation, and
- * re-encodes as JPEG at [quality]. Because a decoded [Bitmap] has NO metadata,
- * the re-encoded JPEG is inherently EXIF-free (no GPS, no make/model, no
- * timestamps) — stripping is a free by-product of the re-encode.
- *
- * The FALLBACK (when the pick cannot be decoded/shrunk) never returns raw
- * bytes blindly: it physically rewrites the JPEG without metadata via
- * [ExifInterface], and if it cannot guarantee a clean result it FAILS CLOSED
- * (returns null) rather than upload geotagged bytes. See [stripOrFail].
- *
- * Compression is centralised in [ImageUploadCoordinator], so callers get it by
- * construction and cannot accidentally upload an un-processed pick.
+ * Two entry points, one shared re-encode ([reencodeToJpeg]):
+ *  - [compress] is a best-effort SIZE optimisation. It decodes, downscales so
+ *    the longest side is at most [maxDimension]px (aspect preserved), honours
+ *    the source EXIF orientation, and re-encodes as JPEG at [quality] — but
+ *    keeps the original bytes when the re-encode would not shrink them. It is
+ *    NOT a privacy guarantee (it can hand back EXIF-bearing originals).
+ *  - [compressForPublicUpload] is the CANONICAL sanitiser for anything other
+ *    members can see. It GUARANTEES the returned bytes carry no EXIF/GPS: it
+ *    adopts the re-encode whenever it succeeds (a decoded [Bitmap] has no
+ *    metadata, so the JPEG is inherently EXIF-free), and when the pick cannot
+ *    be re-encoded it falls back to a physical metadata rewrite ([stripOrFail])
+ *    that either returns provably-clean bytes or FAILS CLOSED (returns null).
+ *    A null result means the caller MUST skip the upload — never fall back to
+ *    the raw pick — so no geotagged image ever leaves the device.
  */
 object ImageCompressor {
 
@@ -48,49 +50,84 @@ object ImageCompressor {
     const val DEFAULT_JPEG_QUALITY: Int = 80
 
     /**
-     * Downscales + re-encodes [picked] to a metadata-free JPEG off the main
-     * thread. Returns:
-     *  - a new [PickedImage] (`contentType = image/jpeg`) with no EXIF, or
-     *  - the original pick when it is provably free of location metadata but
-     *    could not be re-encoded, or
-     *  - `null` when the pick cannot be decoded AND cannot be proven clean —
-     *    the caller MUST treat null as a failed upload (never fall back to the
-     *    raw bytes), guaranteeing no geotagged image ever leaves the device.
+     * Downscales + re-encodes [picked] to JPEG off the main thread. Returns a
+     * new [PickedImage] with `contentType = image/jpeg`, or the original pick
+     * unchanged when it cannot be decoded or the re-encode would not shrink it.
+     *
+     * Size-optimising and best-effort: NOT a privacy guarantee. Because it can
+     * hand back the original bytes (EXIF intact) when the re-encode does not
+     * shrink the payload, callers uploading a PUBLICLY visible image must use
+     * [compressForPublicUpload] instead so location EXIF can never leak.
      */
     suspend fun compress(
         picked: PickedImage,
         maxDimension: Int = AVATAR_MAX_DIMENSION,
         quality: Int = DEFAULT_JPEG_QUALITY,
-    ): PickedImage? = withContext(Dispatchers.Default) {
-        val reencoded =
-            try {
-                compressBlocking(picked, maxDimension, quality)
-            } catch (e: CancellationException) {
-                throw e // never swallow cancellation — keep structured concurrency intact
-            } catch (_: Exception) {
-                null // decode/re-encode blew up unexpectedly; fall through to strip-or-fail
-            }
-        // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
-        // original's metadata or fail closed — we NEVER return raw picked bytes
-        // that might still carry GPS.
-        reencoded ?: stripOrFail(picked)
+    ): PickedImage = withContext(Dispatchers.Default) {
+        try {
+            val reencoded = reencodeToJpeg(picked, maxDimension, quality)
+            // Best-effort size optimisation: adopt the re-encode only when it is
+            // actually smaller; otherwise keep the original pick unchanged.
+            if (reencoded != null && reencoded.sizeBytes < picked.sizeBytes) reencoded else picked
+        } catch (e: CancellationException) {
+            throw e // never swallow cancellation — keep structured concurrency intact
+        } catch (_: Exception) {
+            picked // best-effort: fall back to the original pick (Errors like OOM propagate)
+        }
     }
 
     /**
-     * Decode → orient → downscale → re-encode. Returns a metadata-free JPEG
-     * [PickedImage], or null when the pick cannot be decoded or the re-encode
-     * fails (the caller then routes the original through [stripOrFail]). Note it
-     * NEVER returns the original bytes: the decode path always yields a clean
-     * JPEG, so any non-null result here is guaranteed EXIF-free.
+     * Sanitises [picked] for upload to a PUBLICLY visible location (e.g. a car
+     * profile photo other members can see): the returned bytes are GUARANTEED to
+     * carry no EXIF metadata, so a photo taken at the owner's home can never leak
+     * their GPS coordinates.
+     *
+     * Unlike [compress] this adopts the JPEG re-encode whenever it succeeds —
+     * even when it is not smaller than the source — because the decode+re-encode
+     * is what strips the EXIF (GPS included); dropping metadata matters more than
+     * shaving bytes here. When the pick cannot be re-encoded (corrupt / unusual
+     * image, or the decode threw) it does NOT give up on privacy: it routes the
+     * original through [stripOrFail], which physically rewrites the JPEG without
+     * metadata and, if it still cannot prove the bytes clean, FAILS CLOSED. A
+     * `null` result therefore means the image could not be proven metadata-free:
+     * the caller MUST skip the upload rather than send unsanitised bytes.
      */
-    private fun compressBlocking(
+    suspend fun compressForPublicUpload(
+        picked: PickedImage,
+        maxDimension: Int = AVATAR_MAX_DIMENSION,
+        quality: Int = DEFAULT_JPEG_QUALITY,
+    ): PickedImage? = withContext(Dispatchers.Default) {
+        try {
+            // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
+            // original's metadata or fail closed — we NEVER return raw picked
+            // bytes that might still carry GPS.
+            reencodeToJpeg(picked, maxDimension, quality) ?: stripOrFail(picked)
+        } catch (e: CancellationException) {
+            throw e // never swallow cancellation — keep structured concurrency intact
+        } catch (_: Exception) {
+            // Re-encode blew up unexpectedly; still try the physical-strip
+            // fallback (it never throws) before failing closed.
+            stripOrFail(picked)
+        }
+    }
+
+    /**
+     * Decodes, orients, downscales and re-encodes [picked] to a fresh JPEG whose
+     * bytes carry no EXIF. Returns the re-encoded [PickedImage] on success, or
+     * `null` when the image cannot be decoded or the encode produced no bytes.
+     * The size-vs-original decision is left to the caller so both the best-effort
+     * ([compress]) and privacy-guaranteed ([compressForPublicUpload]) paths can
+     * share the exact same re-encode.
+     */
+    private fun reencodeToJpeg(
         picked: PickedImage,
         maxDimension: Int,
         quality: Int,
     ): PickedImage? {
         // Guard against invalid tuning params before touching any pixels: a
         // non-positive maxDimension would make sampleSizeFor() loop forever, and
-        // Bitmap.compress only defines JPEG quality over 0..100.
+        // Bitmap.compress only defines JPEG quality over 0..100. In either case
+        // there is nothing sensible to re-encode.
         if (maxDimension <= 0 || quality !in 0..100) return null
 
         val source = picked.bytes
@@ -118,11 +155,10 @@ object ImageCompressor {
             val ok = bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
             val encoded = out.toByteArray()
 
-            // Adopt the re-encode whenever it produced a valid buffer. A decoded
-            // Bitmap has no metadata, so this JPEG is inherently EXIF-free (no
-            // GPS). We deliberately DO NOT keep the original when the re-encode
-            // rounds larger — uploading a slightly bigger but clean JPEG beats
-            // leaking the raw pick's location; the upload cap is enforced later.
+            // Bitmap.compress returns false on failure and can leave an empty/
+            // partial buffer, so only treat a successful, non-empty encode as a
+            // valid re-encode. The re-encoded JPEG carries no EXIF regardless of
+            // its size; whether to prefer it over the source is the caller's call.
             return if (ok && encoded.isNotEmpty()) {
                 PickedImage(bytes = encoded, contentType = "image/jpeg")
             } else {
@@ -140,7 +176,8 @@ object ImageCompressor {
      *  1. physically rewrite the JPEG without metadata (works even when the
      *     pixels are undecodable — [ExifInterface] parses the APP1 block), else
      *  2. keep the original ONLY when it provably carries no GPS, else
-     *  3. FAIL CLOSED (null) — a geotagged pick is dropped, never uploaded.
+     *  3. FAIL CLOSED (null) — a geotagged (or unparseable) pick is dropped,
+     *     never uploaded.
      */
     private fun stripOrFail(picked: PickedImage): PickedImage? {
         stripInPlace(picked)?.let { return it }
@@ -179,12 +216,21 @@ object ImageCompressor {
         }.getOrNull()
     }
 
-    /** True when [bytes] embed any GPS location EXIF tag (fail-closed signal). */
+    /**
+     * Conservative, fail-closed location gate for [stripOrFail]/[stripInPlace].
+     * Returns true when [bytes] MIGHT embed a GPS location, so a caller only
+     * treats a `false` here as "provably location-free". Two deliberate choices
+     * keep it from ever passing geotagged bytes through:
+     *  - if the EXIF cannot be parsed we assume it COULD carry location (an
+     *    unparseable, possibly-geotagged file must never be treated as clean); and
+     *  - ANY GPS tag counts — not just latitude/longitude, but destination
+     *    coordinates or any other GPS-IFD field ([GPS_TAGS]).
+     */
     private fun carriesLocation(bytes: ByteArray): Boolean {
         val exif =
             runCatching { ByteArrayInputStream(bytes).use { ExifInterface(it) } }.getOrNull()
-                ?: return false // couldn't parse EXIF → no readable location metadata
-        return GPS_LOCATION_TAGS.any { tag -> exif.getAttribute(tag) != null }
+                ?: return true // EXIF unparseable → cannot prove clean → fail closed
+        return GPS_TAGS.any { tag -> exif.getAttribute(tag) != null }
     }
 
     /**
@@ -264,24 +310,15 @@ object ImageCompressor {
         return rotated
     }
 
-    /** GPS tags whose presence means the pick embeds a location (fail-closed). */
-    private val GPS_LOCATION_TAGS =
-        listOf(
-            ExifInterface.TAG_GPS_LATITUDE,
-            ExifInterface.TAG_GPS_LATITUDE_REF,
-            ExifInterface.TAG_GPS_LONGITUDE,
-            ExifInterface.TAG_GPS_LONGITUDE_REF,
-        )
-
     /**
-     * EXIF tags cleared when physically stripping a fallback JPEG: every GPS tag
-     * (location, precise to metres) plus common identifying tags (device make /
-     * model / serial, capture timestamps, author). Setting each to null and
-     * calling saveAttributes() removes it from the rewritten file.
+     * Every GPS EXIF tag. The presence of ANY of these means the pick embeds
+     * location (or location-adjacent) data, so [carriesLocation] treats it as a
+     * fail-closed signal — we deliberately do NOT try to decide which GPS fields
+     * are "harmless". Covers primary coordinates, destination coordinates, and
+     * the rest of the GPS IFD. Also reused as the GPS half of [STRIP_TAGS].
      */
-    private val STRIP_TAGS =
+    private val GPS_TAGS =
         listOf(
-            // --- GPS: location, the critical privacy leak ---
             ExifInterface.TAG_GPS_ALTITUDE,
             ExifInterface.TAG_GPS_ALTITUDE_REF,
             ExifInterface.TAG_GPS_AREA_INFORMATION,
@@ -313,7 +350,11 @@ object ImageCompressor {
             ExifInterface.TAG_GPS_TRACK,
             ExifInterface.TAG_GPS_TRACK_REF,
             ExifInterface.TAG_GPS_VERSION_ID,
-            // --- Identifying: device + capture provenance ---
+        )
+
+    /** Non-GPS identifying tags cleared alongside [GPS_TAGS] when stripping. */
+    private val IDENTIFYING_TAGS =
+        listOf(
             ExifInterface.TAG_MAKE,
             ExifInterface.TAG_MODEL,
             ExifInterface.TAG_SOFTWARE,
@@ -325,4 +366,12 @@ object ImageCompressor {
             ExifInterface.TAG_DATETIME_ORIGINAL,
             ExifInterface.TAG_DATETIME_DIGITIZED,
         )
+
+    /**
+     * EXIF tags cleared when physically stripping a fallback JPEG: every GPS tag
+     * (location, precise to metres) plus common identifying tags (device make /
+     * model / serial, capture timestamps, author). Setting each to null and
+     * calling saveAttributes() removes it from the rewritten file.
+     */
+    private val STRIP_TAGS = GPS_TAGS + IDENTIFYING_TAGS
 }

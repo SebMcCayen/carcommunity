@@ -8,12 +8,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -110,24 +108,17 @@ class NavigationSearchScreenTest {
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Head north on Main Street").assertIsDisplayed()
 
-        // The "Start" (turn-by-turn) CTA is gated on BuildConfig.NAV_SDK_ENABLED:
-        // it appears once a route is resolved ONLY in a build that bundles the
-        // Mapbox Navigation SDK. Token-less builds (the config-less/CI path this
-        // test runs in) compile the noNav stub and hide the CTA.
-        if (BuildConfig.NAV_SDK_ENABLED) {
-            composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
-        } else {
-            composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertDoesNotExist()
-        }
+        // The "Start" CTA appears once a route is resolved in EVERY build: the host
+        // decides how it navigates (in-app Mapbox turn-by-turn when the SDK is
+        // bundled, else a maps-app handoff), so the preview never dead-ends.
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
     }
 
     @Test
     fun startButton_invokesOnStartNavigation_withDestination() {
-        // The Start CTA only exists in a build with the Navigation SDK bundled
-        // (BuildConfig.NAV_SDK_ENABLED). In the token-less noNav config there is
-        // nothing to click, so skip rather than fail (covered by the hidden-CTA
-        // assertion in typingShowsSuggestion_andSelectingShowsDirections).
-        assumeTrue(BuildConfig.NAV_SDK_ENABLED)
+        // The Start CTA is present in every build and always reports the pick via
+        // onStartNavigation; the host then routes it to in-app turn-by-turn or a
+        // maps-app handoff based on the build variant.
         var started: Pair<LatLng, String>? = null
         composeTestRule.setContent {
             KccTheme {
@@ -161,5 +152,26 @@ class NavigationSearchScreenTest {
             suggestion.point to suggestion.name,
             started,
         )
+    }
+
+    @Test
+    fun emptyState_showsRecentPlaces() {
+        composeTestRule.setContent {
+            KccTheme {
+                NavigationSearchScreen(
+                    mapSurface = StubMapSurface(),
+                    searchClient = FakeClient(emptyList(), null),
+                    originProvider = { LatLng(12.0757, 57.4874) },
+                    onClose = {},
+                    onStartNavigation = { _, _ -> },
+                    recentStore = InMemoryRecentSearchesStore(listOf(suggestion)),
+                )
+            }
+        }
+
+        // With an empty query, the recent-places card is shown up front.
+        composeTestRule.onNodeWithText(str(R.string.addressSearch_recentTitle))
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(suggestion.name).assertIsDisplayed()
     }
 }

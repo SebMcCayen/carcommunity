@@ -33,42 +33,40 @@ fun CrownHuntScreen(
     modifier: Modifier = Modifier,
 ) {
     AeroPage(title = stringResource(R.string.crownHunt_screenTitle), modifier = modifier) {
-            WarningCard(stringResource(R.string.crownHunt_safetyNoDriving))
+        if (!isActiveMember) {
+            InfoCard(
+                title = stringResource(R.string.subscription_teaserTitle),
+                body = stringResource(R.string.subscription_memberRequiredBody),
+            )
+            return@AeroPage
+        }
 
-            if (!isActiveMember) {
-                InfoCard(
-                    title = stringResource(R.string.subscription_teaserTitle),
-                    body = stringResource(R.string.subscription_memberRequiredBody),
+        ClaimStatusBanner(claimStatus)
+
+        when (pointsState) {
+            CrownHuntPointsState.Loading ->
+                Text(
+                    text = stringResource(R.string.crownHunt_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                return@AeroPage
-            }
 
-            ClaimStatusBanner(claimStatus)
+            CrownHuntPointsState.Error ->
+                Text(
+                    text = stringResource(R.string.crownHunt_error),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
 
-            when (pointsState) {
-                CrownHuntPointsState.Loading ->
-                    Text(
-                        text = stringResource(R.string.crownHunt_loading),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            is CrownHuntPointsState.Loaded ->
+                pointsState.points.forEach { point ->
+                    PointCard(
+                        point = point,
+                        collectEnabled = claimStatus != CrownHuntClaimStatus.Claiming,
+                        onCollect = { onCollect(point.id) },
                     )
-
-                CrownHuntPointsState.Error ->
-                    Text(
-                        text = stringResource(R.string.crownHunt_error),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-
-                is CrownHuntPointsState.Loaded ->
-                    pointsState.points.forEach { point ->
-                        PointCard(
-                            point = point,
-                            collectEnabled = claimStatus != CrownHuntClaimStatus.Claiming,
-                            onCollect = { onCollect(point.id) },
-                        )
-                    }
-            }
+                }
+        }
     }
 }
 
@@ -152,21 +150,6 @@ private fun PointCard(point: CrownHuntPoint, collectEnabled: Boolean, onCollect:
                 Text(text = stringResource(R.string.crownHunt_collectButton))
             }
         }
-    }
-}
-
-@Composable
-private fun WarningCard(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(12.dp),
-        )
     }
 }
 

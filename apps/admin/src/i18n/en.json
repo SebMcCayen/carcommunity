@@ -233,6 +233,7 @@
     "subtitle": "Look up a user's membership and grant or revoke it manually.",
     "userIdLabel": "User ID",
     "userIdPlaceholder": "uid",
+    "fromProfileHint": "User ID is pre-filled from the profile and cannot be changed here.",
     "lookup": "Look up",
     "lookupLoading": "Loading…",
     "lookupError": "Could not load the subscription.",
@@ -640,6 +641,7 @@
     "action": {
       "adminSetFeatureFlag": "Feature flag changed",
       "badgeAwardHelpfulMember": "Badge awarded (Helpful Member)",
+      "clientError": "App error reported",
       "billboardsActivate": "Billboard activated",
       "billboardsCreate": "Billboard created",
       "billboardsEnd": "Billboard ended",

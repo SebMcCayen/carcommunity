@@ -21,6 +21,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ fun ConversationListScreen(
     state: DmConversationsState,
     onOpenConversation: (DmConversation) -> Unit,
     modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {},
 ) {
     // Durable list: a LazyColumn so only visible rows compose. The title is the
     // first `item {}`; conversation rows are keyed by conversationId so
@@ -68,13 +70,18 @@ fun ConversationListScreen(
                 DmConversationsState.Loading ->
                     item(key = "loading") { CircularProgressIndicator() }
 
-                DmConversationsState.Error ->
+                is DmConversationsState.Error ->
                     item(key = "error") {
-                        Text(
-                            text = stringResource(R.string.dm_loadError),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                            Text(
+                                text = stringResource(R.string.dm_loadError),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            TextButton(onClick = onRetry) {
+                                Text(stringResource(R.string.dm_retry))
+                            }
+                        }
                     }
 
                 is DmConversationsState.Loaded ->

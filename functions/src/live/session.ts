@@ -31,9 +31,11 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
+  toLiveMainCar,
   type LiveSession,
   type LiveStopReason,
 } from './live-core';
+import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -62,12 +64,31 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
     throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
   }
 
-  const profile = await db.collection('users').doc(actor.uid).get();
+  // Denormalize the caller's main car onto the session so viewers of the live
+  // share see which car it is. The garage is capped at MAX_VEHICLES_PER_USER,
+  // so the owner query (single-field userId index — no composite index needed)
+  // is cheap; the main car is the one flagged isMainCar (max 1, enforced by
+  // garage.setMainVehicle). The .limit() bounds Firestore reads to the cap even
+  // if corrupt/legacy data ever leaves a user with more owned vehicles.
+  // The profile read and the vehicles query are independent, so fetch them in
+  // parallel to keep startSession latency low.
+  const [profile, ownedVehicles] = await Promise.all([
+    db.collection('users').doc(actor.uid).get(),
+    db
+      .collection('vehicles')
+      .where('userId', '==', actor.uid)
+      .limit(MAX_VEHICLES_PER_USER)
+      .get(),
+  ]);
+  const mainCar = toLiveMainCar(
+    ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
+  );
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
     (profile.data()?.displayName as string | undefined) ?? null,
+    mainCar,
   );
   // Starting while a session is active RESTARTS it (fresh id + expiry).
   // Any previous marker is removed immediately — it carries the OLD

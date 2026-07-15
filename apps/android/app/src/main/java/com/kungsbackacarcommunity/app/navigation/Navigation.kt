@@ -42,6 +42,70 @@ data class RouteStep(
 )
 
 /**
+ * Store of the user's most-recently selected places, surfaced in the search
+ * bar's empty state so a place can be re-opened with a single tap.
+ *
+ * A seam (interface) so [NavigationController] and its tests depend only on this
+ * — not on Android SharedPreferences: production uses the prefs-backed
+ * implementation ([com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore]),
+ * tests inject the in-memory [InMemoryRecentSearchesStore].
+ */
+interface RecentSearchesStore {
+    /** Previously selected places, most-recent-first, already capped. */
+    fun recent(): List<PlaceSuggestion>
+
+    /** Records [place] as the newest recent (de-duplicated + capped). */
+    fun record(place: PlaceSuggestion)
+}
+
+/**
+ * Pure recent-search list logic (promote-to-front, de-duplicate, cap),
+ * independent of any storage backend so it is JVM-unit-testable.
+ */
+object RecentSearches {
+    /** How many recents are persisted. */
+    const val MAX = 5
+
+    /** How many are shown in the empty search state. */
+    const val SHOWN = 3
+
+    /**
+     * Returns [existing] with [place] promoted to the front: any prior entry for
+     * the same place (matched by [PlaceSuggestion.id], else by coordinate) is
+     * dropped first so a re-selected place moves up instead of duplicating, then
+     * the list is capped to [max].
+     */
+    fun record(
+        existing: List<PlaceSuggestion>,
+        place: PlaceSuggestion,
+        max: Int = MAX,
+    ): List<PlaceSuggestion> {
+        val deduped = existing.filterNot { it.samePlace(place) }
+        return (listOf(place) + deduped).take(max)
+    }
+
+    private fun PlaceSuggestion.samePlace(other: PlaceSuggestion): Boolean =
+        if (id.isNotBlank() && other.id.isNotBlank()) id == other.id else point == other.point
+}
+
+/**
+ * In-memory [RecentSearchesStore] used by unit tests and Compose previews, and
+ * as the default so a caller that has no persistence still works (recents just
+ * do not survive process death).
+ */
+class InMemoryRecentSearchesStore(
+    initial: List<PlaceSuggestion> = emptyList(),
+) : RecentSearchesStore {
+    private var items: List<PlaceSuggestion> = initial.take(RecentSearches.MAX)
+
+    override fun recent(): List<PlaceSuggestion> = items
+
+    override fun record(place: PlaceSuggestion) {
+        items = RecentSearches.record(items, place)
+    }
+}
+
+/**
  * A driving route from the user's location to the chosen destination: total
  * distance + duration, the ordered geometry to draw as a line, and the
  * step-by-step maneuver list.
@@ -165,9 +229,28 @@ object MapboxRequests {
     const val GEOCODE_LIMIT = 6
 
     /**
-     * Forward-geocoding (autocomplete) request against Mapbox Geocoding v6.
-     * [proximity] biases results toward the user when known. Returns null for a
-     * blank query so callers never issue an empty request.
+     * Default country bias (ISO 3166-1 alpha-2). The app is a Kungsbacka/Sweden
+     * community app, so results are constrained to Sweden — this both localizes
+     * the ranking and keeps the small result set relevant.
+     */
+    const val DEFAULT_COUNTRY = "SE"
+
+    /**
+     * Forward search request against the Mapbox **Search Box** API's `/forward`
+     * endpoint.
+     *
+     * Unlike Geocoding v6 (the previous backend), the Search Box API resolves
+     * points of interest / businesses ("Kungsmässan", a café, a workshop) in
+     * addition to addresses and streets — a single GET returns both, as a GeoJSON
+     * FeatureCollection whose features carry `properties.name` / `full_address` /
+     * `mapbox_id` and a `geometry.coordinates` pair, so the existing parser is
+     * unchanged. `/forward` (not `/suggest` + `/retrieve`) is used deliberately:
+     * it needs no interactive session token yet still returns coordinates inline.
+     *
+     * Results are biased to the app's locale/region: [proximity] toward the user
+     * when known, [country] (Sweden by default), and [language] for localized
+     * labels. Returns null for a blank query so callers never issue an empty
+     * request.
      */
     fun forwardGeocode(
         query: String,
@@ -175,19 +258,47 @@ object MapboxRequests {
         proximity: LatLng? = null,
         language: String? = null,
         limit: Int = GEOCODE_LIMIT,
+        country: String? = DEFAULT_COUNTRY,
     ): String? {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return null
         val sb =
-            StringBuilder("https://api.mapbox.com/search/geocode/v6/forward")
+            StringBuilder("https://api.mapbox.com/search/searchbox/v1/forward")
                 .append("?q=").append(encode(trimmed))
-                .append("&autocomplete=true")
                 .append("&limit=").append(limit)
                 .append("&access_token=").append(encode(token))
         if (proximity != null) {
             sb.append("&proximity=")
                 .append(fmt(proximity.longitude)).append(",").append(fmt(proximity.latitude))
         }
+        if (!country.isNullOrBlank()) {
+            sb.append("&country=").append(encode(country))
+        }
+        if (!language.isNullOrBlank()) {
+            sb.append("&language=").append(encode(language))
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Reverse-geocoding request against the Mapbox **Search Box** API's
+     * `/reverse` endpoint: resolves a coordinate (e.g. a map long-press) to the
+     * nearest place/address as a GeoJSON FeatureCollection in the same shape the
+     * forward parser reads. [limit] defaults to 1 (only the nearest match is
+     * needed to label a dropped pin).
+     */
+    fun reverseGeocode(
+        point: LatLng,
+        token: String,
+        language: String? = null,
+        limit: Int = 1,
+    ): String {
+        val sb =
+            StringBuilder("https://api.mapbox.com/search/searchbox/v1/reverse")
+                .append("?longitude=").append(fmt(point.longitude))
+                .append("&latitude=").append(fmt(point.latitude))
+                .append("&limit=").append(limit)
+                .append("&access_token=").append(encode(token))
         if (!language.isNullOrBlank()) {
             sb.append("&language=").append(encode(language))
         }

@@ -13,7 +13,8 @@
  *  - Store refunds/cancellations are provider-side and out of scope.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import {
   adminGetUserSubscription,
@@ -69,7 +70,16 @@ function platformLabel(platform: string): string {
 }
 
 export default function SubscriptionPage() {
-  const [userId, setUserId] = useState('');
+  const [searchParams] = useSearchParams();
+  // When the admin arrives from a specific user's profile
+  // (/subscription?uid=…) the target UID is already known, so it is pre-filled
+  // and locked read-only — a mistyped UID on a destructive grant/revoke is
+  // dangerous. Without the param the page is a standalone lookup (reachable
+  // from the sidebar) and the UID stays manually editable.
+  const presetUid = (searchParams.get('uid') ?? '').trim();
+  const fromProfile = presetUid.length > 0;
+
+  const [userId, setUserId] = useState(presetUid);
   const [summary, setSummary] = useState<AdminUserSubscriptionSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +96,14 @@ export default function SubscriptionPage() {
     setError(null);
     setSuccessMessage(null);
     setActionError(null);
+    // Clear the previous user's summary immediately so grant/revoke (which key
+    // off summary.userId) can't act on the prior user while this lookup is in
+    // flight — the read-only UID field already shows the new target by now.
+    setSummary(null);
+    // Drop any half-typed reason too: a reason entered for the previous user
+    // must never carry over to a new lookup and get applied to a different UID
+    // with one click on a destructive grant/revoke.
+    setReason('');
     try {
       const result = await adminGetUserSubscription(uid);
       setSummary(result);
@@ -97,12 +115,40 @@ export default function SubscriptionPage() {
     }
   }, []);
 
+  // Keep the input in sync with the query param. The initial useState(presetUid)
+  // only runs on first mount; the field must track presetUid on every change so
+  // it never shows a stale UID. Whenever presetUid changes — whether it arrives,
+  // clears, OR switches from one non-empty UID to another (navigating between two
+  // profile-scoped /subscription?uid=… routes while still mounted) — we fully
+  // re-scope: mirror the new UID and drop the previous user's summary, reason and
+  // messages. Resetting on *every* change (not just empty↔non-empty) closes the
+  // window where a stale summary/reason could target the previous UID before the
+  // auto-lookup effect below reloads for the new one.
+  useEffect(() => {
+    setUserId(presetUid);
+    setSummary(null);
+    setError(null);
+    setSuccessMessage(null);
+    setActionError(null);
+    setReason('');
+  }, [presetUid]);
+
+  // Auto-look-up when a UID arrives via the profile link, so pressing
+  // "Hantera prenumeration" opens the flow already scoped to that user.
+  useEffect(() => {
+    if (presetUid) void load(presetUid);
+  }, [presetUid, load]);
+
   const handleLookup = (e: React.FormEvent) => {
     e.preventDefault();
     // Block a lookup while a grant/revoke is in flight — otherwise its refresh
     // (load after the action) can race/overwrite the manual lookup.
     if (actingRef.current) return;
-    const uid = userId.trim();
+    // When arriving from a profile the query param is the source of truth for the
+    // target UID; the field is read-only and userId mirrors presetUid, but that
+    // mirror can lag by a render if the param just changed. Read presetUid
+    // directly in that case so a lookup can never target a stale/divergent UID.
+    const uid = (fromProfile ? presetUid : userId).trim();
     if (uid) void load(uid);
   };
 
@@ -157,6 +203,8 @@ export default function SubscriptionPage() {
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             placeholder={t('subscription.userIdPlaceholder')}
+            readOnly={fromProfile}
+            aria-readonly={fromProfile}
           />
           <button
             type="submit"
@@ -166,6 +214,7 @@ export default function SubscriptionPage() {
             {loading ? t('subscription.lookupLoading') : t('subscription.lookup')}
           </button>
         </div>
+        {fromProfile && <p className={styles.hint}>{t('subscription.fromProfileHint')}</p>}
       </form>
 
       {error && (

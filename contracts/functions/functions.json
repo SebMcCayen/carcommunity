@@ -523,6 +523,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "errors.reportClientError",
+      "domain": "errors",
+      "description": "Reports a genuine client-side RUNTIME error (e.g. the Messages inbox listener failing). AUTHENTICATED (non-suspended, non-deleted; no member entitlement required): unauthenticated callers are rejected with unauthenticated (pre-auth failures use diagnostics.submitReport). Rate-limited to 30 reports/hour/user (resource-exhausted when exceeded). Persists the PRIVATE record of record to clientErrorReports/{reportId} (admin-only read; carries the uid + bounded error context) FIRST, then writes an adminAuditEvents entry (action client.error, adminId=uid, targetId=fingerprint) so the error shows in the admin Audit Log. The errors-onClientErrorReport Firestore trigger then files ONE deduplicated PUBLIC GitHub issue per unique fingerprint (labelled auto-error + auto-generated) via the GITHUB_ISSUE_TOKEN secret, tallying occurrences in the server-only clientErrorIssueLinks/{fingerprint} collection so a recurring error never spams issues. PUBLIC-REPO SAFETY: the issue body carries only the feature key + app-generated message/code + non-identifying client context + fingerprint; the uid is NEVER attached to the public issue (it stays in the admin-only clientErrorReports doc + audit details). Deployed via grouped export as errors-reportClientError (functions/src/errors/reportClientError.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "account.deleteAccount",
       "domain": "account",
       "description": "Immediate soft delete (stage 1 of the two-stage deletion workflow): disables the Firebase Auth user and revokes refresh tokens FIRST (fail-safe ordering), then writes accountDeletionRequests/{uid} (status pending) and users/{uid}.deleted=true atomically. Idempotent — repeat calls return the pending request. signedIn access: works while suspended (deletion is a support path). The hard purge runs after the 30-day retention window via the scheduled account-purgeDeleted (Firestore trees, owned vehicles/rides, storage prefixes, the Auth user; moderation/audit history is deliberately retained and the request record becomes the proof-of-deletion). Deployed via grouped export as account-deleteAccount (functions/src/account/deleteAccount.ts).",

@@ -257,7 +257,6 @@
     <string name="chat_errorLoading">Kunde inte ladda chatten. Försök igen.</string>
     <string name="chat_errorSending">Kunde inte skicka meddelandet. Försök igen.</string>
     <string name="chat_unknownAuthor">Okänd</string>
-    <string name="chat_safeDrivingWarning">Använd inte chatten medan du kör.</string>
     <string name="chat_drivingDisabled">Chatten är avstängd medan du kör.</string>
     <string name="chat_drivingStopFirst">Stanna säkert innan du använder chatten.</string>
     <string name="chat_reportReasonHarassment">Trakasserier</string>
@@ -368,7 +367,6 @@
     <string name="groupDrive_participantCount">Deltagare</string>
     <string name="groupDrive_setStatus">Uppdatera status</string>
     <string name="groupDrive_liveLocationDisclaimer">Din liveposition delas bara om du själv har startat en aktiv delningssession.</string>
-    <string name="groupDrive_safeDrivingWarning">Använd inte appen medan du kör.</string>
     <string name="groupDrive_safeDrivingStopFirst">Stanna säkert innan du ändrar status.</string>
     <string name="groupDrive_liveLocationSeparate">Livepositionsdelning hanteras separat.</string>
     <string name="groupDrive_mapTitle">Gruppkarta</string>
@@ -514,7 +512,6 @@
     <string name="crownHunt_claiming">Samlar in...</string>
     <string name="crownHunt_rewardLabel">Belöning: {points} KP</string>
     <string name="crownHunt_safetyStop">Stanna säkert innan du samlar in belöningen.</string>
-    <string name="crownHunt_safetyNoDriving">Använd inte appen medan du kör.</string>
     <string name="crownHunt_safetySlowOnly">Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt.</string>
     <string name="crownHunt_movingTooFast">Du rör dig för snabbt för att samla in.</string>
     <string name="crownHunt_tooFarAway">Du är för långt från platsen.</string>
@@ -672,6 +669,7 @@
     <string name="dm_unreadCount">%1$d olästa meddelanden</string>
     <string name="dm_empty">Du har inga meddelanden än.</string>
     <string name="dm_loadError">Kunde inte ladda dina meddelanden.</string>
+    <string name="dm_retry">Försök igen</string>
     <string name="dm_unknownMember">Medlem</string>
     <string name="dm_emptyThread">Inga meddelanden än — säg hej!</string>
     <string name="dm_inputPlaceholder">Skriv ett meddelande…</string>
@@ -738,6 +736,7 @@
     <string name="shell_layersTitle">Kartlager</string>
     <string name="shell_layersClose">Stäng kartlager</string>
     <string name="shell_layersTraffic">Trafik</string>
+    <string name="shell_layersIncidents">Trafikvarningar</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
     <string name="shell_compass">Återställ till norr</string>
@@ -749,6 +748,9 @@
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>
     <string name="addressSearch_close">Stäng</string>
+    <string name="addressSearch_recentTitle">Senaste</string>
+    <string name="addressSearch_droppedPin">Markerad plats</string>
+    <string name="addressSearch_navAppMissing">Ingen kartapp hittades för att starta navigering.</string>
     <string name="addressSearch_noResults">Inga matchande platser</string>
     <string name="addressSearch_searchError">Kunde inte hämta resultat. Kontrollera anslutningen och försök igen.</string>
     <string name="addressSearch_routeError">Kunde inte hitta en rutt till platsen.</string>

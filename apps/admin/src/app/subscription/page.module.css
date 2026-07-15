@@ -51,6 +51,12 @@
   font-size: var(--text-sm);
 }
 
+.hint {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
 .card {
   display: flex;
   flex-direction: column;

@@ -257,7 +257,6 @@
     <string name="chat_errorLoading">Could not load chat. Please try again.</string>
     <string name="chat_errorSending">Could not send message. Please try again.</string>
     <string name="chat_unknownAuthor">Unknown</string>
-    <string name="chat_safeDrivingWarning">Do not use chat while driving.</string>
     <string name="chat_drivingDisabled">Chat is disabled while driving.</string>
     <string name="chat_drivingStopFirst">Stop safely before using chat.</string>
     <string name="chat_reportReasonHarassment">Harassment</string>
@@ -368,7 +367,6 @@
     <string name="groupDrive_participantCount">Participants</string>
     <string name="groupDrive_setStatus">Update status</string>
     <string name="groupDrive_liveLocationDisclaimer">Your live location is only shared if you have started an active sharing session yourself.</string>
-    <string name="groupDrive_safeDrivingWarning">Do not use the app while driving.</string>
     <string name="groupDrive_safeDrivingStopFirst">Stop safely before changing status.</string>
     <string name="groupDrive_liveLocationSeparate">Live location sharing is managed separately.</string>
     <string name="groupDrive_mapTitle">Group map</string>
@@ -514,7 +512,6 @@
     <string name="crownHunt_claiming">Collecting...</string>
     <string name="crownHunt_rewardLabel">Reward: {points} KP</string>
     <string name="crownHunt_safetyStop">Stop safely before collecting the reward.</string>
-    <string name="crownHunt_safetyNoDriving">Do not use the app while driving.</string>
     <string name="crownHunt_safetySlowOnly">Crown Hunt may only be used when you are stationary or moving very slowly.</string>
     <string name="crownHunt_movingTooFast">You are moving too fast to collect.</string>
     <string name="crownHunt_tooFarAway">You are too far from the location.</string>
@@ -672,6 +669,7 @@
     <string name="dm_unreadCount">%1$d unread messages</string>
     <string name="dm_empty">You have no messages yet.</string>
     <string name="dm_loadError">Couldn\'t load your messages.</string>
+    <string name="dm_retry">Try again</string>
     <string name="dm_unknownMember">Member</string>
     <string name="dm_emptyThread">No messages yet — say hi!</string>
     <string name="dm_inputPlaceholder">Write a message…</string>
@@ -738,6 +736,7 @@
     <string name="shell_layersTitle">Map layers</string>
     <string name="shell_layersClose">Close map layers</string>
     <string name="shell_layersTraffic">Traffic</string>
+    <string name="shell_layersIncidents">Traffic alerts</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
     <string name="shell_compass">Reset to north</string>
@@ -749,6 +748,9 @@
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
     <string name="addressSearch_close">Close</string>
+    <string name="addressSearch_recentTitle">Recent</string>
+    <string name="addressSearch_droppedPin">Dropped pin</string>
+    <string name="addressSearch_navAppMissing">No maps app found to start navigation.</string>
     <string name="addressSearch_noResults">No matching places</string>
     <string name="addressSearch_searchError">Couldn\'t load results. Check your connection and try again.</string>
     <string name="addressSearch_routeError">Couldn\'t find a route to that place.</string>

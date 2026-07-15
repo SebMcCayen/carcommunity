@@ -4,6 +4,7 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -221,11 +222,24 @@ class IncidentReportControllerTest {
         }
 
     @Test
-    fun `refreshAroundCurrent is a no-op without a fix`() = runTest {
+    fun `refreshAroundCurrent is a no-op and returns false without a fix`() = runTest {
         val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
         val controller = IncidentReportController(fake) { null }
-        controller.refreshAroundCurrent()
+        // false signals "no fix yet" so the shell retry loop keeps trying.
+        assertFalse(controller.refreshAroundCurrent())
         assertEquals(0, fake.listNearbyCalls)
         assertTrue(controller.nearbyIncidents.value.isEmpty())
+    }
+
+    @Test
+    fun `refreshAroundCurrent refreshes and returns true with a fix`() = runTest {
+        val seeded = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0))
+        val fake = FakeIncidentRepository(nearby = seeded)
+        val controller = IncidentReportController(fake) { here }
+        // true signals a fix was available, so the shell retry loop stops even
+        // when the fetched list is empty (an area with no active incidents).
+        assertTrue(controller.refreshAroundCurrent())
+        assertEquals(1, fake.listNearbyCalls)
+        assertEquals(seeded, controller.nearbyIncidents.value)
     }
 }

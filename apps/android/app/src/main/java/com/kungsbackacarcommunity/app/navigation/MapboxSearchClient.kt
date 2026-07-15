@@ -20,11 +20,19 @@ interface MapboxSearchClient {
 
     /** The driving route between two points, or null when none can be produced. */
     suspend fun route(origin: LatLng, destination: LatLng): RouteSummary?
+
+    /**
+     * The nearest place/address to [point] (reverse geocoding), used to label a
+     * map long-press ("navigate here"). Returns null when nothing resolves — the
+     * caller then falls back to a generic label. Defaults to null so fakes that
+     * only exercise forward search need not implement it.
+     */
+    suspend fun reverseGeocode(point: LatLng): PlaceSuggestion? = null
 }
 
 /**
- * [MapboxSearchClient] backed by the Mapbox REST APIs (Geocoding v6 +
- * Directions v5) over [HttpURLConnection].
+ * [MapboxSearchClient] backed by the Mapbox REST APIs (Search Box v1 `/forward`
+ * for address + POI search, Directions v5 for routing) over [HttpURLConnection].
  *
  * ## Token guard (config-less CI / no network)
  * May be constructed with a blank `mapbox_access_token` (the wiring builds this
@@ -63,6 +71,13 @@ class HttpMapboxSearchClient(
         return runCatching { parseRoute(body) }.getOrNull()
     }
 
+    override suspend fun reverseGeocode(point: LatLng): PlaceSuggestion? {
+        if (token.isBlank()) return null
+        val url = MapboxRequests.reverseGeocode(point, token, language)
+        val body = runCatchingCancellable { get(url) }.getOrNull() ?: return null
+        return runCatching { parseSuggestions(body).firstOrNull() }.getOrNull()
+    }
+
     private suspend fun get(url: String): String? =
         withContext(Dispatchers.IO) {
             val connection = URL(url).openConnection() as HttpURLConnection
@@ -81,7 +96,7 @@ class HttpMapboxSearchClient(
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
 
-        /** Maps a Mapbox Geocoding v6 FeatureCollection to [PlaceSuggestion]s. */
+        /** Maps a Mapbox Search Box `/forward` FeatureCollection to [PlaceSuggestion]s. */
         fun parseSuggestions(json: String): List<PlaceSuggestion> {
             val features = JSONObject(json).optJSONArray("features") ?: return emptyList()
             val out = ArrayList<PlaceSuggestion>(features.length())

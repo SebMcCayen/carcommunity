@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -57,7 +56,6 @@ fun GroupDriveScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            WarningCard(stringResource(R.string.groupDrive_safeDrivingWarning))
             Text(
                 text = stringResource(R.string.groupDrive_liveLocationSeparate),
                 style = MaterialTheme.typography.bodySmall,
@@ -156,21 +154,6 @@ private fun StatusButton(
         OutlinedButton(onClick = { onSetStatus(status) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(text = stringResource(labelRes))
         }
-    }
-}
-
-@Composable
-private fun WarningCard(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(12.dp),
-        )
     }
 }
 

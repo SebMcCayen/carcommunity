@@ -778,6 +778,30 @@ service cloud.firestore {
       // No client writes: feedback.reportIssue only.
     }
 
+    // clientErrorReports – authenticated client-error record of record (Android)
+    // Admin-only read. The PRIVATE record: carries the reporter's uid, the
+    // (app-generated) error message/code, client context, the dedup fingerprint,
+    // and the cross-referenced GitHub issue number/url/status. ALL writes go
+    // through the errors.reportClientError callable (Admin SDK), which also
+    // writes the adminAuditEvents entry and whose onClientErrorReport trigger
+    // files the deduped PUBLIC issue without attaching the uid — a direct client
+    // create would bypass that safety, so none is allowed.
+    match /clientErrorReports/{reportId} {
+      allow read: if isAdmin();
+      // No client writes: errors.reportClientError only.
+    }
+
+    // clientErrorIssueLinks – client-error → GitHub issue dedup index (server-only)
+    // Keyed by the error fingerprint. Written EXCLUSIVELY by the
+    // errors-onClientErrorReport Firestore trigger (Admin SDK): it stores the
+    // filed public issue number/url plus the occurrence tally so one unique
+    // client error maps to one issue. Admin-only read for triage; NO client
+    // writes — a client write could forge/spoof the dedup link or issue ref.
+    match /clientErrorIssueLinks/{fingerprint} {
+      allow read: if isAdmin();
+      // No client writes: errors-onClientErrorReport (Admin SDK) only.
+    }
+
     // signInIssueLinks – sign-in-failure → GitHub issue dedup index (server-only)
     // Keyed by the diagnostics report fingerprint. Written EXCLUSIVELY by the
     // diagnostics-onSignInFailure Firestore trigger (Admin SDK): it stores the

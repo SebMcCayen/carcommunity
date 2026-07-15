@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -85,7 +84,6 @@ fun EventChatScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            WarningCard(stringResource(R.string.chat_safeDrivingWarning))
 
             if (!canParticipate) {
                 InfoCard(
@@ -329,21 +327,6 @@ private fun ReportReasonDialog(onSelect: (ChatReportReason) -> Unit, onDismiss: 
 private fun ReasonButton(labelRes: Int, reason: ChatReportReason, onSelect: (ChatReportReason) -> Unit) {
     TextButton(onClick = { onSelect(reason) }, modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(labelRes))
-    }
-}
-
-@Composable
-private fun WarningCard(text: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(12.dp),
-        )
     }
 }
 

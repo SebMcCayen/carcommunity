@@ -39,6 +39,8 @@ import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManag
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
+import com.mapbox.maps.plugin.gestures.OnMapLongClickListener
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
@@ -108,6 +110,13 @@ class MapboxMapSurface : MapSurface {
     private val incidentMarkersFlow = MutableStateFlow<List<MapIncidentMarker>>(emptyList())
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
+
+    private val longPressFlow = MutableStateFlow<MapPoint?>(null)
+    override val longPress: StateFlow<MapPoint?> = longPressFlow.asStateFlow()
+
+    // The map long-click gesture listener (Google-Maps "hold to navigate here");
+    // held so it can be detached in onRelease.
+    private var longClickListener: OnMapLongClickListener? = null
 
     // Live references, held only while the map is composed (cleared in
     // onRelease). Touched on the main thread from Compose callbacks.
@@ -187,6 +196,14 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the incident
         // circles when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun emitLongPress(point: MapPoint) {
+        longPressFlow.value = point
+    }
+
+    override fun consumeLongPress() {
+        longPressFlow.value = null
     }
 
     override fun refreshLocationComponent() {
@@ -322,6 +339,22 @@ class MapboxMapSurface : MapSurface {
                         }
                     cameraChangeListener = camListener
                     runCatching { mapboxMap.addOnCameraChangeListener(camListener) }
+                    // Long-press (hold) anywhere on the map to navigate there,
+                    // Google-Maps style: publish the pressed lng/lat so the host
+                    // opens the route preview for it. This is the hold gesture only
+                    // — pan/zoom/rotate (drag/pinch/two-finger) are untouched, so it
+                    // never conflicts with normal map manipulation. Returning true
+                    // marks the long-press handled.
+                    val longPressListener =
+                        OnMapLongClickListener { point ->
+                            // Publish through the shared hook (not longPressFlow
+                            // directly) so all long-press publishing goes through
+                            // one place and stays consistent with the stub surface.
+                            emitLongPress(MapPoint(point.longitude(), point.latitude()))
+                            true
+                        }
+                    longClickListener = longPressListener
+                    runCatching { gestures.addOnMapLongClickListener(longPressListener) }
                     // Default camera until the first GPS fix arrives.
                     mapboxMap.setCamera(
                         cameraOptions {
@@ -417,6 +450,10 @@ class MapboxMapSurface : MapSurface {
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }
                 cameraChangeListener = null
+                longClickListener?.let { l ->
+                    runCatching { mapView.gestures.removeOnMapLongClickListener(l) }
+                }
+                longClickListener = null
                 // Reset the mirrored bearing now that the camera-change listener is
                 // detached. This surface outlives the MapView (it's remembered across
                 // tab switches while the MapView is destroyed/recreated), so without

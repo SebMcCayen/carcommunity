@@ -126,6 +126,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -133,9 +134,11 @@ import com.kungsbackacarcommunity.app.media.MediaUploader
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -181,6 +184,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * How many times the Map tab retries the nearby-incidents refresh while no
+ * location fix is available yet, and the delay between attempts. Covers the
+ * common cold-open case where the fused last-known location is momentarily null
+ * (no fix yet), so the first refresh no-ops; a handful of retries lets a real
+ * fix arrive and populate the layer without a busy loop. Once a fix is
+ * available the loop stops after a single refresh, so an area with no active
+ * incidents does not keep retrying.
+ */
+private const val INCIDENTS_REFRESH_ATTEMPTS = 5
+private const val INCIDENTS_REFRESH_RETRY_MS = 3_000L
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -346,6 +361,13 @@ fun AuthenticatedApp(
                         )
                     }
                 }
+            // Visibility of the "Traffic alerts" layer (Trafikverket + crowd-sourced
+            // incidents) toggled from the map-layers popup. Defaults ON (the shared
+            // road-info layer is visible to all users); persisted so the choice
+            // survives rotation / process death. Gating the fetch below on this flag
+            // means a user who turns the layer off stops polling, and turning it back
+            // on re-fetches immediately.
+            var incidentsLayerEnabled by rememberSaveable { mutableStateOf(true) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -433,11 +455,25 @@ fun AuthenticatedApp(
             val incidentLocationUnavailableText =
                 stringResource(R.string.incidents_locationUnavailable)
 
-            // Refresh the nearby-incidents layer around the user each time the
-            // Map tab is shown (a no-op without a fix; keeps the last markers).
-            LaunchedEffect(selectedTab, incidentController) {
-                if (selectedTab == ShellTab.Map) {
-                    incidentController?.refreshAroundCurrent()
+            // Refresh the nearby-incidents layer around the user whenever the Map
+            // tab is shown AND the "Traffic alerts" layer is enabled. A single
+            // one-shot refresh was unreliable: on a cold open the fused
+            // last-known location is frequently null (no fix yet), so
+            // refreshAroundCurrent no-ops and the layer stays empty — the map
+            // shows nothing even though incidents exist in Firestore. So we retry
+            // a few times with a short backoff until a real location fix arrives
+            // (refreshAroundCurrent returns true → a single refresh ran) or the
+            // attempts are exhausted; failures leave the previous markers intact.
+            // We stop on the first successful fix rather than on a non-empty list,
+            // so an area with no active incidents does not keep re-firing the
+            // callable. Keyed on incidentsLayerEnabled so toggling the layer back
+            // on re-fetches immediately.
+            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled) {
+                val controller = incidentController ?: return@LaunchedEffect
+                if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
+                repeat(INCIDENTS_REFRESH_ATTEMPTS) { attempt ->
+                    if (controller.refreshAroundCurrent()) return@LaunchedEffect
+                    if (attempt < INCIDENTS_REFRESH_ATTEMPTS - 1) delay(INCIDENTS_REFRESH_RETRY_MS)
                 }
             }
 
@@ -461,6 +497,25 @@ fun AuthenticatedApp(
                 }
             val originProvider: suspend () -> LatLng? =
                 remember(context) { { CurrentLocation.lastKnown(context) } }
+            // Persists the last few selected places (SharedPreferences) so they
+            // reappear in the search bar's empty state for one-tap re-selection.
+            val recentSearchesStore =
+                remember(context) { PrefsRecentSearchesStore(context) }
+            // Resolved in composition (lint: no resource lookups off the UI thread)
+            // for the "no maps app" handoff fallback below.
+            val navAppMissingText = stringResource(R.string.addressSearch_navAppMissing)
+
+            // Map long-press ("navigate here"): the surface publishes the pressed
+            // coordinate; open the search/route overlay previewing that point.
+            // Cleared on the surface once consumed so a later press re-triggers.
+            var navSearchTarget by remember { mutableStateOf<LatLng?>(null) }
+            val pendingLongPress by mapSurface.longPress.collectAsState()
+            LaunchedEffect(pendingLongPress) {
+                val pressed = pendingLongPress ?: return@LaunchedEffect
+                navSearchTarget = LatLng(pressed.longitude, pressed.latitude)
+                navSearchOpen = true
+                mapSurface.consumeLongPress()
+            }
 
             // Flag-gated (not member-gated) reach to the live-location feature.
             val liveLocationEnabled =
@@ -641,11 +696,35 @@ fun AuthenticatedApp(
                         onClose = {
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
+                            // Drop any long-press target so re-opening via the
+                            // search bar starts in the normal search-first state.
+                            navSearchTarget = null
                         },
                         onStartNavigation = { dest, label ->
-                            navDestinationLabel = label
-                            navDestination = dest
+                            // Real in-app Mapbox turn-by-turn only exists in a build
+                            // that bundles the Navigation SDK (NAV_SDK_ENABLED). The
+                            // token-less noNav build (incl. the current Play release —
+                            // its CI provides no MAPBOX_DOWNLOADS_TOKEN) would only
+                            // show the "unavailable" stub, so there we hand off to the
+                            // device's maps app for genuine turn-by-turn instead.
+                            if (BuildConfig.NAV_SDK_ENABLED) {
+                                navDestinationLabel = label
+                                navDestination = dest
+                            } else {
+                                ExternalNavigation.launch(
+                                    context = context,
+                                    destination = dest,
+                                    label = label,
+                                    onUnavailable = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(navAppMissingText)
+                                        }
+                                    },
+                                )
+                            }
                         },
+                        recentStore = recentSearchesStore,
+                        initialTarget = navSearchTarget,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {
@@ -846,6 +925,8 @@ fun AuthenticatedApp(
                                         // (requireMemberActor), so non-members must not
                                         // see an action that would fail on submit.
                                         incidentMarkers = incidentMarkers,
+                                        incidentsLayerEnabled = incidentsLayerEnabled,
+                                        onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                                         incidentReportingEnabled =
                                             incidentController != null && profile?.activeMember == true,
                                         onReportIncident = { type ->
@@ -971,22 +1052,19 @@ fun AuthenticatedApp(
                                 ShellTab.Garage ->
                                     GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
-                                        // The main car's photo replaces the profile
-                                        // picture at the top of the garage; fall back
-                                        // to the user's avatar when no main car is set.
-                                        // Derived from the hoisted shared garage
-                                        // stream — no listener of its own.
+                                        // The garage identity header shows the main
+                                        // car's photo ONLY — the user's profile
+                                        // picture is deliberately NOT shown here (the
+                                        // garage is about cars, not profiles). When no
+                                        // main car is set the hub falls back to the
+                                        // car placeholder icon. Derived from the
+                                        // hoisted shared garage stream — no listener
+                                        // of its own.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                mainCarImagePath(garageState)
-                                                    ?: profile?.avatarPath,
+                                                mainCarImagePath(garageState),
                                             ),
-                                        // The header image can be the main car's
-                                        // photo or the user's profile picture (or
-                                        // neither), so use a neutral description
-                                        // that stays accurate for both sources and
-                                        // the fallback person icon.
                                         avatarContentDescription =
                                             stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =
@@ -1287,16 +1365,26 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        // The coordinator downscales + JPEG-re-encodes + strips
-                        // EXIF/GPS before upload; the path is built from the
-                        // PROCESSED content type so the extension matches.
-                        avatarCoordinator.upload(
-                            picked,
-                            pathFor = { ct ->
-                                MediaUpload.profileImagePath(uid, MediaUpload.newImageId(ct))
-                            },
-                        ) { storedPath ->
-                            repo.updateAvatarPath(uid, storedPath)
+                        // Strip EXIF/GPS metadata BEFORE upload: avatars are PUBLICLY
+                        // readable by any authenticated member (storage.rules), so a
+                        // selfie taken at the owner's home must never leak their
+                        // coordinates. compressForPublicUpload downscales + re-encodes
+                        // to JPEG (dropping all EXIF, GPS included) and GUARANTEES the
+                        // returned bytes are EXIF-free — it returns null instead of
+                        // falling back to the un-sanitised original, so we fail closed
+                        // and skip the upload rather than risk leaking source metadata.
+                        val sanitized = ImageCompressor.compressForPublicUpload(picked)
+                        if (sanitized != null) {
+                            val imageId = MediaUpload.newImageId(sanitized.contentType)
+                            val path = MediaUpload.profileImagePath(uid, imageId)
+                            avatarCoordinator.upload(sanitized, path) { storedPath ->
+                                repo.updateAvatarPath(uid, storedPath)
+                            }
+                        } else {
+                            // Sanitisation failed (decode/re-encode returned null), so
+                            // nothing was uploaded. Surface the failure instead of a
+                            // silent no-op so the user knows to retry.
+                            avatarCoordinator.markFailed()
                         }
                     }
                 }

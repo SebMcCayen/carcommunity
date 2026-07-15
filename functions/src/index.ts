@@ -68,6 +68,8 @@ import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
+import { reportClientError } from './errors/reportClientError';
+import { onClientErrorReport } from './errors/onClientErrorReport';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
@@ -406,6 +408,28 @@ export const diagnostics = {
  */
 export const feedback = {
   reportIssue,
+};
+
+/**
+ * Errors domain (grouped export → deployed as `errors-reportClientError` and
+ * the Firestore trigger `errors-onClientErrorReport`).
+ *
+ * The single client-side error-reporting pipeline (contracts/functions/
+ * functions.json: errors.reportClientError). An authenticated app reports a
+ * genuine runtime error (e.g. the Messages inbox listener failing); the
+ * callable persists the private clientErrorReports/{reportId} record of record
+ * (admin-only read; carries the uid) AND writes an adminAuditEvents entry
+ * (action `client.error`) so the failure shows in the KCC admin Audit Log. The
+ * errors-onClientErrorReport Firestore trigger then files ONE deduplicated
+ * PUBLIC GitHub issue per unique fingerprint (labelled `auto-error` +
+ * `auto-generated`), tracking occurrences in the server-only
+ * clientErrorIssueLinks/{fingerprint} collection — reusing the shared GitHub
+ * helper + GITHUB_ISSUE_TOKEN secret. No uid or secret ever reaches the public
+ * issue (functions/src/errors/*).
+ */
+export const errors = {
+  reportClientError,
+  onClientErrorReport,
 };
 
 /**

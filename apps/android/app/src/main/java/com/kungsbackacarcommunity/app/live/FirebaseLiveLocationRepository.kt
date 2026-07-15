@@ -7,7 +7,9 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.garage.VehicleValidation
 import java.time.Instant
+import java.time.Year
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
@@ -141,7 +143,37 @@ private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
     val latitude = child("latitude").getValue(Double::class.java) ?: return null
     val longitude = child("longitude").getValue(Double::class.java) ?: return null
     val displayName = child("displayName").getValue(String::class.java)
-    return LiveMarker(uid = uid, latitude = latitude, longitude = longitude, displayName = displayName)
+    return LiveMarker(
+        uid = uid,
+        latitude = latitude,
+        longitude = longitude,
+        displayName = displayName,
+        mainCar = child("mainCar").toLiveMainCar(),
+    )
+}
+
+/**
+ * Maps the RTDB `mainCar` child (written by live.startSession's denormalization)
+ * to [LiveMainCar], or null when absent or missing a required display field.
+ * modelYear is read as a [Long] (RTDB stores integers as Long) and narrowed.
+ */
+private fun DataSnapshot.toLiveMainCar(): LiveMainCar? {
+    if (!exists()) return null
+    val make = child("make").getValue(String::class.java) ?: return null
+    val model = child("model").getValue(String::class.java) ?: return null
+    // Guard the Long before narrowing: a bare toInt() silently overflows on
+    // malformed data (a client writing a huge/negative value would surface a
+    // wrong year). Only accept plausible model years (same bounds the garage
+    // form enforces); anything outside drops the whole main car rather than
+    // render a bogus year.
+    val modelYear =
+        child("modelYear").getValue(Long::class.java)?.let { raw ->
+            val minYear = VehicleValidation.MIN_MODEL_YEAR.toLong()
+            val maxYear = VehicleValidation.maxModelYear(Year.now().value).toLong()
+            if (raw in minYear..maxYear) raw.toInt() else null
+        } ?: return null
+    val imagePath = child("imagePath").getValue(String::class.java)
+    return LiveMainCar(make = make, model = model, modelYear = modelYear, imagePath = imagePath)
 }
 
 /** Maps the RTDB session node to the Firebase-free [LiveSessionInfo]. */

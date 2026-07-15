@@ -35,10 +35,12 @@ class NavigationControllerTest {
     private class FakeClient(
         private val suggestions: List<PlaceSuggestion> = emptyList(),
         private val route: RouteSummary? = null,
+        private val reverse: PlaceSuggestion? = null,
     ) : MapboxSearchClient {
         var lastQuery: String? = null
         var lastProximity: LatLng? = null
         var geocodeCalls: Int = 0
+        var lastReversePoint: LatLng? = null
 
         override suspend fun geocode(query: String, proximity: LatLng?): List<PlaceSuggestion> {
             geocodeCalls++
@@ -48,6 +50,11 @@ class NavigationControllerTest {
         }
 
         override suspend fun route(origin: LatLng, destination: LatLng): RouteSummary? = route
+
+        override suspend fun reverseGeocode(point: LatLng): PlaceSuggestion? {
+            lastReversePoint = point
+            return reverse
+        }
     }
 
     @Test
@@ -184,6 +191,47 @@ class NavigationControllerTest {
         assertEquals(routeSummary, state.route)
         assertFalse(state.routeLoading)
         assertNull(state.error)
+    }
+
+    @Test
+    fun `selectPoint reverse-geocodes the label and routes to the pressed point`() = runTest {
+        val pressed = LatLng(longitude = 12.10, latitude = 57.50)
+        val resolved =
+            PlaceSuggestion(id = "poi", name = "Kungsmässan", address = "Innerstaden", point = pressed)
+        val client = FakeClient(route = routeSummary, reverse = resolved)
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+        controller.refreshOrigin()
+        advanceUntilIdle()
+
+        controller.selectPoint(pressed, fallbackLabel = "Dropped pin")
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertEquals(pressed, client.lastReversePoint)
+        // Resolved name is used for the label; the destination stays the pressed point.
+        assertEquals("Kungsmässan", state.destination?.name)
+        assertEquals(pressed, state.destination?.point)
+        assertEquals(routeSummary, state.route)
+        // The dropped pin is recorded as a recent for one-tap re-selection.
+        assertEquals("Kungsmässan", controller.state.value.recents.firstOrNull()?.name)
+    }
+
+    @Test
+    fun `selectPoint falls back to the dropped-pin label when reverse geocoding is empty`() = runTest {
+        val pressed = LatLng(longitude = 12.10, latitude = 57.50)
+        val client = FakeClient(route = routeSummary, reverse = null)
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+        controller.refreshOrigin()
+        advanceUntilIdle()
+
+        controller.selectPoint(pressed, fallbackLabel = "Dropped pin")
+        advanceUntilIdle()
+
+        val state = controller.state.value
+        assertEquals("Dropped pin", state.destination?.name)
+        assertEquals(pressed, state.destination?.point)
+        // Address falls back to the raw coordinates.
+        assertTrue(state.destination?.address?.contains("57.50000") == true)
     }
 
     @Test
