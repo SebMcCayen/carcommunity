@@ -164,4 +164,25 @@ describe('public issue payload', () => {
     expect(payload.body).not.toContain('@maintainer');
     expect(payload.body).not.toContain('#123');
   });
+
+  it('collapses newlines/tabs in the message so a bullet renders single-line', () => {
+    const payload = buildClientErrorIssuePayload(
+      sampleReport({ message: 'line one\n- injected: bullet\tafter\ttab\nline three' }),
+      { firstSeenIso: '2026-07-15T00:00:00.000Z', count: 1 },
+    );
+    const messageLine = payload.body
+      .split('\n')
+      .find((line) => line.startsWith('- Message:'));
+    expect(messageLine).toBeDefined();
+    // The whole (whitespace-collapsed) message stays on the one bullet line.
+    expect(messageLine).toBe('- Message: `line one - injected: bullet after tab line three`');
+    // No raw newline/tab from the payload leaked a second bullet into the body.
+    expect(payload.body).not.toContain('\t');
+    // The crafted "- injected:" text never becomes its own bullet line; it
+    // stays inside the single Message bullet's inline-code span.
+    const injectedAsBullet = payload.body
+      .split('\n')
+      .some((line) => line.startsWith('- injected:'));
+    expect(injectedAsBullet).toBe(false);
+  });
 });

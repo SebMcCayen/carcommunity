@@ -30,7 +30,12 @@ interface ClientErrorReporter {
     fun report(feature: String, message: String, code: String? = null)
 }
 
-/** No-op reporter used when Firebase is unavailable (CI / local validation builds). */
+/**
+ * No-op reporter for tests/previews that need a real [ClientErrorReporter] which
+ * does nothing (production callers instead receive `null` from
+ * [FirebaseClientErrorReporter.createIfAvailable] and treat that as "reporting
+ * unavailable").
+ */
 object NoopClientErrorReporter : ClientErrorReporter {
     override fun report(feature: String, message: String, code: String?) = Unit
 }
@@ -38,7 +43,8 @@ object NoopClientErrorReporter : ClientErrorReporter {
 /**
  * [ClientErrorReporter] backed by the `errors-reportClientError` callable
  * (europe-west1). Guarded ([createIfAvailable]): returns null when Firebase is
- * not configured, so callers fall back to [NoopClientErrorReporter].
+ * not configured. Callers treat a null reporter as "reporting unavailable" and
+ * simply skip the report (a no-op) — e.g. `errorReporter?.report(...)`.
  *
  * Best-effort and non-blocking: the callable is fired via the Task API and every
  * failure (network, rate limit, sign-out) is swallowed — a failure to REPORT an

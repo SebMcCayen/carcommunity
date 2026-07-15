@@ -371,10 +371,17 @@ export interface ClientErrorIssueMeta {
 /**
  * Renders a client-supplied scalar as a markdown inline-code span so it cannot
  * inject a link/image/html into the world-readable issue body; backticks are
- * neutralized first, and @mention/#ref are defanged. Mirrors the sign-in path.
+ * neutralized first, and @mention/#ref are defanged. All whitespace (including
+ * the newlines/tabs that `boundText` preserves on the `message` field) is
+ * collapsed to single spaces so a crafted payload cannot break out of the
+ * bullet layout — mirroring the single-line guarantee `boundContext` gives the
+ * sign-in path.
  */
 function inlineCodeScalar(value: string): string {
-  const safe = neutralizeMentions(value).replace(/`/g, "'");
+  const safe = neutralizeMentions(value)
+    .replace(/`/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
   return `\`${safe}\``;
 }
 
