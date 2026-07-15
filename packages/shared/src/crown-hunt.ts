@@ -14,7 +14,6 @@
  *
  * Safety copy (always use Swedish in user-facing text):
  *  - "Stanna säkert innan du samlar in belöningen."
- *  - "Använd inte appen medan du kör."
  *  - "Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt."
  *
  * Excluded from public mobile contracts:
@@ -172,11 +171,6 @@ export interface CrownHuntPointDetail extends CrownHuntPointSummary {
    * Always: "Stanna säkert innan du samlar in belöningen."
    */
   safetyInstruction: string;
-  /**
-   * Swedish driving warning.
-   * Always: "Använd inte appen medan du kör."
-   */
-  drivingWarning: string;
 }
 
 // ---------------------------------------------------------------------------

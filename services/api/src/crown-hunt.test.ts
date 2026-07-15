@@ -1298,3 +1298,64 @@ await test('listActivePoints does not return other users claim state', async () 
   // Current user has NOT claimed this point
   assert.equal(result.points[0]!.claimedByCurrentUser, false);
 });
+
+await test('getPointDetail returns safetyInstruction and omits the removed driving-warning field', async () => {
+  const prisma = buildFakePrisma({
+    points: [activePoint()],
+    users: [{ id: USER_ID, status: 'active', role: 'user', subscriptionEntitlement: 'member_monthly' }],
+  });
+  const svc = buildService(prisma);
+
+  const detail = await svc.getPointDetail(POINT_ID, USER_ID);
+
+  // Expected point-detail shape is still returned in full.
+  assert.equal(detail.pointId, POINT_ID);
+  assert.equal(detail.title, 'Testpunkt');
+  assert.equal(detail.status, 'active');
+  assert.equal(detail.rewardPoints, 10);
+  assert.equal(detail.geofenceRadiusMeters, 50);
+  assert.equal(detail.repeatRule, 'once');
+  assert.equal(detail.claimedByCurrentUser, false);
+
+  // The safety instruction is still present…
+  assert.equal(detail.safetyInstruction, 'Stanna säkert innan du samlar in belöningen.');
+
+  // …but the driving-warning field must no longer be part of the response
+  // (guards against accidental reintroduction / contract drift).
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(detail, 'drivingWarning'),
+    'Point detail must not include the removed drivingWarning field',
+  );
+});
+
+await test('getPointDetail reflects the current users claim state', async () => {
+  const prisma = buildFakePrisma({
+    points: [activePoint()],
+    users: [{ id: USER_ID, status: 'active', role: 'user', subscriptionEntitlement: 'member_monthly' }],
+    claims: [{
+      id: 'my-claim',
+      pointId: POINT_ID,
+      userId: USER_ID,
+      pointsLedgerEntryId: null,
+      result: 'awarded',
+      claimedAt: new Date(),
+      distanceMeters: 5,
+      reportedSpeedMetersPerSecond: 0,
+      positionRecordedAt: new Date(),
+      riskScore: null,
+      riskReasons: null,
+      idempotencyKey: 'my-claim-key',
+      createdAt: new Date(),
+      point: { title: 'Testpunkt', rewardPoints: 10 },
+    }],
+  });
+  const svc = buildService(prisma);
+
+  const detail = await svc.getPointDetail(POINT_ID, USER_ID);
+  assert.equal(detail.claimedByCurrentUser, true);
+  assert.equal(detail.safetyInstruction, 'Stanna säkert innan du samlar in belöningen.');
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(detail, 'drivingWarning'),
+    'Point detail must not include the removed drivingWarning field',
+  );
+});
