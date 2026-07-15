@@ -6,6 +6,8 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.push.PushChannels
@@ -40,6 +42,18 @@ class KccApplication : Application() {
         // FirebaseApp.initializeApp returns null when configuration is
         // absent — mirror FirebaseAuthRepository.createIfAvailable.
         val firebaseApp = FirebaseApp.initializeApp(this) ?: return
+
+        // Debug-only local-emulator wiring. Compiled out of release (the release
+        // buildType hardcodes USE_FIREBASE_EMULATOR=false and BuildConfig.DEBUG is
+        // false there), and off in a normal debug build unless it was assembled
+        // with -PuseFirebaseEmulator=true. Must run before any Auth/Firestore use,
+        // so it lives here in Application.onCreate ahead of MainActivity's wiring.
+        // 10.0.2.2 is the Android emulator's alias for the host loopback, where the
+        // Firebase Auth (9099) and Firestore (8080) emulators listen (firebase.json).
+        if (BuildConfig.DEBUG && BuildConfig.USE_FIREBASE_EMULATOR) {
+            FirebaseAuth.getInstance(firebaseApp).useEmulator("10.0.2.2", 9099)
+            FirebaseFirestore.getInstance(firebaseApp).useEmulator("10.0.2.2", 8080)
+        }
 
         val appCheck = FirebaseAppCheck.getInstance(firebaseApp)
         if (BuildConfig.DEBUG) {

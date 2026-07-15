@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -76,6 +77,12 @@ fun SignInScreen(
     // null (production) = random pick per screen display, stable across
     // recomposition and rotation via rememberSaveable.
     quoteIndex: Int? = null,
+    // Debug-only dev sign-in. Non-null ONLY in a debug build wired to the local
+    // Firebase emulator (MainActivity passes it under
+    // BuildConfig.DEBUG && BuildConfig.USE_FIREBASE_EMULATOR); null everywhere
+    // else, including all release builds, so the affordance never renders in
+    // production and Google Sign-In stays the sole production path.
+    onDevSignInClick: (() -> Unit)? = null,
 ) {
     // The sign-in screen is a brand moment shown over Ink Black art, so it
     // always renders light-on-dark (light content over the dark background)
@@ -151,6 +158,18 @@ fun SignInScreen(
                         }
 
                         SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
+                    }
+
+                    // Debug-only dev sign-in (local emulator builds only). Never
+                    // shown in production: onDevSignInClick is null there.
+                    if (onDevSignInClick != null) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = onDevSignInClick,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(text = "Dev sign-in (Sven — emulator)")
+                        }
                     }
 
                     Spacer(Modifier.height(24.dp))

@@ -115,6 +115,17 @@ if (file("google-services.json").exists()) {
     apply(plugin = libs.plugins.google.services.get().pluginId)
 }
 
+// Debug-only local Firebase emulator switch. When true (and DEBUG), the app
+// points Firebase Auth + Firestore at the local emulators (10.0.2.2:9099/8080)
+// and exposes a dev email/password sign-in so a locally-seeded test user can be
+// used without production or Google Sign-In. Off by default, so a normal debug
+// build still hits production. Enable with:
+//     ./gradlew :app:assembleDebug -PuseFirebaseEmulator=true
+// Release builds hardcode this to false (see the release buildType below), so
+// the emulator wiring and dev sign-in are compiled out of production entirely.
+val useFirebaseEmulator: Boolean =
+    (providers.gradleProperty("useFirebaseEmulator").orNull ?: "false").trim().toBoolean()
+
 android {
     namespace = "com.kungsbackacarcommunity.app"
     // compileSdk 36 is required by core-ktx 1.18 / activity-compose 1.13 (their
@@ -160,6 +171,9 @@ android {
             // Resolved above: empty unless MAPBOX_ACCESS_TOKEN / mapbox.properties
             // provides a token. Empty keeps config-less/CI builds green.
             resValue("string", "mapbox_access_token", mapboxAccessToken)
+            // Local-emulator switch (see useFirebaseEmulator above). Only a debug
+            // build launched with -PuseFirebaseEmulator=true turns this on.
+            buildConfigField("boolean", "USE_FIREBASE_EMULATOR", useFirebaseEmulator.toString())
         }
         release {
             if (hasReleaseSigning) {
@@ -177,6 +191,9 @@ android {
                 debugSymbolLevel = "FULL"
             }
             resValue("string", "mapbox_access_token", mapboxAccessToken)
+            // Never point a release build at a local emulator, regardless of any
+            // Gradle property: production always uses live Firebase + Google auth.
+            buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "false")
         }
     }
 

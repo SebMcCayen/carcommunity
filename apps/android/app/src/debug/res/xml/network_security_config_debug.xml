@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-ONLY network security config. Lives in src/debug, so it is merged only
+  into debug builds — release builds never permit cleartext traffic.
+
+  Permits cleartext (HTTP) to the local Firebase emulators, which serve plain
+  HTTP on the host loopback (10.0.2.2 from the Android emulator; localhost for
+  a physical device over adb reverse). Only used when a debug build is assembled
+  with -PuseFirebaseEmulator=true; otherwise the app talks HTTPS to production.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

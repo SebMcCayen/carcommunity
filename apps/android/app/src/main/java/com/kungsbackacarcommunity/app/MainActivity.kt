@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.auth.FirebaseAuth
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
@@ -203,6 +204,27 @@ class MainActivity : ComponentActivity() {
         val subscriptionVerifier =
             FirebaseSubscriptionVerifier.createIfAvailable(applicationContext)
 
+        // Debug-only dev sign-in against the local Firebase Auth emulator. Only a
+        // debug build assembled with -PuseFirebaseEmulator=true wires this up;
+        // otherwise (and in every release build) it stays null and the sign-in
+        // screen shows only Google Sign-In. Firebase Auth is already pointed at the
+        // emulator by KccApplication under the same guard, so this email/password
+        // call reaches the local emulator, never production.
+        val devEmulatorSignIn: (() -> Unit)? =
+            if (BuildConfig.DEBUG && BuildConfig.USE_FIREBASE_EMULATOR && authRepository != null) {
+                {
+                    FirebaseAuth.getInstance()
+                        .signInWithEmailAndPassword("sven.svensson@example.com", "Test1234!")
+                        .addOnFailureListener { e ->
+                            // Debug-only build; surface emulator sign-in failures in
+                            // logcat so a misconfigured emulator is easy to diagnose.
+                            android.util.Log.w("KccDevSignIn", "Emulator dev sign-in failed", e)
+                        }
+                }
+            } else {
+                null
+            }
+
         setContent {
             val authState =
                 authRepository?.authState?.collectAsState()?.value ?: AuthState.Unavailable
@@ -243,6 +265,13 @@ class MainActivity : ComponentActivity() {
                 // signOut flips Firebase auth state; the authState listener
                 // re-renders AppRoot back to the sign-in screen reactively.
                 onSignOutClick = { authRepository?.signOut() },
+                // Debug-only dev sign-in against the local Firebase Auth emulator
+                // (seeded test user). Non-null ONLY in a debug build assembled with
+                // -PuseFirebaseEmulator=true; null (hidden) in every normal debug
+                // build and all release builds, so Google Sign-In stays the sole
+                // production path. See KccApplication for the matching emulator
+                // wiring and apps/android/README.md / tools/kcc-run.sh for usage.
+                onDevSignInClick = devEmulatorSignIn,
                 signedInContent = { uid, displayName ->
                     AuthenticatedApp(
                         uid = uid,

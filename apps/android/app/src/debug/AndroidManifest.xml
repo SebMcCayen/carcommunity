@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG source-set manifest overlay. Merged only into debug builds, so nothing
+  here affects release. Points the app at a debug-only network security config
+  that permits cleartext HTTP to the local Firebase emulators (see
+  res/xml/network_security_config_debug.xml). Without this, Android's default
+  cleartext block rejects the emulator connection ("Cleartext HTTP traffic to
+  10.0.2.2 not permitted").
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:networkSecurityConfig="@xml/network_security_config_debug"
+        tools:ignore="UnusedAttribute"
+        xmlns:tools="http://schemas.android.com/tools" />
+</manifest>

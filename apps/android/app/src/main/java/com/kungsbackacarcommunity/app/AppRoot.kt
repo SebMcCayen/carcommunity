@@ -28,6 +28,9 @@ fun AppRoot(
     signInStatus: SignInStatus = SignInStatus.Idle,
     onSignInClick: () -> Unit = {},
     onSignOutClick: () -> Unit = {},
+    // Debug-only dev sign-in affordance (local emulator builds only). Null in
+    // production, so the sign-in screen shows only Google Sign-In there.
+    onDevSignInClick: (() -> Unit)? = null,
     // The signed-in experience is injected by MainActivity (onboarding gate +
     // Home/Profile). The default renders the home shell directly so previews
     // and pure UI tests need no repositories.
@@ -37,7 +40,11 @@ fun AppRoot(
     KccTheme {
         when (authState) {
             AuthState.SignedOut ->
-                SignInScreen(status = signInStatus, onSignInClick = onSignInClick)
+                SignInScreen(
+                    status = signInStatus,
+                    onSignInClick = onSignInClick,
+                    onDevSignInClick = onDevSignInClick,
+                )
 
             is AuthState.SignedIn ->
                 signedInContent(authState.uid, authState.displayName)
