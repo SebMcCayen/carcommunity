@@ -209,8 +209,12 @@ object ImageCompressor {
      * allowed image type), producing a confusing "upload failed" downstream — so
      * we reject it here instead. Both re-encode and [stripInPlace] paths always
      * emit `image/jpeg`, so a non-null result is always precheck-valid.
+     *
+     * `suspend` because [stripInPlace] performs blocking disk I/O on
+     * [Dispatchers.IO]; the in-memory [carriesStrippableMetadata] parse stays on
+     * the calling (Default) dispatcher.
      */
-    private fun stripOrFail(picked: PickedImage): PickedImage? {
+    private suspend fun stripOrFail(picked: PickedImage): PickedImage? {
         stripInPlace(picked)?.let { return it }
         val provablyClean =
             !carriesStrippableMetadata(picked.bytes) &&
@@ -232,30 +236,38 @@ object ImageCompressor {
      * undecodable/odd picks, so it must key off the format on disk. The post-
      * rewrite [carriesStrippableMetadata] check still gates the result, so even a
      * misdetection can only fail closed, never leak un-stripped bytes.
+     *
+     * The temp-file dance (create / write / [ExifInterface] save / read / delete)
+     * is blocking disk I/O, so it runs on [Dispatchers.IO] rather than occupying
+     * a CPU worker on the caller's [Dispatchers.Default] pool (matters on
+     * low-core devices). The cheap [looksLikeJpeg] magic-byte check stays off the
+     * IO pool.
      */
-    private fun stripInPlace(picked: PickedImage): PickedImage? {
+    private suspend fun stripInPlace(picked: PickedImage): PickedImage? {
         // ExifInterface.saveAttributes() only rewrites JPEG; other formats either
         // carry no EXIF (png/gif) or are not writable here — let the caller decide.
         if (!looksLikeJpeg(picked.bytes)) return null
-        return runCatching {
-            val tmp = File.createTempFile("kcc-strip-", ".jpg")
-            try {
-                tmp.writeBytes(picked.bytes)
-                val exif = ExifInterface(tmp.absolutePath)
-                STRIP_TAGS.forEach { tag -> exif.setAttribute(tag, null) }
-                exif.saveAttributes()
-                val cleaned = tmp.readBytes()
-                // Verify the rewrite actually removed EVERY strip tag (GPS and
-                // identifying) before trusting it.
-                if (cleaned.isEmpty() || carriesStrippableMetadata(cleaned)) {
-                    null
-                } else {
-                    PickedImage(bytes = cleaned, contentType = "image/jpeg")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val tmp = File.createTempFile("kcc-strip-", ".jpg")
+                try {
+                    tmp.writeBytes(picked.bytes)
+                    val exif = ExifInterface(tmp.absolutePath)
+                    STRIP_TAGS.forEach { tag -> exif.setAttribute(tag, null) }
+                    exif.saveAttributes()
+                    val cleaned = tmp.readBytes()
+                    // Verify the rewrite actually removed EVERY strip tag (GPS and
+                    // identifying) before trusting it.
+                    if (cleaned.isEmpty() || carriesStrippableMetadata(cleaned)) {
+                        null
+                    } else {
+                        PickedImage(bytes = cleaned, contentType = "image/jpeg")
+                    }
+                } finally {
+                    tmp.delete()
                 }
-            } finally {
-                tmp.delete()
-            }
-        }.getOrNull()
+            }.getOrNull()
+        }
     }
 
     /**
