@@ -171,17 +171,19 @@ object ImageCompressor {
 
     /**
      * Last line of defence for a pick that could NOT be re-encoded (corrupt /
-     * unusual image, or the decode threw). We must never upload the raw bytes if
-     * they might carry location, so:
+     * unusual image, or the decode threw). Because [compressForPublicUpload]
+     * promises bytes with NO EXIF/identifying metadata, we must never upload the
+     * raw bytes unless they are provably free of EVERY strip tag, so:
      *  1. physically rewrite the JPEG without metadata (works even when the
      *     pixels are undecodable — [ExifInterface] parses the APP1 block), else
-     *  2. keep the original ONLY when it provably carries no GPS, else
-     *  3. FAIL CLOSED (null) — a geotagged (or unparseable) pick is dropped,
-     *     never uploaded.
+     *  2. keep the original ONLY when it provably carries no strippable metadata
+     *     at all (no GPS AND no identifying tags), else
+     *  3. FAIL CLOSED (null) — a pick carrying any strip tag (or whose EXIF is
+     *     unparseable) is dropped, never uploaded.
      */
     private fun stripOrFail(picked: PickedImage): PickedImage? {
         stripInPlace(picked)?.let { return it }
-        return if (carriesLocation(picked.bytes)) null else picked
+        return if (carriesStrippableMetadata(picked.bytes)) null else picked
     }
 
     /**
@@ -204,8 +206,9 @@ object ImageCompressor {
                 STRIP_TAGS.forEach { tag -> exif.setAttribute(tag, null) }
                 exif.saveAttributes()
                 val cleaned = tmp.readBytes()
-                // Verify the rewrite actually removed location before trusting it.
-                if (cleaned.isEmpty() || carriesLocation(cleaned)) {
+                // Verify the rewrite actually removed EVERY strip tag (GPS and
+                // identifying) before trusting it.
+                if (cleaned.isEmpty() || carriesStrippableMetadata(cleaned)) {
                     null
                 } else {
                     PickedImage(bytes = cleaned, contentType = "image/jpeg")
@@ -217,20 +220,26 @@ object ImageCompressor {
     }
 
     /**
-     * Conservative, fail-closed location gate for [stripOrFail]/[stripInPlace].
-     * Returns true when [bytes] MIGHT embed a GPS location, so a caller only
-     * treats a `false` here as "provably location-free". Two deliberate choices
-     * keep it from ever passing geotagged bytes through:
-     *  - if the EXIF cannot be parsed we assume it COULD carry location (an
-     *    unparseable, possibly-geotagged file must never be treated as clean); and
-     *  - ANY GPS tag counts — not just latitude/longitude, but destination
-     *    coordinates or any other GPS-IFD field ([GPS_TAGS]).
+     * Conservative, fail-closed metadata gate for [stripOrFail]/[stripInPlace].
+     * Returns true when [bytes] MIGHT still carry any tag we strip for a public
+     * upload, so a caller only treats a `false` here as "provably free of every
+     * strip tag". Because [compressForPublicUpload] guarantees NO EXIF/identifying
+     * metadata (not just no GPS), the gate keys off the FULL [STRIP_TAGS] set —
+     * GPS IFD *and* identifying tags (make/model/timestamps/user comment/…). Two
+     * deliberate choices keep it from ever passing un-sanitised bytes through:
+     *  - if the EXIF cannot be parsed we assume it COULD carry metadata (an
+     *    unparseable file must never be treated as clean); and
+     *  - ANY strip tag counts — a JPEG with, say, only a device make/model or a
+     *    capture timestamp is NOT clean even though it has no GPS.
+     *
+     * Internal (not private) purely so the instrumented tests can assert the
+     * fail-closed gate against real [ExifInterface] parsing without a device rig.
      */
-    private fun carriesLocation(bytes: ByteArray): Boolean {
+    internal fun carriesStrippableMetadata(bytes: ByteArray): Boolean {
         val exif =
             runCatching { ByteArrayInputStream(bytes).use { ExifInterface(it) } }.getOrNull()
                 ?: return true // EXIF unparseable → cannot prove clean → fail closed
-        return GPS_TAGS.any { tag -> exif.getAttribute(tag) != null }
+        return STRIP_TAGS.any { tag -> exif.getAttribute(tag) != null }
     }
 
     /**
@@ -312,10 +321,10 @@ object ImageCompressor {
 
     /**
      * Every GPS EXIF tag. The presence of ANY of these means the pick embeds
-     * location (or location-adjacent) data, so [carriesLocation] treats it as a
-     * fail-closed signal — we deliberately do NOT try to decide which GPS fields
-     * are "harmless". Covers primary coordinates, destination coordinates, and
-     * the rest of the GPS IFD. Also reused as the GPS half of [STRIP_TAGS].
+     * location (or location-adjacent) data — we deliberately do NOT try to decide
+     * which GPS fields are "harmless". Covers primary coordinates, destination
+     * coordinates, and the rest of the GPS IFD. Reused as the GPS half of
+     * [STRIP_TAGS], which [carriesStrippableMetadata] gates the fallback on.
      */
     private val GPS_TAGS =
         listOf(
