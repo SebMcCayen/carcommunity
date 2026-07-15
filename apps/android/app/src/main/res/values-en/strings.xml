@@ -188,6 +188,7 @@
     <string name="map_noOtherMarkersSubtitle">Live locations are only shown during active, time-limited sessions.</string>
     <string name="map_memberRequiredTitle">Membership is required to see other members\' live locations.</string>
     <string name="map_shareOwnFreeHint">You can share your own position for free.</string>
+    <string name="map_liveMarkerFallbackName">Sharing live</string>
     <string name="events_title">Events</string>
     <string name="events_placeholder">Event list coming soon.</string>
     <string name="events_screenSubtitle">Upcoming events and community gatherings.</string>
