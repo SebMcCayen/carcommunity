@@ -40,21 +40,26 @@ class FirebaseCommunityChatRepository private constructor(
             messagesQuery(CHANNEL_MESSAGES_PAGE_SIZE.toLong())
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        // Prefer cached data over collapsing to empty; a genuine
-                        // transient failure is retried by the SDK, so keep the
-                        // last emitted state rather than misrendering "no messages".
-                        if (snapshot != null) {
+                        if ((error as? FirebaseFirestoreException)?.code ==
+                            FirebaseFirestoreException.Code.PERMISSION_DENIED
+                        ) {
+                            // Access revoked (lost membership / blocked): hard clear
+                            // even if a cached snapshot exists, so denied history is
+                            // never shown. This also leaves Loading on a first-load
+                            // deny. PERMISSION_DENIED is terminal — no retry to undo.
+                            trySend(ChannelMessagesState.Loaded(emptyList()))
+                        } else if (snapshot != null) {
+                            // Transient failure (UNAVAILABLE/timeout) WITH cached
+                            // data: prefer the last-known messages; the SDK retries
+                            // and delivers a fresh snapshot.
                             val cached =
                                 snapshot.documents.mapNotNull { it.toChannelMessage() }.asReversed()
                             trySend(ChannelMessagesState.Loaded(cached))
-                        } else {
-                            // No cached snapshot (e.g. first load + PERMISSION_DENIED
-                            // / UNAVAILABLE): there is no prior state to keep, so
-                            // surface the empty/denied state instead of leaving the
-                            // UI stuck in Loading forever. The SDK still retries and
-                            // delivers a fresh snapshot once the listen succeeds.
-                            trySend(ChannelMessagesState.Loaded(emptyList()))
                         }
+                        // Transient failure with NO cached data: don't emit — an
+                        // empty list would misrender offline/unavailable as "no
+                        // messages". The SDK retries; the initial Loading holds
+                        // until a real snapshot arrives.
                         return@addSnapshotListener
                     }
                     val messages =
@@ -69,18 +74,20 @@ class FirebaseCommunityChatRepository private constructor(
         val newest: Flow<ChannelMessage?> = callbackFlow {
             val registration =
                 messagesQuery(1L).addSnapshotListener { snapshot, error ->
-                    if (error != null && snapshot == null) {
-                        // No cached data. A denied listen (not a member / no
-                        // readable channel) legitimately clears unread; any other
-                        // error is transient, so keep the last value by NOT
-                        // emitting a misleading "no newest message" (which would
-                        // collapse the dot to a confident no-unread).
+                    if (error != null) {
                         if ((error as? FirebaseFirestoreException)?.code ==
                             FirebaseFirestoreException.Code.PERMISSION_DENIED
                         ) {
+                            // Access revoked: hard-clear unread even if a stale
+                            // cached snapshot is present — never keep the dot lit
+                            // for a channel the user can no longer read.
                             trySend(null)
+                            return@addSnapshotListener
                         }
-                        return@addSnapshotListener
+                        // Other (transient) error with no cached data: keep the
+                        // last-known value rather than emitting a misleading
+                        // no-unread. With cached data, fall through and use it.
+                        if (snapshot == null) return@addSnapshotListener
                     }
                     trySend(snapshot?.documents?.firstOrNull()?.toChannelMessage())
                 }

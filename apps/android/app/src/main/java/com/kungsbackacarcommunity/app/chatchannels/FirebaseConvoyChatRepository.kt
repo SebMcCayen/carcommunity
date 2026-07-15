@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.chatchannels
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
@@ -37,20 +38,25 @@ class FirebaseConvoyChatRepository private constructor(
                 .limit(CHANNEL_MESSAGES_PAGE_SIZE.toLong())
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        // Prefer cached data over collapsing to empty; a transient
-                        // failure is retried by the SDK.
-                        if (snapshot != null) {
+                        if ((error as? FirebaseFirestoreException)?.code ==
+                            FirebaseFirestoreException.Code.PERMISSION_DENIED
+                        ) {
+                            // Removed from the convoy / blocked: hard clear even if a
+                            // cached snapshot exists, so denied convoy history is
+                            // never shown. Also leaves Loading on a first-load deny.
+                            // PERMISSION_DENIED is terminal — no retry to undo it.
+                            trySend(ChannelMessagesState.Loaded(emptyList()))
+                        } else if (snapshot != null) {
+                            // Transient failure (UNAVAILABLE/timeout) WITH cached
+                            // data: prefer the last-known messages; the SDK retries.
                             val cached =
                                 snapshot.documents.mapNotNull { it.toChannelMessage() }.asReversed()
                             trySend(ChannelMessagesState.Loaded(cached))
-                        } else {
-                            // No cached snapshot (e.g. first load + PERMISSION_DENIED
-                            // / UNAVAILABLE): there is no prior state to keep, so
-                            // surface the empty/denied state instead of leaving the
-                            // convoy channel stuck in Loading forever. The SDK still
-                            // retries and delivers a fresh snapshot once it succeeds.
-                            trySend(ChannelMessagesState.Loaded(emptyList()))
                         }
+                        // Transient failure with NO cached data: don't emit — an
+                        // empty list would misrender offline/unavailable as "no
+                        // messages". The SDK retries; the initial Loading holds
+                        // until a real snapshot arrives.
                         return@addSnapshotListener
                     }
                     val messages =
