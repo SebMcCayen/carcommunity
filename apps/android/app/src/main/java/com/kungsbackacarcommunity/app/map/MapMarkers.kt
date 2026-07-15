@@ -128,20 +128,39 @@ object MapMarkers {
      * make/model parts are trimmed away; a car with an empty make+model degrades
      * to just the name line. Pure (no Android/Mapbox types) so it is unit-tested
      * alongside the rest of [MapMarkers] and reused by the map surface.
+     *
+     * The only intentional line break is the one this function inserts between
+     * the name and the car, so every field is [sanitizeLine]-collapsed first:
+     * an embedded newline or run of control whitespace in a display name, make,
+     * or model becomes a single space and can never inject extra lines into the
+     * 1–2 line callout.
      */
     fun calloutLabel(marker: MapMarker, fallbackName: String): String? {
-        val name = marker.displayName?.trim()?.takeIf { it.isNotEmpty() }
+        val name = sanitizeLine(marker.displayName).takeIf { it.isNotEmpty() }
         val car =
             marker.mainCar
-                ?.let { "${it.make.trim()} ${it.model.trim()}".trim() }
+                ?.let { "${sanitizeLine(it.make)} ${sanitizeLine(it.model)}".trim() }
                 ?.takeIf { it.isNotEmpty() }
+        val who = name ?: sanitizeLine(fallbackName)
         return when {
             name != null && car != null -> "$name\n$car"
             name != null -> name
-            car != null -> "$fallbackName\n$car"
+            car != null -> "$who\n$car"
             else -> null
         }
     }
+
+    /**
+     * Collapses every run of whitespace — including embedded newlines, tabs, and
+     * other control whitespace — to a single space and trims the ends, so a value
+     * is guaranteed single-line before it is composed into the callout. Null in
+     * ⇒ empty string out.
+     */
+    private fun sanitizeLine(value: String?): String =
+        value?.replace(WHITESPACE_RUN, " ")?.trim().orEmpty()
+
+    /** Any run of one-or-more whitespace characters (incl. \n, \r, \t). */
+    private val WHITESPACE_RUN = Regex("\\s+")
 
     /**
      * Camera to show for the given own-position marker: focus on it when

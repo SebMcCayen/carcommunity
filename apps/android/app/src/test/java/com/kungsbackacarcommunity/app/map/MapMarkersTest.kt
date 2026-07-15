@@ -166,6 +166,28 @@ class MapMarkersTest {
     }
 
     @Test
+    fun `calloutLabel collapses embedded newlines so it stays at most two lines`() {
+        val sneakyCar = LiveMainCar(make = "Vol\nvo", model = "2\t40", modelYear = 1989)
+        val label =
+            MapMarkers.calloutLabel(
+                marker(name = "Ali\nce\r\nEvil", car = sneakyCar),
+                "Sharing",
+            )
+        // The ONLY newline is the one calloutLabel inserts between name and car:
+        // every embedded control-whitespace run collapsed to a single space.
+        assertEquals("Ali ce Evil\nVol vo 2 40", label)
+        assertEquals(2, label!!.split("\n").size)
+    }
+
+    @Test
+    fun `calloutLabel collapses newlines in the fallback name too`() {
+        val car = LiveMainCar(make = "Saab", model = "900", modelYear = 1993)
+        val label = MapMarkers.calloutLabel(marker(name = null, car = car), "Sha\nring")
+        assertEquals("Sha ring\nSaab 900", label)
+        assertEquals(2, label!!.split("\n").size)
+    }
+
+    @Test
     fun `cameraForMarkers focuses on first other when no own marker`() {
         val markers =
             MapMarkers.markers(

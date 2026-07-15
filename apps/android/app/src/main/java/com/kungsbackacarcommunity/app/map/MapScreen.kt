@@ -358,8 +358,12 @@ private const val CALLOUT_HALO_COLOR: Int = 0xFFFFFFFF.toInt()
 /** Halo width (px) around the callout text. */
 private const val CALLOUT_HALO_WIDTH: Double = 1.4
 
-/** Callout text size (sp-equivalent). */
-private const val CALLOUT_TEXT_SIZE: Double = 13.0
+/**
+ * Callout text size in Mapbox `text-size` units — style-spec PIXELS, NOT Android
+ * `sp` (Mapbox annotation text is not density/font-scaled the way a Compose `sp`
+ * value is). 14px reads as a comfortable marker label at the map's zoom.
+ */
+private const val CALLOUT_TEXT_SIZE: Double = 14.0
 
 /**
  * Text offset in ems: nudge the label up (negative y) so it clears the 8px
