@@ -609,7 +609,6 @@
     <string name="billboard_call">Call</string>
     <string name="billboard_visitWebsite">Visit website</string>
     <string name="billboard_viewOffer">View offer</string>
-    <string name="billboard_safeDrivingWarning">Park safely before opening the advertisement.</string>
     <string name="billboard_safeDrivingInteractionDisabled">Advertising interactions are disabled while driving.</string>
     <string name="billboard_availableUntil">Available until</string>
     <string name="billboard_availableFrom">Available from</string>
