@@ -58,6 +58,7 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -330,19 +331,35 @@ class MapboxMapSurface : MapSurface {
     private fun onUserGestureEnd() {
         if (!followController.onGestureEnd()) return
         val scope = followScope ?: return
+        // Cancel any previous timer first so exactly ONE idle job is ever alive.
         idleReturnJob?.cancel()
-        idleReturnJob =
+        val job =
             scope.launch {
                 delay(CameraFollowController.IDLE_RETURN_MS)
+                // A gesture that began during the delay cancels this job. delay()
+                // throws on cancellation while suspended, but if cancel() lands in
+                // the instant AFTER delay() returns and BEFORE the lines below run,
+                // there is no further suspension point to observe it — so check
+                // explicitly here and bail before touching any camera state, so a
+                // cancelled timer can never resume follow or fire the recenter.
+                ensureActive()
                 // Quiet window elapsed with no further gesture: resume follow.
                 followController.onIdleElapsed()
-                idleReturnJob = null
                 // Glide back only when nothing else owns the camera (a route
                 // preview fits and holds it); otherwise leave the framing be.
                 if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
                     easeToUser()
                 }
             }
+        idleReturnJob = job
+        // Clear the shared reference only when THIS job is still the current one,
+        // so a job that completes or is cancelled after a newer timer has already
+        // replaced it never nulls out the newer job. invokeOnCompletion runs on
+        // the coroutine's Main dispatcher (same thread that mutates idleReturnJob),
+        // so the identity check needs no extra synchronisation.
+        job.invokeOnCompletion {
+            if (idleReturnJob === job) idleReturnJob = null
+        }
     }
 
     override fun resetNorth() {
