@@ -42,6 +42,10 @@ fun CommunityChannelRoute(
     val displayed = remember(older, liveMessages) { ChannelThread.merge(older, liveMessages) }
     val sendStatus by coordinator.sendStatus.collectAsState()
     val pageStatus by coordinator.pageStatus.collectAsState()
+    // The next older-page cursor: the earliest loaded message's ISO createdAt, or
+    // null when it lacks createdAt. A null cursor makes older-paging a no-op, so
+    // gate the "Load earlier" affordance on it and reuse the same cursor to page.
+    val olderCursor = remember(displayed) { ChannelThread.oldestCursor(displayed) }
 
     // Mark read on open, and again when a new INCOMING message lands while open.
     LaunchedEffect(Unit) { coordinator.markRead() }
@@ -57,10 +61,11 @@ fun CommunityChannelRoute(
         emptyText = stringResource(R.string.channel_emptyCommunity),
         sendStatus = sendStatus,
         canLoadOlder = pageStatus != ChannelPageStatus.End &&
-            displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE,
+            displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
+            olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
         onSend = { text -> scope.launch { coordinator.send(text) } },
-        onLoadOlder = { scope.launch { coordinator.loadOlder(ChannelThread.oldestCursor(displayed)) } },
+        onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         onResetError = { coordinator.resetSendError() },
         modifier = modifier,
     )
