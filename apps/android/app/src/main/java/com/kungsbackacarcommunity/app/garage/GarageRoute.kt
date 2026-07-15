@@ -105,16 +105,17 @@ fun GarageRoute(
                 maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
             ) { picked ->
                 if (picked != null && photoCoordinator != null && editingId != null) {
-                    // Strip EXIF/GPS metadata BEFORE upload: car profiles are
-                    // PUBLICLY visible to other members, so a photo taken at the
-                    // owner's home must never leak their coordinates.
-                    // compressForPublicUpload decodes + re-encodes to JPEG (dropping
-                    // all EXIF, GPS included) and GUARANTEES the returned bytes are
-                    // EXIF-free — it returns null instead of falling back to the
-                    // un-sanitised original, so we fail closed and skip the upload
-                    // rather than risk leaking the source metadata. Vehicle photos
-                    // keep a larger longest-side cap than avatars so detail shots
-                    // stay crisp.
+                    // Strip GPS + identifying metadata BEFORE upload: car profiles
+                    // are PUBLICLY visible to other members, so a photo taken at the
+                    // owner's home must never leak their coordinates or device
+                    // fingerprint. compressForPublicUpload GUARANTEES the returned
+                    // bytes are free of every STRIP_TAG (all GPS + identifying EXIF):
+                    // the happy path re-encodes to JPEG (dropping all metadata), and
+                    // if a pick can't be re-encoded it physically strips those tags
+                    // or returns the original only when proven free of them — else it
+                    // returns null and we fail closed / skip the upload rather than
+                    // risk leaking source metadata. Vehicle photos keep a larger
+                    // longest-side cap than avatars so detail shots stay crisp.
                     val sanitized =
                         ImageCompressor.compressForPublicUpload(
                             picked,

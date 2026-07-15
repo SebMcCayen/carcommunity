@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.media
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,5 +52,23 @@ class ImageCompressorTest {
     @Test
     fun `jpeg quality is a valid percentage`() {
         assertTrue(ImageCompressor.DEFAULT_JPEG_QUALITY in 1..100)
+    }
+
+    @Test
+    fun `looksLikeJpeg detects the SOI magic regardless of reported MIME`() {
+        // Real JPEG bytes start with FF D8 FF — the strip fallback keys off this,
+        // not contentType, so a JPEG mis-typed as null/image-jpg/octet-stream is
+        // still recognised and stripped rather than needlessly dropped.
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte())
+        assertTrue(ImageCompressor.looksLikeJpeg(jpeg))
+    }
+
+    @Test
+    fun `looksLikeJpeg rejects non-jpeg and too-short buffers`() {
+        // PNG signature, a short buffer, and empty bytes are all not strippable JPEGs.
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
+        assertFalse(ImageCompressor.looksLikeJpeg(png))
+        assertFalse(ImageCompressor.looksLikeJpeg(byteArrayOf(0xFF.toByte(), 0xD8.toByte())))
+        assertFalse(ImageCompressor.looksLikeJpeg(ByteArray(0)))
     }
 }

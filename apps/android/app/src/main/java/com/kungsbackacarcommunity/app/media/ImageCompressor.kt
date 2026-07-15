@@ -25,13 +25,15 @@ import kotlinx.coroutines.withContext
  *    keeps the original bytes when the re-encode would not shrink them. It is
  *    NOT a privacy guarantee (it can hand back EXIF-bearing originals).
  *  - [compressForPublicUpload] is the CANONICAL sanitiser for anything other
- *    members can see. It GUARANTEES the returned bytes carry no EXIF/GPS: it
- *    adopts the re-encode whenever it succeeds (a decoded [Bitmap] has no
- *    metadata, so the JPEG is inherently EXIF-free), and when the pick cannot
- *    be re-encoded it falls back to a physical metadata rewrite ([stripOrFail])
- *    that either returns provably-clean bytes or FAILS CLOSED (returns null).
- *    A null result means the caller MUST skip the upload — never fall back to
- *    the raw pick — so no geotagged image ever leaves the device.
+ *    members can see. It GUARANTEES the returned bytes are free of every tag in
+ *    [STRIP_TAGS] (all GPS + identifying EXIF: make/model/software/artist/
+ *    timestamps/…). On the happy path it re-encodes a decoded [Bitmap] to JPEG,
+ *    which drops ALL metadata; when the pick cannot be re-encoded it falls back
+ *    to [stripOrFail], which physically removes those tags, or returns the
+ *    original ONLY when it is provably free of every [STRIP_TAGS] entry, else
+ *    FAILS CLOSED (returns null). A null result means the caller MUST skip the
+ *    upload — never fall back to the raw pick — so no image carrying GPS or
+ *    identifying metadata ever leaves the device.
  *
  * Sanitisation is a CALL-SITE CONTRACT, not an automatic guarantee: the two
  * public-image upload paths — the profile avatar (AuthenticatedApp) and the
@@ -86,19 +88,27 @@ object ImageCompressor {
 
     /**
      * Sanitises [picked] for upload to a PUBLICLY visible location (e.g. a car
-     * profile photo other members can see): the returned bytes are GUARANTEED to
-     * carry no EXIF metadata, so a photo taken at the owner's home can never leak
-     * their GPS coordinates.
+     * profile photo other members can see). The returned bytes are GUARANTEED to
+     * be free of every tag in [STRIP_TAGS] (all GPS + identifying EXIF), so a
+     * photo taken at the owner's home can never leak their GPS coordinates or
+     * device fingerprint.
      *
      * Unlike [compress] this adopts the JPEG re-encode whenever it succeeds —
      * even when it is not smaller than the source — because the decode+re-encode
-     * is what strips the EXIF (GPS included); dropping metadata matters more than
-     * shaving bytes here. When the pick cannot be re-encoded (corrupt / unusual
-     * image, or the decode threw) it does NOT give up on privacy: it routes the
-     * original through [stripOrFail], which physically rewrites the JPEG without
-     * metadata and, if it still cannot prove the bytes clean, FAILS CLOSED. A
-     * `null` result therefore means the image could not be proven metadata-free:
-     * the caller MUST skip the upload rather than send unsanitised bytes.
+     * is what drops the metadata (a decoded [Bitmap] has none, so the re-encoded
+     * JPEG carries no EXIF at all); shedding metadata matters more than shaving
+     * bytes here. When the pick cannot be re-encoded (corrupt / unusual image, or
+     * the decode threw) it does NOT give up on privacy: it routes the original
+     * through [stripOrFail], which physically removes the [STRIP_TAGS] (or keeps
+     * the original only when it is provably free of every one of them) and
+     * otherwise FAILS CLOSED. A `null` result therefore means the image could not
+     * be proven free of GPS/identifying metadata: the caller MUST skip the upload
+     * rather than send unsanitised bytes.
+     *
+     * Note: on the fallback "return the proven-clean original" branch the bytes
+     * may still contain benign EXIF that is NOT in [STRIP_TAGS] (e.g. orientation)
+     * — the guarantee is precisely "free of [STRIP_TAGS]", not "zero EXIF". The
+     * common (re-encode) path strips everything.
      */
     suspend fun compressForPublicUpload(
         picked: PickedImage,
@@ -107,8 +117,8 @@ object ImageCompressor {
     ): PickedImage? = withContext(Dispatchers.Default) {
         try {
             // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
-            // original's metadata or fail closed — we NEVER return raw picked
-            // bytes that might still carry GPS.
+            // original's STRIP_TAGS or fail closed — we NEVER return raw picked
+            // bytes that might still carry GPS or identifying metadata.
             reencodeToJpeg(picked, maxDimension, quality) ?: stripOrFail(picked)
         } catch (e: CancellationException) {
             throw e // never swallow cancellation — keep structured concurrency intact
@@ -180,11 +190,12 @@ object ImageCompressor {
     /**
      * Last line of defence for a pick that could NOT be re-encoded (corrupt /
      * unusual image, or the decode threw). Because [compressForPublicUpload]
-     * promises bytes with NO EXIF/identifying metadata, we must never upload the
+     * promises bytes free of every tag in [STRIP_TAGS], we must never upload the
      * raw bytes unless they are provably free of EVERY strip tag, so:
-     *  1. physically rewrite the JPEG without metadata (works even when the
-     *     pixels are undecodable — [ExifInterface] parses the APP1 block), else
-     *  2. keep the original ONLY when it provably carries no strippable metadata
+     *  1. physically rewrite the JPEG dropping the [STRIP_TAGS] (works even when
+     *     the pixels are undecodable — [ExifInterface] parses the APP1 block),
+     *     else
+     *  2. keep the original ONLY when it provably carries no [STRIP_TAGS] entry
      *     at all (no GPS AND no identifying tags) AND already advertises an
      *     allowed image content type, else
      *  3. FAIL CLOSED (null) — a pick carrying any strip tag, whose EXIF is
@@ -208,17 +219,24 @@ object ImageCompressor {
     }
 
     /**
-     * Physically strips GPS + identifying EXIF from JPEG [picked] by rewriting it
+     * Physically strips the [STRIP_TAGS] from JPEG [picked] by rewriting it
      * through a temp file (the only way [android.media.ExifInterface] can persist
      * edits — it has no in-memory save). Returns the cleaned JPEG, or null when
-     * the format is not a strippable JPEG or anything goes wrong (temp dir not
+     * the bytes are not a strippable JPEG or anything goes wrong (temp dir not
      * writable, save unsupported), so the caller can fall back to fail-closed.
+     *
+     * The JPEG decision is made from the actual bytes ([looksLikeJpeg] — the
+     * SOI/APP0 magic), NOT [PickedImage.contentType]: `ContentResolver.getType`
+     * can misreport the type (a real JPEG typed `null` / `image/jpg` /
+     * `application/octet-stream`), and this is the safety net for exactly those
+     * undecodable/odd picks, so it must key off the format on disk. The post-
+     * rewrite [carriesStrippableMetadata] check still gates the result, so even a
+     * misdetection can only fail closed, never leak un-stripped bytes.
      */
     private fun stripInPlace(picked: PickedImage): PickedImage? {
-        // ExifInterface.saveAttributes() only rewrites JPEG; other types either
+        // ExifInterface.saveAttributes() only rewrites JPEG; other formats either
         // carry no EXIF (png/gif) or are not writable here — let the caller decide.
-        val isJpeg = picked.contentType?.trim()?.lowercase() == "image/jpeg"
-        if (!isJpeg) return null
+        if (!looksLikeJpeg(picked.bytes)) return null
         return runCatching {
             val tmp = File.createTempFile("kcc-strip-", ".jpg")
             try {
@@ -241,12 +259,27 @@ object ImageCompressor {
     }
 
     /**
+     * True when [bytes] begin with the JPEG SOI + marker magic (`FF D8 FF`).
+     * Used instead of the reported MIME type to decide whether [stripInPlace] can
+     * rewrite the pick, so a real JPEG whose `contentType` is null / `image/jpg` /
+     * `application/octet-stream` is still stripped rather than needlessly dropped.
+     *
+     * Internal (not private) purely so it is JVM-unit-testable without a device.
+     */
+    internal fun looksLikeJpeg(bytes: ByteArray): Boolean =
+        bytes.size >= 3 &&
+            bytes[0] == 0xFF.toByte() &&
+            bytes[1] == 0xD8.toByte() &&
+            bytes[2] == 0xFF.toByte()
+
+    /**
      * Conservative, fail-closed metadata gate for [stripOrFail]/[stripInPlace].
      * Returns true when [bytes] MIGHT still carry any tag we strip for a public
      * upload, so a caller only treats a `false` here as "provably free of every
-     * strip tag". Because [compressForPublicUpload] guarantees NO EXIF/identifying
-     * metadata (not just no GPS), the gate keys off the FULL [STRIP_TAGS] set —
-     * GPS IFD *and* identifying tags (make/model/timestamps/user comment/…). Two
+     * strip tag". Because [compressForPublicUpload] guarantees bytes free of every
+     * [STRIP_TAGS] entry (not just no GPS), the gate keys off the FULL [STRIP_TAGS]
+     * set — GPS IFD *and* identifying tags (make/model/timestamps/user comment/…).
+     * Two
      * deliberate choices keep it from ever passing un-sanitised bytes through:
      *  - if the EXIF cannot be parsed we assume it COULD carry metadata (an
      *    unparseable file must never be treated as clean); and

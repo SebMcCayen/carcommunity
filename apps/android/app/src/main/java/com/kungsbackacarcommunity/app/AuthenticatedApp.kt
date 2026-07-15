@@ -1365,14 +1365,16 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Strip EXIF/GPS metadata BEFORE upload: avatars are PUBLICLY
-                        // readable by any authenticated member (storage.rules), so a
-                        // selfie taken at the owner's home must never leak their
-                        // coordinates. compressForPublicUpload downscales + re-encodes
-                        // to JPEG (dropping all EXIF, GPS included) and GUARANTEES the
-                        // returned bytes are EXIF-free — it returns null instead of
-                        // falling back to the un-sanitised original, so we fail closed
-                        // and skip the upload rather than risk leaking source metadata.
+                        // Strip GPS + identifying metadata BEFORE upload: avatars are
+                        // PUBLICLY readable by any authenticated member (storage.rules),
+                        // so a selfie taken at the owner's home must never leak their
+                        // coordinates or device fingerprint. compressForPublicUpload
+                        // GUARANTEES the returned bytes are free of every STRIP_TAG (all
+                        // GPS + identifying EXIF): the happy path re-encodes to JPEG
+                        // (dropping all metadata), and if a pick can't be re-encoded it
+                        // physically strips those tags or returns the original only when
+                        // proven free of them — else it returns null and we fail closed /
+                        // skip the upload rather than risk leaking source metadata.
                         val sanitized = ImageCompressor.compressForPublicUpload(picked)
                         if (sanitized != null) {
                             val imageId = MediaUpload.newImageId(sanitized.contentType)
