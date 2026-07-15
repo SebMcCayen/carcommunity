@@ -41,6 +41,8 @@ enum class ShellRoute {
     NotificationSettings,
     Garage,
     Friends,
+    /** Convoy management (list / create / detail / ended summary). */
+    Convoys,
     /**
      * Another member's read-only public profile (name/avatar/bio + their garage
      * cars and, when readable, awards). The target member's uid is carried

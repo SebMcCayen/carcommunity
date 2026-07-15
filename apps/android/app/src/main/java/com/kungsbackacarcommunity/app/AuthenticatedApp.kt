@@ -82,6 +82,8 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
+import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
@@ -245,6 +247,7 @@ fun AuthenticatedApp(
     friendsRepository: FriendsRepository?,
     memberProfileRepository: MemberProfileRepository?,
     dmRepository: DmRepository?,
+    convoyRepository: ConvoyRepository?,
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
     drivesRepository: DrivesRepository?,
@@ -925,6 +928,7 @@ fun AuthenticatedApp(
                         memberProfileTargetUid = memberProfileTargetUid,
                         onOpenMemberProfile = openMemberProfile,
                         dmRepository = dmRepository,
+                        convoyRepository = convoyRepository,
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
@@ -1119,6 +1123,15 @@ fun AuthenticatedApp(
                                                     Icons.Filled.Groups,
                                                     if (friendsRepository != null) {
                                                         { route = ShellRoute.Friends }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialConvoys),
+                                                    Icons.Filled.DirectionsCar,
+                                                    if (convoyRepository != null) {
+                                                        { route = ShellRoute.Convoys }
                                                     } else {
                                                         null
                                                     },
@@ -1472,6 +1485,7 @@ private fun RouteHost(
     memberProfileTargetUid: String?,
     onOpenMemberProfile: (String) -> Unit,
     dmRepository: DmRepository?,
+    convoyRepository: ConvoyRepository?,
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
@@ -1731,6 +1745,16 @@ private fun RouteHost(
                     targetUid = memberProfileTargetUid,
                     viewerUid = uid,
                     blockingRepository = blockingRepository,
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Convoys ->
+            if (convoyRepository != null) {
+                ConvoyRoute(
+                    repository = convoyRepository,
+                    friendsRepository = friendsRepository,
                 )
             } else {
                 LoadingScreen()

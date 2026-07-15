@@ -77,6 +77,7 @@ class MapFirstShellTest {
                     friendsRepository = null,
                     memberProfileRepository = null,
                     dmRepository = null,
+                    convoyRepository = null,
                     communityChatRepository = null,
                     convoyChatRepository = null,
                     drivesRepository = null,

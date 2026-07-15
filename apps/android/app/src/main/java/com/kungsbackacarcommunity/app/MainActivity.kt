@@ -40,6 +40,7 @@ import com.kungsbackacarcommunity.app.chatchannels.FirebaseCommunityChatReposito
 import com.kungsbackacarcommunity.app.chatchannels.FirebaseConvoyChatRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
+import com.kungsbackacarcommunity.app.convoy.FirebaseConvoyRepository
 import com.kungsbackacarcommunity.app.dm.FirebaseDmRepository
 import com.kungsbackacarcommunity.app.events.FirebaseEventsRepository
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
         val memberProfileRepository =
             FirebaseMemberProfileRepository.createIfAvailable(applicationContext)
         val dmRepository = FirebaseDmRepository.createIfAvailable(applicationContext)
+        val convoyRepository = FirebaseConvoyRepository.createIfAvailable(applicationContext)
         val communityChatRepository =
             FirebaseCommunityChatRepository.createIfAvailable(applicationContext)
         val convoyChatRepository =
@@ -283,6 +285,7 @@ class MainActivity : ComponentActivity() {
                         friendsRepository = friendsRepository,
                         memberProfileRepository = memberProfileRepository,
                         dmRepository = dmRepository,
+                        convoyRepository = convoyRepository,
                         communityChatRepository = communityChatRepository,
                         convoyChatRepository = convoyChatRepository,
                         drivesRepository = drivesRepository,
