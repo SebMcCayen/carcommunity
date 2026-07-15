@@ -230,7 +230,9 @@ object ImageCompressor {
      * writable, save unsupported), so the caller can fall back to fail-closed.
      *
      * The JPEG decision is made from the actual bytes ([looksLikeJpeg] — the
-     * SOI/APP0 magic), NOT [PickedImage.contentType]: `ContentResolver.getType`
+     * JPEG SOI followed by the start of the next marker, i.e. the `FF D8 FF`
+     * prefix; not an APP0/JFIF check), NOT [PickedImage.contentType]:
+     * `ContentResolver.getType`
      * can misreport the type (a real JPEG typed `null` / `image/jpg` /
      * `application/octet-stream`), and this is the safety net for exactly those
      * undecodable/odd picks, so it must key off the format on disk. The post-
