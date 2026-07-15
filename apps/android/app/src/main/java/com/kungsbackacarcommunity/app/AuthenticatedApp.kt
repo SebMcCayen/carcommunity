@@ -450,6 +450,10 @@ fun AuthenticatedApp(
             // Upsell shown when a non-member tries to view others' live locations
             // on the map (sharing your own remains free).
             val viewLiveMembersOnlyText = stringResource(R.string.shell_viewLiveMembersOnly)
+            // Shown instead of the upsell when viewing others is blocked because the
+            // LIVE_LOCATION feature flag is off (not a membership issue) — so an active
+            // member with the flag disabled doesn't see a misleading subscription upsell.
+            val featureUnavailableText = stringResource(R.string.shell_unavailable)
             // Shown when the nav view's "Report incident/roadwork" is tapped while
             // the incidents feature (a sibling PR) is not yet present in this build.
             val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
@@ -789,9 +793,17 @@ fun AuthenticatedApp(
                                         mapParticipantUids = ArrayList(uids)
                                         route = ShellRoute.Map
                                     } else {
+                                        // Distinguish WHY viewing is blocked: a
+                                        // disabled LIVE_LOCATION flag → "not available"
+                                        // (an active member shouldn't see an upsell);
+                                        // otherwise it's the non-member subscription upsell.
                                         scope.launch {
                                             snackbarHostState.showSnackbar(
-                                                viewLiveMembersOnlyText,
+                                                if (!liveLocationEnabled) {
+                                                    featureUnavailableText
+                                                } else {
+                                                    viewLiveMembersOnlyText
+                                                },
                                             )
                                         }
                                     }
