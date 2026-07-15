@@ -431,7 +431,7 @@
     "createSubmit": "Create convoy",
     "createdTitle": "Convoy created",
     "createdBody": "Your convoy is ready. Invited friends can now accept.",
-    "skippedTitle": "%1$d couldn't be invited",
+    "skippedTitle": "Couldn't invite %1$d",
     "skippedBody": "Some people couldn't be added — they may not be your friend.",
     "openConvoy": "Open convoy",
     "membersTitle": "Members",

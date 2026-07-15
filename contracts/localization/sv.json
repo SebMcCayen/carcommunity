@@ -431,7 +431,7 @@
     "createSubmit": "Skapa konvoj",
     "createdTitle": "Konvoj skapad",
     "createdBody": "Din konvoj är klar. Inbjudna vänner kan nu acceptera.",
-    "skippedTitle": "%1$d kunde inte bjudas in",
+    "skippedTitle": "Kunde inte bjuda in %1$d",
     "skippedBody": "Några kunde inte läggas till – de kanske inte är dina vänner.",
     "openConvoy": "Öppna konvoj",
     "membersTitle": "Medlemmar",
