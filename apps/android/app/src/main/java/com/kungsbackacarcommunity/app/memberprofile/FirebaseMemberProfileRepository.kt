@@ -11,6 +11,7 @@ import com.kungsbackacarcommunity.app.badges.Badge
 import com.kungsbackacarcommunity.app.badges.Badges
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -38,12 +39,12 @@ class FirebaseMemberProfileRepository private constructor(
         if (targetUid.isBlank()) return MemberProfileResult.NotFound
 
         val profileSnapshot =
-            runCatching { firestore.collection(USERS).document(targetUid).get().awaitResult() }
+            runCatchingCancellable { firestore.collection(USERS).document(targetUid).get().awaitResult() }
                 .getOrElse { return MemberProfileResult.Error }
         val profile = profileSnapshot.toMemberProfile() ?: return MemberProfileResult.NotFound
 
         val vehicles =
-            runCatching {
+            runCatchingCancellable {
                 firestore
                     .collection(VEHICLES)
                     .whereEqualTo("userId", targetUid)
@@ -62,7 +63,7 @@ class FirebaseMemberProfileRepository private constructor(
         // shown on other members' profiles". The rest of the profile still
         // renders in both cases.
         val badges: MemberBadges =
-            runCatching {
+            runCatchingCancellable {
                 firestore
                     .collection(USERS)
                     .document(targetUid)
