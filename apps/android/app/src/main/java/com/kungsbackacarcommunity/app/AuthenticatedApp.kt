@@ -172,6 +172,8 @@ import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
+import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import com.kungsbackacarcommunity.app.whatsnew.Changelog
 import com.kungsbackacarcommunity.app.whatsnew.ChangelogLoader
 import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
@@ -289,12 +291,49 @@ fun AuthenticatedApp(
         }
 
         AuthedDestination.Main -> {
+            // One-time first-login welcome flow. Shown ONCE after profile
+            // creation, on the first reach of the Main experience, and never
+            // again for a returning user. "Seen" is persisted device-locally per
+            // uid (WelcomeStore / SharedPreferences) — deliberately NOT account
+            // state, so no backend/rules change. Skip and every CTA mark it seen;
+            // a CTA additionally deep-links into the shell (membership / profile /
+            // garage) via pendingWelcomeRoute, consumed as the shell's initial
+            // route below. Keyed on uid so switching accounts on one device shows
+            // each new user their own welcome once.
+            val welcomeContext = LocalContext.current
+            val welcomeStore = remember(welcomeContext) { WelcomeStore(welcomeContext) }
+            var welcomeSeen by
+                rememberSaveable(uid) { mutableStateOf(welcomeStore.hasSeenWelcome(uid)) }
+            var pendingWelcomeRoute by
+                rememberSaveable(uid) { mutableStateOf<ShellRoute?>(null) }
+
+            if (!welcomeSeen) {
+                // Every dismissal path (skip, "Get started", or a CTA) marks the
+                // flow seen so it can't re-appear; a CTA also stashes the route to
+                // open once the shell renders.
+                val finishWelcome = { target: ShellRoute? ->
+                    welcomeStore.markSeen(uid)
+                    pendingWelcomeRoute = target
+                    welcomeSeen = true
+                }
+                WelcomeScreen(
+                    onSeeMembership = { finishWelcome(ShellRoute.Subscription) },
+                    onCompleteProfile = { finishWelcome(ShellRoute.Profile) },
+                    onAddCar = { finishWelcome(ShellRoute.Garage) },
+                    onFinish = { finishWelcome(null) },
+                )
+            } else {
             val profile = (profileState as? ProfileState.Loaded)?.profile
 
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
-            var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
+            // Initialised from any route a welcome-flow CTA requested (membership /
+            // profile / garage), so finishing the welcome deep-links straight into
+            // that screen; null (skip / "Get started") lands on the Map home. Only
+            // consumed on the shell's first composition — a later state restore
+            // uses the saved route, not this one-shot value.
+            var route by rememberSaveable { mutableStateOf(pendingWelcomeRoute) }
 
             // Defensive migration: selectedTab is rememberSaveable, so a session
             // saved by an older app version (when Create was a real content
@@ -1168,6 +1207,7 @@ fun AuthenticatedApp(
                         Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
                 )
               }
+            }
             }
         }
     }
