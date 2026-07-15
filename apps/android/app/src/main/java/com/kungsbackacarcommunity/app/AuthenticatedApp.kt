@@ -332,8 +332,11 @@ fun AuthenticatedApp(
             // profile / garage), so finishing the welcome deep-links straight into
             // that screen; null (skip / "Get started") lands on the Map home. Only
             // consumed on the shell's first composition — a later state restore
-            // uses the saved route, not this one-shot value.
-            var route by rememberSaveable { mutableStateOf(pendingWelcomeRoute) }
+            // uses the saved route, not this one-shot value. Keyed on uid (like the
+            // welcome-gating state above) so a different user signing in within the
+            // same Activity/process re-scopes the route to their own
+            // pendingWelcomeRoute instead of inheriting the previous user's saved one.
+            var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
 
             // Defensive migration: selectedTab is rememberSaveable, so a session
             // saved by an older app version (when Create was a real content

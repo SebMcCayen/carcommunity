@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -147,10 +146,13 @@ fun WelcomeScreen(
 
             Spacer(modifier = Modifier.size(KccSpacing.s4))
 
-            // Primary advance / finish action.
+            // Primary advance / finish action. The whole screen already applies
+            // safeDrawingPadding() (which includes the navigation-bar inset), so
+            // no extra navigationBarsPadding() here — that would apply the inset
+            // twice and push the CTA up on gesture-nav devices.
             Button(
                 onClick = { if (WelcomeFlow.isLast(step)) onFinish() else step = WelcomeFlow.next(step) },
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     text =
