@@ -34,11 +34,17 @@ private enum class ConvoyView { List, Create, Detail }
  *
  * The convoy live-map is a separate surface (built elsewhere) and is
  * deliberately not linked from here; see the driving-mode follow-up.
+ *
+ * [openCreateOnEntry] deep-links straight into the create-convoy sub-screen on
+ * first entry (used by the map "+" Create-tab chooser's "Convoy" option). It is
+ * a one-shot: consumed once so that backing out to the list — or reopening the
+ * route from the Social hub — behaves normally and never re-forces Create.
  */
 @Composable
 fun ConvoyRoute(
     repository: ConvoyRepository,
     friendsRepository: FriendsRepository?,
+    openCreateOnEntry: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator = remember(repository) { ConvoyCoordinator(repository) }
@@ -66,6 +72,22 @@ fun ConvoyRoute(
     var selectedUids by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(coordinator) { coordinator.load() }
+
+    // Deep-link: when entered from the map "+" chooser's "Convoy" option, jump
+    // straight to the create-convoy sub-screen. One-shot (a saveable guard) so
+    // that once consumed, backing out to the list — or reopening the route from
+    // the Social hub — is never re-forced back into Create.
+    var createDeepLinkConsumed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(openCreateOnEntry) {
+        if (openCreateOnEntry && !createDeepLinkConsumed) {
+            createDeepLinkConsumed = true
+            title = ""
+            selectedUids = emptySet()
+            coordinator.resetCreate()
+            friendsCoordinator?.load()
+            view = ConvoyView.Create
+        }
+    }
 
     // Pop internal navigation before the shell closes the route. Disabled on the
     // list root so the shell's handler then returns to the Social hub.
