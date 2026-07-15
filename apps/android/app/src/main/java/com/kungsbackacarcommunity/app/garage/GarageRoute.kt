@@ -116,6 +116,11 @@ fun GarageRoute(
                         photoCoordinator.upload(sanitized, path) { storedPath ->
                             repository.updateVehicleImagePath(editingId, storedPath)
                         }
+                    } else {
+                        // Sanitisation failed (decode/re-encode returned null), so
+                        // nothing was uploaded. Surface the failure instead of a
+                        // silent no-op so the user knows to retry.
+                        photoCoordinator.markFailed()
                     }
                 }
             }

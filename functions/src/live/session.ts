@@ -64,18 +64,22 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
     throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
   }
 
-  const profile = await db.collection('users').doc(actor.uid).get();
   // Denormalize the caller's main car onto the session so viewers of the live
   // share see which car it is. The garage is capped at MAX_VEHICLES_PER_USER,
   // so the owner query (single-field userId index — no composite index needed)
   // is cheap; the main car is the one flagged isMainCar (max 1, enforced by
   // garage.setMainVehicle). The .limit() bounds Firestore reads to the cap even
   // if corrupt/legacy data ever leaves a user with more owned vehicles.
-  const ownedVehicles = await db
-    .collection('vehicles')
-    .where('userId', '==', actor.uid)
-    .limit(MAX_VEHICLES_PER_USER)
-    .get();
+  // The profile read and the vehicles query are independent, so fetch them in
+  // parallel to keep startSession latency low.
+  const [profile, ownedVehicles] = await Promise.all([
+    db.collection('users').doc(actor.uid).get(),
+    db
+      .collection('vehicles')
+      .where('userId', '==', actor.uid)
+      .limit(MAX_VEHICLES_PER_USER)
+      .get(),
+  ]);
   const mainCar = toLiveMainCar(
     ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
   );

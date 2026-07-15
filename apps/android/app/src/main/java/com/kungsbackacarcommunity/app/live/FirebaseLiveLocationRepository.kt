@@ -7,7 +7,9 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.garage.VehicleValidation
 import java.time.Instant
+import java.time.Year
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
@@ -159,7 +161,17 @@ private fun DataSnapshot.toLiveMainCar(): LiveMainCar? {
     if (!exists()) return null
     val make = child("make").getValue(String::class.java) ?: return null
     val model = child("model").getValue(String::class.java) ?: return null
-    val modelYear = child("modelYear").getValue(Long::class.java)?.toInt() ?: return null
+    // Guard the Long before narrowing: a bare toInt() silently overflows on
+    // malformed data (a client writing a huge/negative value would surface a
+    // wrong year). Only accept plausible model years (same bounds the garage
+    // form enforces); anything outside drops the whole main car rather than
+    // render a bogus year.
+    val modelYear =
+        child("modelYear").getValue(Long::class.java)?.let { raw ->
+            val minYear = VehicleValidation.MIN_MODEL_YEAR.toLong()
+            val maxYear = VehicleValidation.maxModelYear(Year.now().value).toLong()
+            if (raw in minYear..maxYear) raw.toInt() else null
+        } ?: return null
     val imagePath = child("imagePath").getValue(String::class.java)
     return LiveMainCar(make = make, model = model, modelYear = modelYear, imagePath = imagePath)
 }
