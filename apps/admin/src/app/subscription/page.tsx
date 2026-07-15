@@ -100,6 +100,10 @@ export default function SubscriptionPage() {
     // off summary.userId) can't act on the prior user while this lookup is in
     // flight — the read-only UID field already shows the new target by now.
     setSummary(null);
+    // Drop any half-typed reason too: a reason entered for the previous user
+    // must never carry over to a new lookup and get applied to a different UID
+    // with one click on a destructive grant/revoke.
+    setReason('');
     try {
       const result = await adminGetUserSubscription(uid);
       setSummary(result);
@@ -113,20 +117,20 @@ export default function SubscriptionPage() {
 
   // Keep the input in sync with the query param. The initial useState(presetUid)
   // only runs on first mount; the field must track presetUid on every change so
-  // it never shows a stale UID. Two cases:
-  //  - preset arrives / changes (e.g. from another user's profile): mirror it so
-  //    the read-only field targets the right user for a destructive grant/revoke.
-  //  - preset clears (navigating back to the standalone /subscription route while
-  //    still mounted): clear the field AND reset the lookup state, so the prior
-  //    user's summary/actions don't linger in the now-editable manual-entry view.
+  // it never shows a stale UID. Whenever presetUid changes — whether it arrives,
+  // clears, OR switches from one non-empty UID to another (navigating between two
+  // profile-scoped /subscription?uid=… routes while still mounted) — we fully
+  // re-scope: mirror the new UID and drop the previous user's summary, reason and
+  // messages. Resetting on *every* change (not just empty↔non-empty) closes the
+  // window where a stale summary/reason could target the previous UID before the
+  // auto-lookup effect below reloads for the new one.
   useEffect(() => {
     setUserId(presetUid);
-    if (!presetUid) {
-      setSummary(null);
-      setError(null);
-      setSuccessMessage(null);
-      setActionError(null);
-    }
+    setSummary(null);
+    setError(null);
+    setSuccessMessage(null);
+    setActionError(null);
+    setReason('');
   }, [presetUid]);
 
   // Auto-look-up when a UID arrives via the profile link, so pressing
@@ -140,7 +144,11 @@ export default function SubscriptionPage() {
     // Block a lookup while a grant/revoke is in flight — otherwise its refresh
     // (load after the action) can race/overwrite the manual lookup.
     if (actingRef.current) return;
-    const uid = userId.trim();
+    // When arriving from a profile the query param is the source of truth for the
+    // target UID; the field is read-only and userId mirrors presetUid, but that
+    // mirror can lag by a render if the param just changed. Read presetUid
+    // directly in that case so a lookup can never target a stale/divergent UID.
+    const uid = (fromProfile ? presetUid : userId).trim();
     if (uid) void load(uid);
   };
 
