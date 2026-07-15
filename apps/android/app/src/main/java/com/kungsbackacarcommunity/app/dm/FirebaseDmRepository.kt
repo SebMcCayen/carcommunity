@@ -55,8 +55,15 @@ class FirebaseDmRepository private constructor(
                             )
                             return@addSnapshotListener
                         }
-                        // No snapshot to fall back on — surface the error.
-                        trySend(DmConversationsState.Error)
+                        // No snapshot to fall back on — surface a retryable
+                        // error, tagged with the Firestore code (e.g.
+                        // FAILED_PRECONDITION for a missing composite index) so
+                        // the route can report it for diagnostics.
+                        trySend(
+                            DmConversationsState.Error(
+                                (error as? FirebaseFirestoreException)?.code?.name,
+                            ),
+                        )
                         return@addSnapshotListener
                     }
                     val rows =

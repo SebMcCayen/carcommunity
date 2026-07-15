@@ -669,6 +669,7 @@
     <string name="dm_unreadCount">%1$d unread messages</string>
     <string name="dm_empty">You have no messages yet.</string>
     <string name="dm_loadError">Couldn\'t load your messages.</string>
+    <string name="dm_retry">Try again</string>
     <string name="dm_unknownMember">Member</string>
     <string name="dm_emptyThread">No messages yet — say hi!</string>
     <string name="dm_inputPlaceholder">Write a message…</string>

@@ -51,6 +51,7 @@ export const AUDIT_LOG_PAGE_SIZE = 25;
 export const KNOWN_AUDIT_ACTIONS = [
   'admin.setFeatureFlag',
   'badge.awardHelpfulMember',
+  'client.error',
   'billboards.activate',
   'billboards.create',
   'billboards.end',
@@ -101,6 +102,7 @@ export type KnownAuditAction = (typeof KNOWN_AUDIT_ACTIONS)[number];
 const ACTION_LABEL_KEYS: Record<KnownAuditAction, string> = {
   'admin.setFeatureFlag': 'auditLog.action.adminSetFeatureFlag',
   'badge.awardHelpfulMember': 'auditLog.action.badgeAwardHelpfulMember',
+  'client.error': 'auditLog.action.clientError',
   'billboards.activate': 'auditLog.action.billboardsActivate',
   'billboards.create': 'auditLog.action.billboardsCreate',
   'billboards.end': 'auditLog.action.billboardsEnd',

@@ -1605,6 +1605,54 @@ describe('Firestore – admin audit events', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: client-error reporting (backend-only writes, admin-only reads)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – client-error reports + issue links', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'clientErrorReports', 'err-1'), {
+        uid: 'reporter-uid',
+        feature: 'messages.conversationList',
+        message: 'Conversation inbox listener failed',
+        fingerprint: 'fp-1',
+      });
+      await setDoc(doc(ctx.firestore(), 'clientErrorIssueLinks', 'fp-1'), {
+        fingerprint: 'fp-1',
+        status: 'created',
+        count: 3,
+      });
+    });
+  });
+
+  it('admin can read client-error reports and issue links', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'clientErrorReports', 'err-1')));
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'clientErrorIssueLinks', 'fp-1')));
+  });
+
+  it('the reporter (a regular user) cannot read their own client-error report', async () => {
+    const ctx = testEnv.authenticatedContext('reporter-uid');
+    await assertFails(getDoc(doc(ctx.firestore(), 'clientErrorReports', 'err-1')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'clientErrorIssueLinks', 'fp-1')));
+  });
+
+  it('no client (not even admin) can write client-error reports or issue links', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'clientErrorReports', 'forged'), { uid: 'x', feature: 'f' }),
+    );
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'clientErrorIssueLinks', 'forged'), { status: 'created' }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'clientErrorReports', 'err-1'), { message: 'tampered' }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'clientErrorIssueLinks', 'fp-1')));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: moderationActions (backend-only writes, admin-only reads)
 // ---------------------------------------------------------------------------
 
