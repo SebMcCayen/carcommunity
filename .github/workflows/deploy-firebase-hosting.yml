@@ -87,16 +87,28 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          # reCAPTCHA Enterprise site key for App Check. REQUIRED in production:
+          # every callable enforces App Check (enforceAppCheck, docs/app-check.md),
+          # so a bundle built WITHOUT this key sends no App Check token and every
+          # admin mutation — grant/revoke subscription, suspend, points, etc. — is
+          # rejected by the callable framework with `unauthenticated` (direct
+          # Firestore reads still work while console enforcement is monitor-only,
+          # which is why lookups succeed but writes fail). The site key is a public
+          # client identifier (baked into the bundle), so it lives as a `vars.*`
+          # production ENVIRONMENT VARIABLE like the Firebase config above.
+          VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
         run: |
           # Fail loudly if any value is missing — better than deploying a
-          # bundle that throws "Missing required environment variable" on load.
+          # bundle that throws "Missing required environment variable" on load,
+          # or (for the App Check key) one whose admin mutations all 401.
           missing=""
           for v in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID \
-                   VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID; do
+                   VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID \
+                   VITE_APPCHECK_SITE_KEY; do
             if [ -z "${!v}" ]; then missing="$missing $v"; fi
           done
           if [ -n "$missing" ]; then
-            echo "::error::Missing production environment variable(s):$missing — set them under Settings → Environments → production → Variables."
+            echo "::error::Missing production environment variable(s):$missing — set them under Settings → Environments → production → Variables. VITE_APPCHECK_SITE_KEY is the reCAPTCHA Enterprise site key: first register the admin hosting domain under reCAPTCHA Enterprise in the Firebase App Check console (docs/app-check.md), then store the resulting site key as this variable — without it every admin callable is rejected with 'unauthenticated'."
             exit 1
           fi
           npm run build --workspace apps/admin

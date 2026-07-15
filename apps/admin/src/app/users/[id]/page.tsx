@@ -218,7 +218,10 @@ export default function UserDetailPage() {
               <dd>{formatDate(detail.updatedAt)}</dd>
             </dl>
             <p className={styles.meta}>
-              <Link className={styles.link} to="/subscription">
+              <Link
+                className={styles.link}
+                to={`/subscription?uid=${encodeURIComponent(detail.uid)}`}
+              >
                 {t('users.detail.subscriptionLink')}
               </Link>
             </p>

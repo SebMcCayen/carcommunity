@@ -233,6 +233,7 @@
     "subtitle": "Slå upp en användares medlemskap och bevilja eller återkalla det manuellt.",
     "userIdLabel": "Användar-ID",
     "userIdPlaceholder": "uid",
+    "fromProfileHint": "Användar-ID är förifyllt från profilen och kan inte ändras här.",
     "lookup": "Slå upp",
     "lookupLoading": "Hämtar…",
     "lookupError": "Kunde inte hämta prenumerationen.",
