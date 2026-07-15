@@ -81,7 +81,7 @@ fun ConvoyRoute(
     // read hiccup no longer leaves a permanent "friends unavailable" notice.
     // A null repository (config-less build) has no coordinator, so this is a
     // no-op and the picker keeps its terminal Error/unavailable fallback.
-    LaunchedEffect(view) {
+    LaunchedEffect(view, friendsCoordinator) {
         if (view == ConvoyView.Create) friendsCoordinator?.load()
     }
 
@@ -136,7 +136,11 @@ fun ConvoyRoute(
                     selectedUids =
                         if (uid in selectedUids) selectedUids - uid else selectedUids + uid
                 },
-                onRetryFriends = { friendsCoordinator?.let { c -> scope.launch { c.load() } } },
+                // Only offer retry when there is a coordinator to retry with; a
+                // null repo (config-less build) gets no button (it could never
+                // succeed) — just the terminal unavailable notice.
+                onRetryFriends =
+                    friendsCoordinator?.let { c -> { scope.launch { c.load() } } },
                 onSubmit = {
                     // Convoys are unnamed — the title is always absent and the
                     // list/detail fall back to the neutral "untitled" label.

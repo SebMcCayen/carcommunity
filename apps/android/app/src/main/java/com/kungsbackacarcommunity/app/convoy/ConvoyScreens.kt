@@ -264,7 +264,7 @@ fun CreateConvoyScreen(
     createState: CreateConvoyState,
     selectedUids: Set<String>,
     onToggleFriend: (String) -> Unit,
-    onRetryFriends: () -> Unit,
+    onRetryFriends: (() -> Unit)?,
     onSubmit: () -> Unit,
     onDone: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -294,8 +294,12 @@ fun CreateConvoyScreen(
                     item(key = "friends-error") {
                         Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                             InfoNoticeCard(text = stringResource(R.string.convoy_friendsUnavailable))
-                            TextButton(onClick = onRetryFriends) {
-                                Text(stringResource(R.string.convoy_friendsRetry))
+                            // Only when a retry can actually work (a live
+                            // coordinator); a null-repo build shows the notice alone.
+                            if (onRetryFriends != null) {
+                                TextButton(onClick = onRetryFriends) {
+                                    Text(stringResource(R.string.convoy_friendsRetry))
+                                }
                             }
                         }
                     }
