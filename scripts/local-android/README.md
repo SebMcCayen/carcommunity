@@ -19,6 +19,16 @@ emulators. All emulator wiring is **debug-only and off by default** — see
   (firebase-tools rejects JDK < 21). `functions/node_modules` installed
   (provides `firebase-admin` for the seed script).
 
+### Platform note for `--fb`
+`kcc-run.sh --fb` has been tested on **Linux**. It uses a couple of host
+utilities with built-in fallbacks so it also works elsewhere (e.g. macOS):
+- **Process daemonization**: `setsid` if present, otherwise `nohup`.
+- **Port detection**: `ss`, else `lsof`, else `netstat` — at least one must be
+  installed (the script fails fast with a clear message if none is found).
+- **JDK 21 discovery**: `JDK21_HOME`/`JAVA21_HOME`, else `/usr/libexec/java_home`
+  (macOS), `update-alternatives` (Debian/Ubuntu), or common install roots.
+Plain `kcc-run.sh` (no `--fb`) only needs the Android toolchain + `adb`.
+
 ## One command
 ```bash
 scripts/local-android/kcc-run.sh --fb
