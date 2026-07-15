@@ -383,9 +383,9 @@
     <string name="convoy_accept">Acceptera</string>
     <string name="convoy_decline">Avböj</string>
     <string name="convoy_createTitle">Ny konvoj</string>
-    <string name="convoy_titleLabel">Konvojnamn (valfritt)</string>
     <string name="convoy_pickFriendsTitle">Bjud in vänner</string>
     <string name="convoy_friendsUnavailable">Dina vänner kunde inte laddas just nu.</string>
+    <string name="convoy_friendsRetry">Försök igen</string>
     <string name="convoy_noFriends">Lägg till några vänner först för att bjuda in dem till en konvoj.</string>
     <string name="convoy_createSubmit">Skapa konvoj</string>
     <string name="convoy_createdTitle">Konvoj skapad</string>

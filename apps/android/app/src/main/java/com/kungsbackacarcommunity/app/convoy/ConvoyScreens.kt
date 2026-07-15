@@ -25,7 +25,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -254,7 +253,8 @@ private fun PendingInviteRow(
 
 /**
  * Create-a-convoy: a multi-select picker over the caller's friends (from the
- * shared FriendsRepository) plus an optional title, wired to `convoy-create`.
+ * shared FriendsRepository), wired to `convoy-create`. Convoys are unnamed —
+ * there is no title input; the list/detail render a neutral fallback label.
  * After creation any skipped invitees (non-friends/blocked) are surfaced before
  * the caller continues into the new convoy.
  */
@@ -262,10 +262,9 @@ private fun PendingInviteRow(
 fun CreateConvoyScreen(
     friendsStatus: FriendsStatus,
     createState: CreateConvoyState,
-    title: String,
     selectedUids: Set<String>,
-    onTitleChange: (String) -> Unit,
     onToggleFriend: (String) -> Unit,
+    onRetryFriends: () -> Unit,
     onSubmit: () -> Unit,
     onDone: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -284,17 +283,6 @@ fun CreateConvoyScreen(
         ) {
             item(key = "title") { AeroPageTitle(stringResource(R.string.convoy_createTitle)) }
 
-            item(key = "title-field") {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    label = { Text(stringResource(R.string.convoy_titleLabel)) },
-                    singleLine = true,
-                    enabled = createState !is CreateConvoyState.Working,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
             item(key = "pick-header") {
                 SectionHeader(stringResource(R.string.convoy_pickFriendsTitle))
             }
@@ -304,7 +292,12 @@ fun CreateConvoyScreen(
 
                 is FriendsStatus.Error ->
                     item(key = "friends-error") {
-                        InfoNoticeCard(text = stringResource(R.string.convoy_friendsUnavailable))
+                        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                            InfoNoticeCard(text = stringResource(R.string.convoy_friendsUnavailable))
+                            TextButton(onClick = onRetryFriends) {
+                                Text(stringResource(R.string.convoy_friendsRetry))
+                            }
+                        }
                     }
 
                 is FriendsStatus.Loaded ->

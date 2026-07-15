@@ -68,10 +68,22 @@ fun ConvoyRoute(
     var detailConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Create-flow local form state (reset each time the picker is opened).
-    var title by rememberSaveable { mutableStateOf("") }
     var selectedUids by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(coordinator) { coordinator.load() }
+
+    // Load the friends snapshot whenever the invite-picker is shown. Declarative
+    // (keyed on the sub-view) so it fires on EVERY entry into Create — the list
+    // "Create" button, the map "+" deep-link, and a process-death restoration
+    // straight back into the Create sub-screen — rather than relying on the
+    // imperative navigation handlers, one of which could be skipped. Re-running
+    // on each entry also re-attempts a previously failed load, so a transient
+    // read hiccup no longer leaves a permanent "friends unavailable" notice.
+    // A null repository (config-less build) has no coordinator, so this is a
+    // no-op and the picker keeps its terminal Error/unavailable fallback.
+    LaunchedEffect(view) {
+        if (view == ConvoyView.Create) friendsCoordinator?.load()
+    }
 
     // Deep-link: when entered from the map "+" chooser's "Convoy" option, jump
     // straight to the create-convoy sub-screen. One-shot (a saveable guard) so
@@ -81,10 +93,10 @@ fun ConvoyRoute(
     LaunchedEffect(openCreateOnEntry) {
         if (openCreateOnEntry && !createDeepLinkConsumed) {
             createDeepLinkConsumed = true
-            title = ""
             selectedUids = emptySet()
             coordinator.resetCreate()
-            friendsCoordinator?.load()
+            // Friends load is driven declaratively by the LaunchedEffect(view)
+            // above once the sub-view flips to Create.
             view = ConvoyView.Create
         }
     }
@@ -100,11 +112,10 @@ fun ConvoyRoute(
                 actionError = actionError,
                 busyConvoys = busyConvoys,
                 onCreate = {
-                    // Fresh form + friends snapshot each time the picker opens.
-                    title = ""
+                    // Fresh form each time the picker opens; the friends snapshot
+                    // is (re)loaded by the LaunchedEffect(view) once view == Create.
                     selectedUids = emptySet()
                     coordinator.resetCreate()
-                    friendsCoordinator?.let { c -> scope.launch { c.load() } }
                     view = ConvoyView.Create
                 },
                 onOpenConvoy = { convoyId ->
@@ -120,15 +131,16 @@ fun ConvoyRoute(
             CreateConvoyScreen(
                 friendsStatus = friendsStatus,
                 createState = createState,
-                title = title,
                 selectedUids = selectedUids,
-                onTitleChange = { title = it },
                 onToggleFriend = { uid ->
                     selectedUids =
                         if (uid in selectedUids) selectedUids - uid else selectedUids + uid
                 },
+                onRetryFriends = { friendsCoordinator?.let { c -> scope.launch { c.load() } } },
                 onSubmit = {
-                    scope.launch { coordinator.create(selectedUids.toList(), title) }
+                    // Convoys are unnamed — the title is always absent and the
+                    // list/detail fall back to the neutral "untitled" label.
+                    scope.launch { coordinator.create(selectedUids.toList(), null) }
                 },
                 onDone = { convoyId ->
                     coordinator.resetCreate()
