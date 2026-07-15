@@ -427,11 +427,26 @@ fun AuthenticatedApp(
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
 
             // Community-chat unread flag (a lightweight per-user last-read marker,
-            // no fan-out counter): drives the map chat bubble's "missed" dot.
-            // Guarded — no repo (config-less build) means never unread.
+            // no fan-out counter): drives the map chat bubble's "missed" dot AND
+            // the chat hub's Community-tab dot. Gated like garageState so the two
+            // Firestore listeners it opens (newest-message + userPrivate marker)
+            // are live only while that dot can actually be seen — the Map tab
+            // (bubble) or the open ChatHub route — and degrade to a constant
+            // `false` otherwise. The condition stays true across the Map ↔ ChatHub
+            // transition (the hub opens as a route while the Map tab stays
+            // selected), so the listener survives it rather than tearing down;
+            // leaving both and returning re-subscribes and Firestore's local cache
+            // delivers the current value near-instantly. Guarded — no repo
+            // (config-less build) means never unread.
+            val needsCommunityUnread =
+                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub
             val communityChatUnread by
-                remember(communityChatRepository, uid) {
-                    communityChatRepository?.observeUnread(uid) ?: flowOf(false)
+                remember(communityChatRepository, uid, needsCommunityUnread) {
+                    if (communityChatRepository != null && needsCommunityUnread) {
+                        communityChatRepository.observeUnread(uid)
+                    } else {
+                        flowOf(false)
+                    }
                 }
                     .collectAsState(initial = false)
 

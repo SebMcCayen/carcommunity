@@ -138,10 +138,13 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   (null [HubEntry.onClick]) are omitted; tapping an available entry runs its
  *   action (which navigates to that destination, or signs out) and closes the
  *   popup, and tapping outside the popup dismisses it.
- * @param unreadChatCount number of unread ("missed") chat messages shown as a
- *   badge on the floating chat control. There is no global/community-chat
- *   inbox client-side yet (chat is per-event only), so callers pass 0 as a
- *   placeholder until a global unread-count source exists. See the chat popup.
+ * @param unreadChatCount unread indicator for the floating chat control: a
+ *   non-zero value renders the "missed" badge/dot on the bubble. It is sourced
+ *   from the community-chat unread state (the hoisted `observeUnread` marker
+ *   collected once in `AuthenticatedApp`), so the dot shows whenever the caller
+ *   has an unread community message.
+ * @param onOpenChat invoked when the floating chat bubble is tapped; the host
+ *   opens the full 3-channel chat hub ([ShellRoute.ChatHub]).
  */
 @Composable
 fun MapHome(
