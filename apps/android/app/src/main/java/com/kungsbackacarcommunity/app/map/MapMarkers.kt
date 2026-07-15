@@ -117,6 +117,33 @@ object MapMarkers {
     }
 
     /**
+     * The callout text to draw above a [marker]: the sharer's display name on
+     * the first line and, when a main car is denormalized onto the marker (see
+     * [LiveMainCar]), its "make model" on a second line. Returns null when there
+     * is nothing worth labelling (no display name AND no car) so the renderer
+     * leaves a position-only pin as a bare circle.
+     *
+     * [fallbackName] is used as the first line when the marker carries a car but
+     * no display name, so the car is never shown orphaned without a who. Blank
+     * make/model parts are trimmed away; a car with an empty make+model degrades
+     * to just the name line. Pure (no Android/Mapbox types) so it is unit-tested
+     * alongside the rest of [MapMarkers] and reused by the map surface.
+     */
+    fun calloutLabel(marker: MapMarker, fallbackName: String): String? {
+        val name = marker.displayName?.trim()?.takeIf { it.isNotEmpty() }
+        val car =
+            marker.mainCar
+                ?.let { "${it.make.trim()} ${it.model.trim()}".trim() }
+                ?.takeIf { it.isNotEmpty() }
+        return when {
+            name != null && car != null -> "$name\n$car"
+            name != null -> name
+            car != null -> "$fallbackName\n$car"
+            else -> null
+        }
+    }
+
+    /**
      * Camera to show for the given own-position marker: focus on it when
      * present, otherwise fall back to [DEFAULT_CAMERA]. Longitude/latitude are
      * carried through unchanged; only the zoom tightens when we have a fix.

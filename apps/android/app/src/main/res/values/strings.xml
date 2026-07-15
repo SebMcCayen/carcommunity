@@ -188,6 +188,7 @@
     <string name="map_noOtherMarkersSubtitle">Livepositioner visas endast under aktiva, tidsbegränsade sessioner.</string>
     <string name="map_memberRequiredTitle">Medlemskap krävs för att se andra medlemmars livepositioner.</string>
     <string name="map_shareOwnFreeHint">Du kan dela din egen position gratis.</string>
+    <string name="map_liveMarkerFallbackName">Delar live</string>
     <string name="events_title">Träffar</string>
     <string name="events_placeholder">Träfflistan kommer snart.</string>
     <string name="events_screenSubtitle">Kommande träffar och community-evenemang.</string>

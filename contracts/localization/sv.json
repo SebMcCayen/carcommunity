@@ -208,7 +208,8 @@
     "noOtherMarkersTitle": "Inga andra medlemmar delar sin liveposition just nu.",
     "noOtherMarkersSubtitle": "Livepositioner visas endast under aktiva, tidsbegränsade sessioner.",
     "memberRequiredTitle": "Medlemskap krävs för att se andra medlemmars livepositioner.",
-    "shareOwnFreeHint": "Du kan dela din egen position gratis."
+    "shareOwnFreeHint": "Du kan dela din egen position gratis.",
+    "liveMarkerFallbackName": "Delar live"
   },
   "events": {
     "title": "Träffar",
