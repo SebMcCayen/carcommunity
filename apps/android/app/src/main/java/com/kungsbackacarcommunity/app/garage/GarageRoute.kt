@@ -103,15 +103,19 @@ fun GarageRoute(
                 if (picked != null && photoCoordinator != null && editingId != null) {
                     // Strip EXIF/GPS metadata BEFORE upload: car profiles are
                     // PUBLICLY visible to other members, so a photo taken at the
-                    // owner's home must never leak their coordinates. ImageCompressor
-                    // decodes + re-encodes to JPEG, which drops all EXIF metadata
-                    // (GPS included) — reusing the exact sanitiser the profile-avatar
-                    // upload already runs. The re-encoded bytes are what get uploaded.
-                    val sanitized = ImageCompressor.compress(picked)
-                    val imageId = MediaUpload.newImageId(sanitized.contentType)
-                    val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
-                    photoCoordinator.upload(sanitized, path) { storedPath ->
-                        repository.updateVehicleImagePath(editingId, storedPath)
+                    // owner's home must never leak their coordinates.
+                    // compressForPublicUpload decodes + re-encodes to JPEG (dropping
+                    // all EXIF, GPS included) and GUARANTEES the returned bytes are
+                    // EXIF-free — it returns null instead of falling back to the
+                    // un-sanitised original, so we fail closed and skip the upload
+                    // rather than risk leaking the source metadata.
+                    val sanitized = ImageCompressor.compressForPublicUpload(picked)
+                    if (sanitized != null) {
+                        val imageId = MediaUpload.newImageId(sanitized.contentType)
+                        val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
+                        photoCoordinator.upload(sanitized, path) { storedPath ->
+                            repository.updateVehicleImagePath(editingId, storedPath)
+                        }
                     }
                 }
             }
