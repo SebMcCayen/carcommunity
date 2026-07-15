@@ -10,5 +10,7 @@
   a release build. English-only by design (not user-facing product copy).
 -->
 <resources>
-    <string name="debug_devSignInButton">Dev sign-in (Sven — emulator)</string>
+    <!-- translatable=false: debug-only developer affordance, never localized (and
+         never shown in release), so it needs no per-locale translation. -->
+    <string name="debug_devSignInButton" translatable="false">Dev sign-in (Sven — emulator)</string>
 </resources>
