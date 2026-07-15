@@ -31,6 +31,7 @@ import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
+import com.kungsbackacarcommunity.app.memberprofile.FirebaseMemberProfileRepository
 import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
@@ -162,6 +163,8 @@ class MainActivity : ComponentActivity() {
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
+        val memberProfileRepository =
+            FirebaseMemberProfileRepository.createIfAvailable(applicationContext)
         val dmRepository = FirebaseDmRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
@@ -272,6 +275,7 @@ class MainActivity : ComponentActivity() {
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        memberProfileRepository = memberProfileRepository,
                         dmRepository = dmRepository,
                         drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,

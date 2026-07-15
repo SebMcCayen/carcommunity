@@ -396,6 +396,20 @@
     "errorRequestGone": "Förfrågan är inte längre tillgänglig.",
     "errorGeneric": "Något gick fel. Försök igen."
   },
+  "memberProfile": {
+    "title": "Profil",
+    "unknownMember": "Medlem",
+    "unavailable": "Den här profilen är inte tillgänglig.",
+    "error": "Det gick inte att läsa in profilen.",
+    "retry": "Försök igen",
+    "carsTitle": "Bilar",
+    "carsEmpty": "Inga bilar i garaget ännu.",
+    "mainCar": "Huvudbil",
+    "badgesTitle": "Utmärkelser",
+    "badgesEmpty": "Inga utmärkelser ännu.",
+    "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
+    "awardedOn": "Tilldelad"
+  },
   "groupDrive": {
     "screenTitle": "Gruppkörning",
     "joinButton": "Gå med i gruppkörningen",

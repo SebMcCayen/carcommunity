@@ -61,6 +61,7 @@ class MapFirstShellTest {
                     badgesRepository = null,
                     blockingRepository = null,
                     friendsRepository = null,
+                    memberProfileRepository = null,
                     dmRepository = null,
                     drivesRepository = null,
                     pointsRepository = null,

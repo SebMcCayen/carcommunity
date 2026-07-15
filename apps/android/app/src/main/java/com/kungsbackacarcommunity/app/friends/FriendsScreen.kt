@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.friends
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,6 +69,7 @@ fun FriendsScreen(
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
     onMessageFriend: (FriendSummary) -> Unit,
+    onViewProfile: (FriendSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
@@ -167,6 +169,7 @@ fun FriendsScreen(
                             FriendRow(
                                 friend = friend,
                                 working = friend.uid in busyRows,
+                                onViewProfile = { onViewProfile(friend) },
                                 onMessage = { onMessageFriend(friend) },
                                 onRemove = { removeTarget = friend },
                             )
@@ -338,6 +341,7 @@ private fun OutgoingRequestRow(request: FriendRequestSummary) {
 private fun FriendRow(
     friend: FriendSummary,
     working: Boolean,
+    onViewProfile: () -> Unit,
     onMessage: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -346,8 +350,13 @@ private fun FriendRow(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
+            // Tapping the member (avatar + name) opens their read-only profile.
             MemberHeader(
                 user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onViewProfile),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Opens the 1:1 DM thread with this friend; the conversation is
