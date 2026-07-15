@@ -242,7 +242,10 @@ object DriveSummary {
      * estimate (a summary-only save), so the dialog renders an em dash for them.
      */
     fun preview(points: List<RecordedPoint>, elapsedMillis: Long): DriveSummaryPreview {
-        val durationSeconds = (elapsedMillis / 1000L).coerceAtLeast(0L)
+        // Round (not floor) to match the backend's driveDurationSeconds, which
+        // uses Math.round(ms / 1000) — so the preview's duration seconds agree
+        // with what the server stores.
+        val durationSeconds = Math.round(elapsedMillis / 1000.0).coerceAtLeast(0L)
         if (points.size < 2) {
             return DriveSummaryPreview(
                 distanceMeters = null,

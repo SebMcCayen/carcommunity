@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /** Test tag on the end-of-session save/discard summary dialog. */
 const val SESSION_SUMMARY_DIALOG_TAG = "session_summary_dialog"
@@ -97,7 +98,7 @@ private fun SummaryPrompt(
         onDismissRequest = {},
         title = { Text(stringResource(R.string.savedDrives_promptTitle)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
                 Text(
                     text = stringResource(R.string.savedDrives_promptBody),
                     style = MaterialTheme.typography.bodyMedium,
@@ -175,9 +176,9 @@ private fun SavingDialog() {
         text = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(KccSpacing.s5), strokeWidth = 2.dp)
                 Text(text = stringResource(R.string.savedDrives_saveAction))
             }
         },

@@ -32,6 +32,16 @@ class DriveSummaryTest {
     }
 
     @Test
+    fun `duration seconds are rounded to match the backend, not floored`() {
+        // Backend driveDurationSeconds uses Math.round(ms / 1000): 1500ms -> 2s
+        // (a floor would give 1s), and 1499ms -> 1s.
+        assertEquals(2L, DriveSummary.preview(emptyList(), elapsedMillis = 1_500L).durationSeconds)
+        assertEquals(1L, DriveSummary.preview(emptyList(), elapsedMillis = 1_499L).durationSeconds)
+        // Exact multiples are unaffected by rounding.
+        assertEquals(30L, DriveSummary.preview(emptyList(), elapsedMillis = 30_000L).durationSeconds)
+    }
+
+    @Test
     fun `haversine is zero for identical points`() {
         assertEquals(0.0, DriveSummary.haversineMetres(57.0, 12.0, 57.0, 12.0), 1e-6)
     }
