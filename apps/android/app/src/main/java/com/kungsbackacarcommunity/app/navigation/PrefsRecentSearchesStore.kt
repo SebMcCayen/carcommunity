@@ -76,7 +76,11 @@ class PrefsRecentSearchesStore(context: Context) : RecentSearchesStore {
                     ),
                 )
             }
-            return out
+            // Enforce the store contract that recents are capped, even if a
+            // corrupt/oversized SharedPreferences payload holds more than
+            // [RecentSearches.MAX] entries, so callers relying on the cap can't
+            // be handed an unbounded list.
+            return out.take(RecentSearches.MAX)
         }
     }
 }
