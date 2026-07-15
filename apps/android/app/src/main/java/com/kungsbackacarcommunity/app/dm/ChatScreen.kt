@@ -143,6 +143,10 @@ private fun MessageList(
     onLoadOlder: () -> Unit,
 ) {
     val listState = rememberLazyListState()
+    // The optional "load older" row is a single item prepended before the
+    // messages, so every message's LazyColumn index is shifted by +1 while it is
+    // present. Track that offset so the auto-scroll targets the real last item.
+    val headerOffset = if (canLoadOlder || isLoadingOlder) 1 else 0
     // Auto-scroll to the newest message only when it won't fight the reader:
     // either the new message is the user's OWN send (always follow your own
     // message), or the user is already at/near the bottom. If they've scrolled
@@ -156,7 +160,9 @@ private fun MessageList(
         val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
         val isOwnSend = newest.senderUid == currentUid
         if (isOwnSend || nearBottom) {
-            listState.animateScrollToItem(messages.lastIndex)
+            // Index into the LazyColumn, not the messages list: account for the
+            // header so we land on the newest message rather than the one before.
+            listState.animateScrollToItem(messages.lastIndex + headerOffset)
         }
     }
 
