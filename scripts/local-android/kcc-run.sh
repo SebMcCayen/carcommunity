@@ -7,11 +7,19 @@
 # for --fb, firebase-tools + JDK 21. See README.md in this directory.
 #
 # Usage:
-#   ./kcc-run.sh              # emulator + build/install + launch (prod Firebase)
-#   ./kcc-run.sh --fb         # ALSO start Firebase emulators, seed Sven, and
-#                             #   build with -PuseFirebaseEmulator=true so the app
-#                             #   talks to the local emulators + shows dev sign-in
-#   ./kcc-run.sh --fb --no-build   # skip gradle, just reinstall the existing APK
+#   ./kcc-run.sh                 # emulator + build/install + launch (prod Firebase)
+#   ./kcc-run.sh --fb            # ALSO start Firebase emulators, seed Sven, and
+#                                #   build with -PuseFirebaseEmulator=true so the app
+#                                #   talks to the local emulators + shows dev sign-in
+#   ./kcc-run.sh --fb --no-build # skip gradle, just reinstall the existing APK
+#   ./kcc-run.sh --offline       # build Gradle offline (default is ONLINE, so a
+#                                #   fresh clone / evicted cache can resolve deps).
+#                                #   Same as KCC_GRADLE_OFFLINE=1.
+#
+# Env:
+#   KCC_AVD               AVD name (default: kcc_test)
+#   KCC_GRADLE_OFFLINE=1  build Gradle offline (same as --offline)
+#   JDK21_HOME/JAVA21_HOME  JDK 21 home for the Firebase emulators (--fb)
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -19,6 +27,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ANDROID="$REPO_ROOT/apps/android"
 AVD="${KCC_AVD:-kcc_test}"
 APPID="com.kungsbackacarcommunity.app"
+
+usage() {
+  sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
 
 # Start a command fully detached, writing to a log file. Uses setsid when
 # available (Linux) and falls back to nohup (e.g. macOS, where setsid is absent).
@@ -57,6 +69,11 @@ port_open() { # $1=port
   esac
 }
 
+# First emulator serial in the "device" (fully-authorized) state, or empty.
+emulator_serial() {
+  adb devices | awk '/^emulator-[0-9]+[[:space:]]+device$/{print $1; exit}'
+}
+
 # Resolve a JDK 21 home (firebase-tools requires JDK >= 21; the toolchain's
 # env.sh exports JDK 17 for Gradle). Honor JDK21_HOME/JAVA21_HOME if set, else
 # try common discovery mechanisms across platforms. Only needed for --fb; if
@@ -78,11 +95,15 @@ find_jdk21() {
 }
 JDK21="$(find_jdk21)"
 
-WITH_FB=0; DO_BUILD=1
+WITH_FB=0; DO_BUILD=1; OFFLINE=0
+[ "${KCC_GRADLE_OFFLINE:-0}" = "1" ] && OFFLINE=1
 for a in "$@"; do
   case "$a" in
     --fb) WITH_FB=1;;
     --no-build) DO_BUILD=0;;
+    --offline) OFFLINE=1;;
+    -h|--help) usage; exit 0;;
+    *) echo "Unknown option: $a" >&2; usage; exit 1;;
   esac
 done
 
@@ -90,18 +111,33 @@ done
 source ~/android-toolchain/env.sh
 export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
-# --- 1. boot the Android emulator if not already online ---
-# Detect ANY already-online emulator (serials vary: 5554, 5556, ...), not just
-# the default 5554, so we don't boot a second one when one is already running.
+# --- 1. ensure an Android emulator is online, then pin its serial ---
+# Every subsequent adb call is scoped with `-s "$ADB_SERIAL"` so a second
+# connected device (another emulator or a physical phone) can't trigger
+# "more than one device" or make us act on the wrong target.
 if ! adb devices | grep -qE "^emulator-[0-9]+[[:space:]]+device$"; then
   echo ">> booting emulator $AVD ..."
   spawn_detached /tmp/kcc-emulator.log emulator -avd "$AVD" -no-window -no-audio \
       -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-  adb wait-for-device
-  echo ">> waiting for boot ..."
-  until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do sleep 3; done
 fi
-echo ">> emulator online (API $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
+# Wait (up to ~4 min) for an emulator to reach the "device" state, then capture
+# its serial. A polling loop (rather than `adb wait-for-device`) so a pre-existing
+# physical device doesn't satisfy the wait while our emulator is still starting.
+ADB_SERIAL=""
+for _ in $(seq 1 120); do
+  ADB_SERIAL="$(emulator_serial)"
+  [ -n "$ADB_SERIAL" ] && break
+  sleep 2
+done
+if [ -z "$ADB_SERIAL" ]; then
+  echo "ERROR: no emulator reached the 'device' state (see /tmp/kcc-emulator.log)." >&2
+  exit 1
+fi
+echo ">> waiting for boot ($ADB_SERIAL) ..."
+until [ "$(adb -s "$ADB_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+  sleep 3
+done
+echo ">> emulator $ADB_SERIAL online (API $(adb -s "$ADB_SERIAL" shell getprop ro.build.version.sdk | tr -d '\r'))"
 
 # --- 2. optional: Firebase emulators + seeded Sven Svensson ---
 GRADLE_FLAG=()
@@ -131,20 +167,24 @@ if [ "$WITH_FB" = "1" ]; then
 fi
 
 # --- 3. build + install the debug APK ---
+# Gradle runs ONLINE by default so a fresh clone / evicted cache can resolve
+# dependencies; pass --offline (or KCC_GRADLE_OFFLINE=1) to force offline.
 APK="$ANDROID/app/build/outputs/apk/debug/app-debug.apk"
+GRADLE_OFFLINE=()
+[ "$OFFLINE" = "1" ] && GRADLE_OFFLINE=(--offline)
 if [ "$DO_BUILD" = "1" ]; then
-  echo ">> building debug APK ${GRADLE_FLAG[*]:-} ..."
-  ( cd "$ANDROID" && ./gradlew --offline :app:assembleDebug "${GRADLE_FLAG[@]}" )
+  echo ">> building debug APK ${GRADLE_FLAG[*]:-} ${GRADLE_OFFLINE[*]:-} ..."
+  ( cd "$ANDROID" && ./gradlew "${GRADLE_OFFLINE[@]}" :app:assembleDebug "${GRADLE_FLAG[@]}" )
 fi
 echo ">> installing $APK"
-adb install -r "$APK"
+adb -s "$ADB_SERIAL" install -r "$APK"
 
 # --- 4. launch ---
 echo ">> launching $APPID"
-adb shell monkey -p "$APPID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+adb -s "$ADB_SERIAL" shell monkey -p "$APPID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
 sleep 4
 OUT="/tmp/kcc-screen.png"
-adb exec-out screencap -p > "$OUT" 2>/dev/null || true
+adb -s "$ADB_SERIAL" exec-out screencap -p > "$OUT" 2>/dev/null || true
 echo ">> done. screenshot: $OUT"
 if [ "$WITH_FB" = "1" ]; then
   echo ">> tap 'Dev sign-in (Sven — emulator)' on the sign-in screen to log in."

@@ -40,6 +40,17 @@ installs it, and launches the app. Then tap **"Dev sign-in (Sven — emulator)"*
 Plain `kcc-run.sh` (no `--fb`) builds a normal debug build that talks to
 **production** Firebase and shows only Google Sign-In.
 
+### Flags / env
+- `--fb` — start the Firebase emulators, seed Sven, and build with the emulator flag on.
+- `--no-build` — skip Gradle; reinstall the existing APK.
+- `--offline` (or `KCC_GRADLE_OFFLINE=1`) — build Gradle offline. **Gradle runs
+  ONLINE by default** so a fresh clone / evicted cache can resolve dependencies;
+  use this only once the cache is warm.
+- `KCC_AVD` — AVD name (default `kcc_test`).
+
+The script pins all `adb` commands to one emulator serial (`adb -s <serial>`),
+so it works even when another emulator or a physical device is connected.
+
 ## What the emulator flag does
 `-PuseFirebaseEmulator=true` sets `BuildConfig.USE_FIREBASE_EMULATOR = true`
 in the **debug** build. Guarded by `BuildConfig.DEBUG && USE_FIREBASE_EMULATOR`:
