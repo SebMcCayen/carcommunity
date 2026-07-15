@@ -873,7 +873,8 @@
     "remaining": "%1$s · %2$s",
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",
-    "reportComingSoon": "Incident and roadwork reporting is coming soon."
+    "reportComingSoon": "Incident and roadwork reporting is coming soon.",
+    "rerouting": "Rerouting…"
   },
   "incidents": {
     "reportButton": "Report incident",

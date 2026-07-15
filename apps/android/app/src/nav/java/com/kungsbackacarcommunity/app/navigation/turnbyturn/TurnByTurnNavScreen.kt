@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +77,8 @@ import com.mapbox.navigation.core.directions.session.RoutesObserver
 import com.mapbox.navigation.core.formatter.MapboxDistanceFormatter
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationApp
 import com.mapbox.navigation.core.lifecycle.MapboxNavigationObserver
+import com.mapbox.navigation.core.reroute.RerouteController
+import com.mapbox.navigation.core.reroute.RerouteState
 import com.mapbox.navigation.core.trip.session.LocationMatcherResult
 import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
@@ -256,6 +260,7 @@ fun TurnByTurnNavScreen(
 
     val following by engine.cameraFollowing.collectAsState()
     val progress by engine.progress.collectAsState()
+    val rerouting by engine.rerouting.collectAsState()
 
     BackHandler { onExit() }
 
@@ -305,6 +310,38 @@ fun TurnByTurnNavScreen(
                 }
             }
             AndroidView(factory = { maneuverView }, modifier = Modifier.fillMaxWidth())
+
+            // Brief "Rerouting…" indicator, shown only while the SDK is fetching a
+            // replacement route after the user deviates; cleared once the new route
+            // is active (reroute state leaves FetchingRoute) or the session ends.
+            if (rerouting) {
+                Surface(
+                    shape = RoundedCornerShape(KccRadius.full),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 3.dp,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                        modifier = Modifier.padding(
+                            horizontal = KccSpacing.s3,
+                            vertical = KccSpacing.s2,
+                        ),
+                    ) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.turnByTurn_rerouting),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    }
+                }
+            }
         }
 
         // Right side: re-centre (only when the camera is NOT following) + report.
@@ -474,6 +511,15 @@ private class TurnByTurnEngine(
     private val progressFlow = MutableStateFlow<NavProgress?>(null)
     val progress: StateFlow<NavProgress?> = progressFlow.asStateFlow()
 
+    /**
+     * True while an off-route reroute is in flight (SDK is fetching a replacement
+     * route), driving the "Rerouting…" indicator. Set on
+     * [RerouteState.FetchingRoute] and cleared on every other state — the
+     * fetched/idle/interrupted/failed transitions all mean nothing is in flight.
+     */
+    private val reroutingFlow = MutableStateFlow(false)
+    val rerouting: StateFlow<Boolean> = reroutingFlow.asStateFlow()
+
     private val viewportDataSource = MapboxNavigationViewportDataSource(mapView.mapboxMap)
     private val navigationCamera =
         NavigationCamera(mapView.mapboxMap, mapView.camera, viewportDataSource)
@@ -641,6 +687,20 @@ private class TurnByTurnEngine(
             }
         }
 
+    // Off-route re-routing. The Nav SDK v3 default reroute controller is active by
+    // default: once a trip session is running with a set route, deviating from it
+    // triggers the SDK to recompute a route from the current location to the same
+    // destination and swap it in — which arrives through routesObserver (reason
+    // ROUTES_UPDATE_REASON_REROUTE) and continues the session automatically, so no
+    // manual off-route detection or re-request is needed here. We only OBSERVE the
+    // reroute state to surface a brief "Rerouting…" indicator: FetchingRoute means
+    // a reroute is in flight; any other state (RouteFetched/Idle/Interrupted/Failed)
+    // means it isn't.
+    private val rerouteStateObserver =
+        RerouteController.RerouteStateObserver { state ->
+            reroutingFlow.value = state is RerouteState.FetchingRoute
+        }
+
     private var mapboxNavigation: MapboxNavigation? = null
 
     @SuppressLint("MissingPermission")
@@ -649,6 +709,10 @@ private class TurnByTurnEngine(
         mapboxNavigation.registerRoutesObserver(routesObserver)
         mapboxNavigation.registerLocationObserver(locationObserver)
         mapboxNavigation.registerRouteProgressObserver(routeProgressObserver)
+        // Observe the (default, already-active) reroute controller for the UI
+        // indicator. getRerouteController() is null-safe: if no controller is set
+        // the indicator simply never shows, but the SDK's built-in reroute still runs.
+        mapboxNavigation.getRerouteController()?.registerRerouteStateObserver(rerouteStateObserver)
         // Real GPS trip session (permission is guarded by the caller).
         mapboxNavigation.startTripSession()
         // If we already have an origin, request the route immediately.
@@ -659,6 +723,9 @@ private class TurnByTurnEngine(
         mapboxNavigation.unregisterRoutesObserver(routesObserver)
         mapboxNavigation.unregisterLocationObserver(locationObserver)
         mapboxNavigation.unregisterRouteProgressObserver(routeProgressObserver)
+        mapboxNavigation.getRerouteController()?.unregisterRerouteStateObserver(rerouteStateObserver)
+        // Clear any lingering "Rerouting…" indicator when the session ends.
+        reroutingFlow.value = false
         // Mirror attach()'s startTripSession(): stop the live GPS trip session so
         // exiting the screen ends location updates instead of leaving them running
         // (battery/GPS drain). stopTripSession() is a safe no-op if not started, so
