@@ -347,7 +347,10 @@ class MapboxMapSurface : MapSurface {
                     // marks the long-press handled.
                     val longPressListener =
                         OnMapLongClickListener { point ->
-                            longPressFlow.value = MapPoint(point.longitude(), point.latitude())
+                            // Publish through the shared hook (not longPressFlow
+                            // directly) so all long-press publishing goes through
+                            // one place and stays consistent with the stub surface.
+                            emitLongPress(MapPoint(point.longitude(), point.latitude()))
                             true
                         }
                     longClickListener = longPressListener

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.navigation
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -52,7 +53,14 @@ object ExternalNavigation {
         label: String,
         onUnavailable: () -> Unit,
     ) {
+        // A non-Activity context (application/service) has no task to launch into,
+        // so starting an Activity from it without FLAG_ACTIVITY_NEW_TASK throws an
+        // AndroidRuntimeException. Add the flag in that case so this helper is safe
+        // for any Context; an Activity context keeps the default same-task launch.
+        val newTask = context !is Activity
+
         val navIntent = Intent(Intent.ACTION_VIEW, Uri.parse(navigationUri(destination)))
+        if (newTask) navIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(navIntent)
             return
@@ -60,6 +68,7 @@ object ExternalNavigation {
             // No Google-Maps navigation handler — fall through to the geo pin.
         }
         val geoIntent = Intent(Intent.ACTION_VIEW, Uri.parse(geoUri(destination, label)))
+        if (newTask) geoIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(geoIntent)
         } catch (_: ActivityNotFoundException) {

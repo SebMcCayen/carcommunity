@@ -55,13 +55,24 @@ class PrefsRecentSearchesStore(context: Context) : RecentSearchesStore {
                 val obj = array.optJSONObject(i) ?: continue
                 val name = obj.optString("name")
                 if (name.isBlank()) continue
+                // Require present, finite, in-range coordinates. optDouble defaults
+                // missing/non-numeric values to 0.0, which would silently surface a
+                // bogus recent at (0,0) that could then be routed/navigated to — so
+                // a partially corrupt entry is skipped instead.
+                val lng = obj.optDouble("lng", Double.NaN)
+                val lat = obj.optDouble("lat", Double.NaN)
+                if (!lng.isFinite() || !lat.isFinite() ||
+                    lng !in -180.0..180.0 || lat !in -90.0..90.0
+                ) {
+                    continue
+                }
                 val address = obj.optString("address").takeIf { it.isNotBlank() && !obj.isNull("address") }
                 out.add(
                     PlaceSuggestion(
                         id = obj.optString("id").ifBlank { "$i-$name" },
                         name = name,
                         address = address,
-                        point = LatLng(longitude = obj.optDouble("lng"), latitude = obj.optDouble("lat")),
+                        point = LatLng(longitude = lng, latitude = lat),
                     ),
                 )
             }

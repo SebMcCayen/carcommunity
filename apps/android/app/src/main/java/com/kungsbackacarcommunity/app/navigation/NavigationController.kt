@@ -60,6 +60,11 @@ class NavigationController(
     private var searchJob: Job? = null
     private var routeJob: Job? = null
 
+    // Tracks the reverse-geocode launched by selectPoint(); held so a newer
+    // action (typing, another pick, another long-press, or a clear) can cancel it
+    // and its stale result never overwrites the newer UI state / route job.
+    private var pointJob: Job? = null
+
     /** Fetches the current location up-front so autocomplete can bias by it. */
     fun refreshOrigin() {
         scope.launch { cachedOrigin = runCatchingCancellable { originProvider() }.getOrNull() }
@@ -72,6 +77,9 @@ class NavigationController(
      */
     fun onQueryChange(query: String) {
         searchJob?.cancel()
+        // A fresh query supersedes any pending long-press reverse-geocode, so its
+        // late result can't call select() and clobber the search that's starting.
+        pointJob?.cancel()
         // Reset `searching` up front: cancelling the prior job doesn't clear the
         // spinner it may have set, so without this it would linger through the
         // pre-lookup debounce window even though no lookup is running. The
@@ -113,6 +121,12 @@ class NavigationController(
     fun select(suggestion: PlaceSuggestion) {
         searchJob?.cancel()
         routeJob?.cancel()
+        // Cancel any pending long-press reverse-geocode so it can't re-select a
+        // stale point over this pick. When select() is itself invoked from that
+        // reverse-geocode's coroutine (selectPoint below), this self-cancel is
+        // harmless: select() has no suspension points before it returns, so it
+        // runs to completion and the route job it starts lives on the outer scope.
+        pointJob?.cancel()
         // Persist the pick as a recent so it reappears in the empty search state
         // next time; re-read so the promoted+capped list drives the UI too.
         recentStore.record(suggestion)
@@ -189,6 +203,8 @@ class NavigationController(
     fun selectPoint(point: LatLng, fallbackLabel: String) {
         searchJob?.cancel()
         routeJob?.cancel()
+        // Supersede any in-flight long-press resolution from a previous press.
+        pointJob?.cancel()
         // Show the destination immediately (loading) so the sheet appears the
         // instant the user lifts their finger, before reverse geocoding resolves.
         val pending =
@@ -208,20 +224,25 @@ class NavigationController(
                 routeLoading = true,
                 error = null,
             )
-        scope.launch {
-            val resolved =
-                runCatchingCancellable { client.reverseGeocode(point) }.getOrNull()
-            // Keep the pressed point as the destination; use the resolved
-            // name/address for the label when available, else the pending fallback.
-            val suggestion =
-                if (resolved != null) {
-                    pending.copy(name = resolved.name, address = resolved.address ?: pending.address)
-                } else {
-                    pending
-                }
-            // Route + record-as-recent go through the same select() path.
-            select(suggestion)
-        }
+        pointJob =
+            scope.launch {
+                val resolved =
+                    runCatchingCancellable { client.reverseGeocode(point) }.getOrNull()
+                // reverseGeocode may block non-cooperatively; if a newer action
+                // cancelled this job while it was in flight, bail before touching
+                // state so a stale point never re-selects over the newer one.
+                coroutineContext.ensureActive()
+                // Keep the pressed point as the destination; use the resolved
+                // name/address for the label when available, else the pending fallback.
+                val suggestion =
+                    if (resolved != null) {
+                        pending.copy(name = resolved.name, address = resolved.address ?: pending.address)
+                    } else {
+                        pending
+                    }
+                // Route + record-as-recent go through the same select() path.
+                select(suggestion)
+            }
     }
 
     /**
@@ -231,6 +252,9 @@ class NavigationController(
     fun clearDestination() {
         searchJob?.cancel()
         routeJob?.cancel()
+        // Drop any pending long-press resolution so it can't re-open a route after
+        // the user cleared the destination.
+        pointJob?.cancel()
         stateFlow.value =
             stateFlow.value.copy(
                 query = "",

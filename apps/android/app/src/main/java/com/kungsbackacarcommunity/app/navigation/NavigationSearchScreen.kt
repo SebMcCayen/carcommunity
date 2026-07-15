@@ -88,7 +88,9 @@ const val NAV_START_TEST_TAG = "nav_start"
  *   in-app Mapbox turn-by-turn screen when the Navigation SDK is bundled, else a
  *   handoff to the device's maps app (see the host wiring).
  * @param recentStore persistence for recently selected places, shown in the
- *   empty (pre-typing) search state for one-tap re-selection.
+ *   empty (pre-typing) search state for one-tap re-selection. Null (the default)
+ *   uses an in-memory store created once via [remember] — see the resolution
+ *   below for why the fallback must be stable across recompositions.
  * @param initialTarget a raw coordinate to preview immediately on open (a map
  *   long-press "navigate here"): it is reverse-geocoded for a label and fed into
  *   the same route preview + Start flow as a searched place. Null for a normal
@@ -101,19 +103,28 @@ fun NavigationSearchScreen(
     originProvider: suspend () -> LatLng?,
     onClose: () -> Unit,
     onStartNavigation: (destination: LatLng, destinationLabel: String) -> Unit,
-    recentStore: RecentSearchesStore = InMemoryRecentSearchesStore(),
+    recentStore: RecentSearchesStore? = null,
     initialTarget: LatLng? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    // Resolve the recent-searches store to a STABLE instance. When the caller
+    // omits one, build the in-memory fallback once with remember instead of a
+    // default-arg `InMemoryRecentSearchesStore()`, which would be a fresh object
+    // on every recomposition. Because the store is a remember() key for the
+    // controller below, an unstable fallback would recreate the
+    // NavigationController on each recomposition — restarting its effects and
+    // dropping the in-flight debounced search — so typed suggestions would never
+    // surface.
+    val resolvedRecentStore = remember(recentStore) { recentStore ?: InMemoryRecentSearchesStore() }
     // Keep the controller stable across recompositions (keyed on the search
     // client + recent store) while always invoking the latest origin provider —
     // otherwise a changed originProvider lambda would be ignored and the stale
     // one called.
     val currentOriginProvider by rememberUpdatedState(originProvider)
     val controller =
-        remember(searchClient, recentStore) {
-            NavigationController(searchClient, { currentOriginProvider() }, scope, recentStore)
+        remember(searchClient, resolvedRecentStore) {
+            NavigationController(searchClient, { currentOriginProvider() }, scope, resolvedRecentStore)
         }
     val state by controller.state.collectAsState()
 
