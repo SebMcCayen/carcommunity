@@ -43,10 +43,13 @@ class FirebaseCommunityChatRepository private constructor(
                         if ((error as? FirebaseFirestoreException)?.code ==
                             FirebaseFirestoreException.Code.PERMISSION_DENIED
                         ) {
-                            // Access revoked (lost membership / blocked): hard clear
-                            // even if a cached snapshot exists, so denied history is
-                            // never shown. This also leaves Loading on a first-load
-                            // deny. PERMISSION_DENIED is terminal — no retry to undo.
+                            // Access revoked (lost membership / blocked): emit the
+                            // empty/denied state, clearing to no messages even when a
+                            // cached snapshot exists, so denied history is never
+                            // shown. Applies whether or not a snapshot came back (a
+                            // first-load deny also clears to empty rather than
+                            // staying in Loading). PERMISSION_DENIED is terminal — no
+                            // retry undoes it.
                             trySend(ChannelMessagesState.Loaded(emptyList()))
                         } else if (snapshot != null) {
                             // Transient failure (UNAVAILABLE/timeout) WITH cached

@@ -54,7 +54,9 @@ internal fun Throwable.toChannelErrorCode(): ChannelErrorCode {
 /** Reads a stored channel message doc into the pure model (Timestamp → millis + ISO). */
 internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
     if (!exists()) return null
-    val senderUid = getString("senderUid") ?: return null
+    // senderUid is required (author identity + own/other + unread logic); a
+    // missing OR blank value is malformed, so drop the doc.
+    val senderUid = getString("senderUid")?.takeIf { it.isNotBlank() } ?: return null
     val millis = getTimestamp("createdAt")?.toDate()?.time
     return ChannelMessage(
         id = id,

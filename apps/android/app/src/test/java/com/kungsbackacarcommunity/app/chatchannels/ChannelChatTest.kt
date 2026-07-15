@@ -114,6 +114,20 @@ class ChannelChatTest {
     }
 
     @Test
+    fun `parseMessage drops rows with a missing or blank senderUid`() {
+        // Valid row survives.
+        assertEquals(
+            "u1",
+            ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "u1"))?.senderUid,
+        )
+        // senderUid is required (author identity + own/other + unread logic):
+        // missing, empty, and whitespace-only are all malformed → dropped.
+        assertNull(ChannelResponseParser.parseMessage(mapOf("id" to "m1")))
+        assertNull(ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "")))
+        assertNull(ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "   ")))
+    }
+
+    @Test
     fun `parseLastReadAt returns the marker or null`() {
         assertEquals("2020-01-01T00:00:00Z", ChannelResponseParser.parseLastReadAt(mapOf("lastReadAt" to "2020-01-01T00:00:00Z")))
         assertNull(ChannelResponseParser.parseLastReadAt(mapOf("lastReadAt" to "")))

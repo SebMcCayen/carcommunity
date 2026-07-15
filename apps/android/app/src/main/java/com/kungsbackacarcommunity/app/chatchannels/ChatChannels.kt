@@ -200,7 +200,9 @@ object ChannelResponseParser {
     fun parseMessage(raw: Any?): ChannelMessage? {
         val map = raw as? Map<*, *> ?: return null
         val id = (map["id"] as? String)?.takeIf { it.isNotBlank() } ?: return null
-        val senderUid = (map["senderUid"] as? String) ?: return null
+        // senderUid is required (author identity + own/other + unread logic); a
+        // missing OR blank value is malformed, so drop the row like a missing id.
+        val senderUid = (map["senderUid"] as? String)?.takeIf { it.isNotBlank() } ?: return null
         val iso = map["createdAt"] as? String
         return ChannelMessage(
             id = id,
