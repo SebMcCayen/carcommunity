@@ -609,7 +609,6 @@
     <string name="billboard_call">Ring</string>
     <string name="billboard_visitWebsite">Besök webbplats</string>
     <string name="billboard_viewOffer">Visa erbjudande</string>
-    <string name="billboard_safeDrivingWarning">Stanna säkert innan du öppnar marknadsföringen.</string>
     <string name="billboard_safeDrivingInteractionDisabled">Marknadsföringsinteraktioner är avstängda medan du kör.</string>
     <string name="billboard_availableUntil">Tillgänglig till</string>
     <string name="billboard_availableFrom">Tillgänglig från</string>
