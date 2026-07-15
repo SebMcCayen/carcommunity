@@ -776,6 +776,34 @@
     "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
     "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
   },
+  "channel": {
+    "inputPlaceholder": "Skriv ett meddelande…",
+    "send": "Skicka",
+    "loadOlder": "Ladda tidigare meddelanden",
+    "emptyCommunity": "Inga meddelanden än — starta samtalet!",
+    "emptyConvoy": "Inga meddelanden än — säg hej till din konvoj!",
+    "unknownSender": "Medlem",
+    "sendErrorSignedOut": "Logga in för att skicka meddelanden.",
+    "sendErrorNotMember": "Chatten är tillgänglig för aktiva medlemmar.",
+    "sendErrorInvalid": "Skriv ett meddelande att skicka.",
+    "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
+    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
+  },
+  "chatHub": {
+    "title": "Chatt",
+    "close": "Stäng chatt",
+    "back": "Tillbaka",
+    "tabCommunity": "Gemenskap",
+    "tabConvoys": "Konvojer",
+    "tabFriends": "Vänner",
+    "tabNotifications": "Notiser",
+    "unavailable": "Det här är inte tillgängligt just nu.",
+    "convoysEmpty": "Du är inte med i några konvojer än.",
+    "convoysError": "Kunde inte ladda dina konvojer.",
+    "convoysRetry": "Försök igen",
+    "convoyUntitled": "Konvoj",
+    "convoyMembers": "Medlemmar: %1$d"
+  },
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",

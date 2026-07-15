@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
@@ -76,6 +77,8 @@ class MapFirstShellTest {
                     friendsRepository = null,
                     memberProfileRepository = null,
                     dmRepository = null,
+                    communityChatRepository = null,
+                    convoyChatRepository = null,
                     drivesRepository = null,
                     pointsRepository = null,
                     partnerApplicationCoordinator = null,
@@ -202,17 +205,20 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun chatBubble_opensAndDismissesPopup() {
+    fun chatBubble_opensAndDismissesChatHub() {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
-        // Tapping it opens the community-chat popup.
+        // Tapping it opens the full 3-channel chat hub as a route over the map.
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
-        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_POPUP_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_chatTitle)).assertIsDisplayed()
-        // Closing minimizes back to the bubble.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_chatClose)).performClick()
-        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_POPUP_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        // The Community / Convoys / Friends / Notifications tabs are shown.
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
+        // Closing returns to the map (the hub is gone).
+        composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_close)).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
     @Test
