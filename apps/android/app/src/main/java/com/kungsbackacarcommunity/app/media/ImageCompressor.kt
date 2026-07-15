@@ -13,11 +13,10 @@ import kotlinx.coroutines.withContext
 
 /**
  * Client-side image compression (+ EXIF/GPS stripping for public uploads) run
- * BEFORE upload so every picked image (avatars, vehicle photos, and any FUTURE
- * image upload) stays small AND — for anything publicly visible — carries no
- * identifying metadata: full-resolution phone photos are commonly 3–8 MB and
- * embed EXIF — including precise GPS coordinates — which both risks the
- * [MediaUpload] byte caps and would leak the owner's location.
+ * BEFORE upload so picked images stay small AND — for anything publicly visible
+ * — carry no identifying metadata: full-resolution phone photos are commonly
+ * 3–8 MB and embed EXIF — including precise GPS coordinates — which both risks
+ * the [MediaUpload] byte caps and would leak the owner's location.
  *
  * Two entry points, one shared re-encode ([reencodeToJpeg]):
  *  - [compress] is a best-effort SIZE optimisation. It decodes, downscales so
@@ -33,6 +32,15 @@ import kotlinx.coroutines.withContext
  *    that either returns provably-clean bytes or FAILS CLOSED (returns null).
  *    A null result means the caller MUST skip the upload — never fall back to
  *    the raw pick — so no geotagged image ever leaves the device.
+ *
+ * Sanitisation is a CALL-SITE CONTRACT, not an automatic guarantee: the two
+ * public-image upload paths — the profile avatar (AuthenticatedApp) and the
+ * vehicle photo (GarageRoute) — each call [compressForPublicUpload] on the pick
+ * and skip the upload on a null result before handing the sanitised bytes to
+ * [ImageUploadCoordinator]. The coordinator itself only enforces the size/type
+ * pre-check and uploads; it does NOT compress or strip. Any NEW upload path for
+ * a publicly visible image MUST therefore call [compressForPublicUpload] itself
+ * — nothing downstream will strip metadata for it.
  */
 object ImageCompressor {
 
@@ -177,13 +185,26 @@ object ImageCompressor {
      *  1. physically rewrite the JPEG without metadata (works even when the
      *     pixels are undecodable — [ExifInterface] parses the APP1 block), else
      *  2. keep the original ONLY when it provably carries no strippable metadata
-     *     at all (no GPS AND no identifying tags), else
-     *  3. FAIL CLOSED (null) — a pick carrying any strip tag (or whose EXIF is
-     *     unparseable) is dropped, never uploaded.
+     *     at all (no GPS AND no identifying tags) AND already advertises an
+     *     allowed image content type, else
+     *  3. FAIL CLOSED (null) — a pick carrying any strip tag, whose EXIF is
+     *     unparseable, or whose content type is unknown/unsupported is dropped,
+     *     never uploaded.
+     *
+     * The content-type guard matters because [PickedImage.contentType] comes
+     * straight from `ContentResolver.getType(uri)`, which can be null (or a
+     * non-image type). Returning such an original would look like success to the
+     * caller yet be rejected by [MediaUpload.precheck] (which requires an
+     * allowed image type), producing a confusing "upload failed" downstream — so
+     * we reject it here instead. Both re-encode and [stripInPlace] paths always
+     * emit `image/jpeg`, so a non-null result is always precheck-valid.
      */
     private fun stripOrFail(picked: PickedImage): PickedImage? {
         stripInPlace(picked)?.let { return it }
-        return if (carriesStrippableMetadata(picked.bytes)) null else picked
+        val provablyClean =
+            !carriesStrippableMetadata(picked.bytes) &&
+                MediaUpload.isAllowedImageType(picked.contentType)
+        return if (provablyClean) picked else null
     }
 
     /**
