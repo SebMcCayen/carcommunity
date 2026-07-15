@@ -12,6 +12,8 @@ import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,11 +32,22 @@ class MapFirstShellTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    /**
+     * The one-time first-login welcome flow gates the Main shell on the first
+     * reach for a uid. These tests target the shell itself, so mark the flow
+     * already-seen for this uid (device-local WelcomeStore) — deterministic
+     * regardless of prior device state — so [setShell] renders the shell directly.
+     */
+    @Before
+    fun markWelcomeSeen() {
+        WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
+    }
+
     private fun setShell() {
         composeTestRule.setContent {
             KccTheme {
                 AuthenticatedApp(
-                    uid = "u1",
+                    uid = TEST_UID,
                     authDisplayName = null,
                     profileRepository = null,
                     onboardingCoordinator = null,
@@ -61,6 +74,7 @@ class MapFirstShellTest {
                     badgesRepository = null,
                     blockingRepository = null,
                     friendsRepository = null,
+                    memberProfileRepository = null,
                     dmRepository = null,
                     convoyRepository = null,
                     drivesRepository = null,
@@ -80,6 +94,10 @@ class MapFirstShellTest {
                 )
             }
         }
+    }
+
+    private companion object {
+        const val TEST_UID = "u1"
     }
 
     @Test
@@ -164,11 +182,19 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_liveTitle)).assertIsDisplayed()
-        // No-Firebase config → not an active member, so starting is member-gated:
-        // the popup shows the membership teaser instead of the start controls.
+        // Sharing your OWN location is FREE (LIVE_LOCATION flag on in DEFAULTS,
+        // not member-gated). Even in the no-Firebase config (not an active
+        // member), the popup shows the start controls — duration picker + Start —
+        // NOT the membership teaser, which is reserved for VIEWING others.
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_durationLabel))
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_start))
+            .assertIsDisplayed()
         composeTestRule
             .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
-            .assertIsDisplayed()
+            .assertDoesNotExist()
         // The map stays visible behind the transparent popup (no navigation).
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // Closing dismisses the popup.

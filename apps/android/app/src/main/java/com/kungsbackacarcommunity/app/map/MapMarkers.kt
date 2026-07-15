@@ -117,6 +117,62 @@ object MapMarkers {
     }
 
     /**
+     * The callout text to draw above a [marker]: the sharer's display name on
+     * the first line and, when a main car is denormalized onto the marker (see
+     * [LiveMainCar]), its "make model" on a second line. Returns null when there
+     * is nothing worth labelling (no display name AND no car) so the renderer
+     * leaves a position-only pin as a bare circle.
+     *
+     * [fallbackName] is used as the first line when the marker carries a car but
+     * no display name, so the car is never shown orphaned without a who. Blank
+     * make/model parts are trimmed away; a car with an empty make+model degrades
+     * to just the name line. Pure (no Android/Mapbox types) so it is unit-tested
+     * alongside the rest of [MapMarkers] and reused by the map surface.
+     *
+     * The only intentional line break is the one this function inserts between
+     * the name and the car, so every field is [sanitizeLine]-collapsed first:
+     * an embedded newline or run of control whitespace in a display name, make,
+     * or model becomes a single space and can never inject extra lines into the
+     * 1–2 line callout.
+     *
+     * A blank/whitespace-only [fallbackName] is treated as absent (never emitted
+     * as an empty first line): a car with no usable name renders as just the car
+     * line, and a marker with neither a usable name nor a car returns null so the
+     * renderer draws a bare circle rather than a blank/vertically-shifted callout.
+     */
+    fun calloutLabel(marker: MapMarker, fallbackName: String): String? {
+        val name = sanitizeLine(marker.displayName).takeIf { it.isNotEmpty() }
+        val car =
+            marker.mainCar
+                ?.let { "${sanitizeLine(it.make)} ${sanitizeLine(it.model)}".trim() }
+                ?.takeIf { it.isNotEmpty() }
+        // The fallback only ever stands in as the "who" for a car — a bare
+        // position marker with no real display name is NOT labelled with it. A
+        // blank fallback collapses to null so it is never emitted as an empty line.
+        return when {
+            name != null && car != null -> "$name\n$car"
+            name != null -> name
+            car != null -> {
+                val fallback = sanitizeLine(fallbackName).takeIf { it.isNotEmpty() }
+                if (fallback != null) "$fallback\n$car" else car
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * Collapses every run of whitespace — including embedded newlines, tabs, and
+     * other control whitespace — to a single space and trims the ends, so a value
+     * is guaranteed single-line before it is composed into the callout. Null in
+     * ⇒ empty string out.
+     */
+    private fun sanitizeLine(value: String?): String =
+        value?.replace(WHITESPACE_RUN, " ")?.trim().orEmpty()
+
+    /** Any run of one-or-more whitespace characters (incl. \n, \r, \t). */
+    private val WHITESPACE_RUN = Regex("\\s+")
+
+    /**
      * Camera to show for the given own-position marker: focus on it when
      * present, otherwise fall back to [DEFAULT_CAMERA]. Longitude/latitude are
      * carried through unchanged; only the zoom tightens when we have a fix.

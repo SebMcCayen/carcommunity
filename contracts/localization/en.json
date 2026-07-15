@@ -120,6 +120,23 @@
     "loading": "Saving...",
     "error": "Something went wrong. Please try again."
   },
+  "welcome": {
+    "skip": "Skip",
+    "next": "Next",
+    "getStarted": "Get started",
+    "progress": "Step %1$d of %2$d",
+    "step1Title": "Welcome to the community",
+    "step1Body": "You're in! This is where local car enthusiasts meet, drive and share the passion. Here's a quick tour before you get started.",
+    "step2Title": "The map is your home base",
+    "step2Body": "Start from the map to see what's happening around you, share your live location with friends, and roll out together in convoys.",
+    "step3Title": "Unlock more with membership",
+    "step3Body": "A membership unlocks the full experience — including seeing other members' live locations, joining convoys and member-only events.",
+    "seeMembership": "See membership",
+    "step4Title": "Make it yours",
+    "step4Body": "Finish setting up your profile so others recognise you, and add your first car to your garage.",
+    "completeProfile": "Complete profile",
+    "addCar": "Add your car"
+  },
   "url": {
     "terms": "https://kungsbacka-car-community.web.app/terms",
     "privacy": "https://kungsbacka-car-community.web.app/privacy",
@@ -208,7 +225,8 @@
     "noOtherMarkersTitle": "No other members are currently sharing their live location.",
     "noOtherMarkersSubtitle": "Live locations are only shown during active, time-limited sessions.",
     "memberRequiredTitle": "Membership is required to see other members' live locations.",
-    "shareOwnFreeHint": "You can share your own position for free."
+    "shareOwnFreeHint": "You can share your own position for free.",
+    "liveMarkerFallbackName": "Sharing live"
   },
   "events": {
     "title": "Events",
@@ -443,6 +461,21 @@
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "memberProfile": {
+    "title": "Profile",
+    "unknownMember": "Member",
+    "unavailable": "This profile isn't available.",
+    "error": "Couldn't load this profile.",
+    "retry": "Try again",
+    "carsTitle": "Cars",
+    "carsEmpty": "No cars in the garage yet.",
+    "mainCar": "Main car",
+    "badgesTitle": "Awards",
+    "badgesEmpty": "No awards yet.",
+    "badgesUnavailable": "Awards aren't shown on other members' profiles.",
+    "badgesLoadError": "Awards couldn't be loaded.",
+    "awardedOn": "Awarded %1$s"
   },
   "groupDrive": {
     "screenTitle": "Group Drive",
@@ -714,7 +747,6 @@
     "call": "Call",
     "visitWebsite": "Visit website",
     "viewOffer": "View offer",
-    "safeDrivingWarning": "Park safely before opening the advertisement.",
     "safeDrivingInteractionDisabled": "Advertising interactions are disabled while driving.",
     "availableUntil": "Available until",
     "availableFrom": "Available from",
@@ -838,6 +870,7 @@
     "moreSettings": "Settings",
     "moreSignOut": "Sign out",
     "unavailable": "Not available right now.",
+    "viewLiveMembersOnly": "A membership is required to see others on the map. You can still share your own location for free.",
     "trafficOn": "Traffic layer on",
     "trafficOff": "Show traffic",
     "chat": "Chat",
