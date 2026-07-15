@@ -41,6 +41,8 @@ enum class ShellRoute {
     NotificationSettings,
     Garage,
     Friends,
+    /** Convoy management (list / create / detail / ended summary). */
+    Convoys,
     /** The DM inbox (conversation list). */
     Conversations,
     /** A single 1:1 DM thread (target carried alongside the route). */

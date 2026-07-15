@@ -81,6 +81,8 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
+import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
@@ -236,6 +238,7 @@ fun AuthenticatedApp(
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
+    convoyRepository: ConvoyRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -788,6 +791,7 @@ fun AuthenticatedApp(
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
                         dmRepository = dmRepository,
+                        convoyRepository = convoyRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
                         onOpenChat = openChat,
@@ -976,6 +980,15 @@ fun AuthenticatedApp(
                                                     Icons.Filled.Groups,
                                                     if (friendsRepository != null) {
                                                         { route = ShellRoute.Friends }
+                                                    } else {
+                                                        null
+                                                    },
+                                                ),
+                                                HubEntry(
+                                                    stringResource(R.string.shell_socialConvoys),
+                                                    Icons.Filled.DirectionsCar,
+                                                    if (convoyRepository != null) {
+                                                        { route = ShellRoute.Convoys }
                                                     } else {
                                                         null
                                                     },
@@ -1325,6 +1338,7 @@ private fun RouteHost(
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
+    convoyRepository: ConvoyRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
     onOpenChat: (String, String?) -> Unit,
@@ -1560,6 +1574,16 @@ private fun RouteHost(
                         // Guarded: only offer to open a thread when DM is wired.
                         if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
                     },
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.Convoys ->
+            if (convoyRepository != null) {
+                ConvoyRoute(
+                    repository = convoyRepository,
+                    friendsRepository = friendsRepository,
                 )
             } else {
                 LoadingScreen()
