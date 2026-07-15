@@ -10,9 +10,12 @@
   This cleartext allowance is merged into EVERY debug build via the debug
   manifest overlay — it is not gated on -PuseFirebaseEmulator. What the flag
   controls is whether the app actually TALKS to those emulator hosts: only a
-  build with USE_FIREBASE_EMULATOR=true points Firebase at 10.0.2.2, so only
-  then is any cleartext request made. A normal debug build carries this config
-  but never contacts the emulator hosts, so it stays on HTTPS to production.
+  build with USE_FIREBASE_EMULATOR=true points Firebase at the emulator host
+  (10.0.2.2 on an emulator, 127.0.0.1 on a physical device — see
+  KccApplication.emulatorHost()), so only then is any cleartext request made. A
+  normal debug build carries this config but never contacts the emulator hosts,
+  so it stays on HTTPS to production. All three host aliases are allow-listed
+  above so either device type works.
   Release builds don't include this file at all (debug source set only), so
   production keeps Android's default cleartext block.
 -->

@@ -43,16 +43,20 @@ class KccApplication : Application() {
         // absent — mirror FirebaseAuthRepository.createIfAvailable.
         val firebaseApp = FirebaseApp.initializeApp(this) ?: return
 
-        // Debug-only local-emulator wiring. Compiled out of release (the release
-        // buildType hardcodes USE_FIREBASE_EMULATOR=false and BuildConfig.DEBUG is
-        // false there), and off in a normal debug build unless it was assembled
-        // with -PuseFirebaseEmulator=true. Must run before any Auth/Firestore use,
-        // so it lives here in Application.onCreate ahead of MainActivity's wiring.
-        // 10.0.2.2 is the Android emulator's alias for the host loopback, where the
-        // Firebase Auth (9099) and Firestore (8080) emulators listen (firebase.json).
+        // Debug-only local-emulator wiring. This block is present in the release
+        // binary (release has isMinifyEnabled=false) but never executes there: it
+        // is runtime-gated on BuildConfig.DEBUG (false in release) AND
+        // BuildConfig.USE_FIREBASE_EMULATOR (hardcoded false in the release
+        // buildType). In a normal debug build it is also off unless the build was
+        // assembled with -PuseFirebaseEmulator=true. Must run before any
+        // Auth/Firestore use, so it lives here in Application.onCreate ahead of
+        // MainActivity's wiring. The Firebase Auth (9099) and Firestore (8080)
+        // emulators listen on the host loopback (firebase.json); the reachable host
+        // differs by device type — see emulatorHost().
         if (BuildConfig.DEBUG && BuildConfig.USE_FIREBASE_EMULATOR) {
-            FirebaseAuth.getInstance(firebaseApp).useEmulator("10.0.2.2", 9099)
-            FirebaseFirestore.getInstance(firebaseApp).useEmulator("10.0.2.2", 8080)
+            val host = emulatorHost()
+            FirebaseAuth.getInstance(firebaseApp).useEmulator(host, 9099)
+            FirebaseFirestore.getInstance(firebaseApp).useEmulator(host, 8080)
         }
 
         val appCheck = FirebaseAppCheck.getInstance(firebaseApp)
@@ -74,5 +78,31 @@ class KccApplication : Application() {
                 osVersion = Build.VERSION.RELEASE,
             )
         }
+    }
+
+    /**
+     * Host that reaches the local Firebase emulators from THIS device:
+     * - Android emulator: `10.0.2.2`, the emulator's alias for the host loopback.
+     * - Physical device: `127.0.0.1`, reachable once the emulator ports are
+     *   forwarded to the device with `adb reverse tcp:9099 tcp:9099` (and 8080).
+     *
+     * Emulator detection combines several Build signals so it's robust across
+     * emulator images (goldfish/ranchu hardware, generic/sdk fingerprints and
+     * products, the "Emulator"/"Android SDK built for" models, Genymotion).
+     * Debug/USE_FIREBASE_EMULATOR-only path, so this only ever runs in that mode.
+     */
+    private fun emulatorHost(): String {
+        val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
+            Build.FINGERPRINT.startsWith("unknown") ||
+            Build.FINGERPRINT.contains("generic") ||
+            Build.HARDWARE == "goldfish" ||
+            Build.HARDWARE == "ranchu" ||
+            Build.PRODUCT.contains("sdk") ||
+            Build.PRODUCT.contains("emulator") ||
+            Build.PRODUCT.contains("simulator") ||
+            Build.MODEL.contains("Emulator") ||
+            Build.MODEL.contains("Android SDK built for") ||
+            Build.MANUFACTURER.contains("Genymotion")
+        return if (isEmulator) "10.0.2.2" else "127.0.0.1"
     }
 }
