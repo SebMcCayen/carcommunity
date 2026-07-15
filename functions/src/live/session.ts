@@ -13,8 +13,10 @@
  *   (enforced by the liveLocation/$uid/latest RTDB read rule).
  * - updatePosition (signedIn active): requires an ACTIVE, unexpired
  *   session; writes the lean liveLocation/{uid}/latest marker node.
- * - stopSession (authenticated): marks the session stopped and removes
- *   `latest` — the marker disappears immediately.
+ * - stopSession (signedIn active): requires an active, non-suspended caller
+ *   (requireActiveActor), so it is NOT available while suspended/restricted —
+ *   use hideMeNow as the privacy escape hatch in that case. Marks the session
+ *   stopped and removes `latest` — the marker disappears immediately.
  * - hideMeNow (signedIn — works while SUSPENDED; removing your own
  *   position is a privacy action that must always be available): stops
  *   the session with reason hide_me_now and removes `latest`.

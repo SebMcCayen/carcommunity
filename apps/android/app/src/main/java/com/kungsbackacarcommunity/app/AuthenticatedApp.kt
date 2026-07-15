@@ -541,7 +541,10 @@ fun AuthenticatedApp(
             // Viewing OTHERS on the map is the paid capability (backend parity:
             // the liveLocation/$uid/latest RTDB read rule requires activeMember).
             // A non-member gets a subscription upsell instead of the roster map.
-            val canViewLiveOthers = profile?.activeMember == true
+            // ALSO flag-gated: a server-disabled LIVE_LOCATION flag must fully
+            // block opening the roster map / starting RTDB reads, so require the
+            // flag (liveLocationEnabled) IN ADDITION to the active-member gate.
+            val canViewLiveOthers = liveLocationEnabled && profile?.activeMember == true
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
@@ -775,10 +778,13 @@ fun AuthenticatedApp(
                         onShowOnMap =
                             if (liveLocationRepository != null) {
                                 { uids ->
-                                    // Viewing others on the map is member-gated
-                                    // (backend RTDB read rule parity). A non-member
-                                    // gets a subscription upsell instead — they can
-                                    // still share their own location + see their puck.
+                                    // Viewing others on the map is flag- AND
+                                    // member-gated (canViewLiveOthers = LIVE_LOCATION
+                                    // flag && activeMember; backend RTDB read rule
+                                    // parity). A disabled flag or a non-member gets
+                                    // the upsell/no-op instead of the roster map, so
+                                    // no RTDB reads start — they can still share their
+                                    // own location + see their own puck.
                                     if (canViewLiveOthers) {
                                         mapParticipantUids = ArrayList(uids)
                                         route = ShellRoute.Map

@@ -163,11 +163,19 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_liveTitle)).assertIsDisplayed()
-        // No-Firebase config → not an active member, so starting is member-gated:
-        // the popup shows the membership teaser instead of the start controls.
+        // Sharing your OWN location is FREE (LIVE_LOCATION flag on in DEFAULTS,
+        // not member-gated). Even in the no-Firebase config (not an active
+        // member), the popup shows the start controls — duration picker + Start —
+        // NOT the membership teaser, which is reserved for VIEWING others.
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_durationLabel))
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_start))
+            .assertIsDisplayed()
         composeTestRule
             .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
-            .assertIsDisplayed()
+            .assertDoesNotExist()
         // The map stays visible behind the transparent popup (no navigation).
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // Closing dismisses the popup.
