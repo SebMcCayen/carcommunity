@@ -972,22 +972,19 @@ fun AuthenticatedApp(
                                 ShellTab.Garage ->
                                     GarageHubScreen(
                                         title = stringResource(R.string.shell_garageTitle),
-                                        // The main car's photo replaces the profile
-                                        // picture at the top of the garage; fall back
-                                        // to the user's avatar when no main car is set.
-                                        // Derived from the hoisted shared garage
-                                        // stream — no listener of its own.
+                                        // The garage identity header shows the main
+                                        // car's photo ONLY — the user's profile
+                                        // picture is deliberately NOT shown here (the
+                                        // garage is about cars, not profiles). When no
+                                        // main car is set the hub falls back to the
+                                        // car placeholder icon. Derived from the
+                                        // hoisted shared garage stream — no listener
+                                        // of its own.
                                         avatarUrl =
                                             rememberStorageImageUrl(
                                                 context,
-                                                mainCarImagePath(garageState)
-                                                    ?: profile?.avatarPath,
+                                                mainCarImagePath(garageState),
                                             ),
-                                        // The header image can be the main car's
-                                        // photo or the user's profile picture (or
-                                        // neither), so use a neutral description
-                                        // that stays accurate for both sources and
-                                        // the fallback person icon.
                                         avatarContentDescription =
                                             stringResource(R.string.garage_headerImageAlt),
                                         vehiclesLabel =
@@ -1288,13 +1285,26 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Downscale + JPEG-re-encode before upload so avatars stay
-                        // small (Storage cost + well under the byte cap).
-                        val compressed = ImageCompressor.compress(picked)
-                        val imageId = MediaUpload.newImageId(compressed.contentType)
-                        val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(compressed, path) { storedPath ->
-                            repo.updateAvatarPath(uid, storedPath)
+                        // Strip EXIF/GPS metadata BEFORE upload: avatars are PUBLICLY
+                        // readable by any authenticated member (storage.rules), so a
+                        // selfie taken at the owner's home must never leak their
+                        // coordinates. compressForPublicUpload downscales + re-encodes
+                        // to JPEG (dropping all EXIF, GPS included) and GUARANTEES the
+                        // returned bytes are EXIF-free — it returns null instead of
+                        // falling back to the un-sanitised original, so we fail closed
+                        // and skip the upload rather than risk leaking source metadata.
+                        val sanitized = ImageCompressor.compressForPublicUpload(picked)
+                        if (sanitized != null) {
+                            val imageId = MediaUpload.newImageId(sanitized.contentType)
+                            val path = MediaUpload.profileImagePath(uid, imageId)
+                            avatarCoordinator.upload(sanitized, path) { storedPath ->
+                                repo.updateAvatarPath(uid, storedPath)
+                            }
+                        } else {
+                            // Sanitisation failed (decode/re-encode returned null), so
+                            // nothing was uploaded. Surface the failure instead of a
+                            // silent no-op so the user knows to retry.
+                            avatarCoordinator.markFailed()
                         }
                     }
                 }

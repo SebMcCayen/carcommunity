@@ -144,6 +144,16 @@ describe('live session lifecycle', () => {
       .collection('users')
       .doc(member.uid)
       .set({ displayName: 'Sebbe' }, { merge: true });
+    // Seed the member's main car so the session denormalizes it onto the marker.
+    await adminDb.collection('vehicles').doc('veh-main').set({
+      userId: member.uid,
+      make: 'Volvo',
+      model: '242',
+      modelYear: 1980,
+      powertrain: 'petrol',
+      imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
+      isMainCar: true,
+    });
 
     const started = (await call('live-startSession', { duration: '1h' })).data as {
       sessionId: string;
@@ -160,6 +170,12 @@ describe('live session lifecycle', () => {
       sessionId: started.sessionId,
       displayName: 'Sebbe',
       expiresAt: started.expiresAt,
+      mainCar: {
+        make: 'Volvo',
+        model: '242',
+        modelYear: 1980,
+        imagePath: `vehicleImages/${member.uid}/veh-main/photo.jpg`,
+      },
     });
 
     await call('live-stopSession', {});

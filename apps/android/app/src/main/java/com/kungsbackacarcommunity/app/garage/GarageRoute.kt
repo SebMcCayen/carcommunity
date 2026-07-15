@@ -11,6 +11,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -100,10 +101,26 @@ fun GarageRoute(
                 maxBytes = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
             ) { picked ->
                 if (picked != null && photoCoordinator != null && editingId != null) {
-                    val imageId = MediaUpload.newImageId(picked.contentType)
-                    val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
-                    photoCoordinator.upload(picked, path) { storedPath ->
-                        repository.updateVehicleImagePath(editingId, storedPath)
+                    // Strip EXIF/GPS metadata BEFORE upload: car profiles are
+                    // PUBLICLY visible to other members, so a photo taken at the
+                    // owner's home must never leak their coordinates.
+                    // compressForPublicUpload decodes + re-encodes to JPEG (dropping
+                    // all EXIF, GPS included) and GUARANTEES the returned bytes are
+                    // EXIF-free — it returns null instead of falling back to the
+                    // un-sanitised original, so we fail closed and skip the upload
+                    // rather than risk leaking the source metadata.
+                    val sanitized = ImageCompressor.compressForPublicUpload(picked)
+                    if (sanitized != null) {
+                        val imageId = MediaUpload.newImageId(sanitized.contentType)
+                        val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
+                        photoCoordinator.upload(sanitized, path) { storedPath ->
+                            repository.updateVehicleImagePath(editingId, storedPath)
+                        }
+                    } else {
+                        // Sanitisation failed (decode/re-encode returned null), so
+                        // nothing was uploaded. Surface the failure instead of a
+                        // silent no-op so the user knows to retry.
+                        photoCoordinator.markFailed()
                     }
                 }
             }

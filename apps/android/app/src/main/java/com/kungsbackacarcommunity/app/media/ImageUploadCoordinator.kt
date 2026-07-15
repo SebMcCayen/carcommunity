@@ -101,6 +101,16 @@ class ImageUploadCoordinator(
         }
     }
 
+    /**
+     * Surfaces a client-side pre-upload failure (e.g. the caller could not
+     * sanitise the picked image, so nothing was uploaded). Drives the same
+     * [ImageUploadStatus.Failed] terminal state the UI already renders so the
+     * user knows the pick was rejected rather than silently ignored.
+     */
+    fun markFailed() {
+        state.value = ImageUploadStatus.Failed
+    }
+
     /** Resets to idle after the UI consumes a terminal state. */
     fun reset() {
         state.value = ImageUploadStatus.Idle

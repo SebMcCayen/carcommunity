@@ -35,6 +35,11 @@ object ImageCompressor {
      * Downscales + re-encodes [picked] to JPEG off the main thread. Returns a
      * new [PickedImage] with `contentType = image/jpeg`, or the original pick
      * unchanged when it cannot be decoded or the re-encode would not shrink it.
+     *
+     * Size-optimising and best-effort: NOT a privacy guarantee. Because it can
+     * hand back the original bytes (EXIF intact) when the re-encode does not
+     * shrink the payload, callers uploading a PUBLICLY visible image must use
+     * [compressForPublicUpload] instead so location EXIF can never leak.
      */
     suspend fun compress(
         picked: PickedImage,
@@ -42,7 +47,10 @@ object ImageCompressor {
         quality: Int = DEFAULT_JPEG_QUALITY,
     ): PickedImage = withContext(Dispatchers.Default) {
         try {
-            compressBlocking(picked, maxDimension, quality)
+            val reencoded = reencodeToJpeg(picked, maxDimension, quality)
+            // Best-effort size optimisation: adopt the re-encode only when it is
+            // actually smaller; otherwise keep the original pick unchanged.
+            if (reencoded != null && reencoded.sizeBytes < picked.sizeBytes) reencoded else picked
         } catch (e: CancellationException) {
             throw e // never swallow cancellation — keep structured concurrency intact
         } catch (_: Exception) {
@@ -50,23 +58,58 @@ object ImageCompressor {
         }
     }
 
-    private fun compressBlocking(
+    /**
+     * Sanitises [picked] for upload to a PUBLICLY visible location (e.g. a car
+     * profile photo other members can see): the returned bytes are GUARANTEED to
+     * carry no EXIF metadata, so a photo taken at the owner's home can never leak
+     * their GPS coordinates.
+     *
+     * Unlike [compress] this adopts the JPEG re-encode whenever it succeeds —
+     * even when it is not smaller than the source — because the decode+re-encode
+     * is what strips the EXIF (GPS included); dropping metadata matters more than
+     * shaving bytes here. Returns `null` when the image cannot be decoded/encoded
+     * at all: the original bytes may still contain GPS EXIF, so the caller MUST
+     * fail closed and skip the upload rather than send unsanitised bytes.
+     */
+    suspend fun compressForPublicUpload(
+        picked: PickedImage,
+        maxDimension: Int = AVATAR_MAX_DIMENSION,
+        quality: Int = DEFAULT_JPEG_QUALITY,
+    ): PickedImage? = withContext(Dispatchers.Default) {
+        try {
+            reencodeToJpeg(picked, maxDimension, quality)
+        } catch (e: CancellationException) {
+            throw e // never swallow cancellation — keep structured concurrency intact
+        } catch (_: Exception) {
+            null // fail closed: never fall back to the un-sanitised original
+        }
+    }
+
+    /**
+     * Decodes, orients, downscales and re-encodes [picked] to a fresh JPEG whose
+     * bytes carry no EXIF. Returns the re-encoded [PickedImage] on success, or
+     * `null` when the image cannot be decoded or the encode produced no bytes.
+     * The size-vs-original decision is left to the caller so both the best-effort
+     * ([compress]) and privacy-guaranteed ([compressForPublicUpload]) paths can
+     * share the exact same re-encode.
+     */
+    private fun reencodeToJpeg(
         picked: PickedImage,
         maxDimension: Int,
         quality: Int,
-    ): PickedImage {
+    ): PickedImage? {
         // Guard against invalid tuning params before touching any pixels: a
         // non-positive maxDimension would make sampleSizeFor() loop forever, and
         // Bitmap.compress only defines JPEG quality over 0..100. In either case
-        // there is nothing sensible to do, so fall back to the original pick.
-        if (maxDimension <= 0 || quality !in 0..100) return picked
+        // there is nothing sensible to re-encode.
+        if (maxDimension <= 0 || quality !in 0..100) return null
 
         val source = picked.bytes
 
         // 1. Read bounds only (no pixels) to compute an efficient sample size.
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return picked
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         // 2. Decode at the nearest power-of-two down-sample to save memory.
         val decodeOptions =
@@ -74,7 +117,7 @@ object ImageCompressor {
                 inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxDimension)
             }
         val decoded =
-            BitmapFactory.decodeByteArray(source, 0, source.size, decodeOptions) ?: return picked
+            BitmapFactory.decodeByteArray(source, 0, source.size, decodeOptions) ?: return null
 
         // 3. Orient per EXIF, then scale exactly so the longest side fits.
         var bitmap = decoded
@@ -86,15 +129,14 @@ object ImageCompressor {
             val ok = bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
             val encoded = out.toByteArray()
 
-            // Only adopt the re-encode when it succeeded AND actually shrinks the
-            // payload. Bitmap.compress returns false on failure and can leave an
-            // empty/partial buffer; a 0-byte JPEG would otherwise look "smaller"
-            // than the source. A small, already-optimised JPEG may also round-trip
-            // larger, so both conditions must hold before we swap the bytes.
-            return if (ok && encoded.isNotEmpty() && encoded.size < source.size) {
+            // Bitmap.compress returns false on failure and can leave an empty/
+            // partial buffer, so only treat a successful, non-empty encode as a
+            // valid re-encode. The re-encoded JPEG carries no EXIF regardless of
+            // its size; whether to prefer it over the source is the caller's call.
+            return if (ok && encoded.isNotEmpty()) {
                 PickedImage(bytes = encoded, contentType = "image/jpeg")
             } else {
-                picked
+                null
             }
         } finally {
             bitmap.recycle()

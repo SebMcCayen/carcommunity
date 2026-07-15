@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,20 +24,18 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
- * The Garage tab landing, redesigned to lead with the member's identity: a
- * circular identity image — their main car's photo, falling back to their
- * profile picture — centred at the top, then their
- * cars (My garage) as a prominent button. Friends, Badges, Points and Membership
- * have moved elsewhere (Social tab / profile menu / Settings), so this screen now
- * holds only the identity header and the Cars action.
+ * The Garage tab landing, led by the member's MAIN CAR photo: a circular image
+ * centred at the top, then their cars (My garage) as a prominent button.
+ * Friends, Badges, Points and Membership have moved elsewhere (Social tab /
+ * profile menu / Settings), so this screen now holds only the car header and the
+ * Cars action. The user's profile picture is deliberately NOT shown here.
  *
  * Shares the [AeroPage] chrome with every other sub-route; Back is handled by
  * the shell's system-Back handler, so this renders no Back affordance.
  *
- * @param avatarUrl resolved Storage URL for the identity-header image: the
- *   main car's photo, falling back to the user's profile picture when no main
- *   car is set (see the call site in AuthenticatedApp), or null to show the
- *   fallback person icon (a config-less build never crashes on rendering).
+ * @param avatarUrl resolved Storage URL for the main car's photo (see the call
+ *   site in AuthenticatedApp), or null to show the fallback car icon (also used
+ *   when no main car is set / a config-less build).
  * @param onVehicles opens the vehicles (My garage) screen, or null when the
  *   destination is unavailable (e.g. non-member) — the button is then hidden,
  *   preserving the previous membership gating.
@@ -87,8 +84,11 @@ private fun GarageAvatar(avatarUrl: String?, contentDescription: String) {
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
+            // Car placeholder (NOT a person/profile icon): the garage header
+            // shows the main car's photo, so its empty state is a car, never a
+            // profile picture.
             Icon(
-                imageVector = Icons.Filled.Person,
+                imageVector = Icons.Filled.DirectionsCar,
                 contentDescription = contentDescription,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(64.dp),
