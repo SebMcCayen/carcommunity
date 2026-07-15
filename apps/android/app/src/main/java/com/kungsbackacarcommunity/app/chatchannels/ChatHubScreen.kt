@@ -25,7 +25,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +72,10 @@ fun ChatHubRoute(
     dmRepository: DmRepository?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
+    // Hoisted from AuthenticatedApp, which already collects observeUnread(uid) to
+    // drive the map chat-bubble dot. Passed in (not re-subscribed here) so a
+    // single Firestore listener backs both the bubble and this tab's dot.
+    communityUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -102,13 +105,6 @@ fun ChatHubRoute(
     BackHandler(enabled = true) {
         if (inSubScreen) popSubScreen() else onClose()
     }
-
-    val communityUnread by
-        remember(communityChatRepository, uid) {
-            communityChatRepository?.observeUnread(uid)
-                ?: kotlinx.coroutines.flow.flowOf(false)
-        }
-            .collectAsState(initial = false)
 
     val title =
         when {

@@ -803,6 +803,7 @@ fun AuthenticatedApp(
                         friendsRepository = friendsRepository,
                         dmRepository = dmRepository,
                         communityChatRepository = communityChatRepository,
+                        communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
@@ -1345,6 +1346,10 @@ private fun RouteHost(
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
     communityChatRepository: CommunityChatRepository?,
+    // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
+    // down so the chat hub reuses that single unread listener instead of starting
+    // its own duplicate observeUnread subscription.
+    communityChatUnread: Boolean,
     convoyChatRepository: ConvoyChatRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
@@ -1627,6 +1632,7 @@ private fun RouteHost(
                 dmRepository = dmRepository,
                 notificationsRepository = notificationsRepository,
                 notificationsCoordinator = notificationsCoordinator,
+                communityUnread = communityChatUnread,
                 onClose = onClose,
             )
 
