@@ -58,7 +58,7 @@ object DriveFormatters {
 
     /** m/s → "45 km/h" (whole km/h). */
     fun formatSpeed(metersPerSecond: Double?): String {
-        if (metersPerSecond == null || metersPerSecond < 0) return "—"
+        if (metersPerSecond == null || !metersPerSecond.isFinite() || metersPerSecond < 0) return "—"
         val kmh = (metersPerSecond * 3.6).roundToInt()
         return "$kmh km/h"
     }
@@ -74,11 +74,23 @@ object DriveFormatters {
         distanceMeters: Double?,
         durationSeconds: Long,
     ): Double? {
-        if (averageSpeedMetersPerSecond != null && averageSpeedMetersPerSecond >= 0) {
+        // A corrupted stored value (Infinity/NaN) must never reach formatSpeed,
+        // where it would overflow/wrap the label. Require a finite, non-negative
+        // number both for the persisted value and for the distance/duration
+        // fallback (a huge distance / tiny duration can also blow up).
+        if (averageSpeedMetersPerSecond != null &&
+            averageSpeedMetersPerSecond.isFinite() &&
+            averageSpeedMetersPerSecond >= 0
+        ) {
             return averageSpeedMetersPerSecond
         }
-        if (distanceMeters != null && distanceMeters >= 0 && durationSeconds > 0) {
-            return distanceMeters / durationSeconds
+        if (distanceMeters != null &&
+            distanceMeters.isFinite() &&
+            distanceMeters >= 0 &&
+            durationSeconds > 0
+        ) {
+            val derived = distanceMeters / durationSeconds
+            if (derived.isFinite()) return derived
         }
         return null
     }

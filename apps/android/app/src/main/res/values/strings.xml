@@ -428,6 +428,8 @@
     <string name="savedDrives_timeRange">Tid</string>
     <string name="savedDrives_shareAction">Dela körning</string>
     <string name="savedDrives_shareSummary">Körde %1$s på %2$s den %3$s — %4$s</string>
+    <string name="savedDrives_shareSummaryNoDate">Körde %1$s på %2$s — %3$s</string>
+    <string name="savedDrives_shareUnavailable">Det finns ingen app att dela med</string>
     <string name="savedDrives_startArea">Startområde</string>
     <string name="savedDrives_endArea">Slutområde</string>
     <string name="savedDrives_routeOverview">Ruttöversikt</string>

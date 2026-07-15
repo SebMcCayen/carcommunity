@@ -1,6 +1,9 @@
 package com.kungsbackacarcommunity.app.drives
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -152,14 +155,28 @@ fun SavedDriveDetailScreen(
             drive.durationSeconds,
         )
 
+    val appName = stringResource(R.string.app_name)
+    val distanceText = DriveFormatters.formatDistance(drive.distanceMeters)
+    val durationText = DriveFormatters.formatDuration(drive.durationSeconds)
+    // Drop the "on <date>" clause entirely when the drive has no timestamp,
+    // rather than emitting a bare em dash ("… on —").
     val shareSummary =
-        stringResource(
-            R.string.savedDrives_shareSummary,
-            DriveFormatters.formatDistance(drive.distanceMeters),
-            DriveFormatters.formatDuration(drive.durationSeconds),
-            dateText ?: "—",
-            stringResource(R.string.app_name),
-        )
+        if (dateText != null) {
+            stringResource(
+                R.string.savedDrives_shareSummary,
+                distanceText,
+                durationText,
+                dateText,
+                appName,
+            )
+        } else {
+            stringResource(
+                R.string.savedDrives_shareSummaryNoDate,
+                distanceText,
+                durationText,
+                appName,
+            )
+        }
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -220,6 +237,7 @@ fun SavedDriveDetailScreen(
                 )
             }
 
+            val shareUnavailable = stringResource(R.string.savedDrives_shareUnavailable)
             OutlinedButton(
                 onClick = {
                     val sendIntent =
@@ -227,7 +245,18 @@ fun SavedDriveDetailScreen(
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, shareSummary)
                         }
-                    context.startActivity(Intent.createChooser(sendIntent, null))
+                    val chooser = Intent.createChooser(sendIntent, null)
+                    // A non-Activity context (application) has no task to launch
+                    // into, so an Activity launch without FLAG_ACTIVITY_NEW_TASK
+                    // throws. Add it defensively; an Activity keeps same-task.
+                    if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Some devices have no app that handles ACTION_SEND; guard the
+                    // launch so a missing handler is a toast, not a hard crash.
+                    try {
+                        context.startActivity(chooser)
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -290,11 +319,19 @@ private fun StatRow(label: String, value: String) {
 private fun formatDriveDate(millis: Long?): String? =
     millis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
 
-/** "13:05 – 14:00" short-time range when both endpoints are present, else null. */
-private fun formatDriveTimeRange(startMillis: Long?, endMillis: Long?): String? {
+/**
+ * "13:05 – 14:00" short-time range when both endpoints are present, else null.
+ * Timestamps are backend-provided and nullable; a range where the end is before
+ * the start is treated as invalid (returns null) so we never render a backwards
+ * range. Equal endpoints render as a single time.
+ */
+internal fun formatDriveTimeRange(startMillis: Long?, endMillis: Long?): String? {
     if (startMillis == null || endMillis == null) return null
+    if (endMillis < startMillis) return null
     val timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT)
-    return "${timeFormat.format(Date(startMillis))} – ${timeFormat.format(Date(endMillis))}"
+    val start = timeFormat.format(Date(startMillis))
+    if (endMillis == startMillis) return start
+    return "$start – ${timeFormat.format(Date(endMillis))}"
 }
 
 @Composable

@@ -2,6 +2,9 @@ package com.kungsbackacarcommunity.app.drives
 
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SavedDriveTest {
@@ -49,6 +52,42 @@ class SavedDriveTest {
     }
 
     @Test
+    fun `formatSpeed renders em dash for non-finite values`() {
+        assertEquals("—", DriveFormatters.formatSpeed(Double.POSITIVE_INFINITY))
+        assertEquals("—", DriveFormatters.formatSpeed(Double.NEGATIVE_INFINITY))
+        assertEquals("—", DriveFormatters.formatSpeed(Double.NaN))
+    }
+
+    @Test
+    fun `effectiveAverageSpeed rejects a non-finite stored value and falls back`() {
+        // Corrupted stored value must not pass through; distance/duration is used.
+        assertEquals(
+            10.0,
+            DriveFormatters.effectiveAverageSpeed(
+                Double.POSITIVE_INFINITY,
+                distanceMeters = 1000.0,
+                durationSeconds = 100,
+            ),
+        )
+        assertEquals(
+            10.0,
+            DriveFormatters.effectiveAverageSpeed(Double.NaN, distanceMeters = 1000.0, durationSeconds = 100),
+        )
+    }
+
+    @Test
+    fun `effectiveAverageSpeed is null when both sources are non-finite`() {
+        assertEquals(
+            null,
+            DriveFormatters.effectiveAverageSpeed(
+                Double.NaN,
+                distanceMeters = Double.POSITIVE_INFINITY,
+                durationSeconds = 100,
+            ),
+        )
+    }
+
+    @Test
     fun `effectiveAverageSpeed prefers the stored value`() {
         assertEquals(
             12.0,
@@ -68,6 +107,32 @@ class SavedDriveTest {
     fun `effectiveAverageSpeed is null when neither source is usable`() {
         assertEquals(null, DriveFormatters.effectiveAverageSpeed(null, distanceMeters = null, durationSeconds = 0))
         assertEquals(null, DriveFormatters.effectiveAverageSpeed(null, distanceMeters = 1000.0, durationSeconds = 0))
+    }
+
+    @Test
+    fun `formatDriveTimeRange is null when an endpoint is missing`() {
+        assertEquals(null, formatDriveTimeRange(null, 1000L))
+        assertEquals(null, formatDriveTimeRange(1000L, null))
+    }
+
+    @Test
+    fun `formatDriveTimeRange is null for a reversed range`() {
+        // end before start (backend-provided, nullable) must never render backwards.
+        assertEquals(null, formatDriveTimeRange(2000L, 1000L))
+    }
+
+    @Test
+    fun `formatDriveTimeRange renders a single time for equal endpoints`() {
+        val result = formatDriveTimeRange(1000L, 1000L)
+        assertNotNull(result)
+        assertFalse(result!!.contains("–"))
+    }
+
+    @Test
+    fun `formatDriveTimeRange renders a range for a forward interval`() {
+        val result = formatDriveTimeRange(1000L, 2000L)
+        assertNotNull(result)
+        assertTrue(result!!.contains("–"))
     }
 
     @Test
