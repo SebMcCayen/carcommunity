@@ -204,11 +204,17 @@ describe('live session lifecycle', () => {
     await call('live-stopSession', {});
   });
 
-  it('is member-gated and honors the liveLocation flag', async () => {
+  it('lets a non-member share and honors the liveLocation flag', async () => {
+    // Sharing your own location is free: a non-member (no activeMember claim)
+    // can start a session and update position. Only viewing OTHERS is paid.
     await signInAs(freeUser);
-    expect(await callableErrorCode(call('live-startSession', { duration: '1h' }))).toBe(
-      'functions/permission-denied',
-    );
+    const started = (await call('live-startSession', { duration: '1h' })).data as {
+      sessionId: string;
+    };
+    expect(started.sessionId).toBeTruthy();
+    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    expect((await adminRtdb.ref(`liveLocation/${freeUser.uid}/latest`).get()).exists()).toBe(true);
+    await call('live-stopSession', {});
 
     await signInAs(member);
     await adminDb

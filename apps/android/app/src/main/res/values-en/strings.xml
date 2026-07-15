@@ -724,6 +724,7 @@
     <string name="shell_moreSettings">Settings</string>
     <string name="shell_moreSignOut">Sign out</string>
     <string name="shell_unavailable">Not available right now.</string>
+    <string name="shell_viewLiveMembersOnly">A membership is required to see others on the map. You can still share your own location for free.</string>
     <string name="shell_trafficOn">Traffic layer on</string>
     <string name="shell_trafficOff">Show traffic</string>
     <string name="shell_chat">Chat</string>
