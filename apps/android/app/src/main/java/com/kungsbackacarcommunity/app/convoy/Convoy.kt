@@ -233,8 +233,6 @@ object ConvoyResponseParser {
         return ConvoyMutationResult.Updated(convoy)
     }
 
-    fun reasonOf(details: Any?): String? = (details as? Map<*, *>)?.get("reason") as? String
-
     private fun parseConvoy(raw: Any?): ConvoySummary? {
         val map = raw as? Map<*, *> ?: return null
         val convoyId = (map["convoyId"] as? String)?.takeIf { it.isNotBlank() } ?: return null

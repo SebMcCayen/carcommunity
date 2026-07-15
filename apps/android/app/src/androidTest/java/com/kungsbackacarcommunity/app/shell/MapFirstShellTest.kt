@@ -62,6 +62,7 @@ class MapFirstShellTest {
                     blockingRepository = null,
                     friendsRepository = null,
                     dmRepository = null,
+                    convoyRepository = null,
                     drivesRepository = null,
                     pointsRepository = null,
                     partnerApplicationCoordinator = null,

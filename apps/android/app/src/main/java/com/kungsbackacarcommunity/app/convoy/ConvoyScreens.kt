@@ -137,6 +137,22 @@ fun ConvoyListScreen(
     }
 }
 
+/**
+ * Transient placeholder for the detail route while the target convoy is not (yet)
+ * resolvable — the list snapshot is still loading, or the convoy fell out of it
+ * and the route is about to pop back to the list. Renders a neutral centered
+ * spinner rather than a fully-wired-looking list whose actions would be dead.
+ */
+@Composable
+fun ConvoyLoadingScreen(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
 @Composable
 private fun ConvoyCardRow(convoy: ConvoySummary, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
