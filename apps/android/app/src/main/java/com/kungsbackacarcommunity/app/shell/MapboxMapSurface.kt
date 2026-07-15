@@ -196,8 +196,15 @@ class MapboxMapSurface : MapSurface {
 
     override fun setTrafficEnabled(enabled: Boolean) {
         // The Content update lambda observes this flow and applies the layer's
-        // visibility, so flipping the flow is enough to toggle the overlay.
+        // visibility on recomposition, but apply eagerly too (mirroring
+        // setMapMode) so the overlay flips on the SAME frame the user toggles
+        // instead of waiting for a recomposition to propagate — the flow stays
+        // the source of truth (re-applied on every style (re)load). A no-op
+        // until the style is loaded; wrapped defensively like every native call.
         trafficFlow.value = enabled
+        runCatching {
+            mapViewRef?.mapboxMap?.style?.let { applyTrafficVisibility(it, enabled) }
+        }
     }
 
     override fun setMapMode(mode: MapMode) {
@@ -212,9 +219,20 @@ class MapboxMapSurface : MapSurface {
 
     override fun set3dEnabled(enabled: Boolean) {
         is3dFlow.value = enabled
-        // Flip the shared pitch field and re-apply it through recenter(), which
-        // already re-issues the camera with `pitch(this.pitch)`. A no-op until
-        // the map is composed (recenter guards on mapViewRef).
+        // Actually SHOW/HIDE the 3D buildings + landmarks: in the Mapbox Standard
+        // style these are part of the basemap and render at ANY camera pitch, so
+        // flattening the camera alone never removes them (Mapbox issue #2608).
+        // The real toggle is the `show3dObjects` config on the Standard import;
+        // apply it eagerly here and re-apply it on every style (re)load from the
+        // is3dFlow value, so is3dFlow stays the single source of truth. A no-op
+        // until the style is loaded; wrapped defensively.
+        runCatching {
+            mapViewRef?.mapboxMap?.style?.let { apply3dObjects(it, enabled) }
+        }
+        // Also flip the shared pitch field and re-apply it through recenter(),
+        // which re-issues the camera with `pitch(this.pitch)`, so 3D-on opens
+        // tilted and 3D-off flattens to top-down. A no-op until the map is
+        // composed (recenter guards on mapViewRef).
         pitch = if (enabled) MapMarkers.DEFAULT_PITCH else MapMarkers.FLAT_PITCH
         recenter()
     }
@@ -553,6 +571,11 @@ class MapboxMapSurface : MapSurface {
                         // directly — this runs async at style-load, not at
                         // composition, so the captured value can be stale).
                         runCatching { applyLightPreset(style, mapModeFlow.value) }
+                        // Apply the current 3D-objects toggle (read the flow
+                        // directly — this runs async at style-load, so a captured
+                        // value could be stale) so a map (re)created while 3D is
+                        // OFF opens with the buildings hidden, not re-shown.
+                        runCatching { apply3dObjects(style, is3dFlow.value) }
                         runCatching { addTrafficLayer(style) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
                         // Route line + destination marker managers, created once
@@ -841,6 +864,14 @@ class MapboxMapSurface : MapSurface {
         /** Config key on the Standard import controlling the day/night lighting. */
         const val LIGHT_PRESET_CONFIG = "lightPreset"
 
+        /**
+         * Config key on the Standard import that shows/hides all 3D objects
+         * (buildings, landmarks, trees). This — NOT the camera pitch — is what
+         * actually removes the 3D buildings when the layers popup's "3D buildings"
+         * toggle is turned off; the Standard basemap renders them at any pitch.
+         */
+        const val SHOW_3D_OBJECTS_CONFIG = "show3dObjects"
+
         const val TRAFFIC_SOURCE_ID = "kcc-traffic-source"
         const val TRAFFIC_LAYER_ID = "kcc-traffic-layer"
         const val TRAFFIC_SOURCE_LAYER = "traffic"
@@ -907,6 +938,16 @@ class MapboxMapSurface : MapSurface {
         fun applyLightPreset(style: Style, mode: MapMode) {
             val preset = if (mode == MapMode.Night) "night" else "day"
             style.setStyleImportConfigProperty(STANDARD_IMPORT_ID, LIGHT_PRESET_CONFIG, Value(preset))
+        }
+
+        /**
+         * Shows or hides the Standard style's 3D objects (buildings/landmarks)
+         * via the `show3dObjects` import config. Only affects the Standard style
+         * (which owns the [STANDARD_IMPORT_ID] import); callers wrap it in
+         * runCatching so a non-Standard/unloaded import degrades to a no-op.
+         */
+        fun apply3dObjects(style: Style, enabled: Boolean) {
+            style.setStyleImportConfigProperty(STANDARD_IMPORT_ID, SHOW_3D_OBJECTS_CONFIG, Value(enabled))
         }
 
         /** Toggles the traffic layer's visibility; a no-op until it is added. */
