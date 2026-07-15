@@ -245,7 +245,7 @@ object MapboxRequests {
      * before a fix arrives; a real user fix (when present) always takes priority
      * over this constant. Sweden-wide relevance is still enforced by [country].
      */
-    val DEFAULT_PROXIMITY = LatLng(longitude = 12.0730, latitude = 57.4874)
+    private val DEFAULT_PROXIMITY = LatLng(longitude = 12.0730, latitude = 57.4874)
 
     /**
      * Forward search request against the Mapbox **Search Box** API's `/forward`
