@@ -96,6 +96,10 @@ export default function SubscriptionPage() {
     setError(null);
     setSuccessMessage(null);
     setActionError(null);
+    // Clear the previous user's summary immediately so grant/revoke (which key
+    // off summary.userId) can't act on the prior user while this lookup is in
+    // flight — the read-only UID field already shows the new target by now.
+    setSummary(null);
     try {
       const result = await adminGetUserSubscription(uid);
       setSummary(result);
