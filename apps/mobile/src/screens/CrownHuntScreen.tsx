@@ -189,6 +189,9 @@ const PointDetailSheet = ({
               <Text style={[styles.safetyText, { color: theme.colors.textPrimary }]}>
                 ⚠️ {t('crownHunt.safetyStop')}
               </Text>
+              <Text style={[styles.safetyText, { color: theme.colors.textSecondary }]}>
+                {t('crownHunt.safetyNoDriving')}
+              </Text>
             </View>
 
             {/* Speed warning */}

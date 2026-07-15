@@ -374,7 +374,6 @@ export class CrownHuntService {
       claimedByCurrentUser: claimed !== null,
       repeatRule: point.repeatRule as CrownHuntRepeatRule,
       safetyInstruction: 'Stanna säkert innan du samlar in belöningen.',
-      drivingWarning: 'Använd inte appen medan du kör.',
     };
   }
 
