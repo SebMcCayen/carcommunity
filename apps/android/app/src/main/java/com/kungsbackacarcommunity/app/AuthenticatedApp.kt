@@ -126,7 +126,6 @@ import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.map.MapRoute
-import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -1288,12 +1287,15 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Downscale + JPEG-re-encode before upload so avatars stay
-                        // small (Storage cost + well under the byte cap).
-                        val compressed = ImageCompressor.compress(picked)
-                        val imageId = MediaUpload.newImageId(compressed.contentType)
-                        val path = MediaUpload.profileImagePath(uid, imageId)
-                        avatarCoordinator.upload(compressed, path) { storedPath ->
+                        // The coordinator downscales + JPEG-re-encodes + strips
+                        // EXIF/GPS before upload; the path is built from the
+                        // PROCESSED content type so the extension matches.
+                        avatarCoordinator.upload(
+                            picked,
+                            pathFor = { ct ->
+                                MediaUpload.profileImagePath(uid, MediaUpload.newImageId(ct))
+                            },
+                        ) { storedPath ->
                             repo.updateAvatarPath(uid, storedPath)
                         }
                     }

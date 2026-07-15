@@ -11,6 +11,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -86,7 +87,14 @@ fun GarageRoute(
         val photoCoordinator =
             remember(mediaUploader, editingId) {
                 if (mediaUploader != null && editingId != null) {
-                    ImageUploadCoordinator(mediaUploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
+                    // Vehicle photos get a larger longest-side cap than avatars so
+                    // detail shots stay crisp; still JPEG-compressed + EXIF/GPS
+                    // stripped, enforced under VEHICLE_IMAGE_MAX_BYTES.
+                    ImageUploadCoordinator(
+                        mediaUploader,
+                        MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
+                        maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                    )
                 } else {
                     null
                 }
@@ -97,12 +105,21 @@ fun GarageRoute(
         val photoUrl = rememberStorageImageUrl(photoContext, vehicle?.imagePath)
         val photoPicker =
             rememberImagePickLauncher(
-                maxBytes = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
+                // Read above the 10 MB upload cap so the raw pick reaches the
+                // coordinator's compressor (which shrinks + strips it below the
+                // cap). Still bounded; the upload precheck on the compressed
+                // result enforces VEHICLE_IMAGE_MAX_BYTES.
+                maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
             ) { picked ->
                 if (picked != null && photoCoordinator != null && editingId != null) {
-                    val imageId = MediaUpload.newImageId(picked.contentType)
-                    val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
-                    photoCoordinator.upload(picked, path) { storedPath ->
+                    // The coordinator downscales + JPEG-re-encodes + strips
+                    // EXIF/GPS; the path is built from the PROCESSED content type.
+                    photoCoordinator.upload(
+                        picked,
+                        pathFor = { ct ->
+                            MediaUpload.vehicleImagePath(uid, editingId, MediaUpload.newImageId(ct))
+                        },
+                    ) { storedPath ->
                         repository.updateVehicleImagePath(editingId, storedPath)
                     }
                 }

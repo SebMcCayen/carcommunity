@@ -32,6 +32,16 @@ object MediaUpload {
     const val PROFILE_IMAGE_READ_MAX_BYTES: Long = 25L * 1024 * 1024
 
     /**
+     * Higher cap for the vehicle-photo PICKER read only — same rationale as
+     * [PROFILE_IMAGE_READ_MAX_BYTES]: the raw pick may exceed the 10 MB upload
+     * cap because [com.kungsbackacarcommunity.app.media.ImageCompressor]
+     * downscales + re-encodes (and strips metadata) before upload. Bounded to
+     * avoid OOM; [VEHICLE_IMAGE_MAX_BYTES] remains the source of truth, enforced
+     * by the upload precheck on the *compressed* result.
+     */
+    const val VEHICLE_IMAGE_READ_MAX_BYTES: Long = 25L * 1024 * 1024
+
+    /**
      * Content types the Storage rules accept
      * (`image/(jpeg|png|webp|gif)`). Anything else is rejected client-side so
      * the write never reaches the bucket.

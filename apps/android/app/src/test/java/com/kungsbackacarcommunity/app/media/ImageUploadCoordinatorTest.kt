@@ -24,13 +24,25 @@ class ImageUploadCoordinatorTest {
 
     private val image = PickedImage(bytes = ByteArray(1_000), contentType = "image/jpeg")
 
+    // Identity compressor: the real ImageCompressor needs Android's Bitmap/EXIF
+    // (instrumentation), so unit tests inject a fake here. Passing the pick
+    // straight through lets us exercise the coordinator's own logic on the JVM.
+    private fun identityCompress(): suspend (PickedImage, Int) -> PickedImage? =
+        { picked, _ -> picked }
+
+    private fun coordinator(
+        uploader: MediaUploader,
+        maxBytes: Long = MediaUpload.PROFILE_IMAGE_MAX_BYTES,
+        compress: suspend (PickedImage, Int) -> PickedImage? = identityCompress(),
+    ) = ImageUploadCoordinator(uploader, maxBytes, compress = compress)
+
     @Test
     fun `success uploads, persists the stored path, ends Uploaded`() = runTest {
         val uploader = FakeUploader()
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(uploader)
         var persisted: String? = null
 
-        coordinator.upload(image, "profileImages/u1/a.jpg") { stored -> persisted = stored }
+        coordinator.upload(image, { "profileImages/u1/a.jpg" }) { stored -> persisted = stored }
 
         assertEquals(listOf(Triple("profileImages/u1/a.jpg", 1_000, "image/jpeg")), uploader.uploaded)
         assertEquals("profileImages/u1/a.jpg", persisted)
@@ -38,12 +50,47 @@ class ImageUploadCoordinatorTest {
     }
 
     @Test
-    fun `too-large never uploads and surfaces TooLarge`() = runTest {
+    fun `compression runs and the path is built from the processed content type`() = runTest {
         val uploader = FakeUploader()
-        val coordinator = ImageUploadCoordinator(uploader, maxBytes = 500)
+        // Fake compressor that re-encodes a PNG pick to a smaller JPEG, mirroring
+        // the real strip+downscale: the coordinator must upload the JPEG bytes and
+        // build the path from the PROCESSED (jpeg) content type, not the raw png.
+        val compressed = PickedImage(bytes = ByteArray(200), contentType = "image/jpeg")
+        val coordinator = coordinator(uploader, compress = { _, _ -> compressed })
+        var persisted: String? = null
+
+        coordinator.upload(
+            PickedImage(ByteArray(4_000), "image/png"),
+            pathFor = { ct -> "profileImages/u1/${MediaUpload.newImageId(ct, uuid = "id")}" },
+        ) { persisted = it }
+
+        assertEquals(listOf(Triple("profileImages/u1/id.jpg", 200, "image/jpeg")), uploader.uploaded)
+        assertEquals("profileImages/u1/id.jpg", persisted)
+        assertEquals(ImageUploadStatus.Uploaded, coordinator.status.value)
+    }
+
+    @Test
+    fun `a null compression result fails closed and never uploads`() = runTest {
+        // Null models a pick that could not be proven metadata-free (e.g. an
+        // undecodable, geotagged image): the coordinator must fail, not leak it.
+        val uploader = FakeUploader()
+        val coordinator = coordinator(uploader, compress = { _, _ -> null })
         var persisted = false
 
-        coordinator.upload(image, "profileImages/u1/a.jpg") { persisted = true }
+        coordinator.upload(image, { "profileImages/u1/a.jpg" }) { persisted = true }
+
+        assertTrue(uploader.uploaded.isEmpty())
+        assertEquals(false, persisted)
+        assertEquals(ImageUploadStatus.Failed, coordinator.status.value)
+    }
+
+    @Test
+    fun `too-large is checked on the compressed result and surfaces TooLarge`() = runTest {
+        val uploader = FakeUploader()
+        val coordinator = coordinator(uploader, maxBytes = 500)
+        var persisted = false
+
+        coordinator.upload(image, { "profileImages/u1/a.jpg" }) { persisted = true }
 
         assertTrue(uploader.uploaded.isEmpty())
         assertEquals(false, persisted)
@@ -53,11 +100,11 @@ class ImageUploadCoordinatorTest {
     @Test
     fun `non-image never uploads and surfaces Failed`() = runTest {
         val uploader = FakeUploader()
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(uploader)
 
         coordinator.upload(
             PickedImage(ByteArray(10), "application/pdf"),
-            "profileImages/u1/a.jpg",
+            { "profileImages/u1/a.jpg" },
         ) {}
 
         assertTrue(uploader.uploaded.isEmpty())
@@ -67,9 +114,9 @@ class ImageUploadCoordinatorTest {
     @Test
     fun `an upload failure surfaces Failed and can reset`() = runTest {
         val uploader = FakeUploader().apply { failWith = IllegalStateException("denied") }
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
 
-        coordinator.upload(image, "vehicleImages/u1/v9/a.jpg") {}
+        coordinator.upload(image, { "vehicleImages/u1/v9/a.jpg" }) {}
 
         assertEquals(ImageUploadStatus.Failed, coordinator.status.value)
         coordinator.reset()
@@ -79,9 +126,9 @@ class ImageUploadCoordinatorTest {
     @Test
     fun `a persist failure surfaces Failed`() = runTest {
         val uploader = FakeUploader()
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
 
-        coordinator.upload(image, "vehicleImages/u1/v9/a.jpg") {
+        coordinator.upload(image, { "vehicleImages/u1/v9/a.jpg" }) {
             throw IllegalStateException("callable rejected imagePath")
         }
 
@@ -93,11 +140,11 @@ class ImageUploadCoordinatorTest {
     @Test
     fun `cancellation is rethrown and leaves Idle`() = runTest {
         val uploader = FakeUploader().apply { failWith = CancellationException("c") }
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(uploader)
         var rethrown = false
 
         try {
-            coordinator.upload(image, "profileImages/u1/a.jpg") {}
+            coordinator.upload(image, { "profileImages/u1/a.jpg" }) {}
         } catch (c: CancellationException) {
             rethrown = true
         }
@@ -123,18 +170,18 @@ class ImageUploadCoordinatorTest {
                     return path
                 }
             }
-        val coordinator = ImageUploadCoordinator(blockingUploader, MediaUpload.PROFILE_IMAGE_MAX_BYTES)
+        val coordinator = coordinator(blockingUploader)
         var firstPersists = 0
         var secondPersists = 0
 
         // First upload grabs the lock and parks inside the uploader.
-        val first = launch { coordinator.upload(image, "p/first.jpg") { firstPersists++ } }
+        val first = launch { coordinator.upload(image, { "p/first.jpg" }) { firstPersists++ } }
         // Let the first upload reach the blocking uploader.
         testScheduler.advanceUntilIdle()
         assertEquals(ImageUploadStatus.Uploading, coordinator.status.value)
 
         // Second concurrent call must be rejected atomically (no-op).
-        coordinator.upload(image, "p/second.jpg") { secondPersists++ }
+        coordinator.upload(image, { "p/second.jpg" }) { secondPersists++ }
         assertEquals(listOf("p/first.jpg"), started)
         assertEquals(0, secondPersists)
 
@@ -150,12 +197,15 @@ class ImageUploadCoordinatorTest {
     @Test
     fun `uses the vehicle path pattern end to end`() = runTest {
         val uploader = FakeUploader()
-        val coordinator = ImageUploadCoordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
-        val imageId = MediaUpload.newImageId("image/jpeg", uuid = "id-1")
-        val path = MediaUpload.vehicleImagePath("u1", "v9", imageId)
+        val coordinator = coordinator(uploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
         var persisted: String? = null
 
-        coordinator.upload(image, path) { persisted = it }
+        coordinator.upload(
+            image,
+            pathFor = { ct ->
+                MediaUpload.vehicleImagePath("u1", "v9", MediaUpload.newImageId(ct, uuid = "id-1"))
+            },
+        ) { persisted = it }
 
         assertEquals("vehicleImages/u1/v9/id-1.jpg", persisted)
         assertNull(MediaUpload.precheck("image/jpeg", image.sizeBytes, MediaUpload.VEHICLE_IMAGE_MAX_BYTES))

@@ -40,15 +40,29 @@ sealed interface ImageUploadStatus {
 }
 
 /**
- * Orchestrates one image upload (Phase 12 media-uploads slice): client pre-check
- * → upload bytes to a caller-built path → invoke [persist] with the stored path.
- * Pure Kotlin so both the avatar and vehicle flows are unit-testable with a fake
- * [MediaUploader]. The path is built by the caller (owner+id are known there);
- * this coordinator only enforces the shared size/type rules and drives status.
+ * Orchestrates one image upload (Phase 12 media-uploads slice): compress + strip
+ * metadata → client pre-check → upload bytes to a caller-built path → invoke
+ * [persist] with the stored path.
+ *
+ * Compression/metadata-stripping is CENTRALISED here (via [compress], defaulting
+ * to [ImageCompressor.compress]) so EVERY caller — avatar, vehicle photo, and any
+ * future image upload — gets a downscaled, EXIF-free (no GPS) JPEG by
+ * construction and cannot accidentally upload a raw pick. [maxDimension] tunes
+ * the longest-side cap per upload type (avatars smaller, vehicle photos larger).
+ * When [compress] returns null the pick could not be proven metadata-free, so the
+ * upload FAILS rather than leak geotagged bytes.
+ *
+ * Pure Kotlin so both flows are unit-testable with a fake [MediaUploader] and a
+ * fake [compress]. The path is built by the caller from the *processed* content
+ * type (owner+id are known there); this coordinator enforces the shared size/type
+ * rules and drives status.
  */
 class ImageUploadCoordinator(
     private val uploader: MediaUploader,
     private val maxBytes: Long,
+    private val maxDimension: Int = ImageCompressor.AVATAR_MAX_DIMENSION,
+    private val compress: suspend (picked: PickedImage, maxDimension: Int) -> PickedImage? =
+        { picked, dimension -> ImageCompressor.compress(picked, dimension) },
 ) {
     private val state = MutableStateFlow<ImageUploadStatus>(ImageUploadStatus.Idle)
     val status: StateFlow<ImageUploadStatus> = state.asStateFlow()
@@ -59,20 +73,30 @@ class ImageUploadCoordinator(
     private val uploadLock = Mutex()
 
     /**
-     * Pre-checks [picked] against the shared rules, uploads to [path], then runs
-     * [persist] (the domain write that records the path — a Firestore avatar
+     * Compresses + metadata-strips [picked], pre-checks it against the shared
+     * rules, uploads to the path built by [pathFor] from the PROCESSED content
+     * type (so the stored object's extension matches the re-encoded bytes), then
+     * runs [persist] (the domain write that records the path — a Firestore avatar
      * write or the garage-updateVehicle callable). Re-entrant calls while an
      * upload is in flight are rejected atomically (a concurrent call is a no-op).
      */
     suspend fun upload(
         picked: PickedImage,
-        path: String,
+        pathFor: (contentType: String?) -> String,
         persist: suspend (storedPath: String) -> Unit,
     ) {
         // Atomic guard: if another upload already holds the lock, do nothing.
         if (!uploadLock.tryLock()) return
         try {
-            when (MediaUpload.precheck(picked.contentType, picked.sizeBytes, maxBytes)) {
+            // Centralised compression + EXIF/GPS strip. A null result means the
+            // pick could not be proven metadata-free — fail rather than leak it.
+            val prepared = compress(picked, maxDimension)
+            if (prepared == null) {
+                state.value = ImageUploadStatus.Failed
+                return
+            }
+
+            when (MediaUpload.precheck(prepared.contentType, prepared.sizeBytes, maxBytes)) {
                 MediaUpload.PrecheckError.TOO_LARGE -> {
                     state.value = ImageUploadStatus.TooLarge
                     return
@@ -87,7 +111,8 @@ class ImageUploadCoordinator(
             state.value = ImageUploadStatus.Uploading
             try {
                 // contentType is guaranteed non-null by the pre-check above.
-                val stored = uploader.upload(path, picked.bytes, picked.contentType!!)
+                val path = pathFor(prepared.contentType)
+                val stored = uploader.upload(path, prepared.bytes, prepared.contentType!!)
                 persist(stored)
                 state.value = ImageUploadStatus.Uploaded
             } catch (cancellation: CancellationException) {
