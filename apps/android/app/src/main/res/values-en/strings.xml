@@ -746,6 +746,12 @@
     <string name="shell_liveSharePromptBody">Start sharing your live location with the community?</string>
     <string name="shell_liveSharePromptConfirm">Share</string>
     <string name="shell_liveSharePromptCancel">Cancel</string>
+    <string name="shell_createChooserTitle">Start driving</string>
+    <string name="shell_createChooserBody">Choose how you want to drive.</string>
+    <string name="shell_createChooserSingle">Single session</string>
+    <string name="shell_createChooserSingleBody">Drive solo and share your live location.</string>
+    <string name="shell_createChooserConvoy">Convoy</string>
+    <string name="shell_createChooserConvoyBody">Create a convoy and drive together with friends.</string>
     <string name="shell_socialTitle">Social</string>
     <string name="shell_socialConvoys">Convoys</string>
     <string name="shell_socialEvents">Events</string>

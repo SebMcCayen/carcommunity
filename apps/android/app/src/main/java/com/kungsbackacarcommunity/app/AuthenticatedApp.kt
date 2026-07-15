@@ -6,9 +6,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -306,17 +311,25 @@ fun AuthenticatedApp(
             // Coerce any such restored Create back to Map on first composition.
             // This is safe against the live action path: tapping Create never
             // sets selectedTab to Create (ShellBottomBar.onSelect switches to Map
-            // and raises the prompt), so this only ever rescues a stale restored
+            // and raises the chooser), so this only ever rescues a stale restored
             // value and never interferes with the Create tab's action behaviour.
             LaunchedEffect(Unit) {
                 if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
             }
 
             // Tapping the bottom-nav "Create" tab opens the Map and raises this
-            // transparent prompt asking whether to start sharing live location —
-            // Create never becomes a selected tab of its own (see
-            // ShellBottomBar.onSelect below).
-            var showLiveSharePrompt by rememberSaveable { mutableStateOf(false) }
+            // transparent chooser: "Single session" (start a solo live-share
+            // drive) vs "Convoy" (deep-link into the create-convoy flow). Create
+            // never becomes a selected tab of its own (see ShellBottomBar.onSelect
+            // below), so it can't get "stuck" selected — it's an action.
+            var showCreateChooser by rememberSaveable { mutableStateOf(false) }
+
+            // Set true immediately before opening ShellRoute.Convoys from the
+            // chooser's "Convoy" option so the convoy route deep-links straight
+            // into its create-convoy sub-screen. Reset to false when the Social
+            // hub opens Convoys the normal way (list first). ConvoyRoute consumes
+            // it one-shot, so it never re-forces Create after a back-out.
+            var convoyOpenCreate by rememberSaveable { mutableStateOf(false) }
 
             // Group-drive "show on map": stash roster uids, switch to the Map
             // tab. Preserved for the real Mapbox impl (the stub surfaces only a
@@ -792,6 +805,7 @@ fun AuthenticatedApp(
                         friendsRepository = friendsRepository,
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
+                        convoyOpenCreate = convoyOpenCreate,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
                         onOpenChat = openChat,
@@ -823,11 +837,12 @@ fun AuthenticatedApp(
                                 selected = selectedTab,
                                 onSelect = { tab ->
                                     // Create is an action, not a destination: open
-                                    // the Map and raise the live-share prompt rather
-                                    // than letting Create become the selected tab.
+                                    // the Map and raise the single/convoy chooser
+                                    // rather than letting Create become the selected
+                                    // tab (so it can never get "stuck" selected).
                                     if (tab == ShellTab.Create) {
                                         selectedTab = ShellTab.Map
-                                        showLiveSharePrompt = true
+                                        showCreateChooser = true
                                     } else {
                                         selectedTab = tab
                                     }
@@ -988,7 +1003,13 @@ fun AuthenticatedApp(
                                                     stringResource(R.string.shell_socialConvoys),
                                                     Icons.Filled.DirectionsCar,
                                                     if (convoyRepository != null) {
-                                                        { route = ShellRoute.Convoys }
+                                                        {
+                                                            // Open the convoy hub
+                                                            // list-first (not the
+                                                            // create deep-link).
+                                                            convoyOpenCreate = false
+                                                            route = ShellRoute.Convoys
+                                                        }
                                                     } else {
                                                         null
                                                     },
@@ -1156,22 +1177,31 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // Transparent prompt raised by the Create tab: Confirm starts
-                // live sharing via the shared toggle path; Cancel or an outside
-                // tap dismisses it, staying on the map.
-                if (showLiveSharePrompt) {
-                    LiveSharePromptDialog(
-                        onConfirm = {
-                            showLiveSharePrompt = false
-                            // The prompt only ever asks to START sharing, but
-                            // toggleLiveShare() maps to Stop while a session is
-                            // active. Guard on the live-time isSharing so
-                            // confirming can never stop an active session; the
-                            // Start / open-screen fallbacks still run when not
-                            // already sharing.
+                // Transparent chooser raised by the Create tab: "Single session"
+                // starts a solo live-share drive via the shared toggle path;
+                // "Convoy" deep-links into the create-convoy flow. Cancel or an
+                // outside tap dismisses it, staying on the map.
+                if (showCreateChooser) {
+                    CreateChooserDialog(
+                        onSingleSession = {
+                            showCreateChooser = false
+                            // Single session = the EXISTING live-location start
+                            // flow (records the drive, and prompts to save it to
+                            // History at end-of-session). The chooser only ever
+                            // asks to START, but toggleLiveShare() maps to Stop
+                            // while a session is active; guard on isSharing so
+                            // confirming can never stop an active session — the
+                            // Start / open-screen fallbacks still run otherwise.
                             if (!isSharing) toggleLiveShare()
                         },
-                        onDismiss = { showLiveSharePrompt = false },
+                        onConvoy = {
+                            showCreateChooser = false
+                            // Deep-link straight into #417's create-convoy flow;
+                            // the owner can start the convoy from its detail.
+                            convoyOpenCreate = true
+                            route = ShellRoute.Convoys
+                        },
+                        onDismiss = { showCreateChooser = false },
                     )
                 }
 
@@ -1259,33 +1289,76 @@ private fun ShellBottomBar(
 }
 
 /**
- * Transparent confirmation prompt shown over the map when the user taps the
- * "Create" tab: a translucent-surfaced [AlertDialog] asking whether to start
- * sharing live location. [onConfirm] runs the shared live-share toggle;
- * [onDismiss] (Cancel or an outside tap) leaves the user on the map.
+ * Transparent chooser shown over the map when the user taps the "Create" tab:
+ * a translucent-surfaced [AlertDialog] offering two ways to drive —
+ * **Single session** ([onSingleSession], the existing solo live-share drive) or
+ * **Convoy** ([onConvoy], deep-linking into the create-convoy flow). [onDismiss]
+ * (Cancel or an outside tap) leaves the user on the map. The "+" tab is an
+ * action, so dismissing simply drops back to the map (Create is never a
+ * selected tab).
  */
 @Composable
-private fun LiveSharePromptDialog(
-    onConfirm: () -> Unit,
+private fun CreateChooserDialog(
+    onSingleSession: () -> Unit,
+    onConvoy: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Translucent surface so the map stays visible behind the prompt.
+        // Translucent surface so the map stays visible behind the chooser.
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        title = { Text(stringResource(R.string.shell_startLiveLocation)) },
-        text = { Text(stringResource(R.string.shell_liveSharePromptBody)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.shell_liveSharePromptConfirm))
+        title = { Text(stringResource(R.string.shell_createChooserTitle)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                Text(stringResource(R.string.shell_createChooserBody))
+                CreateChooserOption(
+                    icon = Icons.Filled.DirectionsCar,
+                    title = stringResource(R.string.shell_createChooserSingle),
+                    body = stringResource(R.string.shell_createChooserSingleBody),
+                    onClick = onSingleSession,
+                )
+                CreateChooserOption(
+                    icon = Icons.Filled.Groups,
+                    title = stringResource(R.string.shell_createChooserConvoy),
+                    body = stringResource(R.string.shell_createChooserConvoyBody),
+                    onClick = onConvoy,
+                )
             }
         },
+        // No confirm button — each option card acts immediately; Cancel dismisses.
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.shell_liveSharePromptCancel))
             }
         },
     )
+}
+
+/**
+ * A single tappable option row inside [CreateChooserDialog]: a leading [icon]
+ * with a [title] and a supporting [body] line. Selecting it runs [onClick].
+ */
+@Composable
+private fun CreateChooserOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String,
+    onClick: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(body, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
 
 /**
@@ -1339,6 +1412,7 @@ private fun RouteHost(
     friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
+    convoyOpenCreate: Boolean,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
     onOpenChat: (String, String?) -> Unit,
@@ -1584,6 +1658,9 @@ private fun RouteHost(
                 ConvoyRoute(
                     repository = convoyRepository,
                     friendsRepository = friendsRepository,
+                    // Deep-link into create-convoy when reached from the map "+"
+                    // chooser's "Convoy" option (list-first from the Social hub).
+                    openCreateOnEntry = convoyOpenCreate,
                 )
             } else {
                 LoadingScreen()
