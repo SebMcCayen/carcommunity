@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.map
 
+import com.kungsbackacarcommunity.app.live.LiveMainCar
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -122,6 +123,83 @@ class MapMarkersTest {
         assertEquals(12.5, camera.longitude, 1e-6)
         assertEquals(57.6, camera.latitude, 1e-6)
         assertEquals(MapMarkers.OWN_MARKER_ZOOM, camera.zoom, 1e-6)
+    }
+
+    // --- Callout label ---
+
+    private fun marker(name: String? = null, car: LiveMainCar? = null) =
+        MapMarker(longitude = 12.0, latitude = 57.0, uid = "u", displayName = name, mainCar = car)
+
+    private val volvo = LiveMainCar(make = "Volvo", model = "240", modelYear = 1989)
+
+    @Test
+    fun `calloutLabel shows name and make model on two lines`() {
+        assertEquals(
+            "Alice\nVolvo 240",
+            MapMarkers.calloutLabel(marker(name = "Alice", car = volvo), "Sharing"),
+        )
+    }
+
+    @Test
+    fun `calloutLabel shows just the name when no car`() {
+        assertEquals("Bob", MapMarkers.calloutLabel(marker(name = "Bob"), "Sharing"))
+    }
+
+    @Test
+    fun `calloutLabel uses the fallback name when a car has no display name`() {
+        assertEquals(
+            "Sharing\nVolvo 240",
+            MapMarkers.calloutLabel(marker(name = null, car = volvo), "Sharing"),
+        )
+    }
+
+    @Test
+    fun `calloutLabel is null when there is nothing to show`() {
+        assertNull(MapMarkers.calloutLabel(marker(name = null, car = null), "Sharing"))
+        assertNull(MapMarkers.calloutLabel(marker(name = "  ", car = null), "Sharing"))
+    }
+
+    @Test
+    fun `calloutLabel degrades to the name when make and model are blank`() {
+        val blankCar = LiveMainCar(make = " ", model = " ", modelYear = 2000)
+        assertEquals("Cara", MapMarkers.calloutLabel(marker(name = "Cara", car = blankCar), "Sharing"))
+    }
+
+    @Test
+    fun `calloutLabel collapses embedded newlines so it stays at most two lines`() {
+        val sneakyCar = LiveMainCar(make = "Vol\nvo", model = "2\t40", modelYear = 1989)
+        val label =
+            MapMarkers.calloutLabel(
+                marker(name = "Ali\nce\r\nEvil", car = sneakyCar),
+                "Sharing",
+            )
+        // The ONLY newline is the one calloutLabel inserts between name and car:
+        // every embedded control-whitespace run collapsed to a single space.
+        assertEquals("Ali ce Evil\nVol vo 2 40", label)
+        assertEquals(2, label!!.split("\n").size)
+    }
+
+    @Test
+    fun `calloutLabel collapses newlines in the fallback name too`() {
+        val car = LiveMainCar(make = "Saab", model = "900", modelYear = 1993)
+        val label = MapMarkers.calloutLabel(marker(name = null, car = car), "Sha\nring")
+        assertEquals("Sha ring\nSaab 900", label)
+        assertEquals(2, label!!.split("\n").size)
+    }
+
+    @Test
+    fun `calloutLabel with a car but blank name and blank fallback shows only the car line`() {
+        // No display name and a whitespace-only fallback must NOT emit an empty
+        // first line ("\nVolvo 240") — just the car, single line.
+        val label = MapMarkers.calloutLabel(marker(name = null, car = volvo), "   ")
+        assertEquals("Volvo 240", label)
+        assertEquals(1, label!!.split("\n").size)
+    }
+
+    @Test
+    fun `calloutLabel is null when name and fallback and car are all blank`() {
+        assertNull(MapMarkers.calloutLabel(marker(name = "  ", car = null), "  "))
+        assertNull(MapMarkers.calloutLabel(marker(name = null, car = null), " \n "))
     }
 
     @Test

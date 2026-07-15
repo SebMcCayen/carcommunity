@@ -233,12 +233,12 @@ object ConvoyResponseParser {
         return ConvoyMutationResult.Updated(convoy)
     }
 
-    fun reasonOf(details: Any?): String? = (details as? Map<*, *>)?.get("reason") as? String
-
     private fun parseConvoy(raw: Any?): ConvoySummary? {
         val map = raw as? Map<*, *> ?: return null
         val convoyId = (map["convoyId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
-        val ownerUid = map["ownerUid"] as? String ?: ""
+        // A convoy with no owner is malformed — drop it rather than surface a
+        // row with a blank ownerUid (matches the convoyId/uid handling above).
+        val ownerUid = (map["ownerUid"] as? String)?.takeIf { it.isNotBlank() } ?: return null
         return ConvoySummary(
             convoyId = convoyId,
             ownerUid = ownerUid,

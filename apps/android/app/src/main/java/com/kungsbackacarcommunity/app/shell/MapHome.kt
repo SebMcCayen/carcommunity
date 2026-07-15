@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -75,7 +74,6 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
@@ -140,10 +138,13 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   (null [HubEntry.onClick]) are omitted; tapping an available entry runs its
  *   action (which navigates to that destination, or signs out) and closes the
  *   popup, and tapping outside the popup dismisses it.
- * @param unreadChatCount number of unread ("missed") chat messages shown as a
- *   badge on the floating chat control. There is no global/community-chat
- *   inbox client-side yet (chat is per-event only), so callers pass 0 as a
- *   placeholder until a global unread-count source exists. See the chat popup.
+ * @param unreadChatCount unread indicator for the floating chat control: a
+ *   non-zero value renders the "missed" badge/dot on the bubble. It is sourced
+ *   from the community-chat unread state (the hoisted `observeUnread` marker
+ *   collected once in `AuthenticatedApp`), so the dot shows whenever the caller
+ *   has an unread community message.
+ * @param onOpenChat invoked when the floating chat bubble is tapped; the host
+ *   opens the full 3-channel chat hub ([ShellRoute.ChatHub]).
  */
 @Composable
 fun MapHome(
@@ -162,6 +163,11 @@ fun MapHome(
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
+    // Tapping the floating chat bubble opens the full 3-channel chat hub
+    // (Community / Convoys / Friends + Notifications) as a full-screen route,
+    // rather than the old inline placeholder popup. Defaults to a no-op so
+    // existing callers/tests that don't wire chat still compile.
+    onOpenChat: () -> Unit = {},
     // Crowd-sourced + Trafikverket incidents layer. [incidentMarkers] are drawn
     // on the map so every user sees them, BUT only while [incidentsLayerEnabled]
     // (the "Traffic alerts" toggle in the layers popup) is on — flipping it off
@@ -238,10 +244,6 @@ fun MapHome(
     // Incident-report type picker open/close is local UI state: tapping the
     // report control opens it, picking a type reports and closes it.
     var reportOpen by remember { mutableStateOf(false) }
-
-    // Chat popup open/close is local UI state: tapping the bubble opens the
-    // overlay, tapping outside it (Dialog dismiss) minimizes back to the bubble.
-    var chatOpen by remember { mutableStateOf(false) }
 
     // Profile/account menu open/close is local UI state too: tapping the
     // top-right profile button opens the menu as a transparent Popup *over* the
@@ -417,11 +419,11 @@ fun MapHome(
                 contentDescription = stringResource(R.string.shell_recenter),
                 onClick = onRecenter,
             )
-            // 4. Chat bubble — opens the community-chat popup; shows a badge
-            //    with the unread ("missed") message count when > 0.
+            // 4. Chat bubble — opens the 3-channel chat hub; shows a badge with
+            //    the unread ("missed") message count when > 0.
             ChatCircleControl(
                 unreadCount = unreadChatCount,
-                onClick = { chatOpen = true },
+                onClick = onOpenChat,
             )
         }
 
@@ -434,14 +436,6 @@ fun MapHome(
                     onReportIncident(type)
                 },
                 onDismiss = { reportOpen = false },
-            )
-        }
-
-        // Chat overlay: tapping outside the card dismisses it (back to bubble).
-        if (chatOpen) {
-            ChatPopup(
-                unreadCount = unreadChatCount,
-                onDismiss = { chatOpen = false },
             )
         }
 
@@ -929,9 +923,6 @@ const val MAP_HOME_MORE_TAG = "map_home_more"
 /** Test tag on the floating chat control (bubble). */
 const val MAP_HOME_CHAT_TAG = "map_home_chat"
 
-/** Test tag on the chat overlay/popup card. */
-const val MAP_HOME_CHAT_POPUP_TAG = "map_home_chat_popup"
-
 /**
  * A [CircleControl]-styled chat bubble with an unread-count badge. Matches the
  * other floating controls (size/shape/elevation/haptics); the badge is hidden
@@ -966,96 +957,6 @@ private fun ChatCircleControl(
             contentDescription = description,
             onClick = onClick,
         )
-    }
-}
-
-/**
- * The community-chat overlay shown when the bubble is tapped. Rendered as a
- * [Popup] (not a [Dialog]) anchored to the LOWER part of the screen — just above
- * the bottom navigation bar — with NO dimming scrim, so the live map stays
- * visible behind it; its surface is slightly translucent to match the layers
- * popup. Tapping outside the card (or Back) minimizes it back to the bubble
- * (focusable popup). Content is a placeholder: there is no global/community-chat
- * inbox client-side yet (chat is per-event only), so this explains where chat
- * lives and shows the caught-up empty state. Wire real messages here once a
- * global unread-count + conversation source exists (backend, out of this lane).
- */
-@Composable
-private fun ChatPopup(
-    unreadCount: Int,
-    onDismiss: () -> Unit,
-) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
-    ) {
-        Surface(
-            modifier =
-                Modifier
-                    // Sit above the system nav-bar inset AND the app's bottom
-                    // navigation bar so the card never hides behind the tab bar,
-                    // with a small breathing gap above it. Derive the offset from
-                    // the shared bar-height constant so it can't drift if the bar
-                    // changes: ShellBottomBarHeight (80.dp) + KccSpacing.s3 (12.dp).
-                    .navigationBarsPadding()
-                    .padding(horizontal = KccSpacing.s4)
-                    .padding(bottom = ShellBottomBarHeight + KccSpacing.s3)
-                    // Fill available width, then cap at 360.dp: full-width on
-                    // phones, capped on tablets (matches LiveSharePopup order).
-                    .fillMaxWidth()
-                    .widthIn(max = 360.dp)
-                    .testTag(MAP_HOME_CHAT_POPUP_TAG),
-            shape = RoundedCornerShape(KccRadius.lg),
-            // Slightly translucent so the map shows through (matches the layers popup).
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Chat,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = stringResource(R.string.shell_chatTitle),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.shell_chatClose),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Text(
-                    text =
-                        if (unreadCount > 0) {
-                            stringResource(R.string.shell_chatUnread, unreadCount)
-                        } else {
-                            stringResource(R.string.shell_chatEmpty)
-                        },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.shell_chatComingSoon),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 

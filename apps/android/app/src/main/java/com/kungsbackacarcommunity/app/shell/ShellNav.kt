@@ -43,10 +43,18 @@ enum class ShellRoute {
     Friends,
     /** Convoy management (list / create / detail / ended summary). */
     Convoys,
+    /**
+     * Another member's read-only public profile (name/avatar/bio + their garage
+     * cars and, when readable, awards). The target member's uid is carried
+     * alongside the route (payload-free enum), set when a friend row is tapped.
+     */
+    MemberProfile,
     /** The DM inbox (conversation list). */
     Conversations,
     /** A single 1:1 DM thread (target carried alongside the route). */
     Chat,
+    /** The 3-channel chat hub (Community / Convoys / Friends + Notifications), opened from the map chat bubble. */
+    ChatHub,
     Badges,
     Blocked,
     Points,

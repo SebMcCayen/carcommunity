@@ -54,6 +54,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -91,6 +92,9 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
+import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
@@ -101,6 +105,8 @@ import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRoute
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRepository
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
@@ -179,6 +185,8 @@ import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
+import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import com.kungsbackacarcommunity.app.whatsnew.Changelog
 import com.kungsbackacarcommunity.app.whatsnew.ChangelogLoader
 import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
@@ -242,8 +250,11 @@ fun AuthenticatedApp(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    memberProfileRepository: MemberProfileRepository?,
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
+    communityChatRepository: CommunityChatRepository?,
+    convoyChatRepository: ConvoyChatRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -297,12 +308,62 @@ fun AuthenticatedApp(
         }
 
         AuthedDestination.Main -> {
+            // One-time first-login welcome flow. Shown ONCE after profile
+            // creation, on the first reach of the Main experience, and never
+            // again for a returning user. "Seen" is persisted device-locally per
+            // uid (WelcomeStore / SharedPreferences) — deliberately NOT account
+            // state, so no backend/rules change. Skip and every CTA mark it seen;
+            // a CTA additionally deep-links into the shell (membership / profile /
+            // garage) via pendingWelcomeRoute, consumed as the shell's initial
+            // route below. Keyed on uid so switching accounts on one device shows
+            // each new user their own welcome once.
+            val welcomeContext = LocalContext.current
+            val welcomeStore = remember(welcomeContext) { WelcomeStore(welcomeContext) }
+            var welcomeSeen by
+                rememberSaveable(uid) { mutableStateOf(welcomeStore.hasSeenWelcome(uid)) }
+            var pendingWelcomeRoute by
+                rememberSaveable(uid) { mutableStateOf<ShellRoute?>(null) }
+
+            if (!welcomeSeen) {
+                // Every dismissal path (skip, "Get started", or a CTA) marks the
+                // flow seen so it can't re-appear; a CTA also stashes the route to
+                // open once the shell renders.
+                val finishWelcome = { target: ShellRoute? ->
+                    welcomeStore.markSeen(uid)
+                    pendingWelcomeRoute = target
+                    welcomeSeen = true
+                }
+                // Scope the whole welcome-flow composition by uid, consistent with
+                // the welcome-gating/route state above. WelcomeScreen keeps its
+                // current step in its own rememberSaveable; without this, a
+                // different user signing in within the same Activity/process would
+                // reuse the previous user's saved step instead of starting at
+                // WelcomeStep.FIRST. key(uid) gives the subtree a new identity per
+                // account so its saved state resets — without coupling the reusable
+                // WelcomeScreen (and its @Preview) to a uid parameter.
+                key(uid) {
+                    WelcomeScreen(
+                        onSeeMembership = { finishWelcome(ShellRoute.Subscription) },
+                        onCompleteProfile = { finishWelcome(ShellRoute.Profile) },
+                        onAddCar = { finishWelcome(ShellRoute.Garage) },
+                        onFinish = { finishWelcome(null) },
+                    )
+                }
+            } else {
             val profile = (profileState as? ProfileState.Loaded)?.profile
 
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
-            var route by rememberSaveable { mutableStateOf<ShellRoute?>(null) }
+            // Initialised from any route a welcome-flow CTA requested (membership /
+            // profile / garage), so finishing the welcome deep-links straight into
+            // that screen; null (skip / "Get started") lands on the Map home. Only
+            // consumed on the shell's first composition — a later state restore
+            // uses the saved route, not this one-shot value. Keyed on uid (like the
+            // welcome-gating state above) so a different user signing in within the
+            // same Activity/process re-scopes the route to their own
+            // pendingWelcomeRoute instead of inheriting the previous user's saved one.
+            var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
 
             // Defensive migration: selectedTab is rememberSaveable, so a session
             // saved by an older app version (when Create was a real content
@@ -346,6 +407,16 @@ fun AuthenticatedApp(
                 dmChatOtherUid = otherUid
                 dmChatOtherName = otherName
                 route = ShellRoute.Chat
+            }
+
+            // Target member whose read-only profile is open, carried alongside the
+            // payload-free ShellRoute.MemberProfile. Set by tapping a friend row.
+            var memberProfileTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
+            val openMemberProfile = { targetUid: String ->
+                if (targetUid.isNotBlank()) {
+                    memberProfileTargetUid = targetUid
+                    route = ShellRoute.MemberProfile
+                }
             }
 
             val snackbarHostState = remember { SnackbarHostState() }
@@ -437,6 +508,30 @@ fun AuthenticatedApp(
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
 
+            // Community-chat unread flag (a lightweight per-user last-read marker,
+            // no fan-out counter): drives the map chat bubble's "missed" dot AND
+            // the chat hub's Community-tab dot. Gated like garageState so the two
+            // Firestore listeners it opens (newest-message + userPrivate marker)
+            // are live only while that dot can actually be seen — the Map tab
+            // (bubble) or the open ChatHub route — and degrade to a constant
+            // `false` otherwise. The condition stays true across the Map ↔ ChatHub
+            // transition (the hub opens as a route while the Map tab stays
+            // selected), so the listener survives it rather than tearing down;
+            // leaving both and returning re-subscribes and Firestore's local cache
+            // delivers the current value near-instantly. Guarded — no repo
+            // (config-less build) means never unread.
+            val needsCommunityUnread =
+                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub
+            val communityChatUnread by
+                remember(communityChatRepository, uid, needsCommunityUnread) {
+                    if (communityChatRepository != null && needsCommunityUnread) {
+                        communityChatRepository.observeUnread(uid)
+                    } else {
+                        flowOf(false)
+                    }
+                }
+                    .collectAsState(initial = false)
+
             // Single shared vehicles stream for the whole garage section: the
             // garage hub header (main-car avatar) and the Cars sub-page both
             // derive from THIS state, so at most one Firestore snapshot
@@ -463,6 +558,13 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            // Upsell shown when a non-member tries to view others' live locations
+            // on the map (sharing your own remains free).
+            val viewLiveMembersOnlyText = stringResource(R.string.shell_viewLiveMembersOnly)
+            // Shown instead of the upsell when viewing others is blocked because the
+            // LIVE_LOCATION feature flag is off (not a membership issue) — so an active
+            // member with the flag disabled doesn't see a misleading subscription upsell.
+            val featureUnavailableText = stringResource(R.string.shell_unavailable)
             // Shown when the nav view's "Report incident/roadwork" is tapped while
             // the incidents feature (a sibling PR) is not yet present in this build.
             val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
@@ -541,14 +643,23 @@ fun AuthenticatedApp(
                     memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
-            // Starting a session is member-gated (backend parity).
+            // Sharing your OWN location is FREE (backend parity: startSession /
+            // updatePosition require only an authenticated, non-suspended user).
+            // Flag-gated but NOT member-gated.
             val canShareLive =
                 FeatureGate.isAvailable(
                     flags = flags,
                     flag = FeatureFlag.LIVE_LOCATION,
-                    memberGated = true,
+                    memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
+            // Viewing OTHERS on the map is the paid capability (backend parity:
+            // the liveLocation/$uid/latest RTDB read rule requires activeMember).
+            // A non-member gets a subscription upsell instead of the roster map.
+            // ALSO flag-gated: a server-disabled LIVE_LOCATION flag must fully
+            // block opening the roster map / starting RTDB reads, so require the
+            // flag (liveLocationEnabled) IN ADDITION to the active-member gate.
+            val canViewLiveOthers = liveLocationEnabled && profile?.activeMember == true
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
@@ -782,8 +893,31 @@ fun AuthenticatedApp(
                         onShowOnMap =
                             if (liveLocationRepository != null) {
                                 { uids ->
-                                    mapParticipantUids = ArrayList(uids)
-                                    route = ShellRoute.Map
+                                    // Viewing others on the map is flag- AND
+                                    // member-gated (canViewLiveOthers = LIVE_LOCATION
+                                    // flag && activeMember; backend RTDB read rule
+                                    // parity). A disabled flag or a non-member gets
+                                    // the upsell/no-op instead of the roster map, so
+                                    // no RTDB reads start — they can still share their
+                                    // own location + see their own puck.
+                                    if (canViewLiveOthers) {
+                                        mapParticipantUids = ArrayList(uids)
+                                        route = ShellRoute.Map
+                                    } else {
+                                        // Distinguish WHY viewing is blocked: a
+                                        // disabled LIVE_LOCATION flag → "not available"
+                                        // (an active member shouldn't see an upsell);
+                                        // otherwise it's the non-member subscription upsell.
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                if (!liveLocationEnabled) {
+                                                    featureUnavailableText
+                                                } else {
+                                                    viewLiveMembersOnlyText
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                             } else {
                                 null
@@ -803,9 +937,15 @@ fun AuthenticatedApp(
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        memberProfileRepository = memberProfileRepository,
+                        memberProfileTargetUid = memberProfileTargetUid,
+                        onOpenMemberProfile = openMemberProfile,
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
                         convoyOpenCreate = convoyOpenCreate,
+                        communityChatRepository = communityChatRepository,
+                        communityChatUnread = communityChatUnread,
+                        convoyChatRepository = convoyChatRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
                         onOpenChat = openChat,
@@ -928,13 +1068,16 @@ fun AuthenticatedApp(
                                                 onOpenRoute = { route = it },
                                                 onSignOut = onSignOut,
                                             ),
-                                        // Placeholder: chat is per-event only
-                                        // (EventChatRepository) — there is no
-                                        // global/community unread-count source
-                                        // client-side. Wire a real "missed
-                                        // chats" count here once a backend
-                                        // inbox exists (out of the Android lane).
-                                        unreadChatCount = 0,
+                                        // Community-chat unread ("missed") dot:
+                                        // shown as a single-count badge when the
+                                        // newest community message post-dates the
+                                        // caller's last-read marker. Cleared when
+                                        // they open + read the Community channel.
+                                        unreadChatCount = if (communityChatUnread) 1 else 0,
+                                        // The chat bubble opens the full 3-channel
+                                        // chat hub (Community / Convoys / Friends +
+                                        // Notifications) as a full-screen route.
+                                        onOpenChat = { route = ShellRoute.ChatHub },
                                         // Crowd-sourced incidents layer: draw the
                                         // fetched markers for everyone, and show the
                                         // report control only when a repository is
@@ -1212,6 +1355,7 @@ fun AuthenticatedApp(
                 )
               }
             }
+            }
         }
     }
 }
@@ -1410,9 +1554,18 @@ private fun RouteHost(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    memberProfileRepository: MemberProfileRepository?,
+    memberProfileTargetUid: String?,
+    onOpenMemberProfile: (String) -> Unit,
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
     convoyOpenCreate: Boolean,
+    communityChatRepository: CommunityChatRepository?,
+    // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
+    // down so the chat hub reuses that single unread listener instead of starting
+    // its own duplicate observeUnread subscription.
+    communityChatUnread: Boolean,
+    convoyChatRepository: ConvoyChatRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
     onOpenChat: (String, String?) -> Unit,
@@ -1453,14 +1606,16 @@ private fun RouteHost(
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Strip EXIF/GPS metadata BEFORE upload: avatars are PUBLICLY
-                        // readable by any authenticated member (storage.rules), so a
-                        // selfie taken at the owner's home must never leak their
-                        // coordinates. compressForPublicUpload downscales + re-encodes
-                        // to JPEG (dropping all EXIF, GPS included) and GUARANTEES the
-                        // returned bytes are EXIF-free — it returns null instead of
-                        // falling back to the un-sanitised original, so we fail closed
-                        // and skip the upload rather than risk leaking source metadata.
+                        // Strip GPS + identifying metadata BEFORE upload: avatars are
+                        // PUBLICLY readable by any authenticated member (storage.rules),
+                        // so a selfie taken at the owner's home must never leak their
+                        // coordinates or device fingerprint. compressForPublicUpload
+                        // GUARANTEES the returned bytes are free of every STRIP_TAG (all
+                        // GPS + identifying EXIF): the happy path re-encodes to JPEG
+                        // (dropping all metadata), and if a pick can't be re-encoded it
+                        // physically strips those tags or returns the original only when
+                        // proven free of them — else it returns null and we fail closed /
+                        // skip the upload rather than risk leaking source metadata.
                         val sanitized = ImageCompressor.compressForPublicUpload(picked)
                         if (sanitized != null) {
                             val imageId = MediaUpload.newImageId(sanitized.contentType)
@@ -1648,6 +1803,22 @@ private fun RouteHost(
                         // Guarded: only offer to open a thread when DM is wired.
                         if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
                     },
+                    onViewProfile = { friend ->
+                        // Guarded: only navigate when the profile repo is wired.
+                        if (memberProfileRepository != null) onOpenMemberProfile(friend.uid)
+                    },
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.MemberProfile ->
+            if (memberProfileRepository != null && memberProfileTargetUid != null) {
+                MemberProfileRoute(
+                    repository = memberProfileRepository,
+                    targetUid = memberProfileTargetUid,
+                    viewerUid = uid,
+                    blockingRepository = blockingRepository,
                 )
             } else {
                 LoadingScreen()
@@ -1695,6 +1866,21 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        // The 3-channel chat hub opened from the map chat bubble. Each tab's
+        // repository is nullable (guarded per tab), so the hub renders even in a
+        // config-less build; onClose returns to the map.
+        ShellRoute.ChatHub ->
+            ChatHubRoute(
+                uid = uid,
+                communityChatRepository = communityChatRepository,
+                convoyChatRepository = convoyChatRepository,
+                dmRepository = dmRepository,
+                notificationsRepository = notificationsRepository,
+                notificationsCoordinator = notificationsCoordinator,
+                communityUnread = communityChatUnread,
+                onClose = onClose,
+            )
 
         ShellRoute.Badges ->
             if (badgesRepository != null) {

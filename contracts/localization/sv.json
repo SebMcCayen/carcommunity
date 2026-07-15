@@ -120,6 +120,23 @@
     "loading": "Sparar...",
     "error": "Något gick fel. Försök igen."
   },
+  "welcome": {
+    "skip": "Hoppa över",
+    "next": "Nästa",
+    "getStarted": "Kom igång",
+    "progress": "Steg %1$d av %2$d",
+    "step1Title": "Välkommen till gemenskapen",
+    "step1Body": "Du är med! Här möts lokala bilentusiaster, kör och delar passionen. Här är en snabb rundtur innan du sätter igång.",
+    "step2Title": "Kartan är din utgångspunkt",
+    "step2Body": "Utgå från kartan för att se vad som händer runt omkring dig, dela din liveposition med vänner och köra tillsammans i konvojer.",
+    "step3Title": "Lås upp mer med medlemskap",
+    "step3Body": "Ett medlemskap låser upp hela upplevelsen – inklusive att se andra medlemmars livepositioner, gå med i konvojer och medlemsexklusiva evenemang.",
+    "seeMembership": "Se medlemskap",
+    "step4Title": "Gör den till din",
+    "step4Body": "Slutför din profil så att andra känner igen dig, och lägg till din första bil i garaget.",
+    "completeProfile": "Slutför profil",
+    "addCar": "Lägg till bil"
+  },
   "url": {
     "terms": "https://kungsbacka-car-community.web.app/terms",
     "privacy": "https://kungsbacka-car-community.web.app/privacy",
@@ -208,7 +225,8 @@
     "noOtherMarkersTitle": "Inga andra medlemmar delar sin liveposition just nu.",
     "noOtherMarkersSubtitle": "Livepositioner visas endast under aktiva, tidsbegränsade sessioner.",
     "memberRequiredTitle": "Medlemskap krävs för att se andra medlemmars livepositioner.",
-    "shareOwnFreeHint": "Du kan dela din egen position gratis."
+    "shareOwnFreeHint": "Du kan dela din egen position gratis.",
+    "liveMarkerFallbackName": "Delar live"
   },
   "events": {
     "title": "Träffar",
@@ -413,7 +431,7 @@
     "createSubmit": "Skapa konvoj",
     "createdTitle": "Konvoj skapad",
     "createdBody": "Din konvoj är klar. Inbjudna vänner kan nu acceptera.",
-    "skippedTitle": "%1$d kunde inte bjudas in",
+    "skippedTitle": "Kunde inte bjuda in %1$d",
     "skippedBody": "Några kunde inte läggas till – de kanske inte är dina vänner.",
     "openConvoy": "Öppna konvoj",
     "membersTitle": "Medlemmar",
@@ -443,6 +461,21 @@
     "errorCannotStart": "Konvojen kan inte längre startas.",
     "errorAlreadyEnded": "Konvojen är redan avslutad.",
     "errorGeneric": "Något gick fel. Försök igen."
+  },
+  "memberProfile": {
+    "title": "Profil",
+    "unknownMember": "Medlem",
+    "unavailable": "Den här profilen är inte tillgänglig.",
+    "error": "Det gick inte att läsa in profilen.",
+    "retry": "Försök igen",
+    "carsTitle": "Bilar",
+    "carsEmpty": "Inga bilar i garaget ännu.",
+    "mainCar": "Huvudbil",
+    "badgesTitle": "Utmärkelser",
+    "badgesEmpty": "Inga utmärkelser ännu.",
+    "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
+    "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
+    "awardedOn": "Tilldelad %1$s"
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",
@@ -714,7 +747,6 @@
     "call": "Ring",
     "visitWebsite": "Besök webbplats",
     "viewOffer": "Visa erbjudande",
-    "safeDrivingWarning": "Stanna säkert innan du öppnar marknadsföringen.",
     "safeDrivingInteractionDisabled": "Marknadsföringsinteraktioner är avstängda medan du kör.",
     "availableUntil": "Tillgänglig till",
     "availableFrom": "Tillgänglig från",
@@ -792,6 +824,34 @@
     "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
     "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
   },
+  "channel": {
+    "inputPlaceholder": "Skriv ett meddelande…",
+    "send": "Skicka",
+    "loadOlder": "Ladda tidigare meddelanden",
+    "emptyCommunity": "Inga meddelanden än — starta samtalet!",
+    "emptyConvoy": "Inga meddelanden än — säg hej till din konvoj!",
+    "unknownSender": "Medlem",
+    "sendErrorSignedOut": "Logga in för att skicka meddelanden.",
+    "sendErrorNotMember": "Chatten är tillgänglig för aktiva medlemmar.",
+    "sendErrorInvalid": "Skriv ett meddelande att skicka.",
+    "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
+    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
+  },
+  "chatHub": {
+    "title": "Chatt",
+    "close": "Stäng chatt",
+    "back": "Tillbaka",
+    "tabCommunity": "Gemenskap",
+    "tabConvoys": "Konvojer",
+    "tabFriends": "Vänner",
+    "tabNotifications": "Notiser",
+    "unavailable": "Det här är inte tillgängligt just nu.",
+    "convoysEmpty": "Du är inte med i några konvojer än.",
+    "convoysError": "Kunde inte ladda dina konvojer.",
+    "convoysRetry": "Försök igen",
+    "convoyUntitled": "Konvoj",
+    "convoyMembers": "Medlemmar: %1$d"
+  },
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",
@@ -844,6 +904,7 @@
     "moreSettings": "Inställningar",
     "moreSignOut": "Logga ut",
     "unavailable": "Inte tillgängligt just nu.",
+    "viewLiveMembersOnly": "Medlemskap krävs för att se andra på kartan. Du kan fortfarande dela din egen plats gratis.",
     "trafficOn": "Trafiklager på",
     "trafficOff": "Visa trafik",
     "chat": "Chatt",

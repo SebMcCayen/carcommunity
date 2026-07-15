@@ -1989,8 +1989,10 @@ describe('Realtime Database security rules – unauthenticated access', () => {
 
 // ---------------------------------------------------------------------------
 // Realtime Database: liveLocation (Phase 10)
-// Backend-write-only; markers readable by entitled members; sessions
-// owner-readable. (Retires the Phase 3 `liveLocations` plural scaffold.)
+// Backend-write-only. The OWNER always reads their own marker (sharing is
+// free); reading ANOTHER user's marker requires an entitled (activeMember,
+// non-suspended, unblocked) viewer. Sessions are owner-readable.
+// (Retires the Phase 3 `liveLocations` plural scaffold.)
 // ---------------------------------------------------------------------------
 
 describe('Realtime Database – liveLocation (Phase 10)', () => {
@@ -2039,6 +2041,15 @@ describe('Realtime Database – liveLocation (Phase 10)', () => {
     await assertSucceeds(dbGet(dbRef(memberCtx.database(), `liveLocation/${SHARER}/latest`)));
     const ownerCtx = testEnv.authenticatedContext(SHARER);
     await assertSucceeds(dbGet(dbRef(ownerCtx.database(), `liveLocation/${SHARER}/session`)));
+  });
+
+  it('the owner reads their OWN marker without a subscription (sharing is free)', async () => {
+    // No activeMember claim: viewing your own position is free.
+    const ownerCtx = testEnv.authenticatedContext(SHARER);
+    await assertSucceeds(dbGet(dbRef(ownerCtx.database(), `liveLocation/${SHARER}/latest`)));
+    // A suspended owner can still read their own marker (privacy/own-data).
+    const suspendedOwner = testEnv.authenticatedContext(SHARER, { suspended: true });
+    await assertSucceeds(dbGet(dbRef(suspendedOwner.database(), `liveLocation/${SHARER}/latest`)));
   });
 
   it('blocking hides the marker symmetrically (either party having blocked)', async () => {

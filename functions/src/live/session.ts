@@ -6,13 +6,17 @@
  * client write), so session integrity, the 60-second staleness
  * threshold, and marker shape are enforced here:
  *
- * - startSession (member, liveLocation flag): creates/replaces the
- *   caller's session (starting again restarts with a fresh id/expiry)
- *   and denormalizes displayName for markers.
- * - updatePosition (member): requires an ACTIVE, unexpired session;
- *   writes the lean liveLocation/{uid}/latest marker node.
- * - stopSession (authenticated): marks the session stopped and removes
- *   `latest` — the marker disappears immediately.
+ * - startSession (signedIn active, liveLocation flag): creates/replaces
+ *   the caller's session (starting again restarts with a fresh id/expiry)
+ *   and denormalizes displayName for markers. Sharing your OWN location is
+ *   FREE — no subscription; only VIEWING OTHERS requires activeMember
+ *   (enforced by the liveLocation/$uid/latest RTDB read rule).
+ * - updatePosition (signedIn active): requires an ACTIVE, unexpired
+ *   session; writes the lean liveLocation/{uid}/latest marker node.
+ * - stopSession (signedIn active): requires an active, non-suspended caller
+ *   (requireActiveActor), so it is NOT available while suspended/restricted —
+ *   use hideMeNow as the privacy escape hatch in that case. Marks the session
+ *   stopped and removes `latest` — the marker disappears immediately.
  * - hideMeNow (signedIn — works while SUSPENDED; removing your own
  *   position is a privacy action that must always be available): stops
  *   the session with reason hide_me_now and removes `latest`.
@@ -20,7 +24,7 @@
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { adminRtdb, db } from '../firebase';
-import { requireActiveActor, requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
   LIVE_LOCATION_FLAG_KEY,
@@ -54,7 +58,11 @@ export interface SessionResponse {
 }
 
 export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
-  const actor = await requireMemberActor(request);
+  // Sharing your OWN location is free: any authenticated, non-suspended user
+  // can start a session. Only VIEWING OTHERS requires an active subscription
+  // (enforced by the liveLocation/$uid/latest RTDB read rule + the Android
+  // viewing gate). The LIVE_LOCATION feature flag still gates the whole thing.
+  const actor = await requireActiveActor(request);
 
   const parsed = parseStartSessionInput(request.data);
   if (!parsed.ok) {
@@ -107,7 +115,8 @@ export interface UpdatePositionResponse {
 export const updatePosition = onCall(
   CALLABLE_OPTS,
   async (request): Promise<UpdatePositionResponse> => {
-    const actor = await requireMemberActor(request);
+    // Free to share your own position — see startSession for the rationale.
+    const actor = await requireActiveActor(request);
 
     const parsed = parseUpdatePositionInput(request.data);
     if (!parsed.ok) {

@@ -89,6 +89,23 @@ class ConvoyResponseParserTest {
     }
 
     @Test
+    fun `convoy rows with a missing or blank ownerUid are dropped as malformed`() {
+        val data =
+            mapOf(
+                "convoys" to
+                    listOf(
+                        convoyMap(id = "c1").toMutableMap().apply { remove("ownerUid") },
+                        convoyMap(id = "c2").toMutableMap().apply { this["ownerUid"] = "   " },
+                        convoyMap(id = "c3"),
+                    ),
+                "pendingInvites" to emptyList<Any?>(),
+            )
+        val result = ConvoyResponseParser.parseList(data)
+        // Only the well-formed row (c3) survives; the missing/blank-owner rows are dropped.
+        assertEquals(listOf("c3"), result.convoys.map { it.convoyId })
+    }
+
+    @Test
     fun `parseCreate maps convoy, invited and skipped with reasons`() {
         val data =
             mapOf(

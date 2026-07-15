@@ -158,6 +158,10 @@ class ConvoyCoordinator(
             throw cancellation
         } catch (_: Exception) {
             rowError.value = ConvoyActionError.Generic
+            // Re-fetch here too so the doc's "always re-fetches" holds and the
+            // snapshot stays consistent after an unexpected failure. load() has
+            // its own guard and never rethrows, so it can't mask this rowError.
+            load()
         } finally {
             inFlight.update { it - convoyId }
         }

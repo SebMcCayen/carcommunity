@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.friends
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -68,6 +70,7 @@ fun FriendsScreen(
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
     onMessageFriend: (FriendSummary) -> Unit,
+    onViewProfile: (FriendSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var nickname by remember { mutableStateOf("") }
@@ -167,6 +170,7 @@ fun FriendsScreen(
                             FriendRow(
                                 friend = friend,
                                 working = friend.uid in busyRows,
+                                onViewProfile = { onViewProfile(friend) },
                                 onMessage = { onMessageFriend(friend) },
                                 onRemove = { removeTarget = friend },
                             )
@@ -338,6 +342,7 @@ private fun OutgoingRequestRow(request: FriendRequestSummary) {
 private fun FriendRow(
     friend: FriendSummary,
     working: Boolean,
+    onViewProfile: () -> Unit,
     onMessage: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -346,8 +351,16 @@ private fun FriendRow(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
+            // Tapping the member (avatar + name) opens their read-only profile.
             MemberHeader(
                 user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        // Announce the row as a button to screen readers — without
+                        // this it reads as plain text and its tap-to-open-profile
+                        // affordance is invisible to accessibility services.
+                        .clickable(role = Role.Button, onClick = onViewProfile),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Opens the 1:1 DM thread with this friend; the conversation is

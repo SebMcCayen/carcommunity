@@ -31,10 +31,13 @@ import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
+import com.kungsbackacarcommunity.app.memberprofile.FirebaseMemberProfileRepository
 import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.FirebaseCommunityChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.FirebaseConvoyChatRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntRepository
 import com.kungsbackacarcommunity.app.convoy.FirebaseConvoyRepository
@@ -163,8 +166,14 @@ class MainActivity : ComponentActivity() {
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
+        val memberProfileRepository =
+            FirebaseMemberProfileRepository.createIfAvailable(applicationContext)
         val dmRepository = FirebaseDmRepository.createIfAvailable(applicationContext)
         val convoyRepository = FirebaseConvoyRepository.createIfAvailable(applicationContext)
+        val communityChatRepository =
+            FirebaseCommunityChatRepository.createIfAvailable(applicationContext)
+        val convoyChatRepository =
+            FirebaseConvoyChatRepository.createIfAvailable(applicationContext)
         val drivesRepository = FirebaseDrivesRepository.createIfAvailable(applicationContext)
         val pointsRepository = FirebasePointsRepository.createIfAvailable(applicationContext)
         val partnerApplicationCoordinator =
@@ -274,8 +283,11 @@ class MainActivity : ComponentActivity() {
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        memberProfileRepository = memberProfileRepository,
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
+                        communityChatRepository = communityChatRepository,
+                        convoyChatRepository = convoyChatRepository,
                         drivesRepository = drivesRepository,
                         pointsRepository = pointsRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,

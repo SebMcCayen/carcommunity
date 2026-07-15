@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
@@ -53,12 +54,15 @@ fun ConvoyRoute(
     val createState by coordinator.createState.collectAsState()
 
     // Friends snapshot for the invite-picker (shared FriendsRepository). Loaded
-    // lazily via its own coordinator; null repository yields a permanent Loading,
-    // which the picker renders as an "unavailable" notice.
+    // lazily via its own coordinator. A null repository (config-less build) has
+    // no snapshot to load, so it resolves to a terminal Error state — which the
+    // picker renders as an "unavailable" notice — instead of a permanent Loading
+    // spinner that would never resolve.
     val friendsCoordinator =
         remember(friendsRepository) { friendsRepository?.let { FriendsCoordinator(it) } }
     val friendsStatus: FriendsStatus =
-        friendsCoordinator?.status?.collectAsState()?.value ?: FriendsStatus.Loading
+        friendsCoordinator?.status?.collectAsState()?.value
+            ?: FriendsStatus.Error(FriendActionError.Generic)
 
     var view by rememberSaveable { mutableStateOf(ConvoyView.List) }
     var detailConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -147,20 +151,13 @@ fun ConvoyRoute(
             } else {
                 // The convoy fell out of the snapshot (e.g. a concurrent change)
                 // or the list is still loading — return to the list rather than
-                // render an empty detail.
+                // render an empty detail. This is a transient state, so show a
+                // neutral loading placeholder instead of a fully-wired-looking
+                // list whose buttons would be dead until the pop lands.
                 LaunchedEffect(detailConvoyId, status) {
                     if (status is ConvoyListStatus.Loaded) view = ConvoyView.List
                 }
-                ConvoyListScreen(
-                    status = status,
-                    actionError = actionError,
-                    busyConvoys = busyConvoys,
-                    onCreate = {},
-                    onOpenConvoy = {},
-                    onAccept = {},
-                    onDecline = {},
-                    onClearActionError = { coordinator.clearActionError() },
-                )
+                ConvoyLoadingScreen()
             }
         }
     }
