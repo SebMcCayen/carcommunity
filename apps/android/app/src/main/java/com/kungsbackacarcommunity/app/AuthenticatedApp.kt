@@ -520,13 +520,13 @@ fun AuthenticatedApp(
             // the chat hub's Community-tab dot. Gated like garageState so the two
             // Firestore listeners it opens (newest-message + userPrivate marker)
             // are live only while that dot can actually be seen — the Map tab
-            // (bubble) or the open ChatHub route — and degrade to a constant
-            // `false` otherwise. The condition stays true across the Map ↔ ChatHub
-            // transition (the hub opens as a route while the Map tab stays
-            // selected), so the listener survives it rather than tearing down;
-            // leaving both and returning re-subscribes and Firestore's local cache
-            // delivers the current value near-instantly. Guarded — no repo
-            // (config-less build) means never unread.
+            // (bubble), the chat hub popup open over the map, or the legacy
+            // ChatHub route fallback — and degrade to a constant `false`
+            // otherwise. Because the popup opens over the map WITHOUT leaving the
+            // Map tab (`selectedTab` stays Map), the `selectedTab == Map` term
+            // already keeps the listener alive while the hub is open; `chatHubOpen`
+            // is kept for clarity and `ShellRoute.ChatHub` covers the fallback
+            // route. Guarded — no repo (config-less build) means never unread.
             val needsCommunityUnread =
                 selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
             val communityChatUnread by

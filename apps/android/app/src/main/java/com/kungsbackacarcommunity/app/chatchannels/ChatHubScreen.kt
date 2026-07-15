@@ -1,10 +1,12 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,8 +35,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -105,11 +109,14 @@ fun ChatHubRoute(
  * idiom as the map-layers and live-share popups: a [Popup] (not a full route or a
  * [androidx.compose.ui.window.Dialog]) so there is NO dimming scrim and the live
  * map stays visible behind (and faintly through) a translucent surface. Tapping
- * outside the card or pressing Back dismisses it (focusable popup + the content's
- * own BackHandler). The card leaves a strip of map visible above it and reaches
- * the bottom of the window so the message-input row's navigation-bar inset lifts
- * it clear of the system bars. Content/tabs/functionality are identical to the
- * route form ([ChatHubContent]); only the container/presentation differs.
+ * outside the card or pressing Back dismisses it (the focusable popup's
+ * [Popup.onDismissRequest] handles Back; an explicit transparent tap layer over
+ * the map strip handles outside taps). The card wraps a near-full height anchored
+ * to the bottom of the window — leaving a strip of live map visible above it —
+ * and reaches the bottom edge so the message-input row's navigation-bar inset
+ * lifts it clear of the system bars. Only the card is opaque/interactive; the
+ * strip above passes through to dismiss. Content/tabs/functionality are identical
+ * to the route form ([ChatHubContent]); only the container/presentation differs.
  */
 @Composable
 fun ChatHubPopup(
@@ -128,35 +135,52 @@ fun ChatHubPopup(
         onDismissRequest = onClose,
         properties = PopupProperties(focusable = true),
     ) {
-        Surface(
-            modifier =
-                modifier
-                    .fillMaxSize()
-                    // Push the card below the status bar and reveal a strip of the
-                    // live map above it, so the popup reads as floating over the map
-                    // rather than a full page.
-                    .statusBarsPadding()
-                    .padding(top = KccSpacing.s6, start = KccSpacing.s2, end = KccSpacing.s2)
-                    .testTag(CHAT_HUB_TEST_TAG),
-            shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
-            // Translucent so the map shows through — matches the map-home popups.
-            color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp,
-        ) {
-            ChatHubContent(
-                uid = uid,
-                communityChatRepository = communityChatRepository,
-                convoyChatRepository = convoyChatRepository,
-                dmRepository = dmRepository,
-                notificationsRepository = notificationsRepository,
-                notificationsCoordinator = notificationsCoordinator,
-                communityUnread = communityUnread,
-                onClose = onClose,
-                // The card is already offset below the status bar, so the content
-                // must NOT add its own status-bar inset again.
-                applyStatusBarInset = false,
+        // Full-window container: the card is NOT full-screen, so the area above it
+        // stays a genuine "outside". A transparent tap layer fills the window; the
+        // card (composed after) sits on top at the bottom, so only the uncovered
+        // map strip actually receives the dismiss tap. A raw pointerInput handler
+        // plus clearAndSetSemantics keeps this invisible dismiss layer out of the
+        // accessibility tree (mirrors the map-home outside-tap scrims).
+        Box(modifier = modifier.fillMaxSize()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) { detectTapGestures { onClose() } }
+                        .clearAndSetSemantics {},
             )
+            Surface(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        // Push the card below the status bar and reveal a strip of
+                        // the live map above it; fillMaxHeight then makes the card
+                        // take all the remaining height down to the bottom edge.
+                        .statusBarsPadding()
+                        .padding(top = KccSpacing.s6, start = KccSpacing.s2, end = KccSpacing.s2)
+                        .fillMaxHeight()
+                        .testTag(CHAT_HUB_TEST_TAG),
+                shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
+                // Translucent so the map shows through — matches the map-home popups.
+                color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+            ) {
+                ChatHubContent(
+                    uid = uid,
+                    communityChatRepository = communityChatRepository,
+                    convoyChatRepository = convoyChatRepository,
+                    dmRepository = dmRepository,
+                    notificationsRepository = notificationsRepository,
+                    notificationsCoordinator = notificationsCoordinator,
+                    communityUnread = communityUnread,
+                    onClose = onClose,
+                    // The card is already offset below the status bar, so the
+                    // content must NOT add its own status-bar inset again.
+                    applyStatusBarInset = false,
+                )
+            }
         }
     }
 }
