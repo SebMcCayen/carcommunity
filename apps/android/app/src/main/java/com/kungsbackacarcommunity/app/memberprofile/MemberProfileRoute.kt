@@ -17,9 +17,10 @@ import kotlinx.coroutines.launch
  * wires the viewer's block list into the blocking decision, loads once on entry,
  * and drives [MemberProfileScreen].
  *
- * The [blockingRepository]/[viewerUid] pair is optional — in a config-less build
- * (or when the block list can't be read) the block check simply resolves to
- * "not blocked" and the profile read (still rules-gated) proceeds.
+ * [viewerUid] is required; only [blockingRepository] is optional. In a
+ * config-less build it is null, in which case block status is simply not
+ * consulted — the block check resolves to "not blocked" and the profile read
+ * (still rules-gated) proceeds.
  */
 @Composable
 fun MemberProfileRoute(

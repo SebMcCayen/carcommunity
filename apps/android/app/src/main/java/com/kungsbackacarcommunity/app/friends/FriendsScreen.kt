@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -356,7 +357,10 @@ private fun FriendRow(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onViewProfile),
+                        // Announce the row as a button to screen readers — without
+                        // this it reads as plain text and its tap-to-open-profile
+                        // affordance is invisible to accessibility services.
+                        .clickable(role = Role.Button, onClick = onViewProfile),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Opens the 1:1 DM thread with this friend; the conversation is
