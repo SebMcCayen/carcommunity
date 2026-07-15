@@ -470,10 +470,16 @@
     <string name="savedDrives_distance">Distance</string>
     <string name="savedDrives_duration">Drive time</string>
     <string name="savedDrives_averageSpeed">Average speed</string>
+    <string name="savedDrives_date">Date</string>
+    <string name="savedDrives_timeRange">Time</string>
+    <string name="savedDrives_shareAction">Share drive</string>
+    <string name="savedDrives_shareSummary">Drove %1$s in %2$s on %3$s — %4$s</string>
+    <string name="savedDrives_shareSummaryNoDate">Drove %1$s in %2$s — %3$s</string>
+    <string name="savedDrives_shareUnavailable">No app available to share with</string>
     <string name="savedDrives_startArea">Start area</string>
     <string name="savedDrives_endArea">End area</string>
     <string name="savedDrives_routeOverview">Route overview</string>
-    <string name="savedDrives_routeOverviewPlaceholder">Route overview coming soon.</string>
+    <string name="savedDrives_routeOverviewPlaceholder">Route map coming soon — the recorded route is stored privately and isn\'t available in the app yet.</string>
     <string name="savedDrives_routeOverviewMemberOnly">Route overview requires an active membership.</string>
     <string name="savedDrives_deleteAction">Delete drive</string>
     <string name="savedDrives_deleteConfirmTitle">Delete drive?</string>
