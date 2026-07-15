@@ -236,6 +236,18 @@ object MapboxRequests {
     const val DEFAULT_COUNTRY = "SE"
 
     /**
+     * Fallback proximity bias (Kungsbacka town centroid, lng/lat) used when the
+     * caller has no live location — GPS permission denied, no fix yet, or the
+     * lookup raced ahead of [NavigationController.refreshOrigin]. Search Box
+     * ranks results near `proximity` first, so without any bias a query like
+     * "Kungsmässan" could surface a same-named place elsewhere before the local
+     * mall. Biasing to the app's home region keeps *nearby* results first even
+     * before a fix arrives; a real user fix (when present) always takes priority
+     * over this constant. Sweden-wide relevance is still enforced by [country].
+     */
+    val DEFAULT_PROXIMITY = LatLng(longitude = 12.0730, latitude = 57.4874)
+
+    /**
      * Forward search request against the Mapbox **Search Box** API's `/forward`
      * endpoint.
      *
@@ -248,9 +260,13 @@ object MapboxRequests {
      * it needs no interactive session token yet still returns coordinates inline.
      *
      * Results are biased to the app's locale/region: [proximity] toward the user
-     * when known, [country] (Sweden by default), and [language] for localized
-     * labels. Returns null for a blank query so callers never issue an empty
-     * request.
+     * when known (falling back to [DEFAULT_PROXIMITY], the Kungsbacka centroid,
+     * when no fix is available so *nearby* results still rank first), [country]
+     * (Sweden by default), and [language] for localized labels. `types` is left
+     * unset deliberately: the Search Box `/forward` endpoint then returns every
+     * feature type — POIs/businesses (e.g. "Kungsmässan") alongside addresses,
+     * streets and places — rather than an address-only subset. Returns null for a
+     * blank query so callers never issue an empty request.
      */
     fun forwardGeocode(
         query: String,
@@ -262,15 +278,16 @@ object MapboxRequests {
     ): String? {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return null
+        // Real user location first; else bias to the app's home region so nearby
+        // POIs still outrank same-named places elsewhere in Sweden.
+        val bias = proximity ?: DEFAULT_PROXIMITY
         val sb =
             StringBuilder("https://api.mapbox.com/search/searchbox/v1/forward")
                 .append("?q=").append(encode(trimmed))
                 .append("&limit=").append(limit)
                 .append("&access_token=").append(encode(token))
-        if (proximity != null) {
-            sb.append("&proximity=")
-                .append(fmt(proximity.longitude)).append(",").append(fmt(proximity.latitude))
-        }
+        sb.append("&proximity=")
+            .append(fmt(bias.longitude)).append(",").append(fmt(bias.latitude))
         if (!country.isNullOrBlank()) {
             sb.append("&country=").append(encode(country))
         }
