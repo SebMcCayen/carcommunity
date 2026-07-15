@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -138,6 +141,25 @@ fun SavedDriveDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     var showConfirm by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val dateText = formatDriveDate(drive.startedAtMillis ?: drive.createdAtMillis)
+    val timeRangeText = formatDriveTimeRange(drive.startedAtMillis, drive.endedAtMillis)
+    val averageSpeed =
+        DriveFormatters.effectiveAverageSpeed(
+            drive.averageSpeedMetersPerSecond,
+            drive.distanceMeters,
+            drive.durationSeconds,
+        )
+
+    val shareSummary =
+        stringResource(
+            R.string.savedDrives_shareSummary,
+            DriveFormatters.formatDistance(drive.distanceMeters),
+            DriveFormatters.formatDuration(drive.durationSeconds),
+            dateText ?: "—",
+            stringResource(R.string.app_name),
+        )
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -145,6 +167,12 @@ fun SavedDriveDetailScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    if (dateText != null) {
+                        StatRow(stringResource(R.string.savedDrives_date), dateText)
+                    }
+                    if (timeRangeText != null) {
+                        StatRow(stringResource(R.string.savedDrives_timeRange), timeRangeText)
+                    }
                     StatRow(
                         stringResource(R.string.savedDrives_distance),
                         DriveFormatters.formatDistance(drive.distanceMeters),
@@ -155,13 +183,17 @@ fun SavedDriveDetailScreen(
                     )
                     StatRow(
                         stringResource(R.string.savedDrives_averageSpeed),
-                        DriveFormatters.formatSpeed(drive.averageSpeedMetersPerSecond),
+                        DriveFormatters.formatSpeed(averageSpeed),
                     )
                 }
             }
 
-            // Route polyline lives in member-gated Cloud Storage + Mapbox; a
-            // placeholder ships until that overview lands.
+            // Map replay is FLAGGED: the recorded route path/GPS points are NOT
+            // in the SavedDrive read model (they live in member-gated Cloud
+            // Storage and the `rides` doc carries no coordinates), so there is
+            // nothing to draw on MapboxMapSurface here. Wiring a real route
+            // replay needs a backend/recording follow-up to expose the path to
+            // the client; until then a placeholder card explains the gap.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -186,6 +218,20 @@ fun SavedDriveDetailScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    val sendIntent =
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareSummary)
+                        }
+                    context.startActivity(Intent.createChooser(sendIntent, null))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.savedDrives_shareAction))
             }
 
             Button(
@@ -238,6 +284,17 @@ private fun StatRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
+}
+
+/** Medium locale date (e.g. "Jul 15, 2026") for a drive timestamp, or null. */
+private fun formatDriveDate(millis: Long?): String? =
+    millis?.let { DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) }
+
+/** "13:05 – 14:00" short-time range when both endpoints are present, else null. */
+private fun formatDriveTimeRange(startMillis: Long?, endMillis: Long?): String? {
+    if (startMillis == null || endMillis == null) return null
+    val timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT)
+    return "${timeFormat.format(Date(startMillis))} – ${timeFormat.format(Date(endMillis))}"
 }
 
 @Composable

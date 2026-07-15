@@ -62,4 +62,24 @@ object DriveFormatters {
         val kmh = (metersPerSecond * 3.6).roundToInt()
         return "$kmh km/h"
     }
+
+    /**
+     * Average speed in m/s: prefer the server-computed value, otherwise derive
+     * it from distance / duration so the detail view still shows a figure when
+     * the backend didn't persist one. Returns null when neither source is
+     * usable (so [formatSpeed] renders the em dash).
+     */
+    fun effectiveAverageSpeed(
+        averageSpeedMetersPerSecond: Double?,
+        distanceMeters: Double?,
+        durationSeconds: Long,
+    ): Double? {
+        if (averageSpeedMetersPerSecond != null && averageSpeedMetersPerSecond >= 0) {
+            return averageSpeedMetersPerSecond
+        }
+        if (distanceMeters != null && distanceMeters >= 0 && durationSeconds > 0) {
+            return distanceMeters / durationSeconds
+        }
+        return null
+    }
 }

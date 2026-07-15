@@ -49,6 +49,28 @@ class SavedDriveTest {
     }
 
     @Test
+    fun `effectiveAverageSpeed prefers the stored value`() {
+        assertEquals(
+            12.0,
+            DriveFormatters.effectiveAverageSpeed(12.0, distanceMeters = 100.0, durationSeconds = 5),
+        )
+    }
+
+    @Test
+    fun `effectiveAverageSpeed derives from distance over duration when unstored`() {
+        assertEquals(
+            10.0,
+            DriveFormatters.effectiveAverageSpeed(null, distanceMeters = 1000.0, durationSeconds = 100),
+        )
+    }
+
+    @Test
+    fun `effectiveAverageSpeed is null when neither source is usable`() {
+        assertEquals(null, DriveFormatters.effectiveAverageSpeed(null, distanceMeters = null, durationSeconds = 0))
+        assertEquals(null, DriveFormatters.effectiveAverageSpeed(null, distanceMeters = 1000.0, durationSeconds = 0))
+    }
+
+    @Test
     fun `coordinator marks deleted on success`() = runTest {
         val coordinator = DrivesCoordinator(FakeDrivesRepository(shouldFail = false))
         coordinator.delete("r1")
