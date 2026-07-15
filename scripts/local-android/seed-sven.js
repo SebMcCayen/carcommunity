@@ -32,16 +32,15 @@ const PASSWORD = 'Test1234!';
 const DISPLAY_NAME = 'Sven Svensson';
 
 async function main() {
-  // 1) Auth user (idempotent). Only create when the user genuinely doesn't
-  // exist ('auth/user-not-found'); any other error (e.g. the Auth emulator
-  // isn't running -> ECONNREFUSED) is a real failure — rethrow it with a hint
-  // rather than masking it behind a createUser attempt.
+  // 1) Auth user (idempotent). The existence check (getUser) is wrapped on its
+  // own so its error hint stays accurate: only 'auth/user-not-found' means
+  // "create it"; any other error (e.g. the Auth emulator isn't running ->
+  // ECONNREFUSED) is a real read failure and is rethrown with a hint. The
+  // update/create write happens OUTSIDE that try, so a write failure surfaces
+  // its own accurate error rather than the "Failed to read" message.
+  let userExists = true;
   try {
     await auth.getUser(UID);
-    await auth.updateUser(UID, {
-      email: EMAIL, password: PASSWORD, displayName: DISPLAY_NAME, emailVerified: true,
-    });
-    console.log('Updated existing auth user', UID);
   } catch (e) {
     if (!e || e.code !== 'auth/user-not-found') {
       throw new Error(
@@ -50,6 +49,14 @@ async function main() {
         `${e && e.message ? e.message : e}`,
       );
     }
+    userExists = false;
+  }
+  if (userExists) {
+    await auth.updateUser(UID, {
+      email: EMAIL, password: PASSWORD, displayName: DISPLAY_NAME, emailVerified: true,
+    });
+    console.log('Updated existing auth user', UID);
+  } else {
     await auth.createUser({
       uid: UID, email: EMAIL, password: PASSWORD, displayName: DISPLAY_NAME, emailVerified: true,
     });

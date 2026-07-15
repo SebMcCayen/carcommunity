@@ -143,7 +143,19 @@ echo ">> emulator $ADB_SERIAL online (API $(adb -s "$ADB_SERIAL" shell getprop r
 GRADLE_FLAG=()
 if [ "$WITH_FB" = "1" ]; then
   require_port_tool
-  if ! port_open 9099; then
+  # Both the Auth (9099) AND Firestore (8080) emulators are needed for seeding.
+  auth_up=0; fs_up=0
+  port_open 9099 && auth_up=1
+  port_open 8080 && fs_up=1
+  if [ "$auth_up" = 1 ] && [ "$fs_up" = 1 ]; then
+    echo ">> Firebase emulators already running (Auth 9099, Firestore 8080)."
+  elif [ "$auth_up" = 1 ] || [ "$fs_up" = 1 ]; then
+    # Exactly one port is held: a partial/older emulator run, or an unrelated
+    # process on one of the ports. Fail fast rather than start a conflicting one.
+    echo "ERROR: only one Firebase emulator port is in use (Auth 9099=$auth_up, Firestore 8080=$fs_up)." >&2
+    echo "       Stop whatever holds it (or the partial emulator) and retry." >&2
+    exit 1
+  else
     if [ -z "$JDK21" ] || [ ! -x "$JDK21/bin/java" ]; then
       echo "ERROR: --fb needs JDK 21 (firebase-tools requires >= 21) but none was found." >&2
       echo "       Set JDK21_HOME (or JAVA21_HOME) to a JDK 21 install and retry." >&2
@@ -158,7 +170,10 @@ if [ "$WITH_FB" = "1" ]; then
         env JAVA_HOME="$JDK21" PATH="$JDK21/bin:$HOME/.npm-global/bin:$PATH" \
         firebase emulators:start --only auth,firestore \
         --project kungsbacka-car-community )
-    until port_open 9099; do sleep 2; done
+    # Wait for BOTH ports so seeding (which needs Auth + Firestore) can't race
+    # ahead of a half-started emulator.
+    echo ">> waiting for Auth (9099) + Firestore (8080) ..."
+    until port_open 9099 && port_open 8080; do sleep 2; done
   fi
   echo ">> seeding Sven Svensson ..."
   node "$REPO_ROOT/scripts/local-android/seed-sven.js"
