@@ -20,6 +20,30 @@ class MapboxRequestsTest {
         // Country-biased to Sweden so businesses/POIs resolve in the right region.
         assertTrue(url.contains("country=SE"))
         assertTrue(url.contains("access_token=pk.abc"))
+        // `types` is left unset so POIs/businesses (e.g. Kungsmässan) are returned
+        // alongside addresses — a `types=address` restriction would drop them.
+        assertFalse(url.contains("types="))
+    }
+
+    @Test
+    fun `forward geocode falls back to the Kungsbacka centroid when no proximity is given`() {
+        // No live fix (GPS denied / no fix yet) must still bias nearby-first, not
+        // omit proximity entirely — otherwise same-named places elsewhere in
+        // Sweden could outrank the local result.
+        val url = MapboxRequests.forwardGeocode("Kungsmässan", token = "pk.abc")!!
+        assertTrue(url.contains("proximity=12.073000,57.487400"))
+    }
+
+    @Test
+    fun `forward geocode prefers a real fix over the fallback proximity`() {
+        val url =
+            MapboxRequests.forwardGeocode(
+                "Kungsmässan",
+                token = "pk.abc",
+                proximity = LatLng(longitude = 11.9746, latitude = 57.7089),
+            )!!
+        assertTrue(url.contains("proximity=11.974600,57.708900"))
+        assertFalse(url.contains("proximity=12.073000,57.487400"))
     }
 
     @Test
