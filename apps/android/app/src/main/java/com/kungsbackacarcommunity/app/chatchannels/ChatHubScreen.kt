@@ -29,13 +29,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
@@ -47,14 +52,120 @@ import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 /** Test tag on the chat-hub root, so UI tests can assert it renders. */
 const val CHAT_HUB_TEST_TAG = "chat_hub"
 
+/**
+ * Surface alpha for the chat hub when shown as a transparent popup over the map —
+ * matches the map-home popups' `POPUP_SURFACE_ALPHA` (0.92f) so the live map
+ * shows faintly through the card, the same translucent idiom as the map-layers
+ * and live-share popups.
+ */
+const val CHAT_HUB_POPUP_ALPHA = 0.92f
+
 /** The four sections of the chat hub. */
 enum class ChatTab { Community, Convoys, Friends, Notifications }
 
 /**
- * The full-screen 3-channel chat hub opened from the map-home chat bubble. A top
- * bar (title + close) and a tab row switch between the COMMUNITY channel, the
- * caller's CONVOY channels, FRIENDS (the existing 1:1 DMs), and the in-app
- * NOTIFICATIONS inbox.
+ * The 3-channel chat hub as a full-screen opaque route (legacy presentation, kept
+ * for [com.kungsbackacarcommunity.app.shell.ShellRoute.ChatHub]). The map-home
+ * chat bubble now opens [ChatHubPopup] instead, so the hub floats as a
+ * translucent popup over the map; this route remains as a migration-safe fallback
+ * and shares the same [ChatHubContent] body.
+ */
+@Composable
+fun ChatHubRoute(
+    uid: String,
+    communityChatRepository: CommunityChatRepository?,
+    convoyChatRepository: ConvoyChatRepository?,
+    dmRepository: DmRepository?,
+    notificationsRepository: NotificationsRepository?,
+    notificationsCoordinator: NotificationsCoordinator?,
+    communityUnread: Boolean,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        ChatHubContent(
+            uid = uid,
+            communityChatRepository = communityChatRepository,
+            convoyChatRepository = convoyChatRepository,
+            dmRepository = dmRepository,
+            notificationsRepository = notificationsRepository,
+            notificationsCoordinator = notificationsCoordinator,
+            communityUnread = communityUnread,
+            onClose = onClose,
+            applyStatusBarInset = true,
+        )
+    }
+}
+
+/**
+ * The 3-channel chat hub rendered as a TRANSPARENT popup *over* the map — the same
+ * idiom as the map-layers and live-share popups: a [Popup] (not a full route or a
+ * [androidx.compose.ui.window.Dialog]) so there is NO dimming scrim and the live
+ * map stays visible behind (and faintly through) a translucent surface. Tapping
+ * outside the card or pressing Back dismisses it (focusable popup + the content's
+ * own BackHandler). The card leaves a strip of map visible above it and reaches
+ * the bottom of the window so the message-input row's navigation-bar inset lifts
+ * it clear of the system bars. Content/tabs/functionality are identical to the
+ * route form ([ChatHubContent]); only the container/presentation differs.
+ */
+@Composable
+fun ChatHubPopup(
+    uid: String,
+    communityChatRepository: CommunityChatRepository?,
+    convoyChatRepository: ConvoyChatRepository?,
+    dmRepository: DmRepository?,
+    notificationsRepository: NotificationsRepository?,
+    notificationsCoordinator: NotificationsCoordinator?,
+    communityUnread: Boolean,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onClose,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    // Push the card below the status bar and reveal a strip of the
+                    // live map above it, so the popup reads as floating over the map
+                    // rather than a full page.
+                    .statusBarsPadding()
+                    .padding(top = KccSpacing.s6, start = KccSpacing.s2, end = KccSpacing.s2)
+                    .testTag(CHAT_HUB_TEST_TAG),
+            shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
+            // Translucent so the map shows through — matches the map-home popups.
+            color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            ChatHubContent(
+                uid = uid,
+                communityChatRepository = communityChatRepository,
+                convoyChatRepository = convoyChatRepository,
+                dmRepository = dmRepository,
+                notificationsRepository = notificationsRepository,
+                notificationsCoordinator = notificationsCoordinator,
+                communityUnread = communityUnread,
+                onClose = onClose,
+                // The card is already offset below the status bar, so the content
+                // must NOT add its own status-bar inset again.
+                applyStatusBarInset = false,
+            )
+        }
+    }
+}
+
+/**
+ * Shared hub body: a top bar (title + close) and a tab row switching between the
+ * COMMUNITY channel, the caller's CONVOY channels, FRIENDS (the existing 1:1 DMs),
+ * and the in-app NOTIFICATIONS inbox. Rendered inside either the full-screen
+ * [ChatHubRoute] surface or the translucent [ChatHubPopup].
  *
  * Friends and Convoys have a second level (a list → a thread/channel); that
  * nested navigation is local state here, and system Back pops it before closing
@@ -62,9 +173,13 @@ enum class ChatTab { Community, Convoys, Friends, Notifications }
  * routes ([ConversationListRoute]/[ChatRoute], [NotificationsRoute],
  * [CommunityChannelRoute], [ConvoyChannelRoute]). Any repository may be null in a
  * config-less build; that tab then renders an informational placeholder.
+ *
+ * @param applyStatusBarInset when true the body pads for the status bar itself
+ *   (full-screen route); the popup form passes false because its card is already
+ *   offset below the status bar.
  */
 @Composable
-fun ChatHubRoute(
+private fun ChatHubContent(
     uid: String,
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
@@ -76,7 +191,7 @@ fun ChatHubRoute(
     // single Firestore listener backs both the bubble and this tab's dot.
     communityUnread: Boolean,
     onClose: () -> Unit,
-    modifier: Modifier = Modifier,
+    applyStatusBarInset: Boolean,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(ChatTab.Community) }
 
@@ -113,11 +228,16 @@ fun ChatHubRoute(
             else -> stringResource(R.string.chatHub_title)
         }
 
-    Surface(
-        modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
-        color = MaterialTheme.colorScheme.background,
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .then(if (applyStatusBarInset) Modifier.statusBarsPadding() else Modifier),
     ) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        // Everything below is identical for the route and popup forms; only the
+        // surrounding container (opaque route surface vs translucent popup card)
+        // differs.
+        run {
             // Top bar: back (when in a sub-screen) or nothing, the title, close.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),

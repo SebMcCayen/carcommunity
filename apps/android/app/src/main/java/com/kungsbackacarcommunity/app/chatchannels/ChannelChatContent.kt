@@ -5,12 +5,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -82,7 +86,17 @@ fun ChannelChatContent(
     }
 
     Column(
-        modifier = modifier.fillMaxSize().imePadding().padding(KccSpacing.s4),
+        // Inset for the IME *and* the system navigation bar (their union, so the
+        // taller of the two wins rather than double-counting): with the keyboard
+        // down this clears the message-input row above the Android nav bar
+        // (back/home/recents or the gesture pill), and with the keyboard up it
+        // lifts above the IME. Without the nav-bar half the input sat hidden
+        // behind the system bar at the bottom of the chat.
+        modifier =
+            modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                .padding(KccSpacing.s4),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {

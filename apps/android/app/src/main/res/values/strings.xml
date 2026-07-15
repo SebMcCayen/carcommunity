@@ -811,7 +811,6 @@
     <string name="shell_createChooserConvoy">Konvoj</string>
     <string name="shell_createChooserConvoyBody">Skapa en konvoj och kör tillsammans med vänner.</string>
     <string name="shell_socialTitle">Socialt</string>
-    <string name="shell_socialConvoys">Konvojer</string>
     <string name="shell_socialEvents">Event</string>
     <string name="shell_socialNotifications">Aviseringar</string>
     <string name="shell_socialCrownHunt">Kronjakt</string>

@@ -210,13 +210,16 @@ class MapFirstShellTest {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
-        // Tapping it opens the full 3-channel chat hub as a route over the map.
+        // Tapping it opens the 3-channel chat hub as a TRANSPARENT popup over the
+        // map (the map stays composed behind it, not a full opaque route).
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        // The map stays visible behind the transparent popup.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // The Community / Convoys / Friends / Notifications tabs are shown.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
-        // Closing returns to the map (the hub is gone).
+        // Closing returns to the map (the hub popup is gone).
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_close)).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()

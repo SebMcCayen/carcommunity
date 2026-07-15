@@ -92,6 +92,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
 import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
@@ -385,6 +386,12 @@ fun AuthenticatedApp(
             // below), so it can't get "stuck" selected — it's an action.
             var showCreateChooser by rememberSaveable { mutableStateOf(false) }
 
+            // Chat hub open/close is local UI state: tapping the map's chat bubble
+            // opens the 3-channel hub as a TRANSPARENT popup *over* the map (no
+            // scrim, map visible behind — the same idiom as the map-layers /
+            // live-share popups) rather than navigating to a full opaque route.
+            var chatHubOpen by rememberSaveable { mutableStateOf(false) }
+
             // Set true immediately before opening ShellRoute.Convoys from the
             // chooser's "Convoy" option so the convoy route deep-links straight
             // into its create-convoy sub-screen. Reset to false when the Social
@@ -521,7 +528,7 @@ fun AuthenticatedApp(
             // delivers the current value near-instantly. Guarded — no repo
             // (config-less build) means never unread.
             val needsCommunityUnread =
-                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub
+                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
             val communityChatUnread by
                 remember(communityChatRepository, uid, needsCommunityUnread) {
                     if (communityChatRepository != null && needsCommunityUnread) {
@@ -1074,10 +1081,12 @@ fun AuthenticatedApp(
                                         // caller's last-read marker. Cleared when
                                         // they open + read the Community channel.
                                         unreadChatCount = if (communityChatUnread) 1 else 0,
-                                        // The chat bubble opens the full 3-channel
-                                        // chat hub (Community / Convoys / Friends +
-                                        // Notifications) as a full-screen route.
-                                        onOpenChat = { route = ShellRoute.ChatHub },
+                                        // The chat bubble opens the 3-channel chat
+                                        // hub (Community / Convoys / Friends +
+                                        // Notifications) as a TRANSPARENT popup over
+                                        // the map (map stays visible behind), not a
+                                        // full opaque route — see ChatHubPopup below.
+                                        onOpenChat = { chatHubOpen = true },
                                         // Crowd-sourced incidents layer: draw the
                                         // fetched markers for everyone, and show the
                                         // report control only when a repository is
@@ -1142,21 +1151,12 @@ fun AuthenticatedApp(
                                                         null
                                                     },
                                                 ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialConvoys),
-                                                    Icons.Filled.DirectionsCar,
-                                                    if (convoyRepository != null) {
-                                                        {
-                                                            // Open the convoy hub
-                                                            // list-first (not the
-                                                            // create deep-link).
-                                                            convoyOpenCreate = false
-                                                            route = ShellRoute.Convoys
-                                                        }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
+                                                // Convoys intentionally removed from
+                                                // the Social menu (Issue 11): the
+                                                // convoy feature stays reachable via
+                                                // the "+" Create chooser's "Convoy"
+                                                // option and the chat hub's Convoys
+                                                // tab. Only this menu entry is gone.
                                                 HubEntry(
                                                     stringResource(R.string.shell_socialEvents),
                                                     Icons.Filled.Event,
@@ -1345,6 +1345,30 @@ fun AuthenticatedApp(
                             route = ShellRoute.Convoys
                         },
                         onDismiss = { showCreateChooser = false },
+                    )
+                }
+
+                // 3-channel chat hub as a TRANSPARENT popup over the map (Issue 4):
+                // a focusable Popup with no dimming scrim and a translucent surface,
+                // so the live map stays visible behind it — matching the map-layers
+                // and live-share popups. Only shown while the map shell is the
+                // active branch (the bubble that opens it lives on the map tab), so
+                // it can never float over a full route / the nav-search overlay.
+                if (chatHubOpen &&
+                    navDestination == null &&
+                    !navSearchOpen &&
+                    route == null &&
+                    selectedTab == ShellTab.Map
+                ) {
+                    ChatHubPopup(
+                        uid = uid,
+                        communityChatRepository = communityChatRepository,
+                        convoyChatRepository = convoyChatRepository,
+                        dmRepository = dmRepository,
+                        notificationsRepository = notificationsRepository,
+                        notificationsCoordinator = notificationsCoordinator,
+                        communityUnread = communityChatUnread,
+                        onClose = { chatHubOpen = false },
                     )
                 }
 
