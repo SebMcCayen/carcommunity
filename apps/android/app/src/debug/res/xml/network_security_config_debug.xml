@@ -15,7 +15,7 @@
   KccApplication.emulatorHost()), so only then is any cleartext request made. A
   normal debug build carries this config but never contacts the emulator hosts,
   so it stays on HTTPS to production. All three host aliases are allow-listed
-  above so either device type works.
+  below so either device type works.
   Release builds don't include this file at all (debug source set only), so
   production keeps Android's default cleartext block.
 -->

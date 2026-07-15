@@ -121,8 +121,13 @@ if (file("google-services.json").exists()) {
 // used without production or Google Sign-In. Off by default, so a normal debug
 // build still hits production. Enable with:
 //     ./gradlew :app:assembleDebug -PuseFirebaseEmulator=true
-// Release builds hardcode this to false (see the release buildType below), so
-// the emulator wiring and dev sign-in are compiled out of production entirely.
+// Release builds hardcode this to false (see the release buildType below). As a
+// result the dev sign-in behaves safely in release two different ways: the dev
+// sign-in IMPLEMENTATION (DevEmulatorSignIn + its credentials) is genuinely
+// excluded from the release binary via the src/debug vs src/release source-set
+// stub (compile-time), while the KccApplication emulator-wiring block IS compiled
+// into release (isMinifyEnabled=false) but is runtime-disabled — it never runs
+// because BuildConfig.DEBUG and USE_FIREBASE_EMULATOR are both false there.
 val useFirebaseEmulator: Boolean =
     (providers.gradleProperty("useFirebaseEmulator").orNull ?: "false").trim().toBoolean()
 

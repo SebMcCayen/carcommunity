@@ -82,14 +82,16 @@ class KccApplication : Application() {
 
     /**
      * Host that reaches the local Firebase emulators from THIS device:
-     * - Android emulator: `10.0.2.2`, the emulator's alias for the host loopback.
+     * - Standard Android emulator: `10.0.2.2`, its alias for the host loopback.
      * - Physical device: `127.0.0.1`, reachable once the emulator ports are
      *   forwarded to the device with `adb reverse tcp:9099 tcp:9099` (and 8080).
      *
-     * Emulator detection combines several Build signals so it's robust across
+     * Detection combines several Build signals so it's robust across the standard
      * emulator images (goldfish/ranchu hardware, generic/sdk fingerprints and
-     * products, the "Emulator"/"Android SDK built for" models, Genymotion).
-     * Debug/USE_FIREBASE_EMULATOR-only path, so this only ever runs in that mode.
+     * products, the "Emulator"/"Android SDK built for" models). This dev tool
+     * targets the standard Android emulator only — Genymotion (host alias
+     * 10.0.3.2) is intentionally not supported. Debug/USE_FIREBASE_EMULATOR-only
+     * path, so this only ever runs in that mode.
      */
     private fun emulatorHost(): String {
         val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
@@ -101,8 +103,7 @@ class KccApplication : Application() {
             Build.PRODUCT.contains("emulator") ||
             Build.PRODUCT.contains("simulator") ||
             Build.MODEL.contains("Emulator") ||
-            Build.MODEL.contains("Android SDK built for") ||
-            Build.MANUFACTURER.contains("Genymotion")
+            Build.MODEL.contains("Android SDK built for")
         return if (isEmulator) "10.0.2.2" else "127.0.0.1"
     }
 }
