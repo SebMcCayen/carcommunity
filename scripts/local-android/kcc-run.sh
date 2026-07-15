@@ -91,7 +91,9 @@ source ~/android-toolchain/env.sh
 export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
 
 # --- 1. boot the Android emulator if not already online ---
-if ! adb devices | grep -q "emulator-5554[[:space:]]*device"; then
+# Detect ANY already-online emulator (serials vary: 5554, 5556, ...), not just
+# the default 5554, so we don't boot a second one when one is already running.
+if ! adb devices | grep -qE "^emulator-[0-9]+[[:space:]]+device$"; then
   echo ">> booting emulator $AVD ..."
   spawn_detached /tmp/kcc-emulator.log emulator -avd "$AVD" -no-window -no-audio \
       -no-boot-anim -gpu swiftshader_indirect -no-snapshot
