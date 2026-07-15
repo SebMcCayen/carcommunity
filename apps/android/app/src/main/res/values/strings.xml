@@ -724,6 +724,7 @@
     <string name="shell_moreSettings">Inställningar</string>
     <string name="shell_moreSignOut">Logga ut</string>
     <string name="shell_unavailable">Inte tillgängligt just nu.</string>
+    <string name="shell_viewLiveMembersOnly">Medlemskap krävs för att se andra på kartan. Du kan fortfarande dela din egen plats gratis.</string>
     <string name="shell_trafficOn">Trafiklager på</string>
     <string name="shell_trafficOff">Visa trafik</string>
     <string name="shell_chat">Chatt</string>

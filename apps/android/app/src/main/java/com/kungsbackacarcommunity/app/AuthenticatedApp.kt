@@ -447,6 +447,13 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            // Upsell shown when a non-member tries to view others' live locations
+            // on the map (sharing your own remains free).
+            val viewLiveMembersOnlyText = stringResource(R.string.shell_viewLiveMembersOnly)
+            // Shown instead of the upsell when viewing others is blocked because the
+            // LIVE_LOCATION feature flag is off (not a membership issue) — so an active
+            // member with the flag disabled doesn't see a misleading subscription upsell.
+            val featureUnavailableText = stringResource(R.string.shell_unavailable)
             // Shown when the nav view's "Report incident/roadwork" is tapped while
             // the incidents feature (a sibling PR) is not yet present in this build.
             val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
@@ -525,14 +532,23 @@ fun AuthenticatedApp(
                     memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
-            // Starting a session is member-gated (backend parity).
+            // Sharing your OWN location is FREE (backend parity: startSession /
+            // updatePosition require only an authenticated, non-suspended user).
+            // Flag-gated but NOT member-gated.
             val canShareLive =
                 FeatureGate.isAvailable(
                     flags = flags,
                     flag = FeatureFlag.LIVE_LOCATION,
-                    memberGated = true,
+                    memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
+            // Viewing OTHERS on the map is the paid capability (backend parity:
+            // the liveLocation/$uid/latest RTDB read rule requires activeMember).
+            // A non-member gets a subscription upsell instead of the roster map.
+            // ALSO flag-gated: a server-disabled LIVE_LOCATION flag must fully
+            // block opening the roster map / starting RTDB reads, so require the
+            // flag (liveLocationEnabled) IN ADDITION to the active-member gate.
+            val canViewLiveOthers = liveLocationEnabled && profile?.activeMember == true
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
@@ -766,8 +782,31 @@ fun AuthenticatedApp(
                         onShowOnMap =
                             if (liveLocationRepository != null) {
                                 { uids ->
-                                    mapParticipantUids = ArrayList(uids)
-                                    route = ShellRoute.Map
+                                    // Viewing others on the map is flag- AND
+                                    // member-gated (canViewLiveOthers = LIVE_LOCATION
+                                    // flag && activeMember; backend RTDB read rule
+                                    // parity). A disabled flag or a non-member gets
+                                    // the upsell/no-op instead of the roster map, so
+                                    // no RTDB reads start — they can still share their
+                                    // own location + see their own puck.
+                                    if (canViewLiveOthers) {
+                                        mapParticipantUids = ArrayList(uids)
+                                        route = ShellRoute.Map
+                                    } else {
+                                        // Distinguish WHY viewing is blocked: a
+                                        // disabled LIVE_LOCATION flag → "not available"
+                                        // (an active member shouldn't see an upsell);
+                                        // otherwise it's the non-member subscription upsell.
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                if (!liveLocationEnabled) {
+                                                    featureUnavailableText
+                                                } else {
+                                                    viewLiveMembersOnlyText
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                             } else {
                                 null
