@@ -11,6 +11,7 @@ import java.io.File
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -151,6 +152,72 @@ class ImageCompressorTest {
             "ORIENTATION_ROTATE_90 must swap a landscape pick to portrait " +
                 "(${bounds.outWidth}x${bounds.outHeight})",
             bounds.outHeight > bounds.outWidth,
+        )
+    }
+
+    /** Writes [attrs] onto a fresh JPEG and returns the resulting bytes. */
+    private fun jpegWithExif(attrs: ExifInterface.() -> Unit): ByteArray {
+        val bitmap = gradientBitmap(64, 64)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("exif-meta", ".jpg", context.cacheDir)
+        return try {
+            file.writeBytes(jpegBytes(bitmap, 90))
+            ExifInterface(file.absolutePath).apply(attrs).saveAttributes()
+            file.readBytes()
+        } finally {
+            file.delete()
+            bitmap.recycle()
+        }
+    }
+
+    @Test
+    fun carriesStrippableMetadata_identifyingExifWithoutGps_isNotClean() {
+        // The core fail-closed guarantee: a JPEG carrying only IDENTIFYING EXIF
+        // (device make/model + capture time) and NO GPS must still count as
+        // un-sanitised, so the stripOrFail fallback fails closed rather than
+        // uploading it as-is. Regression test for the GPS-only gate that used to
+        // wave these bytes through.
+        val bytes =
+            jpegWithExif {
+                setAttribute(ExifInterface.TAG_MAKE, "ACME")
+                setAttribute(ExifInterface.TAG_MODEL, "Phone X")
+                setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "2024:01:01 12:00:00")
+            }
+
+        assertTrue(
+            "identifying EXIF (no GPS) must NOT be treated as clean",
+            ImageCompressor.carriesStrippableMetadata(bytes),
+        )
+    }
+
+    @Test
+    fun carriesStrippableMetadata_gpsExif_isNotClean() {
+        // A geotagged JPEG is obviously not clean — the gate must catch GPS too.
+        val bytes =
+            jpegWithExif {
+                setAttribute(ExifInterface.TAG_GPS_LATITUDE, "57/1,29/1,13/1")
+                setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, "N")
+                setAttribute(ExifInterface.TAG_GPS_LONGITUDE, "12/1,4/1,15/1")
+                setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, "E")
+            }
+
+        assertTrue(
+            "GPS EXIF must NOT be treated as clean",
+            ImageCompressor.carriesStrippableMetadata(bytes),
+        )
+    }
+
+    @Test
+    fun carriesStrippableMetadata_freshlyEncodedJpeg_isClean() {
+        // A JPEG freshly encoded straight from a Bitmap carries no EXIF at all, so
+        // the gate must report it clean (otherwise nothing would ever pass).
+        val bitmap = gradientBitmap(64, 64)
+        val bytes = jpegBytes(bitmap, 90)
+        bitmap.recycle()
+
+        assertFalse(
+            "a metadata-free JPEG must be treated as clean",
+            ImageCompressor.carriesStrippableMetadata(bytes),
         )
     }
 }
