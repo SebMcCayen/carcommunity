@@ -305,25 +305,43 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
-     * Handles a manual map-camera gesture (pan / pinch-zoom / rotate / tilt):
-     * stop following the user and (re)arm the [CameraFollowController.IDLE_RETURN_MS]
-     * timer. Every fresh gesture cancels and restarts the timer, so the camera
-     * only returns to the user after a full quiet window with no interaction; when
-     * it elapses we resume following and glide back via [easeToUser]. Runs on the
-     * main thread (gesture callbacks); a no-op until the composable scope exists.
+     * A manual map-camera gesture STARTED (pan / pinch-zoom / rotate / tilt):
+     * stop following and stop any pending idle-return — no 10-second countdown
+     * runs while the user is actively interacting, so a continuous gesture lasting
+     * longer than the window never snaps the camera mid-drag. The timer is armed
+     * only when the gesture ends ([onUserGestureEnd]). Runs on the main thread
+     * (gesture callbacks).
      */
-    private fun onUserMapInteraction() {
-        followController.onUserGesture()
+    private fun onUserGestureBegin() {
+        followController.onGestureBegin()
+        idleReturnJob?.cancel()
+        idleReturnJob = null
+    }
+
+    /**
+     * A manual map-camera gesture ENDED. Only once ALL gestures have ended (a
+     * pan can overlap a pinch) do we arm the [CameraFollowController.IDLE_RETURN_MS]
+     * timer, so it counts from when interaction STOPS. On elapse we resume the
+     * follow STATE, but only glide back to the user when no route overlay owns the
+     * camera — mirroring the position-listener follow gate so the idle-return
+     * never fights an active route fit. Follow resumes moving the camera once the
+     * overlay is cleared. A no-op until the composable scope exists.
+     */
+    private fun onUserGestureEnd() {
+        if (!followController.onGestureEnd()) return
         val scope = followScope ?: return
         idleReturnJob?.cancel()
         idleReturnJob =
             scope.launch {
                 delay(CameraFollowController.IDLE_RETURN_MS)
-                // Quiet window elapsed with no further gesture: resume follow and
-                // glide back to the user's current position.
+                // Quiet window elapsed with no further gesture: resume follow.
                 followController.onIdleElapsed()
                 idleReturnJob = null
-                easeToUser()
+                // Glide back only when nothing else owns the camera (a route
+                // preview fits and holds it); otherwise leave the framing be.
+                if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                    easeToUser()
+                }
             }
     }
 
@@ -458,34 +476,37 @@ class MapboxMapSurface : MapSurface {
                     longClickListener = longPressListener
                     runCatching { gestures.addOnMapLongClickListener(longPressListener) }
                     // Camera-manipulation gestures (pan/zoom/rotate/tilt): any of
-                    // them means the user is taking over the camera, so they all
-                    // stop "follow me" and arm the 10s idle-return timer. These are
-                    // touch-gesture callbacks only — the programmatic follow/recenter
-                    // eases never fire them, so follow doesn't cancel itself. Returning
-                    // false from onMove leaves the pan itself untouched.
+                    // them means the user is taking over the camera. On BEGIN they
+                    // stop "follow me" and halt any pending idle-return; the 10s
+                    // idle-return timer is armed only on END (see onUserGestureEnd),
+                    // so it counts from when interaction STOPS and never snaps the
+                    // camera mid-gesture. These are touch-gesture callbacks only —
+                    // the programmatic follow/recenter eases never fire them, so
+                    // follow doesn't cancel itself. Returning false from onMove
+                    // leaves the pan itself untouched.
                     val moveL =
                         object : OnMoveListener {
-                            override fun onMoveBegin(detector: MoveGestureDetector) = onUserMapInteraction()
+                            override fun onMoveBegin(detector: MoveGestureDetector) = onUserGestureBegin()
                             override fun onMove(detector: MoveGestureDetector): Boolean = false
-                            override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+                            override fun onMoveEnd(detector: MoveGestureDetector) = onUserGestureEnd()
                         }
                     val scaleL =
                         object : OnScaleListener {
-                            override fun onScaleBegin(detector: StandardScaleGestureDetector) = onUserMapInteraction()
+                            override fun onScaleBegin(detector: StandardScaleGestureDetector) = onUserGestureBegin()
                             override fun onScale(detector: StandardScaleGestureDetector) = Unit
-                            override fun onScaleEnd(detector: StandardScaleGestureDetector) = Unit
+                            override fun onScaleEnd(detector: StandardScaleGestureDetector) = onUserGestureEnd()
                         }
                     val rotateL =
                         object : OnRotateListener {
-                            override fun onRotateBegin(detector: RotateGestureDetector) = onUserMapInteraction()
+                            override fun onRotateBegin(detector: RotateGestureDetector) = onUserGestureBegin()
                             override fun onRotate(detector: RotateGestureDetector) = Unit
-                            override fun onRotateEnd(detector: RotateGestureDetector) = Unit
+                            override fun onRotateEnd(detector: RotateGestureDetector) = onUserGestureEnd()
                         }
                     val shoveL =
                         object : OnShoveListener {
-                            override fun onShoveBegin(detector: ShoveGestureDetector) = onUserMapInteraction()
+                            override fun onShoveBegin(detector: ShoveGestureDetector) = onUserGestureBegin()
                             override fun onShove(detector: ShoveGestureDetector) = Unit
-                            override fun onShoveEnd(detector: ShoveGestureDetector) = Unit
+                            override fun onShoveEnd(detector: ShoveGestureDetector) = onUserGestureEnd()
                         }
                     moveListener = moveL
                     scaleListener = scaleL
