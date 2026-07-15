@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 fun FriendsRoute(
     repository: FriendsRepository,
     onMessageFriend: (FriendSummary) -> Unit,
+    onViewProfile: (FriendSummary) -> Unit,
 ) {
     val coordinator = remember(repository) { FriendsCoordinator(repository) }
     val status by coordinator.status.collectAsState()
@@ -40,5 +41,6 @@ fun FriendsRoute(
         onRemove = { friendUid -> scope.launch { coordinator.remove(friendUid) } },
         onClearActionError = { coordinator.clearActionError() },
         onMessageFriend = onMessageFriend,
+        onViewProfile = onViewProfile,
     )
 }

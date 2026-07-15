@@ -95,6 +95,8 @@ import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRoute
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRepository
+import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
 import com.kungsbackacarcommunity.app.garage.GarageRepository
 import com.kungsbackacarcommunity.app.garage.GarageRoute
@@ -238,6 +240,7 @@ fun AuthenticatedApp(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    memberProfileRepository: MemberProfileRepository?,
     dmRepository: DmRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
@@ -383,6 +386,16 @@ fun AuthenticatedApp(
                 dmChatOtherUid = otherUid
                 dmChatOtherName = otherName
                 route = ShellRoute.Chat
+            }
+
+            // Target member whose read-only profile is open, carried alongside the
+            // payload-free ShellRoute.MemberProfile. Set by tapping a friend row.
+            var memberProfileTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
+            val openMemberProfile = { targetUid: String ->
+                if (targetUid.isNotBlank()) {
+                    memberProfileTargetUid = targetUid
+                    route = ShellRoute.MemberProfile
+                }
             }
 
             val snackbarHostState = remember { SnackbarHostState() }
@@ -879,6 +892,9 @@ fun AuthenticatedApp(
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
+                        memberProfileRepository = memberProfileRepository,
+                        memberProfileTargetUid = memberProfileTargetUid,
+                        onOpenMemberProfile = openMemberProfile,
                         dmRepository = dmRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
@@ -1417,6 +1433,9 @@ private fun RouteHost(
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
+    memberProfileRepository: MemberProfileRepository?,
+    memberProfileTargetUid: String?,
+    onOpenMemberProfile: (String) -> Unit,
     dmRepository: DmRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
@@ -1655,6 +1674,22 @@ private fun RouteHost(
                         // Guarded: only offer to open a thread when DM is wired.
                         if (dmRepository != null) onOpenChat(friend.uid, friend.displayName)
                     },
+                    onViewProfile = { friend ->
+                        // Guarded: only navigate when the profile repo is wired.
+                        if (memberProfileRepository != null) onOpenMemberProfile(friend.uid)
+                    },
+                )
+            } else {
+                LoadingScreen()
+            }
+
+        ShellRoute.MemberProfile ->
+            if (memberProfileRepository != null && memberProfileTargetUid != null) {
+                MemberProfileRoute(
+                    repository = memberProfileRepository,
+                    targetUid = memberProfileTargetUid,
+                    viewerUid = uid,
+                    blockingRepository = blockingRepository,
                 )
             } else {
                 LoadingScreen()
