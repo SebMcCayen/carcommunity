@@ -408,7 +408,8 @@
     "badgesTitle": "Awards",
     "badgesEmpty": "No awards yet.",
     "badgesUnavailable": "Awards aren't shown on other members' profiles.",
-    "awardedOn": "Awarded"
+    "badgesLoadError": "Awards couldn't be loaded.",
+    "awardedOn": "Awarded %1$s"
   },
   "groupDrive": {
     "screenTitle": "Group Drive",

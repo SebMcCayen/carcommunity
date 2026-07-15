@@ -27,8 +27,20 @@ data class MemberProfile(
 sealed interface MemberBadges {
     data class Available(val badges: List<Badge>) : MemberBadges
 
-    /** Not readable under current rules (or the read failed) — hidden gracefully. */
+    /**
+     * Genuinely not visible to this viewer: the read was denied
+     * (PERMISSION_DENIED) under the current owner-only rules. A definitive
+     * "awards aren't shown on other members' profiles" state, not a failure.
+     */
     data object Unavailable : MemberBadges
+
+    /**
+     * The read failed for a transient/unknown reason (offline, timeout,
+     * backend misconfig) — NOT a permission denial. Surfaced as a
+     * reason-agnostic "couldn't load" note so a temporary hiccup isn't
+     * misreported as the definitive [Unavailable] explanation.
+     */
+    data object Unknown : MemberBadges
 }
 
 /**

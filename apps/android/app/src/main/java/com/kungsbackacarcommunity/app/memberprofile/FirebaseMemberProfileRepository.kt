@@ -5,6 +5,7 @@ import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.QuerySnapshot
 import com.kungsbackacarcommunity.app.badges.Badge
 import com.kungsbackacarcommunity.app.badges.Badges
@@ -24,8 +25,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  *    authenticated user).
  *  - users/{targetUid}/badges — best-effort. Under the current rules this
  *    subcollection is OWNER-ONLY read, so the query is denied for any other
- *    viewer; that denial is caught and mapped to [MemberBadges.Unavailable]
- *    (the rest of the profile still renders). Exposing another member's badges
+ *    viewer; a PERMISSION_DENIED is mapped to [MemberBadges.Unavailable] while
+ *    any transient failure maps to [MemberBadges.Unknown] (the rest of the
+ *    profile still renders in both cases). Exposing another member's badges
  *    would require a backend rule/callable change (out of the Android lane).
  */
 class FirebaseMemberProfileRepository private constructor(
@@ -53,8 +55,12 @@ class FirebaseMemberProfileRepository private constructor(
                 // failing the whole profile — name/avatar/bio still render.
                 .getOrDefault(emptyList())
 
-        // Badges are owner-only readable today: a denied read is EXPECTED, so we
-        // treat any failure as "not available" rather than an error state.
+        // Badges are owner-only readable today: a denied read is EXPECTED, so a
+        // PERMISSION_DENIED collapses to the definitive "not available" note.
+        // Any OTHER failure (offline, timeout, misconfig) is transient and maps
+        // to Unknown, so a temporary hiccup isn't misreported as "awards aren't
+        // shown on other members' profiles". The rest of the profile still
+        // renders in both cases.
         val badges: MemberBadges =
             runCatching {
                 firestore
@@ -65,8 +71,18 @@ class FirebaseMemberProfileRepository private constructor(
                     .awaitResult()
                     .toBadges()
             }
-                .map { MemberBadges.Available(it) }
-                .getOrDefault(MemberBadges.Unavailable)
+                .fold(
+                    onSuccess = { MemberBadges.Available(it) },
+                    onFailure = { error ->
+                        if ((error as? FirebaseFirestoreException)?.code ==
+                            FirebaseFirestoreException.Code.PERMISSION_DENIED
+                        ) {
+                            MemberBadges.Unavailable
+                        } else {
+                            MemberBadges.Unknown
+                        }
+                    },
+                )
 
         return MemberProfileResult.Loaded(profile, vehicles, badges)
     }

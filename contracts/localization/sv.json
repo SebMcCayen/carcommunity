@@ -408,7 +408,8 @@
     "badgesTitle": "Utmärkelser",
     "badgesEmpty": "Inga utmärkelser ännu.",
     "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
-    "awardedOn": "Tilldelad"
+    "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
+    "awardedOn": "Tilldelad %1$s"
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",

@@ -369,7 +369,8 @@
     <string name="memberProfile_badgesTitle">Utmärkelser</string>
     <string name="memberProfile_badgesEmpty">Inga utmärkelser ännu.</string>
     <string name="memberProfile_badgesUnavailable">Utmärkelser visas inte på andra medlemmars profiler.</string>
-    <string name="memberProfile_awardedOn">Tilldelad</string>
+    <string name="memberProfile_badgesLoadError">Det gick inte att läsa in utmärkelser.</string>
+    <string name="memberProfile_awardedOn">Tilldelad %1$s</string>
     <string name="groupDrive_screenTitle">Gruppkörning</string>
     <string name="groupDrive_joinButton">Gå med i gruppkörningen</string>
     <string name="groupDrive_leaveButton">Lämna gruppkörningen</string>

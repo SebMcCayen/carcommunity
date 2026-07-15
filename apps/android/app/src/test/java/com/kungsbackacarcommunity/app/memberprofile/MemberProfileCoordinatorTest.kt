@@ -62,6 +62,17 @@ class MemberProfileCoordinatorTest {
     }
 
     @Test
+    fun badges_unknown_passes_through() = runTest {
+        val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Unknown))
+        val coordinator = MemberProfileCoordinator("u2", repo)
+
+        coordinator.load()
+
+        val state = coordinator.state.value as MemberProfileState.Loaded
+        assertEquals(MemberBadges.Unknown, state.badges)
+    }
+
+    @Test
     fun notFound_maps_to_unavailable() = runTest {
         val repo = FakeRepo(MemberProfileResult.NotFound)
         val coordinator = MemberProfileCoordinator("u2", repo)

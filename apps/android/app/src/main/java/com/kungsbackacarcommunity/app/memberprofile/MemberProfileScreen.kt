@@ -245,6 +245,13 @@ private fun BadgesSection(badges: MemberBadges) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+        MemberBadges.Unknown ->
+            Text(
+                text = stringResource(R.string.memberProfile_badgesLoadError),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
         is MemberBadges.Available ->
             if (badges.badges.isEmpty()) {
                 Text(
@@ -273,10 +280,9 @@ private fun BadgeCard(badge: Badge) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             badge.awardedAtMillis?.let { millis ->
+                val awardedDate = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))
                 Text(
-                    text =
-                        "${stringResource(R.string.memberProfile_awardedOn)} " +
-                            DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis)),
+                    text = stringResource(R.string.memberProfile_awardedOn, awardedDate),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
