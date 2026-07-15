@@ -383,9 +383,9 @@
     <string name="convoy_accept">Accept</string>
     <string name="convoy_decline">Decline</string>
     <string name="convoy_createTitle">New convoy</string>
-    <string name="convoy_titleLabel">Convoy name (optional)</string>
     <string name="convoy_pickFriendsTitle">Invite friends</string>
     <string name="convoy_friendsUnavailable">Your friends couldn\'t be loaded right now.</string>
+    <string name="convoy_friendsRetry">Try again</string>
     <string name="convoy_noFriends">Add some friends first to invite them to a convoy.</string>
     <string name="convoy_createSubmit">Create convoy</string>
     <string name="convoy_createdTitle">Convoy created</string>
