@@ -703,6 +703,15 @@ fun AuthenticatedApp(
             // and live sharing still works.
             val driveLocationController =
                 remember { DriveLocationController.createIfAvailable(context) }
+            // Mirror RecordDriveScreen: always release the foreground GPS updates
+            // when this composable leaves composition, so the controller can never
+            // keep running after the auth subtree is disposed while a session is
+            // still active (the isSharing=false branch already stops it on a normal
+            // session end). stop() is idempotent — safe to call when already
+            // stopped — so this never double-stops or crashes.
+            DisposableEffect(driveLocationController) {
+                onDispose { driveLocationController?.stop() }
+            }
             val idleRecordingState =
                 remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
             // The coordinator for the CURRENT session; a fresh one (new
