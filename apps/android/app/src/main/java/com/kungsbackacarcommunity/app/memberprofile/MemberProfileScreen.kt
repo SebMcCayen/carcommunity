@@ -61,7 +61,13 @@ fun MemberProfileScreen(
 
     AeroPage(title = title, modifier = modifier) {
         when (state) {
-            MemberProfileState.Loading -> CircularProgressIndicator()
+            MemberProfileState.Loading ->
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s6),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
 
             MemberProfileState.Unavailable ->
                 NoticeCard(text = stringResource(R.string.memberProfile_unavailable))

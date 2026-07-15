@@ -54,9 +54,18 @@ fun MemberProfileRoute(
 /**
  * Whether [viewerUid] has blocked [targetUid], read from the viewer's own
  * owner-scoped block list. Best-effort: a null repository, a blank viewer uid, or
- * a non-[BlockedUsersState.Loaded] outcome resolves to `false` (the profile read
- * still runs and is rules-protected). This only ever reflects who the viewer
- * blocked — never who blocked the viewer.
+ * a non-[BlockedUsersState.Loaded] settled state (including a clean
+ * [BlockedUsersState.Error]) resolves to `false` (the profile read still runs and
+ * is rules-protected). This only ever reflects who the viewer blocked — never who
+ * blocked the viewer.
+ *
+ * The block-list read is intentionally NOT wrapped in a swallowing `runCatching`:
+ * an unexpected exception (and, crucially, [kotlinx.coroutines.CancellationException])
+ * propagates to the coordinator, which re-throws cancellation to preserve
+ * structured concurrency and surfaces any other failure as
+ * [MemberProfileState.Error] — rather than silently masquerading a genuine
+ * failure as "not blocked". A *clean* subsystem error is still a settled
+ * [BlockedUsersState.Error] state, handled here as best-effort "not blocked".
  */
 private suspend fun hasBlocked(
     blockingRepository: BlockingRepository?,
@@ -65,8 +74,6 @@ private suspend fun hasBlocked(
 ): Boolean {
     if (blockingRepository == null || viewerUid.isBlank()) return false
     val settled =
-        runCatching {
-            blockingRepository.observeBlocked(viewerUid).first { it !is BlockedUsersState.Loading }
-        }.getOrNull()
+        blockingRepository.observeBlocked(viewerUid).first { it !is BlockedUsersState.Loading }
     return settled is BlockedUsersState.Loaded && settled.users.any { it.userId == targetUid }
 }
