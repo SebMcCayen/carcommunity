@@ -770,7 +770,7 @@
     "convoysError": "Kunde inte ladda dina konvojer.",
     "convoysRetry": "Försök igen",
     "convoyUntitled": "Konvoj",
-    "convoyMembers": "%1$d medlemmar"
+    "convoyMembers": "Medlemmar: %1$d"
   },
   "shell": {
     "searchHint": "Vart vill du?",

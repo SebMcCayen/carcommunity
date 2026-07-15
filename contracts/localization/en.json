@@ -770,7 +770,7 @@
     "convoysError": "Couldn't load your convoys.",
     "convoysRetry": "Try again",
     "convoyUntitled": "Convoy",
-    "convoyMembers": "%1$d members"
+    "convoyMembers": "Members: %1$d"
   },
   "shell": {
     "searchHint": "Where to?",

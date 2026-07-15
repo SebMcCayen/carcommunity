@@ -703,7 +703,7 @@
     <string name="chatHub_convoysError">Couldn\'t load your convoys.</string>
     <string name="chatHub_convoysRetry">Try again</string>
     <string name="chatHub_convoyUntitled">Convoy</string>
-    <string name="chatHub_convoyMembers">%1$d members</string>
+    <string name="chatHub_convoyMembers">Members: %1$d</string>
     <string name="shell_searchHint">Where to?</string>
     <string name="shell_searchIcon">Search</string>
     <string name="shell_loadingRoads">Loading roads…</string>
