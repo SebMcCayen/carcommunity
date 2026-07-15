@@ -113,8 +113,8 @@ fun NavigationSearchScreen(
     // Dismiss the soft keyboard + drop text-field focus when a place is picked.
     // Selecting a suggestion swaps the search field for the bottom route sheet
     // (distance/ETA + the step-by-step directions); if the IME stayed up it would
-    // sit ON TOP of that sheet and hide the directions. Google-Maps-style, we hide
-    // it the moment a result is chosen so the steps are fully visible.
+    // sit ON TOP of that sheet and hide the directions. We hide it the moment a
+    // result is chosen so the steps are fully visible.
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     // Resolve the recent-searches store to a STABLE instance. When the caller
