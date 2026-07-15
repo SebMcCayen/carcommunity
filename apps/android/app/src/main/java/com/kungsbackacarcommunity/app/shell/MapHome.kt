@@ -516,6 +516,9 @@ const val MAP_HOME_REPORT_TAG = "map_home_report"
 /** Test tag on the map-layers popup card. */
 const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
 
+/** Test tag on the incidents ("Traffic alerts") layer toggle switch. */
+const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
+
 /** Test tag on the floating live-location broadcast control. */
 const val MAP_HOME_LIVE_TAG = "map_home_live"
 
@@ -608,6 +611,7 @@ private fun MapLayersPopup(
                     label = stringResource(R.string.shell_layersIncidents),
                     checked = incidentsOn,
                     onCheckedChange = onIncidentsChange,
+                    switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
                 )
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersTraffic),
@@ -647,6 +651,7 @@ private fun LayerToggleRow(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    switchTestTag: String? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -658,7 +663,11 @@ private fun LayerToggleRow(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
+        )
     }
 }
 

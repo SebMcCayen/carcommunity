@@ -184,11 +184,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * How many times the Map tab retries the nearby-incidents fetch while it comes
- * back empty, and the delay between attempts. Covers the common cold-open case
- * where the fused last-known location is momentarily null (no fix yet), so the
- * first refresh no-ops; a handful of retries lets a real fix arrive and populate
- * the layer without a busy loop.
+ * How many times the Map tab retries the nearby-incidents refresh while no
+ * location fix is available yet, and the delay between attempts. Covers the
+ * common cold-open case where the fused last-known location is momentarily null
+ * (no fix yet), so the first refresh no-ops; a handful of retries lets a real
+ * fix arrive and populate the layer without a busy loop. Once a fix is
+ * available the loop stops after a single refresh, so an area with no active
+ * incidents does not keep retrying.
  */
 private const val INCIDENTS_REFRESH_ATTEMPTS = 5
 private const val INCIDENTS_REFRESH_RETRY_MS = 3_000L
@@ -457,16 +459,18 @@ fun AuthenticatedApp(
             // last-known location is frequently null (no fix yet), so
             // refreshAroundCurrent no-ops and the layer stays empty — the map
             // shows nothing even though incidents exist in Firestore. So we retry
-            // a few times with a short backoff until the fetch yields incidents (a
-            // real fix arrives) or the attempts are exhausted; failures leave the
-            // previous markers intact. Keyed on incidentsLayerEnabled so toggling
-            // the layer back on re-fetches immediately.
+            // a few times with a short backoff until a real location fix arrives
+            // (refreshAroundCurrent returns true → a single refresh ran) or the
+            // attempts are exhausted; failures leave the previous markers intact.
+            // We stop on the first successful fix rather than on a non-empty list,
+            // so an area with no active incidents does not keep re-firing the
+            // callable. Keyed on incidentsLayerEnabled so toggling the layer back
+            // on re-fetches immediately.
             LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled) {
                 val controller = incidentController ?: return@LaunchedEffect
                 if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
                 repeat(INCIDENTS_REFRESH_ATTEMPTS) { attempt ->
-                    controller.refreshAroundCurrent()
-                    if (controller.nearbyIncidents.value.isNotEmpty()) return@LaunchedEffect
+                    if (controller.refreshAroundCurrent()) return@LaunchedEffect
                     if (attempt < INCIDENTS_REFRESH_ATTEMPTS - 1) delay(INCIDENTS_REFRESH_RETRY_MS)
                 }
             }

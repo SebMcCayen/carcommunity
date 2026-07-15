@@ -122,13 +122,34 @@ class MapFirstShellTest {
         // Tapping the layers control opens the transparent map-layers popup.
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
-        // It exposes the traffic / night-mode / 3D toggles.
+        // It exposes the incidents ("Traffic alerts") / traffic / night-mode / 3D
+        // toggles.
+        composeTestRule.onNodeWithText(str(R.string.shell_layersIncidents)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layersTraffic)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layersNightMode)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layers3d)).assertIsDisplayed()
         // Closing dismisses the popup.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersClose)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun layersPopup_incidentsToggle_gatesTrafikverketAttribution() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
+        // The incidents layer defaults ON, so the "Källa: Trafikverket" attribution
+        // for the Trafikverket-sourced incidents is shown alongside the toggle row.
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
+            .assertIsDisplayed()
+        // Turning the incidents layer off removes the attribution (no Trafikverket
+        // data is on screen to credit) — the conditional wiring this test guards.
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
+            .assertDoesNotExist()
     }
 
     @Test
