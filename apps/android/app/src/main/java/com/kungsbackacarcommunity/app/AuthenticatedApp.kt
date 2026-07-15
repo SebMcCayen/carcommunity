@@ -49,6 +49,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -316,12 +317,22 @@ fun AuthenticatedApp(
                     pendingWelcomeRoute = target
                     welcomeSeen = true
                 }
-                WelcomeScreen(
-                    onSeeMembership = { finishWelcome(ShellRoute.Subscription) },
-                    onCompleteProfile = { finishWelcome(ShellRoute.Profile) },
-                    onAddCar = { finishWelcome(ShellRoute.Garage) },
-                    onFinish = { finishWelcome(null) },
-                )
+                // Scope the whole welcome-flow composition by uid, consistent with
+                // the welcome-gating/route state above. WelcomeScreen keeps its
+                // current step in its own rememberSaveable; without this, a
+                // different user signing in within the same Activity/process would
+                // reuse the previous user's saved step instead of starting at
+                // WelcomeStep.FIRST. key(uid) gives the subtree a new identity per
+                // account so its saved state resets — without coupling the reusable
+                // WelcomeScreen (and its @Preview) to a uid parameter.
+                key(uid) {
+                    WelcomeScreen(
+                        onSeeMembership = { finishWelcome(ShellRoute.Subscription) },
+                        onCompleteProfile = { finishWelcome(ShellRoute.Profile) },
+                        onAddCar = { finishWelcome(ShellRoute.Garage) },
+                        onFinish = { finishWelcome(null) },
+                    )
+                }
             } else {
             val profile = (profileState as? ProfileState.Loaded)?.profile
 

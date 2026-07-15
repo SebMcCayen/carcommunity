@@ -191,7 +191,12 @@ private fun StepCard(step: WelcomeStep) {
             Box(
                 modifier =
                     Modifier
-                        .size(72.dp)
+                        // Prominent hero disc — larger than the map-home's
+                        // interactive KccSpacing.s12 (48.dp) control buttons since
+                        // it's decorative and holds a KccSpacing.s8 (32.dp) icon.
+                        // Composed from spacing tokens (48 + 24 = 72.dp) to stay on
+                        // the scale rather than hard-coding a raw dp value.
+                        .size(KccSpacing.s12 + KccSpacing.s6)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
