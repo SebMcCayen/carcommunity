@@ -1,16 +1,23 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
+import com.kungsbackacarcommunity.app.map.CameraFollowController
 import com.kungsbackacarcommunity.app.map.MapMarkers
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.android.gestures.RotateGestureDetector
+import com.mapbox.android.gestures.ShoveGestureDetector
+import com.mapbox.android.gestures.StandardScaleGestureDetector
 import com.mapbox.bindgen.Value
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
@@ -40,13 +47,21 @@ import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.plugin.gestures.OnMapLongClickListener
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.OnRotateListener
+import com.mapbox.maps.plugin.gestures.OnScaleListener
+import com.mapbox.maps.plugin.gestures.OnShoveListener
 import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -117,6 +132,23 @@ class MapboxMapSurface : MapSurface {
     // The map long-click gesture listener (Google-Maps "hold to navigate here");
     // held so it can be detached in onRelease.
     private var longClickListener: OnMapLongClickListener? = null
+
+    // "Camera follows me" state. The controller owns the follow/idle DECISION
+    // (pure, unit-tested); the 10-second countdown is [idleReturnJob], a coroutine
+    // on [followScope] (the composable's scope, cancelled on dispose). Each manual
+    // pan/zoom/rotate/tilt gesture stops following and (re)arms the timer; when it
+    // elapses (or the user taps my-location) we glide back and resume following.
+    private val followController = CameraFollowController()
+    private var followScope: CoroutineScope? = null
+    private var idleReturnJob: Job? = null
+
+    // Camera-manipulation gesture listeners, held so they can be detached in
+    // onRelease. Any of pan/zoom/rotate/tilt counts as the user taking over the
+    // camera, so all four drive the same [onUserMapInteraction] hook.
+    private var moveListener: OnMoveListener? = null
+    private var scaleListener: OnScaleListener? = null
+    private var rotateListener: OnRotateListener? = null
+    private var shoveListener: OnShoveListener? = null
 
     // Live references, held only while the map is composed (cleared in
     // onRelease). Touched on the main thread from Compose callbacks.
@@ -225,6 +257,23 @@ class MapboxMapSurface : MapSurface {
     }
 
     override fun recenter() {
+        // Tapping my-location is the shared re-centre affordance: resume follow,
+        // cancel any pending idle-return timer, and glide to the user. The
+        // idle-return path reuses [easeToUser] so the two never diverge.
+        followController.onRecenterRequested()
+        idleReturnJob?.cancel()
+        idleReturnJob = null
+        easeToUser()
+    }
+
+    /**
+     * Smoothly glides the camera to the user's current position (or the default
+     * town camera when there is no fix yet), keeping the current 3D tilt. Shared
+     * by the my-location control ([recenter]) and the 10-second idle-return timer
+     * so the re-centre animation is identical for both. A no-op until the map is
+     * composed; wrapped defensively so a missing fix/permission never crashes.
+     */
+    private fun easeToUser() {
         val map = mapViewRef ?: return
         val target = lastPoint
         runCatching {
@@ -242,7 +291,7 @@ class MapboxMapSurface : MapSurface {
                         )
                         zoom(MapMarkers.DEFAULT_CAMERA.zoom)
                     }
-                    // Keep the 3D tilt when the user re-centres.
+                    // Keep the 3D tilt when the camera re-centres.
                     pitch(this@MapboxMapSurface.pitch)
                 }
             // Smoothly glide to the target rather than jumping instantly, via the
@@ -253,6 +302,29 @@ class MapboxMapSurface : MapSurface {
                 mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
             )
         }
+    }
+
+    /**
+     * Handles a manual map-camera gesture (pan / pinch-zoom / rotate / tilt):
+     * stop following the user and (re)arm the [CameraFollowController.IDLE_RETURN_MS]
+     * timer. Every fresh gesture cancels and restarts the timer, so the camera
+     * only returns to the user after a full quiet window with no interaction; when
+     * it elapses we resume following and glide back via [easeToUser]. Runs on the
+     * main thread (gesture callbacks); a no-op until the composable scope exists.
+     */
+    private fun onUserMapInteraction() {
+        followController.onUserGesture()
+        val scope = followScope ?: return
+        idleReturnJob?.cancel()
+        idleReturnJob =
+            scope.launch {
+                delay(CameraFollowController.IDLE_RETURN_MS)
+                // Quiet window elapsed with no further gesture: resume follow and
+                // glide back to the user's current position.
+                followController.onIdleElapsed()
+                idleReturnJob = null
+                easeToUser()
+            }
     }
 
     override fun resetNorth() {
@@ -285,24 +357,54 @@ class MapboxMapSurface : MapSurface {
             remember {
                 OnIndicatorPositionChangedListener { point ->
                     lastPoint = point
-                    // Auto-centre on the first valid fix so the map opens close
-                    // to the user rather than on the default town camera. Once
-                    // only, so later fixes don't yank the camera while panning.
-                    if (!centeredOnFirstFix) {
-                        centeredOnFirstFix = true
-                        runCatching {
-                            mapViewRef?.mapboxMap?.setCamera(
+                    // "Camera follows me": while following (and no route overlay
+                    // owns the camera), keep the camera centred on the puck as the
+                    // user moves. Suppressed once the user pans/zooms/rotates —
+                    // the 10s idle timer resumes it — and while a route preview is
+                    // shown, so follow never fights an explicit camera move.
+                    if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                        return@OnIndicatorPositionChangedListener
+                    }
+                    val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                    runCatching {
+                        if (!centeredOnFirstFix) {
+                            // Open the FIRST fix close to the user, at the own-marker
+                            // zoom and 3D tilt (snap, so the map opens already framed).
+                            centeredOnFirstFix = true
+                            map.mapboxMap.setCamera(
                                 cameraOptions {
                                     center(point)
                                     zoom(MapMarkers.OWN_MARKER_ZOOM)
-                                    // Open the first fix in the 3D tilt.
                                     pitch(this@MapboxMapSurface.pitch)
                                 },
+                            )
+                        } else {
+                            // Later fixes: glide the CENTRE only (leave zoom/pitch/
+                            // bearing as they are) with a short ease so following
+                            // reads smoothly and doesn't fight its own zoom. A
+                            // programmatic ease does not trigger the gesture
+                            // listeners, so this never disables follow.
+                            map.camera.easeTo(
+                                cameraOptions { center(point) },
+                                mapAnimationOptions { duration(FOLLOW_ANIMATION_MS) },
                             )
                         }
                     }
                 }
             }
+
+        // Scope for the 10-second idle-return timer, tied to this composable's
+        // lifecycle: cancelled (with any in-flight timer) when the map leaves the
+        // composition, so no follow work outlives the screen.
+        val followScope = rememberCoroutineScope()
+        DisposableEffect(followScope) {
+            this@MapboxMapSurface.followScope = followScope
+            onDispose {
+                idleReturnJob?.cancel()
+                idleReturnJob = null
+                this@MapboxMapSurface.followScope = null
+            }
+        }
 
         AndroidView(
             modifier = modifier,
@@ -355,6 +457,44 @@ class MapboxMapSurface : MapSurface {
                         }
                     longClickListener = longPressListener
                     runCatching { gestures.addOnMapLongClickListener(longPressListener) }
+                    // Camera-manipulation gestures (pan/zoom/rotate/tilt): any of
+                    // them means the user is taking over the camera, so they all
+                    // stop "follow me" and arm the 10s idle-return timer. These are
+                    // touch-gesture callbacks only — the programmatic follow/recenter
+                    // eases never fire them, so follow doesn't cancel itself. Returning
+                    // false from onMove leaves the pan itself untouched.
+                    val moveL =
+                        object : OnMoveListener {
+                            override fun onMoveBegin(detector: MoveGestureDetector) = onUserMapInteraction()
+                            override fun onMove(detector: MoveGestureDetector): Boolean = false
+                            override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+                        }
+                    val scaleL =
+                        object : OnScaleListener {
+                            override fun onScaleBegin(detector: StandardScaleGestureDetector) = onUserMapInteraction()
+                            override fun onScale(detector: StandardScaleGestureDetector) = Unit
+                            override fun onScaleEnd(detector: StandardScaleGestureDetector) = Unit
+                        }
+                    val rotateL =
+                        object : OnRotateListener {
+                            override fun onRotateBegin(detector: RotateGestureDetector) = onUserMapInteraction()
+                            override fun onRotate(detector: RotateGestureDetector) = Unit
+                            override fun onRotateEnd(detector: RotateGestureDetector) = Unit
+                        }
+                    val shoveL =
+                        object : OnShoveListener {
+                            override fun onShoveBegin(detector: ShoveGestureDetector) = onUserMapInteraction()
+                            override fun onShove(detector: ShoveGestureDetector) = Unit
+                            override fun onShoveEnd(detector: ShoveGestureDetector) = Unit
+                        }
+                    moveListener = moveL
+                    scaleListener = scaleL
+                    rotateListener = rotateL
+                    shoveListener = shoveL
+                    runCatching { gestures.addOnMoveListener(moveL) }
+                    runCatching { gestures.addOnScaleListener(scaleL) }
+                    runCatching { gestures.addOnRotateListener(rotateL) }
+                    runCatching { gestures.addOnShoveListener(shoveL) }
                     // Default camera until the first GPS fix arrives.
                     mapboxMap.setCamera(
                         cameraOptions {
@@ -454,6 +594,17 @@ class MapboxMapSurface : MapSurface {
                     runCatching { mapView.gestures.removeOnMapLongClickListener(l) }
                 }
                 longClickListener = null
+                // Detach the camera-gesture (follow) listeners and stop the timer.
+                moveListener?.let { l -> runCatching { mapView.gestures.removeOnMoveListener(l) } }
+                scaleListener?.let { l -> runCatching { mapView.gestures.removeOnScaleListener(l) } }
+                rotateListener?.let { l -> runCatching { mapView.gestures.removeOnRotateListener(l) } }
+                shoveListener?.let { l -> runCatching { mapView.gestures.removeOnShoveListener(l) } }
+                moveListener = null
+                scaleListener = null
+                rotateListener = null
+                shoveListener = null
+                idleReturnJob?.cancel()
+                idleReturnJob = null
                 // Reset the mirrored bearing now that the camera-change listener is
                 // detached. This surface outlives the MapView (it's remembered across
                 // tab switches while the MapView is destroyed/recreated), so without
@@ -471,6 +622,9 @@ class MapboxMapSurface : MapSurface {
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
+                // A later recreated map (e.g. after a tab switch) should open
+                // following the user again, even if the user had panned away.
+                followController.reset()
                 mapView.onDestroy()
             },
         )
@@ -629,6 +783,15 @@ class MapboxMapSurface : MapSurface {
          * enough to read as an intentional animation rather than a jarring snap.
          */
         const val RECENTER_ANIMATION_MS = 1000L
+
+        /**
+         * Duration (ms) of the per-fix camera glide while "follow me" is active.
+         * Short — a fix arrives roughly every second — so the camera keeps pace
+         * with the user smoothly without a queue of long animations building up
+         * (each new ease supersedes the previous one on the camera-animations
+         * plugin).
+         */
+        const val FOLLOW_ANIMATION_MS = 700L
 
         /**
          * Import id of the Mapbox Standard style's basemap, used to set config
