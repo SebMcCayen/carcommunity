@@ -120,6 +120,23 @@
     "loading": "Sparar...",
     "error": "Något gick fel. Försök igen."
   },
+  "welcome": {
+    "skip": "Hoppa över",
+    "next": "Nästa",
+    "getStarted": "Kom igång",
+    "progress": "Steg %1$d av %2$d",
+    "step1Title": "Välkommen till gemenskapen",
+    "step1Body": "Du är med! Här möts lokala bilentusiaster, kör och delar passionen. Här är en snabb rundtur innan du sätter igång.",
+    "step2Title": "Kartan är din utgångspunkt",
+    "step2Body": "Utgå från kartan för att se vad som händer runt omkring dig, dela din liveposition med vänner och köra tillsammans i konvojer.",
+    "step3Title": "Lås upp mer med medlemskap",
+    "step3Body": "Ett medlemskap låser upp hela upplevelsen – inklusive att se andra medlemmars livepositioner, gå med i konvojer och medlemsexklusiva evenemang.",
+    "seeMembership": "Se medlemskap",
+    "step4Title": "Gör den till din",
+    "step4Body": "Slutför din profil så att andra känner igen dig, och lägg till din första bil i garaget.",
+    "completeProfile": "Slutför profil",
+    "addCar": "Lägg till bil"
+  },
   "url": {
     "terms": "https://kungsbacka-car-community.web.app/terms",
     "privacy": "https://kungsbacka-car-community.web.app/privacy",

@@ -12,6 +12,8 @@ import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,11 +32,22 @@ class MapFirstShellTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    /**
+     * The one-time first-login welcome flow gates the Main shell on the first
+     * reach for a uid. These tests target the shell itself, so mark the flow
+     * already-seen for this uid (device-local WelcomeStore) — deterministic
+     * regardless of prior device state — so [setShell] renders the shell directly.
+     */
+    @Before
+    fun markWelcomeSeen() {
+        WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
+    }
+
     private fun setShell() {
         composeTestRule.setContent {
             KccTheme {
                 AuthenticatedApp(
-                    uid = "u1",
+                    uid = TEST_UID,
                     authDisplayName = null,
                     profileRepository = null,
                     onboardingCoordinator = null,
@@ -79,6 +92,10 @@ class MapFirstShellTest {
                 )
             }
         }
+    }
+
+    private companion object {
+        const val TEST_UID = "u1"
     }
 
     @Test
