@@ -697,7 +697,7 @@
     <string name="chatHub_tabCommunity">Community</string>
     <string name="chatHub_tabConvoys">Convoys</string>
     <string name="chatHub_tabFriends">Friends</string>
-    <string name="chatHub_tabNotifications">Alerts</string>
+    <string name="chatHub_tabNotifications">Notifications</string>
     <string name="chatHub_unavailable">This isn\'t available right now.</string>
     <string name="chatHub_convoysEmpty">You\'re not in any convoys yet.</string>
     <string name="chatHub_convoysError">Couldn\'t load your convoys.</string>

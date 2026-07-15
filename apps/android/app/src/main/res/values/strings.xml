@@ -697,7 +697,7 @@
     <string name="chatHub_tabCommunity">Gemenskap</string>
     <string name="chatHub_tabConvoys">Konvojer</string>
     <string name="chatHub_tabFriends">Vänner</string>
-    <string name="chatHub_tabNotifications">Aviseringar</string>
+    <string name="chatHub_tabNotifications">Notiser</string>
     <string name="chatHub_unavailable">Det här är inte tillgängligt just nu.</string>
     <string name="chatHub_convoysEmpty">Du är inte med i några konvojer än.</string>
     <string name="chatHub_convoysError">Kunde inte ladda dina konvojer.</string>
