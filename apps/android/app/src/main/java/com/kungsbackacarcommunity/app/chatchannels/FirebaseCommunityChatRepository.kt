@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.chatchannels
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.channels.awaitClose
@@ -67,7 +68,20 @@ class FirebaseCommunityChatRepository private constructor(
     override fun observeUnread(uid: String): Flow<Boolean> {
         val newest: Flow<ChannelMessage?> = callbackFlow {
             val registration =
-                messagesQuery(1L).addSnapshotListener { snapshot, _ ->
+                messagesQuery(1L).addSnapshotListener { snapshot, error ->
+                    if (error != null && snapshot == null) {
+                        // No cached data. A denied listen (not a member / no
+                        // readable channel) legitimately clears unread; any other
+                        // error is transient, so keep the last value by NOT
+                        // emitting a misleading "no newest message" (which would
+                        // collapse the dot to a confident no-unread).
+                        if ((error as? FirebaseFirestoreException)?.code ==
+                            FirebaseFirestoreException.Code.PERMISSION_DENIED
+                        ) {
+                            trySend(null)
+                        }
+                        return@addSnapshotListener
+                    }
                     trySend(snapshot?.documents?.firstOrNull()?.toChannelMessage())
                 }
             awaitClose { registration.remove() }
@@ -77,7 +91,13 @@ class FirebaseCommunityChatRepository private constructor(
                 firestore
                     .collection(USER_PRIVATE)
                     .document(uid)
-                    .addSnapshotListener { snapshot, _ ->
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null && snapshot == null) {
+                            // Transient failure with no cached marker: keep the
+                            // last-known marker rather than momentarily reading it
+                            // as missing, which could wrongly flip unread.
+                            return@addSnapshotListener
+                        }
                         trySend(snapshot?.getTimestamp(LAST_READ_AT)?.toDate()?.time)
                     }
             awaitClose { registration.remove() }
