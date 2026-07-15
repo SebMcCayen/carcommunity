@@ -19,7 +19,27 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ANDROID="$REPO_ROOT/apps/android"
 AVD="${KCC_AVD:-kcc_test}"
 APPID="com.kungsbackacarcommunity.app"
-JDK21="${JDK21_HOME:-/home/sebmccayen/android-toolchain/jdk-21.0.11+10}"
+
+# Resolve a JDK 21 home (firebase-tools requires JDK >= 21; the toolchain's
+# env.sh exports JDK 17 for Gradle). Honor JDK21_HOME/JAVA21_HOME if set, else
+# try common discovery mechanisms across platforms. Only needed for --fb; if
+# nothing is found we error at the point of use, not here.
+find_jdk21() {
+  if [ -n "${JDK21_HOME:-}" ]; then echo "$JDK21_HOME"; return; fi
+  if [ -n "${JAVA21_HOME:-}" ]; then echo "$JAVA21_HOME"; return; fi
+  # macOS
+  if command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    local h; h="$(/usr/libexec/java_home -v 21 2>/dev/null)" && { echo "$h"; return; }
+  fi
+  # Debian/Ubuntu alternatives -> derive JAVA_HOME from the java binary
+  local j; j="$(update-alternatives --list java 2>/dev/null | grep -m1 -- '-21-' || true)"
+  if [ -n "$j" ]; then echo "$(dirname "$(dirname "$j")")"; return; fi
+  # Common install roots
+  for d in /usr/lib/jvm/*21* "$HOME"/android-toolchain/jdk-21* "$HOME"/.sdkman/candidates/java/21*; do
+    [ -x "$d/bin/java" ] && { echo "$d"; return; }
+  done
+}
+JDK21="$(find_jdk21)"
 
 WITH_FB=0; DO_BUILD=1
 for a in "$@"; do
@@ -49,7 +69,12 @@ echo ">> emulator online (API $(adb shell getprop ro.build.version.sdk | tr -d '
 GRADLE_FLAG=()
 if [ "$WITH_FB" = "1" ]; then
   if ! (ss -ltn 2>/dev/null | grep -q ':9099'); then
-    echo ">> starting Firebase emulators (auth+firestore) ..."
+    if [ -z "$JDK21" ] || [ ! -x "$JDK21/bin/java" ]; then
+      echo "ERROR: --fb needs JDK 21 (firebase-tools requires >= 21) but none was found." >&2
+      echo "       Set JDK21_HOME (or JAVA21_HOME) to a JDK 21 install and retry." >&2
+      exit 1
+    fi
+    echo ">> starting Firebase emulators (auth+firestore) with JDK21 at $JDK21 ..."
     ( export JAVA_HOME="$JDK21"
       export PATH="$JAVA_HOME/bin:$HOME/.npm-global/bin:$PATH"
       cd "$REPO_ROOT"

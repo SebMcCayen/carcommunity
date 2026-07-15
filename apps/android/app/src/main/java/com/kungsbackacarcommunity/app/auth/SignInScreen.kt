@@ -168,7 +168,12 @@ fun SignInScreen(
                             onClick = onDevSignInClick,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(text = "Dev sign-in (Sven — emulator)")
+                            // Label from a hand-maintained resource
+                            // (res/values/strings_debug.xml — kept in src/main so
+                            // release still compiles). The button only renders when
+                            // onDevSignInClick != null, i.e. a debug +
+                            // USE_FIREBASE_EMULATOR build, so it never shows in release.
+                            Text(text = stringResource(R.string.debug_devSignInButton))
                         }
                     }
 

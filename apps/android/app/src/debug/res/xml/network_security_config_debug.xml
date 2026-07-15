@@ -5,8 +5,16 @@
 
   Permits cleartext (HTTP) to the local Firebase emulators, which serve plain
   HTTP on the host loopback (10.0.2.2 from the Android emulator; localhost for
-  a physical device over adb reverse). Only used when a debug build is assembled
-  with -PuseFirebaseEmulator=true; otherwise the app talks HTTPS to production.
+  a physical device over adb reverse).
+
+  This cleartext allowance is merged into EVERY debug build via the debug
+  manifest overlay — it is not gated on -PuseFirebaseEmulator. What the flag
+  controls is whether the app actually TALKS to those emulator hosts: only a
+  build with USE_FIREBASE_EMULATOR=true points Firebase at 10.0.2.2, so only
+  then is any cleartext request made. A normal debug build carries this config
+  but never contacts the emulator hosts, so it stays on HTTPS to production.
+  Release builds don't include this file at all (debug source set only), so
+  production keeps Android's default cleartext block.
 -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">

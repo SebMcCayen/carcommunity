@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Developer-affordance string(s). Kept in a SEPARATE, hand-maintained file (not
+  the generated strings.xml, which is regenerated from contracts/localization
+  and would clobber hand edits). It lives in src/main — not src/debug — because
+  SignInScreen (in src/main) references it, so the resource must resolve in
+  every variant for release to compile; a src/debug-only resource breaks
+  compileRelease. The associated UI is still gated to debug + USE_FIREBASE_EMULATOR
+  at runtime (onDevSignInClick is null otherwise), so this label never renders in
+  a release build. English-only by design (not user-facing product copy).
+-->
+<resources>
+    <string name="debug_devSignInButton">Dev sign-in (Sven — emulator)</string>
+</resources>

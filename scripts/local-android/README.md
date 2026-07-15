@@ -13,7 +13,9 @@ emulators. All emulator wiring is **debug-only and off by default** — see
   sdkmanager "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
   avdmanager create avd -n kcc_test -k "system-images;android-34;google_apis;x86_64" -d pixel_6
   ```
-- For the Firebase emulators: `firebase-tools` on PATH and **JDK 21**
+- For the Firebase emulators: `firebase-tools` on PATH and **JDK 21** (set
+  `JDK21_HOME` or `JAVA21_HOME` if it isn't auto-discovered; `kcc-run.sh` tries
+  `java_home`, `update-alternatives`, and common install roots)
   (firebase-tools rejects JDK < 21). `functions/node_modules` installed
   (provides `firebase-admin` for the seed script).
 

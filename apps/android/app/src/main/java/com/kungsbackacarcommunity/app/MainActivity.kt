@@ -270,7 +270,7 @@ class MainActivity : ComponentActivity() {
                 // -PuseFirebaseEmulator=true; null (hidden) in every normal debug
                 // build and all release builds, so Google Sign-In stays the sole
                 // production path. See KccApplication for the matching emulator
-                // wiring and apps/android/README.md / tools/kcc-run.sh for usage.
+                // wiring and scripts/local-android/ (kcc-run.sh + README.md) for usage.
                 onDevSignInClick = devEmulatorSignIn,
                 signedInContent = { uid, displayName ->
                     AuthenticatedApp(
