@@ -134,6 +134,11 @@ object MapMarkers {
      * an embedded newline or run of control whitespace in a display name, make,
      * or model becomes a single space and can never inject extra lines into the
      * 1–2 line callout.
+     *
+     * A blank/whitespace-only [fallbackName] is treated as absent (never emitted
+     * as an empty first line): a car with no usable name renders as just the car
+     * line, and a marker with neither a usable name nor a car returns null so the
+     * renderer draws a bare circle rather than a blank/vertically-shifted callout.
      */
     fun calloutLabel(marker: MapMarker, fallbackName: String): String? {
         val name = sanitizeLine(marker.displayName).takeIf { it.isNotEmpty() }
@@ -141,11 +146,16 @@ object MapMarkers {
             marker.mainCar
                 ?.let { "${sanitizeLine(it.make)} ${sanitizeLine(it.model)}".trim() }
                 ?.takeIf { it.isNotEmpty() }
-        val who = name ?: sanitizeLine(fallbackName)
+        // The fallback only ever stands in as the "who" for a car — a bare
+        // position marker with no real display name is NOT labelled with it. A
+        // blank fallback collapses to null so it is never emitted as an empty line.
         return when {
             name != null && car != null -> "$name\n$car"
             name != null -> name
-            car != null -> "$who\n$car"
+            car != null -> {
+                val fallback = sanitizeLine(fallbackName).takeIf { it.isNotEmpty() }
+                if (fallback != null) "$fallback\n$car" else car
+            }
             else -> null
         }
     }

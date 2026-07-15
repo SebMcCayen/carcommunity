@@ -188,6 +188,21 @@ class MapMarkersTest {
     }
 
     @Test
+    fun `calloutLabel with a car but blank name and blank fallback shows only the car line`() {
+        // No display name and a whitespace-only fallback must NOT emit an empty
+        // first line ("\nVolvo 240") — just the car, single line.
+        val label = MapMarkers.calloutLabel(marker(name = null, car = volvo), "   ")
+        assertEquals("Volvo 240", label)
+        assertEquals(1, label!!.split("\n").size)
+    }
+
+    @Test
+    fun `calloutLabel is null when name and fallback and car are all blank`() {
+        assertNull(MapMarkers.calloutLabel(marker(name = "  ", car = null), "  "))
+        assertNull(MapMarkers.calloutLabel(marker(name = null, car = null), " \n "))
+    }
+
+    @Test
     fun `cameraForMarkers focuses on first other when no own marker`() {
         val markers =
             MapMarkers.markers(
