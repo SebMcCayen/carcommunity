@@ -46,6 +46,13 @@ class FirebaseCommunityChatRepository private constructor(
                             val cached =
                                 snapshot.documents.mapNotNull { it.toChannelMessage() }.asReversed()
                             trySend(ChannelMessagesState.Loaded(cached))
+                        } else {
+                            // No cached snapshot (e.g. first load + PERMISSION_DENIED
+                            // / UNAVAILABLE): there is no prior state to keep, so
+                            // surface the empty/denied state instead of leaving the
+                            // UI stuck in Loading forever. The SDK still retries and
+                            // delivers a fresh snapshot once the listen succeeds.
+                            trySend(ChannelMessagesState.Loaded(emptyList()))
                         }
                         return@addSnapshotListener
                     }
