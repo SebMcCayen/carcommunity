@@ -97,6 +97,14 @@ class DriveRecordingCoordinator(
         }
     }
 
+    /**
+     * Snapshot of the accumulated fixes, used only to compute the client-side
+     * [DriveSummary] preview shown in the end-of-session save prompt. Empty once
+     * the recorder has been released (after a successful save / discard / reset).
+     * Never used for persistence — the save payload is built by the recorder.
+     */
+    fun recordedPoints(): List<RecordedPoint> = recorder?.snapshot() ?: emptyList()
+
     /** Explicitly discards the recording — nothing is stored. */
     fun discard() {
         recorder = null

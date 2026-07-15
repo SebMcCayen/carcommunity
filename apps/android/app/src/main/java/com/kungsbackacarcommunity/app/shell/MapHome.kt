@@ -79,8 +79,6 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
-import com.kungsbackacarcommunity.app.live.LiveDurationPicker
-import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
@@ -118,8 +116,11 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   Stop / Hide-me-now are governed by [isLiveSharing] (not this flag), so they
  *   appear only while a session is already active; the details entry point
  *   stays reachable regardless.
- * @param onStartLiveShare start a session for the chosen [LiveSessionDuration]
- *   (wired to LiveLocationCoordinator.start); only offered when [canShareLive].
+ * @param onStartLiveShare request starting a Single (solo live-sharing) session;
+ *   only offered when [canShareLive]. The 1h/2h/4h duration choice is NOT made
+ *   here anymore — this hands off to the single-session start flow (the same one
+ *   the "+" Create → Single session raises), which is where the duration is
+ *   picked. Keeps the broadcast control a one-tap "start sharing" affordance.
  * @param onStopLiveShare stop the active session (wired to
  *   LiveLocationCoordinator.stop); offered while sharing.
  * @param onHideMeNow privacy stop — remove my position now (wired to
@@ -155,7 +156,7 @@ fun MapHome(
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    onStartLiveShare: (LiveSessionDuration) -> Unit,
+    onStartLiveShare: () -> Unit,
     onStopLiveShare: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenLiveShareDetails: () -> Unit,
@@ -674,7 +675,10 @@ private fun LayerToggleRow(
  * the existing live-location logic (wired through to LiveLocationCoordinator by
  * the caller):
  * - While sharing: a Stop-sharing action and the never-gated Hide-me-now.
- * - Not sharing and [canShareLive]: a session-duration picker + Start.
+ * - Not sharing and [canShareLive]: a single "start sharing" action. The 1h/2h/4h
+ *   duration choice is NOT here — [onStart] hands off to the single-session start
+ *   flow (shared with the "+" Create → Single session), which is where the
+ *   duration is picked. This keeps the map's broadcast control a one-tap start.
  * - Not sharing and not [canShareLive]: the membership teaser (starting is
  *   member-gated on the backend), Stop/Hide stay reachable in the sharing state.
  * A "More options" row always opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
@@ -684,16 +688,13 @@ private fun LayerToggleRow(
 private fun LiveSharePopup(
     isSharing: Boolean,
     canShareLive: Boolean,
-    onStart: (LiveSessionDuration) -> Unit,
+    onStart: () -> Unit,
     onStop: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenDetails: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val statusColors = LocalKccStatusColors.current
-    // Pending duration selection, mirroring LiveLocationScreen's picker; only
-    // read when starting a fresh session (canShareLive && !isSharing).
-    var selectedDuration by remember { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
     Popup(
         alignment = Alignment.BottomCenter,
         onDismissRequest = onDismiss,
@@ -778,21 +779,12 @@ private fun LiveSharePopup(
                         }
                     }
                     canShareLive -> {
-                        Text(
-                            text = stringResource(R.string.liveLocation_durationLabel),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        // Shared with LiveLocationScreen so the duration options
-                        // never drift; the popup has no busy state, so enabled.
-                        LiveDurationPicker(
-                            selected = selectedDuration,
-                            enabled = true,
-                            onSelect = { selectedDuration = it },
-                        )
+                        // One-tap start: the 1h/2h/4h duration choice has moved to
+                        // the single-session start flow (raised by the host), so the
+                        // broadcast control no longer picks a duration inline.
                         Button(
                             onClick = {
-                                onStart(selectedDuration)
+                                onStart()
                                 onDismiss()
                             },
                             modifier = Modifier.fillMaxWidth(),
