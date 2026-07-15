@@ -36,6 +36,8 @@
 
 import { z } from 'zod';
 
+import { MIN_MODEL_YEAR, maxModelYear } from '../garage/garage-core';
+
 export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4 } as const;
 export type LiveSessionDuration = keyof typeof LIVE_SESSION_DURATIONS;
 
@@ -150,8 +152,17 @@ export interface LiveMainCar {
  * null when the required display fields are missing/malformed. Pure so the
  * callable's main-car selection stays testable. Only make/model/modelYear/
  * imagePath are projected — nothing sensitive.
+ *
+ * `modelYear` must be a FINITE INTEGER within the same bounds the garage
+ * validation enforces on write (MIN_MODEL_YEAR..maxModelYear). NaN/Infinity or
+ * a non-integer can't be represented reliably in RTDB (Android reads it as a
+ * Long) and would make startSession/marker writes fail or viewers drop the
+ * mainCar, so a doc with such a year is treated as malformed and rejected.
  */
-export function toLiveMainCar(data: Record<string, unknown> | undefined | null): LiveMainCar | null {
+export function toLiveMainCar(
+  data: Record<string, unknown> | undefined | null,
+  now: Date = new Date(),
+): LiveMainCar | null {
   if (!data) {
     return null;
   }
@@ -159,6 +170,13 @@ export function toLiveMainCar(data: Record<string, unknown> | undefined | null):
   const model = data.model;
   const modelYear = data.modelYear;
   if (typeof make !== 'string' || typeof model !== 'string' || typeof modelYear !== 'number') {
+    return null;
+  }
+  if (
+    !Number.isInteger(modelYear) ||
+    modelYear < MIN_MODEL_YEAR ||
+    modelYear > maxModelYear(now)
+  ) {
     return null;
   }
   const imagePath = typeof data.imagePath === 'string' ? data.imagePath : null;

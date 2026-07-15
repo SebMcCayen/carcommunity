@@ -83,6 +83,26 @@ describe('live-core toLiveMainCar', () => {
     expect(toLiveMainCar({ make: 'Saab', modelYear: 1993 })).toBeNull();
     expect(toLiveMainCar({ make: 'Saab', model: '900', modelYear: '1993' })).toBeNull();
   });
+
+  it('rejects non-finite, non-integer, or out-of-range model years (RTDB-unsafe)', () => {
+    const base = { make: 'Saab', model: '900' };
+    // NaN / Infinity are `typeof number` but can't be written to RTDB.
+    expect(toLiveMainCar({ ...base, modelYear: NaN }, NOW)).toBeNull();
+    expect(toLiveMainCar({ ...base, modelYear: Infinity }, NOW)).toBeNull();
+    expect(toLiveMainCar({ ...base, modelYear: -Infinity }, NOW)).toBeNull();
+    // Non-integer years (Android reads modelYear as a Long).
+    expect(toLiveMainCar({ ...base, modelYear: 1993.5 }, NOW)).toBeNull();
+    // Out of the garage-validation bounds (MIN_MODEL_YEAR..now+2).
+    expect(toLiveMainCar({ ...base, modelYear: 1800 }, NOW)).toBeNull();
+    expect(toLiveMainCar({ ...base, modelYear: NOW.getFullYear() + 3 }, NOW)).toBeNull();
+    // A sane finite integer within bounds still projects.
+    expect(toLiveMainCar({ ...base, modelYear: 1993 }, NOW)).toEqual({
+      make: 'Saab',
+      model: '900',
+      modelYear: 1993,
+      imagePath: null,
+    });
+  });
 });
 
 describe('live-core session lifecycle', () => {
