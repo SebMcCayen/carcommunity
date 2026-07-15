@@ -824,6 +824,34 @@
     "sendErrorCannotDeliver": "This message can't be delivered right now.",
     "sendErrorGeneric": "Couldn't send your message. Please try again."
   },
+  "channel": {
+    "inputPlaceholder": "Write a message…",
+    "send": "Send",
+    "loadOlder": "Load earlier messages",
+    "emptyCommunity": "No messages yet — start the conversation!",
+    "emptyConvoy": "No messages yet — say hi to your convoy!",
+    "unknownSender": "Member",
+    "sendErrorSignedOut": "Please sign in to send messages.",
+    "sendErrorNotMember": "Chat is available to active members.",
+    "sendErrorInvalid": "Enter a message to send.",
+    "sendErrorCannotDeliver": "This message can't be delivered right now.",
+    "sendErrorGeneric": "Couldn't send your message. Please try again."
+  },
+  "chatHub": {
+    "title": "Chat",
+    "close": "Close chat",
+    "back": "Back",
+    "tabCommunity": "Community",
+    "tabConvoys": "Convoys",
+    "tabFriends": "Friends",
+    "tabNotifications": "Notifications",
+    "unavailable": "This isn't available right now.",
+    "convoysEmpty": "You're not in any convoys yet.",
+    "convoysError": "Couldn't load your convoys.",
+    "convoysRetry": "Try again",
+    "convoyUntitled": "Convoy",
+    "convoyMembers": "Members: %1$d"
+  },
   "shell": {
     "searchHint": "Where to?",
     "searchIcon": "Search",

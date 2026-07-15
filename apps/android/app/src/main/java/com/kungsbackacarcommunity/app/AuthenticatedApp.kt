@@ -87,6 +87,9 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
+import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
+import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
@@ -245,6 +248,8 @@ fun AuthenticatedApp(
     memberProfileRepository: MemberProfileRepository?,
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
+    communityChatRepository: CommunityChatRepository?,
+    convoyChatRepository: ConvoyChatRepository?,
     drivesRepository: DrivesRepository?,
     pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
@@ -489,6 +494,30 @@ fun AuthenticatedApp(
             // Resolved avatar download URL for the map-home top-right profile
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+
+            // Community-chat unread flag (a lightweight per-user last-read marker,
+            // no fan-out counter): drives the map chat bubble's "missed" dot AND
+            // the chat hub's Community-tab dot. Gated like garageState so the two
+            // Firestore listeners it opens (newest-message + userPrivate marker)
+            // are live only while that dot can actually be seen — the Map tab
+            // (bubble) or the open ChatHub route — and degrade to a constant
+            // `false` otherwise. The condition stays true across the Map ↔ ChatHub
+            // transition (the hub opens as a route while the Map tab stays
+            // selected), so the listener survives it rather than tearing down;
+            // leaving both and returning re-subscribes and Firestore's local cache
+            // delivers the current value near-instantly. Guarded — no repo
+            // (config-less build) means never unread.
+            val needsCommunityUnread =
+                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub
+            val communityChatUnread by
+                remember(communityChatRepository, uid, needsCommunityUnread) {
+                    if (communityChatRepository != null && needsCommunityUnread) {
+                        communityChatRepository.observeUnread(uid)
+                    } else {
+                        flowOf(false)
+                    }
+                }
+                    .collectAsState(initial = false)
 
             // Single shared vehicles stream for the whole garage section: the
             // garage hub header (main-car avatar) and the Cars sub-page both
@@ -900,6 +929,9 @@ fun AuthenticatedApp(
                         onOpenMemberProfile = openMemberProfile,
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
+                        communityChatRepository = communityChatRepository,
+                        communityChatUnread = communityChatUnread,
+                        convoyChatRepository = convoyChatRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
                         onOpenChat = openChat,
@@ -1021,13 +1053,16 @@ fun AuthenticatedApp(
                                                 onOpenRoute = { route = it },
                                                 onSignOut = onSignOut,
                                             ),
-                                        // Placeholder: chat is per-event only
-                                        // (EventChatRepository) — there is no
-                                        // global/community unread-count source
-                                        // client-side. Wire a real "missed
-                                        // chats" count here once a backend
-                                        // inbox exists (out of the Android lane).
-                                        unreadChatCount = 0,
+                                        // Community-chat unread ("missed") dot:
+                                        // shown as a single-count badge when the
+                                        // newest community message post-dates the
+                                        // caller's last-read marker. Cleared when
+                                        // they open + read the Community channel.
+                                        unreadChatCount = if (communityChatUnread) 1 else 0,
+                                        // The chat bubble opens the full 3-channel
+                                        // chat hub (Community / Convoys / Friends +
+                                        // Notifications) as a full-screen route.
+                                        onOpenChat = { route = ShellRoute.ChatHub },
                                         // Crowd-sourced incidents layer: draw the
                                         // fetched markers for everyone, and show the
                                         // report control only when a repository is
@@ -1451,6 +1486,12 @@ private fun RouteHost(
     onOpenMemberProfile: (String) -> Unit,
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
+    communityChatRepository: CommunityChatRepository?,
+    // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
+    // down so the chat hub reuses that single unread listener instead of starting
+    // its own duplicate observeUnread subscription.
+    communityChatUnread: Boolean,
+    convoyChatRepository: ConvoyChatRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
     onOpenChat: (String, String?) -> Unit,
@@ -1748,6 +1789,21 @@ private fun RouteHost(
             } else {
                 LoadingScreen()
             }
+
+        // The 3-channel chat hub opened from the map chat bubble. Each tab's
+        // repository is nullable (guarded per tab), so the hub renders even in a
+        // config-less build; onClose returns to the map.
+        ShellRoute.ChatHub ->
+            ChatHubRoute(
+                uid = uid,
+                communityChatRepository = communityChatRepository,
+                convoyChatRepository = convoyChatRepository,
+                dmRepository = dmRepository,
+                notificationsRepository = notificationsRepository,
+                notificationsCoordinator = notificationsCoordinator,
+                communityUnread = communityChatUnread,
+                onClose = onClose,
+            )
 
         ShellRoute.Badges ->
             if (badgesRepository != null) {
