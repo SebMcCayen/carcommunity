@@ -112,13 +112,21 @@ export default function SubscriptionPage() {
   }, []);
 
   // Keep the input in sync with the query param. The initial useState(presetUid)
-  // only runs on first mount; if the admin is already ON /subscription and
-  // navigates to /subscription?uid=… again (e.g. from another user's profile),
-  // presetUid changes but userId would otherwise keep the stale value — leaving
-  // the field locked read-only against the WRONG UID for a destructive
-  // grant/revoke. Mirror presetUid into userId whenever a preset arrives.
+  // only runs on first mount; the field must track presetUid on every change so
+  // it never shows a stale UID. Two cases:
+  //  - preset arrives / changes (e.g. from another user's profile): mirror it so
+  //    the read-only field targets the right user for a destructive grant/revoke.
+  //  - preset clears (navigating back to the standalone /subscription route while
+  //    still mounted): clear the field AND reset the lookup state, so the prior
+  //    user's summary/actions don't linger in the now-editable manual-entry view.
   useEffect(() => {
-    if (presetUid) setUserId(presetUid);
+    setUserId(presetUid);
+    if (!presetUid) {
+      setSummary(null);
+      setError(null);
+      setSuccessMessage(null);
+      setActionError(null);
+    }
   }, [presetUid]);
 
   // Auto-look-up when a UID arrives via the profile link, so pressing
