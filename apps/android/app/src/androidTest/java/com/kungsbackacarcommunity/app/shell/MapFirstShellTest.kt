@@ -186,7 +186,7 @@ class MapFirstShellTest {
         // Tapping it opens the full 3-channel chat hub as a route over the map.
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
-        // The Community / Convoys / Friends / Alerts tabs are shown.
+        // The Community / Convoys / Friends / Notifications tabs are shown.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
         // Closing returns to the map (the hub is gone).
