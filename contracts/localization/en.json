@@ -473,6 +473,8 @@
     "timeRange": "Time",
     "shareAction": "Share drive",
     "shareSummary": "Drove %1$s in %2$s on %3$s — %4$s",
+    "shareSummaryNoDate": "Drove %1$s in %2$s — %3$s",
+    "shareUnavailable": "No app available to share with",
     "startArea": "Start area",
     "endArea": "End area",
     "routeOverview": "Route overview",

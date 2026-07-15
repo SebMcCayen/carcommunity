@@ -473,6 +473,8 @@
     "timeRange": "Tid",
     "shareAction": "Dela körning",
     "shareSummary": "Körde %1$s på %2$s den %3$s — %4$s",
+    "shareSummaryNoDate": "Körde %1$s på %2$s — %3$s",
+    "shareUnavailable": "Det finns ingen app att dela med",
     "startArea": "Startområde",
     "endArea": "Slutområde",
     "routeOverview": "Ruttöversikt",
