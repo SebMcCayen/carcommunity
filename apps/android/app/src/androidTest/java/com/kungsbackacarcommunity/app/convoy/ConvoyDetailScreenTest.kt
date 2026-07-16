@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -74,13 +75,17 @@ class ConvoyDetailScreenTest {
     }
 
     @Test
-    fun ownRow_doesNotNavigate() {
+    fun ownRow_exposesNoProfileAffordance() {
         var opened: String? = null
         // Consistent with chat, where your own messages carry no sender
-        // affordance: your own roster row never opens a profile.
+        // affordance: your own roster row never opens a profile. Assert the click
+        // action is absent rather than clicking and checking nothing happened —
+        // clicking a node with no click action silently does nothing, so that
+        // would also pass for a row wired to a dead no-op button, which screen
+        // readers would still announce as tappable.
         setContent(listOf(member("me", "Me")), onViewMember = { opened = it })
 
-        composeTestRule.onNodeWithText("Me").performClick()
+        composeTestRule.onNodeWithText("Me").assertHasNoClickAction()
 
         assertNull(opened)
     }

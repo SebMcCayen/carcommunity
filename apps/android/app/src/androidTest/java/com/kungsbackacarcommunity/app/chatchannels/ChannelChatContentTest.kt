@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -83,15 +84,19 @@ class ChannelChatContentTest {
     }
 
     @Test
-    fun blankSenderUid_doesNotNavigate() {
+    fun blankSenderUid_exposesNoProfileAffordance() {
         var opened: String? = null
-        // A malformed message would otherwise open a dead profile route.
+        // A malformed message would otherwise open a dead profile route. Assert the
+        // affordance is absent rather than clicking it and checking nothing
+        // happened: a click on a node with no click action silently does nothing,
+        // so it would also "pass" against a sender wired to a dead no-op button —
+        // which screen readers would still announce as a tappable button.
         setContent(
             messages = listOf(message("m1", senderUid = "", name = "Ghost")),
             onViewProfile = { opened = it },
         )
 
-        composeTestRule.onNodeWithText("Ghost").performClick()
+        composeTestRule.onNodeWithText("Ghost").assertHasNoClickAction()
 
         assertNull(opened)
     }

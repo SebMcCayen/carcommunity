@@ -247,12 +247,23 @@ private fun ChannelMessageRow(
         onViewProfile?.takeIf { message.senderUid.isNotBlank() }?.let {
             { it(message.senderUid) }
         }
+    val senderName = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
         SenderAvatar(
             avatarPath = message.senderAvatarPath,
+            // The avatar image is decorative while inert — the sender name sits
+            // right next to it — but once it becomes a button it has to carry its
+            // own label, or screen readers focus an unlabeled button. The label is
+            // merged up from the image by the clickable below.
+            contentDescription =
+                if (openProfile != null) {
+                    stringResource(R.string.channel_openSenderProfile, senderName)
+                } else {
+                    null
+                },
             // Announce the sender as a button to screen readers — without the role
             // it reads as a plain image/text and the tap-to-open-profile
             // affordance is invisible to accessibility services.
@@ -265,7 +276,7 @@ private fun ChannelMessageRow(
         )
         Column {
             Text(
-                text = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender),
+                text = senderName,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier =
@@ -302,7 +313,11 @@ private fun ChannelBubble(message: ChannelMessage, isOwn: Boolean) {
 }
 
 @Composable
-private fun SenderAvatar(avatarPath: String?, modifier: Modifier = Modifier) {
+private fun SenderAvatar(
+    avatarPath: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val url = rememberStorageImageUrl(context, avatarPath)
     Box(
@@ -320,14 +335,14 @@ private fun SenderAvatar(avatarPath: String?, modifier: Modifier = Modifier) {
         if (url != null) {
             AsyncImage(
                 model = url,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(32.dp),
             )
         } else {
             Icon(
                 imageVector = Icons.Filled.Person,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
