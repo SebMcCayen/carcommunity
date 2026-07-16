@@ -215,7 +215,18 @@ fun EventsRoute(
         if (!attendeesVisible) return@LaunchedEffect
         attendees = EventAttendeesState.Loading
         val result = repository.loadAttendees(selected)
-        val blocked = blockedUids(blockingRepository, uid)
+        // Only a Loaded roster has rows to filter, and stateFor ignores the
+        // block list on every other branch (see EventAttendeesTest's
+        // "blocked uids are irrelevant unless the roster loaded"). Skipping the
+        // fetch matters because Unavailable is the COMMON path — the roster read
+        // is denied for a normal member today — and waiting on a block-list read
+        // there would hold the section on Loading for a result it cannot use.
+        val blocked =
+            if (result is EventAttendeesResult.Loaded) {
+                blockedUids(blockingRepository, uid)
+            } else {
+                emptySet()
+            }
         attendees = EventAttendees.stateFor(result, blocked)
     }
 

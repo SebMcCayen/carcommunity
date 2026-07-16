@@ -80,6 +80,24 @@ class EventAttendeesTest {
     }
 
     @Test
+    fun `blocked uids are irrelevant unless the roster loaded`() {
+        // EventsRoute relies on this to skip the block-list read entirely on the
+        // non-Loaded branches (Unavailable is the common path for a member, and
+        // waiting on a read whose result cannot change the state would just hold
+        // the section on Loading). If a future change makes the block list matter
+        // here, that skip becomes wrong — and this test is what says so.
+        val blocked = setOf("u1", "u2")
+        assertEquals(
+            EventAttendees.stateFor(EventAttendeesResult.Unavailable),
+            EventAttendees.stateFor(EventAttendeesResult.Unavailable, blocked),
+        )
+        assertEquals(
+            EventAttendees.stateFor(EventAttendeesResult.Unknown),
+            EventAttendees.stateFor(EventAttendeesResult.Unknown, blocked),
+        )
+    }
+
+    @Test
     fun `blocked members are dropped from the roster`() {
         val result =
             EventAttendeesResult.Loaded(
