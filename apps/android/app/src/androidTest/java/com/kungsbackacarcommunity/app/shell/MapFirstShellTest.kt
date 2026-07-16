@@ -290,6 +290,35 @@ class MapFirstShellTest {
     }
 
     /**
+     * Regression: a tap INSIDE the chat-hub card must never dismiss the hub, even on
+     * a spot no child consumes. The dismiss layer behind the card is `fillMaxSize()`,
+     * so this pins that the card itself swallows the touch rather than letting it
+     * fall through to that layer. Every repository is null in this configuration, so
+     * the card's body is the non-interactive `TabPlaceholder` (a plain Box + Text) —
+     * exactly the "empty area / placeholder" case.
+     */
+    @Test
+    fun chatHubPopup_tapInsideCardOnNonInteractiveArea_doesNotDismiss() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        // Sanity: the body really is the non-interactive placeholder, not a live
+        // channel with its own click handlers.
+        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+
+        // Tap well inside the card, in the placeholder body: coordinates are derived
+        // from the card's own measured size (node-relative px), not magic pixels.
+        // 75% down clears the top bar and the tab row, so nothing interactive is
+        // under the finger — if the card failed to consume the touch it would reach
+        // the dismiss layer behind it and close the hub.
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
+            click(Offset(width / 2f, height * 0.75f))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+    }
+
+    /**
      * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
      * rememberSaveable but the popup only renders while the map shell is the
      * active branch, so leaving the Map tab has to CLEAR the flag — otherwise the
