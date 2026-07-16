@@ -391,4 +391,79 @@ class NavigationControllerTest {
         advanceUntilIdle()
         assertEquals(listOf(suggestion), controller.state.value.suggestions)
     }
+
+    @Test
+    fun `saved places are seeded from the store into the initial state`() = runTest {
+        val saved = SavedPlaces.create(SavedPlaceKind.Home, suggestion, "h")
+        val controller =
+            NavigationController(
+                FakeClient(),
+                originProvider = { origin },
+                scope = this,
+                savedStore = InMemorySavedPlacesStore(listOf(saved)),
+            )
+        assertEquals(listOf(saved), controller.state.value.savedPlaces)
+    }
+
+    @Test
+    fun `savePlace persists and surfaces the place in state`() = runTest {
+        val store = InMemorySavedPlacesStore()
+        val controller =
+            NavigationController(
+                FakeClient(),
+                originProvider = { origin },
+                scope = this,
+                savedStore = store,
+            )
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "Torget")
+
+        assertEquals(listOf("Torget"), controller.state.value.savedPlaces.map { it.label })
+        // Written through to the store, not merely held in state.
+        assertEquals(listOf("Torget"), store.saved().map { it.label })
+    }
+
+    @Test
+    fun `re-saving with a new label renames in place`() = runTest {
+        val controller =
+            NavigationController(FakeClient(), originProvider = { origin }, scope = this)
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "Old")
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "New")
+
+        assertEquals(listOf("New"), controller.state.value.savedPlaces.map { it.label })
+    }
+
+    @Test
+    fun `re-saving under a different kind moves the place instead of duplicating it`() = runTest {
+        val controller =
+            NavigationController(FakeClient(), originProvider = { origin }, scope = this)
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "Torget")
+        // Promoting the favourite to Home changes its id, so the old favourite row
+        // must be dropped rather than left behind alongside the new Home.
+        controller.savePlace(suggestion, SavedPlaceKind.Home, "Torget")
+
+        val saved = controller.state.value.savedPlaces
+        assertEquals(1, saved.size)
+        assertEquals(SavedPlaceKind.Home, saved.single().kind)
+    }
+
+    @Test
+    fun `removeSavedPlace drops it from state and leaves the route untouched`() = runTest {
+        val controller =
+            NavigationController(
+                FakeClient(suggestions = listOf(suggestion), route = routeSummary),
+                originProvider = { origin },
+                scope = this,
+            )
+        controller.select(suggestion)
+        advanceUntilIdle()
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "Torget")
+        val id = controller.state.value.savedPlaces.single().id
+
+        controller.removeSavedPlace(id)
+
+        assertTrue(controller.state.value.savedPlaces.isEmpty())
+        // Un-saving is not a navigation action: the previewed route stays put.
+        assertEquals(suggestion, controller.state.value.destination)
+        assertEquals(routeSummary, controller.state.value.route)
+    }
 }

@@ -159,6 +159,7 @@ import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
+import com.kungsbackacarcommunity.app.navigation.PrefsSavedPlacesStore
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -632,6 +633,14 @@ fun AuthenticatedApp(
             // reappear in the search bar's empty state for one-tap re-selection.
             val recentSearchesStore =
                 remember(context) { PrefsRecentSearchesStore(context) }
+            // The user's saved places (Home/Work/favourites), also local
+            // (SharedPreferences) so the shortcuts render instantly and work
+            // offline. Keyed by uid — unlike recents, saved places are a curated
+            // personal list, so two accounts sharing a device must not see each
+            // other's Home. Device-local: they do NOT follow the user to a new
+            // phone (cloud-syncing them per uid is a possible follow-up).
+            val savedPlacesStore =
+                remember(context, uid) { PrefsSavedPlacesStore(context, uid) }
             // Resolved in composition (lint: no resource lookups off the UI thread)
             // for the "no maps app" handoff fallback below.
             val navAppMissingText = stringResource(R.string.addressSearch_navAppMissing)
@@ -959,6 +968,7 @@ fun AuthenticatedApp(
                             }
                         },
                         recentStore = recentSearchesStore,
+                        savedStore = savedPlacesStore,
                         initialTarget = navSearchTarget,
                         modifier = Modifier.fillMaxSize(),
                     )
