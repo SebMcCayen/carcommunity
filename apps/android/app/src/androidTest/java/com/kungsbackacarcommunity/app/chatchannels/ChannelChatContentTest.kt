@@ -59,7 +59,7 @@ class ChannelChatContentTest {
                     sendStatus = ChannelSendStatus.Idle,
                     canLoadOlder = false,
                     isLoadingOlder = false,
-                    onSend = {},
+                    onSend = { _, _ -> },
                     onLoadOlder = {},
                     onResetError = {},
                     surface = surface,

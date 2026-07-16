@@ -86,6 +86,43 @@ class ChannelChatTest {
     }
 
     @Test
+    fun `parsePostSuccess carries the ACCEPTED mention set the server echoed`() {
+        assertEquals(
+            ChannelSendResult.Sent("m1", listOf("uid-a", "uid-b")),
+            ChannelResponseParser.parsePostSuccess(
+                mapOf("messageId" to "m1", "mentionedUids" to listOf("uid-a", "uid-b")),
+            ),
+        )
+    }
+
+    @Test
+    fun `a missing or malformed mention echo does not fail a message that posted`() {
+        // convoyChat-post echoes none at all, and a payload we can't read must not
+        // undo a message a human wrote — both parse as the empty accepted set.
+        assertEquals(
+            ChannelSendResult.Sent("m1", emptyList()),
+            ChannelResponseParser.parsePostSuccess(mapOf("messageId" to "m1")),
+        )
+        assertEquals(
+            ChannelSendResult.Sent("m1", emptyList()),
+            ChannelResponseParser.parsePostSuccess(
+                mapOf("messageId" to "m1", "mentionedUids" to "not-a-list"),
+            ),
+        )
+    }
+
+    @Test
+    fun `parseMentionedUids drops blanks and non-strings and dedupes`() {
+        assertEquals(
+            listOf("uid-a", "uid-b"),
+            ChannelResponseParser.parseMentionedUids(
+                listOf("uid-a", "", "uid-b", "uid-a", 7, null),
+            ),
+        )
+        assertEquals(emptyList<String>(), ChannelResponseParser.parseMentionedUids(null))
+    }
+
+    @Test
     fun `parseMessagesPage maps rows and pagination flags`() {
         val data =
             mapOf(
@@ -111,6 +148,22 @@ class ChannelChatTest {
         assertEquals("Ada", page.messages[0].senderDisplayName)
         assertTrue(page.hasMore)
         assertEquals("1970-01-01T00:00:01Z", page.nextBefore)
+    }
+
+    @Test
+    fun `a listed message carries its mentions, and pre-mentions history carries none`() {
+        assertEquals(
+            listOf("uid-a"),
+            ChannelResponseParser.parseMessage(
+                mapOf("id" to "m1", "senderUid" to "u1", "mentionedUids" to listOf("uid-a")),
+            )?.mentionedUids,
+        )
+        // Absent on pre-mentions history (and always [] for convoy) — never null.
+        assertEquals(
+            emptyList<String>(),
+            ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "u1"))
+                ?.mentionedUids,
+        )
     }
 
     @Test

@@ -857,7 +857,10 @@
     "sendErrorNotMember": "Chatten är tillgänglig för aktiva medlemmar.",
     "sendErrorInvalid": "Skriv ett meddelande att skicka.",
     "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
-    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
+    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen.",
+    "mentionPicker": "Nämn en medlem",
+    "mentionLimit": "Du kan nämna högst %1$d medlemmar i ett meddelande.",
+    "mentionsNotDelivered": "Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras."
   },
   "chatHub": {
     "title": "Chatt",

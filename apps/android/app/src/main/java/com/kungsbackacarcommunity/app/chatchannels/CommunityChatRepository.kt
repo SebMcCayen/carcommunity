@@ -25,8 +25,15 @@ interface CommunityChatRepository {
      */
     fun observeUnread(uid: String): Flow<Boolean>
 
-    /** `communityChat-post` — posts [text] to the global channel. */
-    suspend fun post(text: String): ChannelSendResult
+    /**
+     * `communityChat-post` — posts [text] to the global channel, @mentioning
+     * [mentionedUids] (at most [MAX_MESSAGE_MENTIONS] — the server REJECTS more
+     * with `invalid-argument`). The uids come from the composer's @-picker, never
+     * from parsing names out of [text]: display names are not unique, so a parsed
+     * mention would sooner or later notify the wrong member. The returned
+     * [ChannelSendResult.Sent] echoes the ACCEPTED subset.
+     */
+    suspend fun post(text: String, mentionedUids: List<String> = emptyList()): ChannelSendResult
 
     /** `communityChat-list` — an older page before the [before] ISO cursor. */
     suspend fun loadOlder(before: String): ChannelOlderResult

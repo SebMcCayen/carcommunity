@@ -787,6 +787,9 @@
     <string name="channel_sendErrorInvalid">Enter a message to send.</string>
     <string name="channel_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="channel_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
+    <string name="channel_mentionPicker">Mention a member</string>
+    <string name="channel_mentionLimit">You can mention up to %1$d members in one message.</string>
+    <string name="channel_mentionsNotDelivered">Your message was posted, but some members you mentioned couldn\'t be notified.</string>
     <string name="chatHub_title">Chat</string>
     <string name="chatHub_close">Close chat</string>
     <string name="chatHub_back">Back</string>
