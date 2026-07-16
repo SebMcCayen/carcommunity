@@ -66,14 +66,14 @@ service firebase.storage {
     // override feature access.
     //
     // Deleted accounts: this upload goes DIRECTLY to Storage (no callable in the
-    // path), and Storage rules cannot check users/{uid}.deleted — it is a
-    // backend-managed Firestore field, not a custom claim, and Storage rules have
-    // no cross-service Firestore reads. Deletion is enforced at the IDENTITY layer
-    // instead: account.deleteAccount disables the Auth user and revokes refresh
-    // tokens before flagging the doc, so a deleted account cannot sign in or renew
-    // a session and isOwner()'s request.auth == null. Like every token-based check
-    // here (isNotSuspended included), that transition is bounded by the ID token
-    // TTL (<= 1h).
+    // path), and Storage rules cannot read users/{uid}.deleted — a backend-managed
+    // Firestore field, not a claim, and Storage rules have no cross-service reads.
+    // Enforcement is at the identity layer: account.deleteAccount disables the Auth
+    // user and revokes refresh tokens, so no new sign-in or renewal is possible.
+    // That makes it TTL-bounded rather than immediate — an already-issued ID token
+    // is still accepted here until it expires (<= 1h), after which request.auth
+    // fails. isNotSuspended() is eventually consistent the same way: the claim only
+    // updates on token refresh.
     // -------------------------------------------------------------------------
     match /vehicleImages/{userId}/{vehicleId}/{imageId} {
       allow read: if isAuthenticated();
