@@ -127,10 +127,16 @@ object SavedPlaces {
      *
      * Replacement is by id, which gives both conventions for free: a new Home
      * (id "home") swaps the old Home's address, while re-saving an already-saved
-     * favourite refreshes its label/coordinate rather than duplicating it. When
-     * the id is new and the list is already at [max], the oldest *favourite* is
-     * dropped — never Home or Work, which the user set deliberately and would be
-     * astonished to lose to a cap. If [max] is somehow already reached with no
+     * favourite refreshes its label/coordinate rather than duplicating it. A
+     * replacement keeps the entry **where it already is** rather than re-adding
+     * it at the end: renaming a favourite must not shuffle the user's list, and
+     * — since favourites are held oldest-first (see [sort]) — must not change
+     * which one the cap considers oldest.
+     *
+     * A genuinely new entry is appended, so favourites stay in insertion order.
+     * When the id is new and the list is already at [max], the oldest *favourite*
+     * is dropped — never Home or Work, which the user set deliberately and would
+     * be astonished to lose to a cap. If [max] is somehow already reached with no
      * favourite to evict, the new entry is rejected (the list is returned
      * unchanged) rather than growing past the cap.
      */
@@ -139,15 +145,21 @@ object SavedPlaces {
         saved: SavedPlace,
         max: Int = MAX,
     ): List<SavedPlace> {
-        val withoutSame = existing.filterNot { it.id == saved.id }
-        // A replacement never grows the list, so it can skip the cap handling.
-        if (withoutSame.size < existing.size) return sort(withoutSame + saved)
-        if (withoutSame.size < max) return sort(withoutSame + saved)
+        val at = existing.indexOfFirst { it.id == saved.id }
+        if (at >= 0) {
+            // Replace in place. A replacement never grows the list, so it also
+            // skips the cap handling. Any further copies of the id (unreachable
+            // through this path — only a hand-seeded list could hold them)
+            // collapse into the one at [at].
+            val deduped = existing.filterIndexed { i, e -> i == at || e.id != saved.id }
+            return sort(deduped.map { if (it.id == saved.id) saved else it })
+        }
+        if (existing.size < max) return sort(existing + saved)
         // Favourites are held in insertion order (see [sort]), so the OLDEST is
         // the first of them — not the last.
         val oldestFavourite =
-            withoutSame.firstOrNull { it.kind == SavedPlaceKind.Favourite } ?: return sort(existing)
-        return sort(withoutSame.filterNot { it.id == oldestFavourite.id } + saved)
+            existing.firstOrNull { it.kind == SavedPlaceKind.Favourite } ?: return sort(existing)
+        return sort(existing.filterNot { it.id == oldestFavourite.id } + saved)
     }
 
     /** Returns [existing] without the entry [id]. */
@@ -155,9 +167,14 @@ object SavedPlaces {
         existing.filterNot { it.id == id }
 
     /**
-     * Canonical display order: Home, then Work, then favourites in the order they
-     * were added. Applied on every write so a store's on-disk payload — and thus
-     * the UI — is already ordered without the screen re-sorting.
+     * Canonical display order: Home, then Work, then the favourites, whose
+     * relative order is passed through untouched. That incoming order is the
+     * order they were added, because [upsert] is the only writer and it appends
+     * new favourites while replacing existing ones in place — so favourites read
+     * oldest-first here and the cap can trust the first of them to be the oldest.
+     *
+     * Applied on every write so a store's on-disk payload — and thus the UI — is
+     * already ordered without the screen re-sorting.
      */
     fun sort(items: List<SavedPlace>): List<SavedPlace> {
         val home = items.filter { it.kind == SavedPlaceKind.Home }

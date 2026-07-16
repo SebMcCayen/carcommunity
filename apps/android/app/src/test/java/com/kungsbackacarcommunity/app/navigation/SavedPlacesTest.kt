@@ -51,6 +51,30 @@ class SavedPlacesTest {
     }
 
     @Test
+    fun `re-saving a favourite keeps its position rather than moving it to the end`() {
+        val saved =
+            listOf("a", "b", "c").fold(emptyList<SavedPlace>()) { acc, id -> SavedPlaces.upsert(acc, favourite(id)) }
+        assertEquals(listOf("fav:a", "fav:b", "fav:c"), saved.map { it.id })
+
+        val result = SavedPlaces.upsert(saved, favourite("b", label = "Renamed"))
+        // The rename must not reorder the list: b stays in the middle.
+        assertEquals(listOf("fav:a", "fav:b", "fav:c"), result.map { it.id })
+        assertEquals("Renamed", result.single { it.id == "fav:b" }.label)
+    }
+
+    @Test
+    fun `re-saving a favourite does not change which one the cap evicts`() {
+        val full = (1..SavedPlaces.MAX).fold(emptyList<SavedPlace>()) { acc, i -> SavedPlaces.upsert(acc, favourite("f$i")) }
+        // Renaming the oldest favourite must not make it look like the newest.
+        val renamed = SavedPlaces.upsert(full, favourite("f1", label = "Renamed"))
+        val result = SavedPlaces.upsert(renamed, favourite("new"))
+        assertEquals(SavedPlaces.MAX, result.size)
+        // f1 is still the oldest, so it is still the one evicted.
+        assertTrue(result.none { it.id == "fav:f1" })
+        assertTrue(result.any { it.id == "fav:f2" })
+    }
+
+    @Test
     fun `create trims and caps an over-long label`() {
         val long = "x".repeat(SavedPlaces.MAX_LABEL + 20)
         val saved = SavedPlaces.create(SavedPlaceKind.Favourite, place("a"), "   $long   ")
