@@ -318,11 +318,14 @@ service cloud.firestore {
     // vehicles – user's garage
     // Each document carries a `userId` field with the owning UID.
     // -------------------------------------------------------------------------
-    // All writes go through the member-only garage.* callables (Phase 9e):
-    // per-user vehicle cap, strict no-plate/no-VIN validation, and storage
-    // cleanup on delete cannot be enforced on direct client writes. The
-    // document stays authenticated-readable by design — which is exactly why
-    // registration plates must never be stored here (docs/firebase-data-model.md).
+    // All writes go through the garage.* callables (Phase 9e): per-user vehicle
+    // cap, strict no-plate/no-VIN validation, and storage cleanup on delete
+    // cannot be enforced on direct client writes, so writes stay callable-only
+    // even though managing your own garage is no longer member-gated (the ungate
+    // lives in the callable's requireActiveActor check, NOT here — opening direct
+    // owner writes would bypass the cap and validation). The document stays
+    // authenticated-readable by design — which is exactly why registration
+    // plates must never be stored here (docs/firebase-data-model.md).
     match /vehicles/{vehicleId} {
       allow read: if isAuthenticated();
       // No client writes: garage.addVehicle/updateVehicle/deleteVehicle only.

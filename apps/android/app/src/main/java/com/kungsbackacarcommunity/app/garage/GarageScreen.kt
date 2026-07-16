@@ -25,12 +25,12 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Garage list (Phase 12 slice 13). Stateless apart from the delete-confirm
- * dialog. Adding is gated on active membership + the max-5 limit.
+ * dialog. Any signed-in user may add/manage their own cars (no longer
+ * member-gated); adding is limited only by the max-5 cap (backend-enforced).
  */
 @Composable
 fun GarageScreen(
     state: GarageState,
-    isActiveMember: Boolean,
     onAdd: () -> Unit,
     onEdit: (Vehicle) -> Unit,
     onDelete: (String) -> Unit,
@@ -45,18 +45,10 @@ fun GarageScreen(
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
     AeroPage(title = stringResource(R.string.garage_screenTitle), modifier = modifier) {
-            if (!isActiveMember) {
-                Text(
-                    text = stringResource(R.string.garage_memberRequiredBody),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
             when (state) {
                 GarageState.Loading ->
                     Text(
-                        text = stringResource(R.string.garage_screenTitle),
+                        text = stringResource(R.string.garage_loading),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -85,7 +77,6 @@ fun GarageScreen(
                         state.vehicles.forEach { vehicle ->
                             VehicleCard(
                                 vehicle = vehicle,
-                                isActiveMember = isActiveMember,
                                 onEdit = { onEdit(vehicle) },
                                 onDelete = { pendingDelete = vehicle.id },
                                 onSetMain = { isMain -> onSetMain(vehicle.id, isMain) },
@@ -93,7 +84,7 @@ fun GarageScreen(
                         }
                     }
                     // Max 5 vehicles per user (backend-enforced).
-                    if (isActiveMember && state.vehicles.size < 5) {
+                    if (state.vehicles.size < 5) {
                         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
                             Text(text = stringResource(R.string.garage_addVehicle))
                         }
@@ -128,7 +119,6 @@ fun GarageScreen(
 @Composable
 private fun VehicleCard(
     vehicle: Vehicle,
-    isActiveMember: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSetMain: (isMain: Boolean) -> Unit,
@@ -169,34 +159,32 @@ private fun VehicleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (isActiveMember) {
-                // Main-car toggle: filled when this car is the main car (tapping
-                // clears it), outlined otherwise (tapping makes it the main car).
-                if (vehicle.isMainCar) {
-                    Button(
-                        onClick = { onSetMain(false) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.garage_unsetMainCar))
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { onSetMain(true) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(text = stringResource(R.string.garage_setMainCar))
-                    }
-                }
-                Row(
+            // Main-car toggle: filled when this car is the main car (tapping
+            // clears it), outlined otherwise (tapping makes it the main car).
+            if (vehicle.isMainCar) {
+                Button(
+                    onClick = { onSetMain(false) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.garage_editVehicle))
-                    }
-                    OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.garage_deleteVehicle))
-                    }
+                    Text(text = stringResource(R.string.garage_unsetMainCar))
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onSetMain(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.garage_setMainCar))
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
+                    Text(text = stringResource(R.string.garage_editVehicle))
+                }
+                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                    Text(text = stringResource(R.string.garage_deleteVehicle))
                 }
             }
         }

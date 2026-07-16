@@ -36,7 +36,6 @@ class GarageScreensTest {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(emptyList()),
-                    isActiveMember = true,
                     onAdd = { added++ },
                     onEdit = {},
                     onDelete = {},
@@ -56,7 +55,6 @@ class GarageScreensTest {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(listOf(vehicle())),
-                    isActiveMember = true,
                     onAdd = {},
                     onEdit = { edited = it },
                     onDelete = {},

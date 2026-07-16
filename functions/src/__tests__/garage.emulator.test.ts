@@ -2,7 +2,7 @@
  * Garage emulator integration tests (Phase 9e).
  *
  * Exercises the deployed-in-emulator callables end-to-end:
- * - `garage-addVehicle` (member gating, per-user cap)
+ * - `garage-addVehicle` (auth-only — NOT member-gated — per-user cap)
  * - `garage-updateVehicle` (ownership, imagePath prefix validation)
  * - `garage-deleteVehicle` (storage prefix cleanup)
  *
@@ -131,12 +131,27 @@ afterAll(async () => {
 });
 
 describe('garage-addVehicle', () => {
-  it('rejects unauthenticated and non-member callers', async () => {
+  it('rejects unauthenticated and suspended callers, but lets any signed-in (non-member) user add their own car', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('garage-addVehicle', validAdd))).toBe(
       'functions/unauthenticated',
     );
+
+    // Managing your OWN garage is no longer member-gated: a non-member (no
+    // activeMember entitlement) may add their own car.
     await signInAs(freeUser);
+    const { vehicleId } = (await call('garage-addVehicle', validAdd)).data as {
+      vehicleId: string;
+    };
+    expect((await adminDb.collection('vehicles').doc(vehicleId).get()).data()!.userId).toBe(
+      freeUser.uid,
+    );
+
+    // Suspension still overrides access (requireActiveActor keeps the
+    // suspended/deleted guard even though membership is no longer required).
+    const suspended = await createProvisionedUser('garage-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('garage-addVehicle', validAdd))).toBe(
       'functions/permission-denied',
     );

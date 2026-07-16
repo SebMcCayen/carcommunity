@@ -1,14 +1,16 @@
 /**
  * garage.addVehicle / garage.updateVehicle / garage.setMainVehicle /
- * garage.deleteVehicle — member callables (contracts/functions/functions.json).
+ * garage.deleteVehicle — garage callables (contracts/functions/functions.json).
  *
  * Deployed via the `garage` export group as `garage-addVehicle`,
  * `garage-updateVehicle`, `garage-setMainVehicle`, and `garage-deleteVehicle`.
  *
- * All four require an active member (legacy canAccessGarage: garage
- * features are member-only, including deletion). Vehicles documents are
+ * All four require a signed-in, non-suspended, non-deleted caller acting on
+ * their OWN cars (requireActiveActor). Managing your own garage is NOT
+ * member-gated — any authenticated user may add/update/delete/setMain their
+ * own vehicles (Seb-approved ungate). Vehicles documents are
  * authenticated-readable by design (docs/firebase-data-model.md), so all
- * writes go through these callables: the strict schemas make registration
+ * writes still go through these callables: the strict schemas make registration
  * numbers / VIN / location unrepresentable, the per-user vehicle cap is
  * enforced race-safely, and deletion cleans the vehicleImages storage
  * prefix. Ownership failures return not-found — never permission-denied —
@@ -21,7 +23,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';
-import { requireMemberActor } from '../shared/memberActor';
+import { requireActiveActor } from '../shared/memberActor';
 import { tryAutomaticAward } from '../badges/awards';
 import {
   MAX_VEHICLES_PER_USER,
@@ -47,7 +49,7 @@ export interface VehicleIdResponse {
 }
 
 export const addVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseAddVehicleInput(request.data, new Date());
   if (!parsed.ok) {
@@ -86,7 +88,7 @@ export const addVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehicle
 });
 
 export const updateVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseUpdateVehicleInput(request.data, new Date());
   if (!parsed.ok) {
@@ -133,7 +135,7 @@ export const updateVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
  * other garage callables.
  */
 export const setMainVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseSetMainVehicleInput(request.data);
   if (!parsed.ok) {
@@ -172,7 +174,7 @@ export const setMainVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Veh
 });
 
 export const deleteVehicle = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
-  const actor = await requireMemberActor(request);
+  const actor = await requireActiveActor(request);
 
   const parsed = parseDeleteVehicleInput(request.data);
   if (!parsed.ok) {
