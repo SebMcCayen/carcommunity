@@ -275,6 +275,35 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
+    override fun setActive(active: Boolean) {
+        // Called when the map home is covered by another bottom-nav tab, and
+        // again when it comes back. The map deliberately stays composed across
+        // that trip (see MapSurface.setActive), so this is what stops a map
+        // nobody can see from pulsing its puck every frame and burning GPS fixes.
+        //
+        // Only the location component is touched: the MapView, its loaded style
+        // and the camera all stay exactly as they were, which is what makes the
+        // return instant. Reactivating goes through the same updateSettings call
+        // refreshLocationComponent already uses after a permission grant, so the
+        // puck comes back the same way it does there. A no-op until the map is
+        // composed; wrapped defensively like every other native call.
+        val map = mapViewRef ?: return
+        if (active) {
+            refreshLocationComponent()
+        } else {
+            // Cancel any pending idle-return so a timer armed just before the
+            // user left the tab can't ease the camera while the map is covered.
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+            runCatching {
+                map.location.updateSettings {
+                    enabled = false
+                    pulsingEnabled = false
+                }
+            }
+        }
+    }
+
     override fun recenter() {
         // Tapping my-location is the shared re-centre affordance: resume follow,
         // cancel any pending idle-return timer, and glide to the user. The

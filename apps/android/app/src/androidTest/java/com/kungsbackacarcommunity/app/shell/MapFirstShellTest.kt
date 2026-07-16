@@ -20,6 +20,8 @@ import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -61,7 +63,7 @@ class MapFirstShellTest {
         WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
     }
 
-    private fun setShell() {
+    private fun setShell(mapSurface: MapSurface? = null) {
         composeTestRule.setContent {
             KccTheme {
                 AuthenticatedApp(
@@ -111,9 +113,55 @@ class MapFirstShellTest {
                     loginRecordCoordinator = null,
                     flags = FeatureFlags.DEFAULTS,
                     onSignOut = {},
+                    // Defaults to rememberMapSurface() (the stub in CI) exactly
+                    // like production; tests that need to assert the map wiring
+                    // pass a stub they hold a reference to.
+                    mapSurface = mapSurface ?: rememberMapSurface(),
                 )
             }
         }
+    }
+
+    /**
+     * The map home must NOT be disposed when the user visits another tab.
+     *
+     * Leaving it used to unmount the map, which on the real surface tears the
+     * Mapbox MapView down and rebuilds it (style reload and all) on the way
+     * back — the window has nothing to show for those frames, which is the
+     * blank blink this guards against. Asserted through the stub's
+     * composition counter: one entry for the whole round-trip, not one per
+     * visit to the Map tab.
+     */
+    @Test
+    fun switchingTabs_keepsTheMapComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+
+        // Still the SAME map: had it been disposed on the way to Garage, coming
+        // back would have entered the composition a second time.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * The flip side of keeping the map alive: a map nobody can see must not keep
+     * pulsing its puck and drawing GPS fixes, so the shell stands it down while
+     * another tab covers it and brings it back on return.
+     */
+    @Test
+    fun coveringTheMap_deactivatesIt_andReturningReactivatesIt() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
     }
 
     private companion object {

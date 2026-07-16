@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -177,6 +178,25 @@ interface MapSurface {
      */
     fun refreshLocationComponent()
 
+    /**
+     * Whether the map is the page the user is actually looking at.
+     *
+     * The map home stays COMPOSED while the user is on another bottom-nav tab
+     * (History / Social / Garage) so its GL surface and loaded style survive the
+     * trip — disposing it made returning to the Map tab rebuild the whole
+     * `MapView` and blank the screen for a beat. The price of keeping it alive is
+     * that a fully-covered map would otherwise keep pulsing its puck (continuous
+     * GL redraw) and keep consuming location fixes for a page nobody can see, so
+     * the shell calls `setActive(false)` when it is covered and `setActive(true)`
+     * when it comes back.
+     *
+     * Deactivating only stands the location component down; the surface, the
+     * style and the camera are all left intact, which is the whole point.
+     * Reactivating re-applies it exactly like [refreshLocationComponent] does
+     * after a permission grant. A no-op on the stub, which has no device/GPS.
+     */
+    fun setActive(active: Boolean)
+
     /** Set (or clear, with null) the caller's own marker. */
     fun setUserMarker(marker: MapUserMarker?)
 
@@ -254,6 +274,29 @@ class StubMapSurface(
     var recenterCount: Int = 0
         private set
 
+    /**
+     * Last value passed to [setActive] — the stub has no GL surface or GPS to
+     * stand down, so it just records the call for tests asserting that the shell
+     * deactivates the map while another tab covers it. Starts active: the shell
+     * opens on the Map tab.
+     */
+    var isActive: Boolean = true
+        private set
+
+    /**
+     * How many times [Content] has ENTERED the composition. The real surface
+     * rebuilds its whole MapView whenever this happens (see MapboxMapSurface's
+     * AndroidView factory/onRelease), which is what used to blank the screen on
+     * the way back to the Map tab — so tests assert this stays at 1 across a tab
+     * round-trip, i.e. the map was never disposed.
+     */
+    var contentCompositions: Int = 0
+        private set
+
+    override fun setActive(active: Boolean) {
+        isActive = active
+    }
+
     override fun recenter() {
         recenterCount += 1
     }
@@ -303,6 +346,13 @@ class StubMapSurface(
 
     @Composable
     override fun Content(modifier: Modifier) {
+        // Count entries into the composition (not recompositions) so tests can
+        // assert the shell keeps ONE map alive across a tab round-trip. On the
+        // real surface each entry is a fresh MapView + style load.
+        DisposableEffect(Unit) {
+            contentCompositions += 1
+            onDispose {}
+        }
         // Simulate a short tile/style load once, so the "Loading roads…" line
         // appears briefly then clears. Disabled when autoLoad is false so tests
         // can pin the state deterministically.
