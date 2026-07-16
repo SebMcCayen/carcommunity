@@ -3,7 +3,8 @@
  *
  * Exercises the deployed-in-emulator callables end-to-end plus the
  * communityChat / convoyChats Firestore rules:
- * - `communityChat-post` (member gating, denormalized sender profile)
+ * - `communityChat-post` (member gating, denormalized sender profile, @mention
+ *   validation + the mention-only notification producer)
  * - `communityChat-list` (newest-first pagination, per-user lastReadAt)
  * - `communityChat-markRead` (userPrivate last-read marker)
  * - `convoyChat-post` (accepted-member-only; non-member not-found, still-invited
@@ -154,6 +155,7 @@ interface ChatMessage {
   text: string;
   senderDisplayName: string | null;
   senderAvatarPath: string | null;
+  mentionedUids: string[];
   createdAt: string;
 }
 interface ConvoySummary {
@@ -528,29 +530,208 @@ describe('convoyChat-post in-app notification fan-out', () => {
   });
 });
 
-describe('communityChat-post writes NO notification (deliberate)', () => {
-  it('does not fan out to other members on a community message', async () => {
+/** Waits for a community message to exist — proves the post completed. */
+async function awaitCommunityMessage(messageId: string): Promise<Record<string, unknown>> {
+  return pollUntil(async () => {
+    const snap = await adminDb
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
+      .doc(messageId)
+      .get();
+    return snap.exists ? snap.data()! : undefined;
+  });
+}
+
+interface PostedCommunity {
+  messageId: string;
+  mentionedUids: string[];
+}
+
+describe('communityChat-post @mention notifications', () => {
+  it('notifies ONLY the mentioned member, and stores the mention on the message', async () => {
+    const poster = await newMember('MentionPoster');
+    const mentioned = await newMember('MentionTarget');
+    const bystander = await newMember('MentionBystander');
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', {
+        text: 'vad tycker du @MentionTarget?',
+        mentionedUids: [mentioned.uid],
+      })
+    ).data as PostedCommunity;
+    expect(posted.mentionedUids).toEqual([mentioned.uid]);
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(mentioned.uid, 'community_chat');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Du nämndes i community-chatten');
+    expect(items[0]!.previewText).toBe('MentionPoster: vad tycker du @MentionTarget?');
+    // Deep-link target: the message itself (the channel is a singleton).
+    expect(items[0]!.relatedEntityId).toBe(posted.messageId);
+
+    // The mention is stored for client-side highlighting...
+    const stored = await awaitCommunityMessage(posted.messageId);
+    expect(stored.mentionedUids).toEqual([mentioned.uid]);
+    // ...and list hands it to the client, which resolves nothing itself.
+    const listed = (await call('communityChat-list', {})).data as { messages: ChatMessage[] };
+    expect(listed.messages.find((m) => m.id === posted.messageId)!.mentionedUids).toEqual([
+      mentioned.uid,
+    ]);
+
+    // Nobody else is reached — the whole point of mentions over a fan-out.
+    expect(await inboxFor(bystander.uid, 'community_chat')).toHaveLength(0);
+    expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('writes NO notification to a mentioned member who opted out of community_chat', async () => {
+    const poster = await newMember('OptOutPoster');
+    const mentioned = await newMember('OptOutTarget');
+    await optOutOf(mentioned.uid, 'community_chat');
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', {
+        text: 'hej @OptOutTarget',
+        mentionedUids: [mentioned.uid],
+      })
+    ).data as PostedCommunity;
+
+    // The message still posts and still records the mention — the opt-out is
+    // about the inbox, not about whether the highlight renders. Waiting on the
+    // message proves the post completed, so the empty inbox isn't just a race.
+    const stored = await awaitCommunityMessage(posted.messageId);
+    expect(stored.mentionedUids).toEqual([mentioned.uid]);
+    expect(await inboxFor(mentioned.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('drops a self-mention: no notice, not stored', async () => {
+    const poster = await newMember('SelfMentionPoster');
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', { text: 'as @me said', mentionedUids: [poster.uid] })
+    ).data as PostedCommunity;
+    expect(posted.mentionedUids).toEqual([]);
+
+    const stored = await awaitCommunityMessage(posted.messageId);
+    expect(stored.mentionedUids).toEqual([]);
+    expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('drops mentions of an unknown uid / a non-member, still posting the message', async () => {
+    const poster = await newMember('GhostMentionPoster');
+    const free = await newFreeUser(); // a real user, but not an active member
+    const mentioned = await newMember('GhostMentionTarget');
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', {
+        text: 'hej @GhostMentionTarget @nobody',
+        mentionedUids: ['does-not-exist-uid', free.uid, mentioned.uid],
+      })
+    ).data as PostedCommunity;
+
+    // Only the deliverable member survives; the post itself is unaffected (a
+    // stale pick is a race, not a reason to fail someone's message).
+    expect(posted.mentionedUids).toEqual([mentioned.uid]);
+    const stored = await awaitCommunityMessage(posted.messageId);
+    expect(stored.mentionedUids).toEqual([mentioned.uid]);
+    expect(await inboxFor(free.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('drops a mention of someone who blocked the sender (a block cuts directed reach)', async () => {
+    const poster = await newMember('BlockedMentionPoster');
+    const blocker = await newMember('BlockedMentionTarget');
+
+    // The mentioned member has blocked the poster.
+    await signInAs(blocker);
+    await call('blocking-block', { targetUserId: poster.uid });
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', {
+        text: 'hej @BlockedMentionTarget',
+        mentionedUids: [blocker.uid],
+      })
+    ).data as PostedCommunity;
+
+    // The message still posts to the town square (community reads are NOT
+    // block-filtered) — only the directed inbox push is denied.
+    expect(posted.mentionedUids).toEqual([]);
+    const stored = await awaitCommunityMessage(posted.messageId);
+    expect(stored.text).toBe('hej @BlockedMentionTarget');
+    expect(stored.mentionedUids).toEqual([]);
+    expect(await inboxFor(blocker.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('drops a mention of someone the SENDER blocked (both directions)', async () => {
+    const poster = await newMember('SenderBlockedPoster');
+    const target = await newMember('SenderBlockedTarget');
+
+    await signInAs(poster);
+    await call('blocking-block', { targetUserId: target.uid });
+    const posted = (
+      await call('communityChat-post', { text: 'hej @t', mentionedUids: [target.uid] })
+    ).data as PostedCommunity;
+
+    expect(posted.mentionedUids).toEqual([]);
+    expect(await inboxFor(target.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('rejects more than the mention cap (invalid-argument)', async () => {
+    const poster = await newMember('CapMentionPoster');
+    await signInAs(poster);
+    expect(
+      await callableErrorCode(
+        call('communityChat-post', {
+          text: 'allihopa',
+          mentionedUids: Array.from({ length: 11 }, (_, i) => `uid-${i}`),
+        }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('collapses repeated mentions from the SAME sender into one notice per window', async () => {
+    const poster = await newMember('RepeatMentionPoster');
+    const mentioned = await newMember('RepeatMentionTarget');
+
+    await signInAs(poster);
+    await call('communityChat-post', { text: 'hej @t', mentionedUids: [mentioned.uid] });
+    await pollUntil(async () => {
+      const found = await inboxFor(mentioned.uid, 'community_chat');
+      return found.length > 0 ? found : undefined;
+    });
+    const second = (
+      await call('communityChat-post', { text: 'och igen @t', mentionedUids: [mentioned.uid] })
+    ).data as PostedCommunity;
+
+    // Both messages land, but a repeat-mentioner can't stack the inbox: the
+    // per-(sender, window) id leaves the FIRST notice untouched.
+    await awaitCommunityMessage(second.messageId);
+    const items = await inboxFor(mentioned.uid, 'community_chat');
+    expect(items).toHaveLength(1);
+    expect(items[0]!.previewText).toBe('RepeatMentionPoster: hej @t');
+  });
+});
+
+describe('communityChat-post writes NO notification without mentions (deliberate)', () => {
+  it('does not fan out to other members on a plain community message', async () => {
     const poster = await newMember('TownSquarePoster');
     const other = await newMember('TownSquareOther');
 
     await signInAs(poster);
-    const posted = (await call('communityChat-post', { text: 'hej alla' })).data as {
-      messageId: string;
-    };
+    const posted = (await call('communityChat-post', { text: 'hej alla' })).data as PostedCommunity;
+    expect(posted.mentionedUids).toEqual([]);
 
     // Wait for the message to land so this isn't a race, then assert that
     // neither the poster nor any other member got an inbox item. Fanning out to
-    // every active member per message is a spam/cost non-starter — the category
-    // is held for an @mentions or digest design (see communityChat.ts).
-    await pollUntil(async () => {
-      const snap = await adminDb
-        .collection('communityChat')
-        .doc('global')
-        .collection('messages')
-        .doc(posted.messageId)
-        .get();
-      return snap.exists ? true : undefined;
-    });
+    // every active member per message is a spam/cost non-starter — @mentions are
+    // the ONLY community_chat producer (see communityChat.ts).
+    await awaitCommunityMessage(posted.messageId);
     expect(await inboxFor(other.uid, 'community_chat')).toHaveLength(0);
     expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
   });

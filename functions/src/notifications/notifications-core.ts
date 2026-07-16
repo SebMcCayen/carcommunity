@@ -65,10 +65,12 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  *                      accept → requester; a decline is silent)
  *  - convoy_chat     — chatchannels/convoyChat.ts (post; fan-out to the other
  *                      accepted members, collapsed per time window)
- *  - community_chat  — NO producer, deliberately. Per-message fan-out to every
- *                      active member is a spam/cost non-starter; the category
- *                      is held for an @mentions or digest design. See the
- *                      chatchannels/communityChat.ts header.
+ *  - community_chat  — chatchannels/communityChat.ts (post; @MENTIONS ONLY —
+ *                      the members a message explicitly names, at most
+ *                      MAX_MESSAGE_MENTIONS, collapsed per sender per window).
+ *                      A message with no mentions notifies NOBODY: per-message
+ *                      fan-out to every active member is a spam/cost
+ *                      non-starter. See the communityChat.ts header.
  */
 export const NOTIFICATION_CATEGORIES = [
   'event_reminder',

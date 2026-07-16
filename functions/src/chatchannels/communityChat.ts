@@ -22,11 +22,12 @@
  *    dot (createdAt > lastReadAt). See chat-core.ts.
  *  - Blocking is NOT filtered server-side (global town square) — documented in
  *    chat-core.ts. FCM push is intentionally not wired (end-of-MVP, as DM).
- *  - NO per-message notification producer, deliberately. The 'community_chat'
- *    category exists and users can opt out of it, but post() writes no
- *    notification — see below.
+ *  - The ONLY 'community_chat' notification producer is @MENTIONS: a message
+ *    notifies the (at most MAX_MESSAGE_MENTIONS) members it explicitly names,
+ *    and nobody else. A message with no mentions still writes no notification at
+ *    all. Mentions are resolved by the CLIENT and validated here — see below.
  *
- * Why no community_chat producer (deliberate omission, not a gap):
+ * Why mentions instead of a per-message producer:
  *
  * The other three social surfaces have a natural, bounded audience — a DM has
  * one recipient, a friend request has one invitee, a convoy chat has at most
@@ -39,28 +40,43 @@
  * notifications wholesale, which also costs us the notices that DO matter
  * (account warnings can't be disabled, but everything else can).
  *
- * The category is kept because the sane designs still need it, and each is its
- * own scoped piece of work rather than a line in post():
- *  - @mentions only — notify the handful of members a message explicitly names.
- *    Bounded by the mention count, and the notification is by definition
- *    relevant. Needs mention parsing + a handle→uid resolution the chat domain
- *    doesn't have yet, and must respect blocking so a mention can't be used to
- *    reach someone who blocked you.
- *  - A periodic digest — a scheduled function (as notifications/scheduled.ts
- *    already does for cleanup) that rolls unread community activity into ONE
- *    notice per member per period, sent only to members with activity since
- *    their communityChatLastReadAt marker. Cost is O(members) per PERIOD, not
- *    per message, and it collapses a busy day into a single item.
- * Until one of those ships, the existing per-user last-read marker + the
- * client's unread dot are the community channel's notification surface, and
- * they cost nothing per message.
+ * @mentions invert that: instead of asking "who is in the room" (everyone), they
+ * ask "who did this message actually name" (at most MAX_MESSAGE_MENTIONS). The
+ * cost of a post stays O(1) in the member count no matter how big the app gets,
+ * and every notice written is relevant by construction — someone typed that
+ * member's name on purpose.
+ *
+ * How mentions are resolved — CLIENT-SIDE, and that is the load-bearing choice:
+ *
+ * post() takes an explicit `mentionedUids` array; it does NOT parse "@Seb" out
+ * of the text. `displayName` is not unique in this app (the friends nickname
+ * lookup already had to grow an AMBIGUOUS_NICKNAME path for exactly that), so a
+ * server-side name→uid guess would sooner or later notify the wrong Seb — a
+ * stranger receiving a stranger's conversation. The client's @-picker resolves a
+ * tapped profile to a uid, which is unambiguous; the server's job is to VALIDATE
+ * that array, never to guess. Validation, in order: bounded count (schema, a
+ * hard reject over the cap) → dedup + drop self → drop uids that aren't
+ * deliverable active members → drop blocked pairs. Everything after the cap is a
+ * DROP rather than a reject: those are races (a mentioned member deletes their
+ * account or blocks the sender between picking and posting), and a race must not
+ * fail someone's post. The surviving set is stored on the message AND notified,
+ * so the highlight the client renders and the notice that was sent never diverge.
+ *
+ * Still NOT built (unchanged by this): a periodic digest — a scheduled function
+ * (as notifications/scheduled.ts already does for cleanup) rolling unread
+ * community activity into ONE notice per member per period, for members with
+ * activity since their communityChatLastReadAt marker. Cost is O(members) per
+ * PERIOD, not per message. Mentions cover "someone is talking TO me"; a digest
+ * would cover "the channel has been busy" — different jobs, and the last-read
+ * marker + the client's unread dot still serve the second one for free.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { toUserAccessState } from '../shared/access';
+import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
+import { writeInAppNotification } from '../notifications/deliver';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   COMMUNITY_CHANNEL_ID,
@@ -69,6 +85,9 @@ import {
   NOT_DELIVERABLE_MESSAGE,
   buildChatMessageDocument,
   chatMessageExpiry,
+  communityMentionNotificationId,
+  messagePreview,
+  normalizeMentionCandidates,
   parseListCommunityInput,
   parseMarkReadCommunityInput,
   parsePostCommunityInput,
@@ -99,6 +118,11 @@ function userPrivateRef(uid: string) {
   return db.collection('userPrivate').doc(uid);
 }
 
+/** A directed block edge (mirrors dm/manageDirectMessages blockRef). */
+function blockRef(blockerUid: string, blockedUid: string) {
+  return db.collection('userBlocks').doc(blockerUid).collection('blocked').doc(blockedUid);
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -120,12 +144,65 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   return toProfileProjection(snap.data());
 }
 
+/**
+ * Narrows client-supplied mention candidates to the ones actually worth a
+ * notice: a real, active, non-suspended, non-deleted MEMBER whom the sender has
+ * not blocked and who has not blocked the sender.
+ *
+ * Everything here is a DROP, never a throw. A uid that fails is either a race
+ * (the member deleted their account, lost their subscription, or blocked the
+ * sender after the picker resolved them) or a client that sent something it
+ * shouldn't have — and neither is a reason to reject a message a human wrote.
+ * The message posts; the bad mention just isn't one.
+ *
+ * Cost is bounded and flat: `candidates` is capped at MAX_MESSAGE_MENTIONS by
+ * the schema, and both lookups are single batched getAll calls (<=10 profile
+ * reads + <=20 block reads per post) rather than a per-uid round trip.
+ *
+ * The block check is BOTH ways, matching the DM domain. The community channel
+ * deliberately doesn't block-filter its READ surface (chat-core.ts), and this
+ * doesn't change that: a blocked member still sees the message in the channel
+ * like everyone else. What they don't get is a mention notice pushed into their
+ * inbox — because that is directed reach, which is precisely what a block is
+ * meant to stop.
+ */
+async function resolveMentions(candidates: string[], senderUid: string): Promise<string[]> {
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const [profileSnaps, blockSnaps] = await Promise.all([
+    db.getAll(...candidates.map((uid) => db.collection('users').doc(uid))),
+    db.getAll(
+      ...candidates.flatMap((uid) => [blockRef(senderUid, uid), blockRef(uid, senderUid)]),
+    ),
+  ]);
+
+  return candidates.filter((_uid, index) => {
+    const profile = profileSnaps[index]!;
+    if (!profile.exists || !canAccessMemberFeatures(toUserAccessState(profile.data()))) {
+      return false;
+    }
+    // Two block docs per candidate, in the order they were requested above.
+    const senderBlocked = blockSnaps[index * 2]!.exists;
+    const blockedSender = blockSnaps[index * 2 + 1]!.exists;
+    return !senderBlocked && !blockedSender;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // communityChat.post
 // ---------------------------------------------------------------------------
 
 export interface PostCommunityResponse {
   messageId: string;
+  /**
+   * The mentions that SURVIVED validation — the set stored on the message and
+   * notified. Returned so the client's composer can reconcile its optimistic
+   * render with what the server actually accepted (a mention silently dropped as
+   * blocked or no-longer-a-member shouldn't keep rendering as a live highlight).
+   */
+  mentionedUids: string[];
 }
 
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunityResponse> => {
@@ -135,7 +212,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { text } = parsed.input;
+  const { text, mentionedUids } = parsed.input;
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
@@ -144,6 +221,12 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   if (!senderProfile) {
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
   }
+
+  // Dedup + drop self first (free), so only the remainder costs lookups.
+  const mentions = await resolveMentions(
+    normalizeMentionCandidates(mentionedUids, actor.uid),
+    actor.uid,
+  );
 
   // TTL: community messages are retained COMMUNITY_CHAT_RETENTION_DAYS days. A
   // Firestore TTL policy on `expireAt` auto-deletes them after that (one-time
@@ -157,22 +240,47 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   const messageRef = communityMessagesRef().doc();
   await messageRef.set(
     buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile, expireAt },
+      { senderUid: actor.uid, text, senderProfile, expireAt, mentionedUids: mentions },
       () => FieldValue.serverTimestamp(),
     ),
   );
 
-  // NOTE: there is deliberately NO 'community_chat' notification producer here,
-  // even though the category exists and the other three social surfaces (DM,
-  // friend request, convoy chat) now have one. Fanning out to every active
-  // member on every message is a notification-spam and cost disaster; the
-  // module header records the reasoning and the two designs (@mentions, or a
-  // periodic digest) that would be acceptable instead.
+  // The ONLY 'community_chat' producer: the members this message named, and no
+  // one else. A message with no mentions writes nothing — fanning out to every
+  // active member per message is the spam/cost non-starter the header describes.
+  //
+  // Best-effort (never fails a post that already landed), bounded by
+  // MAX_MESSAGE_MENTIONS by construction, and per-recipient eligibility (opt-out,
+  // suspended, deleted) is left to writeInAppNotification rather than re-checked
+  // here — it is the single inbox writer and already owns that decision. The
+  // per-(sender, window) notification id caps a repeat-mentioner at one notice
+  // per window via the same idempotent create-if-absent the convoy chat uses.
   //
   // NOTE: FCM push is intentionally deferred (end-of-MVP Firebase console setup),
   // consistent with the DM + notifications domains.
+  if (mentions.length > 0) {
+    const senderName = senderProfile.displayName ?? 'En medlem';
+    const notificationId = communityMentionNotificationId(actor.uid, new Date());
+    await Promise.all(
+      mentions.map((uid) =>
+        writeInAppNotification(
+          uid,
+          {
+            category: 'community_chat',
+            title: 'Du nämndes i community-chatten',
+            previewText: `${senderName}: ${messagePreview(text)}`,
+            actionType: 'open_notifications',
+            // The channel is a singleton ('global'), so the message id is the
+            // only part worth carrying — it's what a deep-link needs to scroll to.
+            relatedEntityId: messageRef.id,
+          },
+          notificationId,
+        ).catch(() => undefined),
+      ),
+    );
+  }
 
-  return { messageId: messageRef.id };
+  return { messageId: messageRef.id, mentionedUids: mentions };
 });
 
 // ---------------------------------------------------------------------------

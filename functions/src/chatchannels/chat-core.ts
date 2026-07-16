@@ -15,7 +15,8 @@
  *  - COMMUNITY: a single fixed channel document `communityChat/{COMMUNITY_CHANNEL_ID}`
  *    (COMMUNITY_CHANNEL_ID = 'global') with a `messages` subcollection:
  *    `communityChat/global/messages/{messageId}`
- *      { senderUid, text, createdAt, senderDisplayName, senderAvatarPath }.
+ *      { senderUid, text, createdAt, senderDisplayName, senderAvatarPath,
+ *        mentionedUids }.
  *    Any ACTIVE MEMBER reads; writes go through communityChat.post only.
  *  - CONVOY: per convoy, `convoyChats/{convoyId}/messages/{messageId}` with the
  *    same message shape. Only ACCEPTED members of `convoys/{convoyId}`
@@ -40,6 +41,22 @@
  * lookup per page and break the createdAt pagination cursor. Blocking still
  * governs DMs/friend/convoy interactions; hiding a blocked user's community
  * messages is left to the client as a display concern (documented choice).
+ * @MENTIONS are the deliberate exception: a mention is not a message sitting in
+ * a room you chose to open, it is a directed push into a personal inbox — the
+ * same reach a DM has. So the mention producer DOES apply the both-ways block
+ * check (bounded: at most MAX_MESSAGE_MENTIONS pairs per post), exactly as the
+ * DM domain does, and a blocked pair simply resolves to no mention. The message
+ * itself still posts and stays readable by everyone, unchanged.
+ *
+ * MENTIONS (community): resolution is CLIENT-SIDE. `displayName` is NOT unique
+ * (the friends nickname lookup already had to grow an AMBIGUOUS_NICKNAME path
+ * for it), so the server must never parse "@Seb" out of the message text and
+ * guess which Seb was meant — it would silently notify a stranger with the same
+ * name. Instead communityChat.post takes an explicit `mentionedUids` array that
+ * the client's @-picker resolved from a real profile, and the server's job is to
+ * VALIDATE it (bounded count, dedup, no self, deliverable member, not blocked)
+ * rather than to guess. The resolved set is stored on the message as
+ * `mentionedUids` so the client renders highlights without re-resolving.
  *
  * Kept Firebase-free so it stays unit-testable without the emulator (mirrors
  * dm/dm-core.ts + convoy/convoy-core.ts). The callables in communityChat.ts /
@@ -68,6 +85,16 @@ export function messagePreview(text: string): string {
 
 /** The single global community channel id (`communityChat/{id}`). */
 export const COMMUNITY_CHANNEL_ID = 'global';
+
+/**
+ * Hard cap on @mentions per message — the whole reason a mention producer is
+ * affordable where a per-message community fan-out is not. It bounds the post's
+ * extra I/O (at most this many profile + block lookups, batched) AND the inbox
+ * writes it can trigger, so the cost of a message is O(1) in the app's member
+ * count no matter how the app grows. A message naming more than ten people isn't
+ * a mention, it's a broadcast — that's what the (still unbuilt) digest is for.
+ */
+export const MAX_MESSAGE_MENTIONS = 10;
 
 /**
  * Message retention windows (days), config-driven so they stay tunable without a
@@ -110,6 +137,14 @@ export interface ChatMessageSummary {
   senderDisplayName: string | null;
   senderAvatarPath: string | null;
   createdAt: string;
+  /**
+   * The uids this message @mentions, as RESOLVED by the server (self-mentions,
+   * duplicates, non-members and blocked pairs already removed). The client
+   * highlights these and needs no lookup of its own. Always present; `[]` for a
+   * message with no mentions and for every convoy message (convoyChat.post
+   * accepts no mentions — see convoyChat.ts).
+   */
+  mentionedUids: string[];
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
@@ -126,6 +161,11 @@ const idSchema = z
 const postCommunitySchema = z
   .object({
     text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+    // Client-resolved @mentions (the @-picker hands back uids, never names —
+    // displayName is not unique, so the server must not resolve names itself).
+    // Over the cap is a hard reject rather than a silent truncation: the picker
+    // enforces the same limit, so exceeding it is a client bug worth surfacing.
+    mentionedUids: z.array(idSchema).max(MAX_MESSAGE_MENTIONS).optional(),
   })
   .strict();
 
@@ -168,7 +208,7 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
-export const POST_COMMUNITY_EXPECTED = `Expected { text } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters.`;
+export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and at most ${MAX_MESSAGE_MENTIONS} mentioned uids.`;
 export const LIST_COMMUNITY_EXPECTED = 'Expected { before? } where before is an ISO-8601 timestamp.';
 export const POST_CONVOY_EXPECTED = `Expected { convoyId, text } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters.`;
 export const LIST_CONVOY_EXPECTED = 'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
@@ -199,6 +239,26 @@ export const NOT_DELIVERABLE_MESSAGE = 'This message cannot be delivered right n
 export const CONVOY_NOT_FOUND_MESSAGE = 'Convoy not found.';
 export const NOT_CONVOY_MEMBER_MESSAGE = 'Only accepted convoy members can use this chat.';
 
+/**
+ * The mention candidates worth spending a lookup on: input order preserved,
+ * duplicates collapsed, and the sender removed.
+ *
+ * A self-mention is dropped rather than rejected — @-ing yourself in a sentence
+ * ("...same problem @me had") is a normal thing to type, it just isn't a notice
+ * anyone needs to receive, and failing the whole post over it would be absurd.
+ * Dedup matters for the same reason it matters in the picker: the caller pays
+ * one lookup per unique uid, and the recipient gets one notice regardless.
+ */
+export function normalizeMentionCandidates(
+  mentionedUids: readonly string[] | undefined,
+  senderUid: string,
+): string[] {
+  if (!mentionedUids || mentionedUids.length === 0) {
+    return [];
+  }
+  return [...new Set(mentionedUids)].filter((uid) => uid !== senderUid);
+}
+
 /** Reads a profile doc into the minimal safe projection (missing → null). */
 export function toProfileProjection(doc: Record<string, unknown> | undefined): ProfileProjection {
   const displayName = doc?.displayName;
@@ -215,6 +275,13 @@ export function toProfileProjection(doc: Record<string, unknown> | undefined): P
  * per-message profile lookup. `expireAt` is the retention TTL instant (createdAt
  * + the channel's retention window) that a Firestore TTL policy uses to
  * auto-delete the message; the caller passes the pre-built Timestamp value.
+ *
+ * `mentionedUids` is the SERVER-RESOLVED mention set (see resolveMentions in
+ * communityChat.ts) — the caller has already dropped self/duplicate/non-member/
+ * blocked entries, so what lands here is exactly the set that was notified and
+ * exactly the set the client should highlight. Always written (`[]` when there
+ * are none, and for every convoy message) so the stored shape is uniform across
+ * both channels and a reader never has to branch on a missing field.
  */
 export function buildChatMessageDocument(
   input: {
@@ -222,6 +289,7 @@ export function buildChatMessageDocument(
     text: string;
     senderProfile: ProfileProjection;
     expireAt: unknown;
+    mentionedUids?: readonly string[];
   },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
@@ -230,6 +298,7 @@ export function buildChatMessageDocument(
     text: input.text.trim(),
     senderDisplayName: input.senderProfile.displayName,
     senderAvatarPath: input.senderProfile.avatarPath,
+    mentionedUids: [...(input.mentionedUids ?? [])],
     createdAt: serverTimestamp(),
     expireAt: input.expireAt,
   };
@@ -247,6 +316,11 @@ export function toChatMessageSummary(
     text: typeof data.text === 'string' ? data.text : '',
     senderDisplayName: typeof data.senderDisplayName === 'string' ? data.senderDisplayName : null,
     senderAvatarPath: typeof data.senderAvatarPath === 'string' ? data.senderAvatarPath : null,
+    // Defaulted, not assumed: messages written before mentions existed carry no
+    // mentionedUids field, and they must still list as ordinary messages.
+    mentionedUids: Array.isArray(data.mentionedUids)
+      ? (data.mentionedUids as unknown[]).filter((uid): uid is string => typeof uid === 'string')
+      : [],
     createdAt: createdAtIso,
   };
 }
@@ -312,6 +386,40 @@ export const CONVOY_CHAT_NOTIFY_WINDOW_MS = 15 * 60 * 1000;
  * the notificationId charset the markRead callable accepts.
  */
 export function convoyChatNotificationId(convoyId: string, now: Date): string {
-  const bucket = Math.floor(now.getTime() / CONVOY_CHAT_NOTIFY_WINDOW_MS);
-  return `convoychat-${convoyId}-${bucket}`;
+  return `convoychat-${convoyId}-${windowBucket(now, CONVOY_CHAT_NOTIFY_WINDOW_MS)}`;
+}
+
+/** The fixed epoch-aligned window `now` falls in — the id-collapsing primitive. */
+function windowBucket(now: Date, windowMs: number): number {
+  return Math.floor(now.getTime() / windowMs);
+}
+
+/**
+ * Throttle window for community @mention notifications, per SENDER. Mirrors the
+ * convoy-chat window above and exists for a sharper reason: a mention is the one
+ * way one member can put something in another member's inbox on the town square,
+ * so without a guard, mentioning someone in every message is a ready-made
+ * harassment tool. Bucketing the id per (sender, window) caps that at one notice
+ * per sender per window however many messages they post — the same idempotent
+ * create-if-absent that collapses a busy convoy chat.
+ */
+export const COMMUNITY_MENTION_NOTIFY_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Deterministic notification id for an @mention notice: stable within a
+ * COMMUNITY_MENTION_NOTIFY_WINDOW_MS bucket FOR ONE SENDER, so a replay of the
+ * same post, and every further mention by that sender in the same window, resolve
+ * to the same document and are skipped as duplicates.
+ *
+ * Keyed by sender (not by message) on purpose: a per-message id would be
+ * perfectly idempotent yet cap nothing, since every message has a fresh id. Being
+ * per-sender also means two DIFFERENT members mentioning you in the same window
+ * still produce two notices — the collapse only ever silences a repeat from the
+ * SAME person, which is exactly the case where one notice is enough. No recipient
+ * component is needed: the inbox is already per-recipient
+ * (`notifications/{uid}/items/{id}`). Stays within the notificationId charset the
+ * markRead callable accepts (Firebase uids are alphanumeric).
+ */
+export function communityMentionNotificationId(senderUid: string, now: Date): string {
+  return `commention-${senderUid}-${windowBucket(now, COMMUNITY_MENTION_NOTIFY_WINDOW_MS)}`;
 }
