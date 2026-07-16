@@ -5,4 +5,6 @@
     <color name="kcc_crown_gold">#EAB54B</color>
     <!-- Ink Black: dark page/splash background. -->
     <color name="kcc_ink_black">#040211</color>
+    <!-- Warm Ivory: light page background. -->
+    <color name="kcc_warm_ivory">#F8F6EF</color>
 </resources>
