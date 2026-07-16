@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -30,13 +31,24 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
+import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
+import com.kungsbackacarcommunity.app.moderation.ReportReasonDialog
 
 /**
  * Event chat (Phase 12 slice 10). Stateless apart from the message draft and
- * the report/block dialog selections. Participation is gated on [canParticipate]
+ * the report/block sheet selections. Participation is gated on [canParticipate]
  * (active member + published + going/maybe RSVP); removed messages render a
- * neutral placeholder. Reporting opens a reason picker; blocking opens a
- * confirm dialog.
+ * neutral placeholder.
+ *
+ * Moderation actions now live behind a LONG-PRESS on another member's message,
+ * opening the shared [MessageActionsSheet] — the same gesture and the same sheet
+ * as the community/convoy channels and DMs, replacing the inline Report/Block
+ * text buttons that used to sit under every incoming message. From there,
+ * reporting opens the reason picker (event chat is the one surface with a report
+ * callable, `events-reportChatMessage`) and blocking opens a confirm dialog.
  *
  * Blocking here is contextual (block a message's author). Blocks are
  * directional and never revealed to the target; the caller's own messages
@@ -68,6 +80,10 @@ fun EventChatScreen(
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
+    // The long-pressed message, held by ID: Saveable (the sheet survives rotation)
+    // and resolved against the live list, so a sheet whose message left the stream
+    // (author blocked, message moderated away) closes itself.
+    var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var reportingMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var blockingUserId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -135,7 +151,6 @@ fun EventChatScreen(
                                 val isOwn = message.authorUserId == currentUid
                                 MessageRow(
                                     message = message,
-                                    isOwn = isOwn,
                                     // Tap the author's name → their profile. Never
                                     // for your own message, and never for a blank
                                     // author uid (a dead profile route).
@@ -143,11 +158,26 @@ fun EventChatScreen(
                                         onViewProfile
                                             ?.takeIf { !isOwn && message.authorUserId.isNotBlank() }
                                             ?.let { { it(message.authorUserId) } },
-                                    // Block only another user's message, and only when blocking
-                                    // is wired (canBlock). Directional; never on own messages.
-                                    canBlock = canBlock && EventChat.canBlock(message, currentUid),
-                                    onReport = { reportingMessageId = message.id },
-                                    onBlock = { blockingUserId = message.authorUserId },
+                                    // Long-press → the moderation sheet. Never on
+                                    // your own message, nor on one with no
+                                    // resolvable author. A REMOVED message carries
+                                    // no body to report and already shows a neutral
+                                    // placeholder, so it stays inert too.
+                                    onLongPress =
+                                        if (!message.isRemoved &&
+                                            MessageModeration.canActOn(message.authorUserId, currentUid) &&
+                                            MessageModeration.hasActions(
+                                                canBlock = canBlock,
+                                                reportAvailability =
+                                                    MessageModeration.reportAvailability(
+                                                        ChatSurface.EventChat,
+                                                    ),
+                                            )
+                                        ) {
+                                            { actionsMessageId = message.id }
+                                        } else {
+                                            null
+                                        },
                                 )
                             }
                         }
@@ -214,6 +244,31 @@ fun EventChatScreen(
         }
     }
 
+    // Resolve the long-pressed message against the live list, so a sheet whose
+    // message vanished closes rather than acting on a message that is gone.
+    val actionsMessage =
+        (state as? ChatMessagesState.Loaded)?.messages?.firstOrNull { it.id == actionsMessageId }
+    if (actionsMessage != null) {
+        MessageActionsSheet(
+            memberName = actionsMessage.authorDisplayName,
+            // Directional; never on own messages (already excluded from the
+            // long-press) and only when blocking is wired.
+            canBlock = canBlock && EventChat.canBlock(actionsMessage, currentUid),
+            // Event chat is the ONE surface with a report callable, so the report
+            // row is enabled here and opens the real reason picker.
+            reportAvailability = MessageModeration.reportAvailability(ChatSurface.EventChat),
+            onBlock = {
+                actionsMessageId = null
+                blockingUserId = actionsMessage.authorUserId
+            },
+            onReport = {
+                actionsMessageId = null
+                reportingMessageId = actionsMessage.id
+            },
+            onDismiss = { actionsMessageId = null },
+        )
+    }
+
     val selectedMessageId = reportingMessageId
     if (selectedMessageId != null) {
         ReportReasonDialog(
@@ -231,6 +286,11 @@ fun EventChatScreen(
     val selectedBlockUserId = blockingUserId
     if (selectedBlockUserId != null) {
         BlockConfirmDialog(
+            memberName =
+                (state as? ChatMessagesState.Loaded)
+                    ?.messages
+                    ?.firstOrNull { it.authorUserId == selectedBlockUserId }
+                    ?.authorDisplayName,
             onConfirm = {
                 blockingUserId = null
                 onBlock(selectedBlockUserId)
@@ -243,16 +303,30 @@ fun EventChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     message: ChatMessage,
-    isOwn: Boolean,
-    canBlock: Boolean,
-    onReport: () -> Unit,
-    onBlock: () -> Unit,
     onViewProfile: (() -> Unit)?,
+    onLongPress: (() -> Unit)?,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (onLongPress != null) {
+                        // combinedClickable, not pointerInput: it announces the
+                        // long-press to accessibility services as a custom action,
+                        // so the moderation sheet is reachable without a physical
+                        // long-press. onClick is a deliberate no-op — only the
+                        // author's name navigates.
+                        Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                    } else {
+                        Modifier
+                    },
+                ),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -284,73 +358,8 @@ private fun MessageRow(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                // Moderation actions on another user's message only. You cannot
-                // report or block your own message (canBlock is already false
-                // for own messages via EventChat.canBlock).
-                if (!isOwn) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = onReport) {
-                            Text(text = stringResource(R.string.chat_reportMessage))
-                        }
-                        if (canBlock) {
-                            TextButton(onClick = onBlock) {
-                                Text(text = stringResource(R.string.blocking_blockUser))
-                            }
-                        }
-                    }
-                }
             }
         }
-    }
-}
-
-@Composable
-private fun BlockConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.blocking_blockConfirmTitle)) },
-        text = { Text(text = stringResource(R.string.blocking_blockConfirmBody)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = stringResource(R.string.blocking_blockConfirmAction))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.blocking_blockCancelAction))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ReportReasonDialog(onSelect: (ChatReportReason) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.chat_reportReasonPrompt)) },
-        text = {
-            Column {
-                ReasonButton(R.string.chat_reportReasonHarassment, ChatReportReason.HARASSMENT, onSelect)
-                ReasonButton(R.string.chat_reportReasonHateOrAbuse, ChatReportReason.HATE_OR_ABUSE, onSelect)
-                ReasonButton(R.string.chat_reportReasonSpam, ChatReportReason.SPAM, onSelect)
-                ReasonButton(R.string.chat_reportReasonUnsafeDriving, ChatReportReason.UNSAFE_DRIVING, onSelect)
-                ReasonButton(R.string.chat_reportReasonPrivacy, ChatReportReason.PRIVACY, onSelect)
-                ReasonButton(R.string.chat_reportReasonOther, ChatReportReason.OTHER, onSelect)
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.profile_cancelButton))
-            }
-        },
-    )
-}
-
-@Composable
-private fun ReasonButton(labelRes: Int, reason: ChatReportReason, onSelect: (ChatReportReason) -> Unit) {
-    TextButton(onClick = { onSelect(reason) }, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(labelRes))
     }
 }
 

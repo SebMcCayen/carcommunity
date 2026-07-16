@@ -475,7 +475,8 @@
     "badgesEmpty": "Inga utmärkelser ännu.",
     "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
     "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
-    "awardedOn": "Tilldelad %1$s"
+    "awardedOn": "Tilldelad %1$s",
+    "blocked": "Du har blockerat den här medlemmen. Avblockera för att se profilen igen."
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",
@@ -995,5 +996,12 @@
     "dialogClose": "Stäng",
     "entryTitle": "Version %1$s · %2$s",
     "empty": "Inga uppdateringsanteckningar ännu."
+  },
+  "moderation": {
+    "messageActionsTitle": "Meddelande från %1$s",
+    "blockMember": "Blockera %1$s",
+    "reportMessage": "Rapportera meddelande",
+    "reportUser": "Rapportera användare",
+    "close": "Stäng"
   }
 }

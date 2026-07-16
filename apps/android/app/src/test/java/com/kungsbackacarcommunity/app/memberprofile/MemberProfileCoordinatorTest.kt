@@ -93,14 +93,61 @@ class MemberProfileCoordinatorTest {
     }
 
     @Test
-    fun blocked_target_is_unavailable_and_skips_read() = runTest {
+    fun blocked_target_is_blocked_state_and_skips_read() = runTest {
         val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Unavailable))
         val coordinator = MemberProfileCoordinator("u2", repo, isBlocked = { it == "u2" })
 
         coordinator.load()
 
-        assertEquals(MemberProfileState.Unavailable, coordinator.state.value)
+        assertEquals(MemberProfileState.Blocked, coordinator.state.value)
         assertEquals("blocked target must not be fetched", 0, repo.calls)
+    }
+
+    @Test
+    fun markBlocked_reflects_a_block_without_rereading_the_block_list() = runTest {
+        // The block is written by the callable, so a block-list listener
+        // subscribed right after can still serve the PRE-block snapshot. A
+        // successful block must therefore be reflected from its own outcome —
+        // here isBlocked still (staleley) says "not blocked", and the state must
+        // be Blocked regardless.
+        val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Unavailable))
+        val coordinator = MemberProfileCoordinator("u2", repo, isBlocked = { false })
+        coordinator.load()
+
+        coordinator.markBlocked()
+
+        assertEquals(MemberProfileState.Blocked, coordinator.state.value)
+    }
+
+    @Test
+    fun reloadAfterUnblock_ignores_a_stale_block_list_and_loads_the_profile() = runTest {
+        // The mirror case: right after a successful unblock the cached list can
+        // still list the block, which would bounce the viewer back to Blocked and
+        // make the unblock look like it failed.
+        val repo = FakeRepo(MemberProfileResult.Loaded(profile, listOf(car), MemberBadges.Unavailable))
+        val coordinator = MemberProfileCoordinator("u2", repo, isBlocked = { true })
+        coordinator.load()
+        assertEquals(MemberProfileState.Blocked, coordinator.state.value)
+
+        coordinator.reloadAfterUnblock()
+
+        assertTrue(coordinator.state.value is MemberProfileState.Loaded)
+        assertEquals(1, repo.calls)
+    }
+
+    @Test
+    fun a_later_load_consults_the_block_list_again() = runTest {
+        // reloadAfterUnblock's bypass is for that ONE pass only — it must not
+        // leave the coordinator permanently ignoring blocks.
+        val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Unavailable))
+        val coordinator = MemberProfileCoordinator("u2", repo, isBlocked = { true })
+
+        coordinator.reloadAfterUnblock()
+        assertTrue(coordinator.state.value is MemberProfileState.Loaded)
+
+        coordinator.load()
+
+        assertEquals(MemberProfileState.Blocked, coordinator.state.value)
     }
 
     @Test
