@@ -62,6 +62,10 @@ data class MentionSpan(val uid: String, val label: String, val start: Int) {
  * A composer draft: the raw [text] plus the mentions currently welded to it.
  * Invariant (held by every function in [DraftMentions]): for each span,
  * `text.startsWith(span.label, span.start)`.
+ *
+ * The constructor does NOT enforce that invariant — a draft can be hand-built, or
+ * rebuilt from saved state, with spans that do not match its text. [sendableUids]
+ * therefore re-verifies rather than trusting the invariant it cannot check here.
  */
 data class MentionDraft(val text: String = "", val mentions: List<MentionSpan> = emptyList()) {
     /**
@@ -69,9 +73,25 @@ data class MentionDraft(val text: String = "", val mentions: List<MentionSpan> =
      * [MAX_MESSAGE_MENTIONS]. The cap is already enforced at insert time; taking
      * it again here means no draft state can ever reach the server's
      * `invalid-argument`.
+     *
+     * Re-verifies the spans against [text] first ([DraftMentions.verified]) rather
+     * than trusting them. This is the single point at which uids leave for the
+     * network, and it is reachable from drafts that never passed through
+     * [DraftMentions] at all: the composer's `rememberSaveable` restore path
+     * rebuilds spans and text from a Bundle independently, and nothing in the
+     * reconstruction re-checks one against the other. A span that survived into a
+     * draft it no longer matches would not merely mis-highlight — it would put a
+     * uid the text never names into the post, notifying a member who was never
+     * mentioned. Cheap (<= [MAX_MESSAGE_MENTIONS] prefix checks) and it makes the
+     * class's invariant self-enforcing where it actually costs something.
      */
     val sendableUids: List<String>
-        get() = mentions.map { it.uid }.distinct().take(MAX_MESSAGE_MENTIONS)
+        get() =
+            DraftMentions.verified(this)
+                .mentions
+                .map { it.uid }
+                .distinct()
+                .take(MAX_MESSAGE_MENTIONS)
 
     /** Distinct mentioned members — what the cap counts (a repeated @Seb is one member). */
     val distinctUidCount: Int get() = mentions.distinctBy { it.uid }.size

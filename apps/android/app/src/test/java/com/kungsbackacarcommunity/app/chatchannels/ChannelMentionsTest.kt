@@ -133,8 +133,43 @@ class ChannelMentionsTest {
 
     @Test
     fun `sendableUids can never exceed the cap even from hand-built state`() {
-        val spans = (1..15).map { MentionSpan("uid-$it", "@M$it", 0) }
-        assertEquals(MAX_MESSAGE_MENTIONS, MentionDraft("", spans).sendableUids.size)
+        // Each label genuinely stands where its span claims, so all 15 are real
+        // mentions and only the cap may cut them down.
+        val labels = (1..15).map { "@M$it" }
+        val text = labels.joinToString(" ")
+        var offset = 0
+        val spans =
+            labels.mapIndexed { index, label ->
+                val span = MentionSpan("uid-${index + 1}", label, offset)
+                offset += label.length + 1
+                span
+            }
+        assertEquals(MAX_MESSAGE_MENTIONS, MentionDraft(text, spans).sendableUids.size)
+    }
+
+    @Test
+    fun `sendableUids drops a uid whose label no longer stands at its offset`() {
+        // A desynced draft — spans restored beside text they no longer match (the
+        // rememberSaveable restore path reconstructs both without re-checking).
+        // Sending "uid-bob" here would notify a member the text never names: a
+        // wrong-RECIPIENT bug, not a wrong highlight. Nothing may escape.
+        val draft = MentionDraft("@Alice hello", listOf(MentionSpan("uid-bob", "@Bob", 0)))
+        assertEquals(emptyList<String>(), draft.sendableUids)
+    }
+
+    @Test
+    fun `sendableUids keeps the intact mentions of a partially desynced draft`() {
+        // Only the span that no longer reads back is dropped; a still-anchored
+        // mention in the same draft is not collateral.
+        val draft =
+            MentionDraft(
+                "@Alice hi",
+                listOf(
+                    MentionSpan("uid-alice", "@Alice", 0),
+                    MentionSpan("uid-bob", "@Bob", 6),
+                ),
+            )
+        assertEquals(listOf("uid-alice"), draft.sendableUids)
     }
 
     // -------------------------------------- uid tracking across free-text edits
