@@ -63,10 +63,17 @@ service firebase.storage {
     // may upload a photo for their own vehicle; any authenticated user may read
     // (vehicle docs are public-readable). isNotSuspended() is kept explicitly:
     // it used to come in via isActiveMember(), and suspension must always
-    // override feature access. This mirrors the backend requireActiveActor
-    // (signed-in + non-suspended) that guards the garage.* callables — note
-    // `deleted` is a backend-managed users/{uid} field, not a custom claim, so
-    // it has no rules helper and stays enforced by those callables.
+    // override feature access.
+    //
+    // Deleted accounts: this upload goes DIRECTLY to Storage (no callable in the
+    // path), and Storage rules cannot check users/{uid}.deleted — it is a
+    // backend-managed Firestore field, not a custom claim, and Storage rules have
+    // no cross-service Firestore reads. Deletion is enforced at the IDENTITY layer
+    // instead: account.deleteAccount disables the Auth user and revokes refresh
+    // tokens before flagging the doc, so a deleted account cannot sign in or renew
+    // a session and isOwner()'s request.auth == null. Like every token-based check
+    // here (isNotSuspended included), that transition is bounded by the ID token
+    // TTL (<= 1h).
     // -------------------------------------------------------------------------
     match /vehicleImages/{userId}/{vehicleId}/{imageId} {
       allow read: if isAuthenticated();
