@@ -1351,15 +1351,32 @@ fun AuthenticatedApp(
                 // 3-channel chat hub as a TRANSPARENT popup over the map (Issue 4):
                 // a focusable Popup with no dimming scrim and a translucent surface,
                 // so the live map stays visible behind it — matching the map-layers
-                // and live-share popups. Only shown while the map shell is the
-                // active branch (the bubble that opens it lives on the map tab), so
-                // it can never float over a full route / the nav-search overlay.
-                if (chatHubOpen &&
+                // and live-share popups.
+                //
+                // The gate, derived ONCE: the popup floats over the map, so it may
+                // only show while the map shell is the active branch (the bubble that
+                // opens it lives on the map tab) — never over a full route or the
+                // nav-search overlay. Both the auto-close effect below and the render
+                // condition read THIS value, so the two cannot drift apart.
+                val chatHubGateOpen =
                     navDestination == null &&
-                    !navSearchOpen &&
-                    route == null &&
-                    selectedTab == ShellTab.Map
-                ) {
+                        !navSearchOpen &&
+                        route == null &&
+                        selectedTab == ShellTab.Map
+
+                // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
+                // (and still valid) hub survives process death — but the popup only
+                // RENDERS while the gate holds. Without this effect, losing the gate
+                // would hide the popup while leaving the flag set, and the hub would
+                // pop open again by itself the next time the user came back to the
+                // map. Keyed on the same derived gate, so no gate can be lost without
+                // clearing the flag.
+                LaunchedEffect(chatHubGateOpen) {
+                    if (!chatHubGateOpen) chatHubOpen = false
+                }
+
+                val chatHubVisible = chatHubOpen && chatHubGateOpen
+                if (chatHubVisible) {
                     ChatHubPopup(
                         uid = uid,
                         communityChatRepository = communityChatRepository,

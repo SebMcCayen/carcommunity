@@ -242,6 +242,33 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
+    /**
+     * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
+     * rememberSaveable but the popup only renders while the map shell is the
+     * active branch, so leaving the Map tab has to CLEAR the flag — otherwise the
+     * hub silently stays "open" and pops up again on returning to the map.
+     */
+    @Test
+    fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
+        setShell()
+        // Open the hub over the map.
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+
+        // Leaving the Map tab loses the popup's gating condition: the hub goes away
+        // (with the map home) rather than floating over another tab.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+
+        // Returning to the Map tab restores the map WITHOUT re-opening the hub —
+        // the flag was cleared when the gate was lost, so the user gets the map,
+        // not a chat hub they never re-opened.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+    }
+
     @Test
     fun profileMenuEntry_navigatesAndDismissesPopup() {
         setShell()
