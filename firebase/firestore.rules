@@ -249,13 +249,23 @@ service cloud.firestore {
     // Split-document model: events/{eventId} holds teaser-safe + operational
     // fields (title, approximateArea, status, rsvpCounts, ...); the exact
     // location and long description are member-only and live in
-    // events/{eventId}/details/private. All mutations go through the audited
-    // events.* admin callables (Admin SDK) — no client writes, including
-    // admins, so every lifecycle change carries an adminAuditEvents record.
+    // events/{eventId}/details/private. All mutations go through the
+    // events.* callables (Admin SDK) — no client writes, including admins, so
+    // every admin lifecycle change carries an adminAuditEvents record.
+    //
+    // events.create is the one callable an active MEMBER may drive (their
+    // event is stamped createdByRole: 'member' + createdByUserId and published
+    // straight away; admins moderate it afterwards via events.cancel — see
+    // functions/src/events/events-core.ts). That does NOT loosen anything
+    // here: members still cannot write events/{eventId} directly, so the
+    // server-side validation, the isOfficial lock and the per-member rate
+    // limit can never be bypassed by talking to Firestore.
     // -------------------------------------------------------------------------
     match /events/{eventId} {
       // Only published events are visible to non-admin users
-      // (contracts/schemas/events.schema.json eventStatus).
+      // (contracts/schemas/events.schema.json eventStatus). Member-created
+      // events are published, so they are readable on exactly the same terms
+      // as organiser-created ones — no read-rule change needed.
       allow read: if (isAuthenticated() && resource.data.status == 'published') || isAdmin();
       // No client writes: events.create/update/publish/cancel/complete only.
 

@@ -218,11 +218,12 @@ in a separate member-gated document under `details/private` while
 | `startsAt`        | `Timestamp`  |                                                                    |
 | `endsAt`          | `Timestamp?` |                                                                    |
 | `approximateArea` | `string`     | Coarse area shown to non-members, ≤200 chars                       |
-| `isOfficial`      | `boolean`    |                                                                    |
+| `isOfficial`      | `boolean`    | Club-sanctioned badge; forced `false` on member-created events      |
 | `status`          | `string`     | `'draft'` \| `'published'` \| `'cancelled'` \| `'completed'`       |
 | `cancelledAt`     | `Timestamp?` | Set by `events.cancel`                                             |
 | `rsvpCounts`      | `map`        | `{ going, maybe, not_going }` — maintained by `events-onRsvpWrite` |
-| `createdByUserId` | `string`     | Admin UID                                                          |
+| `createdByUserId` | `string`     | Creator UID (admin or member)                                      |
+| `createdByRole`   | `string`     | `'admin'` \| `'member'` — attribution for moderation               |
 | `createdAt`       | `Timestamp`  | Server timestamp                                                   |
 | `updatedAt`       | `Timestamp`  | Server timestamp                                                   |
 
@@ -245,9 +246,26 @@ Document ID = responding user's UID. `{ status: 'going' | 'maybe' |
 Security: authenticated users read published `events/{eventId}` (teaser);
 active members additionally read `details/private` of published events and
 write their own RSVP; admins read everything. All mutations go through the
-audited `events.*` admin callables — no client writes, including admins.
+`events.*` callables — no client writes, including admins.
 
-Composite index: `status ASC, startsAt ASC` (upcoming events list, paginated).
+Member-created events (moderation model): `events.create` is callable by an
+active member as well as an admin. An admin's event is created `draft` (plus an
+`adminAuditEvents` record) and published via `events.publish`; a member's event
+is created `published` with `createdByRole: 'member'`, `isOfficial` forced
+false, and the same future-start precondition `events.publish` enforces. This
+is POST-moderation: member events are attributable via
+`createdByUserId`/`createdByRole`, appear in the (unfiltered) admin events
+listing immediately, and admins remove them with the audited `events.cancel`.
+The pre-moderation alternative (member events start `draft` until an admin
+approves) was rejected — no approval-queue UI exists, drafts are invisible even
+to their creator, and one admin would gate every meetup. Abuse controls
+instead: active-member entitlement + non-suspended required, `isOfficial`
+locked, and max 3 member-created events per rolling 24h. Member creations write
+no `adminAuditEvents` record — that log stays a record of admin actions.
+
+Composite indexes: `status ASC, startsAt ASC` (upcoming events list,
+paginated); `createdByUserId ASC, createdAt ASC` (per-member creation
+rate-limit count in `events.create`).
 
 ---
 

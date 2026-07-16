@@ -318,6 +318,62 @@ export function guardCompletable(status: EventStatus): GuardResult {
 }
 
 // ---------------------------------------------------------------------------
+// Member-created events (moderation model)
+// ---------------------------------------------------------------------------
+
+/**
+ * Who created an event — stored (client-immutable, callable-written) on
+ * `events/{eventId}.createdByRole` next to `createdByUserId`, so every event
+ * is attributable and an admin can tell an organiser-run event from a
+ * member-submitted one.
+ *
+ * MODERATION MODEL — POST-moderation, deliberately: a member-created event is
+ * PUBLISHED on creation (see [initialEventStatus]) and admins take it down
+ * afterwards with the existing audited `events.cancel` callable. Rationale:
+ * - The admin events listing is an unfiltered `events` query, so member
+ *   events appear there the moment they exist — moderation needs no new
+ *   surface, and cancel/update already work on them unchanged.
+ * - Nothing renders `draft` events to anyone (rules: non-admins read
+ *   published only), so an event parked as a draft is invisible even to its
+ *   own creator, and community meetups are time-critical — an unstaffed queue
+ *   silently kills them.
+ *
+ * The PRE-moderation alternative (member events start `draft`; an admin
+ * publishes them) was REJECTED: it needs an admin approval-queue UI that does
+ * not exist, makes one admin the bottleneck for every meetup, and buys little
+ * safety here — creation already demands a paying, identified, non-suspended
+ * member; [MEMBER_EVENT_RATE_LIMIT_MAX] caps the blast radius; takedown is one
+ * audited click. Revisit if abuse actually appears: making [initialEventStatus]
+ * always return 'draft' is the entire switch.
+ */
+export const EVENT_CREATOR_ROLES = ['admin', 'member'] as const;
+export type EventCreatorRole = (typeof EVENT_CREATOR_ROLES)[number];
+
+/** Max events one member may create per rolling [MEMBER_EVENT_RATE_LIMIT_WINDOW_MS]. */
+export const MEMBER_EVENT_RATE_LIMIT_MAX = 3;
+/** Rolling window width: 24 hours. */
+export const MEMBER_EVENT_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Start of the rate-limit window: events created at/after this instant count. */
+export function memberEventRateLimitWindowStart(now: Date): Date {
+  return new Date(now.getTime() - MEMBER_EVENT_RATE_LIMIT_WINDOW_MS);
+}
+
+/** True when one more member-created event would exceed the per-member cap. */
+export function isMemberEventRateLimited(recentCount: number): boolean {
+  return recentCount >= MEMBER_EVENT_RATE_LIMIT_MAX;
+}
+
+/**
+ * The status a newly created event starts in. Admin-created events stay
+ * `draft` (an admin publishes explicitly — unchanged since Phase 9b); member
+ * events publish immediately (see the [EVENT_CREATOR_ROLES] note).
+ */
+export function initialEventStatus(creatorRole: EventCreatorRole): EventStatus {
+  return creatorRole === 'member' ? 'published' : 'draft';
+}
+
+// ---------------------------------------------------------------------------
 // Document builders — the teaser/private split
 // ---------------------------------------------------------------------------
 
@@ -337,11 +393,24 @@ export interface EventDocuments {
   privateDoc: Record<string, unknown>;
 }
 
-/** Builds both documents for a newly created (draft) event. */
+/**
+ * Builds both documents for a newly created event.
+ *
+ * `creatorRole` (default 'admin' — the Phase 9b behaviour) decides two
+ * things and nothing else:
+ * - the starting status ([initialEventStatus]: admin → draft, member →
+ *   published);
+ * - `isOfficial`, which is FORCED false for a member-created event. The
+ *   "official" badge marks club-sanctioned events, so a member must never be
+ *   able to mint one by passing `isOfficial: true` — only an admin's event
+ *   honours the input flag. (`events.update` is admin-only, so an admin can
+ *   still promote a member event afterwards.)
+ */
 export function buildEventDocuments(
   input: CreateEventInput,
   createdByUserId: string,
   serverTimestamp: () => unknown,
+  creatorRole: EventCreatorRole = 'admin',
 ): EventDocuments {
   return {
     eventDoc: {
@@ -352,11 +421,12 @@ export function buildEventDocuments(
       // Europe/Stockholm start day (23:59:59.999 local).
       endsAt: new Date(effectiveEndsAt(input.startsAt, input.endsAt)),
       approximateArea: input.approximateArea,
-      isOfficial: input.isOfficial ?? false,
-      status: 'draft',
+      isOfficial: creatorRole === 'admin' ? (input.isOfficial ?? false) : false,
+      status: initialEventStatus(creatorRole),
       cancelledAt: null,
       rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
       createdByUserId,
+      createdByRole: creatorRole,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     },

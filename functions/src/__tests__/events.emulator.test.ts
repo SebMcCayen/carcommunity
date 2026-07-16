@@ -32,6 +32,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MEMBER_EVENT_RATE_LIMIT_MAX } from '../events/events-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -93,6 +94,20 @@ async function signInAs(user: TestUser): Promise<void> {
   await auth.currentUser?.getIdToken(true);
 }
 
+/**
+ * A provisioned user carrying the backend-managed `activeMember` entitlement.
+ * Created fresh per call so one test's member-creation rate-limit budget can
+ * never leak into another's.
+ */
+async function createMemberUser(prefix: string, suspended = false): Promise<TestUser> {
+  const user = await createProvisionedUser(prefix);
+  await adminDb
+    .collection('users')
+    .doc(user.uid)
+    .set({ activeMember: true, suspended }, { merge: true });
+  return user;
+}
+
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
 
 let adminUser: TestUser;
@@ -146,14 +161,139 @@ describe('events callables – authorization', () => {
     );
   });
 
-  it('rejects non-admin callers', async () => {
+  it('rejects a signed-in caller who is neither an active member nor an admin', async () => {
     await signInAs(regularUser);
+    // events-create admits members as well as admins, but regularUser has no
+    // activeMember entitlement — so it is still permission-denied for them.
     expect(await callableErrorCode(call('events-create', validCreate))).toBe(
       'functions/permission-denied',
     );
     expect(
       await callableErrorCode(call('events-publish', { eventId: 'irrelevant' })),
     ).toBe('functions/permission-denied');
+  });
+
+  it('keeps the rest of the events lifecycle admin-only for members', async () => {
+    const member = await createMemberUser('events-member-lifecycle');
+    const eventId = await createDraftEvent();
+    await signInAs(member);
+
+    // A member may create, but must not drive anyone's event lifecycle.
+    expect(await callableErrorCode(call('events-publish', { eventId }))).toBe(
+      'functions/permission-denied',
+    );
+    expect(
+      await callableErrorCode(call('events-cancel', { eventId, reason: 'Nope.' })),
+    ).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('events-update', { eventId, title: 'Hijacked' }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+});
+
+describe('events-create – member-created events', () => {
+  it('lets an active member create a published, attributed event', async () => {
+    const member = await createMemberUser('events-member-create');
+    await signInAs(member);
+
+    // isOfficial: true is passed deliberately — the club-sanctioned badge must
+    // be forced off for a member-created event.
+    const result = await call('events-create', { ...validCreate, isOfficial: true });
+    const { eventId, status } = result.data as { eventId: string; status: string };
+    expect(status).toBe('published');
+
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('published');
+    expect(event.createdByUserId).toBe(member.uid);
+    expect(event.createdByRole).toBe('member');
+    expect(event.isOfficial).toBe(false);
+    // Exact location still lands only on the member-gated document.
+    expect(event.address).toBeUndefined();
+    const detail = (
+      await adminDb.collection('events').doc(eventId).collection('details').doc('private').get()
+    ).data()!;
+    expect(detail.address).toBe(validCreate.address);
+
+    // The adminAuditEvents log stays a record of ADMIN actions only — a member
+    // creation must never appear there with the member's uid as adminId.
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.empty).toBe(true);
+  });
+
+  it('rejects a suspended member', async () => {
+    const suspended = await createMemberUser('events-member-suspended', true);
+    await signInAs(suspended);
+    expect(await callableErrorCode(call('events-create', validCreate))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('rejects a member event that would publish with a start time in the past', async () => {
+    const member = await createMemberUser('events-member-past');
+    await signInAs(member);
+    // Member events publish on creation, so they must clear the same
+    // preconditions events-publish enforces — no back door to a published
+    // event in the past.
+    const pastStart = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    expect(
+      await callableErrorCode(
+        call('events-create', { ...validCreate, startsAt: pastStart }),
+      ),
+    ).toBe('functions/failed-precondition');
+  });
+
+  it('caps member creations per rolling window', async () => {
+    const member = await createMemberUser('events-member-ratelimit');
+    await signInAs(member);
+
+    for (let i = 0; i < MEMBER_EVENT_RATE_LIMIT_MAX; i += 1) {
+      await call('events-create', { ...validCreate, title: `Member cruise ${i}` });
+    }
+    expect(
+      await callableErrorCode(call('events-create', { ...validCreate, title: 'One too many' })),
+    ).toBe('functions/resource-exhausted');
+
+    // The cap is per member: a different member is unaffected.
+    const other = await createMemberUser('events-member-ratelimit-other');
+    await signInAs(other);
+    await expect(call('events-create', validCreate)).resolves.toBeDefined();
+  });
+
+  it('does not rate-limit admins', async () => {
+    for (let i = 0; i <= MEMBER_EVENT_RATE_LIMIT_MAX; i += 1) {
+      await expect(createDraftEvent({ title: `Admin cruise ${i}` })).resolves.toBeDefined();
+    }
+  });
+
+  it('lets an admin moderate (update and cancel) a member-created event', async () => {
+    const member = await createMemberUser('events-member-moderated');
+    await signInAs(member);
+    const { eventId } = (await call('events-create', validCreate)).data as { eventId: string };
+
+    // Post-moderation: the member event is live, and the existing audited admin
+    // path takes it down again.
+    await signInAs(adminUser);
+    await call('events-update', { eventId, title: 'Renamed by admin' });
+    await call('events-cancel', { eventId, reason: 'Duplicate meetup.' });
+
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('cancelled');
+    expect(event.title).toBe('Renamed by admin');
+    expect(event.cancelledAt).not.toBeNull();
+    // Attribution survives moderation.
+    expect(event.createdByUserId).toBe(member.uid);
+    expect(event.createdByRole).toBe('member');
+
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.cancel')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.size).toBe(1);
+    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
   });
 });
 
