@@ -54,6 +54,18 @@ export const CHAT_MESSAGE_MAX_LENGTH = 2000;
 /** Default page size for the *-list callables (newest-first window). */
 export const CHAT_MESSAGES_PAGE_SIZE = 30;
 
+/** Chars of a message surfaced in a notification preview (mirrors DM's 120). */
+export const CHAT_MESSAGE_PREVIEW_LENGTH = 120;
+
+/**
+ * Single-line preview of a chat message for a notification body. Mirrors
+ * dm-core's messagePreview: the notification builder truncates again to its own
+ * limit, this keeps the producer from shipping a 2000-char string to do it.
+ */
+export function messagePreview(text: string): string {
+  return text.trim().slice(0, CHAT_MESSAGE_PREVIEW_LENGTH);
+}
+
 /** The single global community channel id (`communityChat/{id}`). */
 export const COMMUNITY_CHANNEL_ID = 'global';
 
@@ -255,4 +267,51 @@ export function isAcceptedConvoyMember(
   }
   const members = (data?.members ?? {}) as Record<string, Record<string, unknown> | undefined>;
   return members[uid]?.inviteStatus === 'accepted';
+}
+
+/**
+ * The ACCEPTED members of a stored convoy doc, minus `excludeUid` (the poster).
+ * The notification fan-out set for convoyChat.post — derived from the convoy doc
+ * the membership check already loaded, so the producer costs no extra read.
+ *
+ * Bounded by construction: a convoy holds at most MAX_CONVOY_INVITEES (50)
+ * invitees + the owner, and only accepted ones are returned.
+ */
+export function acceptedConvoyMemberUids(
+  data: Record<string, unknown> | undefined,
+  excludeUid: string,
+): string[] {
+  const memberUids = Array.isArray(data?.memberUids) ? (data!.memberUids as unknown[]) : [];
+  return memberUids
+    .filter((uid): uid is string => typeof uid === 'string')
+    .filter((uid) => uid !== excludeUid && isAcceptedConvoyMember(data, uid));
+}
+
+/**
+ * Throttle window for convoy-chat notifications. A convoy chat is a live,
+ * back-and-forth session: one inbox item per message per member would bury the
+ * inbox and multiply the fan-out cost by the message count. Instead the producer
+ * derives a DETERMINISTIC notification id per (convoy, time bucket) and lets
+ * writeInAppNotification's idempotent create-if-absent collapse everything in the
+ * same window into the FIRST item — so a member gets at most one convoy-chat
+ * notice per convoy per window, however busy the chat is.
+ */
+export const CONVOY_CHAT_NOTIFY_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Deterministic notification id for a convoy-chat notice: stable within a
+ * CONVOY_CHAT_NOTIFY_WINDOW_MS bucket, so replays and every later message in the
+ * same window resolve to the same document and are skipped as duplicates.
+ *
+ * Buckets are fixed epoch-aligned windows rather than a per-recipient sliding
+ * window (which would need a stored last-notified marker plus an extra read and
+ * write per member): two messages either side of a boundary can both notify.
+ * That's an accepted, bounded imprecision — the ceiling stays ~1 notice per
+ * member per window. The id needs no recipient component because the inbox is
+ * already per-recipient (`notifications/{uid}/items/{id}`), and it stays within
+ * the notificationId charset the markRead callable accepts.
+ */
+export function convoyChatNotificationId(convoyId: string, now: Date): string {
+  const bucket = Math.floor(now.getTime() / CONVOY_CHAT_NOTIFY_WINDOW_MS);
+  return `convoychat-${convoyId}-${bucket}`;
 }

@@ -264,8 +264,9 @@ locked, and max 3 member-created events per rolling 24h. Member creations write
 no `adminAuditEvents` record — that log stays a record of admin actions.
 
 Composite indexes: `status ASC, startsAt ASC` (upcoming events list,
-paginated); `createdByUserId ASC, createdAt ASC` (per-member creation
-rate-limit count in `events.create`).
+paginated); `createdByUserId ASC, createdByRole ASC, createdAt ASC`
+(per-member creation rate-limit count in `events.create` — only
+`createdByRole: 'member'` events count toward the cap).
 
 ---
 

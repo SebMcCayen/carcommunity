@@ -483,7 +483,8 @@
     "badgesEmpty": "Inga utmärkelser ännu.",
     "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
     "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
-    "awardedOn": "Tilldelad %1$s"
+    "awardedOn": "Tilldelad %1$s",
+    "blocked": "Du har blockerat den här medlemmen. Avblockera för att se profilen igen."
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",
@@ -782,6 +783,11 @@
     "categoryAccountSuspension": "Kontostatus",
     "categorySubscription": "Medlemskap",
     "categorySystem": "System",
+    "categoryDirectMessage": "Meddelanden",
+    "categoryCommunityChat": "Gemenskapschatt",
+    "categoryConvoyChat": "Konvojchatt",
+    "categoryFriendRequest": "Vänförfrågningar",
+    "categoryConvoyInvite": "Konvoj-inbjudningar",
     "settingsTitle": "Notisinställningar",
     "settingsPushTitle": "Push-notiser",
     "settingsPushGrantedBody": "Push-notiser är aktiverade. Du kan ändra dina val nedan.",
@@ -801,6 +807,8 @@
     "channelEventsDescription": "Påminnelser och uppdateringar om event.",
     "channelAccountName": "Konto",
     "channelAccountDescription": "Viktig information om ditt konto.",
+    "channelSocialName": "Chatt & vänner",
+    "channelSocialDescription": "Meddelanden, vänförfrågningar och konvoj-inbjudningar från andra medlemmar.",
     "channelGeneralName": "Allmänt",
     "channelGeneralDescription": "Medlemskapsuppdateringar och andra meddelanden från klubben."
   },
@@ -844,6 +852,7 @@
     "emptyCommunity": "Inga meddelanden än — starta samtalet!",
     "emptyConvoy": "Inga meddelanden än — säg hej till din konvoj!",
     "unknownSender": "Medlem",
+    "openSenderProfile": "Öppna profilen för %1$s",
     "sendErrorSignedOut": "Logga in för att skicka meddelanden.",
     "sendErrorNotMember": "Chatten är tillgänglig för aktiva medlemmar.",
     "sendErrorInvalid": "Skriv ett meddelande att skicka.",
@@ -995,5 +1004,12 @@
     "dialogClose": "Stäng",
     "entryTitle": "Version %1$s · %2$s",
     "empty": "Inga uppdateringsanteckningar ännu."
+  },
+  "moderation": {
+    "messageActionsTitle": "Meddelande från %1$s",
+    "blockMember": "Blockera %1$s",
+    "reportMessage": "Rapportera meddelande",
+    "reportUser": "Rapportera användare",
+    "close": "Stäng"
   }
 }

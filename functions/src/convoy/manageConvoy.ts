@@ -23,10 +23,11 @@
  *    liveLocation/{uid}/latest for each — the convoy never duplicates GPS
  *    storage (see convoy-core.ts).
  *  - On invite, a best-effort in-app notification is written for each invitee
- *    (reusing writeInAppNotification). It uses the existing 'system_notice'
- *    category — a dedicated 'convoy_invite' category + an 'open_convoy' action
- *    type are the clean follow-up (they require the product/security review the
- *    notifications domain mandates for new categories; see FINAL flag).
+ *    (reusing writeInAppNotification) under the dedicated 'convoy_invite'
+ *    category, so invitees can opt out of convoy invites without silencing
+ *    every 'system_notice'. writeInAppNotification checks that preference
+ *    before writing. An 'open_convoy' action type remains a follow-up; the
+ *    notification still deep-links via 'open_notifications'.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -215,14 +216,15 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   );
   await ref.set(document);
 
-  // Best-effort in-app invite notifications (never fail the create). Reuses the
-  // existing 'system_notice' category — a dedicated convoy_invite category is a
-  // reviewed follow-up.
+  // Best-effort in-app invite notifications (never fail the create). The
+  // dedicated 'convoy_invite' category is honored per-recipient inside
+  // writeInAppNotification, so an invitee who disabled convoy invites is
+  // skipped there rather than filtered here.
   const ownerName = ownerProfile.displayName ?? 'En vän';
   await Promise.all(
     invited.map((invitee) =>
       writeInAppNotification(invitee.uid, {
-        category: 'system_notice',
+        category: 'convoy_invite',
         title: 'Konvoj-inbjudan',
         previewText: `${ownerName} har bjudit in dig till en konvoj${title ? `: ${title}` : ''}.`,
         actionType: 'open_notifications',

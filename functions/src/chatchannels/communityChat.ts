@@ -22,6 +22,38 @@
  *    dot (createdAt > lastReadAt). See chat-core.ts.
  *  - Blocking is NOT filtered server-side (global town square) — documented in
  *    chat-core.ts. FCM push is intentionally not wired (end-of-MVP, as DM).
+ *  - NO per-message notification producer, deliberately. The 'community_chat'
+ *    category exists and users can opt out of it, but post() writes no
+ *    notification — see below.
+ *
+ * Why no community_chat producer (deliberate omission, not a gap):
+ *
+ * The other three social surfaces have a natural, bounded audience — a DM has
+ * one recipient, a friend request has one invitee, a convoy chat has at most
+ * ~50 accepted members. The community channel is the app-wide town square: its
+ * audience is EVERY active member. A per-message producer would therefore mean
+ * one inbox write per member per message — an O(members × messages) fan-out
+ * whose cost and noise both grow with the app's success, and whose only outcome
+ * is that every member's inbox is buried by whatever was last said in a global
+ * room they can already see. The first busy day would train users to disable
+ * notifications wholesale, which also costs us the notices that DO matter
+ * (account warnings can't be disabled, but everything else can).
+ *
+ * The category is kept because the sane designs still need it, and each is its
+ * own scoped piece of work rather than a line in post():
+ *  - @mentions only — notify the handful of members a message explicitly names.
+ *    Bounded by the mention count, and the notification is by definition
+ *    relevant. Needs mention parsing + a handle→uid resolution the chat domain
+ *    doesn't have yet, and must respect blocking so a mention can't be used to
+ *    reach someone who blocked you.
+ *  - A periodic digest — a scheduled function (as notifications/scheduled.ts
+ *    already does for cleanup) that rolls unread community activity into ONE
+ *    notice per member per period, sent only to members with activity since
+ *    their communityChatLastReadAt marker. Cost is O(members) per PERIOD, not
+ *    per message, and it collapses a busy day into a single item.
+ * Until one of those ships, the existing per-user last-read marker + the
+ * client's unread dot are the community channel's notification surface, and
+ * they cost nothing per message.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -130,6 +162,13 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
     ),
   );
 
+  // NOTE: there is deliberately NO 'community_chat' notification producer here,
+  // even though the category exists and the other three social surfaces (DM,
+  // friend request, convoy chat) now have one. Fanning out to every active
+  // member on every message is a notification-spam and cost disaster; the
+  // module header records the reasoning and the two designs (@mentions, or a
+  // periodic digest) that would be acceptable instead.
+  //
   // NOTE: FCM push is intentionally deferred (end-of-MVP Firebase console setup),
   // consistent with the DM + notifications domains.
 

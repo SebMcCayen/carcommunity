@@ -441,6 +441,7 @@
     <string name="memberProfile_badgesUnavailable">Awards aren\'t shown on other members\' profiles.</string>
     <string name="memberProfile_badgesLoadError">Awards couldn\'t be loaded.</string>
     <string name="memberProfile_awardedOn">Awarded %1$s</string>
+    <string name="memberProfile_blocked">You\'ve blocked this member. Unblock them to see their profile again.</string>
     <string name="groupDrive_screenTitle">Group Drive</string>
     <string name="groupDrive_joinButton">Join group drive</string>
     <string name="groupDrive_leaveButton">Leave group drive</string>
@@ -717,6 +718,11 @@
     <string name="notifications_categoryAccountSuspension">Account status</string>
     <string name="notifications_categorySubscription">Subscription</string>
     <string name="notifications_categorySystem">System</string>
+    <string name="notifications_categoryDirectMessage">Direct messages</string>
+    <string name="notifications_categoryCommunityChat">Community chat</string>
+    <string name="notifications_categoryConvoyChat">Convoy chat</string>
+    <string name="notifications_categoryFriendRequest">Friend requests</string>
+    <string name="notifications_categoryConvoyInvite">Convoy invites</string>
     <string name="notifications_settingsTitle">Notification settings</string>
     <string name="notifications_settingsPushTitle">Push notifications</string>
     <string name="notifications_settingsPushGrantedBody">Push notifications are enabled. You can change your preferences below.</string>
@@ -736,6 +742,8 @@
     <string name="notifications_channelEventsDescription">Reminders and updates about events.</string>
     <string name="notifications_channelAccountName">Account</string>
     <string name="notifications_channelAccountDescription">Important notices about your account.</string>
+    <string name="notifications_channelSocialName">Chat &amp; friends</string>
+    <string name="notifications_channelSocialDescription">Messages, friend requests, and convoy invites from other members.</string>
     <string name="notifications_channelGeneralName">General</string>
     <string name="notifications_channelGeneralDescription">Membership updates and other messages from the club.</string>
     <string name="feedback_title">Report a problem</string>
@@ -773,6 +781,7 @@
     <string name="channel_emptyCommunity">No messages yet — start the conversation!</string>
     <string name="channel_emptyConvoy">No messages yet — say hi to your convoy!</string>
     <string name="channel_unknownSender">Member</string>
+    <string name="channel_openSenderProfile">Open %1$s\'s profile</string>
     <string name="channel_sendErrorSignedOut">Please sign in to send messages.</string>
     <string name="channel_sendErrorNotMember">Chat is available to active members.</string>
     <string name="channel_sendErrorInvalid">Enter a message to send.</string>
@@ -912,4 +921,9 @@
     <string name="whatsNew_dialogClose">Close</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
     <string name="whatsNew_empty">No release notes yet.</string>
+    <string name="moderation_messageActionsTitle">Message from %1$s</string>
+    <string name="moderation_blockMember">Block %1$s</string>
+    <string name="moderation_reportMessage">Report message</string>
+    <string name="moderation_reportUser">Report user</string>
+    <string name="moderation_close">Close</string>
 </resources>

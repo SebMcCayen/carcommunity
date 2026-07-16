@@ -205,7 +205,11 @@ export interface AdminEventResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Admin create / update / publish / cancel contracts
+// Create / update / publish / cancel contracts
+//
+// `events.create` is callable by an active member as well as an admin/owner
+// (a member's event is published immediately, attributed via createdByRole,
+// and has isOfficial forced false). Update / publish / cancel stay admin-only.
 // ---------------------------------------------------------------------------
 
 export interface CreateEventRequest {

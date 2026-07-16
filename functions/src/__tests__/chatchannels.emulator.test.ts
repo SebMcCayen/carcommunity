@@ -47,6 +47,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CONVOY_CHAT_NOTIFY_WINDOW_MS } from '../chatchannels/chat-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -372,5 +373,185 @@ describe('convoyChat callables + rules', () => {
     await expect(
       addDoc(messagesPath(), { senderUid: accepted.uid, text: 'forged' }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// convoy_chat / community_chat in-app notification producers
+// ---------------------------------------------------------------------------
+
+/** In-app inbox items for a uid in one category (backend-only collection). */
+async function inboxFor(uid: string, category: string): Promise<Array<Record<string, unknown>>> {
+  const snap = await adminDb.collection('notifications').doc(uid).collection('items').get();
+  return snap.docs.map((d) => d.data()).filter((item) => item.category === category);
+}
+
+/** Opts `uid` out of one notification category (the owner-writable prefs map). */
+async function optOutOf(uid: string, category: string): Promise<void> {
+  await adminDb
+    .collection('userPrivate')
+    .doc(uid)
+    .set({ notificationPreferences: { [category]: { inApp: false } } }, { merge: true });
+}
+
+/**
+ * Owner + two invitees, where `accepted` has accepted and `invited` has not.
+ * Returns the convoy id; the caller is left signed in as the owner.
+ */
+async function seedConvoy(
+  owner: TestUser,
+  accepted: TestUser,
+  invited: TestUser,
+  title?: string,
+): Promise<string> {
+  await makeFriends(owner, accepted);
+  await makeFriends(owner, invited);
+  await signInAs(owner);
+  const created = (
+    await call('convoy-create', {
+      inviteeUids: [accepted.uid, invited.uid],
+      ...(title ? { title } : {}),
+    })
+  ).data as { convoy: ConvoySummary };
+  const convoyId = created.convoy.convoyId;
+  await signInAs(accepted);
+  await call('convoy-respond', { convoyId, action: 'accept' });
+  await signInAs(owner);
+  return convoyId;
+}
+
+/**
+ * Waits until the current convoy-chat notify window has at least `needMs` left,
+ * so a burst posted straight after this call cannot straddle a window boundary.
+ *
+ * convoyChatNotificationId buckets on FIXED, epoch-aligned windows of the
+ * server's clock, so two messages either side of a boundary legitimately produce
+ * two notices (a documented, accepted imprecision). The functions emulator runs
+ * on this process's clock, so the time left in the current bucket is computable
+ * here — waiting out the tail end removes that boundary race from the burst test
+ * without touching the assertion it makes.
+ */
+async function awaitRoomInNotifyWindow(needMs = 15_000): Promise<void> {
+  const remaining = CONVOY_CHAT_NOTIFY_WINDOW_MS - (Date.now() % CONVOY_CHAT_NOTIFY_WINDOW_MS);
+  if (remaining >= needMs) return;
+  await new Promise((resolve) => setTimeout(resolve, remaining + 250));
+}
+
+describe('convoyChat-post in-app notification fan-out', () => {
+  it('notifies the other ACCEPTED members, never the poster or a still-invited member', async () => {
+    const owner = await newMember('FanoutOwner');
+    const accepted = await newMember('FanoutAccepted');
+    const invited = await newMember('FanoutInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited, 'Fjälltur');
+
+    await call('convoyChat-post', { convoyId, text: 'vi rullar om 5' });
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(accepted.uid, 'convoy_chat');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Nytt i konvojen: Fjälltur');
+    expect(items[0]!.previewText).toBe('FanoutOwner: vi rullar om 5');
+    // Deep-link target: the convoy.
+    expect(items[0]!.relatedEntityId).toBe(convoyId);
+
+    // The poster never notifies themselves; a still-invited member is not in
+    // the fan-out set (they can't even read the channel).
+    expect(await inboxFor(owner.uid, 'convoy_chat')).toHaveLength(0);
+    expect(await inboxFor(invited.uid, 'convoy_chat')).toHaveLength(0);
+  });
+
+  it('writes NO notification to a member who opted out of convoy_chat', async () => {
+    const owner = await newMember('CcOptOutOwner');
+    const accepted = await newMember('CcOptOutAccepted');
+    const invited = await newMember('CcOptOutInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited);
+    await optOutOf(accepted.uid, 'convoy_chat');
+
+    const posted = (await call('convoyChat-post', { convoyId, text: 'hej' })).data as {
+      messageId: string;
+    };
+
+    // The message itself must still be posted — only the notification is
+    // suppressed. Waiting on it proves the post completed, so the empty inbox
+    // below isn't just a race.
+    await pollUntil(async () => {
+      const snap = await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .doc(posted.messageId)
+        .get();
+      return snap.exists ? true : undefined;
+    });
+    expect(await inboxFor(accepted.uid, 'convoy_chat')).toHaveLength(0);
+  });
+
+  it('collapses a burst of messages into ONE notice per member (per-window id)', async () => {
+    const owner = await newMember('BurstOwner');
+    const accepted = await newMember('BurstAccepted');
+    const invited = await newMember('BurstInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited);
+
+    // Post the whole burst inside ONE notify window: a boundary straddle would
+    // legitimately produce a second notice and flake the assertion below. This
+    // only pins WHEN the burst runs — within a window the collapse still has to
+    // turn three messages into exactly one notice, so the assertion keeps its
+    // teeth: drop the per-window id and this test sees 3 items and fails.
+    await awaitRoomInNotifyWindow();
+
+    await call('convoyChat-post', { convoyId, text: 'ett' });
+    await pollUntil(async () => {
+      const found = await inboxFor(accepted.uid, 'convoy_chat');
+      return found.length > 0 ? found : undefined;
+    });
+    await call('convoyChat-post', { convoyId, text: 'två' });
+    await call('convoyChat-post', { convoyId, text: 'tre' });
+
+    // All three messages really land — so the single notice below is a genuine
+    // per-window collapse, not posts that silently failed.
+    await pollUntil(async () => {
+      const snap = await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .get();
+      return snap.size === 3 ? true : undefined;
+    });
+
+    // The inbox still holds only the FIRST notice, which keeps its original
+    // preview (create-if-absent never overwrites).
+    const items = await inboxFor(accepted.uid, 'convoy_chat');
+    expect(items).toHaveLength(1);
+    expect(items[0]!.previewText).toBe('BurstOwner: ett');
+  });
+});
+
+describe('communityChat-post writes NO notification (deliberate)', () => {
+  it('does not fan out to other members on a community message', async () => {
+    const poster = await newMember('TownSquarePoster');
+    const other = await newMember('TownSquareOther');
+
+    await signInAs(poster);
+    const posted = (await call('communityChat-post', { text: 'hej alla' })).data as {
+      messageId: string;
+    };
+
+    // Wait for the message to land so this isn't a race, then assert that
+    // neither the poster nor any other member got an inbox item. Fanning out to
+    // every active member per message is a spam/cost non-starter — the category
+    // is held for an @mentions or digest design (see communityChat.ts).
+    await pollUntil(async () => {
+      const snap = await adminDb
+        .collection('communityChat')
+        .doc('global')
+        .collection('messages')
+        .doc(posted.messageId)
+        .get();
+      return snap.exists ? true : undefined;
+    });
+    expect(await inboxFor(other.uid, 'community_chat')).toHaveLength(0);
+    expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
   });
 });

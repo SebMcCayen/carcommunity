@@ -17,6 +17,12 @@
  *  - Blocking is honoured in BOTH directions: if either party has blocked the
  *    other, a request is rejected with a neutral failed-precondition
  *    (NOT_ADDABLE) that never reveals who blocked whom.
+ *  - Best-effort IN-APP notifications ('friend_request' category, honored
+ *    per-recipient by writeInAppNotification) are written for: a new request
+ *    (the invitee), and an ACCEPT (the original requester — from both
+ *    respondRequest's accept and sendRequest's reverse-pending auto-accept).
+ *    A DECLINE is deliberately silent: the requester is never told they were
+ *    turned down.
  *  - Nickname (displayName) is NOT unique: sendRequest resolves an exact
  *    match; 0 → not-found, 1 → proceed, >1 → failed-precondition
  *    (AMBIGUOUS_NICKNAME) carrying a candidate list in the error details so
@@ -29,6 +35,7 @@ import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
+import { writeInAppNotification } from '../notifications/deliver';
 import {
   ALREADY_FRIENDS_MESSAGE,
   AMBIGUOUS_NICKNAME_MESSAGE,
@@ -250,7 +257,7 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
   const callerFriendRef = friendshipRef(actor.uid, targetUid);
   const targetFriendRef = friendshipRef(targetUid, actor.uid);
 
-  return db.runTransaction<SendRequestResult>(async (tx) => {
+  const result = await db.runTransaction<SendRequestResult>(async (tx) => {
     // Reads must precede writes. Re-read the block state in BOTH directions
     // INSIDE the transaction: the outside-transaction check above is a cheap
     // fast-fail, but block state can change between it and these writes
@@ -326,6 +333,36 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
       ),
     };
   });
+
+  // Best-effort in-app notice for the OTHER party (never fails the request).
+  // Both outcomes are the target's news to hear, under the same
+  // 'friend_request' category — honored per-recipient inside
+  // writeInAppNotification. Blocking needs no check: both the pre-transaction
+  // gate and the in-transaction re-read reject a blocked pair before here.
+  const callerName = callerProfile.displayName ?? 'En medlem';
+  await writeInAppNotification(
+    targetUid,
+    result.status === 'friends'
+      ? {
+          // The reverse-pending auto-accept path: the target had a pending
+          // request to the caller and is now friends — from their side the
+          // caller accepted, so this mirrors respondRequest's accept notice.
+          category: 'friend_request',
+          title: 'Vänförfrågan accepterad',
+          previewText: `${callerName} accepterade din vänförfrågan.`,
+          actionType: 'open_profile',
+          relatedEntityId: actor.uid,
+        }
+      : {
+          category: 'friend_request',
+          title: 'Ny vänförfrågan',
+          previewText: `${callerName} vill bli din vän.`,
+          actionType: 'open_notifications',
+          relatedEntityId: actor.uid,
+        },
+  ).catch(() => undefined);
+
+  return result;
 });
 
 // ---------------------------------------------------------------------------
@@ -348,7 +385,15 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
   const reqRef = friendRequestRefById(requestId);
   const now = new Date();
 
-  return db.runTransaction<RespondRequestResult>(async (tx) => {
+  // The transaction additionally reports who to tell and under what name; a
+  // DECLINE reports nothing, so the requester is never told they were turned
+  // down (see the notify block below).
+  interface RespondOutcome {
+    result: RespondRequestResult;
+    notify?: { uid: string; accepterName: string | null };
+  }
+
+  const { result, notify } = await db.runTransaction<RespondOutcome>(async (tx) => {
     const reqSnap = await tx.get(reqRef);
     if (!reqSnap.exists) {
       throw new HttpsError('not-found', REQUEST_NOT_FOUND_MESSAGE);
@@ -367,7 +412,10 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
 
     if (action === 'decline') {
       tx.set(reqRef, { status: 'declined', updatedAt: Timestamp.fromDate(now) }, { merge: true });
-      return { status: 'declined' };
+      // No notify: a decline is deliberately silent. Telling the requester they
+      // were turned down invites pressure on the decliner and leaks a choice
+      // that is nobody else's business — the request simply stops being pending.
+      return { result: { status: 'declined' } };
     }
 
     // action === 'accept' — read both live profiles (freshness) and the block
@@ -417,10 +465,30 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
     tx.set(reqRef, { status: 'accepted', updatedAt: Timestamp.fromDate(now) }, { merge: true });
 
     return {
-      status: 'accepted',
-      friend: toFriendSummary(fromUid, { displayName: fromProfile.displayName, avatarPath: fromProfile.avatarPath }, now.toISOString()),
+      result: {
+        status: 'accepted',
+        friend: toFriendSummary(fromUid, { displayName: fromProfile.displayName, avatarPath: fromProfile.avatarPath }, now.toISOString()),
+      },
+      notify: { uid: fromUid, accepterName: callerProfile.displayName },
     };
   });
+
+  // Best-effort in-app notice for the REQUESTER that their request landed
+  // (never fails the response). Accept only — see the decline path above. The
+  // 'friend_request' preference is honored per-recipient inside
+  // writeInAppNotification, and the accept path's in-transaction block re-read
+  // means a blocked pair never reaches here.
+  if (notify) {
+    await writeInAppNotification(notify.uid, {
+      category: 'friend_request',
+      title: 'Vänförfrågan accepterad',
+      previewText: `${notify.accepterName ?? 'En medlem'} accepterade din vänförfrågan.`,
+      actionType: 'open_profile',
+      relatedEntityId: actor.uid,
+    }).catch(() => undefined);
+  }
+
+  return result;
 });
 
 // ---------------------------------------------------------------------------

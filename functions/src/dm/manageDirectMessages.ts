@@ -20,6 +20,12 @@
  *    sendMessage bumps both by 1 for the recipient; markRead clears the
  *    conversation counter and decrements the aggregate by exactly the cleared
  *    amount (never underflows).
+ *  - sendMessage writes a best-effort IN-APP notification for the recipient
+ *    ('direct_message' category, honored per-recipient by
+ *    writeInAppNotification) on the FIRST message of an unread run only — the
+ *    recipient's pre-existing unread count (already read by the send
+ *    transaction) says whether they've been notified and haven't looked yet, so
+ *    an active back-and-forth doesn't restack the same notice per message.
  *  - FCM push on a new message is intentionally NOT wired here: the migration
  *    schedules FCM delivery (sendPushNotification) for the end-of-MVP Firebase
  *    console setup (see notifications/pushTokens.ts). The DM conversation list
@@ -32,6 +38,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
+import { writeInAppNotification } from '../notifications/deliver';
 import {
   CONVERSATION_NOT_FOUND_MESSAGE,
   DM_CONVERSATIONS_LIMIT,
@@ -168,9 +175,17 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
   const messageRef = convRef.collection('messages').doc();
   const recipientAggRef = unreadAggregateRef(toUid);
 
-  await db.runTransaction(async (tx) => {
+  // Returns the recipient's unread count for this conversation BEFORE this
+  // message, read straight off the transaction's existing conversation get (no
+  // extra I/O). Drives the notify-once-per-unread-run rule below. Returned from
+  // the transaction rather than captured in a closure variable so a Firestore
+  // retry can't leave a stale value behind.
+  const priorUnread = await db.runTransaction<number>(async (tx) => {
     const convSnap = await tx.get(convRef);
     const ts = FieldValue.serverTimestamp();
+    const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
+    const rawUnread = unreadMap[toUid];
+    const unreadBefore = typeof rawUnread === 'number' && rawUnread > 0 ? rawUnread : 0;
 
     if (!convSnap.exists) {
       tx.set(
@@ -205,12 +220,40 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
 
     // Keep the per-user aggregate in lock-step (owner-only readable badge source).
     tx.set(recipientAggRef, { dmUnreadTotal: FieldValue.increment(1) }, { merge: true });
+
+    return unreadBefore;
   });
+
+  // Best-effort in-app notification for the recipient (never fails the send).
+  //
+  // Notify only on the FIRST message of an unread run: if the recipient already
+  // has unread messages in this conversation they were notified when the run
+  // started and haven't read it since, so every further message in an active
+  // back-and-forth would just restack the same "you have a message from X"
+  // notice. dm.markRead zeroes the counter, so the next message after they read
+  // notifies again. The signal is the unread count the transaction already read
+  // — no extra read, no new state to store.
+  //
+  // Blocking needs no check here: a blocked pair can't reach this point (the
+  // both-ways block gate above rejects the send outright). The 'direct_message'
+  // preference is honored per-recipient inside writeInAppNotification.
+  if (priorUnread === 0) {
+    const senderName = senderProfile.displayName ?? 'En vän';
+    await writeInAppNotification(toUid, {
+      category: 'direct_message',
+      title: `Nytt meddelande från ${senderName}`,
+      previewText: messagePreview(text),
+      actionType: 'open_notifications',
+      // The conversation id — lets the client deep-link straight to the thread.
+      relatedEntityId: pairId,
+    }).catch(() => undefined);
+  }
 
   // NOTE: FCM push to the recipient is intentionally deferred — actual FCM
   // delivery (sendPushNotification) ships with the end-of-MVP Firebase console
   // setup (notifications/pushTokens.ts). The unread aggregate + conversation
-  // list already drive the in-app chat-bubble badge.
+  // list already drive the in-app chat-bubble badge; the in-app notification
+  // above is the inbox surface, not a push.
 
   return { conversationId: pairId, messageId: messageRef.id };
 });

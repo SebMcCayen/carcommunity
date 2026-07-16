@@ -586,3 +586,157 @@ describe('friends Firestore rules', () => {
     ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// friend_request in-app notification producers
+// ---------------------------------------------------------------------------
+
+/** In-app inbox items for a uid in one category (backend-only collection). */
+async function inboxFor(uid: string, category: string): Promise<Array<Record<string, unknown>>> {
+  const snap = await adminDb.collection('notifications').doc(uid).collection('items').get();
+  return snap.docs.map((d) => d.data()).filter((item) => item.category === category);
+}
+
+/** Opts `uid` out of one notification category (the owner-writable prefs map). */
+async function optOutOf(uid: string, category: string): Promise<void> {
+  await adminDb
+    .collection('userPrivate')
+    .doc(uid)
+    .set({ notificationPreferences: { [category]: { inApp: false } } }, { merge: true });
+}
+
+describe('friend_request in-app notification producers', () => {
+  it('notifies the INVITEE on a new request, and never the requester', async () => {
+    const requester = await newMember('NotifRequester');
+    const invitee = await newMember('NotifInvitee');
+
+    await signInAs(requester);
+    await call('friend-sendRequest', { toUid: invitee.uid });
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(invitee.uid, 'friend_request');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Ny vänförfrågan');
+    expect(items[0]!.previewText).toBe('NotifRequester vill bli din vän.');
+    // Deep-link target: the requester's profile.
+    expect(items[0]!.relatedEntityId).toBe(requester.uid);
+
+    expect(await inboxFor(requester.uid, 'friend_request')).toHaveLength(0);
+  });
+
+  it('writes NO notification when the invitee opted out of friend_request', async () => {
+    const requester = await newMember('OptOutRequester');
+    const invitee = await newMember('OptOutInvitee');
+    await optOutOf(invitee.uid, 'friend_request');
+
+    await signInAs(requester);
+    await call('friend-sendRequest', { toUid: invitee.uid });
+
+    // The request itself must still be created — only the notification is
+    // suppressed. Waiting on it proves the send completed, so the empty inbox
+    // below isn't just a race.
+    await pollUntil(async () =>
+      (await requestStatus(requester.uid, invitee.uid)) === 'pending' ? true : undefined,
+    );
+    expect(await inboxFor(invitee.uid, 'friend_request')).toHaveLength(0);
+  });
+
+  it('notifies the REQUESTER when their request is accepted', async () => {
+    const requester = await newMember('AcceptedRequester');
+    const accepter = await newMember('AcceptingFriend');
+
+    await signInAs(requester);
+    await call('friend-sendRequest', { toUid: accepter.uid });
+
+    await signInAs(accepter);
+    await call('friend-respondRequest', {
+      requestId: friendRequestId(requester.uid, accepter.uid),
+      action: 'accept',
+    });
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(requester.uid, 'friend_request');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Vänförfrågan accepterad');
+    expect(items[0]!.previewText).toBe('AcceptingFriend accepterade din vänförfrågan.');
+    expect(items[0]!.relatedEntityId).toBe(accepter.uid);
+  });
+
+  it('stays SILENT on a decline — the requester is never told they were turned down', async () => {
+    const requester = await newMember('DeclinedRequester');
+    const decliner = await newMember('DecliningUser');
+
+    await signInAs(requester);
+    await call('friend-sendRequest', { toUid: decliner.uid });
+    // Drain the invitee's new-request notice so only the response is in play.
+    await pollUntil(async () => {
+      const found = await inboxFor(decliner.uid, 'friend_request');
+      return found.length > 0 ? found : undefined;
+    });
+
+    await signInAs(decliner);
+    await call('friend-respondRequest', {
+      requestId: friendRequestId(requester.uid, decliner.uid),
+      action: 'decline',
+    });
+
+    // Wait for the decline to land, then assert the requester learned nothing.
+    await pollUntil(async () =>
+      (await requestStatus(requester.uid, decliner.uid)) === 'declined' ? true : undefined,
+    );
+    expect(await inboxFor(requester.uid, 'friend_request')).toHaveLength(0);
+  });
+
+  it('writes NO notification when the pair is blocked — in EITHER direction', async () => {
+    const kim = await newMember('BlockReqKim');
+    const leo = await newMember('BlockReqLeo');
+
+    // Kim blocks Leo.
+    await signInAs(kim);
+    await call('blocking-block', { targetUserId: leo.uid });
+
+    // Pins the invariant that today holds only by construction: the producer
+    // sits BEHIND the block gates (the pre-transaction check and the
+    // in-transaction re-read). Each leg asserts the request was actually
+    // attempted and observed to be rejected, so the empty inbox is real
+    // suppression and not a race. A blocked user must not be able to use a
+    // friend request to put anything in the inbox of the person who blocked
+    // them — move the producer above the gate and this fails.
+    await signInAs(leo);
+    expect(await callableErrorCode(call('friend-sendRequest', { toUid: kim.uid }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(kim.uid, 'friend_request')).toHaveLength(0);
+
+    // The blocker cannot notify the person they blocked either.
+    await signInAs(kim);
+    expect(await callableErrorCode(call('friend-sendRequest', { toUid: leo.uid }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(leo.uid, 'friend_request')).toHaveLength(0);
+  });
+
+  it('notifies the other party on the reverse-pending auto-accept path', async () => {
+    // They already sent a request to us; our send befriends immediately, which
+    // from their side reads as "your request was accepted".
+    const other = await newMember('RaceOther');
+    const caller = await newMember('RaceCaller');
+    await seedPendingRequest(other, caller, 'RaceOther', 'RaceCaller');
+
+    await signInAs(caller);
+    const result = await call('friend-sendRequest', { toUid: other.uid });
+    expect((result.data as { status: string }).status).toBe('friends');
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(other.uid, 'friend_request');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Vänförfrågan accepterad');
+    expect(items[0]!.previewText).toBe('RaceCaller accepterade din vänförfrågan.');
+  });
+});

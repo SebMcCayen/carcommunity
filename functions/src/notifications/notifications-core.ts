@@ -38,10 +38,37 @@ import { isRestricted, type UserAccessState } from '../shared/access';
 // ---------------------------------------------------------------------------
 
 /**
- * Categories that are actually sent. The legacy contract also defines
- * FUTURE categories (partner_offer, event_chat, nearby_event) that must not
- * be activated without product and security review — they are deliberately
- * NOT accepted here.
+ * The closed set of categories the notification domain recognizes: a value
+ * must appear here before a producer can deliver under it or a preference can
+ * be expressed for it. Membership is a precondition for delivery, not
+ * evidence of it — being listed does NOT mean the category has an active
+ * delivery surface. Some entries are preference-only: the id exists so the
+ * opt-out is expressible and stable ahead of the producer that will use it
+ * (the note below records which have producers today).
+ *
+ * The legacy contract also defines FUTURE categories (partner_offer,
+ * event_chat, nearby_event) that must not be activated without product and
+ * security review — they are deliberately NOT accepted here.
+ *
+ * The social categories (direct_message, community_chat, convoy_chat,
+ * friend_request, convoy_invite) back the per-category preferences for the
+ * chat/social features. The same review rule applies: they exist so users
+ * can opt out and so producers have a category to check before writing, but
+ * activating them as a delivery surface needs the product/security review
+ * this domain mandates.
+ *
+ * Producers today (all IN-APP only — no push path is wired):
+ *  - convoy_invite   — convoy/manageConvoy.ts (invite)
+ *  - direct_message  — dm/manageDirectMessages.ts (sendMessage; first message
+ *                      of an unread run only)
+ *  - friend_request  — friends/manageFriends.ts (new request → invitee;
+ *                      accept → requester; a decline is silent)
+ *  - convoy_chat     — chatchannels/convoyChat.ts (post; fan-out to the other
+ *                      accepted members, collapsed per time window)
+ *  - community_chat  — NO producer, deliberately. Per-message fan-out to every
+ *                      active member is a spam/cost non-starter; the category
+ *                      is held for an @mentions or digest design. See the
+ *                      chatchannels/communityChat.ts header.
  */
 export const NOTIFICATION_CATEGORIES = [
   'event_reminder',
@@ -52,8 +79,44 @@ export const NOTIFICATION_CATEGORIES = [
   'account_suspension',
   'subscription_status',
   'system_notice',
+  'direct_message',
+  'community_chat',
+  'convoy_chat',
+  'friend_request',
+  'convoy_invite',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+/**
+ * Social categories: member-to-member activity. All optional (never
+ * essential) — a user must always be able to silence other members.
+ */
+export const SOCIAL_NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
+  'direct_message',
+  'community_chat',
+  'convoy_chat',
+  'friend_request',
+  'convoy_invite',
+] as const;
+
+/**
+ * Categories notifications.adminSend may broadcast — deliberately NOT all of
+ * NOTIFICATION_CATEGORIES. The social categories describe activity between
+ * members, so accepting one from adminSend would let a broadcast impersonate
+ * a DM / friend request / convoy invite the recipient never received. Admin
+ * sends stay on the operational categories; social notices are producer-only.
+ */
+export const ADMIN_SENDABLE_CATEGORIES = [
+  'event_reminder',
+  'event_updated',
+  'event_cancelled',
+  'admin_message',
+  'account_warning',
+  'account_suspension',
+  'subscription_status',
+  'system_notice',
+] as const;
+export type AdminSendableCategory = (typeof ADMIN_SENDABLE_CATEGORIES)[number];
 
 /**
  * Essential account notices that can never be disabled in-app (legacy:

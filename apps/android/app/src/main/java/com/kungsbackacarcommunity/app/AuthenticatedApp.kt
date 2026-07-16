@@ -1504,6 +1504,31 @@ fun AuthenticatedApp(
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
                         onClose = { chatHubOpen = false },
+                        // Tapping a sender in a channel / the DM title opens their
+                        // read-only profile — a shell ROUTE, which the hub popup's
+                        // gate (route == null) does not survive. Close the hub
+                        // explicitly rather than leaning on the auto-close effect,
+                        // so the flag is cleared in the same frame as the
+                        // navigation and never lingers set behind the route.
+                        // Guarded: no profile repository (config-less build) leaves
+                        // the affordances inert instead of closing the hub for a
+                        // route that could only spin.
+                        onViewProfile =
+                            if (memberProfileRepository != null) {
+                                { targetUid ->
+                                    if (targetUid.isNotBlank()) {
+                                        chatHubOpen = false
+                                        openMemberProfile(targetUid)
+                                    }
+                                }
+                            } else {
+                                null
+                            },
+                        // Backs the block action on the long-press message sheet.
+                        // Unlike onViewProfile this must NOT close the hub: the
+                        // sheet and its confirm dialog compose inside it, and
+                        // blocking from chat should leave the user where they were.
+                        blockingRepository = blockingRepository,
                     )
                 }
 
@@ -1786,6 +1811,14 @@ private fun RouteHost(
     partnerStatsEnabled: Boolean,
 ) {
     val context = LocalContext.current
+    // The one guarded profile-navigation callback every member-bearing surface
+    // reuses (chat senders, the convoy roster, event-chat authors, event
+    // attendee rows) — mirroring
+    // the Friends screen's onViewProfile. Null when the profile repository isn't
+    // wired (config-less build), which leaves those affordances inert rather than
+    // navigating to a route that could only render a permanent spinner.
+    val openProfileIfWired: ((String) -> Unit)? =
+        if (memberProfileRepository != null) onOpenMemberProfile else null
     when (route) {
         ShellRoute.Profile -> {
             val saveStatus by
@@ -1928,11 +1961,7 @@ private fun RouteHost(
                     onShowOnMap = onShowOnMap,
                     onBack = onClose,
                     blockingRepository = blockingRepository,
-                    // Same guard the friends list uses: without a member-profile
-                    // repository the shell route cannot render, so attendee rows
-                    // stay inert rather than navigating into a dead end.
-                    onOpenMemberProfile =
-                        if (memberProfileRepository != null) onOpenMemberProfile else null,
+                    onViewProfile = openProfileIfWired,
                 )
             } else {
                 LoadingScreen()
@@ -2041,6 +2070,10 @@ private fun RouteHost(
                     // Deep-link into create-convoy when reached from the map "+"
                     // chooser's "Convoy" option (list-first from the Social hub).
                     openCreateOnEntry = convoyOpenCreate,
+                    // Tapping a roster member on the convoy detail opens their
+                    // read-only profile; the caller's own row never navigates.
+                    onViewMember = openProfileIfWired,
+                    viewerUid = uid,
                 )
             } else {
                 LoadingScreen()
@@ -2071,6 +2104,9 @@ private fun RouteHost(
                     uid = uid,
                     otherUid = dmChatOtherUid,
                     otherName = dmChatOtherName,
+                    // The thread title names the other member; tapping it opens
+                    // their read-only profile.
+                    onViewProfile = openProfileIfWired,
                 )
             } else {
                 LoadingScreen()
@@ -2089,6 +2125,9 @@ private fun RouteHost(
                 notificationsCoordinator = notificationsCoordinator,
                 communityUnread = communityChatUnread,
                 onClose = onClose,
+                onViewProfile = openProfileIfWired,
+                // Backs the block action on the hub's long-press message sheet.
+                blockingRepository = blockingRepository,
             )
 
         ShellRoute.Badges ->

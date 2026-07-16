@@ -57,10 +57,12 @@ fun EventsRoute(
     // Blocking-in-context: null-safe. When null, chat offers no block action
     // and does no blocked-author filtering (config-less builds pass unchanged).
     blockingRepository: BlockingRepository? = null,
-    // Opens another member's read-only profile (the shell's MemberProfile
-    // route — reused, not rebuilt). Null in a build with no member-profile
-    // repository, which leaves attendee rows inert rather than dead-ending.
-    onOpenMemberProfile: ((String) -> Unit)? = null,
+    // Opens a member's read-only profile (the shell's MemberProfile route —
+    // reused, not rebuilt). Two member-bearing surfaces share it: the event
+    // chat's message authors, and the attendee list's rows. Null in a build
+    // with no member-profile repository, which leaves both inert rather than
+    // navigating into a route that could only render a permanent spinner.
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -159,6 +161,7 @@ fun EventsRoute(
             myRsvp = myRsvp,
             onBack = { showChat = false },
             blockingRepository = blockingRepository,
+            onViewProfile = onViewProfile,
         )
         return
     }
@@ -243,7 +246,7 @@ fun EventsRoute(
         onOpenChat = if (chatEligible) { { showChat = true } } else null,
         onOpenGroupDrive = if (groupDriveEligible) { { showGroupDrive = true } } else null,
         attendees = attendees,
-        onOpenMember = onOpenMemberProfile,
+        onOpenMember = onViewProfile,
         onRetryAttendees = { attendeesReloadKey++ },
     )
 }

@@ -19,6 +19,13 @@
  *    existence can't be probed — parity with convoy.respond.
  *  - Every message denormalizes the sender's safe profile so the channel renders
  *    with no per-message profile lookup. FCM push deferred (end-of-MVP, as DM).
+ *  - On post, a best-effort IN-APP notification fans out to the other ACCEPTED
+ *    members under the 'convoy_chat' category, so a member can silence convoy
+ *    chatter without silencing DMs or invites. writeInAppNotification checks the
+ *    preference; a deterministic per-window notification id
+ *    (convoyChatNotificationId) collapses a busy chat into at most one notice
+ *    per member per CONVOY_CHAT_NOTIFY_WINDOW_MS. This is IN-APP only — no push
+ *    path exists yet.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -26,6 +33,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
+import { writeInAppNotification } from '../notifications/deliver';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   CONVOY_CHAT_RETENTION_DAYS,
@@ -33,9 +41,12 @@ import {
   EMPTY_MESSAGE_MESSAGE,
   NOT_CONVOY_MEMBER_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
+  acceptedConvoyMemberUids,
   buildChatMessageDocument,
   chatMessageExpiry,
+  convoyChatNotificationId,
   isAcceptedConvoyMember,
+  messagePreview,
   parseListConvoyInput,
   parsePostConvoyInput,
   toChatMessageSummary,
@@ -88,8 +99,14 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
  * Loads the convoy doc and asserts the caller is an ACCEPTED member. Not-found
  * (never permission-denied) for a missing convoy OR a non/pending/declined
  * member so a convoy can't be probed by an outsider.
+ *
+ * Returns the convoy data so a caller that also needs it — post's notification
+ * fan-out reads the accepted-member list off it — costs no second read.
  */
-async function requireAcceptedMember(convoyId: string, uid: string): Promise<void> {
+async function requireAcceptedMember(
+  convoyId: string,
+  uid: string,
+): Promise<Record<string, unknown>> {
   const snap = await convoyRef(convoyId).get();
   if (!snap.exists) {
     throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
@@ -105,6 +122,7 @@ async function requireAcceptedMember(convoyId: string, uid: string): Promise<voi
     }
     throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
   }
+  return snap.data() ?? {};
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +145,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
 
-  await requireAcceptedMember(convoyId, actor.uid);
+  const convoy = await requireAcceptedMember(convoyId, actor.uid);
 
   const senderProfile = await loadProfile(actor.uid);
   if (!senderProfile) {
@@ -146,6 +164,37 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     buildChatMessageDocument(
       { senderUid: actor.uid, text, senderProfile, expireAt },
       () => FieldValue.serverTimestamp(),
+    ),
+  );
+
+  // Best-effort in-app fan-out to the OTHER accepted members (never fails the
+  // post). The member list comes off the convoy doc the membership gate already
+  // loaded, so this adds no read of its own. The 'convoy_chat' preference is
+  // honored per-recipient inside writeInAppNotification rather than filtered
+  // here, and the shared per-window notification id collapses a busy chat into
+  // at most one notice per member per CONVOY_CHAT_NOTIFY_WINDOW_MS.
+  //
+  // Blocking is deliberately NOT filtered: a convoy's membership is already
+  // block-gated at invite time (convoy/manageConvoy.ts), and the convoy chat
+  // read surface itself applies no block filter — so filtering only the
+  // notification would silently diverge from what the channel actually shows.
+  const recipients = acceptedConvoyMemberUids(convoy, actor.uid);
+  const senderName = senderProfile.displayName ?? 'En medlem';
+  const convoyTitle = typeof convoy.title === 'string' && convoy.title ? convoy.title : null;
+  const notificationId = convoyChatNotificationId(convoyId, new Date());
+  await Promise.all(
+    recipients.map((uid) =>
+      writeInAppNotification(
+        uid,
+        {
+          category: 'convoy_chat',
+          title: convoyTitle ? `Nytt i konvojen: ${convoyTitle}` : 'Nytt i konvojchatten',
+          previewText: `${senderName}: ${messagePreview(text)}`,
+          actionType: 'open_notifications',
+          relatedEntityId: convoyId,
+        },
+        notificationId,
+      ).catch(() => undefined),
     ),
   );
 
