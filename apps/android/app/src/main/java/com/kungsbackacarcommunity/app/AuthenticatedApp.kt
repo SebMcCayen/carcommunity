@@ -1136,6 +1136,10 @@ fun AuthenticatedApp(
                             ) {
                                 MapHome(
                                     mapSurface = mapSurface,
+                                    // Same single value that stands the surface
+                                    // down below: a covered map must not keep
+                                    // intercepting Back or hold its transient UI.
+                                    covered = mapCovered,
                                     isLiveSharing = isSharing,
                                     canShareLive = canShareLive,
                                     participantCount = mapParticipantUids.size,
