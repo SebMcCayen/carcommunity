@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -256,6 +257,67 @@ class DriveRecordingTest {
     }
 
     @Test
+    fun `summary-only save sends the stop moment as endedAt, not the save time`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        // Explicit clock so the gap between stopping and saving is unambiguous.
+        var now = 0L
+        val c =
+            DriveRecordingCoordinator(
+                repository = repo,
+                sourceSessionId = "sess",
+                clock = { now },
+            )
+        now = 1_000L
+        c.start()
+        // No fixes: a summary-only save, where the backend derives the stored
+        // duration straight from endedAt.
+        now = 5_000L
+        c.stop()
+        // The user sits on the prompt for a while before saving.
+        now = 90_000L
+        c.save(title = null)
+
+        // endedAt must be the STOP moment (5s), not the save moment (90s) —
+        // otherwise History would store an 89s drive instead of a 4s one.
+        assertEquals(
+            Instant.ofEpochMilli(5_000L).toString(),
+            repo.lastRequest?.get("endedAt"),
+        )
+        assertEquals(
+            Instant.ofEpochMilli(1_000L).toString(),
+            repo.lastRequest?.get("startedAt"),
+        )
+    }
+
+    @Test
+    fun `retrying a failed save reuses the original stop moment`() = runTest {
+        val repo = RetryFakeRepository()
+        var now = 0L
+        val c =
+            DriveRecordingCoordinator(
+                repository = repo,
+                sourceSessionId = "sess",
+                clock = { now },
+            )
+        now = 1_000L
+        c.start()
+        now = 5_000L
+        c.stop()
+
+        now = 20_000L
+        c.save(title = null)
+        assertTrue(c.state.value is RecordingState.Failed)
+        val firstEndedAt = repo.lastRequest?.get("endedAt")
+
+        // Retry much later: the stored end time must not drift.
+        now = 300_000L
+        c.save(title = null)
+        assertEquals(RecordingState.Saved, c.state.value)
+        assertEquals(Instant.ofEpochMilli(5_000L).toString(), firstEndedAt)
+        assertEquals(firstEndedAt, repo.lastRequest?.get("endedAt"))
+    }
+
+    @Test
     fun `discard releases the recorder so a subsequent save is a no-op`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
         val c = DriveRecordingCoordinator(repo, "sess")
@@ -273,6 +335,25 @@ private class CancellingFakeRepository : DrivesRepository {
 
     override suspend fun saveDrive(request: Map<String, Any?>): Unit =
         throw CancellationException("scope cancelled")
+
+    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+}
+
+/**
+ * Records every request and fails only the FIRST save, so a retry succeeds —
+ * lets a test compare the payload across the failed attempt and the retry.
+ */
+private class RetryFakeRepository : DrivesRepository {
+    var lastRequest: Map<String, Any?>? = null
+    private var attempts = 0
+
+    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+    override suspend fun saveDrive(request: Map<String, Any?>) {
+        lastRequest = request
+        attempts++
+        if (attempts == 1) throw IllegalStateException("save failed")
+    }
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
 }

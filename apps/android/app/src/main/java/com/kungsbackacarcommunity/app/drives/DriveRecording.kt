@@ -241,11 +241,17 @@ object DriveSummary {
      * time. Distance / average speed are null when there are too few points to
      * estimate (a summary-only save), so the dialog renders an em dash for them.
      */
+    /**
+     * Elapsed millis → whole seconds, rounded (not floored) to match the
+     * backend's `driveDurationSeconds` (`Math.round(ms / 1000)`). O(1), so the
+     * summary dialog can render the duration immediately while the O(n)
+     * distance scan resolves off the main thread.
+     */
+    fun durationSeconds(elapsedMillis: Long): Long =
+        Math.round(elapsedMillis / 1000.0).coerceAtLeast(0L)
+
     fun preview(points: List<RecordedPoint>, elapsedMillis: Long): DriveSummaryPreview {
-        // Round (not floor) to match the backend's driveDurationSeconds, which
-        // uses Math.round(ms / 1000) — so the preview's duration seconds agree
-        // with what the server stores.
-        val durationSeconds = Math.round(elapsedMillis / 1000.0).coerceAtLeast(0L)
+        val durationSeconds = durationSeconds(elapsedMillis)
         if (points.size < 2) {
             return DriveSummaryPreview(
                 distanceMeters = null,

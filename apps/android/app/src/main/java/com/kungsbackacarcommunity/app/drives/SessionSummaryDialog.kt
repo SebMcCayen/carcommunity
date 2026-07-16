@@ -12,7 +12,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -20,6 +21,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Test tag on the end-of-session save/discard summary dialog. */
 const val SESSION_SUMMARY_DIALOG_TAG = "session_summary_dialog"
@@ -52,34 +55,38 @@ fun SessionSummaryDialog(
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
-    when (state) {
-        is RecordingState.PromptSave ->
-            SummaryPrompt(
-                elapsedMillis = state.elapsedMillis,
-                pointsProvider = pointsProvider,
-                showError = false,
-                onSave = onSave,
-                onDiscard = onDiscard,
-            )
+    // PromptSave and Failed render the SAME prompt (Failed only adds an error
+    // line), so they resolve to one SummaryPrompt call site rather than two
+    // `when` branches. That keeps the composable's identity — and therefore its
+    // in-flight preview computation — alive across a failed save + retry instead
+    // of restarting the point scan on every transition.
+    val prompt: SummaryPromptArgs? =
+        when (state) {
+            is RecordingState.PromptSave -> SummaryPromptArgs(state.elapsedMillis, showError = false)
+            is RecordingState.Failed -> SummaryPromptArgs(state.elapsedMillis, showError = true)
+            RecordingState.Saving,
+            RecordingState.Idle,
+            is RecordingState.Recording,
+            RecordingState.Saved,
+            RecordingState.Discarded,
+            -> null
+        }
 
-        is RecordingState.Failed ->
-            SummaryPrompt(
-                elapsedMillis = state.elapsedMillis,
-                pointsProvider = pointsProvider,
-                showError = true,
-                onSave = onSave,
-                onDiscard = onDiscard,
-            )
-
-        RecordingState.Saving -> SavingDialog()
-
-        RecordingState.Idle,
-        is RecordingState.Recording,
-        RecordingState.Saved,
-        RecordingState.Discarded,
-        -> Unit
+    if (prompt != null) {
+        SummaryPrompt(
+            elapsedMillis = prompt.elapsedMillis,
+            pointsProvider = pointsProvider,
+            showError = prompt.showError,
+            onSave = onSave,
+            onDiscard = onDiscard,
+        )
+    } else if (state == RecordingState.Saving) {
+        SavingDialog()
     }
 }
+
+/** The [SummaryPrompt] inputs derived from a prompt-bearing [RecordingState]. */
+private data class SummaryPromptArgs(val elapsedMillis: Long, val showError: Boolean)
 
 @Composable
 private fun SummaryPrompt(
@@ -89,8 +96,21 @@ private fun SummaryPrompt(
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
-    // Points are frozen once recording stops, so compute the estimate once.
-    val preview = remember(elapsedMillis) { DriveSummary.preview(pointsProvider(), elapsedMillis) }
+    // A recording can hold up to DriveRecorder.MAX_ROUTE_POINTS (20k) fixes and
+    // the distance scan is O(n) Haversine/trig, so computing it during
+    // composition would jank the frame the dialog opens on. Resolve it on a
+    // background dispatcher instead and render the established em-dash
+    // placeholder until it lands. Points are frozen once recording stops, so
+    // keying on elapsedMillis (stable for a given stop, including across a
+    // failed save + retry) computes this exactly once per prompt.
+    val preview by
+        produceState<DriveSummaryPreview?>(initialValue = null, elapsedMillis) {
+            value = withContext(Dispatchers.Default) {
+                DriveSummary.preview(pointsProvider(), elapsedMillis)
+            }
+        }
+    // O(1), so the duration renders immediately rather than waiting on the scan.
+    val durationSeconds = DriveSummary.durationSeconds(elapsedMillis)
     AlertDialog(
         modifier = Modifier.testTag(SESSION_SUMMARY_DIALOG_TAG),
         // Force an explicit choice: a session's drive is never silently dropped
@@ -103,24 +123,26 @@ private fun SummaryPrompt(
                     text = stringResource(R.string.savedDrives_promptBody),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // While [preview] is still resolving these render "—", the same
+                // placeholder the formatters already use for an unknown value.
                 SummaryRow(
                     label = stringResource(R.string.savedDrives_distance),
-                    value = DriveFormatters.formatDistance(preview.distanceMeters),
+                    value = DriveFormatters.formatDistance(preview?.distanceMeters),
                 )
                 SummaryRow(
                     label = stringResource(R.string.savedDrives_averageSpeed),
                     value =
                         DriveFormatters.formatSpeed(
                             DriveFormatters.effectiveAverageSpeed(
-                                averageSpeedMetersPerSecond = preview.averageSpeedMetersPerSecond,
-                                distanceMeters = preview.distanceMeters,
-                                durationSeconds = preview.durationSeconds,
+                                averageSpeedMetersPerSecond = preview?.averageSpeedMetersPerSecond,
+                                distanceMeters = preview?.distanceMeters,
+                                durationSeconds = preview?.durationSeconds ?: 0L,
                             ),
                         ),
                 )
                 SummaryRow(
                     label = stringResource(R.string.savedDrives_duration),
-                    value = DriveFormatters.formatDuration(preview.durationSeconds),
+                    value = DriveFormatters.formatDuration(durationSeconds),
                 )
                 Text(
                     text = stringResource(R.string.savedDrives_promptPrivacyNote),
