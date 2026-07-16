@@ -479,6 +479,11 @@ private fun SavedPlaceKind.icon() =
  * result takes — so a saved place is genuinely one tap from a route preview. The
  * trailing edit button opens the same dialog the route sheet's save button does,
  * pre-filled, for rename / re-kind / remove.
+ *
+ * Renders [saved] in full, deliberately: the store caps at [SavedPlaces.MAX] and
+ * that cap *is* what fits here, so there is nothing to truncate and no hidden
+ * remainder. Truncating anyway would silently re-introduce the saved-but-
+ * invisible places the single cap exists to rule out.
  */
 @Composable
 private fun SavedPlacesCard(
@@ -502,7 +507,7 @@ private fun SavedPlacesCard(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            saved.take(SavedPlaces.SHOWN).forEachIndexed { index, place ->
+            saved.forEachIndexed { index, place ->
                 if (index > 0) HorizontalDivider()
                 val label = place.displayLabel()
                 Row(verticalAlignment = Alignment.CenterVertically) {
