@@ -323,10 +323,20 @@ object MentionCandidates {
     /**
      * uid → display name for RENDERING (a superset of the picker: it keeps
      * [selfUid]'s own name, since being mentioned yourself must highlight too).
+     *
+     * Resolves each uid with the SAME precedence [from] picks with — first
+     * occurrence in [sources] wins — because the two must agree. Callers pass
+     * `friends + senders`, and a member who renamed appears in both: the friend
+     * list under their current name, an old message under the name denormalized
+     * onto it at post time. [from] keeps the first (`distinctBy`), so the picker
+     * inserts the CURRENT name; resolving the stale one here would leave the
+     * label it inserted unmatched and render an accepted mention as plain text.
+     * Hence `distinctBy` before `associate`, which would otherwise keep the LAST.
      */
     fun displayNames(sources: List<MentionCandidate>): Map<String, String> =
         sources
             .filter { it.uid.isNotBlank() && it.displayName.isNotBlank() }
+            .distinctBy { it.uid }
             .associate { it.uid to it.displayName }
 
     /**
@@ -364,7 +374,10 @@ object MentionCandidates {
  * A stored message carries `mentionedUids` but NOT offsets (the server never
  * parsed the text, so it has none to store), so highlighting has to map uids back
  * onto the text here. It does so by resolving each accepted uid to a display name
- * and matching "@name" at token boundaries.
+ * and matching "@name" at token boundaries. That resolution must use the same
+ * precedence the picker inserted with, or the label will not match the text it
+ * produced — see [MentionCandidates.displayNames], which is where the two are
+ * kept in step.
  *
  * The consequences, all deliberate:
  *  - a uid we cannot name (no profile in reach) simply isn't highlighted — the

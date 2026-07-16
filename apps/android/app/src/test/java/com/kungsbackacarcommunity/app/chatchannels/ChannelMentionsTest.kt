@@ -351,6 +351,21 @@ class ChannelMentionsTest {
         assertEquals(mapOf("uid-self" to "Me"), MentionCandidates.displayNames(senders))
     }
 
+    @Test
+    fun `a renamed member resolves to the name the picker offers, not a stale one`() {
+        // Same uid in both rosters under different names: the friend list has the
+        // CURRENT name, an old message carries the name denormalized onto it at
+        // post time. The picker inserts the friend-list name (from() keeps the
+        // first match), so rendering must resolve that SAME name — otherwise the
+        // label it inserted will not match the text and an accepted mention
+        // renders plain even though its member really was notified.
+        val friends = listOf(MentionCandidate("uid-1", "NewName"))
+        val senders = MentionCandidates.sendersOf(listOf(message("m1", "uid-1", "OldName", "hi")))
+        val picked = MentionCandidates.from(friends, senders, selfUid = "uid-self")
+        assertEquals(listOf("NewName"), picked.map { it.displayName })
+        assertEquals("NewName", MentionCandidates.displayNames(friends + senders)["uid-1"])
+    }
+
     // -------------------------------------------------------------- rendering
 
     @Test
