@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Placeholder theme. KCC Crown UI tokens (contracts/design-tokens/tokens.json)
-         are applied in Phase 6. -->
-    <style name="Theme.KCC" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- windowBackground mirrors KccLightColors.pageBackground so the window
+         never flashes a platform colour if a frame reveals it before Compose
+         paints. values-night/ carries the dark counterpart. -->
+    <style name="Theme.KCC" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/kcc_warm_ivory</item>
+    </style>
 </resources>
