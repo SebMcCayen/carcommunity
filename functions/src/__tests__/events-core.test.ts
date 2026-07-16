@@ -14,7 +14,12 @@ import {
   guardEventTimes,
   guardPublishable,
   guardUpdatableStatus,
+  initialEventStatus,
+  isMemberEventRateLimited,
   isZeroDeltas,
+  MEMBER_EVENT_RATE_LIMIT_MAX,
+  MEMBER_EVENT_RATE_LIMIT_WINDOW_MS,
+  memberEventRateLimitWindowStart,
   parseCancelEventInput,
   parseCreateEventInput,
   parseEventIdInput,
@@ -413,5 +418,59 @@ describe('events-core RSVP count deltas', () => {
       maybe: 0,
       not_going: 0,
     });
+  });
+});
+
+describe('events-core member-created events', () => {
+  it('defaults to the admin creator role (Phase 9b behaviour unchanged)', () => {
+    const parsed = parseCreateEventInput(validCreate);
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc } = buildEventDocuments(parsed.input, 'admin-1', serverTimestamp);
+
+    expect(eventDoc.status).toBe('draft');
+    expect(eventDoc.createdByRole).toBe('admin');
+  });
+
+  it('publishes a member-created event immediately and attributes it', () => {
+    const parsed = parseCreateEventInput(validCreate);
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc } = buildEventDocuments(parsed.input, 'member-1', serverTimestamp, 'member');
+
+    expect(eventDoc.status).toBe('published');
+    expect(eventDoc.createdByUserId).toBe('member-1');
+    expect(eventDoc.createdByRole).toBe('member');
+  });
+
+  it('forces isOfficial false for a member, honours it for an admin', () => {
+    const parsed = parseCreateEventInput({ ...validCreate, isOfficial: true });
+    if (!parsed.ok) throw new Error('expected ok');
+
+    // A member must never be able to mint the club-sanctioned badge.
+    expect(buildEventDocuments(parsed.input, 'm1', serverTimestamp, 'member').eventDoc.isOfficial).toBe(
+      false,
+    );
+    expect(buildEventDocuments(parsed.input, 'a1', serverTimestamp, 'admin').eventDoc.isOfficial).toBe(
+      true,
+    );
+  });
+
+  it('maps creator role to the initial status', () => {
+    expect(initialEventStatus('admin')).toBe('draft');
+    expect(initialEventStatus('member')).toBe('published');
+  });
+
+  it('rate-limits a member at the cap, not below it', () => {
+    expect(isMemberEventRateLimited(0)).toBe(false);
+    expect(isMemberEventRateLimited(MEMBER_EVENT_RATE_LIMIT_MAX - 1)).toBe(false);
+    expect(isMemberEventRateLimited(MEMBER_EVENT_RATE_LIMIT_MAX)).toBe(true);
+    expect(isMemberEventRateLimited(MEMBER_EVENT_RATE_LIMIT_MAX + 1)).toBe(true);
+  });
+
+  it('computes the rate-limit window start one window back', () => {
+    const now = new Date('2027-06-01T12:00:00.000Z');
+    expect(memberEventRateLimitWindowStart(now).getTime()).toBe(
+      now.getTime() - MEMBER_EVENT_RATE_LIMIT_WINDOW_MS,
+    );
+    expect(MEMBER_EVENT_RATE_LIMIT_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
   });
 });

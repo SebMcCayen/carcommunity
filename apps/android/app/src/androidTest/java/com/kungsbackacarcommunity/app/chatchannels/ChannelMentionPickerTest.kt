@@ -11,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -54,6 +55,9 @@ class ChannelMentionPickerTest {
                     },
                     onLoadOlder = {},
                     onResetError = {},
+                    // The picker only exists on the community channel; convoy
+                    // passes no candidates (see the no-picker case below).
+                    surface = ChatSurface.CommunityChannel,
                     mentionCandidates = candidates,
                     droppedMentionCount = droppedMentionCount,
                 )

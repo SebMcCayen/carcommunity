@@ -433,6 +433,7 @@
     <string name="memberProfile_badgesUnavailable">Utmärkelser visas inte på andra medlemmars profiler.</string>
     <string name="memberProfile_badgesLoadError">Det gick inte att läsa in utmärkelser.</string>
     <string name="memberProfile_awardedOn">Tilldelad %1$s</string>
+    <string name="memberProfile_blocked">Du har blockerat den här medlemmen. Avblockera för att se profilen igen.</string>
     <string name="groupDrive_screenTitle">Gruppkörning</string>
     <string name="groupDrive_joinButton">Gå med i gruppkörningen</string>
     <string name="groupDrive_leaveButton">Lämna gruppkörningen</string>
@@ -772,6 +773,7 @@
     <string name="channel_emptyCommunity">Inga meddelanden än — starta samtalet!</string>
     <string name="channel_emptyConvoy">Inga meddelanden än — säg hej till din konvoj!</string>
     <string name="channel_unknownSender">Medlem</string>
+    <string name="channel_openSenderProfile">Öppna profilen för %1$s</string>
     <string name="channel_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
     <string name="channel_sendErrorNotMember">Chatten är tillgänglig för aktiva medlemmar.</string>
     <string name="channel_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
@@ -914,4 +916,9 @@
     <string name="whatsNew_dialogClose">Stäng</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
     <string name="whatsNew_empty">Inga uppdateringsanteckningar ännu.</string>
+    <string name="moderation_messageActionsTitle">Meddelande från %1$s</string>
+    <string name="moderation_blockMember">Blockera %1$s</string>
+    <string name="moderation_reportMessage">Rapportera meddelande</string>
+    <string name="moderation_reportUser">Rapportera användare</string>
+    <string name="moderation_close">Stäng</string>
 </resources>

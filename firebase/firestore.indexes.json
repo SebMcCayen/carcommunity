@@ -43,6 +43,24 @@
       ]
     },
     {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "createdByUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdByRole",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "hazards",
       "queryScope": "COLLECTION",
       "fields": [

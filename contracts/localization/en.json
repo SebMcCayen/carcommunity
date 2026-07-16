@@ -475,7 +475,8 @@
     "badgesEmpty": "No awards yet.",
     "badgesUnavailable": "Awards aren't shown on other members' profiles.",
     "badgesLoadError": "Awards couldn't be loaded.",
-    "awardedOn": "Awarded %1$s"
+    "awardedOn": "Awarded %1$s",
+    "blocked": "You've blocked this member. Unblock them to see their profile again."
   },
   "groupDrive": {
     "screenTitle": "Group Drive",
@@ -843,6 +844,7 @@
     "emptyCommunity": "No messages yet — start the conversation!",
     "emptyConvoy": "No messages yet — say hi to your convoy!",
     "unknownSender": "Member",
+    "openSenderProfile": "Open %1$s's profile",
     "sendErrorSignedOut": "Please sign in to send messages.",
     "sendErrorNotMember": "Chat is available to active members.",
     "sendErrorInvalid": "Enter a message to send.",
@@ -997,5 +999,12 @@
     "dialogClose": "Close",
     "entryTitle": "Version %1$s · %2$s",
     "empty": "No release notes yet."
+  },
+  "moderation": {
+    "messageActionsTitle": "Message from %1$s",
+    "blockMember": "Block %1$s",
+    "reportMessage": "Report message",
+    "reportUser": "Report user",
+    "close": "Close"
   }
 }

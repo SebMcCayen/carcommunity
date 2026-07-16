@@ -17,8 +17,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,10 +37,15 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.Badge
 import com.kungsbackacarcommunity.app.badges.badgeNameRes
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.labelRes
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
+import com.kungsbackacarcommunity.app.moderation.ReportAvailability
+import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.util.Date
@@ -42,24 +53,55 @@ import java.util.Date
 /**
  * Read-only view of another member's public profile: avatar, display name, bio,
  * their garage cars (with the main-car photo highlighted), and — when readable —
- * their awards. Every state is neutral and non-actionable; this screen never
- * mutates and never reveals owner-only data.
+ * their awards. The profile DATA stays read-only: this screen never mutates and
+ * never reveals owner-only data.
+ *
+ * It does carry the two safety actions a member needs on another member, both
+ * about the VIEWER's own relationship to them rather than about their profile:
+ *
+ *  - **Block / Unblock** (when [onBlock]/[onUnblock] are wired): blocking a
+ *    loaded profile confirms first, and on success the route settles the screen
+ *    on [MemberProfileState.Blocked] — the profile withheld, offering the
+ *    Unblock that undoes it.
+ *  - **Report user**: rendered DISABLED with an explanatory note, because no
+ *    report-a-user callable exists yet — the action must not look like it filed
+ *    a report it cannot file. See
+ *    [com.kungsbackacarcommunity.app.moderation.MessageModeration] for the exact
+ *    backend this is waiting on.
  *
  * Badges collapse to a soft "not shown" note when they aren't readable under the
  * current Security Rules (they are owner-only today) — see [MemberBadges].
+ *
+ * @param onBlock blocks the viewed member; null (config-less build, or the
+ *   viewer's own profile) omits the block action.
+ * @param onUnblock unblocks them from the [MemberProfileState.Blocked] state;
+ *   null omits the unblock action, leaving that state a bare notice.
  */
 @Composable
 fun MemberProfileScreen(
     state: MemberProfileState,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    onBlock: (() -> Unit)? = null,
+    onUnblock: (() -> Unit)? = null,
+    blockStatus: BlockActionStatus = BlockActionStatus.Idle,
 ) {
     val title =
         (state as? MemberProfileState.Loaded)?.profile?.displayName
             ?.takeIf { it.isNotBlank() }
             ?: stringResource(R.string.memberProfile_title)
+    var confirmingBlock by rememberSaveable { mutableStateOf(false) }
+    var confirmingUnblock by rememberSaveable { mutableStateOf(false) }
 
     AeroPage(title = title, modifier = modifier) {
+        if (blockStatus == BlockActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.blocking_errorGeneric),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
         when (state) {
             MemberProfileState.Loading ->
                 Box(
@@ -71,6 +113,19 @@ fun MemberProfileScreen(
 
             MemberProfileState.Unavailable ->
                 NoticeCard(text = stringResource(R.string.memberProfile_unavailable))
+
+            MemberProfileState.Blocked -> {
+                NoticeCard(text = stringResource(R.string.memberProfile_blocked))
+                if (onUnblock != null) {
+                    Button(
+                        onClick = { confirmingUnblock = true },
+                        enabled = blockStatus != BlockActionStatus.Working,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.blocking_unblock))
+                    }
+                }
+            }
 
             MemberProfileState.Error ->
                 Card(modifier = Modifier.fillMaxWidth()) {
@@ -93,6 +148,69 @@ fun MemberProfileScreen(
                 ProfileHeader(state.profile)
                 CarsSection(state.vehicles)
                 BadgesSection(state.badges)
+                MemberActions(
+                    onBlock = onBlock?.let { { confirmingBlock = true } },
+                    blockStatus = blockStatus,
+                )
+            }
+        }
+    }
+
+    if (confirmingBlock) {
+        BlockConfirmDialog(
+            memberName = (state as? MemberProfileState.Loaded)?.profile?.displayName,
+            onConfirm = {
+                confirmingBlock = false
+                onBlock?.invoke()
+            },
+            onDismiss = { confirmingBlock = false },
+        )
+    }
+    if (confirmingUnblock) {
+        UnblockConfirmDialog(
+            onConfirm = {
+                confirmingUnblock = false
+                onUnblock?.invoke()
+            },
+            onDismiss = { confirmingUnblock = false },
+        )
+    }
+}
+
+/**
+ * The viewer's safety actions on a loaded profile. Deliberately last on the page,
+ * below the profile content: they are a rarely-used escape hatch, not the point
+ * of the screen.
+ *
+ * "Report user" is omitted entirely while no `moderation.reportUser` callable
+ * exists to submit to ([MessageModeration.reportUserAvailability]) — the same
+ * hide-don't-disable rule the message action sheet follows. It reappears when
+ * that callable lands; nothing else here changes.
+ */
+@Composable
+private fun MemberActions(onBlock: (() -> Unit)?, blockStatus: BlockActionStatus) {
+    val canReportUser =
+        MessageModeration.reportUserAvailability == ReportAvailability.Wired
+    if (onBlock == null && !canReportUser) {
+        // Nothing actionable: no blocking wired, and reporting has no backend.
+        return
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
+        if (onBlock != null) {
+            OutlinedButton(
+                onClick = onBlock,
+                enabled = blockStatus != BlockActionStatus.Working,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.blocking_blockUser))
+            }
+        }
+        if (canReportUser) {
+            TextButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.moderation_reportUser))
             }
         }
     }

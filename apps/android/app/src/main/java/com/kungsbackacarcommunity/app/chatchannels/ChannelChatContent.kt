@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -58,9 +61,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
+import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
 
 /** Test tag for the message input (Compose tests type into it to drive the picker). */
 const val CHANNEL_INPUT_TEST_TAG = "channel-input"
@@ -136,6 +144,18 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
  *   mentioned yourself must highlight too.
  * @param droppedMentionCount mentions the server dropped from the last send (see
  *   [ChannelChatCoordinator.droppedMentionCount]); > 0 shows one quiet note.
+ * @param onViewProfile opens the read-only member profile for a sender's uid.
+ *   Null (the default) leaves the sender header inert — the config-less build has
+ *   no profile repository to open. Only OTHER members' messages carry a sender
+ *   header at all, so the caller's own messages can never navigate here.
+ * @param surface which channel this is. It decides whether the long-press action
+ *   sheet's "Report message" can reach a backend
+ *   ([MessageModeration.reportAvailability]) — neither channel has a report
+ *   callable today, so the row is omitted. Deliberately has NO default: a caller
+ *   that forgets it would silently pick some other channel's report wiring. See
+ *   [MessageModeration] for the precise gap.
+ * @param onBlock blocks a sender's uid. Null (the default) means blocking is
+ *   unwired (config-less build), and the sheet then omits the block row.
  */
 @Composable
 fun ChannelChatContent(
@@ -149,11 +169,16 @@ fun ChannelChatContent(
     onSend: (String, List<String>) -> Unit,
     onLoadOlder: () -> Unit,
     onResetError: () -> Unit,
+    surface: ChatSurface,
     modifier: Modifier = Modifier,
     mentionCandidates: List<MentionCandidate> = emptyList(),
     mentionDisplayNames: Map<String, String> = emptyMap(),
     droppedMentionCount: Int = 0,
     onDismissDroppedMentions: () -> Unit = {},
+    onViewProfile: ((String) -> Unit)? = null,
+    onBlock: ((String) -> Unit)? = null,
+    blockStatus: BlockActionStatus = BlockActionStatus.Idle,
+    onBlockDismiss: () -> Unit = {},
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
@@ -166,6 +191,12 @@ fun ChannelChatContent(
     }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
     var atMentionCap by rememberSaveable { mutableStateOf(false) }
+    // Long-press targets are held by message ID, not by the message itself: the ID
+    // is Saveable (so the sheet survives rotation), and resolving it against the
+    // live list means an open sheet collapses on its own if its message leaves the
+    // stream (author blocked, message moderated away) while it is showing.
+    var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
+    var blockTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Clear the draft only once a send succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
@@ -227,6 +258,20 @@ fun ChannelChatContent(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
+                    onViewProfile = onViewProfile,
+                    // Long-press opens the moderation sheet — never on your own
+                    // message, never on one with no resolvable author, and never
+                    // when the sheet would have no action to offer.
+                    onMessageLongPress = { message ->
+                        if (MessageModeration.canActOn(message.senderUid, currentUid) &&
+                            MessageModeration.hasActions(
+                                canBlock = onBlock != null,
+                                reportAvailability = MessageModeration.reportAvailability(surface),
+                            )
+                        ) {
+                            actionsMessageId = message.id
+                        }
+                    },
                 )
             }
         }
@@ -236,6 +281,20 @@ fun ChannelChatContent(
                 text = stringResource(sendStatus.error.messageRes()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.blocking_errorGeneric),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Done) {
+            Text(
+                text = stringResource(R.string.blocking_blockSuccess),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 
@@ -331,6 +390,42 @@ fun ChannelChatContent(
             }
         }
     }
+
+    // Resolve the long-pressed message against the LIVE list, so a sheet whose
+    // message vanished (its author was blocked, it was moderated away) closes
+    // itself rather than acting on a message that is no longer there.
+    val actionsMessage = messages.firstOrNull { it.id == actionsMessageId }
+    if (actionsMessage != null) {
+        MessageActionsSheet(
+            memberName = actionsMessage.senderDisplayName,
+            canBlock = onBlock != null,
+            reportAvailability = MessageModeration.reportAvailability(surface),
+            onBlock = {
+                actionsMessageId = null
+                blockTargetUid = actionsMessage.senderUid
+            },
+            // Unreachable while every channel is BackendMissing (the row is
+            // disabled), but wired so the callable landing only needs the route
+            // to pass a submit lambda.
+            onReport = { actionsMessageId = null },
+            onDismiss = { actionsMessageId = null },
+        )
+    }
+
+    val blockTarget = blockTargetUid
+    if (blockTarget != null) {
+        BlockConfirmDialog(
+            memberName = messages.firstOrNull { it.senderUid == blockTarget }?.senderDisplayName,
+            onConfirm = {
+                blockTargetUid = null
+                onBlock?.invoke(blockTarget)
+            },
+            onDismiss = {
+                blockTargetUid = null
+                onBlockDismiss()
+            },
+        )
+    }
 }
 
 /** The @-autocomplete list, shown directly above the input while a query is live. */
@@ -356,7 +451,9 @@ private fun MentionPicker(
                     horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SenderAvatar(avatarPath = candidate.avatarPath)
+                    // Decorative: the display name sits right next to it, and the
+                    // row's clickable merges that name up as the row's own label.
+                    SenderAvatar(avatarPath = candidate.avatarPath, contentDescription = null)
                     Text(
                         text = candidate.displayName,
                         style = MaterialTheme.typography.bodyMedium,
@@ -376,6 +473,8 @@ private fun ChannelMessageList(
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
+    onViewProfile: ((String) -> Unit)?,
+    onMessageLongPress: (ChannelMessage) -> Unit,
 ) {
     val listState = rememberLazyListState()
     // The optional "load older" row is a single item prepended before the
@@ -421,6 +520,8 @@ private fun ChannelMessageList(
                 message = message,
                 isOwn = message.senderUid == currentUid,
                 mentionDisplayNames = mentionDisplayNames,
+                onViewProfile = onViewProfile,
+                onLongPress = { onMessageLongPress(message) },
             )
         }
     }
@@ -431,42 +532,90 @@ private fun ChannelMessageRow(
     message: ChannelMessage,
     isOwn: Boolean,
     mentionDisplayNames: Map<String, String>,
+    onViewProfile: ((String) -> Unit)?,
+    onLongPress: () -> Unit,
 ) {
     if (isOwn) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
         ) {
-            ChannelBubble(message = message, isOwn = true, mentionDisplayNames = mentionDisplayNames)
+            // Your own bubble carries no long-press: you can neither block nor
+            // report yourself.
+            ChannelBubble(
+                message = message,
+                isOwn = true,
+                mentionDisplayNames = mentionDisplayNames,
+                onLongPress = null,
+            )
         }
         return
     }
     // Incoming message: avatar + sender name above the bubble (group context).
+    // Tapping the sender (avatar or name) opens their read-only profile; the
+    // BUBBLE's tap stays free, and its LONG-press opens the moderation sheet. A
+    // malformed message can carry a blank senderUid, which would open a dead
+    // profile route, so the affordance is only wired for a resolvable sender.
+    val openProfile =
+        onViewProfile?.takeIf { message.senderUid.isNotBlank() }?.let {
+            { it(message.senderUid) }
+        }
+    val senderName = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        SenderAvatar(avatarPath = message.senderAvatarPath)
+        SenderAvatar(
+            avatarPath = message.senderAvatarPath,
+            // The avatar image is decorative while inert — the sender name sits
+            // right next to it — but once it becomes a button it has to carry its
+            // own label, or screen readers focus an unlabeled button. The label is
+            // merged up from the image by the clickable below.
+            contentDescription =
+                if (openProfile != null) {
+                    stringResource(R.string.channel_openSenderProfile, senderName)
+                } else {
+                    null
+                },
+            // Announce the sender as a button to screen readers — without the role
+            // it reads as a plain image/text and the tap-to-open-profile
+            // affordance is invisible to accessibility services.
+            modifier =
+                if (openProfile != null) {
+                    Modifier.clickable(role = Role.Button, onClick = openProfile)
+                } else {
+                    Modifier
+                },
+        )
         Column {
             Text(
-                text = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender),
+                text = senderName,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    if (openProfile != null) {
+                        Modifier.clickable(role = Role.Button, onClick = openProfile)
+                    } else {
+                        Modifier
+                    },
             )
             ChannelBubble(
                 message = message,
                 isOwn = false,
                 mentionDisplayNames = mentionDisplayNames,
+                onLongPress = onLongPress,
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChannelBubble(
     message: ChannelMessage,
     isOwn: Boolean,
     mentionDisplayNames: Map<String, String>,
+    onLongPress: (() -> Unit)?,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -489,7 +638,21 @@ private fun ChannelBubble(
     Surface(
         color = bubbleColor,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg),
-        modifier = Modifier.widthIn(max = 280.dp),
+        modifier =
+            Modifier
+                .widthIn(max = 280.dp)
+                .then(
+                    if (onLongPress != null) {
+                        // combinedClickable, not pointerInput: it announces the
+                        // long-press to accessibility services as a custom action,
+                        // so the moderation sheet is reachable without a physical
+                        // long-press. onClick is a deliberate no-op — the bubble has
+                        // no tap action; only the sender header navigates.
+                        Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         Text(
             text = body,
@@ -529,28 +692,36 @@ private fun annotateMentions(
 }
 
 @Composable
-private fun SenderAvatar(avatarPath: String?) {
+private fun SenderAvatar(
+    avatarPath: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val url = rememberStorageImageUrl(context, avatarPath)
     Box(
+        // The caller's modifier (the tap-to-open-profile clickable) is applied
+        // AFTER the clip, so the touch ripple is clipped to the circular avatar
+        // rather than painting a square behind it.
         modifier =
             Modifier
                 .size(32.dp)
                 .clip(CircleShape)
+                .then(modifier)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
         if (url != null) {
             AsyncImage(
                 model = url,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(32.dp),
             )
         } else {
             Icon(
                 imageVector = Icons.Filled.Person,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )

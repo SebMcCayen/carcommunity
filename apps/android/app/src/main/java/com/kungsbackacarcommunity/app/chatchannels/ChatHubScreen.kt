@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.dm.ChatRoute
@@ -102,6 +103,8 @@ fun ChatHubRoute(
     communityUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
+    blockingRepository: BlockingRepository? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
@@ -118,6 +121,8 @@ fun ChatHubRoute(
             communityUnread = communityUnread,
             onClose = onClose,
             applyStatusBarInset = true,
+            onViewProfile = onViewProfile,
+            blockingRepository = blockingRepository,
         )
     }
 }
@@ -153,6 +158,8 @@ fun ChatHubPopup(
     communityUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
+    blockingRepository: BlockingRepository? = null,
 ) {
     Popup(
         alignment = Alignment.BottomCenter,
@@ -221,6 +228,8 @@ fun ChatHubPopup(
                         // The enclosing box already applies the status-bar inset, so
                         // the content must NOT add it again.
                         applyStatusBarInset = false,
+                        onViewProfile = onViewProfile,
+                        blockingRepository = blockingRepository,
                     )
                 }
             }
@@ -244,6 +253,15 @@ fun ChatHubPopup(
  * @param applyStatusBarInset when true the body pads for the status bar itself
  *   (full-screen route); the popup form passes false because its card is already
  *   offset below the status bar.
+ * @param onViewProfile opens a member's read-only profile, passed down to every
+ *   member-bearing tab (community + convoy sender headers, the DM thread title).
+ *   That profile is a shell ROUTE, so opening it from the popup form closes the
+ *   hub — the popup's gate in AuthenticatedApp only holds while no route is open.
+ *   Null (config-less build) leaves those affordances inert.
+ * @param blockingRepository backs the block action behind every message-bearing
+ *   tab's long-press moderation sheet. Null (config-less build) leaves the
+ *   sheet's block row off. Unlike [onViewProfile] this closes nothing: the sheet
+ *   and its confirm dialog compose INSIDE the hub, opening no route.
  */
 @Composable
 private fun ChatHubContent(
@@ -263,6 +281,8 @@ private fun ChatHubContent(
     communityUnread: Boolean,
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
+    onViewProfile: ((String) -> Unit)?,
+    blockingRepository: BlockingRepository?,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(ChatTab.Community) }
 
@@ -384,6 +404,8 @@ private fun ChatHubContent(
                                 repository = communityChatRepository,
                                 uid = uid,
                                 friendsRepository = friendsRepository,
+                                onViewProfile = onViewProfile,
+                                blockingRepository = blockingRepository,
                             )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
@@ -396,6 +418,8 @@ private fun ChatHubContent(
                                     repository = convoyChatRepository,
                                     uid = uid,
                                     convoyId = openConvoyId!!,
+                                    onViewProfile = onViewProfile,
+                                    blockingRepository = blockingRepository,
                                 )
                             } else {
                                 ConvoyListRoute(
@@ -418,6 +442,8 @@ private fun ChatHubContent(
                                     uid = uid,
                                     otherUid = dmOtherUid!!,
                                     otherName = dmOtherName,
+                                    onViewProfile = onViewProfile,
+                                    blockingRepository = blockingRepository,
                                 )
                             } else {
                                 ConversationListRoute(
