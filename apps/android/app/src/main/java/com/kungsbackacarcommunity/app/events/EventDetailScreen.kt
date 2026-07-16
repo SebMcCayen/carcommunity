@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -286,7 +287,14 @@ private fun AttendeeRow(
     Row(
         modifier =
             if (onOpenMember != null) {
-                base.clickable { onOpenMember(attendee.uid) }.padding(vertical = 8.dp)
+                // role = Role.Button matches every other profile-open affordance
+                // (friends list, chat authors, convoy roster) so TalkBack
+                // announces this row as a button rather than plain text. The
+                // padding stays INSIDE the clickable — .clickable().padding()
+                // puts the tap target around the padded row, not within it.
+                base
+                    .clickable(role = Role.Button) { onOpenMember(attendee.uid) }
+                    .padding(vertical = 8.dp)
             } else {
                 base.padding(vertical = 8.dp)
             },

@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.events
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
@@ -114,6 +118,18 @@ class EventAttendeesScreenTest {
             .onNodeWithTag(attendeeRowTag("u1"))
             .performScrollTo()
             .assertHasClickAction()
+    }
+
+    @Test
+    fun attendees_clickableRow_isAnnouncedAsAButton() {
+        // The row opens a profile, so TalkBack must announce it as a button
+        // rather than as plain text — matching every other profile-open
+        // affordance (friends list, chat authors, convoy roster).
+        setDetail(EventAttendeesState.Loaded(listOf(EventAttendee(uid = "u1", displayName = "Alice"))))
+        composeTestRule
+            .onNodeWithTag(attendeeRowTag("u1"))
+            .performScrollTo()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
     }
 
     @Test

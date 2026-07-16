@@ -12,7 +12,10 @@ import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -186,21 +189,34 @@ class FirebaseEventsRepository private constructor(
         // The RSVP doc carries only { status, updatedAt } (the rules pin it to
         // exactly those keys), so names/avatars are joined from the public
         // users/{uid} profile — readable by any authenticated user.
+        //
+        // Issued CONCURRENTLY: this is up to MAX_RENDERED (50) separate gets,
+        // and awaiting them one at a time would serialize 50 round trips into
+        // one worst-case latency on a mobile network. awaitAll preserves the
+        // uids order, so the roster is assembled exactly as before — only the
+        // waiting overlaps. (Individual document gets, not a whereIn query, so
+        // the owner-or-admin rules evaluation per doc is unchanged.)
         val attendees =
-            uids.map { uid ->
-                val profile =
-                    runCatchingCancellable {
-                        firestore.collection(USERS).document(uid).get().awaitResult()
+            coroutineScope {
+                uids
+                    .map { uid ->
+                        async {
+                            val profile =
+                                runCatchingCancellable {
+                                    firestore.collection(USERS).document(uid).get().awaitResult()
+                                }
+                                    .getOrNull()
+                            // One unreadable/missing profile degrades to a nameless row
+                            // rather than failing the whole roster — they ARE going, which
+                            // is the fact this section exists to report.
+                            EventAttendee(
+                                uid = uid,
+                                displayName = profile?.getString("displayName"),
+                                avatarPath = profile?.getString("avatarPath"),
+                            )
+                        }
                     }
-                        .getOrNull()
-                // One unreadable/missing profile degrades to a nameless row rather
-                // than failing the whole roster — they ARE going, which is the fact
-                // this section exists to report.
-                EventAttendee(
-                    uid = uid,
-                    displayName = profile?.getString("displayName"),
-                    avatarPath = profile?.getString("avatarPath"),
-                )
+                    .awaitAll()
             }
         return EventAttendeesResult.Loaded(attendees)
     }
