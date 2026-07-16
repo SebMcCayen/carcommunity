@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.toArgb
 import com.kungsbackacarcommunity.app.design.KccDarkColors
 import com.kungsbackacarcommunity.app.design.KccLightColors
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowInsetsControllerCompat
@@ -33,6 +34,7 @@ import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
 import com.kungsbackacarcommunity.app.memberprofile.FirebaseMemberProfileRepository
 import com.kungsbackacarcommunity.app.drives.FirebaseDrivesRepository
+import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.billboards.FirebaseBillboardsRepository
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.FirebaseEventChatRepository
@@ -220,6 +222,28 @@ class MainActivity : ComponentActivity() {
             val signInStatus =
                 signInCoordinator?.status?.collectAsState()?.value ?: SignInStatus.Idle
             val flags by featureFlagsStore.flags.collectAsState()
+
+            // Tear down a single-session drive recording when the signed-in user
+            // goes away. The recording is process-scoped ON PURPOSE (its lifetime
+            // is the live session's, which outlives the Activity — see
+            // SingleSessionRecording), so a genuine teardown needs an explicit
+            // trigger or its fused-location updates and in-memory drive would run
+            // on with no UI left to resolve them.
+            //
+            // Keying on the signed-in uid is the semantic trigger, and it sits
+            // HERE rather than inside AuthenticatedApp because sign-out unmounts
+            // that composable outright (it swaps screens without recreating the
+            // Activity, per the theme effect below) — an effect inside it could
+            // never observe its own removal. It is also inherently
+            // rotation-immune: a recreation re-runs this with the SAME uid, which
+            // clearIfNotOwnedBy ignores, so a live recording and any pending
+            // save/discard prompt survive. Sign-out (null) or an account switch
+            // (different uid) tears it down; an unsaved drive is dropped there
+            // deliberately, since it belongs to the departing account.
+            val signedInUid = (authState as? AuthState.SignedIn)?.uid
+            LaunchedEffect(signedInUid) {
+                SingleSessionRecording.clearIfNotOwnedBy(signedInUid)
+            }
 
             // Tint the OS bars from the CURRENTLY displayed theme, not once in
             // onCreate: auth-state navigation swaps screens without recreating

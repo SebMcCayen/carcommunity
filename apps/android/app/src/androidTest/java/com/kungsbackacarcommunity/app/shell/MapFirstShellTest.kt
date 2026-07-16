@@ -187,14 +187,16 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.shell_liveTitle)).assertIsDisplayed()
         // Sharing your OWN location is FREE (LIVE_LOCATION flag on in DEFAULTS,
         // not member-gated). Even in the no-Firebase config (not an active
-        // member), the popup shows the start controls — duration picker + Start —
-        // NOT the membership teaser, which is reserved for VIEWING others.
-        composeTestRule
-            .onNodeWithText(str(R.string.liveLocation_durationLabel))
-            .assertIsDisplayed()
+        // member), the popup shows the Start control — NOT the membership teaser,
+        // which is reserved for VIEWING others.
         composeTestRule
             .onNodeWithText(str(R.string.liveLocation_start))
             .assertIsDisplayed()
+        // The 1h/2h/4h duration picker has MOVED off this broadcast control to
+        // the single-session start flow, so it is no longer shown in the popup.
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_durationLabel))
+            .assertDoesNotExist()
         composeTestRule
             .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
             .assertDoesNotExist()
