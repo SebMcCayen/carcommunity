@@ -22,14 +22,24 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * a direct rules-validated write — no callable. Missing entries default to
  * enabled. The essential account-notice categories can never be disabled
  * (also enforced at delivery time by the backend writer). Pure Kotlin core for
- * testability; matches packages/shared/src/notifications.ts.
+ * testability; tracks functions/src/notifications/notifications-core.ts, the
+ * Firestore-model port that this client's categories are defined against
+ * (packages/shared/src/notifications.ts is the older pre-Firestore contract
+ * and predates the social categories).
  */
 object NotificationCategories {
     /**
-     * All active notification categories, in display order (mirrors the
-     * backend NOTIFICATION_CATEGORIES). Most are user-tunable; the
-     * [ESSENTIAL] account notices are included but rendered locked-on in the
-     * UI, so they stay last.
+     * Every category the backend defines in NOTIFICATION_CATEGORIES
+     * (functions/src/notifications/notifications-core.ts), listed in the order
+     * the settings screen renders them.
+     *
+     * The set of ids must stay in sync with that backend list — a category the
+     * backend can deliver but this list omits is one the user can never turn
+     * off, and an id here that the backend does not know is a toggle that
+     * writes a preference nothing reads. The order is intentionally NOT in
+     * sync: the [ESSENTIAL] account notices appear mid-list in the backend
+     * order, but render locked-on here, so they are moved last rather than
+     * splitting the tunable categories in two.
      */
     val ACTIVE: List<String> =
         listOf(
