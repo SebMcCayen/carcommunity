@@ -994,9 +994,7 @@
     "messageActionsTitle": "Meddelande från %1$s",
     "blockMember": "Blockera %1$s",
     "reportMessage": "Rapportera meddelande",
-    "reportMessageUnavailable": "Det går inte att rapportera meddelanden i den här chatten ännu. Du kan blockera medlemmen i stället.",
     "reportUser": "Rapportera användare",
-    "reportUserUnavailable": "Det går inte att rapportera en medlem ännu. Du kan blockera medlemmen i stället.",
     "close": "Stäng"
   }
 }

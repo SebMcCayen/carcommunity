@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.chat
 
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -252,7 +253,11 @@ class EventChatScreenTest {
             }
         }
         longPress("Body of m9")
+        // Event chat has a real report callable, so its row survives even here,
+        // where the block row is omitted — which is also what keeps the sheet
+        // worth opening at all on this surface.
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertIsEnabled()
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_BLOCK_TEST_TAG).assertDoesNotExist()
     }
 

@@ -43,6 +43,8 @@ import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.labelRes
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
+import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
@@ -180,13 +182,16 @@ fun MemberProfileScreen(
  * below the profile content: they are a rarely-used escape hatch, not the point
  * of the screen.
  *
- * "Report user" is present but DISABLED, with a note saying so, because there is
- * no report-a-user callable to submit to. Showing a working-looking button that
- * quietly did nothing would be worse than showing the limitation.
+ * "Report user" is omitted entirely while no `moderation.reportUser` callable
+ * exists to submit to ([MessageModeration.reportUserAvailability]) — the same
+ * hide-don't-disable rule the message action sheet follows. It reappears when
+ * that callable lands; nothing else here changes.
  */
 @Composable
 private fun MemberActions(onBlock: (() -> Unit)?, blockStatus: BlockActionStatus) {
-    if (onBlock == null) {
+    val canReportUser =
+        MessageModeration.reportUserAvailability == ReportAvailability.Wired
+    if (onBlock == null && !canReportUser) {
         // Nothing actionable: no blocking wired, and reporting has no backend.
         return
     }
@@ -194,21 +199,20 @@ private fun MemberActions(onBlock: (() -> Unit)?, blockStatus: BlockActionStatus
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        OutlinedButton(
-            onClick = onBlock,
-            enabled = blockStatus != BlockActionStatus.Working,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.blocking_blockUser))
+        if (onBlock != null) {
+            OutlinedButton(
+                onClick = onBlock,
+                enabled = blockStatus != BlockActionStatus.Working,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.blocking_blockUser))
+            }
         }
-        TextButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.moderation_reportUser))
+        if (canReportUser) {
+            TextButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.moderation_reportUser))
+            }
         }
-        Text(
-            text = stringResource(R.string.moderation_reportUserUnavailable),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

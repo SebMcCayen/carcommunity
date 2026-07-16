@@ -74,7 +74,8 @@ import com.kungsbackacarcommunity.app.moderation.MessageModeration
  * @param surface which channel this is. It decides whether the long-press action
  *   sheet's "Report message" can reach a backend
  *   ([MessageModeration.reportAvailability]) — neither channel has a report
- *   callable today, so it renders disabled with an explanatory note. See
+ *   callable today, so the row is omitted. Deliberately has NO default: a caller
+ *   that forgets it would silently pick some other channel's report wiring. See
  *   [MessageModeration] for the precise gap.
  * @param onBlock blocks a sender's uid. Null (the default) means blocking is
  *   unwired (config-less build), and the sheet then omits the block row.
@@ -91,9 +92,9 @@ fun ChannelChatContent(
     onSend: (String) -> Unit,
     onLoadOlder: () -> Unit,
     onResetError: () -> Unit,
+    surface: ChatSurface,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
-    surface: ChatSurface = ChatSurface.CommunityChannel,
     onBlock: ((String) -> Unit)? = null,
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
     onBlockDismiss: () -> Unit = {},
@@ -150,9 +151,15 @@ fun ChannelChatContent(
                     onLoadOlder = onLoadOlder,
                     onViewProfile = onViewProfile,
                     // Long-press opens the moderation sheet — never on your own
-                    // message, and never on one with no resolvable author.
+                    // message, never on one with no resolvable author, and never
+                    // when the sheet would have no action to offer.
                     onMessageLongPress = { message ->
-                        if (MessageModeration.canActOn(message.senderUid, currentUid)) {
+                        if (MessageModeration.canActOn(message.senderUid, currentUid) &&
+                            MessageModeration.hasActions(
+                                canBlock = onBlock != null,
+                                reportAvailability = MessageModeration.reportAvailability(surface),
+                            )
+                        ) {
                             actionsMessageId = message.id
                         }
                     },

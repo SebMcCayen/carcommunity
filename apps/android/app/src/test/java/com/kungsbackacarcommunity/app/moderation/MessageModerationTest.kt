@@ -32,10 +32,54 @@ class MessageModerationTest {
     }
 
     @Test
-    fun every_surface_has_an_explicit_report_availability() {
-        // Guards the exhaustive `when`: a new surface must consciously declare
-        // whether it can report, rather than defaulting into "Wired".
-        ChatSurface.entries.forEach { MessageModeration.reportAvailability(it) }
+    fun only_surfaces_with_a_real_callable_are_wired() {
+        // The old version of this test just CALLED reportAvailability for every
+        // surface and asserted nothing — it could only fail if the function threw,
+        // and the exhaustiveness it claimed to guard is already a compile error
+        // (the `when` is expression-form, so a new ChatSurface breaks the build).
+        // What is NOT compiler-guarded is a surface being flipped to Wired before
+        // its callable exists, which would render a report row that submits into
+        // the void. Pin the wired set to exactly the callables that exist.
+        val wired = ChatSurface.entries.filter {
+            MessageModeration.reportAvailability(it) == ReportAvailability.Wired
+        }
+        assertEquals(
+            "Only add a surface here once its report callable actually exists",
+            listOf(ChatSurface.EventChat),
+            wired,
+        )
+    }
+
+    @Test
+    fun reporting_a_user_from_the_profile_is_not_wired_yet() {
+        // No moderation.reportUser callable exists, so the profile's report row
+        // must stay hidden. Same rule as the per-surface map, separate switch.
+        assertEquals(ReportAvailability.BackendMissing, MessageModeration.reportUserAvailability)
+    }
+
+    @Test
+    fun sheet_is_worth_opening_only_when_it_has_an_action() {
+        // Guards the empty-sheet case: hiding an unbacked report means a surface
+        // with no block either would open a sheet of nothing but a Close button.
+        assertFalse(
+            "A config-less build on a report-less surface must open no sheet",
+            MessageModeration.hasActions(
+                canBlock = false,
+                reportAvailability = ReportAvailability.BackendMissing,
+            ),
+        )
+        assertTrue(
+            MessageModeration.hasActions(
+                canBlock = true,
+                reportAvailability = ReportAvailability.BackendMissing,
+            ),
+        )
+        assertTrue(
+            MessageModeration.hasActions(
+                canBlock = false,
+                reportAvailability = ReportAvailability.Wired,
+            ),
+        )
     }
 
     @Test

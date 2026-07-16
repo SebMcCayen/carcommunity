@@ -994,9 +994,7 @@
     "messageActionsTitle": "Message from %1$s",
     "blockMember": "Block %1$s",
     "reportMessage": "Report message",
-    "reportMessageUnavailable": "Reporting messages in this chat isn't available yet. You can block this member instead.",
     "reportUser": "Report user",
-    "reportUserUnavailable": "Reporting a member isn't available yet. You can block them instead.",
     "close": "Close"
   }
 }

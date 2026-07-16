@@ -33,7 +33,9 @@ const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
  *
  * The caller only composes this for a message it has already cleared with
  * [MessageModeration.canActOn], so the sheet never appears on your own message
- * (nor on one with no resolvable author).
+ * (nor on one with no resolvable author), and only when
+ * [MessageModeration.hasActions] — otherwise every row below would be omitted
+ * and the sheet would offer nothing but its own Close button.
  *
  * @param memberName the author's display name, or null when unknown — the block
  *   row then falls back to the generic "Block user" label rather than rendering
@@ -41,10 +43,11 @@ const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
  * @param canBlock false in a config-less build with no blocking repository; the
  *   block row is then omitted entirely (an action that cannot run is not an
  *   action).
- * @param reportAvailability [ReportAvailability.Wired] enables the report row;
- *   [ReportAvailability.BackendMissing] renders it DISABLED with a note naming
- *   the limitation, so the user is never misled into believing a report was
- *   filed on a surface that has no report backend yet.
+ * @param reportAvailability [ReportAvailability.Wired] renders the report row;
+ *   [ReportAvailability.BackendMissing] omits it entirely, on the same principle
+ *   as [canBlock] — the user is never shown a report they cannot file, whether
+ *   as a lie (a button that quietly does nothing) or as a permanently dead
+ *   control. It reappears when its callable lands.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,18 +102,11 @@ fun MessageActionsSheet(
                 )
             }
 
-            SheetAction(
-                text = stringResource(R.string.moderation_reportMessage),
-                onClick = onReport,
-                enabled = reportWired,
-                testTag = MESSAGE_ACTIONS_REPORT_TEST_TAG,
-            )
-            if (!reportWired) {
-                Text(
-                    text = stringResource(R.string.moderation_reportMessageUnavailable),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = KccSpacing.s4),
+            if (reportWired) {
+                SheetAction(
+                    text = stringResource(R.string.moderation_reportMessage),
+                    onClick = onReport,
+                    testTag = MESSAGE_ACTIONS_REPORT_TEST_TAG,
                 )
             }
 

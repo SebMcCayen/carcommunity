@@ -909,8 +909,6 @@
     <string name="moderation_messageActionsTitle">Meddelande från %1$s</string>
     <string name="moderation_blockMember">Blockera %1$s</string>
     <string name="moderation_reportMessage">Rapportera meddelande</string>
-    <string name="moderation_reportMessageUnavailable">Det går inte att rapportera meddelanden i den här chatten ännu. Du kan blockera medlemmen i stället.</string>
     <string name="moderation_reportUser">Rapportera användare</string>
-    <string name="moderation_reportUserUnavailable">Det går inte att rapportera en medlem ännu. Du kan blockera medlemmen i stället.</string>
     <string name="moderation_close">Stäng</string>
 </resources>

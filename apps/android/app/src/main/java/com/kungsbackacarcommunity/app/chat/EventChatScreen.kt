@@ -165,7 +165,14 @@ fun EventChatScreen(
                                     // placeholder, so it stays inert too.
                                     onLongPress =
                                         if (!message.isRemoved &&
-                                            MessageModeration.canActOn(message.authorUserId, currentUid)
+                                            MessageModeration.canActOn(message.authorUserId, currentUid) &&
+                                            MessageModeration.hasActions(
+                                                canBlock = canBlock,
+                                                reportAvailability =
+                                                    MessageModeration.reportAvailability(
+                                                        ChatSurface.EventChat,
+                                                    ),
+                                            )
                                         ) {
                                             { actionsMessageId = message.id }
                                         } else {

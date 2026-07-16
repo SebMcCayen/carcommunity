@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
@@ -13,6 +12,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_BLOCK_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_SHEET_TEST_TAG
@@ -47,6 +47,7 @@ class ChannelChatContentTest {
         messages: List<ChannelMessage>,
         onViewProfile: ((String) -> Unit)?,
         onBlock: ((String) -> Unit)? = null,
+        surface: ChatSurface = ChatSurface.CommunityChannel,
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -61,6 +62,7 @@ class ChannelChatContentTest {
                     onSend = {},
                     onLoadOlder = {},
                     onResetError = {},
+                    surface = surface,
                     onViewProfile = onViewProfile,
                     onBlock = onBlock,
                 )
@@ -138,25 +140,50 @@ class ChannelChatContentTest {
     }
 
     @Test
-    fun channelReportIsDisabled_becauseNoReportBackendExists() {
-        // The community/convoy channels have no report callable. The row must be
-        // visibly present but NOT actionable — a report the client cannot file
-        // must never look like one it filed.
+    fun communityChannel_hasNoReportRow_becauseNoReportBackendExists() {
+        // The community channel has no report callable, so the row is ABSENT —
+        // not present-and-disabled. A permanently dead control teaches testers
+        // the feature is broken; an absent one simply appears when the callable
+        // lands. The sheet itself must still open (block is available here), so
+        // this cannot pass by the sheet failing to show.
         setContent(
             messages = listOf(message("m1", senderUid = "other", name = "Alice")),
             onViewProfile = null,
             onBlock = {},
+            surface = ChatSurface.CommunityChannel,
         )
 
         longPress("Body of m1")
 
-        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_BLOCK_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertDoesNotExist()
+        // The note that used to explain the disabled row must be gone with it.
+        composeTestRule.onNodeWithText(str(R.string.moderation_reportMessage)).assertDoesNotExist()
     }
 
     @Test
-    fun sheetHasNoBlockRow_whenBlockingIsUnwired() {
-        // Config-less build: the row is absent rather than present-and-broken.
+    fun convoyChannel_hasNoReportRow_becauseNoReportBackendExists() {
+        // Same gap, second surface: ConvoyChannel must not inherit the community
+        // channel's wiring by accident now that `surface` has no default.
+        setContent(
+            messages = listOf(message("m1", senderUid = "other", name = "Alice")),
+            onViewProfile = null,
+            onBlock = {},
+            surface = ChatSurface.ConvoyChannel,
+        )
+
+        longPress("Body of m1")
+
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun longPressOpensNothing_whenNeitherBlockNorReportIsAvailable() {
+        // Config-less build on a channel: block unwired AND report backend-less,
+        // so every row would be omitted. Rather than opening a sheet containing
+        // nothing but its own Close button, the long-press does nothing at all.
         setContent(
             messages = listOf(message("m1", senderUid = "other", name = "Alice")),
             onViewProfile = null,
@@ -165,6 +192,7 @@ class ChannelChatContentTest {
 
         longPress("Body of m1")
 
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_BLOCK_TEST_TAG).assertDoesNotExist()
     }
 

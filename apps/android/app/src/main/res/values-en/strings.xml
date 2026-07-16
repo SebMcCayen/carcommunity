@@ -909,8 +909,6 @@
     <string name="moderation_messageActionsTitle">Message from %1$s</string>
     <string name="moderation_blockMember">Block %1$s</string>
     <string name="moderation_reportMessage">Report message</string>
-    <string name="moderation_reportMessageUnavailable">Reporting messages in this chat isn\'t available yet. You can block this member instead.</string>
     <string name="moderation_reportUser">Report user</string>
-    <string name="moderation_reportUserUnavailable">Reporting a member isn\'t available yet. You can block them instead.</string>
     <string name="moderation_close">Close</string>
 </resources>

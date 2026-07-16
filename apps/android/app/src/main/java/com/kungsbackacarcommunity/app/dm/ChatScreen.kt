@@ -128,7 +128,12 @@ fun ChatScreen(
                     // member to act on.
                     onMessageLongPress = { message ->
                         if (MessageModeration.canActOn(otherUid, currentUid) &&
-                            message.senderUid != currentUid
+                            message.senderUid != currentUid &&
+                            MessageModeration.hasActions(
+                                canBlock = onBlock != null,
+                                reportAvailability =
+                                    MessageModeration.reportAvailability(ChatSurface.DirectMessage),
+                            )
                         ) {
                             actionsMessageId = message.id
                         }
