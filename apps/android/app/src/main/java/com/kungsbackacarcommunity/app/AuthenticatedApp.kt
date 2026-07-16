@@ -97,6 +97,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
 import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
@@ -391,6 +392,12 @@ fun AuthenticatedApp(
             // below), so it can't get "stuck" selected — it's an action.
             var showCreateChooser by rememberSaveable { mutableStateOf(false) }
 
+            // Chat hub open/close is local UI state: tapping the map's chat bubble
+            // opens the chat hub as a TRANSPARENT popup *over* the map (no
+            // scrim, map visible behind — the same idiom as the map-layers /
+            // live-share popups) rather than navigating to a full opaque route.
+            var chatHubOpen by rememberSaveable { mutableStateOf(false) }
+
             // Set true immediately before opening ShellRoute.Convoys from the
             // chooser's "Convoy" option so the convoy route deep-links straight
             // into its create-convoy sub-screen. Reset to false when the Social
@@ -519,15 +526,15 @@ fun AuthenticatedApp(
             // the chat hub's Community-tab dot. Gated like garageState so the two
             // Firestore listeners it opens (newest-message + userPrivate marker)
             // are live only while that dot can actually be seen — the Map tab
-            // (bubble) or the open ChatHub route — and degrade to a constant
-            // `false` otherwise. The condition stays true across the Map ↔ ChatHub
-            // transition (the hub opens as a route while the Map tab stays
-            // selected), so the listener survives it rather than tearing down;
-            // leaving both and returning re-subscribes and Firestore's local cache
-            // delivers the current value near-instantly. Guarded — no repo
-            // (config-less build) means never unread.
+            // (bubble), the chat hub popup open over the map, or the legacy
+            // ChatHub route fallback — and degrade to a constant `false`
+            // otherwise. Because the popup opens over the map WITHOUT leaving the
+            // Map tab (`selectedTab` stays Map), the `selectedTab == Map` term
+            // already keeps the listener alive while the hub is open; `chatHubOpen`
+            // is kept for clarity and `ShellRoute.ChatHub` covers the fallback
+            // route. Guarded — no repo (config-less build) means never unread.
             val needsCommunityUnread =
-                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub
+                selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
             val communityChatUnread by
                 remember(communityChatRepository, uid, needsCommunityUnread) {
                     if (communityChatRepository != null && needsCommunityUnread) {
@@ -1169,10 +1176,12 @@ fun AuthenticatedApp(
                                         // caller's last-read marker. Cleared when
                                         // they open + read the Community channel.
                                         unreadChatCount = if (communityChatUnread) 1 else 0,
-                                        // The chat bubble opens the full 3-channel
-                                        // chat hub (Community / Convoys / Friends +
-                                        // Notifications) as a full-screen route.
-                                        onOpenChat = { route = ShellRoute.ChatHub },
+                                        // The chat bubble opens the chat hub
+                                        // (Community / Convoys / Friends +
+                                        // Notifications) as a TRANSPARENT popup over
+                                        // the map (map stays visible behind), not a
+                                        // full opaque route — see ChatHubPopup below.
+                                        onOpenChat = { chatHubOpen = true },
                                         // Crowd-sourced incidents layer: draw the
                                         // fetched markers for everyone, and show the
                                         // report control only when a repository is
@@ -1237,21 +1246,12 @@ fun AuthenticatedApp(
                                                         null
                                                     },
                                                 ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialConvoys),
-                                                    Icons.Filled.DirectionsCar,
-                                                    if (convoyRepository != null) {
-                                                        {
-                                                            // Open the convoy hub
-                                                            // list-first (not the
-                                                            // create deep-link).
-                                                            convoyOpenCreate = false
-                                                            route = ShellRoute.Convoys
-                                                        }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
+                                                // Convoys intentionally removed from
+                                                // the Social menu (Issue 11): the
+                                                // convoy feature stays reachable via
+                                                // the "+" Create chooser's "Convoy"
+                                                // option and the chat hub's Convoys
+                                                // tab. Only this menu entry is gone.
                                                 HubEntry(
                                                     stringResource(R.string.shell_socialEvents),
                                                     Icons.Filled.Event,
@@ -1463,6 +1463,47 @@ fun AuthenticatedApp(
                         pointsProvider = { activeRecording?.recordedPoints() ?: emptyList() },
                         onSave = { scope.launch { activeRecording?.save(null) } },
                         onDiscard = { activeRecording?.discard() },
+                    )
+                }
+
+                // Chat hub as a TRANSPARENT popup over the map (Issue 4): a focusable
+                // Popup with no dimming scrim and a translucent surface, so the live
+                // map stays visible behind it — matching the map-layers and
+                // live-share popups.
+                //
+                // The gate, derived ONCE: the popup floats over the map, so it may
+                // only show while the map shell is the active branch (the bubble that
+                // opens it lives on the map tab) — never over a full route or the
+                // nav-search overlay. Both the auto-close effect below and the render
+                // condition read THIS value, so the two cannot drift apart.
+                val chatHubGateOpen =
+                    navDestination == null &&
+                        !navSearchOpen &&
+                        route == null &&
+                        selectedTab == ShellTab.Map
+
+                // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
+                // (and still valid) hub survives process death — but the popup only
+                // RENDERS while the gate holds. Without this effect, losing the gate
+                // would hide the popup while leaving the flag set, and the hub would
+                // pop open again by itself the next time the user came back to the
+                // map. Keyed on the same derived gate, so no gate can be lost without
+                // clearing the flag.
+                LaunchedEffect(chatHubGateOpen) {
+                    if (!chatHubGateOpen) chatHubOpen = false
+                }
+
+                val chatHubVisible = chatHubOpen && chatHubGateOpen
+                if (chatHubVisible) {
+                    ChatHubPopup(
+                        uid = uid,
+                        communityChatRepository = communityChatRepository,
+                        convoyChatRepository = convoyChatRepository,
+                        dmRepository = dmRepository,
+                        notificationsRepository = notificationsRepository,
+                        notificationsCoordinator = notificationsCoordinator,
+                        communityUnread = communityChatUnread,
+                        onClose = { chatHubOpen = false },
                     )
                 }
 
@@ -2030,7 +2071,7 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        // The 3-channel chat hub opened from the map chat bubble. Each tab's
+        // The chat hub opened from the map chat bubble. Each tab's
         // repository is nullable (guarded per tab), so the hub renders even in a
         // config-less build; onClose returns to the map.
         ShellRoute.ChatHub ->

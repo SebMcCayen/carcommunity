@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
@@ -14,6 +19,7 @@ import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -29,6 +35,17 @@ import org.junit.runner.RunWith
 class MapFirstShellTest {
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    /**
+     * The device's status-bar height in px, read from the platform resource. Used to
+     * assert the chat-hub card clears system UI at whatever window size the test
+     * runs at (portrait, landscape or a resized/short window).
+     */
+    private fun statusBarHeightPx(): Int {
+        val res = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        val id = res.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) res.getDimensionPixelSize(id) else 0
+    }
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
@@ -212,13 +229,16 @@ class MapFirstShellTest {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
-        // Tapping it opens the full 3-channel chat hub as a route over the map.
+        // Tapping it opens the chat hub as a TRANSPARENT popup over the
+        // map (the map stays composed behind it, not a full opaque route).
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        // The map stays visible behind the transparent popup.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         // The Community / Convoys / Friends / Notifications tabs are shown.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
-        // Closing returns to the map (the hub is gone).
+        // Closing returns to the map (the hub popup is gone).
         composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_close)).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
@@ -239,6 +259,116 @@ class MapFirstShellTest {
         // The whole point: the map stays visible behind the popup (transparent
         // Popup, no dimming scrim, no navigation to a separate page).
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * Regression: the chat-hub popup card must be strictly SHORTER than the window,
+     * leaving a real, visible, tappable strip of map above it — and a tap in that
+     * strip must dismiss the hub. A full-height card (e.g. `fillMaxHeight()`, whose
+     * preceding padding lands inside its own footprint) would leave no genuine
+     * "outside" and make the dismiss layer unreachable.
+     */
+    @Test
+    fun chatHubPopup_leavesUncoveredMapStripAboveCard_andTapThereDismisses() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+
+        // The card is bottom-anchored, so an uncovered strip exists iff its top edge
+        // sits strictly below the window top. A full-height card reports top=0 and
+        // fails HERE, which is what gives this test its teeth. 16.dp is a floor for
+        // "actually visible + tappable", not a mirror of the layout's tuning knob —
+        // the production fraction stays private and is deliberately not asserted on.
+        val cardTop =
+            composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).getUnclippedBoundsInRoot().top
+        assertTrue(
+            "chat-hub card top was $cardTop — expected a strip of map above the card",
+            cardTop > 16.dp,
+        )
+
+        // ...and that strip must clear system UI, not just be non-zero: the card's
+        // top may never sit under the status bar, or the hub's own top bar renders
+        // beneath it. This is what stops the height fraction from being taken
+        // against the raw window — on a short window (landscape / split-screen) a
+        // fraction of the WINDOW can be smaller than the status bar, while a
+        // fraction of the SAFE AREA cannot.
+        val statusBarTop = with(composeTestRule.density) { statusBarHeightPx().toDp() }
+        assertTrue(
+            "chat-hub card top was $cardTop — expected it to clear the " +
+                "$statusBarTop status bar so the hub's top bar isn't under system UI",
+            cardTop >= statusBarTop,
+        )
+
+        // That strip is the dismiss affordance: tap inside it and the hub closes
+        // while the map stays. The tap point is DERIVED from the measured card top
+        // and the device density rather than a fixed pixel offset — touch input is
+        // in px while the bounds above are in dp, so a magic px offset could land
+        // outside the strip (above the window) on a low-density device. Midway
+        // between the window top and the card's top edge is provably inside the
+        // strip at any density; y is negative because it is node-relative and the
+        // strip sits above the card.
+        val stripMidYPx = with(composeTestRule.density) { cardTop.toPx() } / 2f
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
+            click(Offset(width / 2f, -stripMidYPx))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * Regression: a tap INSIDE the chat-hub card must never dismiss the hub, even on
+     * a spot no child consumes. The dismiss layer behind the card is `fillMaxSize()`,
+     * so this pins that the card itself swallows the touch rather than letting it
+     * fall through to that layer. Every repository is null in this configuration, so
+     * the card's body is the non-interactive `TabPlaceholder` (a plain Box + Text) —
+     * exactly the "empty area / placeholder" case.
+     */
+    @Test
+    fun chatHubPopup_tapInsideCardOnNonInteractiveArea_doesNotDismiss() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        // Sanity: the body really is the non-interactive placeholder, not a live
+        // channel with its own click handlers.
+        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+
+        // Tap well inside the card, in the placeholder body: coordinates are derived
+        // from the card's own measured size (node-relative px), not magic pixels.
+        // 75% down clears the top bar and the tab row, so nothing interactive is
+        // under the finger — if the card failed to consume the touch it would reach
+        // the dismiss layer behind it and close the hub.
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
+            click(Offset(width / 2f, height * 0.75f))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+    }
+
+    /**
+     * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
+     * rememberSaveable but the popup only renders while the map shell is the
+     * active branch, so leaving the Map tab has to CLEAR the flag — otherwise the
+     * hub silently stays "open" and pops up again on returning to the map.
+     */
+    @Test
+    fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
+        setShell()
+        // Open the hub over the map.
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+
+        // Leaving the Map tab loses the popup's gating condition: the hub goes away
+        // (with the map home) rather than floating over another tab.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+
+        // Returning to the Map tab restores the map WITHOUT re-opening the hub —
+        // the flag was cleared when the gate was lost, so the user gets the map,
+        // not a chat hub they never re-opened.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
     }
 
     @Test

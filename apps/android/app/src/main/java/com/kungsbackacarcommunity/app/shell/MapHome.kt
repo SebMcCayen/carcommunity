@@ -145,7 +145,7 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   collected once in `AuthenticatedApp`), so the dot shows whenever the caller
  *   has an unread community message.
  * @param onOpenChat invoked when the floating chat bubble is tapped; the host
- *   opens the full 3-channel chat hub ([ShellRoute.ChatHub]).
+ *   opens the chat hub (Community / Convoys / Friends + Notifications).
  */
 @Composable
 fun MapHome(
@@ -164,10 +164,10 @@ fun MapHome(
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
     unreadChatCount: Int = 0,
-    // Tapping the floating chat bubble opens the full 3-channel chat hub
-    // (Community / Convoys / Friends + Notifications) as a full-screen route,
-    // rather than the old inline placeholder popup. Defaults to a no-op so
-    // existing callers/tests that don't wire chat still compile.
+    // Tapping the floating chat bubble opens the chat hub
+    // (Community / Convoys / Friends + Notifications) as a transparent popup
+    // over the map. Defaults to a no-op so existing callers/tests that don't
+    // wire chat still compile.
     onOpenChat: () -> Unit = {},
     // Crowd-sourced + Trafikverket incidents layer. [incidentMarkers] are drawn
     // on the map so every user sees them, BUT only while [incidentsLayerEnabled]
@@ -420,7 +420,7 @@ fun MapHome(
                 contentDescription = stringResource(R.string.shell_recenter),
                 onClick = onRecenter,
             )
-            // 4. Chat bubble — opens the 3-channel chat hub; shows a badge with
+            // 4. Chat bubble — opens the chat hub; shows a badge with
             //    the unread ("missed") message count when > 0.
             ChatCircleControl(
                 unreadCount = unreadChatCount,

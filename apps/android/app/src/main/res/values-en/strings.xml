@@ -810,7 +810,6 @@
     <string name="shell_createChooserConvoy">Convoy</string>
     <string name="shell_createChooserConvoyBody">Create a convoy and drive together with friends.</string>
     <string name="shell_socialTitle">Social</string>
-    <string name="shell_socialConvoys">Convoys</string>
     <string name="shell_socialEvents">Events</string>
     <string name="shell_socialNotifications">Notifications</string>
     <string name="shell_socialCrownHunt">Crown Hunt</string>
