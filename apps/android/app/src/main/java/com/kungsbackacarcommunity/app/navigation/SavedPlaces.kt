@@ -183,13 +183,44 @@ object SavedPlaces {
      *
      * Where a duplicate must be dropped, the **first occurrence wins**, matching
      * [upsert]'s replace-in-place: earlier means older, and older keeps its slot.
+     *
+     * Where the *cap* must drop entries, the **oldest favourites go** — see [cap],
+     * which deliberately mirrors [upsert]'s eviction.
      */
     fun normalize(items: List<SavedPlace>): List<SavedPlace> =
-        sort(
-            items
-                .map { if (it.kind == SavedPlaceKind.Favourite) it else it.copy(id = idFor(it.kind, it.place)) }
-                .distinctBy { it.id },
-        ).take(MAX)
+        cap(
+            sort(
+                items
+                    .map { if (it.kind == SavedPlaceKind.Favourite) it else it.copy(id = idFor(it.kind, it.place)) }
+                    .distinctBy { it.id },
+            ),
+        )
+
+    /**
+     * Caps an already-[sort]ed list at [MAX], evicting the same end [upsert] does:
+     * the **oldest favourites**. Favourites are held oldest-first, so that is the
+     * *front* of their run — a plain `take(MAX)` would keep the stalest and drop
+     * the user's most recent saves, the exact opposite of the eviction the rest of
+     * this object documents.
+     *
+     * Only an oversized list reaches this: a payload written by a build with a
+     * higher [MAX] (a downgrade), or a corrupt/hand-seeded one. [upsert] keeps a
+     * list it owns within the cap on its own.
+     *
+     * Home/Work are exempt, as in [upsert]: the user set them deliberately and
+     * would be astonished to lose them to a cap, so they consume the budget first
+     * and only favourites are evicted.
+     */
+    private fun cap(sorted: List<SavedPlace>): List<SavedPlace> {
+        if (sorted.size <= MAX) return sorted
+        val singletons = sorted.filterNot { it.kind == SavedPlaceKind.Favourite }
+        val favourites = sorted.filter { it.kind == SavedPlaceKind.Favourite }
+        // At most one Home + one Work survive normalize's de-duplication, so the
+        // budget cannot realistically go negative; coerce anyway rather than let
+        // takeLast throw on a hypothetical future kind.
+        val budget = (MAX - singletons.size).coerceAtLeast(0)
+        return singletons + favourites.takeLast(budget)
+    }
 
     /**
      * Canonical display order: Home, then Work, then the favourites, whose

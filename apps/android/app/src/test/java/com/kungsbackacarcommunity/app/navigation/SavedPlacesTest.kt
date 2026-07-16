@@ -238,6 +238,44 @@ class SavedPlacesTest {
     }
 
     @Test
+    fun `normalize caps by dropping the OLDEST favourites, as upsert's eviction does`() {
+        // Favourites are held oldest-first, and upsert evicts the oldest at the
+        // cap. An oversized seed (a downgrade from a build with a higher MAX, or a
+        // corrupt payload) must lose the same end — otherwise the user silently
+        // keeps their stalest favourites and loses their most recent ones.
+        val seed = (1..SavedPlaces.MAX + 2).map { favourite("f$it") }
+        val result = SavedPlaces.normalize(seed)
+        assertEquals(SavedPlaces.MAX, result.size)
+        // The two oldest go; the newest survives.
+        assertTrue(result.none { it.id == "fav:f1" })
+        assertTrue(result.none { it.id == "fav:f2" })
+        assertTrue(result.any { it.id == "fav:f${SavedPlaces.MAX + 2}" })
+        // Survivors stay oldest-first, so the next cap still evicts correctly.
+        assertEquals((3..SavedPlaces.MAX + 2).map { "fav:f$it" }, result.map { it.id })
+    }
+
+    @Test
+    fun `normalize exempts Home and Work from the cap and keeps the newest favourites`() {
+        // MAX + 2 entries: the singletons must survive (they are never evicted),
+        // which costs the two oldest favourites their slots.
+        val seed =
+            listOf(
+                SavedPlaces.create(SavedPlaceKind.Home, place("h", lng = 80.0), "h"),
+                SavedPlaces.create(SavedPlaceKind.Work, place("w", lng = 81.0), "w"),
+            ) + (1..SavedPlaces.MAX).map { favourite("f$it") }
+        val result = SavedPlaces.normalize(seed)
+        assertEquals(SavedPlaces.MAX, result.size)
+        assertEquals(1, result.count { it.kind == SavedPlaceKind.Home })
+        assertEquals(1, result.count { it.kind == SavedPlaceKind.Work })
+        assertTrue(result.none { it.id == "fav:f1" })
+        assertTrue(result.none { it.id == "fav:f2" })
+        assertEquals(
+            listOf("home", "work") + (3..SavedPlaces.MAX).map { "fav:f$it" },
+            result.map { it.id },
+        )
+    }
+
+    @Test
     fun `in-memory store normalizes a seed holding two Homes`() {
         val store =
             InMemorySavedPlacesStore(
