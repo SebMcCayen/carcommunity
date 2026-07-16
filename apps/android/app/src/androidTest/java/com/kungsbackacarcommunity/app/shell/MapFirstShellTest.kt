@@ -36,6 +36,17 @@ class MapFirstShellTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    /**
+     * The device's status-bar height in px, read from the platform resource. Used to
+     * assert the chat-hub card clears system UI at whatever window size the test
+     * runs at (portrait, landscape or a resized/short window).
+     */
+    private fun statusBarHeightPx(): Int {
+        val res = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        val id = res.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) res.getDimensionPixelSize(id) else 0
+    }
+
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
@@ -218,7 +229,7 @@ class MapFirstShellTest {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
-        // Tapping it opens the 3-channel chat hub as a TRANSPARENT popup over the
+        // Tapping it opens the chat hub as a TRANSPARENT popup over the
         // map (the map stays composed behind it, not a full opaque route).
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
@@ -273,6 +284,19 @@ class MapFirstShellTest {
         assertTrue(
             "chat-hub card top was $cardTop — expected a strip of map above the card",
             cardTop > 16.dp,
+        )
+
+        // ...and that strip must clear system UI, not just be non-zero: the card's
+        // top may never sit under the status bar, or the hub's own top bar renders
+        // beneath it. This is what stops the height fraction from being taken
+        // against the raw window — on a short window (landscape / split-screen) a
+        // fraction of the WINDOW can be smaller than the status bar, while a
+        // fraction of the SAFE AREA cannot.
+        val statusBarTop = with(composeTestRule.density) { statusBarHeightPx().toDp() }
+        assertTrue(
+            "chat-hub card top was $cardTop — expected it to clear the " +
+                "$statusBarTop status bar so the hub's top bar isn't under system UI",
+            cardTop >= statusBarTop,
         )
 
         // That strip is the dismiss affordance: tap inside it and the hub closes

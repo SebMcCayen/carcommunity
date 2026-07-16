@@ -393,7 +393,7 @@ fun AuthenticatedApp(
             var showCreateChooser by rememberSaveable { mutableStateOf(false) }
 
             // Chat hub open/close is local UI state: tapping the map's chat bubble
-            // opens the 3-channel hub as a TRANSPARENT popup *over* the map (no
+            // opens the chat hub as a TRANSPARENT popup *over* the map (no
             // scrim, map visible behind — the same idiom as the map-layers /
             // live-share popups) rather than navigating to a full opaque route.
             var chatHubOpen by rememberSaveable { mutableStateOf(false) }
@@ -1176,8 +1176,8 @@ fun AuthenticatedApp(
                                         // caller's last-read marker. Cleared when
                                         // they open + read the Community channel.
                                         unreadChatCount = if (communityChatUnread) 1 else 0,
-                                        // The chat bubble opens the 3-channel chat
-                                        // hub (Community / Convoys / Friends +
+                                        // The chat bubble opens the chat hub
+                                        // (Community / Convoys / Friends +
                                         // Notifications) as a TRANSPARENT popup over
                                         // the map (map stays visible behind), not a
                                         // full opaque route — see ChatHubPopup below.
@@ -2071,7 +2071,7 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        // The 3-channel chat hub opened from the map chat bubble. Each tab's
+        // The chat hub opened from the map chat bubble. Each tab's
         // repository is nullable (guarded per tab), so the hub renders even in a
         // config-less build; onClose returns to the map.
         ShellRoute.ChatHub ->

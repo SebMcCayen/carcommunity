@@ -65,11 +65,14 @@ const val CHAT_HUB_TEST_TAG = "chat_hub"
 private const val CHAT_HUB_POPUP_ALPHA = 0.92f
 
 /**
- * Height of the chat-hub popup card as a fraction of the window, leaving the top
- * ~8% as a genuinely uncovered strip of live map that also acts as the
- * tap-to-dismiss area. Deliberately a fraction rather than `fillMaxHeight()` +
- * top padding: the latter still measures to the full window height (the padding
- * ends up inside the node's own footprint), which leaves no real "outside".
+ * Height of the chat-hub popup card as a fraction of the SAFE area (the window
+ * minus the status-bar inset), leaving the top ~8% of that area — plus the
+ * status bar itself — as a genuinely uncovered strip of live map that also acts
+ * as the tap-to-dismiss area. Deliberately a fraction rather than
+ * `fillMaxHeight()` + top padding: the latter still measures to the full parent
+ * height (the padding ends up inside the node's own footprint), which leaves no
+ * real "outside". Applied inside a status-bar-inset box, so the card's top can
+ * never fall under system UI however short the window is.
  */
 private const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
 
@@ -77,7 +80,7 @@ private const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
 enum class ChatTab { Community, Convoys, Friends, Notifications }
 
 /**
- * The 3-channel chat hub as a full-screen opaque route (legacy presentation, kept
+ * The chat hub as a full-screen opaque route (legacy presentation, kept
  * for [com.kungsbackacarcommunity.app.shell.ShellRoute.ChatHub]). The map-home
  * chat bubble now opens [ChatHubPopup] instead, so the hub floats as a
  * translucent popup over the map; this route remains as a migration-safe fallback
@@ -114,17 +117,18 @@ fun ChatHubRoute(
 }
 
 /**
- * The 3-channel chat hub rendered as a TRANSPARENT popup *over* the map — the same
+ * The chat hub rendered as a TRANSPARENT popup *over* the map — the same
  * idiom as the map-layers and live-share popups: a [Popup] (not a full route or a
  * [androidx.compose.ui.window.Dialog]) so there is NO dimming scrim and the live
  * map stays visible behind (and faintly through) a translucent surface. Tapping
  * outside the card or pressing Back dismisses it (the focusable popup's
  * [Popup.onDismissRequest] handles Back; an explicit transparent tap layer over
  * the map strip handles outside taps). The card is a fixed fraction (92%) of the
- * window height, anchored to the bottom — so it reaches the bottom edge
- * (keeping the message-input row's navigation-bar / IME inset effective) while
- * provably leaving the top of the window as an uncovered, tappable strip of live
- * map. Only the card is opaque/interactive; the strip above dismisses on tap.
+ * SAFE area (the window minus the status-bar inset), anchored to the bottom — so
+ * it reaches the bottom edge (keeping the message-input row's navigation-bar /
+ * IME inset effective) while provably leaving an uncovered, tappable strip of
+ * live map above it that always clears system UI, at any window size or
+ * orientation. Only the card is opaque/interactive; the strip dismisses on tap.
  * Content/tabs/functionality are identical to the route form ([ChatHubContent]);
  * only the container/presentation differs.
  */
@@ -160,43 +164,54 @@ fun ChatHubPopup(
                         .pointerInput(Unit) { detectTapGestures { onClose() } }
                         .clearAndSetSemantics {},
             )
-            Surface(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        // Height is an explicit FRACTION of the window, not
-                        // fillMaxHeight(): fillMaxHeight fills the parent's max-height
-                        // constraint, so any preceding padding lands INSIDE the node's
-                        // footprint and the card still spans the whole window — no real
-                        // strip. A fraction provably leaves the top
-                        // (1 - CHAT_HUB_CARD_HEIGHT_FRACTION) of the window uncovered
-                        // for the map + dismiss layer, while BottomCenter alignment
-                        // keeps the card on the bottom edge so the message input's
-                        // nav-bar / IME inset still holds. Sized BEFORE the horizontal
-                        // padding, which only insets the sides.
-                        .fillMaxHeight(CHAT_HUB_CARD_HEIGHT_FRACTION)
-                        .padding(horizontal = KccSpacing.s2)
-                        .testTag(CHAT_HUB_TEST_TAG),
-                shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
-                // Translucent so the map shows through — matches the map-home popups.
-                color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp,
-            ) {
-                ChatHubContent(
-                    uid = uid,
-                    communityChatRepository = communityChatRepository,
-                    convoyChatRepository = convoyChatRepository,
-                    dmRepository = dmRepository,
-                    notificationsRepository = notificationsRepository,
-                    notificationsCoordinator = notificationsCoordinator,
-                    communityUnread = communityUnread,
-                    onClose = onClose,
-                    // The card is already offset below the status bar, so the
-                    // content must NOT add its own status-bar inset again.
-                    applyStatusBarInset = false,
-                )
+            // Safe-area box for the card: status-bar inset FIRST, so the height
+            // fraction below is measured against the safe area rather than the raw
+            // window. Without this the card's top is a fixed fraction of the WINDOW,
+            // which is not guaranteed to clear system UI — on a short window
+            // (landscape, split-screen, a tall status bar / cutout) the remaining
+            // fraction can be smaller than the status bar and the hub's top bar would
+            // render underneath it. Insetting first makes the card's top
+            // statusBar + (1 - fraction) * safeHeight — provably below system UI at
+            // any window size or orientation. Only the top is inset, so the box (and
+            // the bottom-anchored card in it) still reaches the window's bottom edge,
+            // keeping the message input's nav-bar / IME inset effective.
+            Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+                Surface(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            // An explicit FRACTION, not fillMaxHeight(): fillMaxHeight
+                            // fills the parent's max-height constraint, so any preceding
+                            // padding lands INSIDE the node's footprint and the card
+                            // still spans the whole parent — no real strip. A fraction
+                            // provably leaves the top (1 - fraction) of the safe area
+                            // uncovered for the map + dismiss layer, while BottomCenter
+                            // alignment keeps the card on the bottom edge. Sized BEFORE
+                            // the horizontal padding, which only insets the sides.
+                            .fillMaxHeight(CHAT_HUB_CARD_HEIGHT_FRACTION)
+                            .padding(horizontal = KccSpacing.s2)
+                            .testTag(CHAT_HUB_TEST_TAG),
+                    shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
+                    // Translucent so the map shows through — matches the map-home popups.
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 6.dp,
+                ) {
+                    ChatHubContent(
+                        uid = uid,
+                        communityChatRepository = communityChatRepository,
+                        convoyChatRepository = convoyChatRepository,
+                        dmRepository = dmRepository,
+                        notificationsRepository = notificationsRepository,
+                        notificationsCoordinator = notificationsCoordinator,
+                        communityUnread = communityUnread,
+                        onClose = onClose,
+                        // The enclosing box already applies the status-bar inset, so
+                        // the content must NOT add it again.
+                        applyStatusBarInset = false,
+                    )
+                }
             }
         }
     }
