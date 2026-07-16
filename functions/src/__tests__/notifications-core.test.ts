@@ -10,10 +10,12 @@ import {
   MAX_NOTIFICATION_PREVIEW_LENGTH,
   MAX_NOTIFICATION_TITLE_LENGTH,
   NOTIFICATION_CATEGORIES,
+  SOCIAL_NOTIFICATION_CATEGORIES,
   buildNotificationDocument,
   buildPushTokenDocument,
   decideInAppDelivery,
   hashPushToken,
+  isEssentialCategory,
   parseMarkNotificationReadInput,
   parseRegisterPushTokenInput,
   parseUnregisterPushTokenInput,
@@ -87,6 +89,54 @@ describe('notifications-core delivery eligibility', () => {
     expect(
       decideInAppDelivery('event_reminder', activeUser, { event_reminder: true }).deliver,
     ).toBe(true);
+  });
+});
+
+describe('notifications-core social categories', () => {
+  it('exposes the five chat/social categories as active', () => {
+    expect(SOCIAL_NOTIFICATION_CATEGORIES).toEqual([
+      'direct_message',
+      'community_chat',
+      'convoy_chat',
+      'friend_request',
+      'convoy_invite',
+    ]);
+    for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
+      expect(NOTIFICATION_CATEGORIES).toContain(category);
+    }
+  });
+
+  it('never marks a social category essential — members can always be silenced', () => {
+    for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
+      expect(isEssentialCategory(category)).toBe(false);
+      expect(ESSENTIAL_NOTIFICATION_CATEGORIES).not.toContain(category);
+    }
+  });
+
+  it('honors an opt-out for every social category independently', () => {
+    for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
+      expect(decideInAppDelivery(category, activeUser, { [category]: { inApp: false } })).toEqual({
+        deliver: false,
+        reason: 'opted_out',
+      });
+      // Opting out of one social category leaves the others delivering.
+      const others = SOCIAL_NOTIFICATION_CATEGORIES.filter((c) => c !== category);
+      for (const other of others) {
+        expect(decideInAppDelivery(other, activeUser, { [category]: { inApp: false } }).deliver).toBe(
+          true,
+        );
+      }
+      // Default (no entry) is enabled.
+      expect(decideInAppDelivery(category, activeUser, undefined).deliver).toBe(true);
+    }
+  });
+
+  it('no longer couples convoy invites to system_notice', () => {
+    // Silencing system notices must not silence convoy invites, and vice versa.
+    const noSystem = { system_notice: { inApp: false } };
+    expect(decideInAppDelivery('convoy_invite', activeUser, noSystem).deliver).toBe(true);
+    const noInvites = { convoy_invite: { inApp: false } };
+    expect(decideInAppDelivery('system_notice', activeUser, noInvites).deliver).toBe(true);
   });
 });
 

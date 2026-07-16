@@ -3,7 +3,7 @@ package com.kungsbackacarcommunity.app.notifications
 /**
  * In-app notifications domain (Phase 12 slice 21, in-app portion).
  *
- * Mirrors the backend notifications-core contract: the 8 notification
+ * Mirrors the backend notifications-core contract: the notification
  * categories and the durable inbox item shape (notifications/{uid}/items).
  * Pure Kotlin — JVM-testable. Push delivery + FCM token registration await the
  * end-of-MVP Firebase console setup and are out of scope here.
@@ -19,6 +19,14 @@ enum class NotificationCategory(val wire: String) {
     ACCOUNT_SUSPENSION("account_suspension"),
     SUBSCRIPTION_STATUS("subscription_status"),
     SYSTEM_NOTICE("system_notice"),
+
+    // Social categories: member-to-member activity. All optional — a user can
+    // always silence other members (backend SOCIAL_NOTIFICATION_CATEGORIES).
+    DIRECT_MESSAGE("direct_message"),
+    COMMUNITY_CHAT("community_chat"),
+    CONVOY_CHAT("convoy_chat"),
+    FRIEND_REQUEST("friend_request"),
+    CONVOY_INVITE("convoy_invite"),
     ;
 
     companion object {

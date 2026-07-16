@@ -15,4 +15,9 @@ fun NotificationCategory.labelRes(): Int =
         NotificationCategory.ACCOUNT_SUSPENSION -> R.string.notifications_categoryAccountSuspension
         NotificationCategory.SUBSCRIPTION_STATUS -> R.string.notifications_categorySubscription
         NotificationCategory.SYSTEM_NOTICE -> R.string.notifications_categorySystem
+        NotificationCategory.DIRECT_MESSAGE -> R.string.notifications_categoryDirectMessage
+        NotificationCategory.COMMUNITY_CHAT -> R.string.notifications_categoryCommunityChat
+        NotificationCategory.CONVOY_CHAT -> R.string.notifications_categoryConvoyChat
+        NotificationCategory.FRIEND_REQUEST -> R.string.notifications_categoryFriendRequest
+        NotificationCategory.CONVOY_INVITE -> R.string.notifications_categoryConvoyInvite
     }

@@ -14,9 +14,28 @@
         "account_warning",
         "account_suspension",
         "subscription_status",
+        "system_notice",
+        "direct_message",
+        "community_chat",
+        "convoy_chat",
+        "friend_request",
+        "convoy_invite"
+      ],
+      "description": "Active categories only. The legacy contract's future categories (partner_offer, event_chat, nearby_event) must not be sent without product and security review and are deliberately excluded. The social categories (direct_message, community_chat, convoy_chat, friend_request, convoy_invite) carry member-to-member activity for the chat/social features; they are all optional (never essential) so a user can always silence other members, and activating any of them as a delivery surface requires the same product/security review. Only convoy_invite has a producer today — the others are preference-only until their domains wire one up."
+    },
+    "adminSendableCategory": {
+      "type": "string",
+      "enum": [
+        "event_reminder",
+        "event_updated",
+        "event_cancelled",
+        "admin_message",
+        "account_warning",
+        "account_suspension",
+        "subscription_status",
         "system_notice"
       ],
-      "description": "Active categories only. The legacy contract's future categories (partner_offer, event_chat, nearby_event) must not be sent without product and security review and are deliberately excluded."
+      "description": "The subset of notificationCategory that notifications.adminSend accepts — deliberately narrower than notificationCategory. The social categories describe activity between members, so accepting one from an admin broadcast would let it impersonate a DM, friend request, or convoy invite the recipient never received. Social notices are producer-only."
     },
     "notificationActionType": {
       "type": "string",

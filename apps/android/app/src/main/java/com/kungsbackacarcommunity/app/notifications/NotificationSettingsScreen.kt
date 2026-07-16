@@ -210,16 +210,12 @@ private fun ChannelToggle(
     }
 }
 
+/**
+ * Wire category → label. Delegates to [NotificationCategory.labelRes] so the
+ * settings rows and the inbox rows can't drift apart as categories are added;
+ * [NotificationCategory.fromWire] already falls back to the neutral system
+ * notice for anything unrecognized.
+ */
 @StringRes
 private fun categoryLabelRes(category: String): Int =
-    when (category) {
-        "event_reminder" -> R.string.notifications_categoryEventReminder
-        "event_updated" -> R.string.notifications_categoryEventUpdated
-        "event_cancelled" -> R.string.notifications_categoryEventCancelled
-        "admin_message" -> R.string.notifications_categoryAdminMessage
-        "subscription_status" -> R.string.notifications_categorySubscription
-        "system_notice" -> R.string.notifications_categorySystem
-        "account_warning" -> R.string.notifications_categoryAccountWarning
-        "account_suspension" -> R.string.notifications_categoryAccountSuspension
-        else -> R.string.notifications_categorySystem
-    }
+    NotificationCategory.fromWire(category).labelRes()

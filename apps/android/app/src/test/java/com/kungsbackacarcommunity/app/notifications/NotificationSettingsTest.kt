@@ -71,6 +71,32 @@ class NotificationSettingsTest {
     }
 
     @Test
+    fun `social categories are toggleable and surfaced in the settings list`() {
+        for (category in NotificationCategories.SOCIAL) {
+            // Every social category has a settings row...
+            assertTrue(category in NotificationCategories.ACTIVE)
+            // ...is never locked-on...
+            assertFalse(NotificationCategories.isEssential(category))
+            // ...and both channels persist an opt-out.
+            val prefs =
+                NotificationPreferences.ALL_ENABLED
+                    .withToggle(category, NotificationChannel.IN_APP, false)
+                    .withToggle(category, NotificationChannel.PUSH, false)
+            assertEquals(CategoryPreference(inApp = false, push = false), prefs.effective(category))
+            assertEquals(mapOf("inApp" to false, "push" to false), prefs.toFirestoreMap()[category])
+        }
+    }
+
+    @Test
+    fun `every settings row maps to a wire category with a real label`() {
+        // Guards against a settings row rendering the system-notice fallback
+        // label because the enum and the ACTIVE list drifted apart.
+        for (category in NotificationCategories.ACTIVE) {
+            assertEquals(category, NotificationCategory.fromWire(category).wire)
+        }
+    }
+
+    @Test
     fun `coordinator marks saved on success`() = runTest {
         val coordinator = NotificationSettingsCoordinator(FakeRepo(shouldFail = false))
         coordinator.save("u1", NotificationPreferences.ALL_ENABLED)

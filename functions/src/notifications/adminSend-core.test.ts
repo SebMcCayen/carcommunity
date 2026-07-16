@@ -5,6 +5,11 @@ import {
   validateAudienceRequirements,
   type AdminSendInput,
 } from './adminSend-core';
+import {
+  ADMIN_SENDABLE_CATEGORIES,
+  NOTIFICATION_CATEGORIES,
+  SOCIAL_NOTIFICATION_CATEGORIES,
+} from './notifications-core';
 
 const base = {
   category: 'admin_message',
@@ -28,6 +33,21 @@ describe('parseAdminSendInput', () => {
     expect(parseAdminSendInput({ ...base, category: 'nope' }).ok).toBe(false);
     expect(parseAdminSendInput({ ...base, audience: 'everyone' }).ok).toBe(false);
     expect(parseAdminSendInput({ ...base, extra: true }).ok).toBe(false);
+  });
+
+  it('accepts every operational category', () => {
+    for (const category of ADMIN_SENDABLE_CATEGORIES) {
+      expect(parseAdminSendInput({ ...base, category }).ok).toBe(true);
+    }
+  });
+
+  it('rejects the social categories — a broadcast must not pose as member activity', () => {
+    // These are valid NOTIFICATION_CATEGORIES, but producer-only: an admin
+    // send must not be able to fake a DM / friend request / convoy invite.
+    for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
+      expect(NOTIFICATION_CATEGORIES).toContain(category);
+      expect(parseAdminSendInput({ ...base, category }).ok).toBe(false);
+    }
   });
 });
 

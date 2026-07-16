@@ -25,6 +25,9 @@ enum class PushChannel(val id: String) {
     /** Essential account notices + important admin messages. */
     ACCOUNT("account"),
 
+    /** Member-to-member activity: DMs, chats, friend requests, convoy invites. */
+    SOCIAL("social"),
+
     /** Subscription status, system notices, and anything unknown. */
     GENERAL("general"),
 }
@@ -77,6 +80,13 @@ object PushDisplay {
             NotificationCategory.ACCOUNT_SUSPENSION,
             NotificationCategory.ADMIN_MESSAGE,
             -> PushChannel.ACCOUNT
+
+            NotificationCategory.DIRECT_MESSAGE,
+            NotificationCategory.COMMUNITY_CHAT,
+            NotificationCategory.CONVOY_CHAT,
+            NotificationCategory.FRIEND_REQUEST,
+            NotificationCategory.CONVOY_INVITE,
+            -> PushChannel.SOCIAL
 
             NotificationCategory.SUBSCRIPTION_STATUS,
             NotificationCategory.SYSTEM_NOTICE,
