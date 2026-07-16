@@ -1,0 +1,155 @@
+package com.kungsbackacarcommunity.app.navigation
+
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * [SavedPlacesStore] backed by [android.content.SharedPreferences], mirroring
+ * [PrefsRecentSearchesStore]: a compact JSON array of the user's saved places,
+ * read and written locally so the shortcuts render instantly and work with no
+ * network — the whole point of a "one-tap, offline-friendly" favourite.
+ *
+ * Unlike recents, the payload is keyed **per uid**, and the guarantee that buys
+ * is concrete: **two accounts on one device can never read each other's saved
+ * places.** Saved places are a curated personal list holding home and work
+ * addresses, so a leak here is genuinely sensitive. The key is derived from the
+ * uid alone ([keyFor]) and a blank uid is rejected outright rather than sharing a
+ * namespace — there is no bucket two sessions can land in together. The uid only
+ * namespaces the local key; nothing is uploaded (see the cloud-sync note below).
+ *
+ * The list logic (upsert, singleton Home/Work, ordering, cap) is the pure,
+ * unit-tested [SavedPlaces]; this class only adds JSON (de)serialization and the
+ * prefs read/write glue. Reads and writes are wrapped defensively: a corrupt or
+ * absent payload degrades to an empty list rather than throwing, so a bad write
+ * can never crash the search UI. That tolerance is for untrusted *data* only —
+ * construction with a blank uid is a programming error and throws (see
+ * [keyFor]), because degrading there would mean silently merging two users.
+ *
+ * Device-local by design (Android lane, no backend/rules change). Follow-up:
+ * cloud-syncing saved places per uid so they follow the user to a new phone —
+ * today a reinstall or a new device starts empty.
+ */
+class PrefsSavedPlacesStore(
+    context: Context,
+    private val uid: String,
+) : SavedPlacesStore {
+    private val prefs =
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val key = keyFor(uid)
+
+    override fun saved(): List<SavedPlace> =
+        runCatching { decode(prefs.getString(key, null)) }.getOrDefault(emptyList())
+
+    override fun save(place: SavedPlace) = write(SavedPlaces.upsert(saved(), place))
+
+    override fun remove(id: String) = write(SavedPlaces.remove(saved(), id))
+
+    private fun write(items: List<SavedPlace>) {
+        runCatching { prefs.edit().putString(key, encode(items)).apply() }
+    }
+
+    /**
+     * `internal` rather than private purely so the pure (de)serialization can be
+     * unit-tested: the store itself needs a [Context] for SharedPreferences and
+     * so cannot be constructed in a JVM test, but [decode] is where a corrupt
+     * payload is disarmed and is worth pinning directly.
+     */
+    internal companion object {
+        const val PREFS_NAME = "nav_saved_places"
+
+        /**
+         * Namespaces the payload per account (see the class doc).
+         *
+         * A blank uid **throws** rather than falling back to a shared namespace.
+         * This list holds the user's home and work addresses, so a shared bucket
+         * would leak exactly the data the per-uid key exists to protect — and it
+         * would do so silently, which is the worst way to fail.
+         *
+         * Blank is unreachable in production: the uid originates from a Firebase
+         * session (`FirebaseUser.uid`, never blank) and the only other callers
+         * pass literals (previews, instrumented tests). So this is an assertion
+         * about a real invariant, not handling of an expected input — a blank uid
+         * would mean a bug upstream, and crashing in test/preview is strictly
+         * better than merging two accounts' saved places in the field.
+         */
+        fun keyFor(uid: String): String {
+            require(uid.isNotBlank()) { "PrefsSavedPlacesStore requires a non-blank uid" }
+            return "saved:$uid"
+        }
+
+        fun encode(items: List<SavedPlace>): String {
+            val array = JSONArray()
+            for (item in items) {
+                array.put(
+                    JSONObject()
+                        .put("id", item.id)
+                        .put("kind", item.kind.name)
+                        .put("label", item.label)
+                        .put("name", item.place.name)
+                        .put("address", item.place.address ?: JSONObject.NULL)
+                        .put("lng", item.place.point.longitude)
+                        .put("lat", item.place.point.latitude)
+                        .put("placeId", item.place.id),
+                )
+            }
+            return array.toString()
+        }
+
+        fun decode(raw: String?): List<SavedPlace> {
+            if (raw.isNullOrBlank()) return emptyList()
+            val array = JSONArray(raw)
+            val out = ArrayList<SavedPlace>(array.length())
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val name = obj.optString("name")
+                if (name.isBlank()) continue
+                // Require present, finite, in-range coordinates. optDouble defaults
+                // missing/non-numeric values to 0.0, which would silently surface a
+                // saved place at (0,0) that could then be routed/navigated to — so
+                // a partially corrupt entry is skipped instead (as in recents).
+                val lng = obj.optDouble("lng", Double.NaN)
+                val lat = obj.optDouble("lat", Double.NaN)
+                if (!lng.isFinite() || !lat.isFinite() ||
+                    lng !in -180.0..180.0 || lat !in -90.0..90.0
+                ) {
+                    continue
+                }
+                // An unknown/absent kind (a payload from a newer build, or a
+                // corrupt one) degrades to Favourite rather than dropping the
+                // entry: the user still sees the place they saved, just without
+                // its shortcut slot.
+                val kind =
+                    SavedPlaceKind.entries.firstOrNull { it.name == obj.optString("kind") }
+                        ?: SavedPlaceKind.Favourite
+                val address =
+                    obj.optString("address").takeIf { it.isNotBlank() && !obj.isNull("address") }
+                val place =
+                    PlaceSuggestion(
+                        id = obj.optString("placeId"),
+                        name = name,
+                        address = address,
+                        point = LatLng(longitude = lng, latitude = lat),
+                    )
+                val label = SavedPlaces.normalizeLabel(obj.optString("label")).ifBlank { name }
+                out.add(
+                    SavedPlace(
+                        id = obj.optString("id").ifBlank { SavedPlaces.idFor(kind, place) },
+                        kind = kind,
+                        label = label,
+                        place = place,
+                    ),
+                )
+            }
+            // Enforce the store contract (ordered, capped, one Home/one Work) even
+            // if a corrupt or oversized payload violates it, so callers can trust
+            // the invariants they were promised. The persisted id is untrusted
+            // input, so normalize re-derives the singletons' ids from their kind
+            // rather than believing the payload — otherwise an entry claiming
+            // kind=Home under some other id would survive de-duplication as a
+            // second Home.
+            return SavedPlaces.normalize(out)
+        }
+    }
+}

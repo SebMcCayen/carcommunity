@@ -17,29 +17,41 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -63,6 +75,15 @@ const val NAV_SEARCH_TEST_TAG = "nav_search"
 
 /** Test tag on the route preview's "Start" (turn-by-turn) button. */
 const val NAV_START_TEST_TAG = "nav_start"
+
+/** Test tag on the saved-places card in the empty search state. */
+const val NAV_SAVED_TEST_TAG = "nav_saved"
+
+/** Test tag on the route preview's save/edit-saved-place button. */
+const val NAV_SAVE_TEST_TAG = "nav_save"
+
+/** Test tag on the save dialog's confirm button. */
+const val NAV_SAVE_CONFIRM_TEST_TAG = "nav_save_confirm"
 
 /**
  * Full-screen address-search + directions overlay behind the map-home "Where
@@ -93,6 +114,10 @@ const val NAV_START_TEST_TAG = "nav_start"
  *   empty (pre-typing) search state for one-tap re-selection. Null (the default)
  *   uses an in-memory store created once via [remember] — see the resolution
  *   below for why the fallback must be stable across recompositions.
+ * @param savedStore persistence for the user's saved places (Home/Work/
+ *   favourites), shown above the recents for one-tap routing and written from
+ *   the route preview's save button. Local + synchronous, so the shortcuts work
+ *   offline. Null (the default) uses a stable in-memory store, same as above.
  * @param initialTarget a raw coordinate to preview immediately on open (a map
  *   long-press "navigate here"): it is reverse-geocoded for a label and fed into
  *   the same route preview + Start flow as a searched place. Null for a normal
@@ -106,6 +131,7 @@ fun NavigationSearchScreen(
     onClose: () -> Unit,
     onStartNavigation: (destination: LatLng, destinationLabel: String) -> Unit,
     recentStore: RecentSearchesStore? = null,
+    savedStore: SavedPlacesStore? = null,
     initialTarget: LatLng? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -126,16 +152,31 @@ fun NavigationSearchScreen(
     // dropping the in-flight debounced search — so typed suggestions would never
     // surface.
     val resolvedRecentStore = remember(recentStore) { recentStore ?: InMemoryRecentSearchesStore() }
+    // Same stability requirement as the recents store above: an unstable fallback
+    // would be a fresh remember() key each recomposition and recreate the
+    // controller, dropping the in-flight debounced search.
+    val resolvedSavedStore = remember(savedStore) { savedStore ?: InMemorySavedPlacesStore() }
     // Keep the controller stable across recompositions (keyed on the search
-    // client + recent store) while always invoking the latest origin provider —
+    // client + stores) while always invoking the latest origin provider —
     // otherwise a changed originProvider lambda would be ignored and the stale
     // one called.
     val currentOriginProvider by rememberUpdatedState(originProvider)
     val controller =
-        remember(searchClient, resolvedRecentStore) {
-            NavigationController(searchClient, { currentOriginProvider() }, scope, resolvedRecentStore)
+        remember(searchClient, resolvedRecentStore, resolvedSavedStore) {
+            NavigationController(
+                searchClient,
+                { currentOriginProvider() },
+                scope,
+                resolvedRecentStore,
+                resolvedSavedStore,
+            )
         }
     val state by controller.state.collectAsState()
+
+    // The save/edit dialog's target, null when closed. Set from the route
+    // preview's save button (a new or already-saved destination) and from a
+    // saved row's edit button in the empty search state.
+    var saveTarget by remember { mutableStateOf<PlaceSuggestion?>(null) }
 
     // Pick a place (suggestion or recent) AND dismiss the keyboard first, so the
     // route sheet's directions aren't left behind the IME (see above).
@@ -226,13 +267,31 @@ fun NavigationSearchScreen(
                             suggestions = state.suggestions,
                             onSelect = onSelectPlace,
                         )
-                    // Empty query (search bar just opened): offer the last few
-                    // selected places for one-tap re-selection.
-                    state.query.isBlank() && state.recents.isNotEmpty() ->
-                        RecentsCard(
-                            recents = state.recents,
-                            onSelect = onSelectPlace,
-                        )
+                    // Empty query (search bar just opened): offer the saved places
+                    // and the last few selected ones for one-tap re-selection.
+                    state.query.isBlank() &&
+                        (state.savedPlaces.isNotEmpty() || state.recents.isNotEmpty()) ->
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                        ) {
+                            // Saved places sit ABOVE recents: they are the user's
+                            // deliberate shortlist, so Home/Work stay reachable in
+                            // the same spot instead of being pushed around by
+                            // whatever was searched most recently.
+                            if (state.savedPlaces.isNotEmpty()) {
+                                SavedPlacesCard(
+                                    saved = state.savedPlaces,
+                                    onSelect = { onSelectPlace(it.place) },
+                                    onEdit = { saveTarget = it.place },
+                                )
+                            }
+                            if (state.recents.isNotEmpty()) {
+                                RecentsCard(
+                                    recents = state.recents,
+                                    onSelect = onSelectPlace,
+                                )
+                            }
+                        }
                     state.query.isNotBlank() && !state.searching ->
                         HintCard(stringResource(R.string.addressSearch_noResults))
                 }
@@ -248,9 +307,31 @@ fun NavigationSearchScreen(
                     val dest = state.destination
                     if (dest != null) onStartNavigation(dest.point, dest.name)
                 },
+                onSave = { saveTarget = state.destination },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
+    }
+
+    // Save / edit dialog, hosted at the top level so it survives the sheet vs.
+    // the saved-row it was opened from. The existing entry (if any) is resolved
+    // from live state, so the dialog opens in "edit" mode — pre-filled label +
+    // kind, with a Remove action — for a place that is already saved.
+    val target = saveTarget
+    if (target != null) {
+        SavePlaceDialog(
+            place = target,
+            existing = SavedPlaces.find(state.savedPlaces, target),
+            onDismiss = { saveTarget = null },
+            onSave = { kind, label ->
+                controller.savePlace(target, kind, label)
+                saveTarget = null
+            },
+            onRemove = { id ->
+                controller.removeSavedPlace(id)
+                saveTarget = null
+            },
+        )
     }
 }
 
@@ -371,6 +452,233 @@ private fun SuggestionsCard(
     }
 }
 
+/**
+ * Localized display name for a saved place: the singletons always read "Home"/
+ * "Work" from resources (the user's stored label is irrelevant there and would
+ * be the raw street name for a Home saved straight from a search result),
+ * favourites read the user's own label.
+ */
+@Composable
+private fun SavedPlace.displayLabel(): String =
+    when (kind) {
+        SavedPlaceKind.Home -> stringResource(R.string.addressSearch_savedHome)
+        SavedPlaceKind.Work -> stringResource(R.string.addressSearch_savedWork)
+        SavedPlaceKind.Favourite -> label
+    }
+
+private fun SavedPlaceKind.icon() =
+    when (this) {
+        SavedPlaceKind.Home -> Icons.Filled.Home
+        SavedPlaceKind.Work -> Icons.Filled.Work
+        SavedPlaceKind.Favourite -> Icons.Filled.Star
+    }
+
+/**
+ * The user's saved places in the empty search state. Tapping a row selects it as
+ * the destination — the identical [NavigationController.select] path a search
+ * result takes — so a saved place is genuinely one tap from a route preview. The
+ * trailing edit button opens the same dialog the route sheet's save button does,
+ * pre-filled, for rename / re-kind / remove.
+ */
+@Composable
+private fun SavedPlacesCard(
+    saved: List<SavedPlace>,
+    onSelect: (SavedPlace) -> Unit,
+    onEdit: (SavedPlace) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(KccRadius.lg),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        shadowElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth().testTag(NAV_SAVED_TEST_TAG),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.addressSearch_savedTitle),
+                modifier =
+                    Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            saved.take(SavedPlaces.SHOWN).forEachIndexed { index, place ->
+                if (index > 0) HorizontalDivider()
+                val label = place.displayLabel()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The row (minus the edit button) is the tap target → route.
+                    Surface(
+                        color = androidx.compose.ui.graphics.Color.Transparent,
+                        onClick = { onSelect(place) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Row(
+                            modifier =
+                                Modifier.padding(
+                                    start = KccSpacing.s4,
+                                    top = KccSpacing.s3,
+                                    bottom = KccSpacing.s3,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                        ) {
+                            Icon(
+                                imageVector = place.kind.icon(),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                // Under a Home/Work shortcut the secondary line is
+                                // the address it points at — otherwise the row
+                                // would read just "Home" with no way to tell WHICH
+                                // address it will route to.
+                                val subtitle = place.place.address ?: place.place.name
+                                if (subtitle != label) {
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    IconButton(onClick = { onEdit(place) }) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription =
+                                stringResource(R.string.addressSearch_savedEdit),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Save / edit dialog for a destination: pick the kind (Home / Work / Favourite),
+ * name it, save. Opened either from the route preview's save button or from a
+ * saved row's edit button; [existing] non-null puts it in edit mode — pre-filled
+ * and with a Remove action.
+ *
+ * The label field is hidden for the singletons: their display name is the
+ * localized "Home"/"Work", so asking for a name there would offer text that is
+ * then never shown (see [displayLabel]).
+ */
+@Composable
+private fun SavePlaceDialog(
+    place: PlaceSuggestion,
+    existing: SavedPlace?,
+    onDismiss: () -> Unit,
+    onSave: (SavedPlaceKind, String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    var kind by remember(existing) { mutableStateOf(existing?.kind ?: SavedPlaceKind.Favourite) }
+    var label by
+        remember(existing) { mutableStateOf(existing?.label ?: place.name) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(
+                    if (existing != null) {
+                        R.string.addressSearch_savedDialogEditTitle
+                    } else {
+                        R.string.addressSearch_savedDialogTitle
+                    },
+                ),
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                // The address being saved, so the user can tell what this shortcut
+                // will point at before naming it.
+                Text(
+                    text = place.address ?: place.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.addressSearch_savedKindLabel),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+                    SavedPlaceKind.entries.forEach { option ->
+                        FilterChip(
+                            selected = kind == option,
+                            onClick = { kind = option },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (option) {
+                                            SavedPlaceKind.Home -> R.string.addressSearch_savedHome
+                                            SavedPlaceKind.Work -> R.string.addressSearch_savedWork
+                                            SavedPlaceKind.Favourite ->
+                                                R.string.addressSearch_savedFavourite
+                                        },
+                                    ),
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = option.icon(),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                        )
+                    }
+                }
+                if (kind == SavedPlaceKind.Favourite) {
+                    OutlinedTextField(
+                        value = label,
+                        onValueChange = { label = it.take(SavedPlaces.MAX_LABEL) },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.addressSearch_savedLabelHint)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(kind, label) },
+                modifier = Modifier.testTag(NAV_SAVE_CONFIRM_TEST_TAG),
+            ) {
+                Text(stringResource(R.string.addressSearch_savedSave))
+            }
+        },
+        dismissButton = {
+            Row {
+                if (existing != null) {
+                    TextButton(onClick = { onRemove(existing.id) }) {
+                        Text(
+                            text = stringResource(R.string.addressSearch_savedRemove),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.addressSearch_savedCancel))
+                }
+            }
+        },
+    )
+}
+
 @Composable
 private fun RecentsCard(
     recents: List<PlaceSuggestion>,
@@ -456,9 +764,13 @@ private fun RouteSheet(
     state: NavUiState,
     onClear: () -> Unit,
     onStart: () -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val destination = state.destination ?: return
+    // Filled bookmark once this destination is already saved — so the button
+    // doubles as the "is this a favourite?" indicator and its edit affordance.
+    val alreadySaved = SavedPlaces.find(state.savedPlaces, destination) != null
     Surface(
         shape = RoundedCornerShape(topStart = KccRadius.xl, topEnd = KccRadius.xl),
         color = MaterialTheme.colorScheme.surface,
@@ -491,6 +803,26 @@ private fun RouteSheet(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                IconButton(onClick = onSave, modifier = Modifier.testTag(NAV_SAVE_TEST_TAG)) {
+                    Icon(
+                        imageVector =
+                            if (alreadySaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                        contentDescription =
+                            stringResource(
+                                if (alreadySaved) {
+                                    R.string.addressSearch_savedEdit
+                                } else {
+                                    R.string.addressSearch_savedAdd
+                                },
+                            ),
+                        tint =
+                            if (alreadySaved) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    )
+                }
                 IconButton(onClick = onClear) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
