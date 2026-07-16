@@ -5,12 +5,10 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [GarageRepository] backed by an owner Firestore query on `vehicles` plus the
@@ -60,22 +58,10 @@ class FirebaseGarageRepository private constructor(
         call(DELETE_VEHICLE, mapOf<String, Any?>("vehicleId" to vehicleId))
     }
 
-    private suspend fun call(name: String, data: Map<String, Any?>): Unit =
-        suspendCancellableCoroutine { continuation ->
-            functions
-                .getHttpsCallable(name)
-                .call(data)
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$name failed without a cause"),
-                        )
-                    }
-                }
-        }
+    private suspend fun call(name: String, data: Map<String, Any?>) {
+        functions.getHttpsCallable(name).call(data)
+            .awaitOrThrow { "$name failed without a cause" }
+    }
 
     companion object {
         private const val VEHICLES = "vehicles"

@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.memberprofile
 
 import android.content.Context
-import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -9,12 +8,10 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.QuerySnapshot
 import com.kungsbackacarcommunity.app.badges.Badge
 import com.kungsbackacarcommunity.app.badges.Badges
+import com.kungsbackacarcommunity.app.firebase.await
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [MemberProfileRepository] backed by one-shot Firestore reads of another
@@ -39,7 +36,7 @@ class FirebaseMemberProfileRepository private constructor(
         if (targetUid.isBlank()) return MemberProfileResult.NotFound
 
         val profileSnapshot =
-            runCatchingCancellable { firestore.collection(USERS).document(targetUid).get().awaitResult() }
+            runCatchingCancellable { firestore.collection(USERS).document(targetUid).get().await() }
                 .getOrElse { return MemberProfileResult.Error }
         val profile = profileSnapshot.toMemberProfile() ?: return MemberProfileResult.NotFound
 
@@ -49,7 +46,7 @@ class FirebaseMemberProfileRepository private constructor(
                     .collection(VEHICLES)
                     .whereEqualTo("userId", targetUid)
                     .get()
-                    .awaitResult()
+                    .await()
                     .toVehicles()
             }
                 // A garage read failure degrades to an empty list rather than
@@ -69,7 +66,7 @@ class FirebaseMemberProfileRepository private constructor(
                     .document(targetUid)
                     .collection(BADGES)
                     .get()
-                    .awaitResult()
+                    .await()
                     .toBadges()
             }
                 .fold(
@@ -99,16 +96,6 @@ class FirebaseMemberProfileRepository private constructor(
         }
     }
 }
-
-/** Minimal Task -> suspend bridge (no kotlinx-coroutines-play-services dep). */
-private suspend fun <T> Task<T>.awaitResult(): T =
-    suspendCancellableCoroutine { continuation ->
-        addOnSuccessListener { result ->
-            if (continuation.isActive) continuation.resume(result)
-        }.addOnFailureListener { error ->
-            if (continuation.isActive) continuation.resumeWithException(error)
-        }
-    }
 
 private fun DocumentSnapshot.toMemberProfile(): MemberProfile? {
     if (!exists()) return null

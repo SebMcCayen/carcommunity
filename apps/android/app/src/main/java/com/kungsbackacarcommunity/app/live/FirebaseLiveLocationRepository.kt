@@ -7,15 +7,13 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import com.kungsbackacarcommunity.app.garage.VehicleValidation
 import java.time.Instant
 import java.time.Year
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [LiveLocationRepository] backed by the live.* callables (europe-west1) and a
@@ -98,23 +96,10 @@ class FirebaseLiveLocationRepository private constructor(
         awaitClose { ref.removeEventListener(listener) }
     }
 
-    private suspend fun call(name: String, data: Map<String, Any>): Unit =
-        suspendCancellableCoroutine { continuation ->
-            functions
-                .getHttpsCallable(name)
-                .call(data)
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception
-                                ?: IllegalStateException("$name failed without a cause"),
-                        )
-                    }
-                }
-        }
+    private suspend fun call(name: String, data: Map<String, Any>) {
+        functions.getHttpsCallable(name).call(data)
+            .awaitOrThrow { "$name failed without a cause" }
+    }
 
     companion object {
         private const val REGION = "europe-west1"
