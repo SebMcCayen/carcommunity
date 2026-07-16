@@ -433,6 +433,7 @@
     <string name="memberProfile_badgesUnavailable">Awards aren\'t shown on other members\' profiles.</string>
     <string name="memberProfile_badgesLoadError">Awards couldn\'t be loaded.</string>
     <string name="memberProfile_awardedOn">Awarded %1$s</string>
+    <string name="memberProfile_blocked">You\'ve blocked this member. Unblock them to see their profile again.</string>
     <string name="groupDrive_screenTitle">Group Drive</string>
     <string name="groupDrive_joinButton">Join group drive</string>
     <string name="groupDrive_leaveButton">Leave group drive</string>
@@ -904,4 +905,11 @@
     <string name="whatsNew_dialogClose">Close</string>
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
     <string name="whatsNew_empty">No release notes yet.</string>
+    <string name="moderation_messageActionsTitle">Message from %1$s</string>
+    <string name="moderation_blockMember">Block %1$s</string>
+    <string name="moderation_reportMessage">Report message</string>
+    <string name="moderation_reportMessageUnavailable">Reporting messages in this chat isn\'t available yet. You can block this member instead.</string>
+    <string name="moderation_reportUser">Report user</string>
+    <string name="moderation_reportUserUnavailable">Reporting a member isn\'t available yet. You can block them instead.</string>
+    <string name="moderation_close">Close</string>
 </resources>

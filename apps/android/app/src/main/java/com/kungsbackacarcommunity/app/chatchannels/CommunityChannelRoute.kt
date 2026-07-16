@@ -9,6 +9,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
+import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -19,6 +24,13 @@ import kotlinx.coroutines.launch
  *
  * [onViewProfile] is threaded straight through to the sender headers (tap a
  * sender → their read-only member profile); null leaves them inert.
+ *
+ * [blockingRepository] wires the long-press action sheet's block action; null
+ * (config-less build) leaves the sheet's block row off. Blocking from here
+ * deliberately does NOT filter the message list: the community channel is the
+ * global town square, whose messages are not block-filtered server-side either
+ * (functions/src/index.ts). The block still takes effect everywhere it is
+ * enforced — DMs, live location, interaction.
  */
 @Composable
 fun CommunityChannelRoute(
@@ -26,8 +38,16 @@ fun CommunityChannelRoute(
     uid: String,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    blockingRepository: BlockingRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val blockingCoordinator =
+        remember(blockingRepository) { blockingRepository?.let { BlockingCoordinator(it) } }
+    // Clear a stale Done/Failed banner when re-entering the channel.
+    LaunchedEffect(blockingCoordinator) { blockingCoordinator?.reset() }
+    val blockStatus by
+        (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
+            .collectAsState(initial = BlockActionStatus.Idle)
     val coordinator =
         remember(repository) {
             ChannelChatCoordinator(
@@ -73,5 +93,17 @@ fun CommunityChannelRoute(
         onResetError = { coordinator.resetSendError() },
         modifier = modifier,
         onViewProfile = onViewProfile,
+        surface = ChatSurface.CommunityChannel,
+        onBlock =
+            blockingCoordinator?.let { c ->
+                { targetUid ->
+                    // No pre-block reset: BlockingCoordinator.block guards duplicate
+                    // taps via its in-flight (Working) state, which a reset to Idle
+                    // would defeat. Mirrors EventChatRoute.
+                    scope.launch { c.block(targetUid) }
+                }
+            },
+        blockStatus = blockStatus,
+        onBlockDismiss = { blockingCoordinator?.reset() },
     )
 }

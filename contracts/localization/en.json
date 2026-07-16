@@ -475,7 +475,8 @@
     "badgesEmpty": "No awards yet.",
     "badgesUnavailable": "Awards aren't shown on other members' profiles.",
     "badgesLoadError": "Awards couldn't be loaded.",
-    "awardedOn": "Awarded %1$s"
+    "awardedOn": "Awarded %1$s",
+    "blocked": "You've blocked this member. Unblock them to see their profile again."
   },
   "groupDrive": {
     "screenTitle": "Group Drive",
@@ -987,5 +988,14 @@
     "dialogClose": "Close",
     "entryTitle": "Version %1$s · %2$s",
     "empty": "No release notes yet."
+  },
+  "moderation": {
+    "messageActionsTitle": "Message from %1$s",
+    "blockMember": "Block %1$s",
+    "reportMessage": "Report message",
+    "reportMessageUnavailable": "Reporting messages in this chat isn't available yet. You can block this member instead.",
+    "reportUser": "Report user",
+    "reportUserUnavailable": "Reporting a member isn't available yet. You can block them instead.",
+    "close": "Close"
   }
 }

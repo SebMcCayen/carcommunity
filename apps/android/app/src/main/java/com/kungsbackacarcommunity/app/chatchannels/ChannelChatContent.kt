@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,9 +49,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
+import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
 
 /**
  * Shared group-channel chat body (community + convoy): a message list with the
@@ -64,6 +71,13 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
  *   Null (the default) leaves the sender header inert — the config-less build has
  *   no profile repository to open. Only OTHER members' messages carry a sender
  *   header at all, so the caller's own messages can never navigate here.
+ * @param surface which channel this is. It decides whether the long-press action
+ *   sheet's "Report message" can reach a backend
+ *   ([MessageModeration.reportAvailability]) — neither channel has a report
+ *   callable today, so it renders disabled with an explanatory note. See
+ *   [MessageModeration] for the precise gap.
+ * @param onBlock blocks a sender's uid. Null (the default) means blocking is
+ *   unwired (config-less build), and the sheet then omits the block row.
  */
 @Composable
 fun ChannelChatContent(
@@ -79,9 +93,19 @@ fun ChannelChatContent(
     onResetError: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    surface: ChatSurface = ChatSurface.CommunityChannel,
+    onBlock: ((String) -> Unit)? = null,
+    blockStatus: BlockActionStatus = BlockActionStatus.Idle,
+    onBlockDismiss: () -> Unit = {},
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
+    // Long-press targets are held by message ID, not by the message itself: the ID
+    // is Saveable (so the sheet survives rotation), and resolving it against the
+    // live list means an open sheet collapses on its own if its message leaves the
+    // stream (author blocked, message moderated away) while it is showing.
+    var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
+    var blockTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Clear the draft only once a send succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
@@ -125,6 +149,13 @@ fun ChannelChatContent(
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
                     onViewProfile = onViewProfile,
+                    // Long-press opens the moderation sheet — never on your own
+                    // message, and never on one with no resolvable author.
+                    onMessageLongPress = { message ->
+                        if (MessageModeration.canActOn(message.senderUid, currentUid)) {
+                            actionsMessageId = message.id
+                        }
+                    },
                 )
             }
         }
@@ -134,6 +165,20 @@ fun ChannelChatContent(
                 text = stringResource(sendStatus.error.messageRes()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.blocking_errorGeneric),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Done) {
+            Text(
+                text = stringResource(R.string.blocking_blockSuccess),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 
@@ -163,6 +208,42 @@ fun ChannelChatContent(
             }
         }
     }
+
+    // Resolve the long-pressed message against the LIVE list, so a sheet whose
+    // message vanished (its author was blocked, it was moderated away) closes
+    // itself rather than acting on a message that is no longer there.
+    val actionsMessage = messages.firstOrNull { it.id == actionsMessageId }
+    if (actionsMessage != null) {
+        MessageActionsSheet(
+            memberName = actionsMessage.senderDisplayName,
+            canBlock = onBlock != null,
+            reportAvailability = MessageModeration.reportAvailability(surface),
+            onBlock = {
+                actionsMessageId = null
+                blockTargetUid = actionsMessage.senderUid
+            },
+            // Unreachable while every channel is BackendMissing (the row is
+            // disabled), but wired so the callable landing only needs the route
+            // to pass a submit lambda.
+            onReport = { actionsMessageId = null },
+            onDismiss = { actionsMessageId = null },
+        )
+    }
+
+    val blockTarget = blockTargetUid
+    if (blockTarget != null) {
+        BlockConfirmDialog(
+            memberName = messages.firstOrNull { it.senderUid == blockTarget }?.senderDisplayName,
+            onConfirm = {
+                blockTargetUid = null
+                onBlock?.invoke(blockTarget)
+            },
+            onDismiss = {
+                blockTargetUid = null
+                onBlockDismiss()
+            },
+        )
+    }
 }
 
 @Composable
@@ -173,6 +254,7 @@ private fun ChannelMessageList(
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
     onViewProfile: ((String) -> Unit)?,
+    onMessageLongPress: (ChannelMessage) -> Unit,
 ) {
     val listState = rememberLazyListState()
     // The optional "load older" row is a single item prepended before the
@@ -218,6 +300,7 @@ private fun ChannelMessageList(
                 message = message,
                 isOwn = message.senderUid == currentUid,
                 onViewProfile = onViewProfile,
+                onLongPress = { onMessageLongPress(message) },
             )
         }
     }
@@ -228,21 +311,24 @@ private fun ChannelMessageRow(
     message: ChannelMessage,
     isOwn: Boolean,
     onViewProfile: ((String) -> Unit)?,
+    onLongPress: () -> Unit,
 ) {
     if (isOwn) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
         ) {
-            ChannelBubble(message = message, isOwn = true)
+            // Your own bubble carries no long-press: you can neither block nor
+            // report yourself.
+            ChannelBubble(message = message, isOwn = true, onLongPress = null)
         }
         return
     }
     // Incoming message: avatar + sender name above the bubble (group context).
-    // Tapping the sender (avatar or name — never the bubble, which stays free for
-    // message-level actions) opens their read-only profile. A malformed message
-    // can carry a blank senderUid, which would open a dead profile route, so the
-    // affordance is only wired for a resolvable sender.
+    // Tapping the sender (avatar or name) opens their read-only profile; the
+    // BUBBLE's tap stays free, and its LONG-press opens the moderation sheet. A
+    // malformed message can carry a blank senderUid, which would open a dead
+    // profile route, so the affordance is only wired for a resolvable sender.
     val openProfile =
         onViewProfile?.takeIf { message.senderUid.isNotBlank() }?.let {
             { it(message.senderUid) }
@@ -275,13 +361,14 @@ private fun ChannelMessageRow(
                         Modifier
                     },
             )
-            ChannelBubble(message = message, isOwn = false)
+            ChannelBubble(message = message, isOwn = false, onLongPress = onLongPress)
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChannelBubble(message: ChannelMessage, isOwn: Boolean) {
+private fun ChannelBubble(message: ChannelMessage, isOwn: Boolean, onLongPress: (() -> Unit)?) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor =
@@ -289,7 +376,21 @@ private fun ChannelBubble(message: ChannelMessage, isOwn: Boolean) {
     Surface(
         color = bubbleColor,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg),
-        modifier = Modifier.widthIn(max = 280.dp),
+        modifier =
+            Modifier
+                .widthIn(max = 280.dp)
+                .then(
+                    if (onLongPress != null) {
+                        // combinedClickable, not pointerInput: it announces the
+                        // long-press to accessibility services as a custom action,
+                        // so the moderation sheet is reachable without a physical
+                        // long-press. onClick is a deliberate no-op — the bubble has
+                        // no tap action; only the sender header navigates.
+                        Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         Text(
             text = message.text,

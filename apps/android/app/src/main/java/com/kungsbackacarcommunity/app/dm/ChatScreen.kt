@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.dm
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +33,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
+import com.kungsbackacarcommunity.app.moderation.ChatSurface
+import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
+import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
@@ -51,6 +58,11 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  *   conventional "tap the thread header for who you're talking to". Null (the
  *   default) leaves the title inert. The caller's own messages are never a tap
  *   target here, matching the group channels.
+ * @param otherUid the thread's other participant — the block target behind an
+ *   incoming message's long-press. Blank (a malformed thread) leaves the
+ *   moderation sheet unwired rather than targeting nobody.
+ * @param onBlock blocks [otherUid]. Null (the default) means blocking is unwired
+ *   (config-less build), and the sheet then omits the block row.
  */
 @Composable
 fun ChatScreen(
@@ -66,9 +78,17 @@ fun ChatScreen(
     onResetError: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: (() -> Unit)? = null,
+    otherUid: String = "",
+    onBlock: ((String) -> Unit)? = null,
+    blockStatus: BlockActionStatus = BlockActionStatus.Idle,
+    onBlockDismiss: () -> Unit = {},
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
+    // Held by message ID (Saveable, so the sheet survives rotation) and resolved
+    // against the live list, so a sheet whose message vanished closes itself.
+    var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmingBlock by rememberSaveable { mutableStateOf(false) }
 
     // Clear the draft only once a send succeeds; keep it on failure.
     LaunchedEffect(sendStatus) {
@@ -103,6 +123,16 @@ fun ChatScreen(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
+                    // Long-press opens the moderation sheet — never on your own
+                    // message, and never when the thread has no resolvable other
+                    // member to act on.
+                    onMessageLongPress = { message ->
+                        if (MessageModeration.canActOn(otherUid, currentUid) &&
+                            message.senderUid != currentUid
+                        ) {
+                            actionsMessageId = message.id
+                        }
+                    },
                 )
             }
         }
@@ -112,6 +142,20 @@ fun ChatScreen(
                 text = stringResource(sendStatus.error.messageRes()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Failed) {
+            Text(
+                text = stringResource(R.string.blocking_errorGeneric),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (blockStatus == BlockActionStatus.Done) {
+            Text(
+                text = stringResource(R.string.blocking_blockSuccess),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 
@@ -141,6 +185,36 @@ fun ChatScreen(
             }
         }
     }
+
+    if (messages.any { it.id == actionsMessageId }) {
+        MessageActionsSheet(
+            memberName = otherName,
+            canBlock = onBlock != null,
+            reportAvailability = MessageModeration.reportAvailability(ChatSurface.DirectMessage),
+            onBlock = {
+                actionsMessageId = null
+                confirmingBlock = true
+            },
+            // Unreachable while DMs are BackendMissing (the row is disabled), but
+            // wired so a `dm.reportMessage` callable only needs a submit lambda.
+            onReport = { actionsMessageId = null },
+            onDismiss = { actionsMessageId = null },
+        )
+    }
+
+    if (confirmingBlock) {
+        BlockConfirmDialog(
+            memberName = otherName,
+            onConfirm = {
+                confirmingBlock = false
+                onBlock?.invoke(otherUid)
+            },
+            onDismiss = {
+                confirmingBlock = false
+                onBlockDismiss()
+            },
+        )
+    }
 }
 
 @Composable
@@ -150,6 +224,7 @@ private fun MessageList(
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
+    onMessageLongPress: (DmMessage) -> Unit,
 ) {
     val listState = rememberLazyListState()
     // The optional "load older" row is a single item prepended before the
@@ -194,13 +269,21 @@ private fun MessageList(
             }
         }
         items(messages, key = { it.id }) { message ->
-            MessageBubble(message = message, isOwn = message.senderUid == currentUid)
+            val isOwn = message.senderUid == currentUid
+            MessageBubble(
+                message = message,
+                isOwn = isOwn,
+                // Your own bubble carries no long-press: you can neither block nor
+                // report yourself.
+                onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: DmMessage, isOwn: Boolean) {
+private fun MessageBubble(message: DmMessage, isOwn: Boolean, onLongPress: (() -> Unit)?) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor =
@@ -216,7 +299,20 @@ private fun MessageBubble(message: DmMessage, isOwn: Boolean) {
         Surface(
             color = bubbleColor,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg),
-            modifier = Modifier.widthIn(max = 280.dp),
+            modifier =
+                Modifier
+                    .widthIn(max = 280.dp)
+                    .then(
+                        if (onLongPress != null) {
+                            // combinedClickable, not pointerInput: it announces the
+                            // long-press to accessibility services as a custom
+                            // action. onClick is a deliberate no-op — a DM bubble has
+                            // no tap action.
+                            Modifier.combinedClickable(onLongClick = onLongPress, onClick = {})
+                        } else {
+                            Modifier
+                        },
+                    ),
         ) {
             Text(
                 text = message.text,

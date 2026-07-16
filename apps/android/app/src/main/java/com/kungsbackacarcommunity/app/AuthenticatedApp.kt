@@ -1524,6 +1524,11 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Backs the block action on the long-press message sheet.
+                        // Unlike onViewProfile this must NOT close the hub: the
+                        // sheet and its confirm dialog compose inside it, and
+                        // blocking from chat should leave the user where they were.
+                        blockingRepository = blockingRepository,
                     )
                 }
 
@@ -2120,6 +2125,8 @@ private fun RouteHost(
                 communityUnread = communityChatUnread,
                 onClose = onClose,
                 onViewProfile = openProfileIfWired,
+                // Backs the block action on the hub's long-press message sheet.
+                blockingRepository = blockingRepository,
             )
 
         ShellRoute.Badges ->

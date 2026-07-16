@@ -10,8 +10,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
+import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /**
@@ -83,6 +87,13 @@ private fun defaultClientErrorReporter(): ClientErrorReporter? {
  *
  * [onViewProfile] opens [otherUid]'s read-only member profile from the thread
  * title; null (a config-less build with no profile repository) leaves it inert.
+ *
+ * [blockingRepository] wires the long-press action sheet's block action on the
+ * other member's messages; null (config-less build) leaves the sheet's block row
+ * off. The thread is deliberately NOT filtered or closed on a block: the backend
+ * already refuses to deliver new DMs either way (`dm-sendMessage` returns a
+ * neutral failed-precondition), and silently erasing the history the user just
+ * acted on would hide the very messages they may need to reference.
  */
 @Composable
 fun ChatRoute(
@@ -91,9 +102,17 @@ fun ChatRoute(
     otherUid: String,
     otherName: String?,
     onViewProfile: ((String) -> Unit)? = null,
+    blockingRepository: BlockingRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
+    val blockingCoordinator =
+        remember(blockingRepository) { blockingRepository?.let { BlockingCoordinator(it) } }
+    // Clear a stale Done/Failed banner when re-entering, or on a thread switch.
+    LaunchedEffect(conversationId, blockingCoordinator) { blockingCoordinator?.reset() }
+    val blockStatus by
+        (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
+            .collectAsState(initial = BlockActionStatus.Idle)
     val coordinator =
         remember(repository, uid, otherUid, conversationId) {
             DmThreadCoordinator(repository, otherUid, conversationId)
@@ -148,5 +167,16 @@ fun ChatRoute(
         // profile route (dmPairId can be derived from a malformed conversation).
         onViewProfile =
             onViewProfile?.takeIf { otherUid.isNotBlank() }?.let { { it(otherUid) } },
+        otherUid = otherUid,
+        onBlock =
+            blockingCoordinator?.let { c ->
+                { targetUid ->
+                    // No pre-block reset — BlockingCoordinator.block's in-flight
+                    // guard would be defeated by it. Mirrors EventChatRoute.
+                    scope.launch { c.block(targetUid) }
+                }
+            },
+        blockStatus = blockStatus,
+        onBlockDismiss = { blockingCoordinator?.reset() },
     )
 }
