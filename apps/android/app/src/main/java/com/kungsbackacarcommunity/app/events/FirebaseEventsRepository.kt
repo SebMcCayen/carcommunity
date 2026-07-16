@@ -1,14 +1,21 @@
 package com.kungsbackacarcommunity.app.events
 
 import android.content.Context
+import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -135,18 +142,91 @@ class FirebaseEventsRepository private constructor(
                             )
                         }
                     } else {
+                        val cause = task.exception
+                        // The per-member 3-per-24h cap answers `resource-exhausted`.
+                        // Mapped to a domain reason here so the coordinator and the
+                        // form stay Firebase-free and can say something true, rather
+                        // than "please try again" — the one piece of advice that is
+                        // guaranteed not to work for a rate limit.
+                        val code = (cause as? FirebaseFunctionsException)?.code?.name
                         continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("events-create failed without a cause"),
+                            CreateEventException(Events.createFailureFromCode(code), cause),
                         )
                     }
                 }
         }
+
+    override suspend fun loadAttendees(eventId: String): EventAttendeesResult {
+        // Roster read. Under the current rules (owner-or-admin on
+        // events/{id}/rsvps/{uid}) this list query is DENIED for a normal
+        // member — an expected denial that collapses to the definitive
+        // "names aren't shown" note. See EventAttendees.kt for why the read is
+        // attempted rather than assumed-denied.
+        val rsvps =
+            runCatchingCancellable {
+                firestore
+                    .collection(EVENTS)
+                    .document(eventId)
+                    .collection(RSVPS)
+                    .whereEqualTo("status", RsvpStatus.GOING.wire)
+                    .limit(EventAttendees.MAX_RENDERED.toLong())
+                    .get()
+                    .awaitResult()
+            }
+                .getOrElse { error ->
+                    return if ((error as? FirebaseFirestoreException)?.code ==
+                        FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    ) {
+                        EventAttendeesResult.Unavailable
+                    } else {
+                        EventAttendeesResult.Unknown
+                    }
+                }
+
+        val uids = rsvps.documents.map { it.id }
+        if (uids.isEmpty()) return EventAttendeesResult.Loaded(emptyList())
+
+        // The RSVP doc carries only { status, updatedAt } (the rules pin it to
+        // exactly those keys), so names/avatars are joined from the public
+        // users/{uid} profile — readable by any authenticated user.
+        //
+        // Issued CONCURRENTLY: this is up to MAX_RENDERED (50) separate gets,
+        // and awaiting them one at a time would serialize 50 round trips into
+        // one worst-case latency on a mobile network. awaitAll preserves the
+        // uids order, so the roster is assembled exactly as before — only the
+        // waiting overlaps. (Individual document gets, not a whereIn query, so
+        // the owner-or-admin rules evaluation per doc is unchanged.)
+        val attendees =
+            coroutineScope {
+                uids
+                    .map { uid ->
+                        async {
+                            val profile =
+                                runCatchingCancellable {
+                                    firestore.collection(USERS).document(uid).get().awaitResult()
+                                }
+                                    .getOrNull()
+                            // One unreadable/missing profile degrades to a nameless row
+                            // rather than failing the whole roster — they ARE going, which
+                            // is the fact this section exists to report.
+                            EventAttendee(
+                                uid = uid,
+                                displayName = profile?.getString("displayName"),
+                                avatarPath = profile?.getString("avatarPath"),
+                            )
+                        }
+                    }
+                    .awaitAll()
+            }
+        return EventAttendeesResult.Loaded(attendees)
+    }
 
     companion object {
         private const val EVENTS = "events"
         private const val DETAILS = "details"
         private const val PRIVATE = "private"
         private const val RSVPS = "rsvps"
+        private const val USERS = "users"
         private const val REGION = "europe-west1"
         private const val CREATE = "events-create"
 
@@ -159,6 +239,16 @@ class FirebaseEventsRepository private constructor(
         }
     }
 }
+
+/** Minimal Task -> suspend bridge (no kotlinx-coroutines-play-services dep). */
+private suspend fun <T> Task<T>.awaitResult(): T =
+    suspendCancellableCoroutine { continuation ->
+        addOnSuccessListener { result ->
+            if (continuation.isActive) continuation.resume(result)
+        }.addOnFailureListener { error ->
+            if (continuation.isActive) continuation.resumeWithException(error)
+        }
+    }
 
 private fun DocumentSnapshot.toEventSummary(): EventSummary? {
     if (!exists()) return null

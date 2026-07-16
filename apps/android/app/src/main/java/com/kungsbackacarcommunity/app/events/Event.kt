@@ -79,10 +79,12 @@ data class EventDetail(
  * exposes. Times are carried as epoch millis and serialized to ISO-8601 UTC by
  * the repository ([Events.toIsoUtc]).
  *
- * NOTE: the deployed `events-create` callable is admin-only (requireAdminActor)
- * and Firestore rules forbid client writes to `events/{id}`, so submitting this
- * as a non-admin returns permission-denied. Enabling genuine user-created events
- * needs a member-callable createEvent + rules change (backend lane).
+ * An active member may drive `events-create` themselves: the callable stamps
+ * `createdByRole: 'member'` and publishes the event immediately (post-moderated
+ * — admins take one down via the audited `events.cancel`). `isOfficial` is
+ * forced false server-side for member-created events, which is why this input
+ * carries no such field: offering a control the server silently ignores would
+ * be a lie to the member.
  */
 data class CreateEventInput(
     val title: String,
@@ -95,7 +97,55 @@ data class CreateEventInput(
     val address: String? = null,
 )
 
+/**
+ * Why an `events-create` call failed, in domain terms. Keeps the Firebase
+ * exception vocabulary out of the coordinator/UI (which stay pure Kotlin);
+ * [FirebaseEventsRepository] maps the callable's error code onto this via
+ * [Events.createFailureFromCode] and throws [CreateEventException].
+ */
+enum class CreateEventFailure {
+    /**
+     * The per-member cap of [Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY] events per
+     * rolling 24h was hit — the callable answers `resource-exhausted`. A
+     * definitive, self-inflicted "come back later", not a fault.
+     */
+    RATE_LIMITED,
+
+    /** Anything else (denied, offline, invalid, backend fault) — generic error. */
+    UNKNOWN,
+}
+
+/** A create-event failure carrying the domain [reason]. */
+class CreateEventException(
+    val reason: CreateEventFailure,
+    cause: Throwable? = null,
+) : Exception("events-create failed: $reason", cause)
+
 object Events {
+    /**
+     * Max events one member may create per rolling 24h — mirrors
+     * `MEMBER_EVENT_RATE_LIMIT_MAX` in functions/src/events/events-core.ts.
+     * Display-only (the server is the authority); shown so the limit message
+     * states a real number instead of a vague "too many".
+     */
+    const val MEMBER_EVENT_RATE_LIMIT_PER_DAY = 3
+
+    /**
+     * Maps an `events-create` callable error code onto a [CreateEventFailure].
+     * Accepts both the Firebase Android SDK's enum name (`RESOURCE_EXHAUSTED`)
+     * and the wire/`HttpsError` spelling (`resource-exhausted`) so the mapping
+     * is pinned by unit tests without a Firebase dependency. Case-insensitive;
+     * an unknown/absent code is [CreateEventFailure.UNKNOWN].
+     */
+    fun createFailureFromCode(code: String?): CreateEventFailure {
+        val normalized = code?.trim()?.lowercase()?.replace('_', '-') ?: return CreateEventFailure.UNKNOWN
+        return if (normalized == "resource-exhausted") {
+            CreateEventFailure.RATE_LIMITED
+        } else {
+            CreateEventFailure.UNKNOWN
+        }
+    }
+
     /**
      * RSVP is allowed only for active members on a published event — mirrors
      * the Firestore rule on events/{id}/rsvps/{uid} (owner + active member +

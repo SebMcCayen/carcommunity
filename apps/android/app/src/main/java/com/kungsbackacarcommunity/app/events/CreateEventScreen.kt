@@ -42,12 +42,15 @@ import java.util.Date
  * reports a validated [CreateEventInput] on submit; the route wires it to
  * [CreateEventCoordinator].
  *
- * BACKEND GAP (flagged, not fixable in the Android lane): the deployed
- * `events-create` callable requires an active admin (requireAdminActor) and the
- * Firestore rules forbid client writes to `events/{id}`. So for a normal member
- * this submit returns permission-denied and surfaces the generic error below.
- * A member-callable createEvent + rules change is needed to actually let users
- * create events — that lives in functions/ + *.rules, out of this lane.
+ * An active member may create an event: `events-create` publishes it straight
+ * away and admins moderate afterwards, so the form promises immediate
+ * publication and no approval wait. Two deliberate omissions:
+ *  - No `isOfficial` toggle. The callable forces the flag false for
+ *    member-created events, so a control here would silently do nothing.
+ *  - No "pending approval" language. The event is live the moment it is
+ *    created; the only after-the-fact action is an admin takedown.
+ * The 3-per-rolling-24h cap gets its own message
+ * ([CreateEventFailure.RATE_LIMITED]) rather than a generic failure.
  */
 @Composable
 fun CreateEventScreen(
@@ -79,10 +82,11 @@ fun CreateEventScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Honest, non-blocking notice about the current backend restriction.
+        // Sets the expectation the backend actually honours: published on
+        // submit, moderated afterwards.
         Card(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = stringResource(R.string.events_createRestrictedNotice),
+                text = stringResource(R.string.events_createLiveNotice),
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -151,9 +155,19 @@ fun CreateEventScreen(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        if (status == CreateEventStatusUi.Failed) {
+        if (status is CreateEventStatusUi.Failed) {
+            // A rate limit is not a fault the member can retry away, so it gets
+            // its own message naming the real cap instead of "please try again".
             Text(
-                text = stringResource(R.string.events_createError),
+                text =
+                    when (status.reason) {
+                        CreateEventFailure.RATE_LIMITED ->
+                            stringResource(
+                                R.string.events_createRateLimited,
+                                Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY,
+                            )
+                        CreateEventFailure.UNKNOWN -> stringResource(R.string.events_createError)
+                    },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )

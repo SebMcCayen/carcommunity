@@ -1917,7 +1917,8 @@ private fun RouteHost(
 ) {
     val context = LocalContext.current
     // The one guarded profile-navigation callback every member-bearing surface
-    // reuses (chat senders, the convoy roster, event-chat authors) — mirroring
+    // reuses (chat senders, the convoy roster, event-chat authors, event
+    // attendee rows) — mirroring
     // the Friends screen's onViewProfile. Null when the profile repository isn't
     // wired (config-less build), which leaves those affordances inert rather than
     // navigating to a route that could only render a permanent spinner.

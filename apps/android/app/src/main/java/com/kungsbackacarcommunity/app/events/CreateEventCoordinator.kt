@@ -15,13 +15,11 @@ sealed interface CreateEventStatusUi {
     data class Success(val eventId: String) : CreateEventStatusUi
 
     /**
-     * The create failed. For a non-admin caller this is expected today: the
-     * `events-create` callable is admin-only, so the write is denied. The form
-     * surfaces a generic error; enabling user-created events needs a backend
-     * change (a member-callable createEvent + rules), which is out of the
-     * Android lane.
+     * The create failed, carrying the domain [reason] so the form can say
+     * something true — notably [CreateEventFailure.RATE_LIMITED] (the member's
+     * 3-per-24h cap), which is a "come back later", not a "try again".
      */
-    data object Failed : CreateEventStatusUi
+    data class Failed(val reason: CreateEventFailure) : CreateEventStatusUi
 }
 
 /**
@@ -39,7 +37,7 @@ class CreateEventCoordinator(
     suspend fun submit(input: CreateEventInput) {
         if (state.value == CreateEventStatusUi.Saving) return
         if (!Events.isValidForCreate(input)) {
-            state.value = CreateEventStatusUi.Failed
+            state.value = CreateEventStatusUi.Failed(CreateEventFailure.UNKNOWN)
             return
         }
         state.value = CreateEventStatusUi.Saving
@@ -50,7 +48,13 @@ class CreateEventCoordinator(
             state.value = CreateEventStatusUi.Idle
             throw cancellation
         } catch (failure: Exception) {
-            state.value = CreateEventStatusUi.Failed
+            // A repository that classified the failure (the Firebase one maps
+            // the callable's `resource-exhausted` onto RATE_LIMITED) wins; any
+            // other exception is an honest UNKNOWN.
+            state.value =
+                CreateEventStatusUi.Failed(
+                    (failure as? CreateEventException)?.reason ?: CreateEventFailure.UNKNOWN,
+                )
         }
     }
 

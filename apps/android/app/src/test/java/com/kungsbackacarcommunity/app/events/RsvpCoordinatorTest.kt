@@ -28,6 +28,9 @@ class RsvpCoordinatorTest {
         }
 
         override suspend fun createEvent(input: CreateEventInput): String = "unused"
+
+        override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
+            EventAttendeesResult.Unavailable
     }
 
     @Test

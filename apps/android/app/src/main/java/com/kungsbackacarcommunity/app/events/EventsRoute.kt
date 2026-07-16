@@ -15,6 +15,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChat
+import com.kungsbackacarcommunity.app.blocking.BlockedUsersState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRoute
@@ -22,6 +23,7 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRoute
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -55,10 +57,11 @@ fun EventsRoute(
     // Blocking-in-context: null-safe. When null, chat offers no block action
     // and does no blocked-author filtering (config-less builds pass unchanged).
     blockingRepository: BlockingRepository? = null,
-    // Opens a member's read-only profile. Events themselves surface no member
-    // rows (RSVP is aggregate counts only, and the group-drive roster is a
-    // participant COUNT — neither names anyone), so the only member-bearing
-    // surface here is the event chat's message authors.
+    // Opens a member's read-only profile (the shell's MemberProfile route —
+    // reused, not rebuilt). Two member-bearing surfaces share it: the event
+    // chat's message authors, and the attendee list's rows. Null in a build
+    // with no member-profile repository, which leaves both inert rather than
+    // navigating into a route that could only render a permanent spinner.
     onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -98,8 +101,8 @@ fun EventsRoute(
                 createCoordinator.status.collectAsState(initial = CreateEventStatusUi.Idle)
 
             // On a successful create, surface a snackbar and return to the list.
-            // (The new event is a draft until an admin publishes it, so it won't
-            // appear in the published-only list yet.)
+            // A member's event is published on creation (post-moderated), so it
+            // appears in the published-only list straight away — no draft wait.
             val snackbarHostState = LocalSnackbarHostState.current
             val createdMessage = stringResource(R.string.events_createSuccess)
             LaunchedEffect(createStatus, snackbarHostState, createdMessage) {
@@ -199,6 +202,34 @@ fun EventsRoute(
         }
     }
 
+    // Who's going. Loaded once per (event, reload) and folded through the
+    // viewer's block list: someone the viewer blocked is invisible here just as
+    // they are in chat and on profiles. The count rendered beside the list
+    // stays the server's public tally — see EventAttendees.stateFor.
+    val attendeesVisible = Events.canSeeDetails(isActiveMember, event?.status ?: EventStatus.DRAFT)
+    var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
+    var attendees by remember(selected) {
+        mutableStateOf<EventAttendeesState>(EventAttendeesState.Loading)
+    }
+    LaunchedEffect(selected, attendeesVisible, attendeesReloadKey, blockingRepository, uid) {
+        if (!attendeesVisible) return@LaunchedEffect
+        attendees = EventAttendeesState.Loading
+        val result = repository.loadAttendees(selected)
+        // Only a Loaded roster has rows to filter, and stateFor ignores the
+        // block list on every other branch (see EventAttendeesTest's
+        // "blocked uids are irrelevant unless the roster loaded"). Skipping the
+        // fetch matters because Unavailable is the COMMON path — the roster read
+        // is denied for a normal member today — and waiting on a block-list read
+        // there would hold the section on Loading for a result it cannot use.
+        val blocked =
+            if (result is EventAttendeesResult.Loaded) {
+                blockedUids(blockingRepository, uid)
+            } else {
+                emptySet()
+            }
+        attendees = EventAttendees.stateFor(result, blocked)
+    }
+
     val chatEligible =
         chatEnabled &&
             chatRepository != null &&
@@ -225,5 +256,31 @@ fun EventsRoute(
         onRetry = { reloadKey++ },
         onOpenChat = if (chatEligible) { { showChat = true } } else null,
         onOpenGroupDrive = if (groupDriveEligible) { { showGroupDrive = true } } else null,
+        attendees = attendees,
+        onOpenMember = onViewProfile,
+        onRetryAttendees = { attendeesReloadKey++ },
     )
+}
+
+/**
+ * The uids [viewerUid] has blocked, read from their own owner-scoped block
+ * list. Best-effort and deliberately mirrors MemberProfileRoute.hasBlocked: a
+ * null repository, a blank uid, or a settled non-Loaded state resolves to "no
+ * blocks" — the attendee read is rules-protected either way, and failing the
+ * whole roster because the block list hiccuped would be a worse trade.
+ *
+ * This only ever reflects who the VIEWER blocked, never who blocked them.
+ */
+private suspend fun blockedUids(
+    blockingRepository: BlockingRepository?,
+    viewerUid: String,
+): Set<String> {
+    if (blockingRepository == null || viewerUid.isBlank()) return emptySet()
+    val settled =
+        blockingRepository.observeBlocked(viewerUid).first { it !is BlockedUsersState.Loading }
+    return if (settled is BlockedUsersState.Loaded) {
+        settled.users.map { it.userId }.toSet()
+    } else {
+        emptySet()
+    }
 }
