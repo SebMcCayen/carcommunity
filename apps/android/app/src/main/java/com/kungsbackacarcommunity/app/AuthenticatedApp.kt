@@ -1247,9 +1247,10 @@ fun AuthenticatedApp(
                                         vehiclesLabel =
                                             stringResource(R.string.shell_garageVehicles),
                                         onVehicles =
-                                            if (garageRepository != null &&
-                                                profile?.activeMember == true
-                                            ) {
+                                            // Managing your own garage is open to
+                                            // any signed-in user (no longer member-
+                                            // gated); only require the repo to be wired.
+                                            if (garageRepository != null) {
                                                 { route = ShellRoute.Garage }
                                             } else {
                                                 null
@@ -1785,7 +1786,6 @@ private fun RouteHost(
                     repository = garageRepository,
                     coordinator = garageCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
                     garageState = garageState,
                     onRetry = onGarageRetry,
                     onBack = onClose,

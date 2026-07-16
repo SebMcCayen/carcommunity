@@ -2278,10 +2278,22 @@ describe('Cloud Storage – vehicle images', () => {
     await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
   });
 
-  it('non-member owner cannot upload a vehicle image (garage is member-only)', async () => {
+  // Managing your own garage is no longer member-gated, so a signed-in owner
+  // with no activeMember entitlement may upload a photo for their own vehicle.
+  it('non-member owner can upload a vehicle image (garage is no longer member-only)', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
     const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
     const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car2.jpg`);
+    await assertSucceeds(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
+  });
+
+  // Suspension still overrides access: it used to be enforced via
+  // isActiveMember(), and is now kept explicitly by isNotSuspended() so the
+  // rule mirrors the backend requireActiveActor guard.
+  it('suspended owner cannot upload a vehicle image', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER, { suspended: true });
+    const data = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+    const ref = storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car3.jpg`);
     await assertFails(uploadBytes(ref, data, { contentType: 'image/jpeg' }));
   });
 
