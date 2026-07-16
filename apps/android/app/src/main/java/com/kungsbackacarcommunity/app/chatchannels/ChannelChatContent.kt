@@ -156,9 +156,12 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
  *
  * @param mentionCandidates members the @-picker may insert (already excludes the
  *   caller). Empty disables the picker entirely.
- * @param mentionDisplayNames uid → display name for HIGHLIGHTING. Deliberately a
- *   superset of the candidates: it keeps the caller's own name, since being
- *   mentioned yourself must highlight too.
+ * @param mentionDisplayNames uid → display name for HIGHLIGHTING. Highlighting
+ *   resolves only what this map contains; a mentioned uid absent from it renders
+ *   unhighlighted (its member was still notified — see [MentionRendering]).
+ *   Callers are expected to pass a SUPERSET of [mentionCandidates], one that
+ *   still includes the caller: the picker excludes you, but being mentioned
+ *   yourself must highlight, and only the caller can supply that name.
  * @param droppedMentionCount mentions the server dropped from the last send (see
  *   [ChannelChatCoordinator.droppedMentionCount]); > 0 shows one quiet note.
  * @param onViewProfile opens the read-only member profile for a sender's uid.

@@ -329,8 +329,16 @@ object MentionCandidates {
         }
 
     /**
-     * uid → display name for RENDERING (a superset of the picker: it keeps
-     * [selfUid]'s own name, since being mentioned yourself must highlight too).
+     * uid → display name for RENDERING, built from whatever [sources] the caller
+     * passes: blank uids and blank names are skipped, and nobody is excluded.
+     *
+     * That last part is the difference from [from], which drops the caller via
+     * its own `selfUid` parameter. This function has no such parameter and
+     * removes no one, so the map is a superset of the picker's roster exactly
+     * when the caller hands it a superset — which is what happens today:
+     * `CommunityChannelRoute` passes `friends + senders` here without removing
+     * the caller, so the caller's own name resolves and being mentioned yourself
+     * highlights. The self-name guarantee is the caller's, not this function's.
      *
      * Resolves each uid with the SAME precedence [from] picks with — first
      * occurrence in [sources] wins — because the two must agree. Callers pass
