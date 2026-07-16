@@ -64,6 +64,15 @@ const val CHAT_HUB_TEST_TAG = "chat_hub"
  */
 const val CHAT_HUB_POPUP_ALPHA = 0.92f
 
+/**
+ * Height of the chat-hub popup card as a fraction of the window, leaving the top
+ * ~8% as a genuinely uncovered strip of live map that also acts as the
+ * tap-to-dismiss area. Deliberately a fraction rather than `fillMaxHeight()` +
+ * top padding: the latter still measures to the full window height (the padding
+ * ends up inside the node's own footprint), which leaves no real "outside".
+ */
+const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
+
 /** The four sections of the chat hub. */
 enum class ChatTab { Community, Convoys, Friends, Notifications }
 
@@ -111,12 +120,13 @@ fun ChatHubRoute(
  * map stays visible behind (and faintly through) a translucent surface. Tapping
  * outside the card or pressing Back dismisses it (the focusable popup's
  * [Popup.onDismissRequest] handles Back; an explicit transparent tap layer over
- * the map strip handles outside taps). The card wraps a near-full height anchored
- * to the bottom of the window — leaving a strip of live map visible above it —
- * and reaches the bottom edge so the message-input row's navigation-bar inset
- * lifts it clear of the system bars. Only the card is opaque/interactive; the
- * strip above passes through to dismiss. Content/tabs/functionality are identical
- * to the route form ([ChatHubContent]); only the container/presentation differs.
+ * the map strip handles outside taps). The card is [CHAT_HUB_CARD_HEIGHT_FRACTION]
+ * of the window height, anchored to the bottom — so it reaches the bottom edge
+ * (keeping the message-input row's navigation-bar / IME inset effective) while
+ * provably leaving the top of the window as an uncovered, tappable strip of live
+ * map. Only the card is opaque/interactive; the strip above dismisses on tap.
+ * Content/tabs/functionality are identical to the route form ([ChatHubContent]);
+ * only the container/presentation differs.
  */
 @Composable
 fun ChatHubPopup(
@@ -135,12 +145,13 @@ fun ChatHubPopup(
         onDismissRequest = onClose,
         properties = PopupProperties(focusable = true),
     ) {
-        // Full-window container: the card is NOT full-screen, so the area above it
-        // stays a genuine "outside". A transparent tap layer fills the window; the
-        // card (composed after) sits on top at the bottom, so only the uncovered
-        // map strip actually receives the dismiss tap. A raw pointerInput handler
-        // plus clearAndSetSemantics keeps this invisible dismiss layer out of the
-        // accessibility tree (mirrors the map-home outside-tap scrims).
+        // Full-window container: the card is deliberately SHORTER than the window,
+        // so the area above it is a genuine, visible, tappable "outside". A
+        // transparent tap layer fills the window; the card (composed after) sits on
+        // top at the bottom, so only the uncovered map strip actually receives the
+        // dismiss tap. A raw pointerInput handler plus clearAndSetSemantics keeps
+        // this invisible dismiss layer out of the accessibility tree (mirrors the
+        // map-home outside-tap scrims).
         Box(modifier = modifier.fillMaxSize()) {
             Box(
                 modifier =
@@ -154,12 +165,18 @@ fun ChatHubPopup(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        // Push the card below the status bar and reveal a strip of
-                        // the live map above it; fillMaxHeight then makes the card
-                        // take all the remaining height down to the bottom edge.
-                        .statusBarsPadding()
-                        .padding(top = KccSpacing.s6, start = KccSpacing.s2, end = KccSpacing.s2)
-                        .fillMaxHeight()
+                        // Height is an explicit FRACTION of the window, not
+                        // fillMaxHeight(): fillMaxHeight fills the parent's max-height
+                        // constraint, so any preceding padding lands INSIDE the node's
+                        // footprint and the card still spans the whole window — no real
+                        // strip. A fraction provably leaves the top
+                        // (1 - CHAT_HUB_CARD_HEIGHT_FRACTION) of the window uncovered
+                        // for the map + dismiss layer, while BottomCenter alignment
+                        // keeps the card on the bottom edge so the message input's
+                        // nav-bar / IME inset still holds. Sized BEFORE the horizontal
+                        // padding, which only insets the sides.
+                        .fillMaxHeight(CHAT_HUB_CARD_HEIGHT_FRACTION)
+                        .padding(horizontal = KccSpacing.s2)
                         .testTag(CHAT_HUB_TEST_TAG),
                 shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
                 // Translucent so the map shows through — matches the map-home popups.

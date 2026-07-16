@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
@@ -14,6 +19,7 @@ import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -239,6 +245,40 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.shell_moreSignOut)).assertIsDisplayed()
         // The whole point: the map stays visible behind the popup (transparent
         // Popup, no dimming scrim, no navigation to a separate page).
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * Regression: the chat-hub popup card must be strictly SHORTER than the window,
+     * leaving a real, visible, tappable strip of map above it — and a tap in that
+     * strip must dismiss the hub. A full-height card (e.g. `fillMaxHeight()`, whose
+     * preceding padding lands inside its own footprint) would leave no genuine
+     * "outside" and make the dismiss layer unreachable.
+     */
+    @Test
+    fun chatHubPopup_leavesUncoveredMapStripAboveCard_andTapThereDismisses() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+
+        // The card is bottom-anchored, so an uncovered strip exists iff its top edge
+        // sits strictly below the window top. A full-height card would report top=0.
+        // 16.dp is a floor for "actually visible + tappable", not a layout constant.
+        val cardTop =
+            composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).getUnclippedBoundsInRoot().top
+        assertTrue(
+            "chat-hub card top was $cardTop — expected a strip of map above the card",
+            cardTop > 16.dp,
+        )
+
+        // That strip is the dismiss affordance: tap above the card's top edge (a
+        // negative y is node-relative, i.e. inside the strip) and the hub closes
+        // while the map stays. If the card ever filled the window this offset would
+        // fall outside it and nothing would dismiss.
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
+            click(Offset(width / 2f, -20f))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
