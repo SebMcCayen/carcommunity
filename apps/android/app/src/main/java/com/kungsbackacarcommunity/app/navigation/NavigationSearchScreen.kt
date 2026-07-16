@@ -496,7 +496,8 @@ private fun SavedPlacesCard(
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = stringResource(R.string.addressSearch_savedTitle),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier =
+                    Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -512,9 +513,14 @@ private fun SavedPlacesCard(
                         modifier = Modifier.weight(1f),
                     ) {
                         Row(
-                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
+                            modifier =
+                                Modifier.padding(
+                                    start = KccSpacing.s4,
+                                    top = KccSpacing.s3,
+                                    bottom = KccSpacing.s3,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                         ) {
                             Icon(
                                 imageVector = place.kind.icon(),
