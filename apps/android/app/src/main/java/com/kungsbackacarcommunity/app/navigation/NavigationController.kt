@@ -28,6 +28,11 @@ data class NavUiState(
     val error: NavError? = null,
     /** Previously selected places, shown in the empty (pre-typing) search state. */
     val recents: List<PlaceSuggestion> = emptyList(),
+    /**
+     * The user's saved places (Home/Work/favourites), shown above [recents] in
+     * the empty search state for one-tap routing.
+     */
+    val savedPlaces: List<SavedPlace> = emptyList(),
 )
 
 /**
@@ -44,14 +49,21 @@ data class NavUiState(
  * @param scope the coroutine scope the search/route jobs run in (the screen's).
  * @param recentStore persistence for the user's most-recently selected places;
  *   seeded into the initial state and updated when a destination is picked.
+ * @param savedStore persistence for the user's saved places (Home/Work/
+ *   favourites); seeded into the initial state and re-read after every edit.
+ *   Local and synchronous, so saving never blocks or needs the network.
  */
 class NavigationController(
     private val client: MapboxSearchClient,
     private val originProvider: suspend () -> LatLng?,
     private val scope: CoroutineScope,
     private val recentStore: RecentSearchesStore = InMemoryRecentSearchesStore(),
+    private val savedStore: SavedPlacesStore = InMemorySavedPlacesStore(),
 ) {
-    private val stateFlow = MutableStateFlow(NavUiState(recents = recentStore.recent()))
+    private val stateFlow =
+        MutableStateFlow(
+            NavUiState(recents = recentStore.recent(), savedPlaces = savedStore.saved()),
+        )
     val state: StateFlow<NavUiState> = stateFlow.asStateFlow()
 
     // Cached once per screen open; used for proximity bias and route origin.
@@ -243,6 +255,41 @@ class NavigationController(
                 // Route + record-as-recent go through the same select() path.
                 select(suggestion)
             }
+    }
+
+    /**
+     * Saves [place] as a [kind] shortcut under [label], or updates it when it is
+     * already saved (see [SavedPlaces.upsert]: a new Home replaces the old one,
+     * a re-saved favourite is refreshed in place rather than duplicated). This is
+     * also the **rename** path — re-saving an entry with a new [label] rewrites
+     * the same id — so there is one write path rather than two that can diverge.
+     *
+     * Synchronous — the store is a local key-value write — so the UI reflects the
+     * save on the same frame the user taps, with no spinner and no network.
+     */
+    fun savePlace(
+        place: PlaceSuggestion,
+        kind: SavedPlaceKind,
+        label: String,
+    ) {
+        // Re-saving an existing entry under a DIFFERENT kind (e.g. promoting a
+        // favourite to Home) changes its id, so drop the old row first — otherwise
+        // upsert, which replaces by id, would leave the place saved twice.
+        val existing = SavedPlaces.find(savedStore.saved(), place)
+        if (existing != null && existing.kind != kind) savedStore.remove(existing.id)
+        savedStore.save(SavedPlaces.create(kind, place, label))
+        refreshSaved()
+    }
+
+    /** Un-saves the place [id]. The destination/route in view is left untouched. */
+    fun removeSavedPlace(id: String) {
+        savedStore.remove(id)
+        refreshSaved()
+    }
+
+    /** Re-reads the store so the ordered/capped list drives the UI. */
+    private fun refreshSaved() {
+        stateFlow.value = stateFlow.value.copy(savedPlaces = savedStore.saved())
     }
 
     /**
