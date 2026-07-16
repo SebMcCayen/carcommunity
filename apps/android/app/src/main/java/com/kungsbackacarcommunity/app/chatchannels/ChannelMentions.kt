@@ -319,6 +319,13 @@ object MentionCandidates {
         (friends + messageSenders)
             .filter { it.uid.isNotBlank() && it.uid != selfUid && it.displayName.isNotBlank() }
             .distinctBy { it.uid }
+            // lowercase() with NO argument is locale-INVARIANT (it lowercases by
+            // the invariant locale, which is why it superseded toLowerCase()), so
+            // this ordering is the same on every device and needs no Locale.ROOT
+            // argument to make it so. Do not "fix" it to lowercase(getDefault()):
+            // that WOULD be locale-sensitive, and on a Turkish device would map
+            // "I" to the dotless "ı" and sort it after "z". Pinned by the
+            // locale tests in ChannelMentionsTest.
             .sortedWith(compareBy({ it.displayName.lowercase() }, { it.uid }))
 
     /** The distinct authors of [messages] as candidates (skips nameless senders). */

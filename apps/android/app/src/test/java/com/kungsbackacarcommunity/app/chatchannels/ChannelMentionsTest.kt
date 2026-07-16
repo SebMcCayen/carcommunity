@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.compose.runtime.saveable.SaverScope
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -413,6 +414,63 @@ class ChannelMentionsTest {
         val picked = MentionCandidates.from(friends, senders, selfUid = "uid-self")
         assertEquals(listOf("NewName"), picked.map { it.displayName })
         assertEquals("NewName", MentionCandidates.displayNames(friends + senders)["uid-1"])
+    }
+
+    // ------------------------------------------------------- locale independence
+
+    /**
+     * Runs [body] with the device locale set to Turkish and restores it after —
+     * the JVM is shared across this module's tests, so a leaked default locale
+     * would redden unrelated suites and read as a flake.
+     *
+     * Turkish is the standard probe for locale-sensitive case mapping: it maps
+     * "I" to the DOTLESS "ı" (U+0131 = 305), which sorts AFTER "z" (122) rather
+     * than before it. These tests pin that the picker is unaffected. Kotlin's
+     * no-arg `lowercase()` is already locale-INVARIANT (unlike the deprecated
+     * `toLowerCase()`, and unlike `lowercase(Locale.getDefault())`), so no
+     * `Locale.ROOT` argument is needed; these guard that nobody "fixes" it into
+     * a locale-sensitive form later.
+     */
+    private fun withTurkishLocale(body: () -> Unit) {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale("tr", "TR"))
+        try {
+            body()
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun `the picker finds a name by its first letter regardless of device locale`() =
+        withTurkishLocale {
+            // The reported failure was "@I doesn't find Ivan on a Turkish device".
+            // The filter is contains(ignoreCase = true), which compares per-Char
+            // and is locale-invariant, so it does.
+            val roster = listOf(MentionCandidate("uid-ivan", "Ivan"), MentionCandidate("uid-zoe", "Zoe"))
+            assertEquals(listOf("Ivan"), MentionCandidates.matching(roster, "I").map { it.displayName })
+            assertEquals(listOf("Ivan"), MentionCandidates.matching(roster, "i").map { it.displayName })
+        }
+
+    @Test
+    fun `candidate ordering does not depend on the device locale`() = withTurkishLocale {
+        val irma = MentionCandidate("uid-irma", "Irma")
+        val zoe = MentionCandidate("uid-zoe", "Zoe")
+        assertEquals(
+            listOf("Irma", "Zoe"),
+            MentionCandidates.from(listOf(zoe, irma), emptyList(), selfUid = "uid-self")
+                .map { it.displayName },
+        )
+    }
+
+    @Test
+    fun `suggestion ordering does not depend on the device locale`() = withTurkishLocale {
+        val irma = MentionCandidate("uid-irma", "Irma")
+        val zoe = MentionCandidate("uid-zoe", "Zoe")
+        assertEquals(
+            listOf("Irma", "Zoe"),
+            MentionCandidates.matching(listOf(zoe, irma), term = "").map { it.displayName },
+        )
     }
 
     // ------------------------------------------- saved-state encoding (composer)
