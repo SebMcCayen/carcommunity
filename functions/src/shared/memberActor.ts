@@ -11,7 +11,9 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { db } from '../firebase';
 import {
+  canAccessAdminFeatures,
   canAccessMemberFeatures,
+  hasBackendAccess,
   isRestricted,
   toUserAccessState,
   type UserAccessState,
@@ -20,6 +22,12 @@ import {
 export interface AuthenticatedActor {
   uid: string;
   state: UserAccessState;
+}
+
+/** An actor that is either an active member or an admin/owner. */
+export interface MemberOrAdminActor extends AuthenticatedActor {
+  /** True when the caller holds the admin or owner role. */
+  isAdmin: boolean;
 }
 
 /** Asserts a signed-in, non-suspended, non-deleted caller. */
@@ -43,4 +51,21 @@ export async function requireMemberActor(request: CallableRequest): Promise<Auth
     throw new HttpsError('permission-denied', 'Member subscription required.');
   }
   return actor;
+}
+
+/**
+ * Asserts an active member OR an admin/owner (hasBackendAccess: admins never
+ * need a subscription; suspension/deletion closes both doors). Use for
+ * callables a member may drive but where an admin caller takes a different
+ * path — the returned `isAdmin` says which, decided from the backend-managed
+ * users/{uid} role, never from a client-supplied claim.
+ */
+export async function requireMemberOrAdminActor(
+  request: CallableRequest,
+): Promise<MemberOrAdminActor> {
+  const actor = await requireActiveActor(request);
+  if (!hasBackendAccess(actor.state)) {
+    throw new HttpsError('permission-denied', 'Member subscription required.');
+  }
+  return { ...actor, isAdmin: canAccessAdminFeatures(actor.state) };
 }
