@@ -51,6 +51,10 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "createdByRole",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "createdAt",
           "order": "ASCENDING"
         }

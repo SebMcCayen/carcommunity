@@ -118,10 +118,18 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     // Per-member creation cap (mirrors the feedback.reportIssue limiter):
     // counted inside the transaction so concurrent submits cannot race past
     // it. Admins are exempt — the audited admin path is the trusted one.
+    //
+    // The count filters on `createdByRole: 'member'` as well as the uid: the
+    // cap is on MEMBER-created events, so events this uid created while an
+    // admin must not count against them if they later create as a member.
+    // (Backed by the events composite index
+    // `createdByUserId ASC, createdByRole ASC, createdAt ASC` — the equality
+    // filters precede the range on createdAt.)
     if (creatorRole === 'member') {
       const recent = await tx.get(
         events
           .where('createdByUserId', '==', actor.uid)
+          .where('createdByRole', '==', 'member')
           .where('createdAt', '>=', windowStart)
           .count(),
       );

@@ -262,6 +262,36 @@ describe('events-create – member-created events', () => {
     await expect(call('events-create', validCreate)).resolves.toBeDefined();
   });
 
+  it('counts only member-created events toward the cap, not admin-created ones by the same uid', async () => {
+    const member = await createMemberUser('events-member-ratelimit-role');
+
+    // Seed the window with events this SAME uid created as an admin (the
+    // shape events-create writes on the admin path). The cap is on
+    // MEMBER-created events, so these must not count against them — a count
+    // filtered on createdByUserId alone would wrongly exhaust the budget here.
+    for (let i = 0; i < MEMBER_EVENT_RATE_LIMIT_MAX + 1; i += 1) {
+      await adminDb.collection('events').add({
+        title: `Admin-era cruise ${i}`,
+        status: 'draft',
+        createdByUserId: member.uid,
+        createdByRole: 'admin',
+        createdAt: new Date(),
+      });
+    }
+
+    await signInAs(member);
+    // Full member budget still available despite the seeded admin events.
+    for (let i = 0; i < MEMBER_EVENT_RATE_LIMIT_MAX; i += 1) {
+      await expect(
+        call('events-create', { ...validCreate, title: `Member cruise ${i}` }),
+      ).resolves.toBeDefined();
+    }
+    // ...and member-created events DO still count: the cap bites right after.
+    expect(
+      await callableErrorCode(call('events-create', { ...validCreate, title: 'One too many' })),
+    ).toBe('functions/resource-exhausted');
+  });
+
   it('does not rate-limit admins', async () => {
     for (let i = 0; i <= MEMBER_EVENT_RATE_LIMIT_MAX; i += 1) {
       await expect(createDraftEvent({ title: `Admin cruise ${i}` })).resolves.toBeDefined();
