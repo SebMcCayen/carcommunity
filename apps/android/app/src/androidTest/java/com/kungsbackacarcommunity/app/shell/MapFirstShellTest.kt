@@ -1,10 +1,11 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,6 +21,8 @@ import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -34,7 +37,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MapFirstShellTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     /**
      * The device's status-bar height in px, read from the platform resource. Used to
@@ -61,7 +64,7 @@ class MapFirstShellTest {
         WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
     }
 
-    private fun setShell() {
+    private fun setShell(mapSurface: MapSurface? = null) {
         composeTestRule.setContent {
             KccTheme {
                 AuthenticatedApp(
@@ -111,10 +114,89 @@ class MapFirstShellTest {
                     loginRecordCoordinator = null,
                     flags = FeatureFlags.DEFAULTS,
                     onSignOut = {},
+                    // Defaults to rememberMapSurface() (the stub in CI) exactly
+                    // like production; tests that need to assert the map wiring
+                    // pass a stub they hold a reference to.
+                    mapSurface = mapSurface ?: rememberMapSurface(),
                 )
             }
         }
     }
+
+    /**
+     * The map home must NOT be disposed when the user visits another tab.
+     *
+     * Leaving it used to unmount the map, which on the real surface tears the
+     * Mapbox MapView down and rebuilds it (style reload and all) on the way
+     * back — the window has nothing to show for those frames, which is the
+     * blank blink this guards against. Asserted through the stub's
+     * composition counter: one entry for the whole round-trip, not one per
+     * visit to the Map tab.
+     */
+    @Test
+    fun switchingTabs_keepsTheMapComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabGarage)).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+
+        // Still the SAME map: had it been disposed on the way to Garage, coming
+        // back would have entered the composition a second time.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * The flip side of keeping the map alive: a map nobody can see must not keep
+     * pulsing its puck and drawing GPS fixes, so the shell stands it down while
+     * another tab covers it and brings it back on return.
+     */
+    @Test
+    fun coveringTheMap_deactivatesIt_andReturningReactivatesIt() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+    }
+
+    /**
+     * Back on another tab must NOT be intercepted by the covered map.
+     *
+     * The map home stays composed while another tab is shown, which also keeps
+     * its `BackHandler(enabled = searchExpanded)` registered with the activity's
+     * dispatcher — visibility has no bearing on that. So a search bar left
+     * expanded on the Map tab would go on eating Back presses from Social, and
+     * because MapHome's handler is added AFTER the shell's it wins: Back would
+     * appear to do nothing (it collapses a search bar nobody can see) instead of
+     * returning to the Map tab.
+     */
+    @Test
+    fun backOnAnotherTab_isNotSwallowedByTheCoveredMapSearch() {
+        setShell()
+        // Expand the map's search bar, then leave the Map tab with it expanded.
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+
+        // Back belongs to the visible tab: it returns to the Map tab
+        // (ShellNavigation.onBack), rather than being swallowed by the map.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+
+
 
     private companion object {
         const val TEST_UID = "u1"

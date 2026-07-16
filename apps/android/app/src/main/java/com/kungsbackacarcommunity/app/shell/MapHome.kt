@@ -163,6 +163,27 @@ fun MapHome(
     onRecenter: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
+    /**
+     * True while another bottom-nav tab is drawn over the map.
+     *
+     * The map home is deliberately NOT disposed when the user leaves the Map tab
+     * (that teardown is what used to blank the screen on the way back), so it is
+     * still composed — and therefore still live — while something else is on
+     * screen. Anything here that reaches outside its own layout has to know it is
+     * covered:
+     *
+     * - The Back handler below deregisters, because a composed `BackHandler` is
+     *   registered with the activity's dispatcher no matter what is visible, and
+     *   would otherwise eat Back presses that belong to the tab on top.
+     * - The transient popups/search collapse, restoring what disposal used to do
+     *   implicitly, so returning to the map lands on a clean map.
+     *
+     * Comes from the shell's single `mapCovered` value, the same one that stands
+     * the surface down via [MapSurface.setActive], so the two can't disagree.
+     * Defaults to false: callers that only ever show the map (previews, tests)
+     * are unaffected.
+     */
+    covered: Boolean = false,
     unreadChatCount: Int = 0,
     // Tapping the floating chat bubble opens the chat hub
     // (Community / Convoys / Friends + Notifications) as a transparent popup
@@ -261,15 +282,47 @@ fun MapHome(
     // below) collapses it back to the icon.
     var searchExpanded by remember { mutableStateOf(false) }
 
-    // Accessible dismiss for the expanded search: the outside-tap scrim is
-    // deliberately invisible to TalkBack/keyboard, so system Back is the
-    // reliable way to collapse the bar (only intercepts Back while expanded).
-    BackHandler(enabled = searchExpanded) { searchExpanded = false }
-
     // Live-location popup open/close is local UI state: tapping the broadcast
     // control opens the transparent live-share sheet (over the map, no scrim),
     // tapping outside it dismisses it.
     var liveOpen by remember { mutableStateOf(false) }
+
+    // Accessible dismiss for the expanded search: the outside-tap scrim is
+    // deliberately invisible to TalkBack/keyboard, so system Back is the
+    // reliable way to collapse the bar (only intercepts Back while expanded).
+    //
+    // Also gated on the map being the visible tab. Composition — not visibility —
+    // is what registers a BackHandler with the activity's dispatcher, and the map
+    // now stays composed under the other tabs, so without `!covered` a search bar
+    // left expanded would keep swallowing Back presses from History/Social/Garage.
+    // MapHome composes after the shell's own handler and so would win them, making
+    // Back look broken (it would collapse a search bar nobody can see instead of
+    // returning to the map). This is the guarantee; the reset below is not enough
+    // on its own, because it lands a frame later and Back could arrive first.
+    BackHandler(enabled = searchExpanded && !covered) { searchExpanded = false }
+
+    // Collapse the map's transient UI as soon as another tab covers it.
+    //
+    // Until the map started outliving the Map tab, leaving the tab disposed all of
+    // this and it came back collapsed; keeping the map composed would silently
+    // turn that into "the map is exactly as you left it", which is not obviously
+    // better and was never the intent of keeping it alive. These are momentary
+    // affordances, not preferences — an expanded "Where to?" bar or a half-open
+    // layers sheet is not something a user expects to find waiting on their next
+    // visit to the map. So the old behaviour is restored explicitly.
+    //
+    // Deliberately NOT reset: `desiredMapMode` (the manual day/night override).
+    // That IS a preference — it is rememberSaveable precisely so it survives
+    // process death, so a tab switch must not drop it.
+    LaunchedEffect(covered) {
+        if (covered) {
+            searchExpanded = false
+            moreOpen = false
+            layersOpen = false
+            liveOpen = false
+            reportOpen = false
+        }
+    }
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.

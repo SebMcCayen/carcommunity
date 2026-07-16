@@ -3,6 +3,8 @@ package com.kungsbackacarcommunity.app
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -66,9 +68,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.config.FeatureFlag
@@ -185,6 +189,7 @@ import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
+import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
@@ -219,6 +224,14 @@ import kotlinx.coroutines.withContext
  */
 private const val INCIDENTS_REFRESH_ATTEMPTS = 5
 private const val INCIDENTS_REFRESH_RETRY_MS = 3_000L
+
+/**
+ * Crossfade duration (ms) between bottom-nav tabs. Long enough to read as a
+ * deliberate transition rather than a snap, short enough that the shell still
+ * feels immediate — Material's guidance for a simple within-screen fade, and in
+ * the same register as the map's own short camera eases.
+ */
+private const val SHELL_TAB_FADE_MILLIS = 200
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -278,6 +291,12 @@ fun AuthenticatedApp(
     flags: FeatureFlags,
     onSignOut: () -> Unit,
     nowMillis: () -> Long = { System.currentTimeMillis() },
+    // Real Mapbox surface when a token is configured (on device), else the
+    // neutral stub (config-less / CI) — see rememberMapSurface. Defaulted rather
+    // than constructed inside so UI tests can pass a StubMapSurface they hold a
+    // reference to and assert the shell's map wiring (kept alive across tabs,
+    // stood down while covered). Production never passes this.
+    mapSurface: MapSurface = rememberMapSurface(),
 ) {
     val scope = rememberCoroutineScope()
 
@@ -434,9 +453,6 @@ fun AuthenticatedApp(
             }
 
             val snackbarHostState = remember { SnackbarHostState() }
-            // Real Mapbox surface when a token is configured (on device),
-            // else the neutral stub (config-less / CI) — see rememberMapSurface.
-            val mapSurface = rememberMapSurface()
             val context = LocalContext.current
 
             // Crowd-sourced incidents layer (navigation feature). Guarded:
@@ -1109,258 +1125,304 @@ fun AuthenticatedApp(
                         },
                     ) { padding ->
                         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                            when (selectedTab) {
-                                ShellTab.Map ->
-                                    MapHome(
-                                        mapSurface = mapSurface,
-                                        isLiveSharing = isSharing,
-                                        canShareLive = canShareLive,
-                                        participantCount = mapParticipantUids.size,
-                                        avatarUrl = mapAvatarUrl,
-                                        userLabel =
-                                            stringResource(R.string.shell_userMarkerLabel),
-                                        // Tapping "Where to?" opens the address
-                                        // search + directions overlay.
-                                        onSearch = { navSearchOpen = true },
-                                        // The broadcast control opens the transparent
-                                        // live-location popup (over the map, no scrim)
-                                        // with the session options, wired to the same
-                                        // LiveLocationCoordinator as the full screen.
-                                        // Broadcast Start no longer picks a
-                                        // duration inline: it raises the
-                                        // single-session start flow (the 1h/2h/4h
-                                        // picker), shared with the "+" Create →
-                                        // Single session. Unwired (no coordinator):
-                                        // fall back to the live screen rather than
-                                        // silently no-op'ing.
-                                        onStartLiveShare = { requestStartSingleSession() },
-                                        onStopLiveShare = {
-                                            val c = liveLocationCoordinator
-                                            if (c != null) {
-                                                scope.launch { c.stop() }
-                                            } else {
-                                                openLiveShareFallback()
+                            // The map home is composed for EVERY tab, not just the Map tab, and
+                            // the other tabs are drawn over it. Selecting it with `when` used to
+                            // dispose this subtree on the way to History/Social/Garage, which tore
+                            // the Mapbox MapView down (AndroidView.onRelease -> MapView.onDestroy);
+                            // coming back built a fresh MapView and re-ran loadStyle(STANDARD), and
+                            // until that first GL frame landed the surface had nothing in it — the
+                            // blank blink users saw on every return to the map. Keeping it composed
+                            // means there is nothing to rebuild and nothing to blink.
+                            //
+                            // While another tab covers it the map is stood down (setActive(false)
+                            // below) and taken out of the semantics tree, so a covered map neither
+                            // burns GPS/GPU nor answers to TalkBack.
+                            val mapCovered = selectedTab != ShellTab.Map
+                            Box(
+                                modifier =
+                                    Modifier.fillMaxSize().then(
+                                        if (mapCovered) Modifier.clearAndSetSemantics {} else Modifier,
+                                    ),
+                            ) {
+                                MapHome(
+                                    mapSurface = mapSurface,
+                                    // Same single value that stands the surface
+                                    // down below: a covered map must not keep
+                                    // intercepting Back or hold its transient UI.
+                                    covered = mapCovered,
+                                    isLiveSharing = isSharing,
+                                    canShareLive = canShareLive,
+                                    participantCount = mapParticipantUids.size,
+                                    avatarUrl = mapAvatarUrl,
+                                    userLabel =
+                                        stringResource(R.string.shell_userMarkerLabel),
+                                    // Tapping "Where to?" opens the address
+                                    // search + directions overlay.
+                                    onSearch = { navSearchOpen = true },
+                                    // The broadcast control opens the transparent
+                                    // live-location popup (over the map, no scrim)
+                                    // with the session options, wired to the same
+                                    // LiveLocationCoordinator as the full screen.
+                                    // Broadcast Start no longer picks a
+                                    // duration inline: it raises the
+                                    // single-session start flow (the 1h/2h/4h
+                                    // picker), shared with the "+" Create →
+                                    // Single session. Unwired (no coordinator):
+                                    // fall back to the live screen rather than
+                                    // silently no-op'ing.
+                                    onStartLiveShare = { requestStartSingleSession() },
+                                    onStopLiveShare = {
+                                        val c = liveLocationCoordinator
+                                        if (c != null) {
+                                            scope.launch { c.stop() }
+                                        } else {
+                                            openLiveShareFallback()
+                                        }
+                                        // Always stop the foreground service,
+                                        // even when unwired, so Stop can never
+                                        // leave background location running.
+                                        BackgroundLocationController.stop(context)
+                                    },
+                                    onHideMeNow = {
+                                        val c = liveLocationCoordinator
+                                        if (c != null) {
+                                            scope.launch { c.hideMeNow() }
+                                        } else {
+                                            openLiveShareFallback()
+                                        }
+                                        BackgroundLocationController.stop(context)
+                                    },
+                                    // "More options" opens the full live screen;
+                                    // unavailable (no Firebase) → a snackbar.
+                                    onOpenLiveShareDetails = { openLiveShareFallback() },
+                                    // The layers control opens the map-layers
+                                    // popup (traffic / day-night / 3D toggles),
+                                    // handled internally by MapHome against the
+                                    // MapSurface seam.
+                                    onRecenter = { mapSurface.recenter() },
+                                    // The top-right profile button opens the
+                                    // account menu as a transparent Popup
+                                    // *over* the map (map stays visible)
+                                    // rather than navigating to a full-screen
+                                    // hub. Each entry still navigates to its
+                                    // own full route (or signs out).
+                                    moreMenuEntries =
+                                        profileMenuEntries(
+                                            profileEditCoordinator = profileEditCoordinator,
+                                            dmRepository = dmRepository,
+                                            pointsRepository = pointsRepository,
+                                            badgesRepository = badgesRepository,
+                                            partnerApplicationCoordinator =
+                                                partnerApplicationCoordinator,
+                                            onOpenRoute = { route = it },
+                                            onSignOut = onSignOut,
+                                        ),
+                                    // Community-chat unread ("missed") dot:
+                                    // shown as a single-count badge when the
+                                    // newest community message post-dates the
+                                    // caller's last-read marker. Cleared when
+                                    // they open + read the Community channel.
+                                    unreadChatCount = if (communityChatUnread) 1 else 0,
+                                    // The chat bubble opens the chat hub
+                                    // (Community / Convoys / Friends +
+                                    // Notifications) as a TRANSPARENT popup over
+                                    // the map (map stays visible behind), not a
+                                    // full opaque route — see ChatHubPopup below.
+                                    onOpenChat = { chatHubOpen = true },
+                                    // Crowd-sourced incidents layer: draw the
+                                    // fetched markers for everyone, and show the
+                                    // report control only when a repository is
+                                    // configured (guarded off in CI/no-Firebase)
+                                    // AND the user is an active member — the
+                                    // `incidents-report` callable is member-gated
+                                    // (requireMemberActor), so non-members must not
+                                    // see an action that would fail on submit.
+                                    incidentMarkers = incidentMarkers,
+                                    incidentsLayerEnabled = incidentsLayerEnabled,
+                                    onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
+                                    incidentReportingEnabled =
+                                        incidentController != null && profile?.activeMember == true,
+                                    onReportIncident = { type ->
+                                        incidentController?.let { controller ->
+                                            scope.launch {
+                                                val text =
+                                                    when (controller.report(type)) {
+                                                        is ReportOutcome.Success ->
+                                                            incidentReportSuccessText
+                                                        ReportOutcome.NoLocation ->
+                                                            incidentLocationUnavailableText
+                                                        is ReportOutcome.Failed ->
+                                                            incidentReportErrorText
+                                                    }
+                                                snackbarHostState.showSnackbar(text)
                                             }
-                                            // Always stop the foreground service,
-                                            // even when unwired, so Stop can never
-                                            // leave background location running.
-                                            BackgroundLocationController.stop(context)
-                                        },
-                                        onHideMeNow = {
-                                            val c = liveLocationCoordinator
-                                            if (c != null) {
-                                                scope.launch { c.hideMeNow() }
+                                        }
+                                    },
+                                )
+                            }
+
+                            // Stand the map down while it is covered and bring it back when it is
+                            // not. Keyed on the flag (not the tab) so hopping History -> Social
+                            // does not re-fire it.
+                            LaunchedEffect(mapCovered, mapSurface) {
+                                mapSurface.setActive(!mapCovered)
+                            }
+
+                            // The other tabs render as an opaque page over the map, crossfaded so
+                            // pages resolve into each other instead of snapping. Leaving a tab
+                            // fades its page back out to reveal the map that was there all along.
+                            Crossfade(
+                                targetState = selectedTab,
+                                animationSpec = tween(SHELL_TAB_FADE_MILLIS),
+                                label = "shellTabContent",
+                            ) { tab ->
+                                when (tab) {
+                                    // The map is already composed underneath, so the Map tab
+                                    // draws no page of its own. Create is intercepted in
+                                    // ShellBottomBar.onSelect (switches to Map + raises the
+                                    // live-share prompt), so it never renders as its own tab —
+                                    // it shares this branch for `when` exhaustiveness.
+                                    ShellTab.Map, ShellTab.Create -> Unit
+
+                                    ShellTab.History ->
+                                        ShellTabPage {
+                                            if (drivesRepository != null) {
+                                                DrivesRoute(
+                                                    repository = drivesRepository,
+                                                    uid = uid,
+                                                )
                                             } else {
-                                                openLiveShareFallback()
+                                                HubScreen(
+                                                    title = stringResource(R.string.shell_tabHistory),
+                                                    entries = emptyList(),
+                                                )
                                             }
-                                            BackgroundLocationController.stop(context)
-                                        },
-                                        // "More options" opens the full live screen;
-                                        // unavailable (no Firebase) → a snackbar.
-                                        onOpenLiveShareDetails = { openLiveShareFallback() },
-                                        // The layers control opens the map-layers
-                                        // popup (traffic / day-night / 3D toggles),
-                                        // handled internally by MapHome against the
-                                        // MapSurface seam.
-                                        onRecenter = { mapSurface.recenter() },
-                                        // The top-right profile button opens the
-                                        // account menu as a transparent Popup
-                                        // *over* the map (map stays visible)
-                                        // rather than navigating to a full-screen
-                                        // hub. Each entry still navigates to its
-                                        // own full route (or signs out).
-                                        moreMenuEntries =
-                                            profileMenuEntries(
-                                                profileEditCoordinator = profileEditCoordinator,
-                                                dmRepository = dmRepository,
-                                                pointsRepository = pointsRepository,
-                                                badgesRepository = badgesRepository,
-                                                partnerApplicationCoordinator =
-                                                    partnerApplicationCoordinator,
-                                                onOpenRoute = { route = it },
-                                                onSignOut = onSignOut,
-                                            ),
-                                        // Community-chat unread ("missed") dot:
-                                        // shown as a single-count badge when the
-                                        // newest community message post-dates the
-                                        // caller's last-read marker. Cleared when
-                                        // they open + read the Community channel.
-                                        unreadChatCount = if (communityChatUnread) 1 else 0,
-                                        // The chat bubble opens the chat hub
-                                        // (Community / Convoys / Friends +
-                                        // Notifications) as a TRANSPARENT popup over
-                                        // the map (map stays visible behind), not a
-                                        // full opaque route — see ChatHubPopup below.
-                                        onOpenChat = { chatHubOpen = true },
-                                        // Crowd-sourced incidents layer: draw the
-                                        // fetched markers for everyone, and show the
-                                        // report control only when a repository is
-                                        // configured (guarded off in CI/no-Firebase)
-                                        // AND the user is an active member — the
-                                        // `incidents-report` callable is member-gated
-                                        // (requireMemberActor), so non-members must not
-                                        // see an action that would fail on submit.
-                                        incidentMarkers = incidentMarkers,
-                                        incidentsLayerEnabled = incidentsLayerEnabled,
-                                        onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
-                                        incidentReportingEnabled =
-                                            incidentController != null && profile?.activeMember == true,
-                                        onReportIncident = { type ->
-                                            incidentController?.let { controller ->
-                                                scope.launch {
-                                                    val text =
-                                                        when (controller.report(type)) {
-                                                            is ReportOutcome.Success ->
-                                                                incidentReportSuccessText
-                                                            ReportOutcome.NoLocation ->
-                                                                incidentLocationUnavailableText
-                                                            is ReportOutcome.Failed ->
-                                                                incidentReportErrorText
-                                                        }
-                                                    snackbarHostState.showSnackbar(text)
-                                                }
-                                            }
-                                        },
-                                    )
+                                        }
 
-                                ShellTab.History ->
-                                    if (drivesRepository != null) {
-                                        DrivesRoute(
-                                            repository = drivesRepository,
-                                            uid = uid,
-                                        )
-                                    } else {
-                                        HubScreen(
-                                            title = stringResource(R.string.shell_tabHistory),
-                                            entries = emptyList(),
-                                        )
-                                    }
+                                    ShellTab.Social ->
+                                        ShellTabPage {
+                                            HubScreen(
+                                                title = stringResource(R.string.shell_socialTitle),
+                                                entries =
+                                                    listOf(
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_friendsTitle),
+                                                            Icons.Filled.Groups,
+                                                            if (friendsRepository != null) {
+                                                                { route = ShellRoute.Friends }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                        // Convoys intentionally removed from
+                                                        // the Social menu (Issue 11): the
+                                                        // convoy feature stays reachable via
+                                                        // the "+" Create chooser's "Convoy"
+                                                        // option and the chat hub's Convoys
+                                                        // tab. Only this menu entry is gone.
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_socialEvents),
+                                                            Icons.Filled.Event,
+                                                            if (eventsRepository != null) {
+                                                                { route = ShellRoute.Events }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_socialNotifications),
+                                                            Icons.Filled.Notifications,
+                                                            if (notificationsRepository != null) {
+                                                                { route = ShellRoute.Notifications }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_socialCrownHunt),
+                                                            Icons.Filled.EmojiEvents,
+                                                            if (crownHuntRepository != null &&
+                                                                FeatureGate.isAvailable(
+                                                                    flags = flags,
+                                                                    flag = FeatureFlag.CROWN_HUNT,
+                                                                    memberGated = false,
+                                                                    isActiveMember = profile?.activeMember == true,
+                                                                )
+                                                            ) {
+                                                                { route = ShellRoute.CrownHunt }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_socialPartners),
+                                                            Icons.Filled.Storefront,
+                                                            if (partnersRepository != null &&
+                                                                FeatureGate.isAvailable(
+                                                                    flags = flags,
+                                                                    flag = FeatureFlag.PARTNERS,
+                                                                    memberGated = false,
+                                                                    isActiveMember = profile?.activeMember == true,
+                                                                )
+                                                            ) {
+                                                                { route = ShellRoute.Partners }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                        HubEntry(
+                                                            stringResource(R.string.shell_socialBillboards),
+                                                            Icons.Filled.Campaign,
+                                                            if (billboardsRepository != null &&
+                                                                FeatureGate.isAvailable(
+                                                                    flags = flags,
+                                                                    flag = FeatureFlag.DIGITAL_BILLBOARDS,
+                                                                    memberGated = false,
+                                                                    isActiveMember = profile?.activeMember == true,
+                                                                )
+                                                            ) {
+                                                                { route = ShellRoute.Billboards }
+                                                            } else {
+                                                                null
+                                                            },
+                                                        ),
+                                                    ),
+                                            )
+                                        }
 
-                                // Create is intercepted in ShellBottomBar.onSelect
-                                // (switches to Map + raises the live-share prompt),
-                                // so it never renders as its own tab. This branch
-                                // exists only for `when` exhaustiveness.
-                                ShellTab.Create -> Unit
-
-                                ShellTab.Social ->
-                                    HubScreen(
-                                        title = stringResource(R.string.shell_socialTitle),
-                                        entries =
-                                            listOf(
-                                                HubEntry(
-                                                    stringResource(R.string.shell_friendsTitle),
-                                                    Icons.Filled.Groups,
-                                                    if (friendsRepository != null) {
-                                                        { route = ShellRoute.Friends }
+                                    ShellTab.Garage ->
+                                        ShellTabPage {
+                                            GarageHubScreen(
+                                                title = stringResource(R.string.shell_garageTitle),
+                                                // The garage identity header shows the main
+                                                // car's photo ONLY — the user's profile
+                                                // picture is deliberately NOT shown here (the
+                                                // garage is about cars, not profiles). When no
+                                                // main car is set the hub falls back to the
+                                                // car placeholder icon. Derived from the
+                                                // hoisted shared garage stream — no listener
+                                                // of its own.
+                                                avatarUrl =
+                                                    rememberStorageImageUrl(
+                                                        context,
+                                                        mainCarImagePath(garageState),
+                                                    ),
+                                                avatarContentDescription =
+                                                    stringResource(R.string.garage_headerImageAlt),
+                                                vehiclesLabel =
+                                                    stringResource(R.string.shell_garageVehicles),
+                                                onVehicles =
+                                                    // Managing your own garage is open to
+                                                    // any signed-in user (no longer member-
+                                                    // gated); only require the repo to be wired.
+                                                    if (garageRepository != null) {
+                                                        { route = ShellRoute.Garage }
                                                     } else {
                                                         null
                                                     },
-                                                ),
-                                                // Convoys intentionally removed from
-                                                // the Social menu (Issue 11): the
-                                                // convoy feature stays reachable via
-                                                // the "+" Create chooser's "Convoy"
-                                                // option and the chat hub's Convoys
-                                                // tab. Only this menu entry is gone.
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialEvents),
-                                                    Icons.Filled.Event,
-                                                    if (eventsRepository != null) {
-                                                        { route = ShellRoute.Events }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialNotifications),
-                                                    Icons.Filled.Notifications,
-                                                    if (notificationsRepository != null) {
-                                                        { route = ShellRoute.Notifications }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialCrownHunt),
-                                                    Icons.Filled.EmojiEvents,
-                                                    if (crownHuntRepository != null &&
-                                                        FeatureGate.isAvailable(
-                                                            flags = flags,
-                                                            flag = FeatureFlag.CROWN_HUNT,
-                                                            memberGated = false,
-                                                            isActiveMember = profile?.activeMember == true,
-                                                        )
-                                                    ) {
-                                                        { route = ShellRoute.CrownHunt }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialPartners),
-                                                    Icons.Filled.Storefront,
-                                                    if (partnersRepository != null &&
-                                                        FeatureGate.isAvailable(
-                                                            flags = flags,
-                                                            flag = FeatureFlag.PARTNERS,
-                                                            memberGated = false,
-                                                            isActiveMember = profile?.activeMember == true,
-                                                        )
-                                                    ) {
-                                                        { route = ShellRoute.Partners }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                                HubEntry(
-                                                    stringResource(R.string.shell_socialBillboards),
-                                                    Icons.Filled.Campaign,
-                                                    if (billboardsRepository != null &&
-                                                        FeatureGate.isAvailable(
-                                                            flags = flags,
-                                                            flag = FeatureFlag.DIGITAL_BILLBOARDS,
-                                                            memberGated = false,
-                                                            isActiveMember = profile?.activeMember == true,
-                                                        )
-                                                    ) {
-                                                        { route = ShellRoute.Billboards }
-                                                    } else {
-                                                        null
-                                                    },
-                                                ),
-                                            ),
-                                    )
-
-                                ShellTab.Garage ->
-                                    GarageHubScreen(
-                                        title = stringResource(R.string.shell_garageTitle),
-                                        // The garage identity header shows the main
-                                        // car's photo ONLY — the user's profile
-                                        // picture is deliberately NOT shown here (the
-                                        // garage is about cars, not profiles). When no
-                                        // main car is set the hub falls back to the
-                                        // car placeholder icon. Derived from the
-                                        // hoisted shared garage stream — no listener
-                                        // of its own.
-                                        avatarUrl =
-                                            rememberStorageImageUrl(
-                                                context,
-                                                mainCarImagePath(garageState),
-                                            ),
-                                        avatarContentDescription =
-                                            stringResource(R.string.garage_headerImageAlt),
-                                        vehiclesLabel =
-                                            stringResource(R.string.shell_garageVehicles),
-                                        onVehicles =
-                                            // Managing your own garage is open to
-                                            // any signed-in user (no longer member-
-                                            // gated); only require the repo to be wired.
-                                            if (garageRepository != null) {
-                                                { route = ShellRoute.Garage }
-                                            } else {
-                                                null
-                                            },
-                                    )
+                                            )
+                                        }
+                                }
                             }
                         }
                     }
@@ -1552,6 +1614,39 @@ fun AuthenticatedApp(
             }
         }
     }
+}
+
+/**
+ * A non-map bottom-nav tab's page, drawn over the still-composed map home.
+ *
+ * The map is no longer disposed when you leave the Map tab (it stays alive so
+ * returning to it can't blank the screen), which makes it a live, pannable
+ * MapView sitting directly underneath these pages. That imposes two things this
+ * wrapper exists to guarantee:
+ *
+ * - **Opaque.** [MaterialTheme.colorScheme.background] — the same container
+ *   colour [Scaffold] gives the tabs today, so the pages look exactly as they
+ *   did — so the map cannot show through the page it is behind.
+ * - **Touch-blocking.** Every pointer event that reaches the page background is
+ *   swallowed, so a drag over a tab's empty space can't pan the invisible map
+ *   underneath and leave the camera somewhere new. Consumption happens on the
+ *   Main pass, which children see first, so the page's own buttons and lists
+ *   keep working normally.
+ */
+@Composable
+private fun ShellTabPage(content: @Composable () -> Unit) {
+    Surface(
+        modifier =
+            Modifier.fillMaxSize().pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent().changes.forEach { it.consume() }
+                    }
+                }
+            },
+        color = MaterialTheme.colorScheme.background,
+        content = content,
+    )
 }
 
 /**
