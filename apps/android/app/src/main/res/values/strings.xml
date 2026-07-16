@@ -766,6 +766,7 @@
     <string name="channel_emptyCommunity">Inga meddelanden än — starta samtalet!</string>
     <string name="channel_emptyConvoy">Inga meddelanden än — säg hej till din konvoj!</string>
     <string name="channel_unknownSender">Medlem</string>
+    <string name="channel_openSenderProfile">Öppna profilen för %1$s</string>
     <string name="channel_sendErrorSignedOut">Logga in för att skicka meddelanden.</string>
     <string name="channel_sendErrorNotMember">Chatten är tillgänglig för aktiva medlemmar.</string>
     <string name="channel_sendErrorInvalid">Skriv ett meddelande att skicka.</string>

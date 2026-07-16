@@ -837,6 +837,7 @@
     "emptyCommunity": "Inga meddelanden än — starta samtalet!",
     "emptyConvoy": "Inga meddelanden än — säg hej till din konvoj!",
     "unknownSender": "Medlem",
+    "openSenderProfile": "Öppna profilen för %1$s",
     "sendErrorSignedOut": "Logga in för att skicka meddelanden.",
     "sendErrorNotMember": "Chatten är tillgänglig för aktiva medlemmar.",
     "sendErrorInvalid": "Skriv ett meddelande att skicka.",

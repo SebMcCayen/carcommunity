@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -17,6 +18,7 @@ import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_BLOCK_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_REPORT_TEST_TAG
 import com.kungsbackacarcommunity.app.moderation.MESSAGE_ACTIONS_SHEET_TEST_TAG
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -164,6 +166,70 @@ class EventChatScreenTest {
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_BLOCK_TEST_TAG).performClick()
         composeTestRule.onNodeWithText(str(R.string.blocking_blockConfirmAction)).performClick()
         assertEquals("other", blocked)
+    }
+
+    /**
+     * Renders the screen with the profile entry point wired. Unlike the block /
+     * report cases above, these tests only vary the roster, so they share a setup.
+     */
+    private fun setContentWithProfile(
+        messages: List<ChatMessage>,
+        onViewProfile: (String) -> Unit,
+    ) {
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(
+                    state = ChatMessagesState.Loaded(messages),
+                    currentUid = "me",
+                    canParticipate = true,
+                    sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle,
+                    onSend = {},
+                    onReport = { _, _ -> },
+                    onReportDismiss = {},
+                    onBack = {},
+                    onViewProfile = onViewProfile,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun tappingAuthorName_opensThatAuthorsProfile() {
+        var opened: String? = null
+        setContentWithProfile(listOf(message("m1", "Ada", "other"))) { opened = it }
+
+        composeTestRule.onNodeWithText("Ada").performClick()
+
+        assertEquals("other", opened)
+    }
+
+    @Test
+    fun ownMessage_exposesNoProfileAffordance() {
+        var opened: String? = null
+        // Your own message still renders your name (unlike the group channels,
+        // where own messages are a bare bubble), so the name is present but must
+        // never be a button — you don't open your own profile from your own message.
+        setContentWithProfile(listOf(message("m1", "Me", "me"))) { opened = it }
+
+        composeTestRule.onNodeWithText("Me").assertHasNoClickAction()
+
+        assertNull(opened)
+    }
+
+    @Test
+    fun blankAuthorUid_exposesNoProfileAffordance() {
+        var opened: String? = null
+        // A malformed message would otherwise open a dead profile route. Assert the
+        // affordance is absent rather than clicking it and checking nothing
+        // happened: a click on a node with no click action silently does nothing,
+        // so that would also "pass" against an author wired to a dead no-op button —
+        // which screen readers would still announce as a tappable button.
+        setContentWithProfile(listOf(message("m1", "Ghost", ""))) { opened = it }
+
+        composeTestRule.onNodeWithText("Ghost").assertHasNoClickAction()
+
+        assertNull(opened)
     }
 
     @Test
