@@ -63,11 +63,16 @@ interface RecentSearchesStore {
  * independent of any storage backend so it is JVM-unit-testable.
  */
 object RecentSearches {
-    /** How many recents are persisted. */
-    const val MAX = 5
-
-    /** How many are shown in the empty search state. */
-    const val SHOWN = 3
+    /**
+     * How many recents are persisted — and, deliberately, how many are shown:
+     * the empty-search-state card renders them all, so stored == visible.
+     *
+     * There is no "show all" affordance, so any recent held beyond what the card
+     * renders would persist, consume this cap, and never be reachable. Rather
+     * than keep a second `SHOWN` constant that must agree with this one, the two
+     * are one value.
+     */
+    const val MAX = 3
 
     /**
      * Returns [existing] with [place] promoted to the front: any prior entry for
