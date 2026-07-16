@@ -727,10 +727,13 @@ fun AuthenticatedApp(
                 if (isSharing) {
                     if (drivesRepository != null && canShareLive) {
                         SingleSessionRecording.start(drivesRepository) {
-                            // No fixes arrive when this is null (no Play services)
-                            // or the location permission is absent — the session
-                            // then produces a duration-only summary.
-                            DriveLocationController.createIfAvailable(context)
+                            // Null when Play services are unavailable OR the
+                            // fine-location permission isn't granted; either way
+                            // no fixes can arrive and the session yields an
+                            // honest duration-only summary. Evaluated HERE, as
+                            // the session starts, so granting the permission and
+                            // starting a new session gets a real controller.
+                            DriveLocationController.createIfPermitted(context)
                         }
                     }
                 } else {

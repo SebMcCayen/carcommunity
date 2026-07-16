@@ -141,6 +141,90 @@ class SingleSessionRecordingTest {
         assertNull(SingleSessionRecording.active.value)
         assertFalse(SingleSessionRecording.promptPending.value)
     }
+
+    // -------------------------------------------------------------------
+    // Location-permission behaviour. The permission CHECK itself lives in
+    // DriveLocationController.createIfPermitted and needs the Android
+    // framework (ContextCompat/PackageManager), which this JVM suite has no
+    // seam for (the project has no Robolectric). What is pinned here is the
+    // contract that check feeds: a null controller — which is exactly what
+    // createIfPermitted returns without ACCESS_FINE_LOCATION — still records
+    // the session and yields an honest duration-only summary rather than a
+    // fabricated distance.
+    // -------------------------------------------------------------------
+
+    @Test
+    fun `without permission the null controller still records a duration-only summary`() {
+        // createIfPermitted returns null when ACCESS_FINE_LOCATION is missing.
+        SingleSessionRecording.start(repository) { null }
+
+        // The session still records (so duration is real) and can be resolved.
+        val coordinator = SingleSessionRecording.active.value
+        assertNotNull(coordinator)
+        assertTrue(coordinator?.state?.value is RecordingState.Recording)
+
+        SingleSessionRecording.stop()
+        assertTrue(SingleSessionRecording.promptPending.value)
+
+        // No fixes could arrive, so the summary is duration-only: distance and
+        // average speed are null (the dialog renders "—") rather than invented.
+        assertEquals(0, coordinator?.recordedPoints()?.size)
+        val elapsed = (coordinator?.state?.value as RecordingState.PromptSave).elapsedMillis
+        val preview = DriveSummary.preview(coordinator.recordedPoints(), elapsed)
+        assertNull(preview.distanceMeters)
+        assertNull(preview.averageSpeedMetersPerSecond)
+        assertEquals(DriveSummary.durationSeconds(elapsed), preview.durationSeconds)
+    }
+
+    @Test
+    fun `with permission the delivered fixes reach the summary as distance and speed`() {
+        // The mirror of the case above: once ACCESS_FINE_LOCATION is granted,
+        // createIfPermitted yields a real controller and its fixes must land in
+        // the summary. A real DriveLocationController can't be built off-device
+        // (it wraps a FusedLocationProviderClient), so this feeds the coordinator
+        // the fixes such a controller would deliver — the holder wires start()'s
+        // controller callback straight to this same addFix path.
+        SingleSessionRecording.start(repository) { null }
+        val coordinator = SingleSessionRecording.active.value
+        coordinator?.addFix(57.0000, 12.0, 0L)
+        coordinator?.addFix(57.0010, 12.0, 10_000L)
+        SingleSessionRecording.stop()
+
+        // The fixes reached the recorder behind the prompt.
+        assertEquals(2, coordinator?.recordedPoints()?.size)
+        assertTrue(coordinator?.state?.value is RecordingState.PromptSave)
+
+        // The holder builds its coordinator on the real wall clock, which does
+        // not advance within a unit test (elapsed ≈ 0 ⇒ a null average speed is
+        // correct there), so pass a representative elapsed to show the fixes
+        // materialise as a real distance AND speed rather than the em dashes of
+        // the no-permission case above.
+        val preview = DriveSummary.preview(coordinator!!.recordedPoints(), 10_000L)
+        assertNotNull("distance must be estimated once fixes exist", preview.distanceMeters)
+        assertTrue(preview.distanceMeters!! > 100.0)
+        assertNotNull(preview.averageSpeedMetersPerSecond)
+    }
+
+    @Test
+    fun `the controller factory is re-evaluated on each new session, never cached`() {
+        // Permission can be granted between sessions, so the factory must be
+        // consulted again at every start rather than reusing an earlier result.
+        var factoryCalls = 0
+        val factory = { factoryCalls++; null }
+
+        SingleSessionRecording.start(repository, factory)
+        assertEquals(1, factoryCalls)
+        // A re-run within the SAME session must not re-consult it.
+        SingleSessionRecording.start(repository, factory)
+        assertEquals(1, factoryCalls)
+
+        SingleSessionRecording.stop()
+        SingleSessionRecording.clear()
+
+        // A NEW session re-evaluates: a permission granted meanwhile now counts.
+        SingleSessionRecording.start(repository, factory)
+        assertEquals(2, factoryCalls)
+    }
 }
 
 private class SingleSessionFakeRepository : DrivesRepository {
