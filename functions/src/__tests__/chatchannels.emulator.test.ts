@@ -47,6 +47,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CONVOY_CHAT_NOTIFY_WINDOW_MS } from '../chatchannels/chat-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -419,6 +420,23 @@ async function seedConvoy(
   return convoyId;
 }
 
+/**
+ * Waits until the current convoy-chat notify window has at least `needMs` left,
+ * so a burst posted straight after this call cannot straddle a window boundary.
+ *
+ * convoyChatNotificationId buckets on FIXED, epoch-aligned windows of the
+ * server's clock, so two messages either side of a boundary legitimately produce
+ * two notices (a documented, accepted imprecision). The functions emulator runs
+ * on this process's clock, so the time left in the current bucket is computable
+ * here — waiting out the tail end removes that boundary race from the burst test
+ * without touching the assertion it makes.
+ */
+async function awaitRoomInNotifyWindow(needMs = 15_000): Promise<void> {
+  const remaining = CONVOY_CHAT_NOTIFY_WINDOW_MS - (Date.now() % CONVOY_CHAT_NOTIFY_WINDOW_MS);
+  if (remaining >= needMs) return;
+  await new Promise((resolve) => setTimeout(resolve, remaining + 250));
+}
+
 describe('convoyChat-post in-app notification fan-out', () => {
   it('notifies the other ACCEPTED members, never the poster or a still-invited member', async () => {
     const owner = await newMember('FanoutOwner');
@@ -476,26 +494,34 @@ describe('convoyChat-post in-app notification fan-out', () => {
     const invited = await newMember('BurstInvited');
     const convoyId = await seedConvoy(owner, accepted, invited);
 
+    // Post the whole burst inside ONE notify window: a boundary straddle would
+    // legitimately produce a second notice and flake the assertion below. This
+    // only pins WHEN the burst runs — within a window the collapse still has to
+    // turn three messages into exactly one notice, so the assertion keeps its
+    // teeth: drop the per-window id and this test sees 3 items and fails.
+    await awaitRoomInNotifyWindow();
+
     await call('convoyChat-post', { convoyId, text: 'ett' });
     await pollUntil(async () => {
       const found = await inboxFor(accepted.uid, 'convoy_chat');
       return found.length > 0 ? found : undefined;
     });
-    const last = (await call('convoyChat-post', { convoyId, text: 'tre' })).data as {
-      messageId: string;
-    };
+    await call('convoyChat-post', { convoyId, text: 'två' });
+    await call('convoyChat-post', { convoyId, text: 'tre' });
 
-    // All three messages land; the inbox still holds only the FIRST notice,
-    // which keeps its original preview (create-if-absent never overwrites).
+    // All three messages really land — so the single notice below is a genuine
+    // per-window collapse, not posts that silently failed.
     await pollUntil(async () => {
       const snap = await adminDb
         .collection('convoyChats')
         .doc(convoyId)
         .collection('messages')
-        .doc(last.messageId)
         .get();
-      return snap.exists ? true : undefined;
+      return snap.size === 3 ? true : undefined;
     });
+
+    // The inbox still holds only the FIRST notice, which keeps its original
+    // preview (create-if-absent never overwrites).
     const items = await inboxFor(accepted.uid, 'convoy_chat');
     expect(items).toHaveLength(1);
     expect(items[0]!.previewText).toBe('BurstOwner: ett');
