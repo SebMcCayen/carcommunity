@@ -10,11 +10,15 @@ import org.json.JSONObject
  * [RecentSearches.MAX] selected places as a compact JSON array so they survive
  * process death and reappear in the search bar's empty state.
  *
- * The list logic (promote-to-front, de-duplicate, cap) is the pure, unit-tested
- * [RecentSearches]; this class only adds the JSON (de)serialization and the
- * SharedPreferences read/write glue, verified on device. Every access is wrapped
- * defensively: a corrupt/absent payload degrades to an empty list rather than
- * throwing, so a bad write can never crash the search UI.
+ * The list logic on *write* (promote-to-front, de-duplicate, cap) is the pure,
+ * unit-tested [RecentSearches]. On *read*, [decode] does more than parse: a
+ * stored payload is untrusted input, so it also skips entries that would decode
+ * to an unusable place and re-applies the cap. Both are pinned by
+ * [PrefsRecentSearchesStoreTest].
+ *
+ * Every access is wrapped defensively, so a bad write can never crash the search
+ * UI: an absent or unparseable payload degrades to an empty list, and one whose
+ * individual entries are corrupt degrades to whichever entries survive [decode].
  */
 class PrefsRecentSearchesStore(context: Context) : RecentSearchesStore {
     private val prefs =
@@ -28,7 +32,13 @@ class PrefsRecentSearchesStore(context: Context) : RecentSearchesStore {
         runCatching { prefs.edit().putString(KEY_RECENT, encode(next)).apply() }
     }
 
-    private companion object {
+    /**
+     * `internal` rather than private purely so the pure (de)serialization can be
+     * unit-tested: the store itself needs a [Context] for SharedPreferences and
+     * so cannot be constructed in a JVM test, but [decode] is where a corrupt or
+     * oversized payload is disarmed and is worth pinning directly.
+     */
+    internal companion object {
         const val PREFS_NAME = "nav_recent_searches"
         const val KEY_RECENT = "recent"
 
@@ -79,7 +89,11 @@ class PrefsRecentSearchesStore(context: Context) : RecentSearchesStore {
             // Enforce the store contract that recents are capped, even if a
             // corrupt/oversized SharedPreferences payload holds more than
             // [RecentSearches.MAX] entries, so callers relying on the cap can't
-            // be handed an unbounded list.
+            // be handed an unbounded list. This also carries an existing user
+            // down from a payload written under a larger historical cap.
+            //
+            // take (not takeLast): recents are stored most-recent-first, so the
+            // front of the list is what the user must keep.
             return out.take(RecentSearches.MAX)
         }
     }

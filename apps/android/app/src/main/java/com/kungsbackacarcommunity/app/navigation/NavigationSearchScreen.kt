@@ -699,7 +699,9 @@ private fun RecentsCard(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            recents.take(RecentSearches.SHOWN).forEachIndexed { index, place ->
+            // Rendered in full: the store caps at RecentSearches.MAX, and there
+            // is no "show all", so everything held is everything shown.
+            recents.forEachIndexed { index, place ->
                 if (index > 0) HorizontalDivider()
                 // The whole row is the tap target (re-selects → route preview).
                 Surface(
