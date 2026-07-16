@@ -74,15 +74,27 @@ interface SavedPlacesStore {
 /** Pure saved-places list logic, independent of any storage backend. */
 object SavedPlaces {
     /**
-     * How many saved places are persisted in total (Home + Work + favourites).
-     * A deliberate shortlist, not an address book: high enough that nobody
-     * realistically hits it, low enough that the whole list stays a single cheap
-     * prefs read and the search-screen row never becomes a scrolling wall.
+     * How many saved places exist, in total (Home + Work + favourites) — both the
+     * number persisted **and** the number rendered, which are deliberately the
+     * same thing: everything saved is visible in the empty search state, and the
+     * card shows the whole list in [sort] order rather than truncating it.
+     *
+     * That equality is the point. This used to be 12 against a separate `SHOWN`
+     * of 6, which meant a user could save twice as many places as they could ever
+     * see: the surplus persisted, consumed the cap, and was unreachable. Rather
+     * than add a "show all" affordance, the cap came down to what the UI shows, so
+     * there is one constant and no second one to drift out of agreement with it.
+     *
+     * A deliberate shortlist, not an address book: small enough that the whole
+     * list is a single cheap prefs read and the search card never becomes a
+     * scrolling wall, large enough for Home + Work + four favourites.
+     *
+     * Lowering this is safe for existing users: a stored payload written when the
+     * cap was higher is capped on read by [normalize], which drops the *oldest*
+     * favourites and never Home/Work — so an upgrading user keeps their most
+     * recent favourites (see [cap]).
      */
-    const val MAX = 12
-
-    /** How many are shown inline in the empty search state before "show all". */
-    const val SHOWN = 6
+    const val MAX = 6
 
     /** Longest accepted label; longer input is truncated on save/rename. */
     const val MAX_LABEL = 40
@@ -203,9 +215,15 @@ object SavedPlaces {
      * the user's most recent saves, the exact opposite of the eviction the rest of
      * this object documents.
      *
-     * Only an oversized list reaches this: a payload written by a build with a
-     * higher [MAX] (a downgrade), or a corrupt/hand-seeded one. [upsert] keeps a
-     * list it owns within the cap on its own.
+     * Only an oversized list reaches this: a payload written when the cap was
+     * higher, or a corrupt/hand-seeded one. [upsert] keeps a list it owns within
+     * the cap on its own.
+     *
+     * That first case is real, not hypothetical: [MAX] was lowered from 12 to 6
+     * so that saved == visible, so a user who had saved up to 12 places has a
+     * stored payload this must trim on the next read. Dropping the oldest is what
+     * makes that migration acceptable — they keep Home, Work and their most recent
+     * favourites, and lose only the stalest.
      *
      * Home/Work are exempt, as in [upsert]: the user set them deliberately and
      * would be astonished to lose them to a cap, so they consume the budget first
@@ -224,10 +242,16 @@ object SavedPlaces {
 
     /**
      * Canonical display order: Home, then Work, then the favourites, whose
-     * relative order is passed through untouched. That incoming order is the
-     * order they were added, because [upsert] is the only writer and it appends
-     * new favourites while replacing existing ones in place — so favourites read
-     * oldest-first here and the cap can trust the first of them to be the oldest.
+     * relative order is passed through untouched.
+     *
+     * For a list this app built, that incoming order is the order the favourites
+     * were added: [upsert] appends new ones and replaces existing ones in place,
+     * so favourites read oldest-first and the cap can trust the first of them to
+     * be the oldest. That is a property of [upsert]'s discipline, not something
+     * this function verifies — a decoded or hand-seeded payload (see [normalize])
+     * is simply trusted to have been written in that order. The consequence of a
+     * payload that was not is benign: the cap would evict a favourite that is not
+     * strictly the oldest.
      *
      * Applied on every write so a store's on-disk payload — and thus the UI — is
      * already ordered without the screen re-sorting.
@@ -240,14 +264,33 @@ object SavedPlaces {
     }
 
     /**
-     * The saved entry matching [place], if any — what the route preview's save
-     * button reads to decide between "save this" and "edit/remove the existing
-     * one". Matched the same way [idFor] de-duplicates: by geocoder id when both
-     * have one, else by coordinate (so a dropped pin re-pressed on the same spot
-     * still resolves to its saved entry).
+     * The **first** saved entry matching [place], if any — what the route
+     * preview's save button reads to decide between "save this" and "edit/remove
+     * the existing one". Matched by geocoder id when both have one, else by
+     * coordinate (so a dropped pin re-pressed on the same spot still resolves to
+     * its saved entry).
+     *
+     * "First" rather than "the only": the list can hold more than one entry for a
+     * place (see [matching]). That is the right answer for the save button, which
+     * needs one entry to pre-fill a dialog with, but a caller that must not strand
+     * the others wants [matching] instead.
      */
     fun find(existing: List<SavedPlace>, place: PlaceSuggestion): SavedPlace? =
-        existing.firstOrNull { it.place.samePlaceAs(place) }
+        matching(existing, place).firstOrNull()
+
+    /**
+     * **Every** saved entry pointing at [place], by the same identity rule as
+     * [find] — normally at most one, but the list can hold several: [normalize]
+     * de-duplicates by **id**, and a Home ("home") and a Favourite ("fav:…") for
+     * one place carry different ids, so a corrupt payload (or a build predating
+     * the re-kind cleanup) can persist both.
+     *
+     * Callers that must leave no ghost behind — re-kinding a place, in
+     * [NavigationController.savePlace] — use this rather than [find], which by
+     * returning only the first match would clear one row and strand the rest.
+     */
+    fun matching(existing: List<SavedPlace>, place: PlaceSuggestion): List<SavedPlace> =
+        existing.filter { it.place.samePlaceAs(place) }
 
     /** Trims and caps a user-entered label. */
     fun normalizeLabel(label: String): String = label.trim().take(MAX_LABEL)

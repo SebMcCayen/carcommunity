@@ -272,12 +272,24 @@ class NavigationController(
         kind: SavedPlaceKind,
         label: String,
     ) {
-        // Re-saving an existing entry under a DIFFERENT kind (e.g. promoting a
-        // favourite to Home) changes its id, so drop the old row first — otherwise
-        // upsert, which replaces by id, would leave the place saved twice.
-        val existing = SavedPlaces.find(savedStore.saved(), place)
-        if (existing != null && existing.kind != kind) savedStore.remove(existing.id)
-        savedStore.save(SavedPlaces.create(kind, place, label))
+        val saved = SavedPlaces.create(kind, place, label)
+        // Drop every OTHER row pointing at this place before writing the new one.
+        //
+        // Re-saving under a different kind changes the id (a promoted favourite
+        // becomes "home"), and upsert replaces by id — so without this the place
+        // would stay saved twice. Sweeping ALL matches rather than just the first
+        // also heals a store that already holds duplicates of one place, which
+        // normalize() cannot collapse for us: it de-duplicates by id, and a Home
+        // and a Favourite for the same place have different ids.
+        //
+        // Entries sharing the new id are deliberately left for upsert: that is the
+        // rename/refresh case, and upsert replaces them **in place**, preserving
+        // the slot (and so the cap-eviction age) that a remove-then-add would lose.
+        SavedPlaces
+            .matching(savedStore.saved(), place)
+            .filter { it.id != saved.id }
+            .forEach { savedStore.remove(it.id) }
+        savedStore.save(saved)
         refreshSaved()
     }
 

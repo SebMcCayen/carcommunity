@@ -120,6 +120,28 @@ class PrefsSavedPlacesStoreTest {
     }
 
     @Test
+    fun `a payload saved under the old cap of 12 keeps Home, Work and the newest favourites`() {
+        // The real migration: MAX was lowered from 12 to 6 (saved == visible), so
+        // an existing user's stored payload can hold 12 entries. 12 is written out
+        // literally rather than derived from SavedPlaces.MAX — it is a historical
+        // value this payload was written under, not today's cap, and tying it to
+        // MAX would make the test tautological and silently change meaning if the
+        // cap moves again.
+        val legacy = listOf(entry(id = "home", kind = "Home", lng = 80.0)) +
+            listOf(entry(id = "work", kind = "Work", lng = 81.0)) +
+            (1..10).map { entry(id = "fav:p$it", kind = "Favourite", lng = it.toDouble()) }
+        assertEquals(12, legacy.size)
+
+        val decoded = PrefsSavedPlacesStore.decode(payload(*legacy.toTypedArray()))
+
+        // Trimmed to today's cap, and the user keeps what they'd want kept:
+        // both singletons plus their four MOST RECENT favourites. The six oldest
+        // favourites are what's lost — never Home/Work, never the newest.
+        assertEquals(SavedPlaces.MAX, decoded.size)
+        assertEquals(listOf("home", "work", "fav:p7", "fav:p8", "fav:p9", "fav:p10"), decoded.map { it.id })
+    }
+
+    @Test
     fun `keyFor namespaces the payload per uid`() {
         assertEquals("saved:u1", PrefsSavedPlacesStore.keyFor("u1"))
         assertNotEquals(PrefsSavedPlacesStore.keyFor("u1"), PrefsSavedPlacesStore.keyFor("u2"))

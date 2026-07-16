@@ -447,6 +447,59 @@ class NavigationControllerTest {
     }
 
     @Test
+    fun `re-saving collapses pre-existing duplicates of the same place`() = runTest {
+        // A store already holding the SAME place twice under different kinds.
+        // normalize() de-duplicates by id, and a Home ("home") and a Favourite
+        // ("fav:1") for one place have different ids — so this state survives a
+        // decode and is reachable from a corrupt payload or an older build.
+        val store =
+            InMemorySavedPlacesStore(
+                listOf(
+                    SavedPlaces.create(SavedPlaceKind.Home, suggestion, "h"),
+                    SavedPlaces.create(SavedPlaceKind.Favourite, suggestion, "fav"),
+                ),
+            )
+        assertEquals(2, store.saved().size)
+        val controller =
+            NavigationController(
+                FakeClient(),
+                originProvider = { origin },
+                scope = this,
+                savedStore = store,
+            )
+        // Re-kinding must clear EVERY row pointing at this place, not just the
+        // first one find() happens to return.
+        controller.savePlace(suggestion, SavedPlaceKind.Work, "w")
+
+        val saved = controller.state.value.savedPlaces
+        assertEquals(1, saved.size)
+        assertEquals(SavedPlaceKind.Work, saved.single().kind)
+        assertEquals(1, store.saved().size)
+    }
+
+    @Test
+    fun `re-saving the same kind still renames in place rather than re-appending`() = runTest {
+        // Guards the duplicate-collapse above against eating the legitimate case:
+        // the entry keeps its slot (and thus its cap-eviction age) on a rename.
+        val store = InMemorySavedPlacesStore()
+        val controller =
+            NavigationController(
+                FakeClient(),
+                originProvider = { origin },
+                scope = this,
+                savedStore = store,
+            )
+        val other =
+            PlaceSuggestion(id = "2", name = "Other", address = null, point = LatLng(1.0, 2.0))
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "First")
+        controller.savePlace(other, SavedPlaceKind.Favourite, "Second")
+        controller.savePlace(suggestion, SavedPlaceKind.Favourite, "Renamed")
+
+        // Still oldest-first: the renamed entry did not jump to the end.
+        assertEquals(listOf("Renamed", "Second"), controller.state.value.savedPlaces.map { it.label })
+    }
+
+    @Test
     fun `removeSavedPlace drops it from state and leaves the route untouched`() = runTest {
         val controller =
             NavigationController(
