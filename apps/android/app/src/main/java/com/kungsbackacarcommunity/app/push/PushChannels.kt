@@ -35,6 +35,7 @@ object PushChannels {
         when (this) {
             PushChannel.EVENTS -> R.string.notifications_channelEventsName
             PushChannel.ACCOUNT -> R.string.notifications_channelAccountName
+            PushChannel.SOCIAL -> R.string.notifications_channelSocialName
             PushChannel.GENERAL -> R.string.notifications_channelGeneralName
         }
 
@@ -42,6 +43,7 @@ object PushChannels {
         when (this) {
             PushChannel.EVENTS -> R.string.notifications_channelEventsDescription
             PushChannel.ACCOUNT -> R.string.notifications_channelAccountDescription
+            PushChannel.SOCIAL -> R.string.notifications_channelSocialDescription
             PushChannel.GENERAL -> R.string.notifications_channelGeneralDescription
         }
 
@@ -50,6 +52,7 @@ object PushChannels {
             // Essential account notices must be seen (legacy invariant).
             PushChannel.ACCOUNT -> NotificationManager.IMPORTANCE_HIGH
             PushChannel.EVENTS -> NotificationManager.IMPORTANCE_DEFAULT
+            PushChannel.SOCIAL -> NotificationManager.IMPORTANCE_DEFAULT
             PushChannel.GENERAL -> NotificationManager.IMPORTANCE_DEFAULT
         }
 }

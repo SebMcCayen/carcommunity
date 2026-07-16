@@ -99,7 +99,7 @@ class PushDisplayTest {
     }
 
     @Test
-    fun `channel selection groups all eight categories`() {
+    fun `channel selection groups every category`() {
         val expected =
             mapOf(
                 NotificationCategory.EVENT_REMINDER to PushChannel.EVENTS,
@@ -110,7 +110,14 @@ class PushDisplayTest {
                 NotificationCategory.ACCOUNT_SUSPENSION to PushChannel.ACCOUNT,
                 NotificationCategory.SUBSCRIPTION_STATUS to PushChannel.GENERAL,
                 NotificationCategory.SYSTEM_NOTICE to PushChannel.GENERAL,
+                NotificationCategory.DIRECT_MESSAGE to PushChannel.SOCIAL,
+                NotificationCategory.COMMUNITY_CHAT to PushChannel.SOCIAL,
+                NotificationCategory.CONVOY_CHAT to PushChannel.SOCIAL,
+                NotificationCategory.FRIEND_REQUEST to PushChannel.SOCIAL,
+                NotificationCategory.CONVOY_INVITE to PushChannel.SOCIAL,
             )
+        // Exhaustive: a new category must be assigned a channel here too.
+        assertEquals(NotificationCategory.entries.toSet(), expected.keys)
         expected.forEach { (category, channel) ->
             assertEquals(channel, PushDisplay.channelFor(category))
         }

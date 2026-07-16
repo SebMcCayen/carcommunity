@@ -26,9 +26,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 object NotificationCategories {
     /**
-     * All active notification categories, in delivery order (mirrors
-     * ACTIVE_NOTIFICATION_CATEGORIES). Most are user-tunable; the [ESSENTIAL]
-     * account notices are included but rendered locked-on in the UI.
+     * All active notification categories, in display order (mirrors the
+     * backend NOTIFICATION_CATEGORIES). Most are user-tunable; the
+     * [ESSENTIAL] account notices are included but rendered locked-on in the
+     * UI, so they stay last.
      */
     val ACTIVE: List<String> =
         listOf(
@@ -38,9 +39,22 @@ object NotificationCategories {
             "admin_message",
             "subscription_status",
             "system_notice",
+            "direct_message",
+            "community_chat",
+            "convoy_chat",
+            "friend_request",
+            "convoy_invite",
             "account_warning",
             "account_suspension",
         )
+
+    /**
+     * Social categories — member-to-member activity (backend
+     * SOCIAL_NOTIFICATION_CATEGORIES). Never essential: a user must always be
+     * able to silence other members.
+     */
+    val SOCIAL: Set<String> =
+        setOf("direct_message", "community_chat", "convoy_chat", "friend_request", "convoy_invite")
 
     /** Essential account notices — cannot be disabled in-app or push. */
     val ESSENTIAL: Set<String> = setOf("account_warning", "account_suspension")

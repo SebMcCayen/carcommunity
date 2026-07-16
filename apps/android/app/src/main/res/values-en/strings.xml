@@ -709,6 +709,11 @@
     <string name="notifications_categoryAccountSuspension">Account status</string>
     <string name="notifications_categorySubscription">Subscription</string>
     <string name="notifications_categorySystem">System</string>
+    <string name="notifications_categoryDirectMessage">Direct messages</string>
+    <string name="notifications_categoryCommunityChat">Community chat</string>
+    <string name="notifications_categoryConvoyChat">Convoy chat</string>
+    <string name="notifications_categoryFriendRequest">Friend requests</string>
+    <string name="notifications_categoryConvoyInvite">Convoy invites</string>
     <string name="notifications_settingsTitle">Notification settings</string>
     <string name="notifications_settingsPushTitle">Push notifications</string>
     <string name="notifications_settingsPushGrantedBody">Push notifications are enabled. You can change your preferences below.</string>
@@ -728,6 +733,8 @@
     <string name="notifications_channelEventsDescription">Reminders and updates about events.</string>
     <string name="notifications_channelAccountName">Account</string>
     <string name="notifications_channelAccountDescription">Important notices about your account.</string>
+    <string name="notifications_channelSocialName">Chat &amp; friends</string>
+    <string name="notifications_channelSocialDescription">Messages, friend requests, and convoy invites from other members.</string>
     <string name="notifications_channelGeneralName">General</string>
     <string name="notifications_channelGeneralDescription">Membership updates and other messages from the club.</string>
     <string name="feedback_title">Report a problem</string>

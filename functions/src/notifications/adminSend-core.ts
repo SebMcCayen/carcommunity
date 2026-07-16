@@ -9,11 +9,11 @@
 
 import { z } from 'zod';
 import {
+  ADMIN_SENDABLE_CATEGORIES,
   MAX_NOTIFICATION_BODY_LENGTH,
   MAX_NOTIFICATION_PREVIEW_LENGTH,
   MAX_NOTIFICATION_TITLE_LENGTH,
   NOTIFICATION_ACTION_TYPES,
-  NOTIFICATION_CATEGORIES,
 } from './notifications-core';
 
 /** Admin send audiences (mirrors packages/shared ADMIN_NOTIFICATION_AUDIENCES). */
@@ -40,7 +40,9 @@ export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: stri
 
 const adminSendSchema = z
   .object({
-    category: z.enum(NOTIFICATION_CATEGORIES),
+    // Operational categories only — see ADMIN_SENDABLE_CATEGORIES: an admin
+    // broadcast must not be able to pose as member-to-member social activity.
+    category: z.enum(ADMIN_SENDABLE_CATEGORIES),
     audience: z.enum(ADMIN_NOTIFICATION_AUDIENCES),
     title: z.string().trim().min(1).max(MAX_NOTIFICATION_TITLE_LENGTH),
     previewText: z.string().trim().min(1).max(MAX_NOTIFICATION_PREVIEW_LENGTH),

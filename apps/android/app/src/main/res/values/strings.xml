@@ -709,6 +709,11 @@
     <string name="notifications_categoryAccountSuspension">Kontostatus</string>
     <string name="notifications_categorySubscription">Medlemskap</string>
     <string name="notifications_categorySystem">System</string>
+    <string name="notifications_categoryDirectMessage">Meddelanden</string>
+    <string name="notifications_categoryCommunityChat">Gemenskapschatt</string>
+    <string name="notifications_categoryConvoyChat">Konvojchatt</string>
+    <string name="notifications_categoryFriendRequest">Vänförfrågningar</string>
+    <string name="notifications_categoryConvoyInvite">Konvoj-inbjudningar</string>
     <string name="notifications_settingsTitle">Notisinställningar</string>
     <string name="notifications_settingsPushTitle">Push-notiser</string>
     <string name="notifications_settingsPushGrantedBody">Push-notiser är aktiverade. Du kan ändra dina val nedan.</string>
@@ -728,6 +733,8 @@
     <string name="notifications_channelEventsDescription">Påminnelser och uppdateringar om event.</string>
     <string name="notifications_channelAccountName">Konto</string>
     <string name="notifications_channelAccountDescription">Viktig information om ditt konto.</string>
+    <string name="notifications_channelSocialName">Chatt &amp; vänner</string>
+    <string name="notifications_channelSocialDescription">Meddelanden, vänförfrågningar och konvoj-inbjudningar från andra medlemmar.</string>
     <string name="notifications_channelGeneralName">Allmänt</string>
     <string name="notifications_channelGeneralDescription">Medlemskapsuppdateringar och andra meddelanden från klubben.</string>
     <string name="feedback_title">Rapportera ett problem</string>
