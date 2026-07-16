@@ -28,7 +28,7 @@ EXIF. Only a device can prove that.
    mid-reroute — the pill must not stick.
 2. **Image compression + metadata strip** — upload a profile picture **and** a car
    photo taken with the phone camera (so it carries GPS EXIF). Both should upload,
-   look correct, and not be full-resolution. A pick that *fails* to upload is the
+   look correct, and not be full-resolution. A pic that *fails* to upload is the
    fail-closed path working: anything that can't be proven metadata-clean is dropped
    rather than uploaded.
 3. **Live-share entitlement** — as a **non-subscriber**: you can start sharing your
