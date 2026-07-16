@@ -30,13 +30,12 @@ class GarageScreensTest {
         Vehicle("v1", "Volvo", "240", 1988, VehiclePowertrain.PETROL, "B230")
 
     @Test
-    fun member_emptyGarage_showsAdd() {
+    fun emptyGarage_showsEmptyMessageAndInvokesOnAdd() {
         var added = 0
         composeTestRule.setContent {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(emptyList()),
-                    isActiveMember = true,
                     onAdd = { added++ },
                     onEdit = {},
                     onDelete = {},
@@ -50,13 +49,12 @@ class GarageScreensTest {
     }
 
     @Test
-    fun vehicleCard_showsAndEdit() {
+    fun vehicleCard_showsVehicleAndInvokesOnEdit() {
         var edited: Vehicle? = null
         composeTestRule.setContent {
             KccTheme {
                 GarageScreen(
                     state = GarageState.Loaded(listOf(vehicle())),
-                    isActiveMember = true,
                     onAdd = {},
                     onEdit = { edited = it },
                     onDelete = {},

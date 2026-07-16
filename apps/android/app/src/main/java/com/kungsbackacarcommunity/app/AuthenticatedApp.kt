@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -79,8 +80,12 @@ import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
+import com.kungsbackacarcommunity.app.drives.DriveLocationController
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
+import com.kungsbackacarcommunity.app.drives.RecordingState
+import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
+import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
 import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
@@ -133,6 +138,7 @@ import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
+import com.kungsbackacarcommunity.app.live.LiveDurationPicker
 import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -693,6 +699,77 @@ fun AuthenticatedApp(
                     }
                 }
 
+            // --- Single-session drive recording -----------------------------
+            // A Single (solo live-sharing) session records the drive alongside
+            // the live marker so it can land in History. The recorder is fed by
+            // the same in-screen fused-location source the manual recorder uses;
+            // it is decoupled from the individual start/stop buttons and driven
+            // ENTIRELY by [isSharing], so every start path records and every end
+            // path (Stop / Hide / expiry) raises the save-or-discard summary.
+            // Guarded: with no drives backend (config-less/CI) nothing records
+            // and live sharing still works.
+            // The recording + any pending save/discard prompt live in the
+            // process-scoped SingleSessionRecording holder, NOT in composition:
+            // its lifetime is the live SESSION's (which already outlives the
+            // Activity via the foreground service), so an Activity recreation —
+            // rotation, the manifest doesn't lock orientation — must not drop the
+            // coordinator, its points, or the prompt. Observed here so the UI
+            // simply re-attaches after a recreation.
+            val idleRecordingState =
+                remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
+            val activeRecording by SingleSessionRecording.active.collectAsState()
+            val showSessionSummary by SingleSessionRecording.promptPending.collectAsState()
+            val recordingState by
+                (activeRecording?.state ?: idleRecordingState).collectAsState(
+                    initial = RecordingState.Idle,
+                )
+            val driveSavedText = stringResource(R.string.savedDrives_saveSuccess)
+            val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
+
+            // Bind the recording lifecycle to the live-sharing state. Both calls
+            // are idempotent, so re-running this after a recreation resumes the
+            // existing recording / keeps the pending prompt rather than
+            // restarting or clearing either.
+            LaunchedEffect(isSharing) {
+                if (isSharing) {
+                    if (drivesRepository != null && canShareLive) {
+                        // Owned by this uid: signing out (or switching account)
+                        // tears the recording down — see clearIfNotOwnedBy,
+                        // driven from MainActivity's auth state.
+                        SingleSessionRecording.start(uid, drivesRepository) {
+                            // Null when Play services are unavailable OR the
+                            // fine-location permission isn't granted; either way
+                            // no fixes can arrive and the session yields an
+                            // honest duration-only summary. Evaluated HERE, as
+                            // the session starts, so granting the permission and
+                            // starting a new session gets a real controller.
+                            DriveLocationController.createIfPermitted(context)
+                        }
+                    }
+                } else {
+                    // Session ended: stop recording and raise the save/discard
+                    // summary. The holder releases the GPS source here, at the
+                    // real session end, rather than on composable disposal.
+                    SingleSessionRecording.stop()
+                }
+            }
+
+            // Terminal states release the recording so the next session starts
+            // clean; a snackbar confirms the outcome.
+            LaunchedEffect(recordingState) {
+                when (recordingState) {
+                    RecordingState.Saved -> {
+                        SingleSessionRecording.clear()
+                        snackbarHostState.showSnackbar(driveSavedText)
+                    }
+                    RecordingState.Discarded -> {
+                        SingleSessionRecording.clear()
+                        snackbarHostState.showSnackbar(driveDiscardedText)
+                    }
+                    else -> Unit
+                }
+            }
+
             fun showComingSoon() {
                 scope.launch {
                     snackbarHostState.showSnackbar(comingSoonText)
@@ -715,6 +792,33 @@ fun AuthenticatedApp(
                 }
             }
 
+            // Whether the single-session start dialog (the 1h/2h/4h duration
+            // picker, moved OFF the map's broadcast control) is shown. Raised by
+            // both the map's broadcast Start and the "+" Create → Single session,
+            // so the duration is always chosen when a Single session is started.
+            var showSingleSessionStart by rememberSaveable { mutableStateOf(false) }
+
+            // Ask for the session duration before starting: raise the picker
+            // dialog when a start is actually possible, otherwise fall back to
+            // the live screen / unavailable snackbar (same gate as the toggle).
+            fun requestStartSingleSession() {
+                if (liveLocationCoordinator != null && canShareLive) {
+                    showSingleSessionStart = true
+                } else {
+                    openLiveShareFallback()
+                }
+            }
+
+            // Start the Single session for the picked duration; the drive
+            // recording auto-starts via the isSharing-bound effect above.
+            fun startSingleSession(duration: LiveSessionDuration) {
+                showSingleSessionStart = false
+                liveLocationCoordinator?.let { c ->
+                    scope.launch { c.start(duration) }
+                    BackgroundLocationController.start(context)
+                }
+            }
+
             // Single live-share entry point shared by the map's broadcast toggle
             // and the Create-tab prompt, so both honour the same member-gating and
             // "open the live screen when not permitted/unwired" fallback.
@@ -727,12 +831,9 @@ fun AuthenticatedApp(
                     )
                 ) {
                     LiveShareAction.Start -> {
-                        liveLocationCoordinator?.let { c ->
-                            scope.launch {
-                                c.start(LiveSessionDuration.ONE_HOUR)
-                            }
-                            BackgroundLocationController.start(context)
-                        }
+                        // Route Start through the single-session duration picker
+                        // rather than starting with a hard-coded duration.
+                        requestStartSingleSession()
                     }
                     LiveShareAction.Stop -> {
                         liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
@@ -1015,20 +1116,14 @@ fun AuthenticatedApp(
                                         // live-location popup (over the map, no scrim)
                                         // with the session options, wired to the same
                                         // LiveLocationCoordinator as the full screen.
-                                        // Wired: start the session + foreground
-                                        // service. Unwired (no coordinator): fall
-                                        // back to the live screen rather than
-                                        // silently no-op'ing, matching the old
-                                        // toggleLiveShare OpenScreen path.
-                                        onStartLiveShare = { d ->
-                                            val c = liveLocationCoordinator
-                                            if (c != null) {
-                                                scope.launch { c.start(d) }
-                                                BackgroundLocationController.start(context)
-                                            } else {
-                                                openLiveShareFallback()
-                                            }
-                                        },
+                                        // Broadcast Start no longer picks a
+                                        // duration inline: it raises the
+                                        // single-session start flow (the 1h/2h/4h
+                                        // picker), shared with the "+" Create →
+                                        // Single session. Unwired (no coordinator):
+                                        // fall back to the live screen rather than
+                                        // silently no-op'ing.
+                                        onStartLiveShare = { requestStartSingleSession() },
                                         onStopLiveShare = {
                                             val c = liveLocationCoordinator
                                             if (c != null) {
@@ -1247,9 +1342,10 @@ fun AuthenticatedApp(
                                         vehiclesLabel =
                                             stringResource(R.string.shell_garageVehicles),
                                         onVehicles =
-                                            if (garageRepository != null &&
-                                                profile?.activeMember == true
-                                            ) {
+                                            // Managing your own garage is open to
+                                            // any signed-in user (no longer member-
+                                            // gated); only require the repo to be wired.
+                                            if (garageRepository != null) {
                                                 { route = ShellRoute.Garage }
                                             } else {
                                                 null
@@ -1328,14 +1424,13 @@ fun AuthenticatedApp(
                     CreateChooserDialog(
                         onSingleSession = {
                             showCreateChooser = false
-                            // Single session = the EXISTING live-location start
-                            // flow (records the drive, and prompts to save it to
-                            // History at end-of-session). The chooser only ever
-                            // asks to START, but toggleLiveShare() maps to Stop
-                            // while a session is active; guard on isSharing so
-                            // confirming can never stop an active session — the
-                            // Start / open-screen fallbacks still run otherwise.
-                            if (!isSharing) toggleLiveShare()
+                            // Single session = start a solo live-share session
+                            // (which records the drive and prompts to save it to
+                            // History at end-of-session). Raise the duration
+                            // picker so the user chooses 1h/2h/4h here. Guard on
+                            // isSharing so confirming can never disturb an active
+                            // session — the fallback still runs when unwired.
+                            if (!isSharing) requestStartSingleSession()
                         },
                         onConvoy = {
                             showCreateChooser = false
@@ -1348,10 +1443,33 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // 3-channel chat hub as a TRANSPARENT popup over the map (Issue 4):
-                // a focusable Popup with no dimming scrim and a translucent surface,
-                // so the live map stays visible behind it — matching the map-layers
-                // and live-share popups.
+                // Single-session start: the 1h/2h/4h duration picker, moved here
+                // from the map's broadcast control. Confirming starts the solo
+                // live-share session (and its drive recording) for that duration.
+                if (showSingleSessionStart) {
+                    SingleSessionStartDialog(
+                        onStart = { duration -> startSingleSession(duration) },
+                        onDismiss = { showSingleSessionStart = false },
+                    )
+                }
+
+                // End-of-session save/discard summary: shown when a Single
+                // session ends with a recording active. Save persists a
+                // SavedDrive (the backend recomputes the authoritative stats);
+                // Discard stores nothing.
+                if (showSessionSummary && activeRecording != null) {
+                    SessionSummaryDialog(
+                        state = recordingState,
+                        pointsProvider = { activeRecording?.recordedPoints() ?: emptyList() },
+                        onSave = { scope.launch { activeRecording?.save(null) } },
+                        onDiscard = { activeRecording?.discard() },
+                    )
+                }
+
+                // Chat hub as a TRANSPARENT popup over the map (Issue 4): a focusable
+                // Popup with no dimming scrim and a translucent surface, so the live
+                // map stays visible behind it — matching the map-layers and
+                // live-share popups.
                 //
                 // The gate, derived ONCE: the popup floats over the map, so it may
                 // only show while the map shell is the active branch (the bubble that
@@ -1512,6 +1630,52 @@ private fun CreateChooserDialog(
         },
         // No confirm button — each option card acts immediately; Cancel dismisses.
         confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.shell_liveSharePromptCancel))
+            }
+        },
+    )
+}
+
+/**
+ * The single-session start dialog: the 1h/2h/4h sharing-duration picker that
+ * used to live on the map's broadcast control. Raised by both the map's
+ * broadcast Start and the "+" Create → Single session, so the duration is always
+ * chosen when a Single session begins. Confirming runs [onStart] with the picked
+ * [LiveSessionDuration]; Cancel / outside-tap runs [onDismiss].
+ */
+@Composable
+private fun SingleSessionStartDialog(
+    onStart: (LiveSessionDuration) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var selectedDuration by remember { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.shell_createChooserSingle)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                Text(stringResource(R.string.shell_createChooserSingleBody))
+                Text(
+                    text = stringResource(R.string.liveLocation_durationLabel),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Shared with the LiveLocationScreen picker so the options never
+                // drift; no busy state here, so it is always enabled.
+                LiveDurationPicker(
+                    selected = selectedDuration,
+                    enabled = true,
+                    onSelect = { selectedDuration = it },
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onStart(selectedDuration) }) {
+                Text(stringResource(R.string.liveLocation_start))
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.shell_liveSharePromptCancel))
@@ -1826,7 +1990,6 @@ private fun RouteHost(
                     repository = garageRepository,
                     coordinator = garageCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
                     garageState = garageState,
                     onRetry = onGarageRetry,
                     onBack = onClose,

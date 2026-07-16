@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app.drives
 
 import java.time.Instant
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Drive recording domain (Phase 12 slice 12, write side). Pure Kotlin — no
@@ -167,5 +171,100 @@ class DriveRecorder(
 
         /** Backend MAX_ROUTE_POINTS parity (~5.5 h at 1 Hz). */
         const val MAX_ROUTE_POINTS = 20_000
+    }
+}
+
+/**
+ * A client-side estimate of a drive's headline stats, shown ONLY in the
+ * end-of-session save/discard summary so the user sees distance / average speed
+ * / duration before deciding. It is NEVER persisted: on save the backend
+ * recomputes the authoritative figures from the submitted route points (see
+ * functions/src/drives/drive-calculations.ts), and the History list shows those.
+ * Fields are null when there is nothing to estimate (fewer than two fixes).
+ */
+data class DriveSummaryPreview(
+    val distanceMeters: Double?,
+    val durationSeconds: Long,
+    val averageSpeedMetersPerSecond: Double?,
+)
+
+/**
+ * Pure, dependency-light preview calculator mirroring the backend Haversine
+ * distance + average-speed logic (functions/src/drives/drive-calculations.ts)
+ * so the in-app summary roughly matches what the server will store. Kept in
+ * Kotlin (no Android/Firebase types) for JVM unit testing. Per the backend
+ * privacy rule there is deliberately no top-speed estimate.
+ */
+object DriveSummary {
+    /** Mean spherical Earth radius in metres (backend EARTH_RADIUS_METRES). */
+    private const val EARTH_RADIUS_METRES = 6_371_000.0
+
+    /** Backend MAX_PLAUSIBLE_SPEED_MPS: segments faster than this are GPS jumps. */
+    private const val MAX_PLAUSIBLE_SPEED_MPS = 55.6
+
+    private fun toRadians(degrees: Double): Double = degrees * Math.PI / 180.0
+
+    /** Haversine distance in metres between two coordinates; 0 for identical points. */
+    fun haversineMetres(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = toRadians(lat2 - lat1)
+        val dLon = toRadians(lon2 - lon1)
+        val a =
+            sin(dLat / 2) * sin(dLat / 2) +
+                cos(toRadians(lat1)) * cos(toRadians(lat2)) * sin(dLon / 2) * sin(dLon / 2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return EARTH_RADIUS_METRES * c
+    }
+
+    /**
+     * Total distance in metres over ordered points, excluding implausible jumps
+     * and non-positive time deltas exactly like the backend. Returns 0 for
+     * fewer than two points.
+     */
+    fun totalDistanceMetres(points: List<RecordedPoint>): Double {
+        if (points.size < 2) return 0.0
+        var total = 0.0
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val deltaMs = curr.timestampMs - prev.timestampMs
+            if (deltaMs <= 0) continue
+            val distance = haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+            val impliedSpeed = distance / (deltaMs / 1000.0)
+            if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
+            total += distance
+        }
+        return total
+    }
+
+    /**
+     * Elapsed millis → whole seconds, rounded (not floored) to match the
+     * backend's `driveDurationSeconds` (`Math.round(ms / 1000)`). O(1), so the
+     * summary dialog can render the duration immediately while the O(n)
+     * distance scan resolves off the main thread.
+     */
+    fun durationSeconds(elapsedMillis: Long): Long =
+        Math.round(elapsedMillis / 1000.0).coerceAtLeast(0L)
+
+    /**
+     * Builds the preview from the recorded points plus the elapsed recording
+     * time. Distance / average speed are null when there are too few points to
+     * estimate (a summary-only save), so the dialog renders an em dash for them.
+     */
+    fun preview(points: List<RecordedPoint>, elapsedMillis: Long): DriveSummaryPreview {
+        val durationSeconds = durationSeconds(elapsedMillis)
+        if (points.size < 2) {
+            return DriveSummaryPreview(
+                distanceMeters = null,
+                durationSeconds = durationSeconds,
+                averageSpeedMetersPerSecond = null,
+            )
+        }
+        val distance = totalDistanceMetres(points)
+        val averageSpeed = if (durationSeconds > 0) distance / durationSeconds else null
+        return DriveSummaryPreview(
+            distanceMeters = distance,
+            durationSeconds = durationSeconds,
+            averageSpeedMetersPerSecond = averageSpeed,
+        )
     }
 }

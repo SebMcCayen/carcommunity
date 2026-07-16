@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -108,6 +110,13 @@ fun NavigationSearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    // Dismiss the soft keyboard + drop text-field focus when a place is picked.
+    // Selecting a suggestion swaps the search field for the bottom route sheet
+    // (distance/ETA + the step-by-step directions); if the IME stayed up it would
+    // sit ON TOP of that sheet and hide the directions. We hide it the moment a
+    // result is chosen so the steps are fully visible.
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     // Resolve the recent-searches store to a STABLE instance. When the caller
     // omits one, build the in-memory fallback once with remember instead of a
     // default-arg `InMemoryRecentSearchesStore()`, which would be a fresh object
@@ -127,6 +136,14 @@ fun NavigationSearchScreen(
             NavigationController(searchClient, { currentOriginProvider() }, scope, resolvedRecentStore)
         }
     val state by controller.state.collectAsState()
+
+    // Pick a place (suggestion or recent) AND dismiss the keyboard first, so the
+    // route sheet's directions aren't left behind the IME (see above).
+    val onSelectPlace: (PlaceSuggestion) -> Unit = { place ->
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        controller.select(place)
+    }
 
     // Fetch the origin up-front so the first suggestions are location-biased.
     LaunchedEffect(controller) { controller.refreshOrigin() }
@@ -207,14 +224,14 @@ fun NavigationSearchScreen(
                     state.suggestions.isNotEmpty() ->
                         SuggestionsCard(
                             suggestions = state.suggestions,
-                            onSelect = { controller.select(it) },
+                            onSelect = onSelectPlace,
                         )
                     // Empty query (search bar just opened): offer the last few
                     // selected places for one-tap re-selection.
                     state.query.isBlank() && state.recents.isNotEmpty() ->
                         RecentsCard(
                             recents = state.recents,
-                            onSelect = { controller.select(it) },
+                            onSelect = onSelectPlace,
                         )
                     state.query.isNotBlank() && !state.searching ->
                         HintCard(stringResource(R.string.addressSearch_noResults))

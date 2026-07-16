@@ -1,7 +1,10 @@
 package com.kungsbackacarcommunity.app.drives
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -21,11 +24,21 @@ import com.kungsbackacarcommunity.app.location.BackgroundLocation
  * backgrounded) via the existing [com.kungsbackacarcommunity.app.location.LocationSharingService]
  * foreground service is a documented follow-up.
  *
- * Guarded like the other Firebase/location entry points: [createIfAvailable]
- * returns null when Google Play services location is unavailable so a
- * config-less CI build (no device, no services) never crashes at class-load or
- * start. Real-device GPS and the runtime location permission grant cannot be
- * exercised in this environment.
+ * Guarded like the other Firebase/location entry points, via two factories with
+ * deliberately different contracts — pick by whether you request the runtime
+ * permission yourself:
+ * - [createIfAvailable] guards ONLY on Google Play services. It does NOT check
+ *   the runtime location permission, so it can hand back a controller whose
+ *   [start] then fails. For callers that create the controller up front and
+ *   request the permission afterwards (they read [start]'s result to drive their
+ *   own permission UI).
+ * - [createIfPermitted] additionally requires ACCESS_FINE_LOCATION to already be
+ *   granted, returning null when it is not. For callers that need "null means no
+ *   fixes will arrive" to be true and deterministic.
+ *
+ * Either way a config-less CI build (no device, no services) never crashes at
+ * class-load or start. Real-device GPS and the runtime permission grant cannot
+ * be exercised in this environment.
  */
 class DriveLocationController private constructor(
     private val fusedClient: FusedLocationProviderClient,
@@ -71,6 +84,17 @@ class DriveLocationController private constructor(
     }
 
     companion object {
+        /**
+         * Guards ONLY on Google Play services location being available; returns
+         * null when it is not.
+         *
+         * Does NOT check the runtime location permission — without it this still
+         * returns a controller, whose [start] then returns false. That suits a
+         * caller which creates the controller before requesting the permission
+         * and uses [start]'s result to drive its own permission UI (see
+         * [RecordDriveScreen]). If you instead need "null means no fixes will
+         * arrive", use [createIfPermitted].
+         */
         fun createIfAvailable(context: Context): DriveLocationController? =
             try {
                 DriveLocationController(
@@ -80,5 +104,36 @@ class DriveLocationController private constructor(
                 // Play services location unavailable (e.g. config-less CI image).
                 null
             }
+
+        /**
+         * Like [createIfAvailable], but ALSO returns null unless
+         * ACCESS_FINE_LOCATION is already granted — so a null result reliably
+         * means "no fixes will arrive", and a non-null one means [start] can
+         * actually deliver them.
+         *
+         * Fine (not coarse) is required deliberately, matching the rest of the
+         * app: ACCESS_FINE_LOCATION is the only location permission this app
+         * ever checks or requests (the map home and [RecordDriveScreen] both
+         * request exactly it; ACCESS_COARSE_LOCATION is declared in the manifest
+         * but never requested). It is also what this controller's own
+         * [Priority.PRIORITY_HIGH_ACCURACY] request needs: coarse fixes are
+         * city-block accurate, which would turn a drive's distance and average
+         * speed into noise — an honest duration-only summary is better than a
+         * fabricated distance.
+         *
+         * Permission can be granted or revoked at any time, so call this when a
+         * session actually STARTS rather than caching the result — a user who
+         * grants the permission and starts a new session then gets a real
+         * controller.
+         */
+        fun createIfPermitted(context: Context): DriveLocationController? {
+            val granted =
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) return null
+            return createIfAvailable(context)
+        }
     }
 }

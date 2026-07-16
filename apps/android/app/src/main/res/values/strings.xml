@@ -383,9 +383,9 @@
     <string name="convoy_accept">Acceptera</string>
     <string name="convoy_decline">Avböj</string>
     <string name="convoy_createTitle">Ny konvoj</string>
-    <string name="convoy_titleLabel">Konvojnamn (valfritt)</string>
     <string name="convoy_pickFriendsTitle">Bjud in vänner</string>
     <string name="convoy_friendsUnavailable">Dina vänner kunde inte laddas just nu.</string>
+    <string name="convoy_friendsRetry">Försök igen</string>
     <string name="convoy_noFriends">Lägg till några vänner först för att bjuda in dem till en konvoj.</string>
     <string name="convoy_createSubmit">Skapa konvoj</string>
     <string name="convoy_createdTitle">Konvoj skapad</string>
@@ -521,6 +521,7 @@
     <string name="garage_deleteConfirmButton">Radera</string>
     <string name="garage_cancelButton">Avbryt</string>
     <string name="garage_empty">Du har inga fordon i garaget ännu.</string>
+    <string name="garage_loading">Laddar fordon…</string>
     <string name="garage_error">Kunde inte hämta fordon. Försök igen.</string>
     <string name="garage_errorDetail">Kunde inte hämta fordonsinformation.</string>
     <string name="garage_saveError">Fordonet kunde inte sparas. Försök igen.</string>
@@ -531,8 +532,6 @@
     <string name="garage_powertrain">Drivlina</string>
     <string name="garage_engineDescription">Motor, valfritt</string>
     <string name="garage_description">Beskrivning, valfritt</string>
-    <string name="garage_memberRequired">Mitt garage ingår i KCC Medlem.</string>
-    <string name="garage_memberRequiredBody">Som medlem kan du skapa och hantera dina fordonsprofiler.</string>
     <string name="garage_powertrain_petrol">Bensin</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>

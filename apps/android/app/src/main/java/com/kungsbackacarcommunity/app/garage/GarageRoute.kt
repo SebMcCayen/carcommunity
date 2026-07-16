@@ -36,7 +36,6 @@ fun GarageRoute(
     repository: GarageRepository,
     coordinator: GarageCoordinator?,
     uid: String,
-    isActiveMember: Boolean,
     garageState: GarageState,
     onRetry: () -> Unit,
     onBack: () -> Unit,
@@ -167,7 +166,6 @@ fun GarageRoute(
     } else {
         GarageScreen(
             state = garageState,
-            isActiveMember = isActiveMember,
             onRetry = onRetry,
             onAdd = {
                 editingVehicleId = null

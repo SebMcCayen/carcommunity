@@ -58,12 +58,26 @@ service firebase.storage {
     // Vehicle images:  vehicleImages/{userId}/{vehicleId}/{imageId}  (Phase 9e)
     // Path per docs/migration/backend-domain-mapping.md — the vehicleId
     // segment lets garage.deleteVehicle remove exactly one vehicle's images.
-    // Member owner may upload images up to 10 MB (garage is member-only);
-    // any authenticated user may read (vehicle docs are public-readable).
+    // Owner may upload images up to 10 MB — managing your own garage is NOT
+    // member-gated (Seb-approved ungate), so any signed-in, NON-SUSPENDED owner
+    // may upload a photo for their own vehicle; any authenticated user may read
+    // (vehicle docs are public-readable). isNotSuspended() is kept explicitly:
+    // it used to come in via isActiveMember(), and suspension must always
+    // override feature access.
+    //
+    // Deleted accounts: this upload goes DIRECTLY to Storage (no callable in the
+    // path), and Storage rules cannot read users/{uid}.deleted — a backend-managed
+    // Firestore field, not a claim, and Storage rules have no cross-service reads.
+    // Enforcement is at the identity layer: account.deleteAccount disables the Auth
+    // user and revokes refresh tokens, so no new sign-in or renewal is possible.
+    // That makes it TTL-bounded rather than immediate — an already-issued ID token
+    // is still accepted here until it expires (<= 1h), after which request.auth
+    // fails. isNotSuspended() is eventually consistent the same way: the claim only
+    // updates on token refresh.
     // -------------------------------------------------------------------------
     match /vehicleImages/{userId}/{vehicleId}/{imageId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isActiveMember() && isImage() && isUnderMB(10);
+      allow write: if isOwner(userId) && isNotSuspended() && isImage() && isUnderMB(10);
       allow write: if isAdmin();
     }
 

@@ -383,9 +383,9 @@
     <string name="convoy_accept">Accept</string>
     <string name="convoy_decline">Decline</string>
     <string name="convoy_createTitle">New convoy</string>
-    <string name="convoy_titleLabel">Convoy name (optional)</string>
     <string name="convoy_pickFriendsTitle">Invite friends</string>
     <string name="convoy_friendsUnavailable">Your friends couldn\'t be loaded right now.</string>
+    <string name="convoy_friendsRetry">Try again</string>
     <string name="convoy_noFriends">Add some friends first to invite them to a convoy.</string>
     <string name="convoy_createSubmit">Create convoy</string>
     <string name="convoy_createdTitle">Convoy created</string>
@@ -521,6 +521,7 @@
     <string name="garage_deleteConfirmButton">Delete</string>
     <string name="garage_cancelButton">Cancel</string>
     <string name="garage_empty">You have no vehicles in your garage yet.</string>
+    <string name="garage_loading">Loading vehicles…</string>
     <string name="garage_error">Could not load vehicles. Please try again.</string>
     <string name="garage_errorDetail">Could not load vehicle details.</string>
     <string name="garage_saveError">Could not save the vehicle. Please try again.</string>
@@ -531,8 +532,6 @@
     <string name="garage_powertrain">Powertrain</string>
     <string name="garage_engineDescription">Engine, optional</string>
     <string name="garage_description">Description, optional</string>
-    <string name="garage_memberRequired">My Garage is included in KCC Member.</string>
-    <string name="garage_memberRequiredBody">As a member you can create and manage your vehicle profiles.</string>
     <string name="garage_powertrain_petrol">Petrol</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>
