@@ -1,10 +1,10 @@
 name: Dependency Review
 
 on:
+  # Intentionally no `branches:` filter: every PR runs CI regardless of its
+  # base branch, so stacked PRs (base = another feature branch) are verified
+  # too. A branch allowlist silently skips CI for any new naming scheme.
   pull_request:
-    # phase-* lets CI run on stacked PRs (base = previous phase branch),
-    # not only on PRs targeting main.
-    branches: [main, 'phase-*']
 
 permissions:
   contents: read
