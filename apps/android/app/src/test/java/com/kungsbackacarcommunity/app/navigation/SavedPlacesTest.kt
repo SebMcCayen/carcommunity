@@ -203,4 +203,49 @@ class SavedPlacesTest {
         val seed = (1..SavedPlaces.MAX + 3).map { favourite("f$it") }
         assertEquals(SavedPlaces.MAX, InMemorySavedPlacesStore(seed).saved().size)
     }
+
+    @Test
+    fun `normalize re-derives singleton ids so a mislabelled Home cannot duplicate`() {
+        val items =
+            listOf(
+                SavedPlace(id = "home", kind = SavedPlaceKind.Home, label = "First", place = place("h1")),
+                SavedPlace(id = "not-home", kind = SavedPlaceKind.Home, label = "Second", place = place("h2", lng = 5.0)),
+            )
+        val result = SavedPlaces.normalize(items)
+        assertEquals(1, result.count { it.kind == SavedPlaceKind.Home })
+        assertEquals("home", result.single().id)
+        // First occurrence wins, matching upsert's replace-in-place.
+        assertEquals("First", result.single().label)
+    }
+
+    @Test
+    fun `normalize leaves favourite ids alone`() {
+        val items = listOf(favourite("a"), favourite("b"))
+        assertEquals(listOf("fav:a", "fav:b"), SavedPlaces.normalize(items).map { it.id })
+    }
+
+    @Test
+    fun `normalize keeps Home and Work when capping an oversized list`() {
+        // Sort-then-cap, so the singletons cannot be pushed out by favourites
+        // that happened to be listed ahead of them.
+        val seed =
+            (1..SavedPlaces.MAX + 3).map { favourite("f$it") } +
+                SavedPlaces.create(SavedPlaceKind.Home, place("h", lng = 80.0), "h")
+        val result = SavedPlaces.normalize(seed)
+        assertEquals(SavedPlaces.MAX, result.size)
+        assertEquals(1, result.count { it.kind == SavedPlaceKind.Home })
+        assertEquals(SavedPlaceKind.Home, result.first().kind)
+    }
+
+    @Test
+    fun `in-memory store normalizes a seed holding two Homes`() {
+        val store =
+            InMemorySavedPlacesStore(
+                listOf(
+                    SavedPlace(id = "home", kind = SavedPlaceKind.Home, label = "First", place = place("h1")),
+                    SavedPlace(id = "bogus", kind = SavedPlaceKind.Home, label = "Second", place = place("h2", lng = 5.0)),
+                ),
+            )
+        assertEquals(1, store.saved().count { it.kind == SavedPlaceKind.Home })
+    }
 }

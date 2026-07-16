@@ -45,7 +45,13 @@ class PrefsSavedPlacesStore(
         runCatching { prefs.edit().putString(key, encode(items)).apply() }
     }
 
-    private companion object {
+    /**
+     * `internal` rather than private purely so the pure (de)serialization can be
+     * unit-tested: the store itself needs a [Context] for SharedPreferences and
+     * so cannot be constructed in a JVM test, but [decode] is where a corrupt
+     * payload is disarmed and is worth pinning directly.
+     */
+    internal companion object {
         const val PREFS_NAME = "nav_saved_places"
 
         /** Namespaces the payload per account (see the class doc). */
@@ -116,9 +122,12 @@ class PrefsSavedPlacesStore(
             }
             // Enforce the store contract (ordered, capped, one Home/one Work) even
             // if a corrupt or oversized payload violates it, so callers can trust
-            // the invariants they were promised. distinctBy drops any duplicate id
-            // — including a second "home" — keeping the first occurrence.
-            return SavedPlaces.sort(out.distinctBy { it.id }).take(SavedPlaces.MAX)
+            // the invariants they were promised. The persisted id is untrusted
+            // input, so normalize re-derives the singletons' ids from their kind
+            // rather than believing the payload — otherwise an entry claiming
+            // kind=Home under some other id would survive de-duplication as a
+            // second Home.
+            return SavedPlaces.normalize(out)
         }
     }
 }

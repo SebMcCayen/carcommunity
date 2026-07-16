@@ -167,6 +167,31 @@ object SavedPlaces {
         existing.filterNot { it.id == id }
 
     /**
+     * Forces an arbitrary, untrusted list into the store contract: at most one
+     * Home and one Work, no duplicate ids, [sort]ed, and capped at [MAX].
+     *
+     * This is what a store applies to a list it did not build through [upsert] —
+     * a decoded on-disk payload, or a hand-seeded in-memory list — neither of
+     * which can be trusted to hold the invariants the UI reads.
+     *
+     * The singletons' ids are **re-derived from their kind** rather than taken on
+     * faith, because a persisted id is untrusted input: a corrupt entry claiming
+     * `kind=Home` with some other id would otherwise look like a distinct row and
+     * survive de-duplication as a second Home. Favourites keep their stored id —
+     * theirs is meaningful identity (it pins the underlying place), not a
+     * function of the kind.
+     *
+     * Where a duplicate must be dropped, the **first occurrence wins**, matching
+     * [upsert]'s replace-in-place: earlier means older, and older keeps its slot.
+     */
+    fun normalize(items: List<SavedPlace>): List<SavedPlace> =
+        sort(
+            items
+                .map { if (it.kind == SavedPlaceKind.Favourite) it else it.copy(id = idFor(it.kind, it.place)) }
+                .distinctBy { it.id },
+        ).take(MAX)
+
+    /**
      * Canonical display order: Home, then Work, then the favourites, whose
      * relative order is passed through untouched. That incoming order is the
      * order they were added, because [upsert] is the only writer and it appends
@@ -208,7 +233,9 @@ object SavedPlaces {
 class InMemorySavedPlacesStore(
     initial: List<SavedPlace> = emptyList(),
 ) : SavedPlacesStore {
-    private var items: List<SavedPlace> = SavedPlaces.sort(initial.take(SavedPlaces.MAX))
+    // Same normalization as the prefs store's decode: [initial] is hand-written,
+    // so it gets the same distrust as an on-disk payload rather than a bare sort.
+    private var items: List<SavedPlace> = SavedPlaces.normalize(initial)
 
     override fun saved(): List<SavedPlace> = items
 
