@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import androidx.compose.runtime.saveable.SaverScope
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -129,6 +130,54 @@ class ChannelMentionsTest {
         val updated = (again as MentionInsertResult.Inserted).draft
         assertEquals(MAX_MESSAGE_MENTIONS, updated.distinctUidCount)
         assertEquals(MAX_MESSAGE_MENTIONS, updated.sendableUids.size)
+    }
+
+    @Test
+    fun `sendableUids sends in TEXT order, not the order the picks were made`() {
+        // Pick @Bob, then go back and pick @Alice BEFORE him. insert appends the
+        // new span to the end of the list, so list order is [Bob, Alice] while
+        // text order is "@Alice @Bob". The uids must go out in text order.
+        val draft =
+            MentionDraft(
+                "@Alice @Bob ",
+                listOf(MentionSpan("uid-bob", "@Bob", 7), MentionSpan("uid-alice", "@Alice", 0)),
+            )
+        assertEquals(listOf("uid-alice", "uid-bob"), draft.sendableUids)
+    }
+
+    @Test
+    fun `a repeated uid takes its EARLIEST textual position, not its first pick`() {
+        // @Bob appears twice; the span recorded second sits earlier in the text.
+        // "First appearance" must mean first in the MESSAGE, so dedupe has to run
+        // after the sort or the later occurrence would represent him.
+        val draft =
+            MentionDraft(
+                "@Bob @Alice @Bob ",
+                listOf(
+                    MentionSpan("uid-bob", "@Bob", 12),
+                    MentionSpan("uid-alice", "@Alice", 5),
+                    MentionSpan("uid-bob", "@Bob", 0),
+                ),
+            )
+        assertEquals(listOf("uid-bob", "uid-alice"), draft.sendableUids)
+    }
+
+    @Test
+    fun `the cap keeps the first ten BY TEXT POSITION`() {
+        // Hand-built/restored state is the only way past insert's AtCap refusal,
+        // so this is where take() can actually bite. It must cut the LAST ones in
+        // the message, not an arbitrary ten.
+        val labels = (1..15).map { "@M$it" }
+        val text = labels.joinToString(" ")
+        var offset = 0
+        val starts = labels.map { val s = offset; offset += it.length + 1; s }
+        // Spans handed over in REVERSE text order.
+        val spans =
+            labels.indices.reversed().map { i -> MentionSpan("uid-${i + 1}", labels[i], starts[i]) }
+        assertEquals(
+            (1..MAX_MESSAGE_MENTIONS).map { "uid-$it" },
+            MentionDraft(text, spans).sendableUids,
+        )
     }
 
     @Test
@@ -364,6 +413,37 @@ class ChannelMentionsTest {
         val picked = MentionCandidates.from(friends, senders, selfUid = "uid-self")
         assertEquals(listOf("NewName"), picked.map { it.displayName })
         assertEquals("NewName", MentionCandidates.displayNames(friends + senders)["uid-1"])
+    }
+
+    // ------------------------------------------- saved-state encoding (composer)
+
+    /** Round-trips spans through MentionSpansSaver exactly as rememberSaveable does. */
+    private fun roundTrip(spans: List<MentionSpan>): List<MentionSpan>? {
+        val saved = with(MentionSpansSaver) { SaverScope { true }.save(spans) }
+        return MentionSpansSaver.restore(saved!!)
+    }
+
+    @Test
+    fun `spans survive a save-restore round trip`() {
+        val spans = listOf(MentionSpan("uid-1", "@Alice", 0), MentionSpan("uid-2", "@Bob", 7))
+        assertEquals(spans, roundTrip(spans))
+    }
+
+    @Test
+    fun `a display name containing the encoder's separator still round-trips`() {
+        // The label is USER-CONTROLLED (it is "@" + a display name, and the
+        // backend's displayName schema constrains only length, not charset). The
+        // encoding must therefore be total: uid and start cannot contain the
+        // separator, so the unconstrained label goes LAST and the split is
+        // bounded — otherwise this span silently vanishes on restore.
+        val spans = listOf(MentionSpan("uid-1", "@Seb\u001FMcCayen", 4))
+        assertEquals(spans, roundTrip(spans))
+    }
+
+    @Test
+    fun `a label containing several separators still round-trips`() {
+        val spans = listOf(MentionSpan("uid-1", "@a\u001Fb\u001Fc", 0))
+        assertEquals(spans, roundTrip(spans))
     }
 
     // -------------------------------------------------------------- rendering

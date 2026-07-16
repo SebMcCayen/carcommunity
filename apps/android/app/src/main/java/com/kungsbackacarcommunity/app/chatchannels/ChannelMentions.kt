@@ -89,6 +89,14 @@ data class MentionDraft(val text: String = "", val mentions: List<MentionSpan> =
         get() =
             DraftMentions.verified(this)
                 .mentions
+                // Sorted by offset, because "first appearance" means first in the
+                // MESSAGE and the span list is not in text order: [DraftMentions.insert]
+                // appends each new span to the end even when the mention is inserted
+                // earlier in the text. Sorting BEFORE distinct also gives a repeated
+                // member their earliest occurrence, which is the one the reader sees
+                // first, and makes the take() below cut the last mentions in the text
+                // rather than an arbitrary ten.
+                .sortedBy { it.start }
                 .map { it.uid }
                 .distinct()
                 .take(MAX_MESSAGE_MENTIONS)

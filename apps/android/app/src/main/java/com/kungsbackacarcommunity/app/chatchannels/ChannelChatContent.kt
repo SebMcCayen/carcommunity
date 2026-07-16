@@ -88,25 +88,40 @@ const val MENTION_DROPPED_TEST_TAG = "mention-dropped-note"
 fun mentionCandidateTestTag(uid: String): String = "mention-candidate-$uid"
 
 /**
- * ASCII unit separator: it cannot occur in a uid, and the composer's own input
- * never produces one, so it is a safe delimiter for [MentionSpansSaver].
+ * ASCII unit separator, the [MentionSpansSaver] field delimiter.
+ *
+ * Two of the three encoded fields provably cannot contain it: a uid is
+ * `[A-Za-z0-9._-]+` (the backend's own id schema, functions/src/chatchannels/
+ * chat-core.ts), and an offset is decimal digits. A LABEL can — it is "@" plus a
+ * display name, and the backend constrains a display name's length but not its
+ * charset, so nothing stops one holding a control character. Hence the field
+ * order and the bounded split in [MentionSpansSaver]: the two constrained fields
+ * go first, and the unconstrained one takes the remainder.
  */
 private const val MENTION_SEPARATOR = '\u001F'
 
 /**
  * Saves the draft's mention spans across configuration change / process death,
  * alongside the draft text itself. Flattened to strings because a
- * [rememberSaveable] Bundle takes no arbitrary data classes. A row that doesn't
- * round-trip is dropped — that costs a mention rather than restoring a
- * half-parsed one, and the composer re-verifies every restored span against the
- * text on the next edit regardless.
+ * [rememberSaveable] Bundle takes no arbitrary data classes.
+ *
+ * Encoded `uid<sep>start<sep>label` and split with `limit = 3`, which makes the
+ * encoding TOTAL: uid and start cannot contain the separator, so the third field
+ * is simply whatever remains and a label round-trips whatever it holds. The
+ * obvious `uid<sep>label<sep>start` is PARTIAL — a separator anywhere in the
+ * display name splits into four parts and silently drops the span, losing a
+ * mention over what someone called themselves.
+ *
+ * A row that still doesn't round-trip is dropped — that costs a mention rather
+ * than restoring a half-parsed one, and the composer re-verifies every restored
+ * span against the text on the next edit regardless.
  */
 internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
     Saver(
         save = { spans ->
             ArrayList(
                 spans.map { span ->
-                    listOf(span.uid, span.label, span.start.toString())
+                    listOf(span.uid, span.start.toString(), span.label)
                         .joinToString(MENTION_SEPARATOR.toString())
                 },
             )
@@ -114,10 +129,10 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
         restore = { saved ->
             @Suppress("UNCHECKED_CAST")
             (saved as? List<String>)?.mapNotNull { encoded ->
-                val parts = encoded.split(MENTION_SEPARATOR)
-                val start = parts.getOrNull(2)?.toIntOrNull()
+                val parts = encoded.split(MENTION_SEPARATOR, limit = 3)
+                val start = parts.getOrNull(1)?.toIntOrNull()
                 if (parts.size == 3 && start != null) {
-                    MentionSpan(uid = parts[0], label = parts[1], start = start)
+                    MentionSpan(uid = parts[0], label = parts[2], start = start)
                 } else {
                     null
                 }
