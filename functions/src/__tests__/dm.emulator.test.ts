@@ -221,8 +221,8 @@ describe('dm-sendMessage gating', () => {
 
 describe('dm messaging lifecycle', () => {
   it('sends, lists, paginates, and marks read with a consistent unread aggregate', async () => {
-    const alice = await newMember('AliceLC');
-    const bob = await newMember('BobLC');
+    const alice = await newMember('AliceDMLC');
+    const bob = await newMember('BobDMLC');
     await makeFriends(alice, bob);
     const conversationId = pairId(alice.uid, bob.uid);
 
@@ -255,7 +255,7 @@ describe('dm messaging lifecycle', () => {
     expect(bobList.totalUnread).toBe(3);
     const convo = bobList.conversations.find((c) => c.conversationId === conversationId)!;
     expect(convo.otherUser.uid).toBe(alice.uid);
-    expect(convo.otherUser.displayName).toBe('AliceLC');
+    expect(convo.otherUser.displayName).toBe('AliceDMLC');
     expect(convo.unreadCount).toBe(3);
     expect(convo.lastMessage?.text).toBe('hello 3');
     expect(convo.lastMessage?.senderUid).toBe(alice.uid);
