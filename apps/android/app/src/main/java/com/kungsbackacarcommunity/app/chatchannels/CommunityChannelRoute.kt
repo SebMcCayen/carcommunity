@@ -16,12 +16,16 @@ import kotlinx.coroutines.launch
  * listener, drives [ChannelChatContent] through a [ChannelChatCoordinator], and
  * marks the channel read on open + whenever a new incoming message arrives while
  * it is open. Mirrors dm/ChatRoute.
+ *
+ * [onViewProfile] is threaded straight through to the sender headers (tap a
+ * sender → their read-only member profile); null leaves them inert.
  */
 @Composable
 fun CommunityChannelRoute(
     repository: CommunityChatRepository,
     uid: String,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator =
@@ -68,5 +72,6 @@ fun CommunityChannelRoute(
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         onResetError = { coordinator.resetSendError() },
         modifier = modifier,
+        onViewProfile = onViewProfile,
     )
 }

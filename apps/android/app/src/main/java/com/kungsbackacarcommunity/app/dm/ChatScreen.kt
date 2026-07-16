@@ -44,6 +44,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  * Rendered on the shared [AeroPage] chrome (title = the other member's name),
  * with the message list taking the remaining height so the input pins to the
  * bottom.
+ *
+ * @param onViewProfile opens the other member's read-only profile. A 1:1 thread
+ *   shows no per-message sender header (every incoming message is from the same
+ *   member), so the TITLE — which already names them — is the tap target, the
+ *   conventional "tap the thread header for who you're talking to". Null (the
+ *   default) leaves the title inert. The caller's own messages are never a tap
+ *   target here, matching the group channels.
  */
 @Composable
 fun ChatScreen(
@@ -58,6 +65,7 @@ fun ChatScreen(
     onLoadOlder: () -> Unit,
     onResetError: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: (() -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
@@ -76,6 +84,7 @@ fun ChatScreen(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
         modifier = modifier.imePadding(),
         scrollable = false,
+        onTitleClick = onViewProfile,
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (threadLoading && messages.isEmpty()) {

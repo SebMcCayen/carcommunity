@@ -40,6 +40,9 @@ fun EventChatRoute(
     myRsvp: RsvpStatus?,
     onBack: () -> Unit,
     blockingRepository: BlockingRepository? = null,
+    // Opens a message author's read-only member profile; null (no profile
+    // repository wired) leaves the author names inert.
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val canParticipate = EventChat.canParticipate(isActiveMember, eventStatus, myRsvp)
@@ -120,5 +123,6 @@ fun EventChatRoute(
             }
         },
         onBlockDismiss = { blockingCoordinator?.reset() },
+        onViewProfile = onViewProfile,
     )
 }

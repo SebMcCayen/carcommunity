@@ -15,6 +15,9 @@ import kotlinx.coroutines.launch
  * for [convoyId], drives [ChannelChatContent] through a [ChannelChatCoordinator]
  * (send + older-page; convoy channels carry no unread marker, so no mark-read).
  * Mirrors [CommunityChannelRoute].
+ *
+ * [onViewProfile] is threaded straight through to the sender headers (tap a
+ * sender → their read-only member profile); null leaves them inert.
  */
 @Composable
 fun ConvoyChannelRoute(
@@ -22,6 +25,7 @@ fun ConvoyChannelRoute(
     uid: String,
     convoyId: String,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator =
@@ -61,5 +65,6 @@ fun ConvoyChannelRoute(
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         onResetError = { coordinator.resetSendError() },
         modifier = modifier,
+        onViewProfile = onViewProfile,
     )
 }

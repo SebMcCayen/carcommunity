@@ -80,6 +80,9 @@ private fun defaultClientErrorReporter(): ClientErrorReporter? {
  * rule denies a listen on a not-yet-created conversation, [threadKey] is bumped
  * the first time a send creates the document, re-subscribing the (previously
  * empty) listener so the new thread streams in.
+ *
+ * [onViewProfile] opens [otherUid]'s read-only member profile from the thread
+ * title; null (a config-less build with no profile repository) leaves it inert.
  */
 @Composable
 fun ChatRoute(
@@ -87,6 +90,7 @@ fun ChatRoute(
     uid: String,
     otherUid: String,
     otherName: String?,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
@@ -140,5 +144,9 @@ fun ChatRoute(
         onSend = { text -> scope.launch { coordinator.send(text) } },
         onLoadOlder = { scope.launch { coordinator.loadOlder(DmThread.oldestCursor(displayed)) } },
         onResetError = { coordinator.resetSendError() },
+        // Guarded on a resolvable target: a blank otherUid would open a dead
+        // profile route (dmPairId can be derived from a malformed conversation).
+        onViewProfile =
+            onViewProfile?.takeIf { otherUid.isNotBlank() }?.let { { it(otherUid) } },
     )
 }

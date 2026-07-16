@@ -97,6 +97,7 @@ fun ChatHubRoute(
     communityUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
@@ -112,6 +113,7 @@ fun ChatHubRoute(
             communityUnread = communityUnread,
             onClose = onClose,
             applyStatusBarInset = true,
+            onViewProfile = onViewProfile,
         )
     }
 }
@@ -143,6 +145,7 @@ fun ChatHubPopup(
     communityUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     Popup(
         alignment = Alignment.BottomCenter,
@@ -210,6 +213,7 @@ fun ChatHubPopup(
                         // The enclosing box already applies the status-bar inset, so
                         // the content must NOT add it again.
                         applyStatusBarInset = false,
+                        onViewProfile = onViewProfile,
                     )
                 }
             }
@@ -233,6 +237,11 @@ fun ChatHubPopup(
  * @param applyStatusBarInset when true the body pads for the status bar itself
  *   (full-screen route); the popup form passes false because its card is already
  *   offset below the status bar.
+ * @param onViewProfile opens a member's read-only profile, passed down to every
+ *   member-bearing tab (community + convoy sender headers, the DM thread title).
+ *   That profile is a shell ROUTE, so opening it from the popup form closes the
+ *   hub — the popup's gate in AuthenticatedApp only holds while no route is open.
+ *   Null (config-less build) leaves those affordances inert.
  */
 @Composable
 private fun ChatHubContent(
@@ -248,6 +257,7 @@ private fun ChatHubContent(
     communityUnread: Boolean,
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
+    onViewProfile: ((String) -> Unit)?,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(ChatTab.Community) }
 
@@ -365,7 +375,11 @@ private fun ChatHubContent(
                 when (selectedTab) {
                     ChatTab.Community ->
                         if (communityChatRepository != null) {
-                            CommunityChannelRoute(repository = communityChatRepository, uid = uid)
+                            CommunityChannelRoute(
+                                repository = communityChatRepository,
+                                uid = uid,
+                                onViewProfile = onViewProfile,
+                            )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
                         }
@@ -377,6 +391,7 @@ private fun ChatHubContent(
                                     repository = convoyChatRepository,
                                     uid = uid,
                                     convoyId = openConvoyId!!,
+                                    onViewProfile = onViewProfile,
                                 )
                             } else {
                                 ConvoyListRoute(
@@ -399,6 +414,7 @@ private fun ChatHubContent(
                                     uid = uid,
                                     otherUid = dmOtherUid!!,
                                     otherName = dmOtherName,
+                                    onViewProfile = onViewProfile,
                                 )
                             } else {
                                 ConversationListRoute(

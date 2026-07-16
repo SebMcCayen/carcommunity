@@ -436,6 +436,12 @@ private fun CreatedResult(
  * the convoy has ended, the post-drive [ConvoySummaryStats] is shown to ALL
  * members. The live-map is a separate surface and is deliberately not linked
  * here (a "+" chooser / driving-mode follow-up wires start-and-drive).
+ *
+ * @param onViewMember opens a roster member's read-only profile. Null (the
+ *   config-less build) leaves the rows inert.
+ * @param viewerUid the caller, whose OWN row never opens a profile — consistent
+ *   with chat, where your own messages carry no sender affordance. Null when the
+ *   caller is unknown, which simply leaves every row tappable.
  */
 @Composable
 fun ConvoyDetailScreen(
@@ -446,6 +452,8 @@ fun ConvoyDetailScreen(
     onEnd: () -> Unit,
     onClearActionError: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewMember: ((String) -> Unit)? = null,
+    viewerUid: String? = null,
 ) {
     AeroPage(title = convoy.displayTitle(), modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
@@ -462,7 +470,17 @@ fun ConvoyDetailScreen(
 
         SectionHeader(stringResource(R.string.convoy_membersTitle))
         convoy.members.forEach { member ->
-            MemberRow(member = member, isOwner = member.uid == convoy.ownerUid)
+            MemberRow(
+                member = member,
+                isOwner = member.uid == convoy.ownerUid,
+                // Tapping a member opens their read-only profile. Never wired for
+                // the caller's own row, nor for a malformed member whose blank uid
+                // would open a dead profile route.
+                onClick =
+                    onViewMember
+                        ?.takeIf { member.uid.isNotBlank() && member.uid != viewerUid }
+                        ?.let { { it(member.uid) } },
+            )
         }
 
         if (convoy.viewerIsOwner) {
@@ -531,8 +549,21 @@ private fun SummaryStatRow(label: String, value: String) {
 }
 
 @Composable
-private fun MemberRow(member: ConvoyMember, isOwner: Boolean) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun MemberRow(member: ConvoyMember, isOwner: Boolean, onClick: (() -> Unit)?) {
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (onClick != null) {
+                        // Announce the row as a button so its tap-to-open-profile
+                        // affordance reaches accessibility services.
+                        Modifier.clickable(role = Role.Button, onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                ),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,

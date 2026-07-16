@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -39,6 +41,10 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
  * Blocking here is contextual (block a message's author). Blocks are
  * directional and never revealed to the target; the caller's own messages
  * never offer a block affordance ([EventChat.canBlock]).
+ *
+ * [onViewProfile] opens an author's read-only member profile from their name;
+ * as in the group channels the caller's OWN messages never navigate, and null
+ * (config-less build) leaves every name inert.
  */
 @Composable
 fun EventChatScreen(
@@ -58,6 +64,7 @@ fun EventChatScreen(
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
     onBlock: (String) -> Unit = {},
     onBlockDismiss: () -> Unit = {},
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
@@ -125,9 +132,17 @@ fun EventChatScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(state.messages, key = { it.id }) { message ->
+                                val isOwn = message.authorUserId == currentUid
                                 MessageRow(
                                     message = message,
-                                    isOwn = message.authorUserId == currentUid,
+                                    isOwn = isOwn,
+                                    // Tap the author's name → their profile. Never
+                                    // for your own message, and never for a blank
+                                    // author uid (a dead profile route).
+                                    onViewProfile =
+                                        onViewProfile
+                                            ?.takeIf { !isOwn && message.authorUserId.isNotBlank() }
+                                            ?.let { { it(message.authorUserId) } },
                                     // Block only another user's message, and only when blocking
                                     // is wired (canBlock). Directional; never on own messages.
                                     canBlock = canBlock && EventChat.canBlock(message, currentUid),
@@ -235,6 +250,7 @@ private fun MessageRow(
     canBlock: Boolean,
     onReport: () -> Unit,
     onBlock: () -> Unit,
+    onViewProfile: (() -> Unit)?,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -246,6 +262,14 @@ private fun MessageRow(
                     ?: stringResource(R.string.chat_unknownAuthor),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
+                // Tapping the author opens their read-only profile. Announced as a
+                // button so the affordance reaches accessibility services.
+                modifier =
+                    if (onViewProfile != null) {
+                        Modifier.clickable(role = Role.Button, onClick = onViewProfile)
+                    } else {
+                        Modifier
+                    },
             )
             if (message.isRemoved) {
                 Text(
