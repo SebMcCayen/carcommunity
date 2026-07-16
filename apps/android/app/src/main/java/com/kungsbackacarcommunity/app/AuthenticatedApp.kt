@@ -81,11 +81,11 @@ import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
-import com.kungsbackacarcommunity.app.drives.DriveRecordingCoordinator
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
+import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
 import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
@@ -701,76 +701,56 @@ fun AuthenticatedApp(
             // path (Stop / Hide / expiry) raises the save-or-discard summary.
             // Guarded: with no drives backend (config-less/CI) nothing records
             // and live sharing still works.
-            val driveLocationController =
-                remember { DriveLocationController.createIfAvailable(context) }
-            // Mirror RecordDriveScreen: always release the foreground GPS updates
-            // when this composable leaves composition, so the controller can never
-            // keep running after the auth subtree is disposed while a session is
-            // still active (the isSharing=false branch already stops it on a normal
-            // session end). stop() is idempotent — safe to call when already
-            // stopped — so this never double-stops or crashes.
-            DisposableEffect(driveLocationController) {
-                onDispose { driveLocationController?.stop() }
-            }
+            // The recording + any pending save/discard prompt live in the
+            // process-scoped SingleSessionRecording holder, NOT in composition:
+            // its lifetime is the live SESSION's (which already outlives the
+            // Activity via the foreground service), so an Activity recreation —
+            // rotation, the manifest doesn't lock orientation — must not drop the
+            // coordinator, its points, or the prompt. Observed here so the UI
+            // simply re-attaches after a recreation.
             val idleRecordingState =
                 remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
-            // The coordinator for the CURRENT session; a fresh one (new
-            // sourceSessionId) is created per session so drives never collide.
-            var activeRecording by remember { mutableStateOf<DriveRecordingCoordinator?>(null) }
+            val activeRecording by SingleSessionRecording.active.collectAsState()
+            val showSessionSummary by SingleSessionRecording.promptPending.collectAsState()
             val recordingState by
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
                 )
-            // Whether the end-of-session save/discard summary dialog is shown.
-            var showSessionSummary by remember { mutableStateOf(false) }
             val driveSavedText = stringResource(R.string.savedDrives_saveSuccess)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
-            // Bind the recording lifecycle to the live-sharing state.
+            // Bind the recording lifecycle to the live-sharing state. Both calls
+            // are idempotent, so re-running this after a recreation resumes the
+            // existing recording / keeps the pending prompt rather than
+            // restarting or clearing either.
             LaunchedEffect(isSharing) {
                 if (isSharing) {
-                    // Session started (any entry point): begin recording once.
-                    if (drivesRepository != null && canShareLive && activeRecording == null) {
-                        val coordinator =
-                            DriveRecordingCoordinator(
-                                drivesRepository,
-                                "single-" + java.util.UUID.randomUUID().toString(),
-                            )
-                        activeRecording = coordinator
-                        coordinator.start()
-                        // No fixes arrive if the controller is null (no Play
-                        // services) or the location permission is absent — the
-                        // session then produces a duration-only summary.
-                        driveLocationController?.start { latitude, longitude, timestampMs ->
-                            coordinator.addFix(latitude, longitude, timestampMs)
+                    if (drivesRepository != null && canShareLive) {
+                        SingleSessionRecording.start(drivesRepository) {
+                            // No fixes arrive when this is null (no Play services)
+                            // or the location permission is absent — the session
+                            // then produces a duration-only summary.
+                            DriveLocationController.createIfAvailable(context)
                         }
                     }
                 } else {
                     // Session ended: stop recording and raise the save/discard
-                    // summary (only if a recording was actually active).
-                    val coordinator = activeRecording
-                    if (coordinator != null) {
-                        driveLocationController?.stop()
-                        coordinator.stop()
-                        if (coordinator.state.value is RecordingState.PromptSave) {
-                            showSessionSummary = true
-                        }
-                    }
+                    // summary. The holder releases the GPS source here, at the
+                    // real session end, rather than on composable disposal.
+                    SingleSessionRecording.stop()
                 }
             }
 
-            // Terminal states close the summary and release the coordinator so
-            // the next session starts clean; a snackbar confirms the outcome.
+            // Terminal states release the recording so the next session starts
+            // clean; a snackbar confirms the outcome.
             LaunchedEffect(recordingState) {
                 when (recordingState) {
                     RecordingState.Saved -> {
-                        showSessionSummary = false
-                        activeRecording = null
+                        SingleSessionRecording.clear()
                         snackbarHostState.showSnackbar(driveSavedText)
                     }
                     RecordingState.Discarded -> {
-                        showSessionSummary = false
-                        activeRecording = null
+                        SingleSessionRecording.clear()
                         snackbarHostState.showSnackbar(driveDiscardedText)
                     }
                     else -> Unit
