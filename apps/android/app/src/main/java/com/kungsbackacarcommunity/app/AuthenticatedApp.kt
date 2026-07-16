@@ -726,7 +726,10 @@ fun AuthenticatedApp(
             LaunchedEffect(isSharing) {
                 if (isSharing) {
                     if (drivesRepository != null && canShareLive) {
-                        SingleSessionRecording.start(drivesRepository) {
+                        // Owned by this uid: signing out (or switching account)
+                        // tears the recording down — see clearIfNotOwnedBy,
+                        // driven from MainActivity's auth state.
+                        SingleSessionRecording.start(uid, drivesRepository) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way
                             // no fixes can arrive and the session yields an

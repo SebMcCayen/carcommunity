@@ -32,7 +32,11 @@ class SingleSessionRecordingTest {
     @After fun tearDown() = SingleSessionRecording.clear()
 
     /** Stands in for the effect the UI runs whenever `isSharing` is true. */
-    private fun onSharing() = SingleSessionRecording.start(repository) { null }
+    private fun onSharing(uid: String = UID) = SingleSessionRecording.start(uid, repository) { null }
+
+    private companion object {
+        const val UID = "uid-owner"
+    }
 
     @Test
     fun `start begins a recording`() {
@@ -143,6 +147,93 @@ class SingleSessionRecordingTest {
     }
 
     // -------------------------------------------------------------------
+    // Teardown vs config change. The holder is process-scoped on purpose, so a
+    // GENUINE teardown (sign-out / account switch) must stop it, while a
+    // config-change recreation (rotation) must not. clearIfNotOwnedBy keys that
+    // on the signed-in uid, which MainActivity feeds from auth state.
+    // -------------------------------------------------------------------
+
+    @Test
+    fun `sign-out clears an in-flight recording`() {
+        onSharing()
+        assertNotNull(SingleSessionRecording.active.value)
+
+        // Signed-in uid becomes null: the authed screen is being torn down.
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+
+        // The recording is released — no orphaned recording, and clear() stops
+        // the fused-location source with it.
+        assertNull(SingleSessionRecording.active.value)
+        assertFalse(SingleSessionRecording.promptPending.value)
+    }
+
+    @Test
+    fun `sign-out drops an unsaved drive waiting on the prompt, deliberately`() {
+        onSharing()
+        SingleSessionRecording.active.value?.addFix(57.0, 12.0, 1_000L)
+        SingleSessionRecording.stop()
+        assertTrue(SingleSessionRecording.promptPending.value)
+
+        // The user signs out with the save/discard prompt still open. The drive
+        // belongs to the departing uid, so it must NOT survive to be resolved by
+        // whoever signs in next.
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+
+        assertNull(SingleSessionRecording.active.value)
+        assertFalse(SingleSessionRecording.promptPending.value)
+        assertNull("nothing may be filed on sign-out", repository.lastRequest)
+    }
+
+    @Test
+    fun `switching to a different account clears the previous user's recording`() {
+        onSharing()
+        SingleSessionRecording.active.value?.addFix(57.0, 12.0, 1_000L)
+
+        // A different uid signs in: the recording is not theirs to resolve.
+        SingleSessionRecording.clearIfNotOwnedBy("uid-someone-else")
+
+        assertNull(SingleSessionRecording.active.value)
+        assertFalse(SingleSessionRecording.promptPending.value)
+    }
+
+    @Test
+    fun `a rotation with the same uid does not clear an in-flight recording`() {
+        onSharing()
+        val coordinator = SingleSessionRecording.active.value
+        coordinator?.addFix(57.0, 12.0, 1_000L)
+
+        // Activity recreated: the effect re-runs with the SAME signed-in uid.
+        SingleSessionRecording.clearIfNotOwnedBy(UID)
+
+        assertSame(coordinator, SingleSessionRecording.active.value)
+        assertEquals(1, SingleSessionRecording.active.value?.recordedPoints()?.size)
+        assertTrue(SingleSessionRecording.active.value?.state?.value is RecordingState.Recording)
+    }
+
+    @Test
+    fun `a rotation with the same uid keeps a pending save prompt`() {
+        onSharing()
+        val coordinator = SingleSessionRecording.active.value
+        coordinator?.addFix(57.0, 12.0, 1_000L)
+        SingleSessionRecording.stop()
+
+        // The exact regression this guards: rotation must never drop the prompt.
+        SingleSessionRecording.clearIfNotOwnedBy(UID)
+
+        assertTrue(SingleSessionRecording.promptPending.value)
+        assertSame(coordinator, SingleSessionRecording.active.value)
+        assertTrue(SingleSessionRecording.active.value?.state?.value is RecordingState.PromptSave)
+    }
+
+    @Test
+    fun `clearIfNotOwnedBy is a no-op when nothing is recording`() {
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+        SingleSessionRecording.clearIfNotOwnedBy(UID)
+        assertNull(SingleSessionRecording.active.value)
+        assertFalse(SingleSessionRecording.promptPending.value)
+    }
+
+    // -------------------------------------------------------------------
     // Location-permission behaviour. The permission CHECK itself lives in
     // DriveLocationController.createIfPermitted and needs the Android
     // framework (ContextCompat/PackageManager), which this JVM suite has no
@@ -156,7 +247,7 @@ class SingleSessionRecordingTest {
     @Test
     fun `without permission the null controller still records a duration-only summary`() {
         // createIfPermitted returns null when ACCESS_FINE_LOCATION is missing.
-        SingleSessionRecording.start(repository) { null }
+        SingleSessionRecording.start(UID, repository) { null }
 
         // The session still records (so duration is real) and can be resolved.
         val coordinator = SingleSessionRecording.active.value
@@ -184,7 +275,7 @@ class SingleSessionRecordingTest {
         // (it wraps a FusedLocationProviderClient), so this feeds the coordinator
         // the fixes such a controller would deliver — the holder wires start()'s
         // controller callback straight to this same addFix path.
-        SingleSessionRecording.start(repository) { null }
+        SingleSessionRecording.start(UID, repository) { null }
         val coordinator = SingleSessionRecording.active.value
         coordinator?.addFix(57.0000, 12.0, 0L)
         coordinator?.addFix(57.0010, 12.0, 10_000L)
@@ -212,17 +303,17 @@ class SingleSessionRecordingTest {
         var factoryCalls = 0
         val factory = { factoryCalls++; null }
 
-        SingleSessionRecording.start(repository, factory)
+        SingleSessionRecording.start(UID, repository, factory)
         assertEquals(1, factoryCalls)
         // A re-run within the SAME session must not re-consult it.
-        SingleSessionRecording.start(repository, factory)
+        SingleSessionRecording.start(UID, repository, factory)
         assertEquals(1, factoryCalls)
 
         SingleSessionRecording.stop()
         SingleSessionRecording.clear()
 
         // A NEW session re-evaluates: a permission granted meanwhile now counts.
-        SingleSessionRecording.start(repository, factory)
+        SingleSessionRecording.start(UID, repository, factory)
         assertEquals(2, factoryCalls)
     }
 }
