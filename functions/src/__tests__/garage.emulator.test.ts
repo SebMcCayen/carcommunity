@@ -190,6 +190,59 @@ describe('garage-addVehicle', () => {
   });
 });
 
+/**
+ * The ungate applies to ALL FOUR garage callables, not just addVehicle: a
+ * signed-in user with no activeMember entitlement may fully manage their OWN
+ * cars, while suspension still closes every path (requireActiveActor).
+ */
+describe('garage CRUD is ungated for non-members (own cars only)', () => {
+  it('lets a non-member update, set-main and delete their OWN vehicle', async () => {
+    const nonMember = await createProvisionedUser('garage-ungated');
+    await signInAs(nonMember);
+
+    // No activeMember entitlement is ever granted to this user.
+    const { vehicleId } = (await call('garage-addVehicle', validAdd)).data as {
+      vehicleId: string;
+    };
+
+    await call('garage-updateVehicle', { vehicleId, color: 'Non-member Blue' });
+    expect((await adminDb.collection('vehicles').doc(vehicleId).get()).data()!.color).toBe(
+      'Non-member Blue',
+    );
+
+    await call('garage-setMainVehicle', { vehicleId, isMain: true });
+    expect((await adminDb.collection('vehicles').doc(vehicleId).get()).data()!.isMainCar).toBe(
+      true,
+    );
+
+    await call('garage-deleteVehicle', { vehicleId });
+    expect((await adminDb.collection('vehicles').doc(vehicleId).get()).exists).toBe(false);
+  });
+
+  it('still blocks a suspended user on update, set-main and delete', async () => {
+    const user = await createProvisionedUser('garage-susp-crud');
+    await signInAs(user);
+    const { vehicleId } = (await call('garage-addVehicle', validAdd)).data as {
+      vehicleId: string;
+    };
+
+    // Suspend AFTER the vehicle exists, so these are ownership-valid calls that
+    // must still be refused purely because the account is suspended.
+    await adminDb.collection('users').doc(user.uid).set({ suspended: true }, { merge: true });
+    await signInAs(user);
+
+    expect(
+      await callableErrorCode(call('garage-updateVehicle', { vehicleId, color: 'Nope' })),
+    ).toBe('functions/permission-denied');
+    expect(
+      await callableErrorCode(call('garage-setMainVehicle', { vehicleId, isMain: true })),
+    ).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('garage-deleteVehicle', { vehicleId }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+});
+
 describe('garage-updateVehicle / garage-deleteVehicle', () => {
   let vehicleId: string;
 

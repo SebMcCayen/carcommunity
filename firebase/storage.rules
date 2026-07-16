@@ -59,13 +59,18 @@ service firebase.storage {
     // Path per docs/migration/backend-domain-mapping.md — the vehicleId
     // segment lets garage.deleteVehicle remove exactly one vehicle's images.
     // Owner may upload images up to 10 MB — managing your own garage is NOT
-    // member-gated (Seb-approved ungate), so any signed-in owner may upload a
-    // photo for their own vehicle; any authenticated user may read (vehicle
-    // docs are public-readable).
+    // member-gated (Seb-approved ungate), so any signed-in, NON-SUSPENDED owner
+    // may upload a photo for their own vehicle; any authenticated user may read
+    // (vehicle docs are public-readable). isNotSuspended() is kept explicitly:
+    // it used to come in via isActiveMember(), and suspension must always
+    // override feature access. This mirrors the backend requireActiveActor
+    // (signed-in + non-suspended) that guards the garage.* callables — note
+    // `deleted` is a backend-managed users/{uid} field, not a custom claim, so
+    // it has no rules helper and stays enforced by those callables.
     // -------------------------------------------------------------------------
     match /vehicleImages/{userId}/{vehicleId}/{imageId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isImage() && isUnderMB(10);
+      allow write: if isOwner(userId) && isNotSuspended() && isImage() && isUnderMB(10);
       allow write: if isAdmin();
     }
 
