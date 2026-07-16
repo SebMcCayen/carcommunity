@@ -7,12 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.storage.FirebaseStorage
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.kungsbackacarcommunity.app.firebase.await
 
 /**
  * Resolves a Cloud Storage object path (e.g. `profileImages/{uid}/{id}`) to a
@@ -31,19 +28,9 @@ suspend fun resolveStorageDownloadUrl(context: Context, path: String?): String? 
     if (path.isNullOrBlank()) return null
     if (FirebaseApp.getApps(context).isEmpty()) return null
     return runCatching {
-        FirebaseStorage.getInstance().reference.child(path).downloadUrl.awaitUrl()
+        FirebaseStorage.getInstance().reference.child(path).downloadUrl.await()
     }.getOrNull()?.toString()
 }
-
-/** Minimal Task -> suspend bridge (no kotlinx-coroutines-play-services dep). */
-private suspend fun <T> Task<T>.awaitUrl(): T =
-    suspendCancellableCoroutine { continuation ->
-        addOnSuccessListener { result ->
-            if (continuation.isActive) continuation.resume(result)
-        }.addOnFailureListener { error ->
-            if (continuation.isActive) continuation.resumeWithException(error)
-        }
-    }
 
 /**
  * Compose helper: resolves [path] to a download URL, re-resolving when [path]

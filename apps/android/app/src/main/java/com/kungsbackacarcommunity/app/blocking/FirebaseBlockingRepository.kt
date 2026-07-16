@@ -5,12 +5,10 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [BlockingRepository] backed by an owner Firestore listener on
@@ -43,22 +41,10 @@ class FirebaseBlockingRepository private constructor(
 
     override suspend fun unblock(targetUserId: String): Unit = call(UNBLOCK, targetUserId)
 
-    private suspend fun call(name: String, targetUserId: String): Unit =
-        suspendCancellableCoroutine { continuation ->
-            functions
-                .getHttpsCallable(name)
-                .call(mapOf<String, Any?>("targetUserId" to targetUserId))
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$name failed without a cause"),
-                        )
-                    }
-                }
-        }
+    private suspend fun call(name: String, targetUserId: String) {
+        functions.getHttpsCallable(name).call(mapOf<String, Any?>("targetUserId" to targetUserId))
+            .awaitOrThrow { "$name failed without a cause" }
+    }
 
     companion object {
         private const val REGION = "europe-west1"

@@ -4,8 +4,8 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -40,22 +40,10 @@ class FirebasePushTokenRepository private constructor(
         call(UNREGISTER, mapOf("tokenId" to PushTokens.tokenId(token)))
     }
 
-    private suspend fun call(name: String, payload: Map<String, Any?>): Unit =
-        suspendCancellableCoroutine { continuation ->
-            functions
-                .getHttpsCallable(name)
-                .call(payload)
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$name failed without a cause"),
-                        )
-                    }
-                }
-        }
+    private suspend fun call(name: String, payload: Map<String, Any?>) {
+        functions.getHttpsCallable(name).call(payload)
+            .awaitOrThrow { "$name failed without a cause" }
+    }
 
     companion object {
         private const val REGION = "europe-west1"
