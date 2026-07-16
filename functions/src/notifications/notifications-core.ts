@@ -38,10 +38,17 @@ import { isRestricted, type UserAccessState } from '../shared/access';
 // ---------------------------------------------------------------------------
 
 /**
- * Categories that are actually sent. The legacy contract also defines
- * FUTURE categories (partner_offer, event_chat, nearby_event) that must not
- * be activated without product and security review — they are deliberately
- * NOT accepted here.
+ * The closed set of categories the notification domain recognizes: a value
+ * must appear here before a producer can deliver under it or a preference can
+ * be expressed for it. Membership is a precondition for delivery, not
+ * evidence of it — being listed does NOT mean the category has an active
+ * delivery surface. Some entries are preference-only: the id exists so the
+ * opt-out is expressible and stable ahead of the producer that will use it
+ * (the note below records which have producers today).
+ *
+ * The legacy contract also defines FUTURE categories (partner_offer,
+ * event_chat, nearby_event) that must not be activated without product and
+ * security review — they are deliberately NOT accepted here.
  *
  * The social categories (direct_message, community_chat, convoy_chat,
  * friend_request, convoy_invite) back the per-category preferences for the
