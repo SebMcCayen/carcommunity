@@ -1,28 +1,43 @@
 package com.kungsbackacarcommunity.app.events
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.util.Date
@@ -31,7 +46,7 @@ import java.util.Date
  * Event detail (Phase 12 slice 9). Stateless: shows the teaser fields to any
  * authenticated user, the member-gated [detail] (exact location/description)
  * or a membership gate, and — for members on a published event — an RSVP row
- * whose current selection reflects [myRsvp].
+ * whose current selection reflects [myRsvp], plus the "who's going" section.
  */
 @Composable
 fun EventDetailScreen(
@@ -50,6 +65,15 @@ fun EventDetailScreen(
     onRetry: (() -> Unit)? = null,
     onOpenChat: (() -> Unit)? = null,
     onOpenGroupDrive: (() -> Unit)? = null,
+    // Who's going. The COUNT always comes from the public rsvpCounts tally on
+    // the event doc; the NAMES only render when the roster read succeeded —
+    // see EventAttendees for why that is Unavailable for a member today.
+    attendees: EventAttendeesState = EventAttendeesState.Unavailable,
+    // Opens a member's read-only profile. Null (config-less build / no member
+    // profile repository) leaves the rows inert rather than dead-ending a tap.
+    onOpenMember: ((String) -> Unit)? = null,
+    // Re-runs the roster read from the transient-error state; null hides retry.
+    onRetryAttendees: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
@@ -144,6 +168,15 @@ fun EventDetailScreen(
                     RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvpHaptic)
                     RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
                 }
+
+                // Who's going — same member+published gate as the details, so
+                // the roster is never teased to a non-member.
+                AttendeesSection(
+                    state = attendees,
+                    goingCount = event.counts.going,
+                    onOpenMember = onOpenMember,
+                    onRetry = onRetryAttendees,
+                )
             }
 
             // Event chat — offered only when eligible (decided by the caller:
@@ -162,6 +195,148 @@ fun EventDetailScreen(
             }
     }
 }
+
+/**
+ * "Who's going": the count (always available — it is the server-maintained
+ * public rsvpCounts tally) plus, when the roster read succeeded, the members
+ * themselves. [EventAttendeesState.Unavailable] states plainly that names
+ * aren't shown rather than pretending the event has no attendees — the count
+ * next to it would contradict that lie anyway.
+ */
+@Composable
+private fun AttendeesSection(
+    state: EventAttendeesState,
+    goingCount: Int,
+    onOpenMember: ((String) -> Unit)?,
+    onRetry: (() -> Unit)?,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().testTag(ATTENDEES_SECTION_TAG),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.events_attendeesTitle),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.events_attendeesCount, goingCount),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        when (state) {
+            is EventAttendeesState.Loading ->
+                AttendeesNote(stringResource(R.string.events_attendeesLoading))
+
+            is EventAttendeesState.Empty ->
+                AttendeesNote(stringResource(R.string.events_attendeesEmpty))
+
+            is EventAttendeesState.Unavailable ->
+                AttendeesNote(stringResource(R.string.events_attendeesUnavailable))
+
+            is EventAttendeesState.Error -> {
+                AttendeesNote(stringResource(R.string.events_attendeesError))
+                if (onRetry != null) {
+                    OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                        Text(text = stringResource(R.string.events_retry))
+                    }
+                }
+            }
+
+            is EventAttendeesState.Loaded ->
+                state.attendees.forEach { attendee ->
+                    AttendeeRow(attendee = attendee, onOpenMember = onOpenMember)
+                }
+        }
+    }
+}
+
+@Composable
+private fun AttendeesNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * One attendee. Tapping opens their read-only member profile; when
+ * [onOpenMember] is null the row renders identically but is not clickable, so
+ * it never advertises a destination that isn't wired up.
+ */
+@Composable
+private fun AttendeeRow(
+    attendee: EventAttendee,
+    onOpenMember: ((String) -> Unit)?,
+) {
+    val name =
+        attendee.displayName?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.events_attendeesUnknownMember)
+    val base =
+        Modifier
+            .fillMaxWidth()
+            .testTag(attendeeRowTag(attendee.uid))
+    Row(
+        modifier =
+            if (onOpenMember != null) {
+                base.clickable { onOpenMember(attendee.uid) }.padding(vertical = 8.dp)
+            } else {
+                base.padding(vertical = 8.dp)
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        AttendeeAvatar(avatarPath = attendee.avatarPath)
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun AttendeeAvatar(avatarPath: String?) {
+    val context = LocalContext.current
+    val url = rememberStorageImageUrl(context, avatarPath)
+    Box(
+        modifier =
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(40.dp),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+/** Test tag for the attendees section container. */
+internal const val ATTENDEES_SECTION_TAG = "events_attendees_section"
+
+/** Stable per-attendee test tag so a UI test can tap a specific member. */
+internal fun attendeeRowTag(uid: String): String = "events_attendee_$uid"
 
 @Composable
 private fun DetailCard(detail: EventDetail?) {

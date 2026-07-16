@@ -30,6 +30,9 @@ class CreateEventCoordinatorTest {
             created += input
             return returnId
         }
+
+        override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
+            EventAttendeesResult.Unavailable
     }
 
     private val validInput =
@@ -54,15 +57,39 @@ class CreateEventCoordinatorTest {
         val coordinator = CreateEventCoordinator(repo)
         coordinator.submit(validInput.copy(title = "   "))
         assertTrue(repo.created.isEmpty())
-        assertEquals(CreateEventStatusUi.Failed, coordinator.status.value)
+        assertEquals(CreateEventStatusUi.Failed(CreateEventFailure.UNKNOWN), coordinator.status.value)
     }
 
     @Test
-    fun `a denied write surfaces Failed and can be reset`() = runTest {
-        val repo = FakeRepo().apply { failWith = IllegalStateException("permission-denied") }
+    fun `an unclassified write failure surfaces Failed UNKNOWN and can be reset`() = runTest {
+        val repo = FakeRepo().apply { failWith = IllegalStateException("boom") }
         val coordinator = CreateEventCoordinator(repo)
         coordinator.submit(validInput)
-        assertEquals(CreateEventStatusUi.Failed, coordinator.status.value)
+        assertEquals(CreateEventStatusUi.Failed(CreateEventFailure.UNKNOWN), coordinator.status.value)
+        coordinator.reset()
+        assertEquals(CreateEventStatusUi.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `the per-member rate limit surfaces Failed RATE_LIMITED, not a generic error`() = runTest {
+        // Exactly what FirebaseEventsRepository throws once events-create
+        // answers `resource-exhausted` (the 3-per-rolling-24h member cap).
+        val repo =
+            FakeRepo().apply { failWith = CreateEventException(CreateEventFailure.RATE_LIMITED) }
+        val coordinator = CreateEventCoordinator(repo)
+        coordinator.submit(validInput)
+        assertEquals(
+            CreateEventStatusUi.Failed(CreateEventFailure.RATE_LIMITED),
+            coordinator.status.value,
+        )
+    }
+
+    @Test
+    fun `a rate limit is resettable so the form stays usable`() = runTest {
+        val repo =
+            FakeRepo().apply { failWith = CreateEventException(CreateEventFailure.RATE_LIMITED) }
+        val coordinator = CreateEventCoordinator(repo)
+        coordinator.submit(validInput)
         coordinator.reset()
         assertEquals(CreateEventStatusUi.Idle, coordinator.status.value)
     }

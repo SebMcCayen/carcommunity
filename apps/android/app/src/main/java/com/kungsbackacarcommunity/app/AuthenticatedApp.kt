@@ -1928,6 +1928,11 @@ private fun RouteHost(
                     onShowOnMap = onShowOnMap,
                     onBack = onClose,
                     blockingRepository = blockingRepository,
+                    // Same guard the friends list uses: without a member-profile
+                    // repository the shell route cannot render, so attendee rows
+                    // stay inert rather than navigating into a dead end.
+                    onOpenMemberProfile =
+                        if (memberProfileRepository != null) onOpenMemberProfile else null,
                 )
             } else {
                 LoadingScreen()

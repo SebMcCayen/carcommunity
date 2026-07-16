@@ -38,9 +38,20 @@ interface EventsRepository {
 
     /**
      * Creates a new event via the `events-create` callable and returns the new
-     * event id. NOTE: that callable is currently admin-only (requireAdminActor),
-     * so a non-admin caller gets a permission-denied failure — enabling
-     * user-created events needs a backend/rules change (out of the Android lane).
+     * event id. An active member may call this: their event publishes
+     * immediately and is moderated afterwards. Throws [CreateEventException]
+     * with [CreateEventFailure.RATE_LIMITED] when the member's
+     * 3-per-rolling-24h cap is hit, and [CreateEventFailure.UNKNOWN] otherwise.
      */
     suspend fun createEvent(input: CreateEventInput): String
+
+    /**
+     * One-shot read of who is going to [eventId]. Deliberately not a Flow:
+     * under the current rules this is denied for a normal member (see
+     * [EventAttendees]), so a permanently-erroring snapshot listener would buy
+     * nothing — the section offers an explicit retry instead. Never throws;
+     * failures are modelled as [EventAttendeesResult.Unavailable] /
+     * [EventAttendeesResult.Unknown].
+     */
+    suspend fun loadAttendees(eventId: String): EventAttendeesResult
 }
