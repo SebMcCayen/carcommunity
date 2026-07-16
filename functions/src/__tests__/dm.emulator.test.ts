@@ -154,6 +154,20 @@ function pairId(a: string, b: string): string {
   return [a, b].sort().join('__');
 }
 
+/** In-app inbox items for a uid in one category (backend-only collection). */
+async function inboxFor(uid: string, category: string): Promise<Array<Record<string, unknown>>> {
+  const snap = await adminDb.collection('notifications').doc(uid).collection('items').get();
+  return snap.docs.map((d) => d.data()).filter((item) => item.category === category);
+}
+
+/** Opts `uid` out of one notification category (the owner-writable prefs map). */
+async function optOutOf(uid: string, category: string): Promise<void> {
+  await adminDb
+    .collection('userPrivate')
+    .doc(uid)
+    .set({ notificationPreferences: { [category]: { inApp: false } } }, { merge: true });
+}
+
 beforeAll(async () => {
   app = initializeApp(
     { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
@@ -353,5 +367,120 @@ describe('conversations Firestore rules', () => {
         text: 'forged',
       }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+});
+
+describe('dm-sendMessage in-app notification producer', () => {
+  it('notifies the recipient with the sender name, preview, and conversation link', async () => {
+    const sender = await newMember('NotifSender');
+    const recipient = await newMember('NotifRecipient');
+    await makeFriends(sender, recipient);
+
+    await signInAs(sender);
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'hej hej' });
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(recipient.uid, 'direct_message');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Nytt meddelande från NotifSender');
+    expect(items[0]!.previewText).toBe('hej hej');
+    // Deep-link target: the conversation id, so the client opens the thread.
+    expect(items[0]!.relatedEntityId).toBe(pairId(sender.uid, recipient.uid));
+    expect(items[0]!.read).toBe(false);
+  });
+
+  it('never notifies the SENDER of their own message', async () => {
+    const sender = await newMember('SelfNotifSender');
+    const recipient = await newMember('SelfNotifRecipient');
+    await makeFriends(sender, recipient);
+
+    await signInAs(sender);
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'hej' });
+    await pollUntil(async () => {
+      const found = await inboxFor(recipient.uid, 'direct_message');
+      return found.length > 0 ? found : undefined;
+    });
+
+    expect(await inboxFor(sender.uid, 'direct_message')).toHaveLength(0);
+  });
+
+  it('writes NO notification when the recipient opted out of direct_message', async () => {
+    const sender = await newMember('OptOutSender');
+    const recipient = await newMember('OptOutRecipient');
+    await makeFriends(sender, recipient);
+    await optOutOf(recipient.uid, 'direct_message');
+
+    await signInAs(sender);
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'hej' });
+
+    // The message itself must still be delivered — only the notification is
+    // suppressed. Waiting on the unread bump proves the send completed, so the
+    // empty inbox below isn't just a race.
+    await pollUntil(async () => ((await dmUnreadTotal(recipient.uid)) === 1 ? true : undefined));
+    expect(await inboxFor(recipient.uid, 'direct_message')).toHaveLength(0);
+  });
+
+  it('writes NO notification when the pair is blocked — in EITHER direction', async () => {
+    const kim = await newMember('BlockNotifKim');
+    const leo = await newMember('BlockNotifLeo');
+    await makeFriends(kim, leo);
+
+    // Kim blocks Leo. The friendship itself survives (onBlockWrite only mirrors
+    // the block to RTDB), so the send below reaches — and must be stopped by —
+    // the both-ways block gate rather than the not-friends gate.
+    await signInAs(kim);
+    await call('blocking-block', { targetUserId: leo.uid });
+
+    // Pins the invariant that today holds only by construction: the producer
+    // sits BEHIND the block gate. Each leg asserts the send was actually
+    // attempted and observed to be rejected, so the empty inbox is real
+    // suppression and not a race. Move the producer above the gate and the
+    // rejection still fires but the inbox is no longer empty — this fails.
+    await signInAs(leo);
+    expect(await callableErrorCode(call('dm-sendMessage', { toUid: kim.uid, text: 'hej' }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(kim.uid, 'direct_message')).toHaveLength(0);
+
+    // The blocker cannot notify the person they blocked either.
+    await signInAs(kim);
+    expect(await callableErrorCode(call('dm-sendMessage', { toUid: leo.uid, text: 'hej' }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(leo.uid, 'direct_message')).toHaveLength(0);
+  });
+
+  it('does not restack a notice while the recipient still has unread, and notifies again after markRead', async () => {
+    const sender = await newMember('RunSender');
+    const recipient = await newMember('RunRecipient');
+    await makeFriends(sender, recipient);
+
+    await signInAs(sender);
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'first' });
+    await pollUntil(async () => {
+      const found = await inboxFor(recipient.uid, 'direct_message');
+      return found.length > 0 ? found : undefined;
+    });
+
+    // Further messages in the same unread run must NOT add inbox items.
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'second' });
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'third' });
+    await pollUntil(async () => ((await dmUnreadTotal(recipient.uid)) === 3 ? true : undefined));
+    expect(await inboxFor(recipient.uid, 'direct_message')).toHaveLength(1);
+
+    // Once the recipient reads, the run ends and the next message notifies again.
+    await signInAs(recipient);
+    await call('dm-markRead', { conversationId: pairId(sender.uid, recipient.uid) });
+    await signInAs(sender);
+    await call('dm-sendMessage', { toUid: recipient.uid, text: 'fourth' });
+
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(recipient.uid, 'direct_message');
+      return found.length === 2 ? found : undefined;
+    });
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.previewText).sort()).toEqual(['first', 'fourth']);
   });
 });

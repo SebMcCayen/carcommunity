@@ -55,8 +55,20 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  * chat/social features. The same review rule applies: they exist so users
  * can opt out and so producers have a category to check before writing, but
  * activating them as a delivery surface needs the product/security review
- * this domain mandates. Today only convoy_invite has a producer; the rest
- * are preference-only until their domains wire one up.
+ * this domain mandates.
+ *
+ * Producers today (all IN-APP only — no push path is wired):
+ *  - convoy_invite   — convoy/manageConvoy.ts (invite)
+ *  - direct_message  — dm/manageDirectMessages.ts (sendMessage; first message
+ *                      of an unread run only)
+ *  - friend_request  — friends/manageFriends.ts (new request → invitee;
+ *                      accept → requester; a decline is silent)
+ *  - convoy_chat     — chatchannels/convoyChat.ts (post; fan-out to the other
+ *                      accepted members, collapsed per time window)
+ *  - community_chat  — NO producer, deliberately. Per-message fan-out to every
+ *                      active member is a spam/cost non-starter; the category
+ *                      is held for an @mentions or digest design. See the
+ *                      chatchannels/communityChat.ts header.
  */
 export const NOTIFICATION_CATEGORIES = [
   'event_reminder',

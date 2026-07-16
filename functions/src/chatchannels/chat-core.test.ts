@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHAT_MESSAGE_MAX_LENGTH,
+  CHAT_MESSAGE_PREVIEW_LENGTH,
   COMMUNITY_CHAT_RETENTION_DAYS,
+  CONVOY_CHAT_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_RETENTION_DAYS,
+  acceptedConvoyMemberUids,
   buildChatMessageDocument,
   chatMessageExpiry,
+  convoyChatNotificationId,
   isAcceptedConvoyMember,
+  messagePreview,
   parseListCommunityInput,
   parseListConvoyInput,
   parseMarkReadCommunityInput,
@@ -153,5 +158,72 @@ describe('chat-core accepted-convoy-member predicate', () => {
     expect(isAcceptedConvoyMember(convoy, 'stranger')).toBe(false);
     expect(isAcceptedConvoyMember(undefined, 'a')).toBe(false);
     expect(isAcceptedConvoyMember({}, 'a')).toBe(false);
+  });
+});
+
+describe('chat-core convoy-chat notification fan-out set', () => {
+  const convoy = {
+    memberUids: ['owner', 'a', 'b', 'c'],
+    members: {
+      owner: { uid: 'owner', inviteStatus: 'accepted' },
+      a: { uid: 'a', inviteStatus: 'accepted' },
+      b: { uid: 'b', inviteStatus: 'invited' },
+      c: { uid: 'c', inviteStatus: 'declined' },
+    },
+  };
+
+  it('returns the accepted members minus the poster', () => {
+    expect(acceptedConvoyMemberUids(convoy, 'owner')).toEqual(['a']);
+    expect(acceptedConvoyMemberUids(convoy, 'a')).toEqual(['owner']);
+  });
+
+  it('never includes still-invited or declined members', () => {
+    const recipients = acceptedConvoyMemberUids(convoy, 'owner');
+    expect(recipients).not.toContain('b');
+    expect(recipients).not.toContain('c');
+  });
+
+  it('is empty when the poster is the only accepted member, and tolerates junk', () => {
+    expect(
+      acceptedConvoyMemberUids(
+        { memberUids: ['solo'], members: { solo: { inviteStatus: 'accepted' } } },
+        'solo',
+      ),
+    ).toEqual([]);
+    expect(acceptedConvoyMemberUids(undefined, 'owner')).toEqual([]);
+    expect(acceptedConvoyMemberUids({}, 'owner')).toEqual([]);
+    // Non-string entries in memberUids must not crash or leak through.
+    expect(acceptedConvoyMemberUids({ memberUids: [42, null], members: {} }, 'owner')).toEqual([]);
+  });
+});
+
+describe('chat-core convoy-chat notification id (per-window collapse)', () => {
+  it('is stable for every message inside the same window', () => {
+    const start = new Date(1_800_000_000_000);
+    const later = new Date(start.getTime() + CONVOY_CHAT_NOTIFY_WINDOW_MS - 1);
+    expect(convoyChatNotificationId('cv1', later)).toBe(convoyChatNotificationId('cv1', start));
+  });
+
+  it('changes once the window rolls over', () => {
+    const start = new Date(1_800_000_000_000);
+    const next = new Date(start.getTime() + CONVOY_CHAT_NOTIFY_WINDOW_MS);
+    expect(convoyChatNotificationId('cv1', next)).not.toBe(convoyChatNotificationId('cv1', start));
+  });
+
+  it('separates convoys in the same window', () => {
+    const now = new Date(1_800_000_000_000);
+    expect(convoyChatNotificationId('cv1', now)).not.toBe(convoyChatNotificationId('cv2', now));
+  });
+
+  it('stays within the id charset the markRead callable accepts', () => {
+    const id = convoyChatNotificationId('cv1', new Date(1_800_000_000_000));
+    expect(id).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+});
+
+describe('chat-core message preview', () => {
+  it('trims and truncates to the preview length', () => {
+    expect(messagePreview('  hej  ')).toBe('hej');
+    expect(messagePreview('x'.repeat(500))).toHaveLength(CHAT_MESSAGE_PREVIEW_LENGTH);
   });
 });
