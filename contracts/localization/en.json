@@ -847,7 +847,10 @@
     "sendErrorNotMember": "Chat is available to active members.",
     "sendErrorInvalid": "Enter a message to send.",
     "sendErrorCannotDeliver": "This message can't be delivered right now.",
-    "sendErrorGeneric": "Couldn't send your message. Please try again."
+    "sendErrorGeneric": "Couldn't send your message. Please try again.",
+    "mentionPicker": "Mention a member",
+    "mentionLimit": "You can mention up to 10 members in one message.",
+    "mentionsNotDelivered": "Your message was posted, but some members you mentioned couldn't be notified."
   },
   "chatHub": {
     "title": "Chat",

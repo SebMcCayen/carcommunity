@@ -117,8 +117,19 @@ class FirebaseCommunityChatRepository private constructor(
         }
     }
 
-    override suspend fun post(text: String): ChannelSendResult =
-        functions.callChannel(POST, mapOf("text" to text.trim())).fold(
+    override suspend fun post(text: String, mentionedUids: List<String>): ChannelSendResult =
+        functions.callChannel(
+            POST,
+            // `mentionedUids` is optional in the contract, so omit it entirely
+            // when there are none rather than sending an empty array. Deduped and
+            // capped here as well as in the composer, so no client state can reach
+            // the server's one hard reject (> MAX_MESSAGE_MENTIONS).
+            buildMap<String, Any?> {
+                put("text", text.trim())
+                val uids = mentionedUids.distinct().take(MAX_MESSAGE_MENTIONS)
+                if (uids.isNotEmpty()) put("mentionedUids", uids)
+            },
+        ).fold(
             onSuccess = { ChannelResponseParser.parsePostSuccess(it) },
             onFailure = {
                 ChannelSendResult.Failed(ChannelErrorMapper.mapSend(it.toChannelErrorCode()))

@@ -40,7 +40,7 @@ sealed interface ChannelPageStatus {
  * (channel docs already exist), but kept for parity + tests.
  */
 class ChannelChatCoordinator(
-    private val sender: suspend (String) -> ChannelSendResult,
+    private val sender: suspend (String, List<String>) -> ChannelSendResult,
     private val pager: suspend (String) -> ChannelOlderResult,
     private val marker: (suspend () -> Unit)? = null,
 ) {
@@ -56,15 +56,34 @@ class ChannelChatCoordinator(
     private val sent = MutableStateFlow(0)
     val sentCount: StateFlow<Int> = sent.asStateFlow()
 
-    suspend fun send(text: String) {
+    private val dropped = MutableStateFlow(0)
+
+    /**
+     * How many of the last send's @mentions the server DROPPED — the composer's
+     * optimistic picks reconciled against the accepted set the `*-post` response
+     * echoed back. Nonzero means a member the user deliberately named was not
+     * notified (they deleted their account, lost their subscription, or blocked
+     * the sender between picking and posting), which is worth one quiet line;
+     * the message itself was still posted. Self-mentions and duplicates cannot
+     * land here — the picker excludes the caller and the draft dedupes — so every
+     * drop counted is a real one. Cleared by [dismissDroppedMentions].
+     */
+    val droppedMentionCount: StateFlow<Int> = dropped.asStateFlow()
+
+    suspend fun send(text: String, mentionedUids: List<String> = emptyList()) {
         if (sendState.value == ChannelSendStatus.Sending) return
         if (!ChannelThread.isSendable(text)) return
         sendState.value = ChannelSendStatus.Sending
+        dropped.value = 0
         try {
-            when (val result = sender(text.trim())) {
+            when (val result = sender(text.trim(), mentionedUids)) {
                 is ChannelSendResult.Sent -> {
                     sendState.value = ChannelSendStatus.Idle
                     sent.value += 1
+                    // Reconcile: the accepted set is authoritative, and may be a
+                    // strict subset of what we sent.
+                    val accepted = result.mentionedUids.toSet()
+                    dropped.value = mentionedUids.distinct().count { it !in accepted }
                 }
                 is ChannelSendResult.Failed ->
                     sendState.value = ChannelSendStatus.Failed(result.error)
@@ -75,6 +94,11 @@ class ChannelChatCoordinator(
         } catch (_: Exception) {
             sendState.value = ChannelSendStatus.Failed(ChannelSendError.Generic)
         }
+    }
+
+    /** Dismisses the dropped-mention note (e.g. once the user edits a new draft). */
+    fun dismissDroppedMentions() {
+        dropped.value = 0
     }
 
     /** Marks the channel read (community only — no-op when [marker] is null). Best-effort. */

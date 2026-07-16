@@ -777,6 +777,9 @@
     <string name="channel_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="channel_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="channel_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
+    <string name="channel_mentionPicker">Nämn en medlem</string>
+    <string name="channel_mentionLimit">Du kan nämna högst 10 medlemmar i ett meddelande.</string>
+    <string name="channel_mentionsNotDelivered">Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.</string>
     <string name="chatHub_title">Chatt</string>
     <string name="chatHub_close">Stäng chatt</string>
     <string name="chatHub_back">Tillbaka</string>

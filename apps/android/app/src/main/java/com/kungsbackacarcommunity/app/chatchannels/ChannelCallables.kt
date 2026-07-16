@@ -66,5 +66,8 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         senderAvatarPath = getString("senderAvatarPath"),
         createdAtMillis = millis,
         createdAtIso = millis?.let { java.time.Instant.ofEpochMilli(it).toString() },
+        // Backend-written and always present on new messages; absent only on
+        // pre-mentions history, which parses as the empty set.
+        mentionedUids = ChannelResponseParser.parseMentionedUids(get("mentionedUids")),
     )
 }

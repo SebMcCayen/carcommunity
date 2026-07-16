@@ -29,6 +29,12 @@ const val CHANNEL_MESSAGES_PAGE_SIZE = 30
  * older pages (the `before` argument the `*-list` callables expect). The
  * denormalized sender profile lets the channel render the author's name/avatar
  * without a lookup.
+ *
+ * [mentionedUids] is the server-ACCEPTED @mention set (see ChannelMentions.kt):
+ * always present, `[]` for a message with no mentions, for every pre-mentions
+ * message, and for every convoy message (convoyChat-post accepts no mentions).
+ * It carries uids and NO offsets — the server never parsed the text — so
+ * highlighting maps uids back onto spans client-side via [MentionRendering].
  */
 data class ChannelMessage(
     val id: String,
@@ -38,6 +44,7 @@ data class ChannelMessage(
     val senderAvatarPath: String?,
     val createdAtMillis: Long?,
     val createdAtIso: String?,
+    val mentionedUids: List<String> = emptyList(),
 )
 
 /**
@@ -82,7 +89,17 @@ enum class ChannelSendError {
 
 /** Outcome of a `*-post` callable. */
 sealed interface ChannelSendResult {
-    data class Sent(val messageId: String) : ChannelSendResult
+    /**
+     * [mentionedUids] is the ACCEPTED mention set the server echoes back, which
+     * may be SMALLER than what was sent: everything past the <= 10 cap is a
+     * silent drop (a member who deleted their account, lost their subscription,
+     * or blocked the sender between picking and posting), never a throw. The
+     * composer reconciles against this rather than assuming its picks landed.
+     */
+    data class Sent(
+        val messageId: String,
+        val mentionedUids: List<String> = emptyList(),
+    ) : ChannelSendResult
 
     data class Failed(val error: ChannelSendError) : ChannelSendResult
 }
@@ -173,15 +190,27 @@ object ChannelThread {
  * Firebase repositories).
  */
 object ChannelResponseParser {
-    /** Maps a `*-post` success payload. A missing messageId fails the send. */
+    /**
+     * Maps a `*-post` success payload. A missing messageId fails the send. A
+     * missing/malformed `mentionedUids` parses as the empty accepted set — the
+     * message itself landed, so a mention-echo we can't read must not fail it
+     * (convoy-post never echoes one at all).
+     */
     fun parsePostSuccess(data: Map<String, Any?>?): ChannelSendResult {
         val messageId = (data?.get("messageId") as? String)?.takeIf { it.isNotBlank() }
         return if (messageId != null) {
-            ChannelSendResult.Sent(messageId)
+            ChannelSendResult.Sent(messageId, parseMentionedUids(data["mentionedUids"]))
         } else {
             ChannelSendResult.Failed(ChannelSendError.Generic)
         }
     }
+
+    /** `mentionedUids` from a payload/doc: non-blank strings only, deduplicated. */
+    fun parseMentionedUids(raw: Any?): List<String> =
+        (raw as? List<*>)
+            ?.mapNotNull { (it as? String)?.takeIf { uid -> uid.isNotBlank() } }
+            ?.distinct()
+            .orEmpty()
 
     /** Maps a `*-list` success payload into an older-page. */
     fun parseMessagesPage(data: Map<String, Any?>?): ChannelMessagesPage {
@@ -212,6 +241,7 @@ object ChannelResponseParser {
             senderAvatarPath = map["senderAvatarPath"] as? String,
             createdAtMillis = iso?.let(::channelIsoToMillisOrNull),
             createdAtIso = iso,
+            mentionedUids = parseMentionedUids(map["mentionedUids"]),
         )
     }
 

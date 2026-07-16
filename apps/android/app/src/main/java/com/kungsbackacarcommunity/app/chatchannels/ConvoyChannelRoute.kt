@@ -15,6 +15,13 @@ import kotlinx.coroutines.launch
  * for [convoyId], drives [ChannelChatContent] through a [ChannelChatCoordinator]
  * (send + older-page; convoy channels carry no unread marker, so no mark-read).
  * Mirrors [CommunityChannelRoute].
+ *
+ * Deliberately NO @mentions, unlike the community channel: convoyChat-post
+ * accepts none (a convoy already notifies all of its <= 50 accepted members on
+ * every message, so a mention notice would duplicate one they're getting anyway —
+ * and under a category they may have silenced separately), and every convoy
+ * message stores `mentionedUids: []`. Passing no [MentionCandidate]s leaves the
+ * picker off, and the empty stored set means nothing highlights.
  */
 @Composable
 fun ConvoyChannelRoute(
@@ -27,7 +34,9 @@ fun ConvoyChannelRoute(
     val coordinator =
         remember(repository, convoyId) {
             ChannelChatCoordinator(
-                sender = { text -> repository.post(convoyId, text) },
+                // convoyChat-post takes no mentions; the uid list is always empty
+                // here and is dropped rather than forwarded.
+                sender = { text, _ -> repository.post(convoyId, text) },
                 pager = { before -> repository.loadOlder(convoyId, before) },
                 marker = null,
             )
@@ -57,7 +66,7 @@ fun ConvoyChannelRoute(
             displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
             olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
-        onSend = { text -> scope.launch { coordinator.send(text) } },
+        onSend = { text, _ -> scope.launch { coordinator.send(text) } },
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         onResetError = { coordinator.resetSendError() },
         modifier = modifier,

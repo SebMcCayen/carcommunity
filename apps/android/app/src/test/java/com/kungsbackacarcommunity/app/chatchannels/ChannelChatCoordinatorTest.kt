@@ -19,13 +19,15 @@ class ChannelChatCoordinatorTest {
             ChannelOlderResult.Loaded(ChannelMessagesPage(emptyList(), nextBefore = null, hasMore = false))
         var sendCalls = 0
         var lastSendText: String? = null
+        var lastSendMentions: List<String>? = null
         var loadOlderCalls = 0
         var lastBefore: String? = null
         var markReadCalls = 0
 
-        val sender: suspend (String) -> ChannelSendResult = { text ->
+        val sender: suspend (String, List<String>) -> ChannelSendResult = { text, mentionedUids ->
             sendCalls++
             lastSendText = text
+            lastSendMentions = mentionedUids
             sendResult
         }
         val pager: suspend (String) -> ChannelOlderResult = { before ->
@@ -51,6 +53,55 @@ class ChannelChatCoordinatorTest {
         assertEquals("hello", f.lastSendText)
         assertEquals(ChannelSendStatus.Idle, c.sendStatus.value)
         assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `send forwards the picked mention uids`() = runTest {
+        val f = Fakes()
+        f.sendResult = ChannelSendResult.Sent("m1", listOf("uid-a", "uid-b"))
+        val c = coordinator(f)
+        c.send("hi @Alice @Bob", listOf("uid-a", "uid-b"))
+        assertEquals(listOf("uid-a", "uid-b"), f.lastSendMentions)
+        // Everything we sent came back accepted — nothing to tell the user about.
+        assertEquals(0, c.droppedMentionCount.value)
+    }
+
+    @Test
+    fun `send reconciles against the smaller ACCEPTED set the server echoes`() = runTest {
+        val f = Fakes()
+        // The server silently drops what it can't deliver (member gone, blocked
+        // either way, subscription lapsed) — the message still posted.
+        f.sendResult = ChannelSendResult.Sent("m1", listOf("uid-a"))
+        val c = coordinator(f)
+        c.send("hi @Alice @Bob", listOf("uid-a", "uid-b"))
+        assertEquals(ChannelSendStatus.Idle, c.sendStatus.value)
+        assertEquals(1, c.sentCount.value)
+        assertEquals(1, c.droppedMentionCount.value)
+
+        c.dismissDroppedMentions()
+        assertEquals(0, c.droppedMentionCount.value)
+    }
+
+    @Test
+    fun `a mention echo we cannot read counts every mention as dropped, not the send`() = runTest {
+        val f = Fakes()
+        f.sendResult = ChannelSendResult.Sent("m1")
+        val c = coordinator(f)
+        c.send("hi @Alice", listOf("uid-a"))
+        assertEquals(ChannelSendStatus.Idle, c.sendStatus.value)
+        assertEquals(1, c.sentCount.value)
+        assertEquals(1, c.droppedMentionCount.value)
+    }
+
+    @Test
+    fun `a failed send reports no dropped mentions`() = runTest {
+        val f = Fakes()
+        f.sendResult = ChannelSendResult.Failed(ChannelSendError.Generic)
+        val c = coordinator(f)
+        c.send("hi @Alice", listOf("uid-a"))
+        // Nothing was delivered and nothing was dropped — the send simply failed,
+        // and the draft (with its mentions) is kept for a retry.
+        assertEquals(0, c.droppedMentionCount.value)
     }
 
     @Test

@@ -49,6 +49,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
@@ -91,6 +92,10 @@ fun ChatHubRoute(
     uid: String,
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
+    // Sources the community @-picker's roster (one friend-list call). Null in a
+    // config-less build: the picker then offers only the members talking in the
+    // channel.
+    friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
@@ -106,6 +111,7 @@ fun ChatHubRoute(
             uid = uid,
             communityChatRepository = communityChatRepository,
             convoyChatRepository = convoyChatRepository,
+            friendsRepository = friendsRepository,
             dmRepository = dmRepository,
             notificationsRepository = notificationsRepository,
             notificationsCoordinator = notificationsCoordinator,
@@ -137,6 +143,10 @@ fun ChatHubPopup(
     uid: String,
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
+    // Sources the community @-picker's roster (one friend-list call). Null in a
+    // config-less build: the picker then offers only the members talking in the
+    // channel.
+    friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
@@ -202,6 +212,7 @@ fun ChatHubPopup(
                         uid = uid,
                         communityChatRepository = communityChatRepository,
                         convoyChatRepository = convoyChatRepository,
+                        friendsRepository = friendsRepository,
                         dmRepository = dmRepository,
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
@@ -239,6 +250,10 @@ private fun ChatHubContent(
     uid: String,
     communityChatRepository: CommunityChatRepository?,
     convoyChatRepository: ConvoyChatRepository?,
+    // Sources the community @-picker's roster (one friend-list call). Null in a
+    // config-less build: the picker then offers only the members talking in the
+    // channel.
+    friendsRepository: FriendsRepository?,
     dmRepository: DmRepository?,
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
@@ -365,7 +380,11 @@ private fun ChatHubContent(
                 when (selectedTab) {
                     ChatTab.Community ->
                         if (communityChatRepository != null) {
-                            CommunityChannelRoute(repository = communityChatRepository, uid = uid)
+                            CommunityChannelRoute(
+                                repository = communityChatRepository,
+                                uid = uid,
+                                friendsRepository = friendsRepository,
+                            )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
                         }
