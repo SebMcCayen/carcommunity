@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -311,7 +313,10 @@ fun ChannelChatContent(
 
         if (atMentionCap) {
             Text(
-                text = stringResource(R.string.channel_mentionLimit),
+                // Formatted from the constant, never spelled out in the copy: the
+                // cap mirrors the backend's MAX_MESSAGE_MENTIONS, and a sentence
+                // carrying its own literal would drift the moment that moves.
+                text = stringResource(R.string.channel_mentionLimit, MAX_MESSAGE_MENTIONS),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag(MENTION_CAP_TEST_TAG),
@@ -428,16 +433,28 @@ fun ChannelChatContent(
     }
 }
 
-/** The @-autocomplete list, shown directly above the input while a query is live. */
+/**
+ * The @-autocomplete list, shown directly above the input while a query is live.
+ *
+ * The surface carries its own label: it otherwise appears unannounced, and a list
+ * that materialises silently over the composer is exactly what a screen-reader
+ * user has no way to discover. Each row's label is merged up from its
+ * display-name [Text] by the clickable, so the rows announce as themselves.
+ */
 @Composable
 private fun MentionPicker(
     suggestions: List<MentionCandidate>,
     onPick: (MentionCandidate) -> Unit,
 ) {
+    val pickerLabel = stringResource(R.string.channel_mentionPicker)
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.md),
-        modifier = Modifier.fillMaxWidth().testTag(MENTION_PICKER_TEST_TAG),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag(MENTION_PICKER_TEST_TAG)
+                .semantics { contentDescription = pickerLabel },
     ) {
         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
             items(suggestions, key = { it.uid }) { candidate ->
@@ -445,7 +462,9 @@ private fun MentionPicker(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(candidate) }
+                            // Role.Button so it announces as actionable, matching
+                            // the sender-header affordances on this screen.
+                            .clickable(role = Role.Button) { onPick(candidate) }
                             .testTag(mentionCandidateTestTag(candidate.uid))
                             .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
                     horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
