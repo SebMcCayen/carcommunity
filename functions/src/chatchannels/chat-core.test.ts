@@ -3,14 +3,18 @@ import {
   CHAT_MESSAGE_MAX_LENGTH,
   CHAT_MESSAGE_PREVIEW_LENGTH,
   COMMUNITY_CHAT_RETENTION_DAYS,
+  COMMUNITY_MENTION_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_RETENTION_DAYS,
+  MAX_MESSAGE_MENTIONS,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
   chatMessageExpiry,
+  communityMentionNotificationId,
   convoyChatNotificationId,
   isAcceptedConvoyMember,
   messagePreview,
+  normalizeMentionCandidates,
   parseListCommunityInput,
   parseListConvoyInput,
   parseMarkReadCommunityInput,
@@ -30,6 +34,34 @@ describe('chat-core parsing', () => {
     expect(parsePostCommunityInput({ text: 'x'.repeat(CHAT_MESSAGE_MAX_LENGTH + 1) }).ok).toBe(false);
     expect(parsePostCommunityInput({ text: 'hi', extra: 1 }).ok).toBe(false);
     expect(parsePostCommunityInput(null).ok).toBe(false);
+  });
+
+  it('parses optional mentionedUids, rejecting junk ids and more than the cap', () => {
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: [] }).ok).toBe(true);
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: ['u1', 'u2'] })).toEqual({
+      ok: true,
+      input: { text: 'hi', mentionedUids: ['u1', 'u2'] },
+    });
+    // Exactly at the cap is fine; one over is a hard reject (the picker enforces
+    // the same limit, so exceeding it is a client bug worth surfacing).
+    expect(
+      parsePostCommunityInput({
+        text: 'hi',
+        mentionedUids: Array.from({ length: MAX_MESSAGE_MENTIONS }, (_, i) => `u${i}`),
+      }).ok,
+    ).toBe(true);
+    expect(
+      parsePostCommunityInput({
+        text: 'hi',
+        mentionedUids: Array.from({ length: MAX_MESSAGE_MENTIONS + 1 }, (_, i) => `u${i}`),
+      }).ok,
+    ).toBe(false);
+    // A uid is a document id: path separators and the dot ids are not.
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: ['bad/uid'] }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: ['..'] }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: [''] }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: [42] }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', mentionedUids: 'u1' }).ok).toBe(false);
   });
 
   it('parses communityChat.list with an optional ISO cursor', () => {
@@ -91,9 +123,26 @@ describe('chat-core projections + builders', () => {
       text: 'hi',
       senderDisplayName: 'Al',
       senderAvatarPath: 'pa',
+      // Always written, so both channels store one uniform message shape — a
+      // convoy message (which can carry no mentions) still gets the field.
+      mentionedUids: [],
       createdAt: 'TS',
       expireAt: 'EXP',
     });
+  });
+
+  it('stores the resolved mentions on the message doc', () => {
+    const doc = buildChatMessageDocument(
+      {
+        senderUid: 'a',
+        text: 'hi',
+        senderProfile: { displayName: 'Al', avatarPath: null },
+        expireAt: 'EXP',
+        mentionedUids: ['u1', 'u2'],
+      },
+      () => 'TS',
+    );
+    expect(doc.mentionedUids).toEqual(['u1', 'u2']);
   });
 
   it('computes the retention TTL instant as now + retentionDays', () => {
@@ -114,7 +163,13 @@ describe('chat-core projections + builders', () => {
     expect(
       toChatMessageSummary(
         'm1',
-        { senderUid: 'a', text: 'hi', senderDisplayName: 'Al', senderAvatarPath: 'pa' },
+        {
+          senderUid: 'a',
+          text: 'hi',
+          senderDisplayName: 'Al',
+          senderAvatarPath: 'pa',
+          mentionedUids: ['u1'],
+        },
         'T1',
       ),
     ).toEqual({
@@ -123,6 +178,7 @@ describe('chat-core projections + builders', () => {
       text: 'hi',
       senderDisplayName: 'Al',
       senderAvatarPath: 'pa',
+      mentionedUids: ['u1'],
       createdAt: 'T1',
     });
     expect(toChatMessageSummary('m2', {}, 'T2')).toEqual({
@@ -131,8 +187,71 @@ describe('chat-core projections + builders', () => {
       text: '',
       senderDisplayName: null,
       senderAvatarPath: null,
+      mentionedUids: [],
       createdAt: 'T2',
     });
+  });
+
+  it('defaults mentionedUids to [] for pre-mentions messages and junk values', () => {
+    // Messages written before mentions existed carry no field at all — they must
+    // still list as ordinary messages rather than crash the mapper.
+    expect(toChatMessageSummary('m1', { text: 'old' }, 'T1').mentionedUids).toEqual([]);
+    expect(toChatMessageSummary('m2', { mentionedUids: 'u1' }, 'T2').mentionedUids).toEqual([]);
+    expect(
+      toChatMessageSummary('m3', { mentionedUids: ['u1', 42, null] }, 'T3').mentionedUids,
+    ).toEqual(['u1']);
+  });
+});
+
+describe('chat-core mention candidate normalization', () => {
+  it('dedups and preserves the input order', () => {
+    expect(normalizeMentionCandidates(['u1', 'u2', 'u1'], 'me')).toEqual(['u1', 'u2']);
+  });
+
+  it('drops self-mentions rather than rejecting them', () => {
+    // @-ing yourself mid-sentence is a normal thing to type; it just isn't a
+    // notice anyone needs, so it is silently not one.
+    expect(normalizeMentionCandidates(['me'], 'me')).toEqual([]);
+    expect(normalizeMentionCandidates(['u1', 'me', 'u2'], 'me')).toEqual(['u1', 'u2']);
+  });
+
+  it('handles the no-mentions cases', () => {
+    expect(normalizeMentionCandidates(undefined, 'me')).toEqual([]);
+    expect(normalizeMentionCandidates([], 'me')).toEqual([]);
+  });
+});
+
+describe('chat-core community mention notification id (per-sender collapse)', () => {
+  const start = new Date(1_800_000_000_000);
+
+  it('is stable for every message the same sender posts inside one window', () => {
+    const later = new Date(start.getTime() + COMMUNITY_MENTION_NOTIFY_WINDOW_MS - 1);
+    expect(communityMentionNotificationId('s1', later)).toBe(
+      communityMentionNotificationId('s1', start),
+    );
+  });
+
+  it('changes once the window rolls over', () => {
+    const next = new Date(start.getTime() + COMMUNITY_MENTION_NOTIFY_WINDOW_MS);
+    expect(communityMentionNotificationId('s1', next)).not.toBe(
+      communityMentionNotificationId('s1', start),
+    );
+  });
+
+  it('separates DIFFERENT senders in the same window', () => {
+    // The collapse must only ever silence a repeat from the SAME person — two
+    // different members mentioning you still produce two notices.
+    expect(communityMentionNotificationId('s1', start)).not.toBe(
+      communityMentionNotificationId('s2', start),
+    );
+  });
+
+  it('never collides with a convoy-chat notification id', () => {
+    expect(communityMentionNotificationId('x', start)).not.toBe(convoyChatNotificationId('x', start));
+  });
+
+  it('stays within the id charset the markRead callable accepts', () => {
+    expect(communityMentionNotificationId('s1', start)).toMatch(/^[A-Za-z0-9._-]+$/);
   });
 });
 

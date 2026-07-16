@@ -26,6 +26,18 @@
  *    (convoyChatNotificationId) collapses a busy chat into at most one notice
  *    per member per CONVOY_CHAT_NOTIFY_WINDOW_MS. This is IN-APP only — no push
  *    path exists yet.
+ *  - NO @mentions, deliberately — unlike communityChat.post this callable takes
+ *    no `mentionedUids`, and every convoy message stores `mentionedUids: []`
+ *    (the shared builder always writes the field, so the stored message shape
+ *    stays uniform across both channels and readers never branch on its
+ *    absence). Mentions exist on the community channel to pick a handful of
+ *    recipients out of an audience of EVERY active member. A convoy chat has no
+ *    such problem: it already notifies all of its <=50 accepted members on every
+ *    message, so a mention notice would just be a duplicate of one the member is
+ *    getting anyway — and it would land under a different category, letting a
+ *    mention slip past a member who silenced 'convoy_chat'. The only thing
+ *    mentions would still buy here is client-side highlighting, a rendering
+ *    concern the Android @-picker work can add later on its own.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';

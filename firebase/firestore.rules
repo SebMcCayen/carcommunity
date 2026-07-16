@@ -459,12 +459,15 @@ service cloud.firestore {
     //
     // A fixed channel doc communityChat/{channelId} ('global') with a `messages`
     // subcollection: communityChat/global/messages/{id} {senderUid, text,
-    // createdAt, senderDisplayName, senderAvatarPath}. Any ACTIVE MEMBER reads
-    // the channel (it is the app's town square); ALL writes go through the
-    // communityChat.* callables — no client writes, so authorship + the
-    // denormalized sender profile can't be forged. The per-user unread marker is
-    // NOT here: it lives at userPrivate/{uid}.communityChatLastReadAt
-    // (owner-only, in the userPrivate block).
+    // createdAt, senderDisplayName, senderAvatarPath, mentionedUids}. Any ACTIVE
+    // MEMBER reads the channel (it is the app's town square); ALL writes go
+    // through the communityChat.* callables — no client writes, so authorship,
+    // the denormalized sender profile, and mentionedUids can't be forged. That
+    // last one matters: mentionedUids is what the @mention notification producer
+    // acted on (server-validated — deliverable members only, blocked pairs
+    // removed), so a client able to write it could notify anyone at will.
+    // The per-user unread marker is NOT here: it lives at
+    // userPrivate/{uid}.communityChatLastReadAt (owner-only, userPrivate block).
     // -------------------------------------------------------------------------
     match /communityChat/{channelId} {
       // The channel doc itself carries no member-visible payload; the roster is
