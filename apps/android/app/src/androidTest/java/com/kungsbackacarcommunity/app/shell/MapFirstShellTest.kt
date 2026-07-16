@@ -262,8 +262,10 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
         // The card is bottom-anchored, so an uncovered strip exists iff its top edge
-        // sits strictly below the window top. A full-height card would report top=0.
-        // 16.dp is a floor for "actually visible + tappable", not a layout constant.
+        // sits strictly below the window top. A full-height card reports top=0 and
+        // fails HERE, which is what gives this test its teeth. 16.dp is a floor for
+        // "actually visible + tappable", not a mirror of the layout's tuning knob —
+        // the production fraction stays private and is deliberately not asserted on.
         val cardTop =
             composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).getUnclippedBoundsInRoot().top
         assertTrue(
@@ -271,12 +273,17 @@ class MapFirstShellTest {
             cardTop > 16.dp,
         )
 
-        // That strip is the dismiss affordance: tap above the card's top edge (a
-        // negative y is node-relative, i.e. inside the strip) and the hub closes
-        // while the map stays. If the card ever filled the window this offset would
-        // fall outside it and nothing would dismiss.
+        // That strip is the dismiss affordance: tap inside it and the hub closes
+        // while the map stays. The tap point is DERIVED from the measured card top
+        // and the device density rather than a fixed pixel offset — touch input is
+        // in px while the bounds above are in dp, so a magic px offset could land
+        // outside the strip (above the window) on a low-density device. Midway
+        // between the window top and the card's top edge is provably inside the
+        // strip at any density; y is negative because it is node-relative and the
+        // strip sits above the card.
+        val stripMidYPx = with(composeTestRule.density) { cardTop.toPx() } / 2f
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
-            click(Offset(width / 2f, -20f))
+            click(Offset(width / 2f, -stripMidYPx))
         }
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()

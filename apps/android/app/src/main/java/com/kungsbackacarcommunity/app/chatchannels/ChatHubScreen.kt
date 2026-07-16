@@ -62,7 +62,7 @@ const val CHAT_HUB_TEST_TAG = "chat_hub"
  * shows faintly through the card, the same translucent idiom as the map-layers
  * and live-share popups.
  */
-const val CHAT_HUB_POPUP_ALPHA = 0.92f
+private const val CHAT_HUB_POPUP_ALPHA = 0.92f
 
 /**
  * Height of the chat-hub popup card as a fraction of the window, leaving the top
@@ -71,7 +71,7 @@ const val CHAT_HUB_POPUP_ALPHA = 0.92f
  * top padding: the latter still measures to the full window height (the padding
  * ends up inside the node's own footprint), which leaves no real "outside".
  */
-const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
+private const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
 
 /** The four sections of the chat hub. */
 enum class ChatTab { Community, Convoys, Friends, Notifications }
@@ -120,8 +120,8 @@ fun ChatHubRoute(
  * map stays visible behind (and faintly through) a translucent surface. Tapping
  * outside the card or pressing Back dismisses it (the focusable popup's
  * [Popup.onDismissRequest] handles Back; an explicit transparent tap layer over
- * the map strip handles outside taps). The card is [CHAT_HUB_CARD_HEIGHT_FRACTION]
- * of the window height, anchored to the bottom — so it reaches the bottom edge
+ * the map strip handles outside taps). The card is a fixed fraction (92%) of the
+ * window height, anchored to the bottom — so it reaches the bottom edge
  * (keeping the message-input row's navigation-bar / IME inset effective) while
  * provably leaving the top of the window as an uncovered, tappable strip of live
  * map. Only the card is opaque/interactive; the strip above dismisses on tap.
