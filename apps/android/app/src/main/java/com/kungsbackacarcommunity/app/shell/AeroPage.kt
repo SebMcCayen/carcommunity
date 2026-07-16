@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -50,6 +52,9 @@ val AeroPageBottomPadding: Dp = KccSpacing.s6
  *   drive-history lists).
  * @param verticalArrangement spacing between children; defaults to the shared
  *   16dp rhythm. Forms that want a tighter field rhythm may override it.
+ * @param onTitleClick makes the title header itself tappable. Null (the default)
+ *   keeps it inert — the plain header every other page renders. Used where the
+ *   title names a member (the DM thread), so tapping it opens their profile.
  */
 @Composable
 fun AeroPage(
@@ -58,6 +63,7 @@ fun AeroPage(
     scrollable: Boolean = true,
     horizontalPadding: Dp = AeroPageHorizontalPadding,
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(KccSpacing.s4),
+    onTitleClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -86,7 +92,7 @@ fun AeroPage(
                         ),
                 verticalArrangement = verticalArrangement,
             ) {
-                AeroPageTitle(title)
+                AeroPageTitle(title, onClick = onTitleClick)
                 content()
             }
         }
@@ -133,14 +139,28 @@ fun AeroLazyPage(
  * surface, matching the map-first home's floating controls. Exposed on its own
  * so `LazyColumn`-backed pages can drop it in as their first item and stay
  * visually identical to [AeroPage].
+ *
+ * @param onClick makes the header tappable (announced as a button, so the
+ *   affordance reaches accessibility services). Null (the default) keeps it a
+ *   plain, inert header — visually identical either way.
  */
 @Composable
 fun AeroPageTitle(
     title: String,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(role = Role.Button, onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                ),
         shape = RoundedCornerShape(KccRadius.lg),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,

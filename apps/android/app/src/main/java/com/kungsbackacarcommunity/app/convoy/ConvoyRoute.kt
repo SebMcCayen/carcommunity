@@ -39,12 +39,17 @@ private enum class ConvoyView { List, Create, Detail }
  * first entry (used by the map "+" Create-tab chooser's "Convoy" option). It is
  * a one-shot: consumed once so that backing out to the list — or reopening the
  * route from the Social hub — behaves normally and never re-forces Create.
+ *
+ * [onViewMember] opens a detail-roster member's read-only profile (null leaves
+ * the rows inert); [viewerUid] is the caller, whose own row never navigates.
  */
 @Composable
 fun ConvoyRoute(
     repository: ConvoyRepository,
     friendsRepository: FriendsRepository?,
     openCreateOnEntry: Boolean = false,
+    onViewMember: ((String) -> Unit)? = null,
+    viewerUid: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator = remember(repository) { ConvoyCoordinator(repository) }
@@ -163,6 +168,8 @@ fun ConvoyRoute(
                     onStart = { scope.launch { coordinator.start(convoy.convoyId) } },
                     onEnd = { scope.launch { coordinator.end(convoy.convoyId) } },
                     onClearActionError = { coordinator.clearActionError() },
+                    onViewMember = onViewMember,
+                    viewerUid = viewerUid,
                 )
             } else {
                 // The convoy fell out of the snapshot (e.g. a concurrent change)

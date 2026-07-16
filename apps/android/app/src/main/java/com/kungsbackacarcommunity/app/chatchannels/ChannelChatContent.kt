@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -57,6 +59,11 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
  * draft, which clears only once a send succeeds. Unlike the DM [ChatScreen] this
  * is NOT wrapped in the Aero page chrome — it fills whatever container the chat
  * hub gives it (below the hub's tab row).
+ *
+ * @param onViewProfile opens the read-only member profile for a sender's uid.
+ *   Null (the default) leaves the sender header inert — the config-less build has
+ *   no profile repository to open. Only OTHER members' messages carry a sender
+ *   header at all, so the caller's own messages can never navigate here.
  */
 @Composable
 fun ChannelChatContent(
@@ -71,6 +78,7 @@ fun ChannelChatContent(
     onLoadOlder: () -> Unit,
     onResetError: () -> Unit,
     modifier: Modifier = Modifier,
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var awaitingSend by rememberSaveable { mutableStateOf(false) }
@@ -116,6 +124,7 @@ fun ChannelChatContent(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
+                    onViewProfile = onViewProfile,
                 )
             }
         }
@@ -163,6 +172,7 @@ private fun ChannelMessageList(
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
+    onViewProfile: ((String) -> Unit)?,
 ) {
     val listState = rememberLazyListState()
     // The optional "load older" row is a single item prepended before the
@@ -204,13 +214,21 @@ private fun ChannelMessageList(
             }
         }
         items(messages, key = { it.id }) { message ->
-            ChannelMessageRow(message = message, isOwn = message.senderUid == currentUid)
+            ChannelMessageRow(
+                message = message,
+                isOwn = message.senderUid == currentUid,
+                onViewProfile = onViewProfile,
+            )
         }
     }
 }
 
 @Composable
-private fun ChannelMessageRow(message: ChannelMessage, isOwn: Boolean) {
+private fun ChannelMessageRow(
+    message: ChannelMessage,
+    isOwn: Boolean,
+    onViewProfile: ((String) -> Unit)?,
+) {
     if (isOwn) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -221,16 +239,41 @@ private fun ChannelMessageRow(message: ChannelMessage, isOwn: Boolean) {
         return
     }
     // Incoming message: avatar + sender name above the bubble (group context).
+    // Tapping the sender (avatar or name — never the bubble, which stays free for
+    // message-level actions) opens their read-only profile. A malformed message
+    // can carry a blank senderUid, which would open a dead profile route, so the
+    // affordance is only wired for a resolvable sender.
+    val openProfile =
+        onViewProfile?.takeIf { message.senderUid.isNotBlank() }?.let {
+            { it(message.senderUid) }
+        }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        SenderAvatar(avatarPath = message.senderAvatarPath)
+        SenderAvatar(
+            avatarPath = message.senderAvatarPath,
+            // Announce the sender as a button to screen readers — without the role
+            // it reads as a plain image/text and the tap-to-open-profile
+            // affordance is invisible to accessibility services.
+            modifier =
+                if (openProfile != null) {
+                    Modifier.clickable(role = Role.Button, onClick = openProfile)
+                } else {
+                    Modifier
+                },
+        )
         Column {
             Text(
                 text = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    if (openProfile != null) {
+                        Modifier.clickable(role = Role.Button, onClick = openProfile)
+                    } else {
+                        Modifier
+                    },
             )
             ChannelBubble(message = message, isOwn = false)
         }
@@ -259,14 +302,18 @@ private fun ChannelBubble(message: ChannelMessage, isOwn: Boolean) {
 }
 
 @Composable
-private fun SenderAvatar(avatarPath: String?) {
+private fun SenderAvatar(avatarPath: String?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val url = rememberStorageImageUrl(context, avatarPath)
     Box(
+        // The caller's modifier (the tap-to-open-profile clickable) is applied
+        // AFTER the clip, so the touch ripple is clipped to the circular avatar
+        // rather than painting a square behind it.
         modifier =
             Modifier
                 .size(32.dp)
                 .clip(CircleShape)
+                .then(modifier)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
