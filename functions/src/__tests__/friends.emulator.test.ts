@@ -691,6 +691,35 @@ describe('friend_request in-app notification producers', () => {
     expect(await inboxFor(requester.uid, 'friend_request')).toHaveLength(0);
   });
 
+  it('writes NO notification when the pair is blocked — in EITHER direction', async () => {
+    const kim = await newMember('BlockReqKim');
+    const leo = await newMember('BlockReqLeo');
+
+    // Kim blocks Leo.
+    await signInAs(kim);
+    await call('blocking-block', { targetUserId: leo.uid });
+
+    // Pins the invariant that today holds only by construction: the producer
+    // sits BEHIND the block gates (the pre-transaction check and the
+    // in-transaction re-read). Each leg asserts the request was actually
+    // attempted and observed to be rejected, so the empty inbox is real
+    // suppression and not a race. A blocked user must not be able to use a
+    // friend request to put anything in the inbox of the person who blocked
+    // them — move the producer above the gate and this fails.
+    await signInAs(leo);
+    expect(await callableErrorCode(call('friend-sendRequest', { toUid: kim.uid }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(kim.uid, 'friend_request')).toHaveLength(0);
+
+    // The blocker cannot notify the person they blocked either.
+    await signInAs(kim);
+    expect(await callableErrorCode(call('friend-sendRequest', { toUid: leo.uid }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(leo.uid, 'friend_request')).toHaveLength(0);
+  });
+
   it('notifies the other party on the reverse-pending auto-accept path', async () => {
     // They already sent a request to us; our send befriends immediately, which
     // from their side reads as "your request was accepted".

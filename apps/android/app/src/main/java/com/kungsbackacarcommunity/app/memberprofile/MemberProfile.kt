@@ -66,11 +66,24 @@ sealed interface MemberProfileState {
     data object Loading : MemberProfileState
 
     /**
-     * The member can't be shown: either the viewer has blocked them, or the
-     * profile does not exist. Rendered as a single neutral "unavailable" notice
-     * — deliberately not distinguishing block from not-found.
+     * The member can't be shown: the users/{uid} document does not exist, or it
+     * carries no usable identity. A neutral "unavailable" notice.
      */
     data object Unavailable : MemberProfileState
+
+    /**
+     * The VIEWER has blocked this member, so their profile is withheld —
+     * rendered as a neutral notice plus an Unblock action.
+     *
+     * Split out of [Unavailable] (which it previously collapsed into) so the
+     * viewer can undo their own block from the same surface they made it on.
+     * This reveals nothing: a block is directional, this state is only ever
+     * reachable by the viewer who created the block, the blocked member never
+     * sees this screen, and that viewer can already enumerate exactly these uids
+     * under Settings → Blocked users. A genuinely missing profile still collapses
+     * to [Unavailable], so "blocked" remains un-inferable from an absent member.
+     */
+    data object Blocked : MemberProfileState
 
     data object Error : MemberProfileState
 

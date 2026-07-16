@@ -183,7 +183,7 @@
     },
     "createEventRequest": {
       "type": "object",
-      "description": "Admin-only event creation payload.",
+      "description": "Event creation payload for events.create — sent by an active member or an admin/owner. `isOfficial` is honoured only for an admin caller; it is forced false on a member-created event.",
       "properties": {
         "title": { "type": "string", "minLength": 1 },
         "summary": { "type": ["string", "null"] },

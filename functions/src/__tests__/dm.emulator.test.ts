@@ -422,6 +422,36 @@ describe('dm-sendMessage in-app notification producer', () => {
     expect(await inboxFor(recipient.uid, 'direct_message')).toHaveLength(0);
   });
 
+  it('writes NO notification when the pair is blocked — in EITHER direction', async () => {
+    const kim = await newMember('BlockNotifKim');
+    const leo = await newMember('BlockNotifLeo');
+    await makeFriends(kim, leo);
+
+    // Kim blocks Leo. The friendship itself survives (onBlockWrite only mirrors
+    // the block to RTDB), so the send below reaches — and must be stopped by —
+    // the both-ways block gate rather than the not-friends gate.
+    await signInAs(kim);
+    await call('blocking-block', { targetUserId: leo.uid });
+
+    // Pins the invariant that today holds only by construction: the producer
+    // sits BEHIND the block gate. Each leg asserts the send was actually
+    // attempted and observed to be rejected, so the empty inbox is real
+    // suppression and not a race. Move the producer above the gate and the
+    // rejection still fires but the inbox is no longer empty — this fails.
+    await signInAs(leo);
+    expect(await callableErrorCode(call('dm-sendMessage', { toUid: kim.uid, text: 'hej' }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(kim.uid, 'direct_message')).toHaveLength(0);
+
+    // The blocker cannot notify the person they blocked either.
+    await signInAs(kim);
+    expect(await callableErrorCode(call('dm-sendMessage', { toUid: leo.uid, text: 'hej' }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await inboxFor(leo.uid, 'direct_message')).toHaveLength(0);
+  });
+
   it('does not restack a notice while the recipient still has unread, and notifies again after markRead', async () => {
     const sender = await newMember('RunSender');
     const recipient = await newMember('RunRecipient');

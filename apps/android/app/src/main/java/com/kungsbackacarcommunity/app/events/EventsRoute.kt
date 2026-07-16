@@ -55,6 +55,11 @@ fun EventsRoute(
     // Blocking-in-context: null-safe. When null, chat offers no block action
     // and does no blocked-author filtering (config-less builds pass unchanged).
     blockingRepository: BlockingRepository? = null,
+    // Opens a member's read-only profile. Events themselves surface no member
+    // rows (RSVP is aggregate counts only, and the group-drive roster is a
+    // participant COUNT — neither names anyone), so the only member-bearing
+    // surface here is the event chat's message authors.
+    onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -153,6 +158,7 @@ fun EventsRoute(
             myRsvp = myRsvp,
             onBack = { showChat = false },
             blockingRepository = blockingRepository,
+            onViewProfile = onViewProfile,
         )
         return
     }
