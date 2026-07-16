@@ -10,16 +10,21 @@ import org.json.JSONObject
  * read and written locally so the shortcuts render instantly and work with no
  * network — the whole point of a "one-tap, offline-friendly" favourite.
  *
- * Unlike recents, the payload is keyed **per uid**: saved places are a curated,
- * personal list, so two accounts sharing a device must not see each other's
- * Home. The uid only namespaces the local key — nothing is uploaded (see the
- * cloud-sync note below).
+ * Unlike recents, the payload is keyed **per uid**, and the guarantee that buys
+ * is concrete: **two accounts on one device can never read each other's saved
+ * places.** Saved places are a curated personal list holding home and work
+ * addresses, so a leak here is genuinely sensitive. The key is derived from the
+ * uid alone ([keyFor]) and a blank uid is rejected outright rather than sharing a
+ * namespace — there is no bucket two sessions can land in together. The uid only
+ * namespaces the local key; nothing is uploaded (see the cloud-sync note below).
  *
  * The list logic (upsert, singleton Home/Work, ordering, cap) is the pure,
  * unit-tested [SavedPlaces]; this class only adds JSON (de)serialization and the
- * prefs read/write glue. Every access is wrapped defensively: a corrupt/absent
- * payload degrades to an empty list rather than throwing, so a bad write can
- * never crash the search UI.
+ * prefs read/write glue. Reads and writes are wrapped defensively: a corrupt or
+ * absent payload degrades to an empty list rather than throwing, so a bad write
+ * can never crash the search UI. That tolerance is for untrusted *data* only —
+ * construction with a blank uid is a programming error and throws (see
+ * [keyFor]), because degrading there would mean silently merging two users.
  *
  * Device-local by design (Android lane, no backend/rules change). Follow-up:
  * cloud-syncing saved places per uid so they follow the user to a new phone —
@@ -54,8 +59,25 @@ class PrefsSavedPlacesStore(
     internal companion object {
         const val PREFS_NAME = "nav_saved_places"
 
-        /** Namespaces the payload per account (see the class doc). */
-        fun keyFor(uid: String): String = "saved:${uid.ifBlank { "anon" }}"
+        /**
+         * Namespaces the payload per account (see the class doc).
+         *
+         * A blank uid **throws** rather than falling back to a shared namespace.
+         * This list holds the user's home and work addresses, so a shared bucket
+         * would leak exactly the data the per-uid key exists to protect — and it
+         * would do so silently, which is the worst way to fail.
+         *
+         * Blank is unreachable in production: the uid originates from a Firebase
+         * session (`FirebaseUser.uid`, never blank) and the only other callers
+         * pass literals (previews, instrumented tests). So this is an assertion
+         * about a real invariant, not handling of an expected input — a blank uid
+         * would mean a bug upstream, and crashing in test/preview is strictly
+         * better than merging two accounts' saved places in the field.
+         */
+        fun keyFor(uid: String): String {
+            require(uid.isNotBlank()) { "PrefsSavedPlacesStore requires a non-blank uid" }
+            return "saved:$uid"
+        }
 
         fun encode(items: List<SavedPlace>): String {
             val array = JSONArray()

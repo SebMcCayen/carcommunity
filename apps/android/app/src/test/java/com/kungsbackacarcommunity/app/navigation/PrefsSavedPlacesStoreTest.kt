@@ -3,6 +3,8 @@ package com.kungsbackacarcommunity.app.navigation
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -104,6 +106,34 @@ class PrefsSavedPlacesStoreTest {
             entry(id = "fav:p$it", kind = "Favourite", lng = it.toDouble())
         }
         assertEquals(SavedPlaces.MAX, PrefsSavedPlacesStore.decode(payload(*entries.toTypedArray())).size)
+    }
+
+    @Test
+    fun `decode caps an oversized payload by dropping the oldest favourites`() {
+        // The size assertion above cannot tell WHICH end was dropped. An oversized
+        // payload must lose its oldest favourites, matching upsert's eviction.
+        val entries = (1..SavedPlaces.MAX + 2).map {
+            entry(id = "fav:p$it", kind = "Favourite", lng = it.toDouble())
+        }
+        val decoded = PrefsSavedPlacesStore.decode(payload(*entries.toTypedArray()))
+        assertEquals((3..SavedPlaces.MAX + 2).map { "fav:p$it" }, decoded.map { it.id })
+    }
+
+    @Test
+    fun `keyFor namespaces the payload per uid`() {
+        assertEquals("saved:u1", PrefsSavedPlacesStore.keyFor("u1"))
+        assertNotEquals(PrefsSavedPlacesStore.keyFor("u1"), PrefsSavedPlacesStore.keyFor("u2"))
+    }
+
+    @Test
+    fun `a blank uid is rejected rather than sharing a namespace`() {
+        // Fail CLOSED. A shared fallback bucket would let two accounts on one
+        // device read each other's Home/Work addresses — the exact leak the
+        // per-uid key exists to prevent. Blank is unreachable in production (the
+        // uid comes from a Firebase session), so throwing surfaces the bug in
+        // test/preview instead of silently merging two users' saved places.
+        assertThrows(IllegalArgumentException::class.java) { PrefsSavedPlacesStore.keyFor("") }
+        assertThrows(IllegalArgumentException::class.java) { PrefsSavedPlacesStore.keyFor("   ") }
     }
 
     @Test
