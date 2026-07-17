@@ -68,7 +68,7 @@ fun DrivesListScreen(
                         )
                     }
 
-                DrivesState.Error ->
+                is DrivesState.Error ->
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text(

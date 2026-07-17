@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -84,7 +85,9 @@ import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
+import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.drives.RecordingState
@@ -224,6 +227,12 @@ import kotlinx.coroutines.withContext
  */
 private const val INCIDENTS_REFRESH_ATTEMPTS = 5
 private const val INCIDENTS_REFRESH_RETRY_MS = 3_000L
+
+/**
+ * Stable feature key for the end-of-session drive save (the backend fingerprints
+ * auto-filed issues on this plus the error code, so it must not drift).
+ */
+private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
 
 /**
  * Crossfade duration (ms) between bottom-nav tabs. Long enough to read as a
@@ -751,13 +760,28 @@ fun AuthenticatedApp(
             val driveSavedText = stringResource(R.string.savedDrives_saveSuccess)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
+            // Only record a drive the user could actually SAVE. drives-save is
+            // member-gated (requireMemberActor) while live sharing is free, so
+            // gating the recording on canShareLive — as v0.8.0 did — handed a
+            // non-member an end-of-session prompt whose Save could only ever fail
+            // with PERMISSION_DENIED, forever. The manual recorder
+            // (RecordDriveScreen) already applies this same member rule.
+            val canRecordDrive =
+                DriveRecordingGate.shouldRecord(
+                    hasDrivesBackend = drivesRepository != null,
+                    canShareLive = canShareLive,
+                    isActiveMember = profile?.activeMember == true,
+                )
+
             // Bind the recording lifecycle to the live-sharing state. Both calls
             // are idempotent, so re-running this after a recreation resumes the
             // existing recording / keeps the pending prompt rather than
             // restarting or clearing either.
             LaunchedEffect(isSharing) {
                 if (isSharing) {
-                    if (drivesRepository != null && canShareLive) {
+                    // canRecordDrive already covers the null repository; the
+                    // explicit check is what smart-casts it for the start call.
+                    if (drivesRepository != null && canRecordDrive) {
                         // Owned by this uid: signing out (or switching account)
                         // tears the recording down — see clearIfNotOwnedBy,
                         // driven from MainActivity's auth state.
@@ -776,6 +800,26 @@ fun AuthenticatedApp(
                     // summary. The holder releases the GPS source here, at the
                     // real session end, rather than on composable disposal.
                     SingleSessionRecording.stop()
+                }
+            }
+
+            // Auto-file the drive-save failure the moment the user is shown it.
+            // Keyed on the failure's code so ONE issue is filed per distinct
+            // failure per prompt, not one per recomposition; the backend dedups
+            // across users/devices on top of that. Fire-and-forget: the reporter
+            // never throws, so a reporting problem cannot break the save prompt.
+            val errorReporter = rememberClientErrorReporter()
+            val saveFailure = recordingState as? RecordingState.Failed
+            LaunchedEffect(saveFailure?.code, saveFailure != null) {
+                if (saveFailure != null) {
+                    errorReporter?.report(
+                        feature = FEATURE_DRIVE_SAVE,
+                        // App-generated and PII-free: no coordinates, no route,
+                        // no uid — the point count is a bare magnitude and the
+                        // code is what actually identifies the fault.
+                        message = "Saving a live-session drive failed (${saveFailure.pointCount} points)",
+                        code = saveFailure.code,
+                    )
                 }
             }
 
@@ -844,6 +888,27 @@ fun AuthenticatedApp(
                 }
             }
 
+            /**
+             * Ends the running live session. The single stop path, shared by the
+             * bottom bar's STOP sign and [toggleLiveShare], so there is exactly
+             * one definition of what stopping does.
+             *
+             * Does NOT ask anything itself: flipping `isSharing` to false is what
+             * raises the save/discard summary (the isSharing-bound effect above),
+             * and that dialog owns the "save it or delete the data" choice.
+             */
+            fun stopLiveShare() {
+                val c = liveLocationCoordinator
+                if (c != null) {
+                    scope.launch { c.stop() }
+                } else {
+                    openLiveShareFallback()
+                }
+                // Always stop the foreground service, even when unwired, so Stop
+                // can never leave background location running.
+                BackgroundLocationController.stop(context)
+            }
+
             // Single live-share entry point shared by the map's broadcast toggle
             // and the Create-tab prompt, so both honour the same member-gating and
             // "open the live screen when not permitted/unwired" fallback.
@@ -860,14 +925,7 @@ fun AuthenticatedApp(
                         // rather than starting with a hard-coded duration.
                         requestStartSingleSession()
                     }
-                    LiveShareAction.Stop -> {
-                        liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
-                        // Always stop the foreground service, even if the
-                        // coordinator is somehow absent, so Stop can never leave
-                        // background location running — matches the popup Stop
-                        // callback and the LiveLocation route's teardown.
-                        BackgroundLocationController.stop(context)
-                    }
+                    LiveShareAction.Stop -> stopLiveShare()
                     LiveShareAction.OpenScreen -> openLiveShareFallback()
                 }
             }
@@ -1121,6 +1179,10 @@ fun AuthenticatedApp(
                                         selectedTab = tab
                                     }
                                 },
+                                // While a session runs the centre "+" becomes the
+                                // STOP sign — the one way to end a session.
+                                isSharing = isSharing,
+                                onStopLiveShare = { stopLiveShare() },
                             )
                         },
                     ) { padding ->
@@ -1171,18 +1233,6 @@ fun AuthenticatedApp(
                                     // fall back to the live screen rather than
                                     // silently no-op'ing.
                                     onStartLiveShare = { requestStartSingleSession() },
-                                    onStopLiveShare = {
-                                        val c = liveLocationCoordinator
-                                        if (c != null) {
-                                            scope.launch { c.stop() }
-                                        } else {
-                                            openLiveShareFallback()
-                                        }
-                                        // Always stop the foreground service,
-                                        // even when unwired, so Stop can never
-                                        // leave background location running.
-                                        BackgroundLocationController.stop(context)
-                                    },
                                     onHideMeNow = {
                                         val c = liveLocationCoordinator
                                         if (c != null) {
@@ -1657,11 +1707,24 @@ private fun ShellTabPage(content: @Composable () -> Unit) {
  */
 internal val ShellBottomBarHeight = 80.dp
 
-/** The 5-tab bottom navigation; Map is the default, highlighted home tab. */
+/**
+ * The 5-tab bottom navigation; Map is the default, highlighted home tab.
+ *
+ * The centre item is dual-purpose: a "+" that raises the create chooser, and —
+ * while [isSharing] — the STOP sign that ends the running live session
+ * ([onStopLiveShare]). It is the app's only stop affordance.
+ *
+ * `internal` rather than private so the "+"→STOP swap can be tested against this
+ * composable directly: the swap needs a RUNNING session, which the whole-shell
+ * test cannot reach (it renders the no-Firebase configuration, where there is no
+ * live-location repository and `isSharing` is always false).
+ */
 @Composable
-private fun ShellBottomBar(
+internal fun ShellBottomBar(
     selected: ShellTab,
     onSelect: (ShellTab) -> Unit,
+    isSharing: Boolean,
+    onStopLiveShare: () -> Unit,
 ) {
     // 50%-alpha surface container so the map shows through the bar; icon-only
     // items (no labels) keep the tabs compact over the semi-transparent map.
@@ -1680,27 +1743,41 @@ private fun ShellBottomBar(
             icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
             label = null,
         )
+        // The centre action is a "+" that starts a session, and a STOP sign while
+        // one RUNS — one control for the session's whole life, so the way out is
+        // exactly where the way in was. Stopping raises the save/discard summary
+        // (via the isSharing effect), which is where the "save or delete the
+        // data" choice is made; this control does not ask on its own.
+        // It is the ONLY stop affordance: the live popup's Stop row was removed.
         NavigationBarItem(
-            selected = selected == ShellTab.Create,
-            onClick = { onSelect(ShellTab.Create) },
-            // The Create ("+") tab starts live location / convoys — make it the
-            // standout action: a WHITE plus on a filled primary disc so it reads
-            // as a distinct button and stays high-contrast against the
+            selected = !isSharing && selected == ShellTab.Create,
+            onClick = { if (isSharing) onStopLiveShare() else onSelect(ShellTab.Create) },
+            // Standout action: a WHITE glyph on a filled disc so it reads as a
+            // distinct button and stays high-contrast against the
             // semi-transparent nav bar in both light and dark (a bare white tint
-            // would wash out over the light 50%-alpha surface). Behaviour is
-            // unchanged — only the icon's appearance differs from the other tabs.
+            // would wash out over the light 50%-alpha surface). The disc turns
+            // error-red while sharing so the stop affordance is unmistakable.
             icon = {
                 Box(
                     modifier =
                         Modifier
                             .size(KccSpacing.s8)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .background(
+                                if (isSharing) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Filled.Add,
-                        contentDescription = stringResource(R.string.shell_tabCreate),
+                        if (isSharing) Icons.Filled.Stop else Icons.Filled.Add,
+                        contentDescription =
+                            stringResource(
+                                if (isSharing) R.string.liveLocation_stop else R.string.shell_tabCreate,
+                            ),
                         tint = Color.White,
                     )
                 }

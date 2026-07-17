@@ -113,16 +113,14 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  * @param canShareLive whether the caller may START a session (live-location flag
  *   on AND active member); mirrors the backend member check. When false the
  *   popup shows the membership teaser instead of the duration/start controls.
- *   Stop / Hide-me-now are governed by [isLiveSharing] (not this flag), so they
- *   appear only while a session is already active; the details entry point
- *   stays reachable regardless.
+ *   Hide-me-now is governed by [isLiveSharing] (not this flag), so it appears
+ *   only while a session is already active; the details entry point stays
+ *   reachable regardless.
  * @param onStartLiveShare request starting a Single (solo live-sharing) session;
  *   only offered when [canShareLive]. The 1h/2h/4h duration choice is NOT made
  *   here anymore — this hands off to the single-session start flow (the same one
  *   the "+" Create → Single session raises), which is where the duration is
  *   picked. Keeps the broadcast control a one-tap "start sharing" affordance.
- * @param onStopLiveShare stop the active session (wired to
- *   LiveLocationCoordinator.stop); offered while sharing.
  * @param onHideMeNow privacy stop — remove my position now (wired to
  *   LiveLocationCoordinator.hideMeNow); offered while sharing.
  * @param onOpenLiveShareDetails open the full LiveLocationScreen for the
@@ -157,7 +155,6 @@ fun MapHome(
     avatarUrl: String? = null,
     onSearch: () -> Unit,
     onStartLiveShare: () -> Unit,
-    onStopLiveShare: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenLiveShareDetails: () -> Unit,
     onRecenter: () -> Unit,
@@ -540,7 +537,6 @@ fun MapHome(
                 isSharing = isLiveSharing,
                 canShareLive = canShareLive,
                 onStart = onStartLiveShare,
-                onStop = onStopLiveShare,
                 onHideMeNow = onHideMeNow,
                 onOpenDetails = onOpenLiveShareDetails,
                 onDismiss = { liveOpen = false },
@@ -742,7 +738,6 @@ private fun LiveSharePopup(
     isSharing: Boolean,
     canShareLive: Boolean,
     onStart: () -> Unit,
-    onStop: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenDetails: () -> Unit,
     onDismiss: () -> Unit,
@@ -810,17 +805,11 @@ private fun LiveSharePopup(
                 )
                 when {
                     isSharing -> {
-                        // Stopping is authenticated-gated (not member-gated) on the
-                        // backend, so it is always offered while a session is active.
-                        Button(
-                            onClick = {
-                                onStop()
-                                onDismiss()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = stringResource(R.string.liveLocation_stop))
-                        }
+                        // No Stop here: ending a session is the bottom bar's STOP
+                        // sign, so there is ONE stop control and it always raises
+                        // the save/discard summary. "Hide me now" stays — it is a
+                        // different thing (an immediate privacy escape hatch that
+                        // works even while suspended, when stopSession does not).
                         OutlinedButton(
                             onClick = {
                                 onHideMeNow()

@@ -53,11 +53,62 @@ sealed interface RecordingState {
     /** The drive was explicitly discarded — nothing was stored. */
     data object Discarded : RecordingState
 
-    /** The save callable failed; the prompt can be retried. */
+    /**
+     * The save callable failed; the prompt can be retried.
+     *
+     * @property code the callable status name that caused the failure
+     *   (`PERMISSION_DENIED`, `UNAVAILABLE`, …), or null when the failure
+     *   carried no status. [isPermanentRefusal] reads it to decide whether a
+     *   retry is pointless, and the auto error report files it as the dedup
+     *   code.
+     */
     data class Failed(
         val pointCount: Int,
         val elapsedMillis: Long,
-    ) : RecordingState
+        val code: String? = null,
+    ) : RecordingState {
+        /**
+         * True when the backend refused the save outright and retrying cannot
+         * help. `drives-save` is member-gated (requireMemberActor), so a caller
+         * without the activeMember entitlement gets `PERMISSION_DENIED` on every
+         * attempt; telling them to "try again" would loop forever.
+         */
+        val isPermanentRefusal: Boolean
+            get() = code == PERMISSION_DENIED
+    }
+
+    companion object {
+        /** Firebase Functions status for a backend refusal (the member gate). */
+        const val PERMISSION_DENIED: String = "PERMISSION_DENIED"
+    }
+}
+
+/**
+ * Whether a live-sharing session should ALSO record a drive for History.
+ *
+ * This mirrors the backend's gate rather than the live-sharing one, and the
+ * distinction is the whole point. Sharing your OWN position is FREE
+ * (live-startSession only needs requireActiveActor), but SAVING a drive is
+ * member-only (drives-save uses requireMemberActor — and note that gate has no
+ * admin/owner bypass, unlike requireMemberOrAdminActor). Gating the recording on
+ * the sharing rule instead of the saving rule is what shipped in v0.8.0: a
+ * non-member's session recorded a drive, the end-of-session prompt then forced a
+ * save/discard choice, and Save could only ever fail with PERMISSION_DENIED.
+ *
+ * [RecordDriveScreen] already applies exactly this rule to the manual recorder
+ * (it refuses to record without an active membership); this keeps the
+ * live-sharing entry point honest with it, so no recording is started that
+ * cannot be saved.
+ */
+object DriveRecordingGate {
+    /**
+     * @param hasDrivesBackend false in a config-less/CI build with no drives
+     *   repository — live sharing still works, nothing records.
+     * @param isActiveMember the backend-managed `users/{uid}.activeMember`
+     *   entitlement, the same flag drives-save enforces.
+     */
+    fun shouldRecord(hasDrivesBackend: Boolean, canShareLive: Boolean, isActiveMember: Boolean): Boolean =
+        hasDrivesBackend && canShareLive && isActiveMember
 }
 
 /**
