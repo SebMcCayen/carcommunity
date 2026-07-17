@@ -34,18 +34,9 @@ class ChangelogReleaseCoverageTest {
 
     @Test
     fun bundledChangelogHasAnEntryForTheShippingVersion() {
-        assertTrue("build.gradle.kts not found at $buildFile", buildFile.isFile)
-        assertTrue("changelog.json not found at $changelogFile", changelogFile.isFile)
-
-        val gradle = buildFile.readText()
-        val versionCode =
-            Regex("""versionCode\s*=\s*(\d+)""").find(gradle)?.groupValues?.get(1)?.toInt()
-        val versionName =
-            Regex("""versionName\s*=\s*"([^"]+)"""").find(gradle)?.groupValues?.get(1)
-        assertNotNull("Could not read versionCode from build.gradle.kts", versionCode)
-        assertNotNull("Could not read versionName from build.gradle.kts", versionName)
-
-        val entries = Changelog.parse(changelogFile.readText())
+        val versionCode = shippingVersionCode()
+        val versionName = shippingVersionName()
+        val entries = parsedEntries()
         val entry = entries.firstOrNull { it.versionCode == versionCode }
 
         assertNotNull(
@@ -83,10 +74,8 @@ class ChangelogReleaseCoverageTest {
      */
     @Test
     fun bundledChangelogHasNoEntryNewerThanTheShippingVersion() {
-        val gradle = buildFile.readText()
-        val versionCode =
-            Regex("""versionCode\s*=\s*(\d+)""").find(gradle)!!.groupValues[1].toInt()
-        val ahead = Changelog.parse(changelogFile.readText()).filter { it.versionCode > versionCode }
+        val versionCode = shippingVersionCode()
+        val ahead = parsedEntries().filter { it.versionCode > versionCode }
         assertTrue(
             "changelog.json has entries newer than the shipping versionCode " +
                 "$versionCode: ${ahead.map { it.versionCode }}",
@@ -101,14 +90,18 @@ class ChangelogReleaseCoverageTest {
      */
     @Test
     fun everyShippedVersionCodeSinceTheFirstHasAnEntry() {
-        val entries = Changelog.parse(changelogFile.readText())
-        val codes = entries.map { it.versionCode }.toSet()
-        val newest = codes.max()
+        val codes = parsedEntries().map { it.versionCode }.toSet()
+        val newest = codes.maxOrNull()
+        assertNotNull(
+            "changelog.json parsed to no valid entries at all — every entry is " +
+                "missing a required field, or the file is malformed.",
+            newest,
+        )
         // versionCode 4 reached main (5b17f72b) but was superseded by the
         // versionCode 5 "for Play release" bump (7cb04cf1) the same day, so it was
         // never a release and correctly has no notes.
         val neverReleased = setOf(4)
-        val missing = (1..newest).filter { it !in codes && it !in neverReleased }
+        val missing = (1..newest!!).filter { it !in codes && it !in neverReleased }
         assertEquals(
             "changelog.json is missing entries for released versionCodes $missing",
             emptyList<Int>(),
@@ -116,9 +109,34 @@ class ChangelogReleaseCoverageTest {
         )
     }
 
+    private fun parsedEntries(): List<ChangelogEntry> {
+        assertTrue("changelog.json not found at $changelogFile", changelogFile.isFile)
+        return Changelog.parse(changelogFile.readText())
+    }
+
+    /** The shipping versionCode, or a clear failure — never an NPE on a reformat. */
+    private fun shippingVersionCode(): Int =
+        matchInBuildFile("""versionCode\s*=\s*(\d+)""", "versionCode").toInt()
+
+    /** The shipping versionName, or a clear failure — never an NPE on a reformat. */
+    private fun shippingVersionName(): String =
+        matchInBuildFile("""versionName\s*=\s*"([^"]+)"""", "versionName")
+
+    private fun matchInBuildFile(pattern: String, what: String): String {
+        assertTrue("build.gradle.kts not found at $buildFile", buildFile.isFile)
+        val match = Regex(pattern).find(buildFile.readText())
+        assertNotNull(
+            "Could not read $what from $buildFile — has the release block been " +
+                "reformatted? This guard reads it textually; update the pattern.",
+            match,
+        )
+        return match!!.groupValues[1]
+    }
+
     private fun resolveModuleDir(): File {
         // Gradle runs unit tests with the module dir as the working dir, but do not
-        // depend on it: walk up until the module's build file appears.
+        // depend on it: walk up until the changelog the module bundles appears,
+        // accepting either the module dir itself or a repo/apps root above it.
         var dir: File? = File("").absoluteFile
         while (dir != null) {
             if (File(dir, "src/main/res/raw/changelog.json").isFile) return dir
