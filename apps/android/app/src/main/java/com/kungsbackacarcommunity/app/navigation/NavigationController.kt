@@ -112,8 +112,16 @@ class NavigationController(
                     // user kept typing — still returns here. Bail before writing so
                     // stale suggestions never overwrite the latest keystroke's state.
                     coroutineContext.ensureActive()
+                    // Nearest-first. `cachedOrigin` already biases the request, but
+                    // that only tilts the API's relevance ranking — it can still put
+                    // a better-matching further place first. Ordering the matches by
+                    // actual distance is what makes the top result the one you'd
+                    // drive to. Without a fix this is a no-op (see NavGeo).
                     stateFlow.value =
-                        stateFlow.value.copy(suggestions = results, searching = false)
+                        stateFlow.value.copy(
+                            suggestions = NavGeo.nearestFirst(results, cachedOrigin),
+                            searching = false,
+                        )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -212,7 +220,7 @@ class NavigationController(
      * @param fallbackLabel localized "Dropped pin" label supplied by the UI (the
      *   controller holds no Android resources).
      */
-    fun selectPoint(point: LatLng, fallbackLabel: String) {
+    fun selectPoint(point: LatLng, fallbackLabel: String, knownName: String? = null) {
         searchJob?.cancel()
         routeJob?.cancel()
         // Supersede any in-flight long-press resolution from a previous press.
@@ -222,7 +230,7 @@ class NavigationController(
         val pending =
             PlaceSuggestion(
                 id = pinId(point),
-                name = fallbackLabel,
+                name = knownName ?: fallbackLabel,
                 address = rawCoordinates(point),
                 point = point,
             )
@@ -246,9 +254,18 @@ class NavigationController(
                 coroutineContext.ensureActive()
                 // Keep the pressed point as the destination; use the resolved
                 // name/address for the label when available, else the pending fallback.
+                //
+                // A KNOWN name wins over the resolved one: a tapped place already
+                // carries the basemap's own label for it, and reverse geocoding a
+                // shop's coordinate answers with its street address — a worse
+                // answer to "where am I going?" than the name the user just tapped.
+                // Its address is still worth taking, so only the name is pinned.
                 val suggestion =
                     if (resolved != null) {
-                        pending.copy(name = resolved.name, address = resolved.address ?: pending.address)
+                        pending.copy(
+                            name = knownName ?: resolved.name,
+                            address = resolved.address ?: pending.address,
+                        )
                     } else {
                         pending
                     }

@@ -57,6 +57,103 @@ class NavigationControllerTest {
         }
     }
 
+    /**
+     * The reported bug: search results must come back nearest-first.
+     *
+     * The proximity bias was already being sent — and this pins that it still is
+     * — but a bias only tilts the API's RELEVANCE ranking; it is free to rank a
+     * better-matching further place above a nearer one, which is what the user
+     * saw. So the controller must order the matches it gets by real distance.
+     *
+     * The fake returns them worst-first to make sure this asserts ordering rather
+     * than passing on whatever order it was handed.
+     */
+    @Test
+    fun `suggestions are ordered nearest-first from the current location`() = runTest {
+        val near =
+            PlaceSuggestion("near", "Near", null, LatLng(longitude = 12.08, latitude = 57.49))
+        val mid =
+            PlaceSuggestion("mid", "Mid", null, LatLng(longitude = 11.97, latitude = 57.71))
+        val far =
+            PlaceSuggestion("far", "Far", null, LatLng(longitude = 18.07, latitude = 59.33))
+        val client = FakeClient(suggestions = listOf(far, mid, near))
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.refreshOrigin()
+        advanceUntilIdle()
+        controller.onQueryChange("statoil")
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("near", "mid", "far"),
+            controller.state.value.suggestions.map { it.id },
+        )
+        // The bias is still sent: the ordering complements it, it does not replace it.
+        assertEquals(origin, client.lastProximity)
+    }
+
+    /**
+     * With no fix, "nearest" has no meaning — the API's relevance order is the
+     * best answer available and must be left exactly as it came.
+     */
+    @Test
+    fun `suggestions keep the API order when there is no location fix`() = runTest {
+        val far =
+            PlaceSuggestion("far", "Far", null, LatLng(longitude = 18.07, latitude = 59.33))
+        val near =
+            PlaceSuggestion("near", "Near", null, LatLng(longitude = 12.08, latitude = 57.49))
+        val client = FakeClient(suggestions = listOf(far, near))
+        val controller = NavigationController(client, originProvider = { null }, scope = this)
+
+        controller.refreshOrigin()
+        advanceUntilIdle()
+        controller.onQueryChange("statoil")
+        advanceUntilIdle()
+
+        assertEquals(listOf("far", "near"), controller.state.value.suggestions.map { it.id })
+    }
+
+    /**
+     * A tapped place arrives with the basemap's own name for it. Reverse
+     * geocoding that coordinate answers with a street address, which is a worse
+     * answer to "where am I going?" — so a known name must survive it, while the
+     * resolved ADDRESS is still taken.
+     */
+    @Test
+    fun `a known place name survives reverse geocoding`() = runTest {
+        val point = LatLng(longitude = 12.08, latitude = 57.49)
+        val resolved =
+            PlaceSuggestion("rev", "Innerstaden 12", "434 30 Kungsbacka", point)
+        val client = FakeClient(reverse = resolved, route = routeSummary)
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.selectPoint(point, fallbackLabel = "Dropped pin", knownName = "Bilverkstan")
+        advanceUntilIdle()
+
+        val destination = controller.state.value.destination
+        assertEquals("Bilverkstan", destination?.name)
+        // The resolved address is still useful, so it is kept.
+        assertEquals("434 30 Kungsbacka", destination?.address)
+    }
+
+    /**
+     * The long-press case is unchanged: nothing was tapped, so there is no name
+     * to keep and the reverse-geocoded one is the best label available.
+     */
+    @Test
+    fun `without a known name the reverse-geocoded name is used`() = runTest {
+        val point = LatLng(longitude = 12.08, latitude = 57.49)
+        val resolved =
+            PlaceSuggestion("rev", "Innerstaden 12", "434 30 Kungsbacka", point)
+        val client = FakeClient(reverse = resolved, route = routeSummary)
+        val controller = NavigationController(client, originProvider = { origin }, scope = this)
+
+        controller.selectPoint(point, fallbackLabel = "Dropped pin")
+        advanceUntilIdle()
+
+        assertEquals("Innerstaden 12", controller.state.value.destination?.name)
+    }
+
     @Test
     fun `query change debounces then emits suggestions`() = runTest {
         val client = FakeClient(suggestions = listOf(suggestion))
