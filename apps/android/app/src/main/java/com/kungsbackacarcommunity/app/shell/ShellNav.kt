@@ -39,6 +39,17 @@ enum class ShellRoute {
     Partners,
     Notifications,
     NotificationSettings,
+
+    /**
+     * Retired: the garage is no longer a sub-route — it renders directly on the
+     * [ShellTab.Garage] tab, so the user's cars and "Add vehicle" are visible on
+     * landing instead of behind a hub's "Cars" button.
+     *
+     * The constant is retained because two things still produce it: the welcome
+     * flow's "Add a car" CTA, and `rememberSaveable` state persisted by an older
+     * build (dropping the constant would throw on restore). The route host
+     * handles both by switching to the Garage tab. Do not reuse.
+     */
     Garage,
     Friends,
     /** Convoy management (list / create / detail / ended summary). */

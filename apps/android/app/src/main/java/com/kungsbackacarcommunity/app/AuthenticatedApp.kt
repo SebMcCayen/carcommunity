@@ -177,7 +177,6 @@ import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
-import com.kungsbackacarcommunity.app.shell.GarageHubScreen
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
@@ -562,19 +561,15 @@ fun AuthenticatedApp(
                 }
                     .collectAsState(initial = false)
 
-            // Single shared vehicles stream for the whole garage section: the
-            // garage hub header (main-car avatar) and the Cars sub-page both
-            // derive from THIS state, so at most one Firestore snapshot
-            // listener exists while the user is anywhere in the garage section
-            // — and none at all outside it (the flow degrades to a constant
-            // Loading). Because the remember keys don't change when moving
-            // hub ↔ Cars, the listener survives that transition instead of
-            // tearing down and re-attaching. garageReloadKey is bumped by the
-            // Cars page's "try again" affordance to force a re-subscribe after
-            // a listener error.
+            // Single shared vehicles stream for the garage: exactly one Firestore
+            // snapshot listener while the user is on the Garage tab — and none at
+            // all off it (the flow degrades to a constant Loading). The list and
+            // the add/edit form are one composable (GarageRoute), so the listener
+            // survives moving between them instead of tearing down and
+            // re-attaching. garageReloadKey is bumped by the list's "try again"
+            // affordance to force a re-subscribe after a listener error.
             var garageReloadKey by rememberSaveable { mutableStateOf(0) }
-            val inGarageSection =
-                selectedTab == ShellTab.Garage || route == ShellRoute.Garage
+            val inGarageSection = selectedTab == ShellTab.Garage
             val garageState by
                 remember(garageRepository, uid, inGarageSection, garageReloadKey) {
                     if (garageRepository != null && inGarageSection) {
@@ -1064,10 +1059,10 @@ fun AuthenticatedApp(
                         notificationsCoordinator = notificationsCoordinator,
                         notificationSettingsRepository = notificationSettingsRepository,
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
-                        garageRepository = garageRepository,
-                        garageCoordinator = garageCoordinator,
-                        garageState = garageState,
-                        onGarageRetry = { garageReloadKey++ },
+                        onOpenGarageTab = {
+                            route = null
+                            selectedTab = ShellTab.Garage
+                        },
                         badgesRepository = badgesRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
@@ -1390,37 +1385,31 @@ fun AuthenticatedApp(
                                             )
                                         }
 
+                                    // The Garage tab IS the garage: it renders the
+                                    // vehicle list and its "Add vehicle" button
+                                    // directly. It used to show a hub whose only
+                                    // remaining entry was a "Cars" button leading
+                                    // here — a hop that hid the user's own cars
+                                    // behind a tap, so it was removed along with the
+                                    // hub screen itself.
+                                    //
+                                    // Managing your own garage is open to any
+                                    // signed-in user (no longer member-gated, PR
+                                    // #428); only the repo needs to be wired.
                                     ShellTab.Garage ->
                                         ShellTabPage {
-                                            GarageHubScreen(
-                                                title = stringResource(R.string.shell_garageTitle),
-                                                // The garage identity header shows the main
-                                                // car's photo ONLY — the user's profile
-                                                // picture is deliberately NOT shown here (the
-                                                // garage is about cars, not profiles). When no
-                                                // main car is set the hub falls back to the
-                                                // car placeholder icon. Derived from the
-                                                // hoisted shared garage stream — no listener
-                                                // of its own.
-                                                avatarUrl =
-                                                    rememberStorageImageUrl(
-                                                        context,
-                                                        mainCarImagePath(garageState),
-                                                    ),
-                                                avatarContentDescription =
-                                                    stringResource(R.string.garage_headerImageAlt),
-                                                vehiclesLabel =
-                                                    stringResource(R.string.shell_garageVehicles),
-                                                onVehicles =
-                                                    // Managing your own garage is open to
-                                                    // any signed-in user (no longer member-
-                                                    // gated); only require the repo to be wired.
-                                                    if (garageRepository != null) {
-                                                        { route = ShellRoute.Garage }
-                                                    } else {
-                                                        null
-                                                    },
-                                            )
+                                            if (garageRepository != null) {
+                                                GarageRoute(
+                                                    repository = garageRepository,
+                                                    coordinator = garageCoordinator,
+                                                    uid = uid,
+                                                    garageState = garageState,
+                                                    onRetry = { garageReloadKey++ },
+                                                    mediaUploader = mediaUploader,
+                                                )
+                                            } else {
+                                                LoadingScreen()
+                                            }
                                         }
                                 }
                             }
@@ -1883,10 +1872,11 @@ private fun RouteHost(
     notificationsCoordinator: NotificationsCoordinator?,
     notificationSettingsRepository: NotificationSettingsRepository?,
     notificationSettingsCoordinator: NotificationSettingsCoordinator?,
-    garageRepository: GarageRepository?,
-    garageCoordinator: GarageCoordinator?,
-    garageState: GarageState,
-    onGarageRetry: () -> Unit,
+    /**
+     * Switches to the Garage tab (and closes this route). The garage is no
+     * longer a sub-route, so the retired [ShellRoute.Garage] redirects here.
+     */
+    onOpenGarageTab: () -> Unit,
     badgesRepository: BadgesRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
@@ -2124,20 +2114,15 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        ShellRoute.Garage ->
-            if (garageRepository != null) {
-                GarageRoute(
-                    repository = garageRepository,
-                    coordinator = garageCoordinator,
-                    uid = uid,
-                    garageState = garageState,
-                    onRetry = onGarageRetry,
-                    onBack = onClose,
-                    mediaUploader = mediaUploader,
-                )
-            } else {
-                LoadingScreen()
-            }
+        // Retired as a sub-route: the garage now lives directly on the Garage
+        // TAB. Two callers still produce `route = Garage` — the welcome flow's
+        // "Add a car" CTA, and older persisted state (rememberSaveable) from a
+        // build where this was a real route. Both are served by switching to the
+        // tab, which lands on exactly the screen they wanted.
+        ShellRoute.Garage -> {
+            LaunchedEffect(Unit) { onOpenGarageTab() }
+            LoadingScreen()
+        }
 
         ShellRoute.Friends ->
             if (friendsRepository != null) {
@@ -2500,15 +2485,6 @@ private fun profileMenuEntries(
         ),
     )
 
-/**
- * The Cloud Storage path of the user's main car photo, or null when there is no
- * main car (or the garage is not loaded / the car has no photo). A pure
- * derivation over the single hoisted garage stream — it deliberately opens no
- * listener of its own, so the hub header and the Cars sub-page share one
- * Firestore snapshot listener for the whole garage section.
- */
-private fun mainCarImagePath(state: GarageState): String? =
-    (state as? GarageState.Loaded)
-        ?.vehicles
-        ?.firstOrNull { it.isMainCar }
-        ?.imagePath
+// The garage hub's main-car header avatar (and its mainCarImagePath derivation)
+// went away with the hub: the Garage tab now opens straight onto the vehicle
+// list, where every car — main or not — shows its own photo on its card.

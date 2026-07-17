@@ -16,6 +16,7 @@ import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import java.time.Year
@@ -25,11 +26,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Garage integration route (Phase 12 slice 13): owns the list ↔ form selection
- * and wires the coordinator into the stateless screens. [garageState] is the
- * single garage stream hoisted to the shell (shared with the garage hub's
- * main-car header avatar) so the whole garage section holds exactly one
- * vehicles snapshot listener; [onRetry] asks that owner to re-subscribe after
- * a listener error. [repository] remains for the photo-path update callable.
+ * and wires the coordinator into the stateless screens. Rendered directly as the
+ * Garage TAB — the vehicle list and its "Add vehicle" affordance are the first
+ * thing the tab shows, with no intermediate hub to tap through.
+ *
+ * [garageState] is the single garage stream hoisted to the shell so the garage
+ * section holds exactly one vehicles snapshot listener; [onRetry] asks that
+ * owner to re-subscribe after a listener error. [repository] remains for the
+ * photo-path update callable.
  */
 @Composable
 fun GarageRoute(
@@ -38,7 +42,6 @@ fun GarageRoute(
     uid: String,
     garageState: GarageState,
     onRetry: () -> Unit,
-    onBack: () -> Unit,
     mediaUploader: MediaUploader? = null,
     currentYear: Int = Year.now().value,
 ) {
@@ -46,19 +49,57 @@ fun GarageRoute(
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Photo state, hoisted above the form branch so an add-mode upload survives
+    // the form closing on save (see pendingPhoto).
+    val photoContext = LocalContext.current
+
+    // Bumped every time the form OPENS, giving each add/edit session its own
+    // upload coordinator. Sessions must NOT share one: an add-mode upload keeps
+    // running after its form closes, and ImageUploadCoordinator's re-entrancy
+    // Mutex would then make the NEXT session's upload a silent no-op — adding
+    // two cars with photos in quick succession would drop the second photo with
+    // no error. A fresh coordinator per session removes that contention; the
+    // in-flight upload holds its own reference and completes regardless.
+    var photoSession by rememberSaveable { mutableStateOf(0) }
+    val photoCoordinator =
+        remember(mediaUploader, photoSession) {
+            mediaUploader?.let { ImageUploadCoordinator(it, MediaUpload.VEHICLE_IMAGE_MAX_BYTES) }
+        }
+    val photoStatus by
+        (photoCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
+            .collectAsState(initial = ImageUploadStatus.Idle)
+
+    // A photo picked while ADDING a vehicle, already sanitised (EXIF/GPS
+    // stripped) but not yet uploadable: vehicleImages/{uid}/{vehicleId}/ cannot
+    // be keyed until garage-addVehicle mints the id. Held here and uploaded the
+    // moment the add resolves. Plain `remember`, not `rememberSaveable`: the
+    // bytes are far too large for the saved-instance Bundle (TransactionTooLarge),
+    // so a process death drops the pending pick and the user re-picks — the
+    // vehicle itself is unaffected because it is not created until Save.
+    var pendingPhoto by remember { mutableStateOf<PickedImage?>(null) }
+
+    // Clears the form's transient photo state. Called on every path that leaves
+    // the form WITHOUT saving, so a pick abandoned in the add form can never
+    // attach itself to the next vehicle the user starts adding.
+    val resetPhoto = {
+        pendingPhoto = null
+        photoCoordinator?.reset()
+    }
+
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
             .collectAsState(initial = VehicleSaveStatus.Idle)
 
     // System/gesture Back leaves the add/edit form back to the list (mirrors the
     // form's Cancel); at the list root it is disabled so the shell's BackHandler
-    // returns to Home. Only the save coordinator is reset here; the form's photo
-    // coordinator is form-scoped (remembered inside the form branch) and is simply
-    // discarded when the form leaves composition — it has no self-reset on dispose.
+    // returns to Home. The photo coordinator now outlives the form branch (an
+    // add-mode upload starts as the form closes), so backing out must reset it
+    // explicitly rather than relying on it being discarded from composition.
     BackHandler(enabled = showForm) {
         showForm = false
         editingVehicleId = null
         coordinator?.reset()
+        resetPhoto()
     }
 
     if (showForm) {
@@ -77,23 +118,9 @@ fun GarageRoute(
                 )
             } ?: VehicleForm()
 
-        // Photo upload is available only when editing an existing vehicle: a
-        // brand-new vehicle has no id yet to key vehicleImages/{uid}/{id}/. The
-        // 10 MB cap + member gate mirror the storage rules (garage is member-
-        // gated). Wired only when the uploader is present (config-less builds
-        // hide the button).
-        val photoContext = LocalContext.current
-        val photoCoordinator =
-            remember(mediaUploader, editingId) {
-                if (mediaUploader != null && editingId != null) {
-                    ImageUploadCoordinator(mediaUploader, MediaUpload.VEHICLE_IMAGE_MAX_BYTES)
-                } else {
-                    null
-                }
-            }
-        val photoStatus by
-            (photoCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
-                .collectAsState(initial = ImageUploadStatus.Idle)
+        // Photo upload is available whether ADDING or editing. The 10 MB cap
+        // mirrors the storage rules. Wired only when the uploader is present
+        // (config-less builds hide the button).
         val photoUrl = rememberStorageImageUrl(photoContext, vehicle?.imagePath)
         val photoPicker =
             rememberImagePickLauncher(
@@ -103,7 +130,7 @@ fun GarageRoute(
                 // VEHICLE_IMAGE_MAX_BYTES.
                 maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
             ) { picked ->
-                if (picked != null && photoCoordinator != null && editingId != null) {
+                if (picked != null && photoCoordinator != null) {
                     // Strip GPS + identifying metadata BEFORE upload: car profiles
                     // are PUBLICLY visible to other members, so a photo taken at the
                     // owner's home must never leak their coordinates or device
@@ -121,10 +148,21 @@ fun GarageRoute(
                             maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
                         )
                     if (sanitized != null) {
-                        val imageId = MediaUpload.newImageId(sanitized.contentType)
-                        val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
-                        photoCoordinator.upload(sanitized, path) { storedPath ->
-                            repository.updateVehicleImagePath(editingId, storedPath)
+                        if (editingId != null) {
+                            // Edit: the vehicle exists, so its storage prefix is
+                            // known — upload straight away.
+                            val imageId = MediaUpload.newImageId(sanitized.contentType)
+                            val path = MediaUpload.vehicleImagePath(uid, editingId, imageId)
+                            photoCoordinator.upload(sanitized, path) { storedPath ->
+                                repository.updateVehicleImagePath(editingId, storedPath)
+                            }
+                        } else {
+                            // Add: no vehicle id exists yet to key
+                            // vehicleImages/{uid}/{vehicleId}/, so hold the ALREADY
+                            // SANITISED bytes and upload them once Save mints the id.
+                            // Sanitising here (not at upload time) means the raw pick
+                            // never outlives this callback.
+                            pendingPhoto = sanitized
                         }
                     } else {
                         // Sanitisation failed (decode/re-encode returned null), so
@@ -142,15 +180,40 @@ fun GarageRoute(
                 saveStatus = saveStatus,
                 currentYear = currentYear,
                 onSave = { input ->
-                    coordinator?.let { c -> scope.launch { c.save(input, editingId) } }
+                    coordinator?.let { c ->
+                        // Launched in the ROUTE's scope, not the form's: the form
+                        // closes as soon as saveStatus flips to Saved, so a
+                        // form-scoped coroutine would be cancelled mid-upload and
+                        // the new vehicle would silently lose its photo.
+                        scope.launch {
+                            val photo = pendingPhoto
+                            val vehicleId = c.save(input, editingId)
+                            // Add-mode photo: the id exists only now. Nothing to do
+                            // when editing (that photo uploaded at pick time) or
+                            // when the save failed (vehicleId null) — an upload
+                            // under a nonexistent vehicle's prefix would be
+                            // rejected by the callable's ownership check anyway.
+                            if (vehicleId != null && editingId == null && photo != null && photoCoordinator != null) {
+                                pendingPhoto = null
+                                val imageId = MediaUpload.newImageId(photo.contentType)
+                                val path = MediaUpload.vehicleImagePath(uid, vehicleId, imageId)
+                                photoCoordinator.upload(photo, path) { storedPath ->
+                                    repository.updateVehicleImagePath(vehicleId, storedPath)
+                                }
+                            }
+                        }
+                    }
                 },
                 onCancel = {
                     showForm = false
                     editingVehicleId = null
                     coordinator?.reset()
-                    photoCoordinator?.reset()
+                    resetPhoto()
                 },
                 photoUrl = photoUrl,
+                // Local preview of a not-yet-uploaded add-mode pick. Takes
+                // precedence over photoUrl (which is null while adding anyway).
+                photoPreview = pendingPhoto?.bytes,
                 photoUploadStatus = photoStatus,
                 onChangePhoto =
                     if (photoCoordinator != null) {
@@ -170,11 +233,17 @@ fun GarageRoute(
             onAdd = {
                 editingVehicleId = null
                 coordinator?.reset()
+                // Fresh photo session: never inherit a previous car's pending
+                // pick or upload status (see photoSession).
+                pendingPhoto = null
+                photoSession++
                 showForm = true
             },
             onEdit = { vehicle ->
                 editingVehicleId = vehicle.id
                 coordinator?.reset()
+                pendingPhoto = null
+                photoSession++
                 showForm = true
             },
             onDelete = { id ->
@@ -203,7 +272,6 @@ fun GarageRoute(
                     }
                 }
             },
-            onBack = onBack,
         )
     }
 }

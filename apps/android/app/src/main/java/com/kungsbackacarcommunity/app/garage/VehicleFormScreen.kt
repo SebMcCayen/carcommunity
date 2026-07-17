@@ -1,24 +1,19 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -35,12 +30,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccRadius
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
+import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Vehicle add/edit form (Phase 12 slice 13). Owns its field state; validates
  * against the backend bounds ([VehicleValidation]) before reporting a payload,
  * and closes on a successful save.
+ *
+ * Rendered inside [AeroPage] like every other page in the app, which supplies
+ * the status-bar inset — the title must never sit under the system clock — plus
+ * the shared gutters and title treatment. Do not hand-roll a `Surface` +
+ * `statusBarsPadding()` here (see AeroPage's KDoc).
+ *
+ * @param photoUrl the resolved URL of the vehicle's ALREADY-UPLOADED photo
+ *   (edit mode). Null while adding — nothing is uploaded until the vehicle
+ *   exists.
+ * @param photoPreview JPEG/PNG bytes of a photo picked but NOT yet uploaded
+ *   (add mode). Already sanitised by the caller. Takes precedence over
+ *   [photoUrl] so the user sees their pick immediately.
+ * @param onChangePhoto opens the picker; null hides the whole photo section
+ *   (config-less build with no uploader wired).
  */
 @Composable
 fun VehicleFormScreen(
@@ -51,11 +63,8 @@ fun VehicleFormScreen(
     onSave: (VehicleInput) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
-    // Photo (edit only — a new vehicle has no id yet to key the storage path):
-    // the resolved current-photo URL, the in-flight upload status, and the
-    // add/change action. onChangePhoto null hides the button (config-less build
-    // or add mode).
     photoUrl: String? = null,
+    photoPreview: ByteArray? = null,
     photoUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
     onChangePhoto: (() -> Unit)? = null,
 ) {
@@ -74,27 +83,20 @@ fun VehicleFormScreen(
     val form = VehicleForm(make, model, year, powertrain, engine, modifications)
     val error = VehicleValidation.validate(form, currentYear)
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text =
-                    stringResource(
-                        if (isEdit) R.string.garage_formTitleEdit else R.string.garage_formTitleCreate,
-                    ),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
+    AeroPage(
+        title =
+            stringResource(
+                if (isEdit) R.string.garage_formTitleEdit else R.string.garage_formTitleCreate,
+            ),
+        modifier = modifier,
+        // Tighter than the Aero default: a form of stacked fields reads better
+        // at the 12dp rhythm it has always used.
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+    ) {
             if (onChangePhoto != null) {
                 VehiclePhotoSection(
                     photoUrl = photoUrl,
+                    photoPreview = photoPreview,
                     uploadStatus = photoUploadStatus,
                     onChangePhoto = onChangePhoto,
                 )
@@ -128,7 +130,18 @@ fun VehicleFormScreen(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            VehiclePowertrain.values().forEach { option ->
+            // Exactly the four offered powertrains (Petrol / Diesel / Hybrid /
+            // Electric) — plus, ONLY when the car being edited still holds a
+            // retired value, that value as a final row. Without it the user
+            // would see their plug-in hybrid with nothing selected and no way to
+            // tell what it is. Choosing any of the four migrates the car forward;
+            // the retired row then disappears for good.
+            val powertrainOptions =
+                remember(powertrain) {
+                    VehiclePowertrain.selectable() +
+                        listOfNotNull(powertrain?.takeIf { !it.isSelectable })
+                }
+            powertrainOptions.forEach { option ->
                 if (option == powertrain) {
                     Button(onClick = { powertrain = option }, modifier = Modifier.fillMaxWidth()) {
                         Text(text = stringResource(option.labelRes()))
@@ -187,29 +200,39 @@ fun VehicleFormScreen(
             TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.garage_cancelButton))
             }
-        }
     }
 }
 
+/**
+ * The photo tile + add/change button.
+ *
+ * [photoPreview] (a pick not yet uploaded, add mode) wins over [photoUrl] (an
+ * uploaded photo, edit mode): the user's own pick is the freshest truth, and in
+ * add mode there is no URL to compete with anyway. Coil renders `ByteArray`
+ * models natively, so the pick needs no temp file or upload to be previewed.
+ */
 @Composable
 private fun VehiclePhotoSection(
     photoUrl: String?,
+    photoPreview: ByteArray?,
     uploadStatus: ImageUploadStatus,
     onChangePhoto: () -> Unit,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
+    val model: Any? = photoPreview ?: photoUrl
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(KccRadius.md))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        if (photoUrl != null) {
-            // Coil renders nothing (keeps the placeholder) when no URL resolves.
+        if (model != null) {
+            // Coil renders nothing (keeps the placeholder) when the model does
+            // not resolve.
             AsyncImage(
-                model = photoUrl,
+                model = model,
                 contentDescription = stringResource(R.string.garage_photoAlt),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().height(180.dp),
@@ -224,7 +247,7 @@ private fun VehiclePhotoSection(
             text = stringResource(
                 when {
                     uploading -> R.string.garage_photoUploading
-                    photoUrl != null -> R.string.garage_photoChange
+                    model != null -> R.string.garage_photoChange
                     else -> R.string.garage_photoAdd
                 },
             ),

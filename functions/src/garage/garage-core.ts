@@ -31,13 +31,57 @@ export function maxModelYear(now: Date): number {
   return now.getFullYear() + 2;
 }
 
-export const VEHICLE_POWERTRAINS = [
+/**
+ * The powertrain values a client OFFERS when creating a vehicle: exactly
+ * Petrol / Diesel / Hybrid / Electric. This is the canonical, product-facing
+ * set — the Android form lists these four and nothing else.
+ *
+ * Declaration order is the order the form renders them in, so this array is
+ * also the UI contract, not just a vocabulary.
+ */
+export const SELECTABLE_VEHICLE_POWERTRAINS = [
   'petrol',
   'diesel',
   'hybrid',
-  'plug_in_hybrid',
   'electric',
-  'other',
+] as const;
+export type SelectableVehiclePowertrain = (typeof SELECTABLE_VEHICLE_POWERTRAINS)[number];
+
+/**
+ * RETIRED powertrain values. No client offers these any more, but vehicles
+ * created before the four-option change still hold them in Firestore, and
+ * shipped clients (<= v0.8.0) still send them.
+ *
+ * They are therefore deliberately still ACCEPTED on the wire and still stored
+ * verbatim — never silently rewritten. Two reasons:
+ *
+ *  1. **No data corruption.** Mapping `plug_in_hybrid` -> `hybrid` on read
+ *     would be lossy, and `other` has no honest target at all. An existing
+ *     vehicle keeps the value its owner chose until the owner changes it.
+ *  2. **No hard break for old clients.** Rejecting these on add would fail the
+ *     add outright for anyone on a shipped build who taps "Laddhybrid"/"Annat",
+ *     since app updates roll out gradually. Accepting-but-not-offering
+ *     converges the data as users update, with no error path.
+ *
+ * The Android form renders a retired value only when the vehicle being edited
+ * already has it (so the selection is honest); picking any of the four
+ * migrates that vehicle forward permanently.
+ *
+ * Do NOT add to this list — it only ever shrinks, once telemetry shows no
+ * vehicle still holds a given value.
+ */
+export const LEGACY_VEHICLE_POWERTRAINS = ['plug_in_hybrid', 'other'] as const;
+export type LegacyVehiclePowertrain = (typeof LEGACY_VEHICLE_POWERTRAINS)[number];
+
+/**
+ * Every powertrain value the callables ACCEPT and Firestore may hold — the
+ * offered four plus the retired two. This is intentionally wider than
+ * [SELECTABLE_VEHICLE_POWERTRAINS]: what we accept is a superset of what we
+ * offer, so old documents load and old clients keep working.
+ */
+export const VEHICLE_POWERTRAINS = [
+  ...SELECTABLE_VEHICLE_POWERTRAINS,
+  ...LEGACY_VEHICLE_POWERTRAINS,
 ] as const;
 export type VehiclePowertrain = (typeof VEHICLE_POWERTRAINS)[number];
 
