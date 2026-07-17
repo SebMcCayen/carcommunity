@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -14,8 +15,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [CrownHuntRepository] backed by a Firestore listener on active points plus
- * the crownHunt-submitClaim callable (europe-west1), Phase 12 slice 16.
- * Construction is guarded ([createIfAvailable] returns null without Firebase).
+ * the crownHunt-submitClaim callable (europe-west1), Phase 12 slice 16. The
+ * listener is bounded to [CrownHunt.ACTIVE_POINTS_QUERY_LIMIT] (createdAt
+ * descending) using the existing `crownHuntPoints` composite index, so no new
+ * index deploy is needed. Construction is guarded ([createIfAvailable]
+ * returns null without Firebase).
  */
 class FirebaseCrownHuntRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -27,6 +31,8 @@ class FirebaseCrownHuntRepository private constructor(
             firestore
                 .collection(POINTS)
                 .whereEqualTo("status", CrownHuntPointStatus.ACTIVE.wire)
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .limit(CrownHunt.ACTIVE_POINTS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(CrownHuntPointsState.Error)
@@ -84,6 +90,7 @@ class FirebaseCrownHuntRepository private constructor(
     companion object {
         private const val REGION = "europe-west1"
         private const val POINTS = "crownHuntPoints"
+        private const val CREATED_AT = "createdAt"
         private const val SUBMIT_CLAIM = "crownHunt-submitClaim"
 
         fun createIfAvailable(context: Context): CrownHuntRepository? {

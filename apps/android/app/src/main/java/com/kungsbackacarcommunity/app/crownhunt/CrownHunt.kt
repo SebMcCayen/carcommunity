@@ -67,3 +67,14 @@ data class ClaimOutcome(
     val pointsAwarded: Int?,
     val newBalance: Int?,
 )
+
+object CrownHunt {
+    /**
+     * Maximum active points the Firestore listener subscribes to (newest
+     * first by createdAt). Active Kronjakt points are already expected to be
+     * a small, admin-curated set, but the listener is capped regardless so
+     * `crownHuntPoints` staying unbounded can never turn into an unbounded
+     * snapshot as the game runs over the app's lifetime.
+     */
+    const val ACTIVE_POINTS_QUERY_LIMIT = 200L
+}
