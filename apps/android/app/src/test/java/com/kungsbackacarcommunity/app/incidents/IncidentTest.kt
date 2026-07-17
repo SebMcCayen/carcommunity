@@ -19,9 +19,18 @@ private class FakeIncidentRepository(
     var listNearbyCalls = 0
         private set
 
-    override suspend fun report(type: IncidentType, location: LatLng, note: String?) {
+    override suspend fun report(type: IncidentType, location: LatLng, note: String?): Incident {
         reportError?.let { throw it }
         reported += Triple(type, location, note)
+        // Mirrors the real callable, which answers with the created incident.
+        return Incident(
+            id = "reported-${reported.size}",
+            type = type,
+            longitude = location.longitude,
+            latitude = location.latitude,
+            note = note,
+            source = "user",
+        )
     }
 
     override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
@@ -94,6 +103,43 @@ class IncidentResponseParserTest {
         assertTrue(IncidentResponseParser.parseListNearby(mapOf("incidents" to "nope")).isEmpty())
         assertTrue(IncidentResponseParser.parseListNearby(emptyMap()).isEmpty())
     }
+
+    /**
+     * `incidents-report` answers with the created incident view itself (an
+     * unwrapped row), which the reporter's own marker is drawn from.
+     */
+    @Test
+    fun `parses the report payload into the created incident`() {
+        val data: Map<String, Any?> =
+            mapOf(
+                "id" to "new1",
+                "type" to "police",
+                "latitude" to 57.4874,
+                "longitude" to 12.0757,
+                "note" to "Kontroll",
+                "source" to "user",
+            )
+        val incident = IncidentResponseParser.parseIncident(data)
+        assertEquals("new1", incident?.id)
+        assertEquals(IncidentType.POLICE, incident?.type)
+        assertEquals(57.4874, incident?.latitude ?: 0.0, 1e-9)
+        assertEquals(12.0757, incident?.longitude ?: 0.0, 1e-9)
+        assertEquals("Kontroll", incident?.note)
+    }
+
+    @Test
+    fun `report payload that is null or malformed parses to null`() {
+        assertNull(IncidentResponseParser.parseIncident(null))
+        assertNull(IncidentResponseParser.parseIncident(emptyMap()))
+        // Missing coordinate.
+        assertNull(IncidentResponseParser.parseIncident(mapOf("id" to "x", "type" to "police")))
+        // Unknown type.
+        assertNull(
+            IncidentResponseParser.parseIncident(
+                mapOf("id" to "x", "type" to "meteor", "latitude" to 1.0, "longitude" to 2.0),
+            ),
+        )
+    }
 }
 
 class IncidentPaletteTest {
@@ -123,8 +169,82 @@ class IncidentReportControllerTest {
         assertEquals(IncidentType.ACCIDENT, fake.reported[0].first)
         assertEquals(here, fake.reported[0].second)
         assertEquals("krock", fake.reported[0].third)
-        // On success it refreshed, publishing the nearby list.
-        assertEquals(1, controller.nearbyIncidents.value.size)
+        // On success it refreshed, publishing the nearby list...
+        assertTrue(controller.nearbyIncidents.value.any { it.id == "x" })
+        // ...AND the reporter's own incident is on it (see the promise test below).
+        assertEquals(2, controller.nearbyIncidents.value.size)
+    }
+
+    /**
+     * The promise the success message makes — "Thanks, your report is on the map"
+     * — must be kept by the code that returns Success.
+     *
+     * This is the shape of the bug: the write succeeds (no index, no extra read
+     * permission needed), the follow-up `listNearby` that used to be the ONLY
+     * thing putting the pin there fails, `refresh` swallows that failure by
+     * design, and the user is told their report is on a map that never shows it.
+     * Success must mean the marker is present, whatever the fetch did.
+     */
+    @Test
+    fun `report puts the reporters own incident on the map even when the nearby fetch fails`() =
+        runTest {
+            val repo =
+                object : IncidentRepository {
+                    override suspend fun report(
+                        type: IncidentType,
+                        location: LatLng,
+                        note: String?,
+                    ) = Incident("mine", type, location.longitude, location.latitude)
+
+                    // Every way listNearby can fail on a real device (missing
+                    // composite index, permission, network) looks like this.
+                    override suspend fun listNearby(
+                        center: LatLng,
+                        radiusMeters: Double,
+                    ): List<Incident> = throw IllegalStateException("FAILED_PRECONDITION: index")
+
+                    override suspend fun remove(incidentId: String) = Unit
+                }
+            val controller = IncidentReportController(repo) { here }
+
+            val outcome = controller.report(IncidentType.ACCIDENT)
+
+            assertSame(ReportOutcome.Success, outcome)
+            val markers = controller.nearbyIncidents.value
+            assertEquals("the reported incident must be on the map", 1, markers.size)
+            assertEquals("mine", markers[0].id)
+            assertEquals(IncidentType.ACCIDENT, markers[0].type)
+            assertEquals(here.latitude, markers[0].latitude, 1e-9)
+            assertEquals(here.longitude, markers[0].longitude, 1e-9)
+        }
+
+    /**
+     * The optimistic add is id-keyed, so a refresh that ALSO returns the fresh
+     * report (the usual case — the write is committed by the time it runs) must
+     * not leave two markers stacked on the same spot.
+     */
+    @Test
+    fun `report does not duplicate its own incident when the fetch already returns it`() = runTest {
+        val mine = Incident("mine", IncidentType.POLICE, here.longitude, here.latitude)
+        val repo =
+            object : IncidentRepository {
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                    mine
+
+                override suspend fun listNearby(
+                    center: LatLng,
+                    radiusMeters: Double,
+                ): List<Incident> = listOf(mine, Incident("other", IncidentType.HAZARD, 12.1, 57.6))
+
+                override suspend fun remove(incidentId: String) = Unit
+            }
+        val controller = IncidentReportController(repo) { here }
+
+        controller.report(IncidentType.POLICE)
+
+        val markers = controller.nearbyIncidents.value
+        assertEquals(2, markers.size)
+        assertEquals(1, markers.count { it.id == "mine" })
     }
 
     @Test
@@ -156,7 +276,8 @@ class IncidentReportControllerTest {
         val repo =
             object : IncidentRepository {
                 var fail = false
-                override suspend fun report(type: IncidentType, location: LatLng, note: String?) = Unit
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                    Incident("reported", type, location.longitude, location.latitude)
                 override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
                     if (fail) throw IllegalStateException("network")
                     return seeded
@@ -201,7 +322,8 @@ class IncidentReportControllerTest {
     fun `refresh propagates cancellation instead of retaining the previous list`() = runTest {
         val repo =
             object : IncidentRepository {
-                override suspend fun report(type: IncidentType, location: LatLng, note: String?) = Unit
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                    Incident("reported", type, location.longitude, location.latitude)
                 override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> =
                     throw CancellationException("cancelled")
                 override suspend fun remove(incidentId: String) = Unit
