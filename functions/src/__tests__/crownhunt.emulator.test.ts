@@ -223,15 +223,27 @@ describe('crownHunt admin point lifecycle', () => {
 });
 
 describe('crownHunt-submitClaim', () => {
-  it('returns not_eligible for non-members as a result code, not an error', async () => {
+  it('AWARDS a non-member while member gating is disabled', async () => {
+    // Was: not_eligible (a result code, not an error). Re-locking restores it.
     const pointId = await createActivePoint();
     await signInAs(freeUser);
     const response = (await call('crownHunt-submitClaim', claimInput({ pointId }))).data as {
       result: string;
-      message: string;
+      pointsAwarded: number | null;
+    };
+    expect(response.result).toBe('awarded');
+    expect(response.pointsAwarded).toBe(25);
+  });
+
+  it('STILL returns not_eligible for a suspended user, as a result code', async () => {
+    const pointId = await createActivePoint();
+    const suspended = await createProvisionedUser('ch-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
+    const response = (await call('crownHunt-submitClaim', claimInput({ pointId }))).data as {
+      result: string;
     };
     expect(response.result).toBe('not_eligible');
-    expect(response.message).toContain('medlemskap');
   });
 
   it('awards points atomically and records the claim with ledger linkage', async () => {

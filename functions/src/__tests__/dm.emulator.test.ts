@@ -193,9 +193,20 @@ describe('dm-sendMessage gating', () => {
     );
   });
 
-  it('requires an active member', async () => {
+  it('admits a non-member while member gating is disabled', async () => {
+    // Was: permission-denied on the member gate. Now it reaches the real
+    // check — you may only DM a friend (failed-precondition).
     const free = await newFreeUser();
     await signInAs(free);
+    expect(await callableErrorCode(call('dm-sendMessage', { toUid: 'someone', text: 'hi' }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('STILL rejects a suspended caller', async () => {
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('dm-sendMessage', { toUid: 'someone', text: 'hi' }))).toBe(
       'functions/permission-denied',
     );

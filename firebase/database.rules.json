@@ -7,8 +7,19 @@
         "session": {
           ".read": "auth != null && auth.uid == $uid"
         },
+        // ---- MEMBER GATING SWITCH (Realtime Database rules layer) ----------
+        // Member gating is currently DISABLED so live location is viewable
+        // without a subscription. The `auth.token.activeMember == true &&`
+        // term was removed from the non-owner branch below; the suspension
+        // term and BOTH liveLocationBlocks direction checks are DELIBERATELY
+        // KEPT — this one expression bundles all three guards.
+        //
+        // TO RE-LOCK: put `auth.token.activeMember == true && ` back at the
+        // start of the non-owner branch, then redeploy database rules.
+        // Independent of functions/src/shared/memberGating.ts, firestore.rules
+        // and storage.rules — all four switches must be flipped together.
         "latest": {
-          ".read": "auth != null && (auth.uid == $uid || (auth.token.activeMember == true && auth.token.suspended != true && !root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
+          ".read": "auth != null && (auth.uid == $uid || (auth.token.suspended != true && !root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
         }
       }
     },

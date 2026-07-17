@@ -84,21 +84,33 @@ describe('chat-core eligibility (legacy canReadEventChat parity)', () => {
     ).toBe(false);
   });
 
-  it('rejects non-members and suspended members (suspension overrides entitlement)', () => {
+  it('ADMITS non-members while member gating is disabled (memberGating.ts)', () => {
+    // Was: rejected. Re-locking (MEMBER_GATING_ENABLED = true) restores the
+    // rejection; the RSVP and event-status requirements below are unaffected.
     expect(
       guardChatParticipant({
         state: { ...member, activeMember: false },
         eventStatus: 'published',
         rsvpStatus: 'going',
       }).ok,
-    ).toBe(false);
-    expect(
-      guardChatParticipant({
-        state: { ...member, suspended: true },
-        eventStatus: 'published',
-        rsvpStatus: 'going',
-      }).ok,
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('STILL rejects suspended and deleted callers, member or not', () => {
+    // Teeth: the unlock must never open chat to a suspended account.
+    for (const restricted of [
+      { ...member, suspended: true },
+      { ...member, deleted: true },
+      { ...member, activeMember: false, suspended: true },
+    ]) {
+      expect(
+        guardChatParticipant({
+          state: restricted,
+          eventStatus: 'published',
+          rsvpStatus: 'going',
+        }).ok,
+      ).toBe(false);
+    }
   });
 
   it('rejects chat on non-published events', () => {

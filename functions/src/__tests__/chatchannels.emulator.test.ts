@@ -180,13 +180,24 @@ afterAll(async () => {
 });
 
 describe('communityChat callables + rules', () => {
-  it('rejects unauthenticated + non-member callers', async () => {
+  it('rejects unauthenticated callers, but ADMITS a non-member', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('communityChat-list', {}))).toBe(
       'functions/unauthenticated',
     );
+    // Was: permission-denied. Member gating is disabled (memberGating.ts).
     const free = await newFreeUser();
     await signInAs(free);
+    const posted = (await call('communityChat-post', { text: 'hi' })).data as {
+      messageId: string;
+    };
+    expect(typeof posted.messageId).toBe('string');
+  });
+
+  it('STILL rejects a suspended caller', async () => {
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('communityChat-post', { text: 'hi' }))).toBe(
       'functions/permission-denied',
     );
@@ -257,9 +268,22 @@ describe('communityChat callables + rules', () => {
       }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
 
-    // A non-member (free user) cannot read the channel messages.
+    // A non-member (free user) CAN now read the channel messages — the
+    // firestore.rules isActiveMember() switch. Re-locking restores the denial.
     const free = await newFreeUser();
     await signInAs(free);
+    const freeSnap = await getDocs(
+      query(collection(firestore, 'communityChat', 'global', 'messages')),
+    );
+    expect(freeSnap.empty).toBe(false);
+  });
+
+  it('rules: STILL deny a suspended user the channel messages', async () => {
+    // Teeth: isActiveMember() keeps isNotSuspended() after the unlock.
+    const suspended = await newFreeUser();
+    await adminAuth.setCustomUserClaims(suspended.uid, { suspended: true });
+    await signInAs(suspended);
+    await auth.currentUser!.getIdToken(true);
     await expect(
       getDocs(query(collection(firestore, 'communityChat', 'global', 'messages'))),
     ).rejects.toMatchObject({ code: 'permission-denied' });
@@ -622,7 +646,7 @@ describe('communityChat-post @mention notifications', () => {
     expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
   });
 
-  it('drops mentions of an unknown uid / a non-member, still posting the message', async () => {
+  it('drops mentions of an unknown uid but KEEPS a non-member (gating disabled), still posting', async () => {
     const poster = await newMember('GhostMentionPoster');
     const free = await newFreeUser(); // a real user, but not an active member
     const mentioned = await newMember('GhostMentionTarget');
@@ -635,12 +659,31 @@ describe('communityChat-post @mention notifications', () => {
       })
     ).data as PostedCommunity;
 
-    // Only the deliverable member survives; the post itself is unaffected (a
-    // stale pick is a race, not a reason to fail someone's message).
-    expect(posted.mentionedUids).toEqual([mentioned.uid]);
+    // The unknown uid is still dropped; the non-member is now deliverable.
+    // Re-locking drops the non-member again (resolveMentions).
+    expect(posted.mentionedUids.sort()).toEqual([free.uid, mentioned.uid].sort());
     const stored = await awaitCommunityMessage(posted.messageId);
-    expect(stored.mentionedUids).toEqual([mentioned.uid]);
-    expect(await inboxFor(free.uid, 'community_chat')).toHaveLength(0);
+    expect(stored.mentionedUids.sort()).toEqual([free.uid, mentioned.uid].sort());
+    expect(await inboxFor(free.uid, 'community_chat')).toHaveLength(1);
+  });
+
+  it('STILL drops a mention of a suspended user', async () => {
+    // Teeth: resolveMentions drops suspended/deleted regardless of gating.
+    const poster = await newMember('SuspMentionPoster');
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    const mentioned = await newMember('SuspMentionTarget');
+
+    await signInAs(poster);
+    const posted = (
+      await call('communityChat-post', {
+        text: 'hej @SuspMentionTarget',
+        mentionedUids: [suspended.uid, mentioned.uid],
+      })
+    ).data as PostedCommunity;
+
+    expect(posted.mentionedUids).toEqual([mentioned.uid]);
+    expect(await inboxFor(suspended.uid, 'community_chat')).toHaveLength(0);
   });
 
   it('drops a mention of someone who blocked the sender (a block cuts directed reach)', async () => {

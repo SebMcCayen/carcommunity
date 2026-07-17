@@ -129,12 +129,28 @@ afterAll(async () => {
 });
 
 describe('drives-save', () => {
-  it('rejects unauthenticated and non-member callers', async () => {
+  it('rejects unauthenticated callers, but SAVES for a signed-in non-member', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(
       'functions/unauthenticated',
     );
+
+    // Member gating is disabled (functions/src/shared/memberGating.ts): a
+    // non-member may save a drive they recorded. This is the bug Seb hit —
+    // recording was never member-gated but saving was, so a non-member could
+    // record a drive and then be refused when saving it, with no way to keep
+    // the recording. RE-LOCKING MUST RE-ALIGN BOTH GATES or it returns.
     await signInAs(freeUser);
+    const saved = (await call('drives-save', validSave)).data as { rideId: string };
+    expect(typeof saved.rideId).toBe('string');
+  });
+
+  it('STILL rejects a suspended caller', async () => {
+    // Teeth: requireActiveActor keeps the suspended/deleted guard even though
+    // membership is no longer required.
+    const suspended = await createProvisionedUser('drives-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(
       'functions/permission-denied',
     );

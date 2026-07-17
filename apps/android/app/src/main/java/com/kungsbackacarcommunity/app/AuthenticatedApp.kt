@@ -96,6 +96,7 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.config.MemberGating
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -691,13 +692,17 @@ fun AuthenticatedApp(
                     memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
-            // Viewing OTHERS on the map is the paid capability (backend parity:
-            // the liveLocation/$uid/latest RTDB read rule requires activeMember).
-            // A non-member gets a subscription upsell instead of the roster map.
+            // Viewing OTHERS on the map is the paid capability — but member
+            // gating is currently DISABLED (config/MemberGating.kt), so every
+            // signed-in user may view the roster. Backend parity holds: the
+            // liveLocation/$uid/latest RTDB read rule has had its activeMember
+            // term removed to match (firebase/database.rules.json). Re-locking
+            // BOTH restores the subscription upsell in place of the roster map.
             // ALSO flag-gated: a server-disabled LIVE_LOCATION flag must fully
             // block opening the roster map / starting RTDB reads, so require the
-            // flag (liveLocationEnabled) IN ADDITION to the active-member gate.
-            val canViewLiveOthers = liveLocationEnabled && profile?.activeMember == true
+            // flag (liveLocationEnabled) IN ADDITION to the member gate.
+            val canViewLiveOthers =
+                liveLocationEnabled && MemberGating.allows(profile?.activeMember == true)
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
@@ -1241,7 +1246,8 @@ fun AuthenticatedApp(
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                                     incidentReportingEnabled =
-                                        incidentController != null && profile?.activeMember == true,
+                                        incidentController != null &&
+                                            MemberGating.allows(profile?.activeMember == true),
                                     onReportIncident = { type ->
                                         incidentController?.let { controller ->
                                             scope.launch {
@@ -2058,7 +2064,7 @@ private fun RouteHost(
                     repository = eventsRepository,
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
+                    isActiveMember = MemberGating.allows(profileActiveMember),
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
                     chatEnabled = chatEnabled,
@@ -2078,7 +2084,7 @@ private fun RouteHost(
                 CrownHuntRoute(
                     repository = crownHuntRepository,
                     coordinator = crownHuntCoordinator,
-                    isActiveMember = profileActiveMember,
+                    isActiveMember = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {
@@ -2091,7 +2097,7 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
+                    isActiveMember = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {

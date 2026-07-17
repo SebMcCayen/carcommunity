@@ -27,7 +27,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminRtdb, db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
-import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
+import { toUserAccessState } from '../shared/access';
+import { memberGateAllows } from '../shared/memberGating';
 import { creditPoints } from '../points/ledger';
 import {
   haversineDistanceMeters,
@@ -224,9 +225,11 @@ export const submitClaim = onCall(
     }
 
     // 2 + 3. Account status and entitlement (result codes, not errors).
+    // Entitlement is currently bypassed (shared/memberGating.ts); suspended
+    // and deleted accounts still resolve to not_eligible.
     const userSnap = await db.collection('users').doc(uid).get();
     const state = toUserAccessState(userSnap.data());
-    if (!canAccessMemberFeatures(state)) {
+    if (!memberGateAllows(state)) {
       return respond('not_eligible');
     }
 

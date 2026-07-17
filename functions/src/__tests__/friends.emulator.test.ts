@@ -206,9 +206,21 @@ describe('friend-sendRequest gating + resolution', () => {
     expect(await callableErrorCode(call('friend-list', {}))).toBe('functions/unauthenticated');
   });
 
-  it('requires an active member', async () => {
+  it('admits a non-member while member gating is disabled', async () => {
+    // Was: permission-denied on the member gate. Now the call gets PAST the
+    // gate and fails on the real reason — no such nickname. Seb's "Something
+    // went wrong" on a friend request was this gate.
     const free = await newFreeUser();
     await signInAs(free);
+    expect(await callableErrorCode(call('friend-sendRequest', { nickname: 'Nobody' }))).toBe(
+      'functions/not-found',
+    );
+  });
+
+  it('STILL rejects a suspended caller', async () => {
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('friend-sendRequest', { nickname: 'Nobody' }))).toBe(
       'functions/permission-denied',
     );

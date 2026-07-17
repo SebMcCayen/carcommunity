@@ -4,6 +4,15 @@ This document defines the initial Firebase data architecture for carcommunity: C
 
 For PostgreSQL data model (current `services/api` implementation) see [data-model.md](data-model.md). This document covers the target Firebase-native backend described in [ADR-001](adr/001-firebase-platform.md).
 
+> **⚠️ MEMBER GATING IS TEMPORARILY DISABLED (2026-07-17).** Everywhere this
+> document says "member-gated", "member-only", or "active members", that gate is
+> currently **open to any signed-in, non-suspended user** so the whole app can be
+> tested without a subscription. The described design is the intended one and is
+> restored by flipping four switches — see
+> `functions/src/shared/memberGating.ts` for the authoritative re-locking
+> procedure. **Suspension, deletion, ownership, admin-only and rate-limit rules
+> are unaffected and still enforced.**
+
 ## Overview
 
 | Concern                                            | Service                    |
