@@ -19,10 +19,10 @@ sealed interface DrivesState {
 }
 
 /**
- * Thrown by [DrivesRepository.saveDrive] when the save callable rejects the
- * drive.
+ * Thrown by [DrivesRepository.saveDrive] for ANY save failure — a backend
+ * rejection, but equally a transport/network error or a missing cause.
  *
- * [code] is the transport status name (e.g. Firebase Functions'
+ * [code] is the callable status name (e.g. Firebase Functions'
  * `PERMISSION_DENIED`), carried out of the Firebase layer so the pure domain can
  * act on it without a Firebase import. It exists for two reasons:
  * - `drives-save` is MEMBER-gated (functions/src/drives/saveDrive.ts uses
@@ -31,7 +31,8 @@ sealed interface DrivesState {
  * - the auto error report files a stable, fingerprintable code instead of a
  *   free-text message.
  *
- * Null when the failure carried no status (e.g. a raw network error).
+ * [code] is null exactly when the failure carried no callable status — a raw
+ * network/IO error, say — so a null code means "unclassified", never "refused".
  */
 class DriveSaveException(
     val code: String?,
@@ -53,9 +54,9 @@ interface DrivesRepository {
      * [DriveRecorder.buildSaveRequest]; the backend computes all stats and is
      * idempotent per `sourceSessionId`.
      *
-     * @throws DriveSaveException when the callable rejects the save, carrying
-     *   the status code so callers can separate a permanent refusal (the
-     *   member gate) from a retryable fault.
+     * @throws DriveSaveException on any save failure, carrying the callable
+     *   status code (null if the failure had none) so callers can separate a
+     *   permanent refusal (the member gate) from a retryable fault.
      */
     suspend fun saveDrive(request: Map<String, Any?>)
 

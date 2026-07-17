@@ -110,12 +110,14 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   broadcast control opens a transparent [Popup] *over* the map (no dimming
  *   scrim, same idiom as the layers popup) presenting the live-location options
  *   rather than toggling sharing directly.
- * @param canShareLive whether the caller may START a session (live-location flag
- *   on AND active member); mirrors the backend member check. When false the
- *   popup shows the membership teaser instead of the duration/start controls.
- *   Hide-me-now is governed by [isLiveSharing] (not this flag), so it appears
- *   only while a session is already active; the details entry point stays
- *   reachable regardless.
+ * @param canShareLive whether the caller may START a session — i.e. whether the
+ *   LIVE_LOCATION feature flag is on. This is NOT a membership check: sharing
+ *   your OWN position is FREE (backend parity — live-startSession requires only
+ *   an authenticated, non-suspended caller), and only VIEWING others is
+ *   member-gated. When false the popup shows a fallback teaser instead of the
+ *   start control. Hide-me-now is governed by [isLiveSharing] (not this flag), so
+ *   it appears only while a session is already active; the details entry point
+ *   stays reachable regardless.
  * @param onStartLiveShare request starting a Single (solo live-sharing) session;
  *   only offered when [canShareLive]. The 1h/2h/4h duration choice is NOT made
  *   here anymore — this hands off to the single-session start flow (the same one
@@ -835,8 +837,10 @@ private fun LiveSharePopup(
                         }
                     }
                     else -> {
-                        // Starting is member-gated (backend parity) — show the
-                        // membership teaser instead of the start controls.
+                        // Reached only when the LIVE_LOCATION flag is off (the
+                        // server-side kill switch) — starting is NOT member-gated.
+                        // TODO: the teaser string still says "membership
+                        // required", which is not why the control is hidden.
                         Text(
                             text = stringResource(R.string.liveLocation_memberRequiredToShare),
                             style = MaterialTheme.typography.bodyMedium,
