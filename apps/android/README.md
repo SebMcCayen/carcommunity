@@ -44,6 +44,10 @@ Without those files the release build is **unsigned** with a blank-map token —
 
 `app/src/main/res/raw/changelog.json` is the bundled release-notes source for the after-update popup and the Settings → "Vad är nytt" page. **Every release PR that bumps `versionCode`/`versionName` must append an entry** (newest first): `versionCode`, `versionName`, `releaseDate` (ISO `yyyy-MM-dd`), `highlights` (max ~3 short lines, shown in the popup) and `changes` (the full bulleted list). Descriptions are user-facing Swedish — what the user notices, not internal jargon. The page shows the 10 newest entries; the popup shows the newest entry unseen by the device (tracked per `versionCode` in SharedPreferences) and is skipped entirely on first install. Selection logic lives in `whatsnew/Changelog.kt` (unit-tested in `whatsnew/ChangelogTest.kt`).
 
+**Who writes it, and when:** the entry is part of the release PR itself — the same PR that bumps `versionCode` — written by whoever cuts the release, from that release's merged PRs. It is not a follow-up task: a release that ships without its entry can never show its popup, because the popup only fires on the upgrade to that version and each device records the version as seen either way.
+
+This rule is **enforced**, not just documented — `whatsnew/ChangelogReleaseCoverageTest.kt` fails CI if the shipping `versionCode` has no entry (also catching gaps below it, and notes accidentally added ahead of their release). That guard exists because the rule was documented but unenforced from the start and was missed for four consecutive releases: `changelog.json` stopped at versionCode 7 (0.4.0) while the app shipped 8, 9, 10 and 11, so every user who updated to 0.5.0–0.8.0 silently got no "Vad är nytt" popup. Nothing failed, because `Changelog.announcementFor` correctly stays silent when there is nothing to announce.
+
 ## Localization
 
 `res/values/strings.xml` (Swedish, default) and `res/values-en/strings.xml` are **generated** from the canonical contracts:

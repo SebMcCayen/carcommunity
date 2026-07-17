@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,14 +40,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.unit.sp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.KccTypeScale
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
@@ -59,7 +61,7 @@ import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
 const val CHAT_HUB_TEST_TAG = "chat_hub"
 
 /**
- * Surface alpha for the chat hub when shown as a transparent popup over the map —
+ * Surface alpha for the chat hub when shown as a transparent overlay over the map —
  * matches the map-home popups' `POPUP_SURFACE_ALPHA` (0.92f) so the live map
  * shows faintly through the card, the same translucent idiom as the map-layers
  * and live-share popups.
@@ -67,7 +69,7 @@ const val CHAT_HUB_TEST_TAG = "chat_hub"
 private const val CHAT_HUB_POPUP_ALPHA = 0.92f
 
 /**
- * Height of the chat-hub popup card as a fraction of the SAFE area (the window
+ * Height of the chat-hub overlay card as a fraction of the SAFE area (the window
  * minus the status-bar inset), leaving the top ~8% of that area — plus the
  * status bar itself — as a genuinely uncovered strip of live map that also acts
  * as the tap-to-dismiss area. Deliberately a fraction rather than
@@ -82,10 +84,40 @@ private const val CHAT_HUB_CARD_HEIGHT_FRACTION = 0.92f
 enum class ChatTab { Community, Convoys, Friends, Notifications }
 
 /**
+ * The tab labels' font-size floor and ceiling.
+ *
+ * A [TabRow] splits the row into four EQUAL tabs, so each label gets a quarter of
+ * the card's width — about 86dp on a 360dp phone, and the Material text+icon [Tab]
+ * overload spent 16dp of that on padding (which [ChatTabItem] now reclaims). The
+ * longest labels ("Notifications", "Community") then ellipsized to "Notificati…" /
+ * "Commun…" once the user's font scale was raised. Rather than pick a smaller fixed
+ * size (which only moves the cliff to a narrower screen, a longer translation or a
+ * larger font scale), the label AUTO-SHRINKS within these bounds to whatever fits:
+ * [TAB_LABEL_MAX_SP] is the normal `labelMedium` size, so labels are unaffected at
+ * the default font scale — measured, every shipped label in both locales fits at
+ * the full size on a 360dp phone — and only a label that would not otherwise fit
+ * steps down, never below [TAB_LABEL_MIN_SP].
+ *
+ * The floor is deliberately below the type scale's smallest token. It is a
+ * PRE-font-scale value, so it does not mean "8sp on screen": it only ever binds at
+ * a raised accessibility font scale, where 8sp renders at least as large as the
+ * 12sp a default-font-scale user already reads comfortably (8 × 1.5 = 12). At the
+ * default scale nothing shrinks at all. Measured floor across en/sv × 320/360/411dp
+ * × font scales 1.0/1.3/1.5: 8.5sp, reached only by "Notifications" on a 320dp
+ * screen at font scale 1.5 — see `ChatHubTabLabelTest`, which pins that every
+ * shipped label fits across that whole matrix.
+ */
+internal val TAB_LABEL_MIN_SP = 8.sp
+internal val TAB_LABEL_MAX_SP = KccTypeScale.caption
+
+/** Font-size granularity for the tab labels' auto-shrink. */
+internal val TAB_LABEL_STEP_SP = 0.5.sp
+
+/**
  * The chat hub as a full-screen opaque route (legacy presentation, kept
  * for [com.kungsbackacarcommunity.app.shell.ShellRoute.ChatHub]). The map-home
  * chat bubble now opens [ChatHubPopup] instead, so the hub floats as a
- * translucent popup over the map; this route remains as a migration-safe fallback
+ * translucent overlay over the map; this route remains as a migration-safe fallback
  * and shares the same [ChatHubContent] body.
  */
 @Composable
@@ -128,20 +160,38 @@ fun ChatHubRoute(
 }
 
 /**
- * The chat hub rendered as a TRANSPARENT popup *over* the map — the same
- * idiom as the map-layers and live-share popups: a [Popup] (not a full route or a
- * [androidx.compose.ui.window.Dialog]) so there is NO dimming scrim and the live
- * map stays visible behind (and faintly through) a translucent surface. Tapping
- * outside the card or pressing Back dismisses it (the focusable popup's
- * [Popup.onDismissRequest] handles Back; an explicit transparent tap layer over
- * the map strip handles outside taps). The card is a fixed fraction (92%) of the
- * SAFE area (the window minus the status-bar inset), anchored to the bottom — so
- * it reaches the bottom edge (keeping the message-input row's navigation-bar /
- * IME inset effective) while provably leaving an uncovered, tappable strip of
- * live map above it that always clears system UI, at any window size or
- * orientation. Only the card is opaque/interactive; the strip dismisses on tap.
+ * The chat hub rendered as a TRANSPARENT overlay *over* the map — the same idiom
+ * as the map-layers and live-share popups: no dimming scrim, so the live map
+ * stays visible behind (and faintly through) a translucent surface. Tapping
+ * outside the card or pressing Back dismisses it (an explicit transparent tap
+ * layer over the map strip handles outside taps; [ChatHubContent]'s own
+ * `BackHandler` handles Back). The card is a fixed fraction (92%) of the SAFE
+ * area (the window minus the status-bar inset), anchored to the bottom — so it
+ * reaches the bottom edge (keeping the message-input row's navigation-bar / IME
+ * inset effective) while provably leaving an uncovered, tappable strip of live
+ * map above it that always clears system UI, at any window size or orientation.
+ * Only the card is opaque/interactive; the strip dismisses on tap.
  * Content/tabs/functionality are identical to the route form ([ChatHubContent]);
  * only the container/presentation differs.
+ *
+ * Deliberately a plain composable in the HOST window rather than a
+ * [androidx.compose.ui.window.Popup]. A Popup gets its OWN window, and that
+ * window receives NO window-inset dispatch: measured on API 34,
+ * `WindowInsets.navigationBars` reports 0 inside a Popup at the same moment the
+ * host activity window reports the real inset (63px), and `WindowInsets.ime` is
+ * likewise always 0 there. The message input's
+ * `WindowInsets.ime.union(WindowInsets.navigationBars)` padding therefore
+ * evaluated to ZERO in the popup form — the input pinned itself flush to the
+ * window's bottom edge under the nav bar, and with no app-side IME handling the
+ * framework's legacy ADJUST_PAN (the popup window's softInputMode defaulted to
+ * SOFT_INPUT_ADJUST_UNSPECIFIED) panned the whole window when the keyboard
+ * opened, flinging the input up the screen. Hosting the hub in the activity's
+ * own window — which `enableEdgeToEdge()` already puts in charge of its own
+ * insets — makes both states correct by construction and needs no per-window
+ * softInputMode patching.
+ *
+ * Must be composed inside a full-window [Box] (it fills its parent), and last
+ * among its siblings so it draws above the map and the shell's tabs.
  */
 @Composable
 fun ChatHubPopup(
@@ -161,77 +211,71 @@ fun ChatHubPopup(
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
 ) {
-    Popup(
-        alignment = Alignment.BottomCenter,
-        onDismissRequest = onClose,
-        properties = PopupProperties(focusable = true),
-    ) {
-        // Full-window container: the card is deliberately SHORTER than the window,
-        // so the area above it is a genuine, visible, tappable "outside". A
-        // transparent tap layer fills the window; the card (composed after) sits on
-        // top at the bottom, so only the uncovered map strip actually receives the
-        // dismiss tap. A raw pointerInput handler plus clearAndSetSemantics keeps
-        // this invisible dismiss layer out of the accessibility tree (mirrors the
-        // map-home outside-tap scrims).
-        Box(modifier = modifier.fillMaxSize()) {
-            Box(
+    // Full-window container: the card is deliberately SHORTER than the window,
+    // so the area above it is a genuine, visible, tappable "outside". A
+    // transparent tap layer fills the window; the card (composed after) sits on
+    // top at the bottom, so only the uncovered map strip actually receives the
+    // dismiss tap. A raw pointerInput handler plus clearAndSetSemantics keeps
+    // this invisible dismiss layer out of the accessibility tree (mirrors the
+    // map-home outside-tap scrims).
+    Box(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { onClose() } }
+                    .clearAndSetSemantics {},
+        )
+        // Safe-area box for the card: status-bar inset FIRST, so the height
+        // fraction below is measured against the safe area rather than the raw
+        // window. Without this the card's top is a fixed fraction of the WINDOW,
+        // which is not guaranteed to clear system UI — on a short window
+        // (landscape, split-screen, a tall status bar / cutout) the remaining
+        // fraction can be smaller than the status bar and the hub's top bar would
+        // render underneath it. Insetting first makes the card's top
+        // statusBar + (1 - fraction) * safeHeight — provably below system UI at
+        // any window size or orientation. Only the top is inset, so the box (and
+        // the bottom-anchored card in it) still reaches the window's bottom edge,
+        // keeping the message input's nav-bar / IME inset effective.
+        Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Surface(
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) { detectTapGestures { onClose() } }
-                        .clearAndSetSemantics {},
-            )
-            // Safe-area box for the card: status-bar inset FIRST, so the height
-            // fraction below is measured against the safe area rather than the raw
-            // window. Without this the card's top is a fixed fraction of the WINDOW,
-            // which is not guaranteed to clear system UI — on a short window
-            // (landscape, split-screen, a tall status bar / cutout) the remaining
-            // fraction can be smaller than the status bar and the hub's top bar would
-            // render underneath it. Insetting first makes the card's top
-            // statusBar + (1 - fraction) * safeHeight — provably below system UI at
-            // any window size or orientation. Only the top is inset, so the box (and
-            // the bottom-anchored card in it) still reaches the window's bottom edge,
-            // keeping the message input's nav-bar / IME inset effective.
-            Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-                Surface(
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            // An explicit FRACTION, not fillMaxHeight(): fillMaxHeight
-                            // fills the parent's max-height constraint, so any preceding
-                            // padding lands INSIDE the node's footprint and the card
-                            // still spans the whole parent — no real strip. A fraction
-                            // provably leaves the top (1 - fraction) of the safe area
-                            // uncovered for the map + dismiss layer, while BottomCenter
-                            // alignment keeps the card on the bottom edge. Sized BEFORE
-                            // the horizontal padding, which only insets the sides.
-                            .fillMaxHeight(CHAT_HUB_CARD_HEIGHT_FRACTION)
-                            .padding(horizontal = KccSpacing.s2)
-                            .testTag(CHAT_HUB_TEST_TAG),
-                    shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
-                    // Translucent so the map shows through — matches the map-home popups.
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
-                    tonalElevation = 6.dp,
-                    shadowElevation = 6.dp,
-                ) {
-                    ChatHubContent(
-                        uid = uid,
-                        communityChatRepository = communityChatRepository,
-                        convoyChatRepository = convoyChatRepository,
-                        friendsRepository = friendsRepository,
-                        dmRepository = dmRepository,
-                        notificationsRepository = notificationsRepository,
-                        notificationsCoordinator = notificationsCoordinator,
-                        communityUnread = communityUnread,
-                        onClose = onClose,
-                        // The enclosing box already applies the status-bar inset, so
-                        // the content must NOT add it again.
-                        applyStatusBarInset = false,
-                        onViewProfile = onViewProfile,
-                        blockingRepository = blockingRepository,
-                    )
-                }
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        // An explicit FRACTION, not fillMaxHeight(): fillMaxHeight
+                        // fills the parent's max-height constraint, so any preceding
+                        // padding lands INSIDE the node's footprint and the card
+                        // still spans the whole parent — no real strip. A fraction
+                        // provably leaves the top (1 - fraction) of the safe area
+                        // uncovered for the map + dismiss layer, while BottomCenter
+                        // alignment keeps the card on the bottom edge. Sized BEFORE
+                        // the horizontal padding, which only insets the sides.
+                        .fillMaxHeight(CHAT_HUB_CARD_HEIGHT_FRACTION)
+                        .padding(horizontal = KccSpacing.s2)
+                        .testTag(CHAT_HUB_TEST_TAG),
+                shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
+                // Translucent so the map shows through — matches the map-home popups.
+                color = MaterialTheme.colorScheme.surface.copy(alpha = CHAT_HUB_POPUP_ALPHA),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+            ) {
+                ChatHubContent(
+                    uid = uid,
+                    communityChatRepository = communityChatRepository,
+                    convoyChatRepository = convoyChatRepository,
+                    friendsRepository = friendsRepository,
+                    dmRepository = dmRepository,
+                    notificationsRepository = notificationsRepository,
+                    notificationsCoordinator = notificationsCoordinator,
+                    communityUnread = communityUnread,
+                    onClose = onClose,
+                    // The enclosing box already applies the status-bar inset, so
+                    // the content must NOT add it again.
+                    applyStatusBarInset = false,
+                    onViewProfile = onViewProfile,
+                    blockingRepository = blockingRepository,
+                )
             }
         }
     }
@@ -482,6 +526,19 @@ private fun ChatHubContent(
     }
 }
 
+/**
+ * One chat-hub tab: the section's icon above its label.
+ *
+ * Built from the generic content-slot [Tab] rather than the text+icon overload
+ * because that overload wraps the label in its own fixed horizontal padding,
+ * spending ~16dp of an already-tight quarter-width tab on whitespace. Laying the
+ * column out here gives the label the tab's full width; combined with the
+ * auto-shrink (see [TAB_LABEL_MIN_SP]) the label always fits whole.
+ *
+ * `softWrap = false` keeps each label on one line: these are single words in both
+ * locales, so wrapping could only break mid-word, and letting the text auto-shrink
+ * to fit one line reads better on a tab than two cramped lines.
+ */
 @Composable
 private fun ChatTabItem(
     tab: ChatTab,
@@ -494,15 +551,12 @@ private fun ChatTabItem(
     Tab(
         selected = selected == tab,
         onClick = { onSelect(tab) },
-        text = {
-            Text(
-                text = label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        },
-        icon = {
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s2),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        ) {
             if (showDot) {
                 androidx.compose.material3.BadgedBox(badge = { Badge() }) {
                     Icon(imageVector = icon, contentDescription = null)
@@ -510,9 +564,29 @@ private fun ChatTabItem(
             } else {
                 Icon(imageVector = icon, contentDescription = null)
             }
-        },
-    )
+            Text(
+                text = label,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+                // A last resort only: a label that will not fit even at the floor
+                // ellipsizes rather than shrinking into illegibility. No shipped
+                // label in either locale reaches the floor at any width/font scale
+                // the app targets — ChatHubTabLabelTest pins exactly that.
+                overflow = TextOverflow.Ellipsis,
+                autoSize =
+                    TextAutoSize.StepBased(
+                        minFontSize = TAB_LABEL_MIN_SP,
+                        maxFontSize = TAB_LABEL_MAX_SP,
+                        stepSize = TAB_LABEL_STEP_SP,
+                    ),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+    }
 }
+
 
 @Composable
 private fun TabPlaceholder(text: String) {
