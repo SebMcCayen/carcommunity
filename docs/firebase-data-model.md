@@ -216,16 +216,36 @@ in a separate member-gated document under `details/private` while
 | `title`           | `string`     | ≤200 chars                                                         |
 | `summary`         | `string?`    | ≤2000 chars, teaser-safe                                           |
 | `startsAt`        | `Timestamp`  |                                                                    |
-| `endsAt`          | `Timestamp?` |                                                                    |
+| `endsAt`          | `Timestamp?` | Defaults to Europe/Stockholm end-of-day of `startsAt` when omitted |
 | `approximateArea` | `string`     | Coarse area shown to non-members, ≤200 chars                       |
 | `isOfficial`      | `boolean`    | Club-sanctioned badge; forced `false` on member-created events      |
 | `status`          | `string`     | `'draft'` \| `'published'` \| `'cancelled'` \| `'completed'`       |
 | `cancelledAt`     | `Timestamp?` | Set by `events.cancel`                                             |
+| `autoClosedAt`    | `Timestamp?` | Set by `events-autoClose` only — absent on a hand-completed event  |
 | `rsvpCounts`      | `map`        | `{ going, maybe, not_going }` — maintained by `events-onRsvpWrite` |
 | `createdByUserId` | `string`     | Creator UID (admin or member)                                      |
 | `createdByRole`   | `string`     | `'admin'` \| `'member'` — attribution for moderation               |
 | `createdAt`       | `Timestamp`  | Server timestamp                                                   |
 | `updatedAt`       | `Timestamp`  | Server timestamp                                                   |
+
+**Lifecycle.** `draft` → `published` → (`completed` | `cancelled`); the last
+two are terminal. Member-created events start `published`, admin-created ones
+`draft` (see events-core.ts). An event reaches `completed` ("ended") in two
+ways, with identical semantics:
+
+- **`events.complete`** — an admin, or the member who created it
+  (`createdByUserId`).
+- **`events-autoClose`** — an hourly scheduled sweep
+  (functions/src/events/scheduled.ts) completing any published event whose
+  effective end (`endsAt`, or the end-of-day default) is more than 6 hours
+  past, and stamping `autoClosedAt`. This is what keeps finished events out of
+  the app's upcoming list without anyone having to remember.
+
+Both credit badge attendance to the event's `going` RSVPs. Completing an event
+CLOSES it: `details/private`, `messages` (chat) and `groupDriveParticipants`
+are all rules-gated on `published`, so an ended event keeps only its teaser
+document readable — which is what an archive/past list shows. `draft` and
+`cancelled` events stay admin-only.
 
 #### `events/{eventId}/details/private` — member-gated detail
 

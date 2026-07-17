@@ -1102,6 +1102,8 @@ describe('Firestore – userPrivate field validation (Phase 9a)', () => {
 describe('Firestore – events (Phase 9b)', () => {
   const PUBLISHED = 'event-published';
   const DRAFT = 'event-draft';
+  const COMPLETED = 'event-completed';
+  const CANCELLED = 'event-cancelled';
   const MEMBER = 'events-member';
   const NON_MEMBER = 'events-non-member';
 
@@ -1113,6 +1115,8 @@ describe('Firestore – events (Phase 9b)', () => {
       for (const [id, status] of [
         [PUBLISHED, 'published'],
         [DRAFT, 'draft'],
+        [COMPLETED, 'completed'],
+        [CANCELLED, 'cancelled'],
       ] as const) {
         await setDoc(doc(firestore, 'events', id), {
           title: 'Test event',
@@ -1132,6 +1136,29 @@ describe('Firestore – events (Phase 9b)', () => {
   it('any authenticated user can read a published event teaser', async () => {
     const ctx = testEnv.authenticatedContext(NON_MEMBER);
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', PUBLISHED)));
+  });
+
+  it('any authenticated user can read a completed (ended) event teaser', async () => {
+    // events-autoClose makes `completed` the normal end state of every event a
+    // few hours after it finishes, so the teaser must stay readable — an ended
+    // event that 403s would vanish from its own attendees and break any
+    // archive/past list built on it.
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', COMPLETED)));
+  });
+
+  it('non-admin users cannot read cancelled events', async () => {
+    // Only `published` and `completed` opened up — `cancelled` is still admin-only.
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertFails(getDoc(doc(ctx.firestore(), 'events', CANCELLED)));
+  });
+
+  it('completing an event closes its member-gated detail', async () => {
+    // The teaser opening up does NOT open the exact location/description: an
+    // ended event is closed, and details/private stays gated on `published`.
+    await assertFails(
+      getDoc(doc(memberCtx().firestore(), 'events', COMPLETED, 'details', 'private')),
+    );
   });
 
   it('non-admin users cannot read draft events', async () => {

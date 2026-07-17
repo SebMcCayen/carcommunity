@@ -5,18 +5,25 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  autoCloseCandidateCutoff,
+  autoCloseDueAt,
+  AUTO_CLOSE_GRACE_MS,
   buildEventDocuments,
   buildEventUpdates,
   computeRsvpCountDeltas,
+  effectiveEndInstant,
   guardCancellable,
   guardCompletable,
+  guardCompleteActor,
   guardCoordinatePair,
   guardEventTimes,
   guardPublishable,
   guardUpdatableStatus,
   initialEventStatus,
+  isAutoCloseDue,
   isMemberEventRateLimited,
   isZeroDeltas,
+  MAX_EVENT_DURATION_MS,
   MEMBER_EVENT_RATE_LIMIT_MAX,
   MEMBER_EVENT_RATE_LIMIT_WINDOW_MS,
   memberEventRateLimitWindowStart,
@@ -472,5 +479,162 @@ describe('events-core member-created events', () => {
       now.getTime() - MEMBER_EVENT_RATE_LIMIT_WINDOW_MS,
     );
     expect(MEMBER_EVENT_RATE_LIMIT_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe('guardCompleteActor', () => {
+  const creatorUid = 'creator-uid';
+
+  it('lets the creator end their own event', () => {
+    expect(
+      guardCompleteActor({ uid: creatorUid, isAdmin: false }, { createdByUserId: creatorUid }),
+    ).toEqual({ ok: true });
+  });
+
+  it('lets an admin end anyone else’s event', () => {
+    expect(
+      guardCompleteActor({ uid: 'admin-uid', isAdmin: true }, { createdByUserId: creatorUid }),
+    ).toEqual({ ok: true });
+  });
+
+  it('refuses a member who did not create the event', () => {
+    const result = guardCompleteActor(
+      { uid: 'stranger-uid', isAdmin: false },
+      { createdByUserId: creatorUid },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('permission-denied');
+  });
+
+  it('refuses a non-admin when the event has no recorded creator', () => {
+    // A legacy/unattributed event must not become endable by every member:
+    // an absent createdByUserId matches nobody rather than everybody.
+    for (const createdByUserId of [null, undefined, '']) {
+      const result = guardCompleteActor({ uid: 'someone', isAdmin: false }, { createdByUserId });
+      expect(result.ok).toBe(false);
+    }
+    // ...but an admin can still end it.
+    expect(guardCompleteActor({ uid: 'admin', isAdmin: true }, { createdByUserId: null })).toEqual({
+      ok: true,
+    });
+  });
+});
+
+describe('event auto-close', () => {
+  const start = new Date('2026-08-09T16:00:00.000Z');
+
+  it('uses the explicit endsAt as the effective end', () => {
+    const end = new Date('2026-08-09T18:00:00.000Z');
+    expect(effectiveEndInstant(start, end)).toEqual(end);
+  });
+
+  it('falls back to the Stockholm end-of-day when endsAt is absent', () => {
+    const expected = new Date(stockholmEndOfDay(start.toISOString()));
+    expect(effectiveEndInstant(start, null)).toEqual(expected);
+    expect(effectiveEndInstant(start, undefined)).toEqual(expected);
+  });
+
+  it('is due exactly one grace window after the effective end, not before', () => {
+    const end = new Date('2026-08-09T18:00:00.000Z');
+    const due = autoCloseDueAt(start, end);
+    expect(due.getTime()).toBe(end.getTime() + AUTO_CLOSE_GRACE_MS);
+
+    const event = { status: 'published' as const, startsAt: start, endsAt: end };
+    // One millisecond before the due instant: still live.
+    expect(isAutoCloseDue(event, new Date(due.getTime() - 1))).toBe(false);
+    // At the due instant, and after: closable.
+    expect(isAutoCloseDue(event, due)).toBe(true);
+    expect(isAutoCloseDue(event, new Date(due.getTime() + 1))).toBe(true);
+  });
+
+  it('leaves an event that has ended but is still inside the grace window', () => {
+    const end = new Date('2026-08-09T18:00:00.000Z');
+    const justEnded = new Date(end.getTime() + 60_000);
+    expect(isAutoCloseDue({ status: 'published', startsAt: start, endsAt: end }, justEnded)).toBe(
+      false,
+    );
+  });
+
+  it('never closes a future or in-progress event', () => {
+    const end = new Date('2026-08-09T18:00:00.000Z');
+    const beforeItStarts = new Date('2026-08-01T00:00:00.000Z');
+    const midEvent = new Date('2026-08-09T17:00:00.000Z');
+    expect(isAutoCloseDue({ status: 'published', startsAt: start, endsAt: end }, beforeItStarts))
+      .toBe(false);
+    expect(isAutoCloseDue({ status: 'published', startsAt: start, endsAt: end }, midEvent)).toBe(
+      false,
+    );
+  });
+
+  it('only ever closes published events (draft/cancelled/completed are skipped)', () => {
+    const end = new Date('2026-08-09T18:00:00.000Z');
+    const wellPast = new Date('2027-07-17T00:00:00.000Z');
+    // Idempotency at the decision layer: an already-completed event is not due
+    // a second time, and a cancelled event is never resurrected.
+    for (const status of ['draft', 'cancelled', 'completed'] as const) {
+      expect(isAutoCloseDue({ status, startsAt: start, endsAt: end }, wellPast)).toBe(false);
+    }
+    expect(isAutoCloseDue({ status: 'published', startsAt: start, endsAt: end }, wellPast)).toBe(
+      true,
+    );
+  });
+
+  it("closes Seb's stale 9 August event, end-of-day default and all", () => {
+    // The reported bug: an event created for 9 August, no explicit end, still
+    // sitting in the upcoming list the following July.
+    const augustNinth = new Date('2026-08-09T16:00:00.000Z');
+    const theFollowingJuly = new Date('2027-07-17T09:00:00.000Z');
+    expect(
+      isAutoCloseDue({ status: 'published', startsAt: augustNinth, endsAt: null }, theFollowingJuly),
+    ).toBe(true);
+  });
+
+  it('pins the documented 6-hour grace and what it means in local time', () => {
+    // AUTO_CLOSE_GRACE_MS's doc comment makes two concrete promises. Both are
+    // pinned here so neither can silently drift away from the prose.
+    expect(AUTO_CLOSE_GRACE_MS).toBe(6 * 60 * 60 * 1000);
+
+    // Promise: an event with no explicit end (→ Stockholm end-of-day default)
+    // closes at ~06:00 the next Stockholm morning — after the event, before
+    // anyone opens the list, and inside the same 24h.
+    const noExplicitEnd = { status: 'published' as const, startsAt: start, endsAt: null };
+    const due = autoCloseDueAt(start, null);
+    expect(stockholmParts(due.toISOString())).toBe('2026-08-10 05:59:59');
+    // Still listed at 05:00 local the morning after; gone by 07:00 local.
+    expect(isAutoCloseDue(noExplicitEnd, new Date('2026-08-10T03:00:00.000Z'))).toBe(false);
+    expect(isAutoCloseDue(noExplicitEnd, new Date('2026-08-10T05:00:00.000Z'))).toBe(true);
+    // And never more than 24h after the event's own day ends.
+    expect(due.getTime() - new Date(stockholmEndOfDay(start.toISOString())).getTime()).toBeLessThan(
+      24 * 60 * 60 * 1000,
+    );
+  });
+
+  it('sets the candidate cutoff one grace window back from now', () => {
+    const now = new Date('2027-07-17T09:00:00.000Z');
+    expect(autoCloseCandidateCutoff(now).getTime()).toBe(now.getTime() - AUTO_CLOSE_GRACE_MS);
+  });
+
+  it('never lets the startsAt candidate cutoff hide a due event', () => {
+    // The soundness property the sweep's query shape rests on (and the reason
+    // it needs no `status, endsAt` index): for ANY event that guardEventTimes
+    // accepts, due implies startsAt <= autoCloseCandidateCutoff(now). Swept
+    // across durations from 1ms to the 3-day maximum, and across a range of
+    // `now` values either side of the due instant.
+    const now = new Date('2027-07-17T09:00:00.000Z');
+    const cutoff = autoCloseCandidateCutoff(now);
+    const durations = [1, 1_000, 60_000, 3 * 60 * 60 * 1000, MAX_EVENT_DURATION_MS];
+    for (const durationMs of durations) {
+      for (const offsetMs of [-1, 0, 1, 60_000, 30 * 24 * 60 * 60 * 1000]) {
+        // Pin startsAt so the event's due instant lands at now + offsetMs.
+        const startsAt = new Date(now.getTime() + offsetMs - AUTO_CLOSE_GRACE_MS - durationMs);
+        const endsAt = new Date(startsAt.getTime() + durationMs);
+        expect(guardEventTimes(startsAt.toISOString(), endsAt.toISOString())).toEqual({ ok: true });
+
+        const due = isAutoCloseDue({ status: 'published', startsAt, endsAt }, now);
+        if (due) {
+          expect(startsAt.getTime()).toBeLessThanOrEqual(cutoff.getTime());
+        }
+      }
+    }
   });
 });

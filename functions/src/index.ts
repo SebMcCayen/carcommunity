@@ -20,6 +20,7 @@ import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { warnUser } from './admin/warnUser';
 import { cancel, complete, publish } from './events/eventLifecycle';
+import { autoClose } from './events/scheduled';
 import { create, update } from './events/manageEvent';
 import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
@@ -163,13 +164,17 @@ export const admin = {
 /**
  * Events domain (grouped export → deployed as `events-create`,
  * `events-update`, `events-publish`, `events-cancel`, `events-complete`,
- * and the `events-onRsvpWrite` Firestore trigger).
+ * the `events-onRsvpWrite` Firestore trigger and the `events-autoClose`
+ * scheduled sweep).
  *
- * Admin-only lifecycle callables (contracts/functions/functions.json:
+ * Lifecycle callables (contracts/functions/functions.json:
  * events.create/update/publish/cancel/complete) writing the teaser doc
  * `events/{eventId}` + member-gated `events/{eventId}/details/private`
- * split, plus the RSVP counter aggregation trigger. Member RSVPs are direct
- * Security-Rules-gated writes to events/{eventId}/rsvps/{uid} — no callable.
+ * split, plus the RSVP counter aggregation trigger. Most are admin-only;
+ * `create` is member-or-admin and `complete` is creator-or-admin. Member
+ * RSVPs are direct Security-Rules-gated writes to events/{eventId}/rsvps/{uid}
+ * — no callable. events-autoClose completes finished events unattended
+ * (events/scheduled.ts).
  */
 export const events = {
   create,
@@ -178,6 +183,8 @@ export const events = {
   cancel,
   complete,
   onRsvpWrite,
+  // Scheduled lifecycle: hourly sweep completing events past their end.
+  autoClose,
   // Chat (Phase 9c): member post/report callables + admin soft-removal.
   postChatMessage,
   reportChatMessage,

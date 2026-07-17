@@ -202,7 +202,11 @@ export function stockholmEndOfDay(startsAtIso: string): string {
 
 export type GuardResult =
   | { ok: true }
-  | { ok: false; code: 'invalid-argument' | 'failed-precondition' | 'not-found'; message: string };
+  | {
+      ok: false;
+      code: 'invalid-argument' | 'failed-precondition' | 'not-found' | 'permission-denied';
+      message: string;
+    };
 
 /**
  * The effective end of an event: the explicit `endsAt` when provided, otherwise
@@ -315,6 +319,106 @@ export function guardCompletable(status: EventStatus): GuardResult {
     };
   }
   return { ok: true };
+}
+
+/**
+ * Who may mark an event completed ("ended"): an admin/owner, or the member who
+ * created it. A member may only end THEIR OWN event — `createdByUserId` on the
+ * teaser doc is written by events.create and never client-writable (rules deny
+ * all client writes to events/{eventId}), so it is a trustworthy owner record.
+ *
+ * Deliberately NOT allowed: any other member, however active. Ending an event
+ * closes its chat and its member-gated detail (both rules-gated on
+ * `published`), so it is a takedown-shaped action — it stays with the organiser
+ * and the admins.
+ */
+export function guardCompleteActor(
+  actor: { uid: string; isAdmin: boolean },
+  event: { createdByUserId?: string | null },
+): GuardResult {
+  if (actor.isAdmin) {
+    return { ok: true };
+  }
+  if (event.createdByUserId && event.createdByUserId === actor.uid) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    code: 'permission-denied',
+    message: 'Only the event creator or an admin can end this event.',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Auto-close (scheduled lifecycle)
+// ---------------------------------------------------------------------------
+
+/**
+ * How long after an event's effective end it is left `published` before the
+ * scheduled sweep completes it.
+ *
+ * Six hours, chosen against the real model rather than taste:
+ * - Most events carry NO explicit `endsAt`, so [buildEventDocuments] defaults
+ *   it to the Europe/Stockholm end-of-day (23:59:59.999 local). A grace of 6h
+ *   closes those at ~06:00 the next local morning — after the event, before
+ *   anyone opens the list that day, and still inside the same 24h so a past
+ *   event never survives a full day in the upcoming list (Seb's report).
+ * - Closing AT the end instant would be hostile to a running event: completing
+ *   revokes member access to the exact location, the description and the event
+ *   chat (all rules-gated on `published`), so an event that runs long would
+ *   lose its own attendees' directions. 6h covers the overrun without letting
+ *   a finished event linger.
+ */
+export const AUTO_CLOSE_GRACE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * The instant an event actually ends: the stored `endsAt`, or — defensively,
+ * for any document written before the end-of-day default existed — the
+ * Europe/Stockholm end-of-day of its start. Mirrors [effectiveEndsAt] on Date
+ * values rather than ISO strings.
+ */
+export function effectiveEndInstant(startsAt: Date, endsAt: Date | null | undefined): Date {
+  return endsAt ?? new Date(stockholmEndOfDay(startsAt.toISOString()));
+}
+
+/**
+ * The instant at/after which a published event is due to be auto-completed:
+ * its effective end plus [AUTO_CLOSE_GRACE_MS].
+ */
+export function autoCloseDueAt(startsAt: Date, endsAt: Date | null | undefined): Date {
+  return new Date(effectiveEndInstant(startsAt, endsAt).getTime() + AUTO_CLOSE_GRACE_MS);
+}
+
+/**
+ * The newest `startsAt` a due event can possibly have — the sweep's candidate
+ * query bound (see [isAutoCloseDue] for the exact per-event test).
+ *
+ * Sound because [guardEventTimes] enforces `end > start` on every write path:
+ * due means `end + grace <= now`, and `start < end`, therefore
+ * `start < now - grace`. So no due event is ever excluded by filtering
+ * `startsAt <= now - grace`, while future and in-progress events are cheaply
+ * skipped server-side. This bound is what lets the sweep reuse the EXISTING
+ * `status ASC, startsAt ASC` composite index instead of needing a new
+ * `status, endsAt` one.
+ */
+export function autoCloseCandidateCutoff(now: Date): Date {
+  return new Date(now.getTime() - AUTO_CLOSE_GRACE_MS);
+}
+
+/**
+ * Whether a published event is due to be auto-completed at `now` — the precise
+ * test, applied in memory to each candidate the query returns. Only `published`
+ * events are ever due: `draft` events were never live, and `cancelled` /
+ * `completed` are terminal, which is what makes the sweep idempotent.
+ */
+export function isAutoCloseDue(
+  event: { status: EventStatus; startsAt: Date; endsAt: Date | null | undefined },
+  now: Date,
+): boolean {
+  if (event.status !== 'published') {
+    return false;
+  }
+  return now.getTime() >= autoCloseDueAt(event.startsAt, event.endsAt).getTime();
 }
 
 // ---------------------------------------------------------------------------
