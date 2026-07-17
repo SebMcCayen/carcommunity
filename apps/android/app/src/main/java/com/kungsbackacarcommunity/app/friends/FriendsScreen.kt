@@ -520,9 +520,12 @@ private fun FriendActionError.messageRes(): Int =
         FriendActionError.SignedOut -> R.string.friends_errorSignedOut
         FriendActionError.NotMember -> R.string.friends_errorNotMember
         FriendActionError.Invalid -> R.string.friends_errorInvalid
+        FriendActionError.SelfRequest -> R.string.friends_errorSelfRequest
         FriendActionError.NotFound -> R.string.friends_errorNotFound
-        FriendActionError.AlreadyExists -> R.string.friends_errorAlreadyFriends
+        FriendActionError.AlreadyFriends -> R.string.friends_errorAlreadyFriends
+        FriendActionError.RequestAlreadySent -> R.string.friends_errorRequestAlreadySent
         FriendActionError.NotAddable -> R.string.friends_errorNotAddable
         FriendActionError.RequestGone -> R.string.friends_errorRequestGone
+        FriendActionError.Network -> R.string.friends_errorNetwork
         FriendActionError.Generic -> R.string.friends_errorGeneric
     }

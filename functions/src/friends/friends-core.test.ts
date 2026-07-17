@@ -7,10 +7,76 @@ import {
   parseRemoveFriendInput,
   parseRespondRequestInput,
   parseSendRequestInput,
+  prefixUpperBound,
   toFriendRequestSummary,
   toFriendSummary,
   toProfileProjection,
+  toSearchKey,
 } from './friends-core';
+
+/**
+ * Firestore orders strings by their UTF-8 BYTES. These tests assert
+ * prefixUpperBound against that same ordering rather than JS's UTF-16 code-unit
+ * ordering (`<`), because UTF-16 ordering disagrees for astral characters and
+ * would let the emoji regression below pass while prod still failed.
+ */
+const utf8 = (value: string) => Buffer.from(value, 'utf8');
+const sortsBelow = (a: string, b: string) => Buffer.compare(utf8(a), utf8(b)) < 0;
+/** True when `value` falls inside the half-open prefix range [key, bound). */
+const inPrefixRange = (value: string, key: string) =>
+  !sortsBelow(value, key) && sortsBelow(value, prefixUpperBound(key));
+
+describe('toSearchKey', () => {
+  it('folds case and trims, matching the stored displayNameLower key', () => {
+    expect(toSearchKey('Gt86_swe')).toBe('gt86_swe');
+    expect(toSearchKey('GT86_SWE')).toBe('gt86_swe');
+    expect(toSearchKey('  Gt86_swe  ')).toBe('gt86_swe');
+  });
+
+  it('folds non-ASCII the same way regardless of the server locale', () => {
+    expect(toSearchKey('ÅKE')).toBe('åke');
+    // The Turkish trap: a locale-SENSITIVE fold maps 'I' to 'ı' (dotless i),
+    // which would desync the stored key from the query key for every Turkish
+    // -locale user. String.prototype.toLowerCase() is locale-invariant by spec,
+    // so 'I' must always fold to ASCII 'i'.
+    expect(toSearchKey('ISTANBUL')).toBe('istanbul');
+    expect(toSearchKey('ISTANBUL').charCodeAt(0)).toBe('i'.charCodeAt(0));
+  });
+});
+
+describe('prefixUpperBound', () => {
+  it('bounds a plain ASCII prefix so every continuation is inside the range', () => {
+    expect(inPrefixRange('gt86', 'gt86')).toBe(true);
+    expect(inPrefixRange('gt86_swe', 'gt86')).toBe(true);
+    expect(inPrefixRange('gt86zzzz', 'gt86')).toBe(true);
+    // Just outside: a different prefix must not be swept in.
+    expect(inPrefixRange('gt87', 'gt86')).toBe(false);
+    expect(inPrefixRange('gt85', 'gt86')).toBe(false);
+    expect(inPrefixRange('gt8', 'gt86')).toBe(false);
+  });
+
+  it('includes a name continuing with an ASTRAL character (the sentinel trap)', () => {
+    // A '￿' sentinel bound encodes to 3 UTF-8 bytes (EF BF BF); an emoji
+    // encodes to 4 (F0 9F 98 80) and therefore sorts ABOVE it. Appending a
+    // sentinel would silently exclude this name from its own prefix.
+    expect(inPrefixRange('gt86😀', 'gt86')).toBe(true);
+    expect(sortsBelow('gt86￿', 'gt86😀')).toBe(true);
+  });
+
+  it('bounds a prefix that itself ends in an astral character', () => {
+    expect(inPrefixRange('😀', '😀')).toBe(true);
+    expect(inPrefixRange('😀abc', '😀')).toBe(true);
+    expect(inPrefixRange('😁', '😀')).toBe(false);
+  });
+
+  it('never emits a lone surrogate when the increment lands in the surrogate block', () => {
+    const bound = prefixUpperBound('퟿');
+    expect(bound).toBe('');
+    // A lone surrogate is not a valid scalar value and would corrupt the query.
+    expect(bound.codePointAt(0)).toBeGreaterThan(0xdfff);
+    expect(inPrefixRange('퟿x', '퟿')).toBe(true);
+  });
+});
 
 describe('friends-core parsing', () => {
   it('accepts a nickname or a toUid, but not both or neither', () => {

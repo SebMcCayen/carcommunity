@@ -39,6 +39,7 @@ describe('buildUserProfileDocument', () => {
     );
     expect(doc).toStrictEqual({
       displayName: 'Anna',
+      displayNameLower: 'anna',
       role: 'user',
       activeMember: false,
       suspended: false,
@@ -47,6 +48,17 @@ describe('buildUserProfileDocument', () => {
       createdAt: SERVER_TIMESTAMP,
       updatedAt: SERVER_TIMESTAMP,
     });
+  });
+
+  // The provisioning KDoc claims displayNameLower is written in LOCKSTEP with
+  // displayName. Friend nickname resolution reads ONLY the key, so a profile
+  // provisioned without it is unfindable by nickname — pin the claim directly
+  // rather than just the shape above.
+  it('always derives displayNameLower from the resolved displayName', () => {
+    for (const provided of ['Gt86_swe', 'ANNA', 'ÅKE', undefined, '   ']) {
+      const doc = buildUserProfileDocument({ uid: 'uid-1', displayName: provided }, serverTimestamp);
+      expect(doc.displayNameLower).toBe(String(doc.displayName).toLowerCase());
+    }
   });
 
   it('never grants role, entitlement, or moderation flags', () => {
