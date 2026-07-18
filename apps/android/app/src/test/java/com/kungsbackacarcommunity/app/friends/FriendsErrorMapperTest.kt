@@ -38,9 +38,67 @@ class FriendsErrorMapperTest {
     }
 
     @Test
-    fun `send already exists maps to already friends`() {
+    fun `send already exists without a reason falls back to already friends`() {
         val result = FriendsErrorMapper.mapSend(error(FriendErrorCode.AlreadyExists))
-        assertEquals(SendRequestResult.Failed(FriendActionError.AlreadyExists), result)
+        assertEquals(SendRequestResult.Failed(FriendActionError.AlreadyFriends), result)
+    }
+
+    // --- reason discriminators -------------------------------------------------
+    // 'already-exists' covers TWO distinct outcomes and 'failed-precondition'
+    // covers two more, so the code alone cannot pick the right message. These
+    // pin that the reason — not the code — decides.
+
+    @Test
+    fun `send separates already-friends from request-already-sent by reason`() {
+        assertEquals(
+            SendRequestResult.Failed(FriendActionError.AlreadyFriends),
+            FriendsErrorMapper.mapSend(
+                error(FriendErrorCode.AlreadyExists, FriendsErrorMapper.REASON_ALREADY_FRIENDS),
+            ),
+        )
+        assertEquals(
+            SendRequestResult.Failed(FriendActionError.RequestAlreadySent),
+            FriendsErrorMapper.mapSend(
+                error(FriendErrorCode.AlreadyExists, FriendsErrorMapper.REASON_REQUEST_ALREADY_SENT),
+            ),
+        )
+    }
+
+    @Test
+    fun `send maps the self-request and nickname-not-found reasons`() {
+        assertEquals(
+            SendRequestResult.Failed(FriendActionError.SelfRequest),
+            FriendsErrorMapper.mapSend(
+                error(FriendErrorCode.InvalidArgument, FriendsErrorMapper.REASON_SELF_REQUEST),
+            ),
+        )
+        assertEquals(
+            SendRequestResult.Failed(FriendActionError.NotFound),
+            FriendsErrorMapper.mapSend(
+                error(FriendErrorCode.NotFound, FriendsErrorMapper.REASON_NICKNAME_NOT_FOUND),
+            ),
+        )
+    }
+
+    @Test
+    fun `a transport failure reads as network, not as a generic app fault`() {
+        assertEquals(
+            SendRequestResult.Failed(FriendActionError.Network),
+            FriendsErrorMapper.mapSend(error(FriendErrorCode.Unavailable)),
+        )
+        assertEquals(FriendActionError.Network, FriendsErrorMapper.mapGeneric(error(FriendErrorCode.Unavailable)))
+        assertEquals(FriendActionError.Network, FriendsErrorMapper.mapRespond(error(FriendErrorCode.Unavailable)))
+    }
+
+    @Test
+    fun `an unclassified failure keeps its raw code for the error report`() {
+        // Generic is the only reported category; the raw code is what makes the
+        // filed issue diagnosable instead of another "Something went wrong".
+        val result =
+            FriendsErrorMapper.mapSend(
+                FriendCallableError(FriendErrorCode.Other, null, emptyList(), rawCode = "INTERNAL"),
+            )
+        assertEquals(SendRequestResult.Failed(FriendActionError.Generic, "INTERNAL"), result)
     }
 
     @Test

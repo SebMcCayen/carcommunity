@@ -365,7 +365,7 @@
     <string name="friends_requestSent">Vänförfrågan skickad.</string>
     <string name="friends_nowFriends">Ni är nu vänner!</string>
     <string name="friends_chooseMember">Välj en medlem</string>
-    <string name="friends_chooseMemberBody">Flera medlemmar använder det smeknamnet. Välj den du menade.</string>
+    <string name="friends_chooseMemberBody">Flera medlemmar matchar det smeknamnet. Välj den du menade.</string>
     <string name="friends_chooseCancel">Avbryt</string>
     <string name="friends_removeConfirmTitle">Ta bort vän?</string>
     <string name="friends_removeConfirmBody">Ni är inte längre vänner. Du kan skicka en ny förfrågan senare.</string>
@@ -377,8 +377,11 @@
     <string name="friends_errorSignedOut">Logga in för att hantera vänner.</string>
     <string name="friends_errorNotMember">Vänner är tillgängliga för aktiva medlemmar.</string>
     <string name="friends_errorInvalid">Ange ett giltigt smeknamn.</string>
-    <string name="friends_errorNotFound">Ingen medlem hittades med det smeknamnet.</string>
-    <string name="friends_errorAlreadyFriends">Du är redan ansluten till den här medlemmen, eller så finns redan en väntande förfrågan.</string>
+    <string name="friends_errorSelfRequest">Det där är du! Du kan inte skicka en vänförfrågan till dig själv.</string>
+    <string name="friends_errorNotFound">Ingen medlem matchar det smeknamnet. Kontrollera stavningen, eller prova de första bokstäverna.</string>
+    <string name="friends_errorAlreadyFriends">Du är redan vän med den här medlemmen.</string>
+    <string name="friends_errorRequestAlreadySent">Du har redan skickat en förfrågan till den här medlemmen. Den ligger under \"Väntande förfrågningar\" tills de svarar.</string>
+    <string name="friends_errorNetwork">Ingen anslutning. Kontrollera din internetanslutning och försök igen.</string>
     <string name="friends_errorNotAddable">Den här medlemmen kan inte läggas till just nu.</string>
     <string name="friends_errorRequestGone">Förfrågan är inte längre tillgänglig.</string>
     <string name="friends_errorGeneric">Något gick fel. Försök igen.</string>

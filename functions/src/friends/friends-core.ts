@@ -149,12 +149,90 @@ export function parseListInput(data: unknown): ParseResult<Record<string, never>
 export const SELF_REQUEST_MESSAGE = 'You cannot send a friend request to yourself.';
 export const NICKNAME_NOT_FOUND_MESSAGE = 'No user found with that nickname.';
 export const AMBIGUOUS_NICKNAME_MESSAGE =
-  'Several members share that nickname. Pick the intended one.';
+  'Several members match that nickname. Pick the intended one.';
 export const ALREADY_FRIENDS_MESSAGE = 'You are already friends with this user.';
 export const REQUEST_ALREADY_SENT_MESSAGE = 'You already have a pending request to this user.';
 export const NOT_ADDABLE_MESSAGE = 'This user cannot be added right now.';
 export const REQUEST_NOT_FOUND_MESSAGE = 'Friend request not found.';
 export const REQUEST_NOT_PENDING_MESSAGE = 'This friend request has already been handled.';
+
+/**
+ * `details.reason` discriminators carried on the HttpsError of every
+ * sendRequest failure mode. The HttpsError CODE alone is ambiguous — both
+ * "already friends" and "request already pending" are `already-exists`, and
+ * both "ambiguous nickname" and "not addable" are `failed-precondition` — so
+ * a client cannot render a specific, actionable message from the code alone.
+ * Every reason below is attached by manageFriends.ts and asserted in
+ * friends.emulator.test.ts.
+ *
+ * PRIVACY: NOT_ADDABLE is deliberately opaque. It is emitted both when the
+ * caller blocked the target and when the target blocked the caller, and it
+ * carries no further detail, so the blocked party can never learn that (or by
+ * whom) they were blocked. Callers must not add a reason that distinguishes
+ * the two directions.
+ */
+export const REASON_AMBIGUOUS_NICKNAME = 'AMBIGUOUS_NICKNAME';
+export const REASON_NOT_ADDABLE = 'NOT_ADDABLE';
+export const REASON_ALREADY_FRIENDS = 'ALREADY_FRIENDS';
+export const REASON_REQUEST_ALREADY_SENT = 'REQUEST_ALREADY_SENT';
+export const REASON_NICKNAME_NOT_FOUND = 'NICKNAME_NOT_FOUND';
+export const REASON_SELF_REQUEST = 'SELF_REQUEST';
+
+/**
+ * The denormalized, case-folded search key stored on `users/{uid}` as
+ * `displayNameLower` and used by nickname resolution. Firestore has no
+ * case-insensitive or substring operator, so the lowercase form is persisted
+ * alongside `displayName` and queried as a prefix range.
+ *
+ * LOCALE: uses `String.prototype.toLowerCase()`, which is locale-INVARIANT by
+ * spec (unlike `toLocaleLowerCase()`). This matters because the key is written
+ * by the backend but the query may be derived from text typed on a device in
+ * any locale: a locale-sensitive fold would map 'I' to 'ı' under a Turkish
+ * locale and silently desync the stored key from the query key. Never swap
+ * this for `toLocaleLowerCase()`.
+ *
+ * Trimming mirrors `nicknameSchema` (which trims before validating), so the
+ * stored key always matches the key derived from a trimmed user query.
+ */
+export function toSearchKey(displayName: string): string {
+  return displayName.trim().toLowerCase();
+}
+
+/** Largest Unicode code point; the ceiling for {@link prefixUpperBound}. */
+const MAX_CODE_POINT = 0x10ffff;
+
+/**
+ * EXCLUSIVE upper bound for a `>= key` / `< bound` prefix range query, i.e. the
+ * smallest string that sorts strictly above every string starting with `key`.
+ *
+ * Built by incrementing the final CODE POINT of `key` (not by appending a
+ * sentinel such as ''). Firestore orders strings by their UTF-8 BYTES, so
+ * an astral character — an emoji like U+1F600, encoded as a 4-byte sequence —
+ * sorts ABOVE U+FFFF's 3-byte encoding. A sentinel bound would therefore
+ * silently exclude a display name such as "gt86😀" from the prefix "gt86";
+ * incrementing the code point cannot. Pinned by an emoji-suffix test in
+ * friends-core.test.ts.
+ *
+ * Lone surrogates (U+D800..U+DFFF) are not valid scalar values, so an increment
+ * landing in that block is lifted to U+E000. When `key` consists solely of
+ * U+10FFFF there is no representable bound above it and `key` itself is
+ * returned, yielding an empty range; callers never hit this because
+ * `nicknameSchema` rejects an empty nickname and such a name is unreachable.
+ */
+export function prefixUpperBound(key: string): string {
+  const codePoints = Array.from(key);
+  for (let i = codePoints.length - 1; i >= 0; i -= 1) {
+    const codePoint = codePoints[i]!.codePointAt(0)!;
+    if (codePoint < MAX_CODE_POINT) {
+      let next = codePoint + 1;
+      if (next >= 0xd800 && next <= 0xdfff) {
+        next = 0xe000;
+      }
+      return codePoints.slice(0, i).join('') + String.fromCodePoint(next);
+    }
+  }
+  return key;
+}
 
 /**
  * Length-prefixed SHA-256 over a tuple → a collision-resistant, Firestore-safe

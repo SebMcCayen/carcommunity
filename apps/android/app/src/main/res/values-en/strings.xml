@@ -365,7 +365,7 @@
     <string name="friends_requestSent">Friend request sent.</string>
     <string name="friends_nowFriends">You\'re now friends!</string>
     <string name="friends_chooseMember">Choose a member</string>
-    <string name="friends_chooseMemberBody">Several members use that nickname. Pick the one you meant.</string>
+    <string name="friends_chooseMemberBody">Several members match that nickname. Pick the one you meant.</string>
     <string name="friends_chooseCancel">Cancel</string>
     <string name="friends_removeConfirmTitle">Remove friend?</string>
     <string name="friends_removeConfirmBody">You\'ll no longer be friends. You can send a new request later.</string>
@@ -377,8 +377,11 @@
     <string name="friends_errorSignedOut">Please sign in to manage friends.</string>
     <string name="friends_errorNotMember">Friends are available to active members.</string>
     <string name="friends_errorInvalid">Enter a valid nickname.</string>
-    <string name="friends_errorNotFound">No member found with that nickname.</string>
-    <string name="friends_errorAlreadyFriends">You\'re already connected with this member, or a request is already pending.</string>
+    <string name="friends_errorSelfRequest">That\'s you! You can\'t send yourself a friend request.</string>
+    <string name="friends_errorNotFound">No member found matching that nickname. Check the spelling, or try the first few letters.</string>
+    <string name="friends_errorAlreadyFriends">You\'re already friends with this member.</string>
+    <string name="friends_errorRequestAlreadySent">You\'ve already sent this member a request. You\'ll see it under \"Pending requests\" until they reply.</string>
+    <string name="friends_errorNetwork">No connection. Check your internet and try again.</string>
     <string name="friends_errorNotAddable">This member can\'t be added right now.</string>
     <string name="friends_errorRequestGone">That request is no longer available.</string>
     <string name="friends_errorGeneric">Something went wrong. Please try again.</string>
