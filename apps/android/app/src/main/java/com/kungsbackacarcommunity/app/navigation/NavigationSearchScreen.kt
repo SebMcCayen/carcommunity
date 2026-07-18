@@ -119,9 +119,14 @@ const val NAV_SAVE_CONFIRM_TEST_TAG = "nav_save_confirm"
  *   the route preview's save button. Local + synchronous, so the shortcuts work
  *   offline. Null (the default) uses a stable in-memory store, same as above.
  * @param initialTarget a raw coordinate to preview immediately on open (a map
- *   long-press "navigate here"): it is reverse-geocoded for a label and fed into
- *   the same route preview + Start flow as a searched place. Null for a normal
- *   search-first open.
+ *   "navigate here" gesture — a long-press on open map, or a tap on a place the
+ *   basemap draws): it is fed into the same route preview + Start flow as a
+ *   searched place. Null for a normal search-first open.
+ * @param initialTargetName the name of [initialTarget] when the gesture already
+ *   knew it — a tapped shop/workshop/petrol station carries the basemap's own
+ *   label, so the preview can name the destination instead of calling it a
+ *   dropped pin. Null (a long-press on open map, where there is nothing to name)
+ *   falls back to reverse-geocoding for a label. Ignored without [initialTarget].
  */
 @Composable
 fun NavigationSearchScreen(
@@ -133,6 +138,7 @@ fun NavigationSearchScreen(
     recentStore: RecentSearchesStore? = null,
     savedStore: SavedPlacesStore? = null,
     initialTarget: LatLng? = null,
+    initialTargetName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -189,12 +195,20 @@ fun NavigationSearchScreen(
     // Fetch the origin up-front so the first suggestions are location-biased.
     LaunchedEffect(controller) { controller.refreshOrigin() }
 
-    // A map long-press "navigate here": immediately preview + route to the pressed
-    // coordinate (reverse-geocoded for its label) through the same flow as a
-    // searched place. Keyed on the target so a new long-press re-previews.
+    // A map "navigate here" gesture: immediately preview + route to the requested
+    // coordinate through the same flow as a searched place. A tapped place brings
+    // its own name; a long-press on open map has none, so it is reverse-geocoded
+    // for a label and falls back to "dropped pin". Keyed on the target AND its
+    // name so a new gesture re-previews.
     val droppedPinLabel = stringResource(R.string.addressSearch_droppedPin)
-    LaunchedEffect(controller, initialTarget) {
-        if (initialTarget != null) controller.selectPoint(initialTarget, droppedPinLabel)
+    LaunchedEffect(controller, initialTarget, initialTargetName) {
+        if (initialTarget != null) {
+            controller.selectPoint(
+                point = initialTarget,
+                fallbackLabel = droppedPinLabel,
+                knownName = initialTargetName,
+            )
+        }
     }
 
     // Mirror the picked destination onto the map surface behind (cleared when
@@ -223,10 +237,14 @@ fun NavigationSearchScreen(
         if (state.destination != null) controller.clearDestination() else onClose()
     }
 
+    // Chrome only — the map behind this (showing the drawn route + destination
+    // marker) is the shell's single surface, composed once underneath every page.
+    // This deliberately does NOT call [MapSurface.Content]: a second MapView call
+    // site here meant opening the search DISPOSED the map home's map and built a
+    // fresh one — a full style load with nothing on screen until its first GL
+    // frame, i.e. the white flash on entering AND leaving the search. The Box
+    // stays transparent so that map shows through.
     Box(modifier = modifier.fillMaxSize().testTag(NAV_SEARCH_TEST_TAG)) {
-        // Full-bleed map behind (shows the drawn route + destination marker).
-        mapSurface.Content(Modifier.fillMaxSize())
-
         Column(
             modifier =
                 Modifier

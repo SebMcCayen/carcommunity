@@ -325,13 +325,15 @@ fun MapHome(
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
+    //
+    // This composable is the map's CHROME, not the map: the surface itself is
+    // composed once by the shell, underneath every page, and this draws over it.
+    // It deliberately does NOT call [MapSurface.Content] — doing so would put a
+    // second MapView call site in a subtree that navigation disposes, which is
+    // the blank-flash bug (see MapSurface.Content). Everything here reaches the
+    // map through the [mapSurface] hooks instead. The Box stays transparent so
+    // the shell's map shows through.
     Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
-        // Full-bleed map (behind everything). The user's own position is drawn
-        // by the surface itself (the Mapbox location puck at the real GPS
-        // location), so it stays put when the map pans — there is deliberately
-        // no centre-locked Compose "You" overlay here.
-        mapSurface.Content(Modifier.fillMaxSize())
-
         // Transparent outside-tap catcher, shown only while the search bar is
         // expanded: a tap on the open map area collapses it back to the round
         // icon. It's composed here, above the map but below every later overlay

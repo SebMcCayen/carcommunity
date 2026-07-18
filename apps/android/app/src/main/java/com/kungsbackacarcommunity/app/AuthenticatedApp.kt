@@ -243,6 +243,34 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
 private const val SHELL_TAB_FADE_MILLIS = 200
 
 /**
+ * What is drawn over the shell's single map surface.
+ *
+ * The map is composed once for the whole signed-in shell and never disposed, so
+ * "which page is the user on" is, from the map's point of view, only ever this
+ * question: can they see it, and can they touch it? Two different answers hang
+ * off that — whether the surface stays live ([MapSurface.setActive]) and whether
+ * the map home's chrome stands down — and they are NOT the same answer, which is
+ * exactly why this is one enum and not a pair of booleans that can drift.
+ */
+private enum class MapCover {
+    /** Nothing over it: the map home. Visible, live, interactive. */
+    None,
+
+    /**
+     * Chrome over a map the user can still see (the address search). The surface
+     * stays LIVE — it is showing the route and the puck — but the map home's own
+     * chrome stands down, because it is not the page in front any more.
+     */
+    Transparent,
+
+    /**
+     * The map is hidden entirely (a non-map tab, a full-screen route,
+     * turn-by-turn). Nothing to see, so the surface is stood down.
+     */
+    Opaque,
+}
+
+/**
  * The signed-in experience: observes the profile document to gate onboarding,
  * then renders the **map-first, 5-tab shell** ([mapFirstShell]) once onboarded.
  *
@@ -670,16 +698,22 @@ fun AuthenticatedApp(
             // for the "no maps app" handoff fallback below.
             val navAppMissingText = stringResource(R.string.addressSearch_navAppMissing)
 
-            // Map long-press ("navigate here"): the surface publishes the pressed
-            // coordinate; open the search/route overlay previewing that point.
-            // Cleared on the surface once consumed so a later press re-triggers.
+            // A map "navigate here?" gesture — a long-press on open map, or a
+            // single tap on a place the basemap draws (a shop, a workshop, a
+            // petrol station). The surface publishes both through ONE hook, so
+            // both land in the SAME preview/confirmation here; the only difference
+            // is that a tapped place arrives with its own name, which is shown
+            // instead of the generic dropped-pin label. Cleared on the surface once
+            // consumed so a later gesture re-triggers.
             var navSearchTarget by remember { mutableStateOf<LatLng?>(null) }
-            val pendingLongPress by mapSurface.longPress.collectAsState()
-            LaunchedEffect(pendingLongPress) {
-                val pressed = pendingLongPress ?: return@LaunchedEffect
-                navSearchTarget = LatLng(pressed.longitude, pressed.latitude)
+            var navSearchTargetName by remember { mutableStateOf<String?>(null) }
+            val pendingPlace by mapSurface.placeRequest.collectAsState()
+            LaunchedEffect(pendingPlace) {
+                val requested = pendingPlace ?: return@LaunchedEffect
+                navSearchTarget = LatLng(requested.point.longitude, requested.point.latitude)
+                navSearchTargetName = requested.name
                 navSearchOpen = true
-                mapSurface.consumeLongPress()
+                mapSurface.consumePlaceRequest()
             }
 
             // Flag-gated (not member-gated) reach to the live-location feature.
@@ -964,6 +998,27 @@ fun AuthenticatedApp(
                 // so production back behaviour and its tests can't drift. Nested
                 // route BackHandlers compose deeper and take priority while
                 // enabled, so this only fires at a route's own root.
+                // What, if anything, is drawn over the map — the SINGLE source of
+                // truth for every "the map isn't the thing on screen" decision in
+                // the shell. Everything downstream (standing the surface down,
+                // clearing its semantics, standing the map home's chrome down,
+                // gating the chat hub) derives from this one value rather than
+                // re-deriving its own condition, so they cannot drift apart as
+                // pages are added.
+                val mapCover =
+                    when {
+                        // Turn-by-turn brings its own full-screen map.
+                        navDestination != null -> MapCover.Opaque
+                        // The address search is the one page that draws its chrome
+                        // over a map the user is still looking at (it shows the
+                        // route it just drew, and the puck).
+                        navSearchOpen -> MapCover.Transparent
+                        // Full-screen routes and the non-map tabs both hide it.
+                        route != null -> MapCover.Opaque
+                        selectedTab != ShellTab.Map -> MapCover.Opaque
+                        else -> MapCover.None
+                    }
+
                 val backResult = ShellNavigation.onBack(selectedTab, route)
                 BackHandler(enabled = backResult != ShellBackResult.Exit) {
                     when (backResult) {
@@ -975,10 +1030,56 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // ── The one and only map ────────────────────────────────────────
+                //
+                // Composed here, once, underneath every page in the signed-in
+                // shell, and never disposed while the user is signed in. Every
+                // page below draws OVER it.
+                //
+                // This is the generalisation of the tab fix: the map used to live
+                // inside the pages that show it (the map home AND the address
+                // search each called MapSurface.Content), so any navigation that
+                // swapped those pages destroyed the MapView and rebuilt it — a
+                // whole style load with an empty GL surface on screen, which is
+                // the white flash. Opening the search bar did it, closing it did
+                // it again, and a long-press (which opens the same search overlay)
+                // did it too. With one call site that nothing unmounts, there is
+                // nothing to rebuild and nothing to flash.
+                //
+                // Full-bleed on purpose: one surface means one geometry, and the
+                // pages that used to own a map disagreed about it anyway (the map
+                // home inset its map above the bottom bar, the search did not).
+                // The bottom bar is opaque and simply sits on top.
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize().then(
+                            // A map the user cannot see must not answer to TalkBack
+                            // through the page covering it.
+                            if (mapCover != MapCover.None) Modifier.clearAndSetSemantics {} else Modifier,
+                        ),
+                ) {
+                    mapSurface.Content(Modifier.fillMaxSize())
+                }
+
+                // Stand a HIDDEN map down (kills the pulsing puck's continuous GL
+                // redraw + its GPS draw) and bring it back when it is visible
+                // again. Keyed on the cover (not the tab/route) so moving between
+                // two pages that both hide the map does not re-fire it.
+                //
+                // Transparent covers stay ACTIVE: the address search draws its
+                // chrome over a map the user is still looking at and still expects
+                // a puck on. Both this and MapHome's `covered` below are derived
+                // from the same [mapCover], so "is it visible" and "is it live"
+                // cannot drift apart.
+                LaunchedEffect(mapCover, mapSurface) {
+                    mapSurface.setActive(mapCover != MapCover.Opaque)
+                }
+
                 if (navDestination != null) {
-                    // Full-screen turn-by-turn navigation (Google-Maps style),
-                    // entered from the route preview's "Start" button. Owns its own
-                    // Back handling and map surface (its own Nav-SDK MapView). On the
+                    // Full-screen turn-by-turn navigation, entered from the route
+                    // preview's "Start" button. Owns its own Back handling and map
+                    // surface (its own Nav-SDK MapView) — which is why it counts as
+                    // an OPAQUE cover and stands the shell's map down. On the
                     // config-less / CI build this is the no-SDK stub (see the
                     // src/noNav TurnByTurnNavScreen). The report affordance is wired
                     // to a "coming soon" snackbar until the incidents feature (a
@@ -1014,9 +1115,11 @@ fun AuthenticatedApp(
                         onClose = {
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
-                            // Drop any long-press target so re-opening via the
-                            // search bar starts in the normal search-first state.
+                            // Drop any long-press / place-tap target so re-opening
+                            // via the search bar starts in the normal search-first
+                            // state rather than re-previewing the last place.
                             navSearchTarget = null
+                            navSearchTargetName = null
                         },
                         onStartNavigation = { dest, label ->
                             // Real in-app Mapbox turn-by-turn only exists in a build
@@ -1044,6 +1147,7 @@ fun AuthenticatedApp(
                         recentStore = recentSearchesStore,
                         savedStore = savedPlacesStore,
                         initialTarget = navSearchTarget,
+                        initialTargetName = navSearchTargetName,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {
@@ -1187,31 +1291,35 @@ fun AuthenticatedApp(
                         },
                     ) { padding ->
                         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                            // The map home is composed for EVERY tab, not just the Map tab, and
-                            // the other tabs are drawn over it. Selecting it with `when` used to
-                            // dispose this subtree on the way to History/Social/Garage, which tore
-                            // the Mapbox MapView down (AndroidView.onRelease -> MapView.onDestroy);
-                            // coming back built a fresh MapView and re-ran loadStyle(STANDARD), and
-                            // until that first GL frame landed the surface had nothing in it — the
-                            // blank blink users saw on every return to the map. Keeping it composed
-                            // means there is nothing to rebuild and nothing to blink.
+                            // The map home's CHROME (search bar, floating controls, CTAs) — the
+                            // map itself is the shell's single surface, composed above this and
+                            // drawn behind it. This subtree is composed for EVERY tab, not just
+                            // the Map tab, with the other tabs drawn over it, so the transient UI
+                            // and Back wiring below survive a tab round-trip the way they did
+                            // before the map outlived the tab.
                             //
-                            // While another tab covers it the map is stood down (setActive(false)
-                            // below) and taken out of the semantics tree, so a covered map neither
-                            // burns GPS/GPU nor answers to TalkBack.
-                            val mapCovered = selectedTab != ShellTab.Map
+                            // Inset above the bottom bar (unlike the full-bleed map underneath)
+                            // so the floating controls never sit under the nav bar.
+                            //
+                            // Taken out of the semantics tree while covered, so TalkBack can't
+                            // reach the map's controls through the page drawn on top of them.
                             Box(
                                 modifier =
                                     Modifier.fillMaxSize().then(
-                                        if (mapCovered) Modifier.clearAndSetSemantics {} else Modifier,
+                                        if (mapCover != MapCover.None) {
+                                            Modifier.clearAndSetSemantics {}
+                                        } else {
+                                            Modifier
+                                        },
                                     ),
                             ) {
                                 MapHome(
                                     mapSurface = mapSurface,
-                                    // Same single value that stands the surface
-                                    // down below: a covered map must not keep
-                                    // intercepting Back or hold its transient UI.
-                                    covered = mapCovered,
+                                    // Derived from the same [mapCover] that stands
+                                    // the surface down: a map home that isn't the
+                                    // page in front must not keep intercepting Back
+                                    // or hold its transient UI open.
+                                    covered = mapCover != MapCover.None,
                                     isLiveSharing = isSharing,
                                     canShareLive = canShareLive,
                                     participantCount = mapParticipantUids.size,
@@ -1309,13 +1417,6 @@ fun AuthenticatedApp(
                                         }
                                     },
                                 )
-                            }
-
-                            // Stand the map down while it is covered and bring it back when it is
-                            // not. Keyed on the flag (not the tab) so hopping History -> Social
-                            // does not re-fire it.
-                            LaunchedEffect(mapCovered, mapSurface) {
-                                mapSurface.setActive(!mapCovered)
                             }
 
                             // The other tabs render as an opaque page over the map, crossfaded so
@@ -1593,16 +1694,15 @@ fun AuthenticatedApp(
                 // map stays visible behind it — matching the map-layers and
                 // live-share popups.
                 //
-                // The gate, derived ONCE: the popup floats over the map, so it may
-                // only show while the map shell is the active branch (the bubble that
-                // opens it lives on the map tab) — never over a full route or the
-                // nav-search overlay. Both the auto-close effect below and the render
+                // The gate: the popup floats over the map, so it may only show while
+                // the map home is the page in front — never over a full route, a
+                // non-map tab, turn-by-turn, or the nav-search overlay. That is
+                // precisely "nothing covers the map", so it reads the shell's single
+                // [mapCover] rather than restating the condition (which is how the
+                // nav-search term would have been missed when search stopped being
+                // its own branch). Both the auto-close effect below and the render
                 // condition read THIS value, so the two cannot drift apart.
-                val chatHubGateOpen =
-                    navDestination == null &&
-                        !navSearchOpen &&
-                        route == null &&
-                        selectedTab == ShellTab.Map
+                val chatHubGateOpen = mapCover == MapCover.None
 
                 // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
                 // (and still valid) hub survives process death — but the popup only

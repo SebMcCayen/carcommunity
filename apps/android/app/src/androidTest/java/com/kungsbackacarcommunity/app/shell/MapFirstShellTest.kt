@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,6 +21,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -163,6 +166,143 @@ class MapFirstShellTest {
 
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+    }
+
+    /** Opens the address-search overlay the way a user does: expand the bar, tap it. */
+    private fun openNavSearch() {
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).performClick()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+    }
+
+    /**
+     * The reported bug: pressing the search bar flashed white, and so did leaving
+     * it.
+     *
+     * The map home and the address search each used to call MapSurface.Content,
+     * and the shell picked between them — so opening the search DISPOSED the map
+     * home's MapView (AndroidView.onRelease -> MapView.onDestroy) and the search
+     * built a brand-new one, re-running loadStyle(STANDARD) from scratch; closing
+     * did the same in reverse. Between a new SurfaceView attaching and its first
+     * GL frame there is nothing to show, and that gap lasts a whole style load —
+     * that is the flash, once each way.
+     *
+     * Guarded exactly as the tab case is: ONE entry into the composition for the
+     * whole round-trip. On the real surface each entry is a fresh MapView + style
+     * load, so "still 1" is precisely "nothing was rebuilt, so nothing can flash".
+     */
+    @Test
+    fun openingAndClosingSearch_keepsTheMapComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        openNavSearch()
+        // The search is up, over the SAME map — not a second one.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        // Leave the search the way a user does.
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+
+        // Still the same map: had it been disposed either way, this would be 2 or 3.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * Same bug, the other reported route in: holding a finger on the map flashed
+     * white before the "navigate here?" question appeared. A long-press opens the
+     * very same search overlay, so it was the same teardown — and it must stay
+     * fixed even though nothing about the gesture looks like navigation.
+     */
+    @Test
+    fun longPressingTheMap_opensTheNavigatePreview_withoutRebuildingTheMap() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        // The gesture the real surface publishes when the user holds the map.
+        composeTestRule.runOnIdle { surface.emitLongPress(MapPoint(12.0757, 57.4874)) }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * A single tap on a place the basemap draws must reach the SAME preview a
+     * long-press does — that is the whole point of the two gestures sharing one
+     * hook — and carry the place's name, not a generic dropped pin.
+     */
+    @Test
+    fun tappingAPlace_opensTheSameNavigatePreview_named() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+
+        composeTestRule.runOnIdle {
+            surface.emitPlaceTap(MapPoint(12.0757, 57.4874), name = "Bilverkstan")
+        }
+        composeTestRule.waitForIdle()
+
+        // Same overlay as the long-press, showing the tapped place BY NAME — not
+        // as a generic dropped pin. The name lands in more than one node (the
+        // search field and the destination card both carry it), so assert on the
+        // set rather than a single match.
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+        composeTestRule.onAllNodesWithText("Bilverkstan").onFirst().assertExists()
+        composeTestRule
+            .onNodeWithText(str(R.string.addressSearch_droppedPin))
+            .assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * The search draws over a map the user can still SEE (it shows the route and
+     * the puck), so unlike a tab or a route it must not stand the surface down.
+     * This is the distinction the shell's single `mapCover` exists to keep: the
+     * map home's chrome steps back, the map itself stays live.
+     */
+    @Test
+    fun searchOverlay_leavesTheMapActive_unlikeATab() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+
+        openNavSearch()
+        composeTestRule.runOnIdle {
+            assertTrue("the search shows the live map behind it", surface.isActive)
+        }
+
+        // A tab, by contrast, hides it entirely — so that one does stand it down.
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+    }
+
+    /**
+     * A full-screen route hides the map completely, so it must stand the surface
+     * down — but it must NOT dispose it. Routes were the gap left open when the
+     * tab case was fixed; the map now outlives them too.
+     */
+    @Test
+    fun openingARoute_standsTheMapDown_butKeepsItComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.settingsMenu_title)).assertIsDisplayed()
+
+        composeTestRule.runOnIdle {
+            assertFalse("a hidden map must not keep burning GPS/GPU", surface.isActive)
+            assertEquals("but it must not be rebuilt either", 1, surface.contentCompositions)
+        }
     }
 
     /**
