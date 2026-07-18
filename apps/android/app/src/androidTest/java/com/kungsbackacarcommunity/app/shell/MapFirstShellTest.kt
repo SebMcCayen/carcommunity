@@ -450,7 +450,12 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
-        // A tab tap while the hub is open is inert — the card is in the way.
+        // A tab tap while the hub is open is inert — the card is in the way. This
+        // genuinely models a physical tap: performClick() is not a semantics-action
+        // shortcut, it delegates to performTouchInput { click() } (ActionsKt
+        // .performClick -> Actions_androidKt.performClickImpl -> performTouchInput),
+        // so the event is hit-tested against whatever is actually on top. If the card
+        // did not block it, the shell would switch tabs and the hub would vanish.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
