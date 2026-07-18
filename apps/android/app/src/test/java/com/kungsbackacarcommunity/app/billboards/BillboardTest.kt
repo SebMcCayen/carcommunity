@@ -15,4 +15,9 @@ class BillboardTest {
         assertEquals("offer_view", BillboardInteractionType.OFFER_VIEW.wire)
         assertEquals(6, BillboardInteractionType.values().size)
     }
+
+    @Test
+    fun `active billboards query limit is one hundred fifty`() {
+        assertEquals(150L, Billboards.ACTIVE_BILLBOARDS_QUERY_LIMIT)
+    }
 }

@@ -7,6 +7,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
@@ -23,11 +24,17 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * [EventsRepository] backed by Cloud Firestore (Phase 12 slice 9).
  *
- * Published events are read with an equality filter only (status == published)
- * and sorted client-side ([Events.sortedForList]) so the query needs no
- * composite index. Member-gated details and RSVP writes rely on the Security
- * Rules; an RSVP is a direct owner write of exactly `{ status, updatedAt }`.
- * Construction is guarded ([createIfAvailable] returns null without Firebase).
+ * Published events are read with an equality filter (status == published)
+ * ordered soonest-start-first and bounded to
+ * [Events.PUBLISHED_EVENTS_QUERY_LIMIT] — the same soonest-first order the
+ * list displays ([Events.sortedForList]), so capping the query keeps exactly
+ * the events the screen would show first as the collection grows without
+ * bound over the app's lifetime. Uses the existing `events` composite index
+ * (status ASC, startsAt ASC — firebase/firestore.indexes.json), so no new
+ * index is required. Member-gated details and RSVP writes rely on the
+ * Security Rules; an RSVP is a direct owner write of exactly
+ * `{ status, updatedAt }`. Construction is guarded ([createIfAvailable]
+ * returns null without Firebase).
  */
 class FirebaseEventsRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -39,6 +46,8 @@ class FirebaseEventsRepository private constructor(
             firestore
                 .collection(EVENTS)
                 .whereEqualTo("status", EventStatus.PUBLISHED.wire)
+                .orderBy(STARTS_AT, Query.Direction.ASCENDING)
+                .limit(Events.PUBLISHED_EVENTS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(EventsListState.Error)
@@ -223,6 +232,7 @@ class FirebaseEventsRepository private constructor(
 
     companion object {
         private const val EVENTS = "events"
+        private const val STARTS_AT = "startsAt"
         private const val DETAILS = "details"
         private const val PRIVATE = "private"
         private const val RSVPS = "rsvps"

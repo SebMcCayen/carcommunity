@@ -33,6 +33,12 @@ class PartnerTest {
         assertEquals(listOf("o3", "o1"), result) // "apple" < "Zebra", case-insensitive
     }
 
+    @Test
+    fun `active companies and offers query limits are bounded`() {
+        assertEquals(150L, Partners.ACTIVE_COMPANIES_QUERY_LIMIT)
+        assertEquals(200L, Partners.ACTIVE_OFFERS_QUERY_LIMIT)
+    }
+
     private fun offer(id: String, companyId: String, title: String) =
         PartnerOffer(id, companyId, title, "teaser", PartnerOfferType.DISCOUNT_CODE)
 }
