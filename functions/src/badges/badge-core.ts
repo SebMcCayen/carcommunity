@@ -11,8 +11,10 @@
  * - Attendance for first_event / five_events uses the legacy conservative
  *   proxy: a `going` RSVP on an event that reaches `completed`. The count is
  *   maintained on the backend-only `badgeProgress/{uid}` counter document,
- *   incremented exactly once per completed event (events.complete is a
- *   guarded single transition).
+ *   incremented exactly once per completed event — `completed` is terminal, so
+ *   whichever path ends the event (the events.complete callable or the
+ *   events-autoClose sweep) makes that transition exactly once and credits
+ *   exactly once.
  *
  * Design rules (legacy):
  *  - Wording stays positive and non-competitive; no speed/distance/racing

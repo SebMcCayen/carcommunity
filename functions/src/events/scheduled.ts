@@ -7,11 +7,17 @@
  * until an admin clicks "complete" (which, in practice, nobody ever did — a
  * 9 August event was still listed as upcoming in mid-July of the next year).
  *
- * Semantics are exactly the events.complete callable's, minus the actor:
- * published → completed, going-RSVP attendees credited with badge attendance
- * (creditEventAttendance, shared with the callable). `completed` is terminal
- * and rules-gate the event's chat, member-gated detail and group-drive roster
- * on `published`, so completing an event closes it in the full sense.
+ * The USER-VISIBLE outcome matches the events.complete callable: published →
+ * completed, with going-RSVP attendees credited badge attendance through the
+ * shared creditEventAttendance. `completed` is terminal, and rules gate the
+ * event's chat, member-gated detail and group-drive roster on `published`, so
+ * completing an event closes it in the full sense.
+ *
+ * Two deliberate differences from the callable, both because there is no actor:
+ * - No adminAuditEvents record. That log is a record of ADMIN actions, and an
+ *   unattended sweep is not one; `autoClosedAt` below is the trace instead.
+ * - `autoClosedAt` is stamped (the callable never sets it), so an operator can
+ *   always tell an auto-close from a hand-completed event.
  *
  * WHY NO NEW COMPOSITE INDEX: the candidate query filters
  * `status == 'published' AND startsAt <= autoCloseCandidateCutoff(now)`,

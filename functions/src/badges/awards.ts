@@ -68,9 +68,14 @@ export async function awardBadge(params: {
 /**
  * Records one completed-event attendance for a user (going-RSVP proxy,
  * legacy parity) on the backend-only badgeProgress/{uid} counter, then
- * awards any newly qualified event badges. Called from events.complete for
- * each going attendee — the completed transition is single-shot, so each
- * event increments a user at most once.
+ * awards any newly qualified event badges.
+ *
+ * Called (via creditEventAttendance) for each going attendee by BOTH paths
+ * that complete an event: the events.complete callable and the events-autoClose
+ * scheduled sweep. Each event increments a given user at most once because
+ * `completed` is terminal, so only the one writer that actually performed the
+ * published→completed transition credits — see creditEventAttendance's caller
+ * contract in events/eventLifecycle.ts, which is where that guarantee lives.
  */
 export async function recordEventAttendance(targetUid: string): Promise<void> {
   const progressRef = db.collection('badgeProgress').doc(targetUid);

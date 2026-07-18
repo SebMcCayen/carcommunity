@@ -547,9 +547,12 @@ describe('events-complete – creator or admin', () => {
 
     await signInAs(adminUser);
     await call('events-complete', { eventId });
-    expect((await adminDb.collection('events').doc(eventId).get()).data()!.status).toBe(
-      'completed',
-    );
+    const completed = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(completed.status).toBe('completed');
+    // autoClosedAt distinguishes an auto-close from a hand-completed event, so
+    // the callable must NOT stamp it (events/scheduled.ts documents this as the
+    // sweep's only trace, standing in for the audit record it does not write).
+    expect(completed.autoClosedAt).toBeUndefined();
 
     const audit = await adminDb
       .collection('adminAuditEvents')

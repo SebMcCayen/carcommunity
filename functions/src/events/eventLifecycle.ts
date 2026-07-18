@@ -70,10 +70,21 @@ interface StoredEvent {
  * holds however the event reached `completed`, rather than depending on an
  * admin having clicked the button.
  *
- * Safe to call at most once per event: every caller must have just performed
- * the single-shot published→completed transition (guardCompletable inside a
- * transaction), so no event can double-credit. Failures log per attendee and
- * never propagate — attendance credit must not undo a completion.
+ * CALLER CONTRACT: call this only after YOUR OWN write has just moved the
+ * event published→completed inside a transaction. That is what makes the
+ * credit single-shot — `completed` is terminal, so exactly one writer can ever
+ * make that transition and only that writer credits. The two paths establish
+ * it differently, and neither is a guard the other shares:
+ * - events.complete — `guardCompletable` rejects any status but `published`,
+ *   inside the transitionEvent transaction.
+ * - the auto-close sweep — `closeEvent` re-reads the status inside its own
+ *   transaction and returns false without writing if it is no longer
+ *   `published`; the sweep credits only when it returned true.
+ *
+ * Calling this WITHOUT having performed that transition (e.g. on an
+ * already-completed event) would double-credit — nothing in this function
+ * detects that. Failures log per attendee and never propagate: attendance
+ * credit must not undo a completion.
  */
 export async function creditEventAttendance(eventId: string): Promise<void> {
   try {
