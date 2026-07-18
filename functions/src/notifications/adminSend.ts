@@ -65,22 +65,25 @@ async function resolveRecipients(input: AdminSendInput): Promise<string[]> {
       return snap.exists && isEligible(snap.data()) ? [snap.id] : [];
     }
     case 'admins': {
-      const snap = await users.where('role', 'in', ['admin', 'owner']).get();
+      const snap = await users.where('role', 'in', ['admin', 'owner']).limit(MAX_SYNC_AUDIENCE_SIZE + 1).get();
+      // Reject on the RAW size — never silently truncate to the eligible subset
+      // of an over-cap audience.
+      assertAudienceWithinCap(snap.docs.length);
       return snap.docs.filter((d) => isEligible(d.data())).map((d) => d.id);
     }
     case 'members': {
-      const snap = await users.where('activeMember', '==', true).get();
+      const snap = await users.where('activeMember', '==', true).limit(MAX_SYNC_AUDIENCE_SIZE + 1).get();
+      assertAudienceWithinCap(snap.docs.length);
       return snap.docs.filter((d) => isEligible(d.data())).map((d) => d.id);
     }
     case 'free_users': {
-      const snap = await users.where('activeMember', '==', false).get();
+      const snap = await users.where('activeMember', '==', false).limit(MAX_SYNC_AUDIENCE_SIZE + 1).get();
+      assertAudienceWithinCap(snap.docs.length);
       return snap.docs.filter((d) => isEligible(d.data())).map((d) => d.id);
     }
     case 'all_users': {
       const snap = await users.limit(MAX_SYNC_AUDIENCE_SIZE + 1).get();
-      // Reject on the RAW size — never silently truncate to the eligible subset
-      // of an over-cap audience.
-      assertAllUsersWithinCap(snap.docs.length);
+      assertAudienceWithinCap(snap.docs.length);
       return snap.docs.filter((d) => isEligible(d.data())).map((d) => d.id);
     }
     case 'event_participants': {
@@ -96,8 +99,17 @@ async function resolveRecipients(input: AdminSendInput): Promise<string[]> {
   }
 }
 
-/** Rejects an all_users audience whose RAW size exceeds the cap (before eligibility filtering). */
-function assertAllUsersWithinCap(rawSize: number): void {
+/**
+ * Rejects an audience query whose RAW result size exceeds the cap (before
+ * eligibility filtering). Used by every audience whose recipient set is
+ * resolved via a Firestore query (admins, members, free_users, all_users):
+ * each of those queries is itself bounded with `.limit(MAX_SYNC_AUDIENCE_SIZE
+ * + 1)`, so a RAW size over the cap means "more than the cap exists" rather
+ * than "the whole collection, unbounded, happened to be this size" — the
+ * +1 lets us distinguish "exactly at the cap" from "over the cap" without
+ * reading the entire matching set into memory first.
+ */
+function assertAudienceWithinCap(rawSize: number): void {
   if (rawSize > MAX_SYNC_AUDIENCE_SIZE) {
     throw new HttpsError(
       'invalid-argument',
