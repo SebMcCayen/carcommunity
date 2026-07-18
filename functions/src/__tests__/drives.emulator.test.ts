@@ -97,6 +97,7 @@ const call = (name: string, data: unknown) => httpsCallable(functions, name)(dat
 
 let member: TestUser;
 let freeUser: TestUser;
+let unentitledOwner: TestUser;
 
 const validSave = {
   title: 'Kvällstur',
@@ -122,6 +123,11 @@ beforeAll(async () => {
   member = await createProvisionedUser('drives-member');
   await adminDb.collection('users').doc(member.uid).set({ activeMember: true }, { merge: true });
   freeUser = await createProvisionedUser('drives-free');
+  unentitledOwner = await createProvisionedUser('drives-owner');
+  await adminDb
+    .collection('users')
+    .doc(unentitledOwner.uid)
+    .set({ role: 'owner', activeMember: false }, { merge: true });
 }, 120_000);
 
 afterAll(async () => {
@@ -135,6 +141,22 @@ describe('drives-save', () => {
       'functions/unauthenticated',
     );
     await signInAs(freeUser);
+    expect(await callableErrorCode(call('drives-save', validSave))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  /**
+   * Regression (v0.8.0 "Could not save the drive"): the owner/admin ROLE does
+   * NOT bypass the member entitlement here. saveDrive gates on
+   * requireMemberActor (activeMember only), not requireMemberOrAdminActor
+   * (role bypass), so an owner whose users/{uid}.activeMember is false is
+   * refused exactly like any free user. This is the whole delta between
+   * live-startSession (requireActiveActor — free, succeeded) and drives-save
+   * (requireMemberActor — refused) for the same account in the same session.
+   */
+  it('rejects an owner without an active membership (the role does not bypass)', async () => {
+    await signInAs(unentitledOwner);
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(
       'functions/permission-denied',
     );

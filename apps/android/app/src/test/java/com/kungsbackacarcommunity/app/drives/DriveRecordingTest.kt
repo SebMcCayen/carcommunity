@@ -202,6 +202,122 @@ class DriveRecordingTest {
         assertTrue(c.state.value is RecordingState.Failed)
     }
 
+    // ---------------------------------------------------------------------
+    // Regression (v0.8.0 "Could not save the drive"): the save failure's code
+    // must survive into the state, so the prompt can tell a permanent member-gate
+    // refusal from a retryable fault and the auto error report files a code.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `save carries the callable status code into Failed`() = runTest {
+        val c =
+            DriveRecordingCoordinator(
+                repository = FailingRepository(DriveSaveException(code = "PERMISSION_DENIED")),
+                sourceSessionId = "sess",
+                clock = { 1_000L },
+            )
+        c.start()
+        c.stop()
+        c.save(title = null)
+        val failed = c.state.value as RecordingState.Failed
+        assertEquals("PERMISSION_DENIED", failed.code)
+    }
+
+    @Test
+    fun `a member-gate refusal is a permanent refusal, not a retryable fault`() = runTest {
+        val c =
+            DriveRecordingCoordinator(
+                repository = FailingRepository(DriveSaveException(code = "PERMISSION_DENIED")),
+                sourceSessionId = "sess",
+                clock = { 1_000L },
+            )
+        c.start()
+        c.stop()
+        c.save(title = null)
+        assertTrue((c.state.value as RecordingState.Failed).isPermanentRefusal)
+    }
+
+    @Test
+    fun `a transient fault is not a permanent refusal`() = runTest {
+        val c =
+            DriveRecordingCoordinator(
+                repository = FailingRepository(DriveSaveException(code = "UNAVAILABLE")),
+                sourceSessionId = "sess",
+                clock = { 1_000L },
+            )
+        c.start()
+        c.stop()
+        c.save(title = null)
+        val failed = c.state.value as RecordingState.Failed
+        assertEquals("UNAVAILABLE", failed.code)
+        assertFalse(failed.isPermanentRefusal)
+    }
+
+    @Test
+    fun `a non-callable failure yields no code and is not a permanent refusal`() = runTest {
+        val c =
+            DriveRecordingCoordinator(
+                repository = FailingRepository(IllegalStateException("socket closed")),
+                sourceSessionId = "sess",
+                clock = { 1_000L },
+            )
+        c.start()
+        c.stop()
+        c.save(title = null)
+        val failed = c.state.value as RecordingState.Failed
+        assertNull(failed.code)
+        assertFalse(failed.isPermanentRefusal)
+    }
+
+    // ---------------------------------------------------------------------
+    // DriveRecordingGate — the v0.8.0 root cause. A live session must only
+    // record a drive the backend would actually accept.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `a non-member live session records nothing, since drives-save would refuse it`() {
+        assertFalse(
+            DriveRecordingGate.shouldRecord(
+                hasDrivesBackend = true,
+                canShareLive = true,
+                isActiveMember = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a member live session records`() {
+        assertTrue(
+            DriveRecordingGate.shouldRecord(
+                hasDrivesBackend = true,
+                canShareLive = true,
+                isActiveMember = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `no drives backend records nothing even for a member`() {
+        assertFalse(
+            DriveRecordingGate.shouldRecord(
+                hasDrivesBackend = false,
+                canShareLive = true,
+                isActiveMember = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `no live-share reach records nothing`() {
+        assertFalse(
+            DriveRecordingGate.shouldRecord(
+                hasDrivesBackend = true,
+                canShareLive = false,
+                isActiveMember = true,
+            ),
+        )
+    }
+
     @Test
     fun `discard stores nothing and clears the recorder`() {
         val c = coordinator(shouldFail = false)
@@ -354,6 +470,15 @@ private class RetryFakeRepository : DrivesRepository {
         attempts++
         if (attempts == 1) throw IllegalStateException("save failed")
     }
+
+    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+}
+
+/** Repository whose save always fails with [failure], to pin failure mapping. */
+private class FailingRepository(private val failure: Exception) : DrivesRepository {
+    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+    override suspend fun saveDrive(request: Map<String, Any?>): Unit = throw failure
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
 }

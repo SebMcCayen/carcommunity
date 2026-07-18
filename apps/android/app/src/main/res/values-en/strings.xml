@@ -502,6 +502,10 @@
     <string name="savedDrives_promptNotPublic">Drive history is not public.</string>
     <string name="savedDrives_saveAction">Save drive</string>
     <string name="savedDrives_discardAction">Discard drive</string>
+    <string name="savedDrives_discardConfirmTitle">Discard the drive?</string>
+    <string name="savedDrives_discardConfirmBody">All data from the drive is deleted immediately and cannot be recovered.</string>
+    <string name="savedDrives_discardConfirmAction">Discard the drive</string>
+    <string name="savedDrives_discardConfirmCancel">Cancel</string>
     <string name="savedDrives_saveError">Could not save the drive. Please try again.</string>
     <string name="savedDrives_discardError">Could not discard the drive. Please try again.</string>
     <string name="savedDrives_noDriveSaved">No drive was saved.</string>

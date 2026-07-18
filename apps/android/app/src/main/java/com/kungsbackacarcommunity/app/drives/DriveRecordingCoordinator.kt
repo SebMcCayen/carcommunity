@@ -81,7 +81,11 @@ class DriveRecordingCoordinator(
     /**
      * Explicitly saves the recorded drive via `drives-save`. Only valid from
      * the prompt or a prior failure. On success → [RecordingState.Saved]; on
-     * failure → [RecordingState.Failed] (retryable).
+     * failure → [RecordingState.Failed], carrying the callable status code so
+     * the caller can tell a retryable fault from a permanent refusal
+     * ([RecordingState.Failed.isPermanentRefusal] — the member gate). A retry is
+     * still ACCEPTED from either, so the decision of whether to offer one is the
+     * UI's.
      *
      * The payload's `endedAt` is the captured [stoppedAtMillis], so a retry
      * sends the exact same end time as the first attempt (and the stored
@@ -120,6 +124,10 @@ class DriveRecordingCoordinator(
                 RecordingState.Failed(
                     pointCount = recorder.pointCount,
                     elapsedMillis = recorder.elapsedMillis(endedAt),
+                    // Carry the callable status so the prompt can distinguish a
+                    // permanent refusal (the member gate) from a retryable fault,
+                    // and so the auto error report files a stable code.
+                    code = (failure as? DriveSaveException)?.code,
                 )
         }
     }

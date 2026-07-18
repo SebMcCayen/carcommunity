@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -35,9 +39,13 @@ const val SESSION_SUMMARY_DIALOG_TAG = "session_summary_dialog"
  * recomputes the authoritative stats server-side) or DISCARD it (nothing stored,
  * the product's explicit-save rule).
  *
+ * DISCARD is irreversible, so it is guarded by a second are-you-sure
+ * confirmation ([DISCARD_CONFIRM_DIALOG_TAG]); SAVE is not, since it only adds.
+ *
  * Driven entirely by the [DriveRecordingCoordinator] state:
  * - [RecordingState.PromptSave] / [RecordingState.Failed] → the summary + actions
- *   (Failed additionally shows a retry error line).
+ *   (Failed additionally shows an error line — the member-gate refusal names the
+ *   missing membership, anything else offers a retry).
  * - [RecordingState.Saving] → a non-dismissible progress dialog.
  * - any other state → nothing (the host dismisses on Saved / Discarded).
  *
@@ -62,8 +70,20 @@ fun SessionSummaryDialog(
     // of restarting the point scan on every transition.
     val prompt: SummaryPromptArgs? =
         when (state) {
-            is RecordingState.PromptSave -> SummaryPromptArgs(state.elapsedMillis, showError = false)
-            is RecordingState.Failed -> SummaryPromptArgs(state.elapsedMillis, showError = true)
+            is RecordingState.PromptSave ->
+                SummaryPromptArgs(state.elapsedMillis, error = null)
+            is RecordingState.Failed ->
+                SummaryPromptArgs(
+                    state.elapsedMillis,
+                    // A member-gate refusal can never succeed on a retry, so say
+                    // what is actually wrong instead of "please try again".
+                    error =
+                        if (state.isPermanentRefusal) {
+                            R.string.savedDrives_memberRequired
+                        } else {
+                            R.string.savedDrives_saveError
+                        },
+                )
             RecordingState.Saving,
             RecordingState.Idle,
             is RecordingState.Recording,
@@ -76,7 +96,7 @@ fun SessionSummaryDialog(
         SummaryPrompt(
             elapsedMillis = prompt.elapsedMillis,
             pointsProvider = pointsProvider,
-            showError = prompt.showError,
+            error = prompt.error,
             onSave = onSave,
             onDiscard = onDiscard,
         )
@@ -85,17 +105,28 @@ fun SessionSummaryDialog(
     }
 }
 
-/** The [SummaryPrompt] inputs derived from a prompt-bearing [RecordingState]. */
-private data class SummaryPromptArgs(val elapsedMillis: Long, val showError: Boolean)
+/**
+ * The [SummaryPrompt] inputs derived from a prompt-bearing [RecordingState].
+ *
+ * @property error the error string to show under the summary, or null when the
+ *   prompt is not in a failed state.
+ */
+private data class SummaryPromptArgs(val elapsedMillis: Long, @StringRes val error: Int?)
 
 @Composable
 private fun SummaryPrompt(
     elapsedMillis: Long,
     pointsProvider: () -> List<RecordedPoint>,
-    showError: Boolean,
+    @StringRes error: Int?,
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    // Discarding destroys the recorded drive irrecoverably, so it takes a second,
+    // explicit confirmation. Held in rememberSaveable: the prompt itself survives
+    // an Activity recreation (SingleSessionRecording is process-scoped), so the
+    // confirmation stacked on top of it must survive one too rather than
+    // silently reverting to the summary.
+    var confirmingDiscard by rememberSaveable { mutableStateOf(false) }
     // A recording can hold up to DriveRecorder.MAX_ROUTE_POINTS (20k) fixes and
     // the distance scan is O(n) Haversine/trig, so computing it during
     // composition would jank the frame the dialog opens on. Resolve it on a
@@ -149,9 +180,9 @@ private fun SummaryPrompt(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (showError) {
+                if (error != null) {
                     Text(
-                        text = stringResource(R.string.savedDrives_saveError),
+                        text = stringResource(error),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -164,8 +195,60 @@ private fun SummaryPrompt(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDiscard) {
+            // Routed through the are-you-sure confirmation, never straight to
+            // onDiscard: this is the irreversible branch.
+            TextButton(onClick = { confirmingDiscard = true }) {
                 Text(text = stringResource(R.string.savedDrives_discardAction))
+            }
+        },
+    )
+
+    // Composed AFTER the summary, deliberately: each AlertDialog owns a separate
+    // window and the LAST one composed is the one on top. Declared before the
+    // summary it would open behind it, leaving the user staring at an
+    // unresponsive-looking summary.
+    if (confirmingDiscard) {
+        DiscardConfirmDialog(
+            onConfirm = {
+                confirmingDiscard = false
+                onDiscard()
+            },
+            onCancel = { confirmingDiscard = false },
+        )
+    }
+}
+
+/** Test tag on the are-you-sure confirmation guarding the discard branch. */
+const val DISCARD_CONFIRM_DIALOG_TAG = "discard_confirm_dialog"
+
+/**
+ * Second confirmation before the recorded drive is destroyed. Discard is
+ * irreversible — the points live only in memory, so there is nothing to undo
+ * from — and it sits next to Save in the summary, where a mis-tap would silently
+ * bin the whole drive.
+ *
+ * Unlike the summary it guards, this one IS dismissible by back/outside tap:
+ * dismissing simply returns to the summary, where the forced Save/Discard choice
+ * still stands, so no drive can slip through unresolved.
+ */
+@Composable
+private fun DiscardConfirmDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        modifier = Modifier.testTag(DISCARD_CONFIRM_DIALOG_TAG),
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.savedDrives_discardConfirmTitle)) },
+        text = { Text(stringResource(R.string.savedDrives_discardConfirmBody)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.savedDrives_discardConfirmAction),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(text = stringResource(R.string.savedDrives_discardConfirmCancel))
             }
         },
     )

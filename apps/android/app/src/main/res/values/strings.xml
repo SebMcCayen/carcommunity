@@ -502,6 +502,10 @@
     <string name="savedDrives_promptNotPublic">Körhistorik är inte publik.</string>
     <string name="savedDrives_saveAction">Spara körning</string>
     <string name="savedDrives_discardAction">Kasta körning</string>
+    <string name="savedDrives_discardConfirmTitle">Kasta körningen?</string>
+    <string name="savedDrives_discardConfirmBody">All data från körningen raderas direkt och går inte att få tillbaka.</string>
+    <string name="savedDrives_discardConfirmAction">Kasta körningen</string>
+    <string name="savedDrives_discardConfirmCancel">Avbryt</string>
     <string name="savedDrives_saveError">Körningen kunde inte sparas. Försök igen.</string>
     <string name="savedDrives_discardError">Körningen kunde inte kastas. Försök igen.</string>
     <string name="savedDrives_noDriveSaved">Ingen körning sparades.</string>
