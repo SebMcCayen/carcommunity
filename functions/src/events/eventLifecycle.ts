@@ -46,6 +46,14 @@ import {
 } from './events-core';
 import type { EventIdResponse } from './manageEvent';
 
+/**
+ * Max attendance-credit transactions in flight at once, per event. Each credit
+ * is its own Firestore transaction on an independent badgeProgress/{uid}
+ * document (no cross-attendee contention), so this bounds burst load, not
+ * correctness — every attendee is still credited, just in waves.
+ */
+const ATTENDANCE_CREDIT_CONCURRENCY = 25;
+
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   memory: '256MiB' as const,
@@ -94,21 +102,29 @@ export async function creditEventAttendance(eventId: string): Promise<void> {
       .collection('rsvps')
       .where('status', '==', 'going')
       .get();
-    // Parallel per-attendee writes (independent per-user documents) keep a
-    // large attendee list well inside the caller's timeout; individual
-    // failures log per user and never fail the completion.
-    const results = await Promise.allSettled(
-      goingRsvps.docs.map((rsvp) => recordEventAttendance(rsvp.id)),
-    );
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        logger.error('Attendance credit failed for attendee', {
-          eventId,
-          uid: goingRsvps.docs[index]?.id,
-          error: String(result.reason),
-        });
-      }
-    });
+    // Per-attendee writes target independent per-user documents, so they can
+    // run in parallel — but NOT all at once: each recordEventAttendance is its
+    // own Firestore transaction, and a large going-list would otherwise open
+    // one per attendee simultaneously. The auto-close sweep can complete many
+    // events per run, so an unbounded burst here is a throttling risk it would
+    // hit unattended. Chunked to ATTENDANCE_CREDIT_CONCURRENCY at a time:
+    // bounded concurrency, still parallel enough to stay well inside the
+    // caller's timeout. Individual failures log per user and never propagate.
+    for (let i = 0; i < goingRsvps.docs.length; i += ATTENDANCE_CREDIT_CONCURRENCY) {
+      const batch = goingRsvps.docs.slice(i, i + ATTENDANCE_CREDIT_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map((rsvp) => recordEventAttendance(rsvp.id)),
+      );
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          logger.error('Attendance credit failed for attendee', {
+            eventId,
+            uid: batch[index]?.id,
+            error: String(result.reason),
+          });
+        }
+      });
+    }
   } catch (error) {
     logger.error('Event badge attendance recording failed', {
       eventId,

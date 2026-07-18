@@ -31,8 +31,10 @@
  *
  * PAGED + IDEMPOTENT: candidates are walked in startsAt order with a document
  * cursor (a page of PAGE_SIZE at a time, at most MAX_CLOSURES_PER_RUN closed
- * per run); the cursor is what lets the sweep step over still-running events
- * that stay published rather than re-reading them forever. Each closure
+ * and MAX_CANDIDATES_SCANNED_PER_RUN read per run — the latter bounds cost even
+ * when candidates match but are skipped); the cursor is what lets the sweep step
+ * over still-running events that stay published rather than re-reading them
+ * forever. Each closure
  * re-checks `status == 'published'` inside its transaction, so a concurrent
  * events.complete / events.cancel wins and the sweep neither double-closes nor
  * resurrects a cancelled event. Re-running the sweep is always safe: closed
@@ -56,6 +58,24 @@ const PAGE_SIZE = 100;
  * hourly sweep drains any remainder on later runs, oldest first.
  */
 const MAX_CLOSURES_PER_RUN = 200;
+/**
+ * Upper bound of candidate documents READ per sweep, independent of how many
+ * turn out to be due. Without it the only bound on reads is MAX_CLOSURES_PER_RUN,
+ * which bounds nothing when candidates are matched but skipped: the sweep would
+ * page through every published-and-started event each hour to close none.
+ *
+ * WHY IT CANNOT STARVE A DUE EVENT. Candidates are read in `startsAt` order, so
+ * the question is how many not-yet-due events can sort AHEAD of a due one. A
+ * candidate is skipped only while it is still inside its own end+grace window,
+ * and guardEventTimes caps an event at MAX_EVENT_DURATION_MS (3 days) — so every
+ * skipped candidate must have started within roughly (3 days + grace) of `now`.
+ * Reaching this cap therefore needs >2000 events whose starts fall in a ~3-day
+ * window, and it would have to hold every hour to defer a due event
+ * indefinitely. For a single-town community calendar that is far outside any
+ * real regime; the cap exists so an unexpected one degrades into "closes a bit
+ * later" instead of an unbounded hourly scan.
+ */
+const MAX_CANDIDATES_SCANNED_PER_RUN = 2000;
 
 interface StoredEventTimes {
   status: EventStatus;
@@ -94,23 +114,54 @@ export async function closeEvent(eventId: string): Promise<boolean> {
   });
 }
 
+/** Per-run bounds. Defaults are the production values; tests may shrink them. */
+export interface AutoCloseLimits {
+  /** Max events completed in one run. */
+  maxClosures: number;
+  /** Max candidate documents read in one run, due or not. */
+  maxCandidatesScanned: number;
+}
+
+/** What one sweep did. `scanned` counts candidates READ, due or not. */
+export interface AutoCloseResult {
+  closed: number;
+  scanned: number;
+}
+
 /**
- * Runs one auto-close sweep against `now`. Returns the number of events
- * actually completed. Exported (rather than inlined in the schedule handler)
- * so emulator tests can drive it at a deterministic instant.
+ * Runs one auto-close sweep against `now`. Exported (rather than inlined in the
+ * schedule handler) so emulator tests can drive it at a deterministic instant.
+ *
+ * Returns both counts: `closed` is the outcome, `scanned` is the work done to
+ * get there. `scanned` is reported rather than kept internal because it is the
+ * only way to observe the read bound — a run that scans many and closes none is
+ * indistinguishable from a cheap one by its outcome alone.
+ *
+ * `limits` exists so the bounds can be exercised at a scale a test can seed —
+ * the scheduled entry point never passes it, so production always runs on the
+ * constants above.
  */
-export async function runEventAutoClose(now: Date): Promise<number> {
+export async function runEventAutoClose(
+  now: Date,
+  limits: AutoCloseLimits = {
+    maxClosures: MAX_CLOSURES_PER_RUN,
+    maxCandidatesScanned: MAX_CANDIDATES_SCANNED_PER_RUN,
+  },
+): Promise<AutoCloseResult> {
   const cutoff = autoCloseCandidateCutoff(now);
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   let closed = 0;
+  let scanned = 0;
 
-  while (closed < MAX_CLOSURES_PER_RUN) {
+  while (closed < limits.maxClosures && scanned < limits.maxCandidatesScanned) {
+    // Never fetch more than the remaining scan budget allows.
+    const pageLimit = Math.min(PAGE_SIZE, limits.maxCandidatesScanned - scanned);
     let query = db
       .collection('events')
       .where('status', '==', 'published')
       .where('startsAt', '<=', Timestamp.fromDate(cutoff))
       .orderBy('startsAt', 'asc')
-      .limit(PAGE_SIZE);
+      .limit(pageLimit);
     if (cursor) {
       query = query.startAfter(cursor);
     }
@@ -121,9 +172,10 @@ export async function runEventAutoClose(now: Date): Promise<number> {
     }
 
     for (const doc of page.docs) {
-      if (closed >= MAX_CLOSURES_PER_RUN) {
+      if (closed >= limits.maxClosures || scanned >= limits.maxCandidatesScanned) {
         break;
       }
+      scanned += 1;
       const event = doc.data() as StoredEventTimes;
       // The query's startsAt bound is a sound but coarse filter; the real
       // decision is the event's effective end + grace.
@@ -144,20 +196,28 @@ export async function runEventAutoClose(now: Date): Promise<number> {
         // Same attendance credit the events.complete callable gives, so a
         // badge never depends on who (or what) ended the event.
         await creditEventAttendance(doc.id);
-        logger.info('Event auto-closed', { eventId: doc.id });
       }
     }
 
-    if (page.size < PAGE_SIZE) {
+    // A short page means the query is exhausted — compare against the limit
+    // ACTUALLY used, not PAGE_SIZE, which the scan budget may have shrunk.
+    if (page.size < pageLimit) {
       break;
     }
     cursor = page.docs[page.docs.length - 1];
   }
 
-  if (closed > 0) {
-    logger.info('Event auto-close sweep finished', { closed });
+  // Per-RUN summary only — no per-event line. Every other scheduled sweep in
+  // this codebase logs exactly one summary (account-purgeDeleted,
+  // notifications-cleanupExpired, partnerInsights-*, incidents-*), and a
+  // backlog drain would otherwise emit up to MAX_CLOSURES_PER_RUN log lines an
+  // hour. The durable per-event trace is `autoClosedAt` on the document itself.
+  // `scanned` is included so a sweep that reads a lot and closes little (the
+  // MAX_CANDIDATES_SCANNED_PER_RUN regime) is visible without a code change.
+  if (closed > 0 || scanned >= limits.maxCandidatesScanned) {
+    logger.info('Event auto-close sweep complete', { closed, scanned });
   }
-  return closed;
+  return { closed, scanned };
 }
 
 export const autoClose = onSchedule(

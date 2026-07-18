@@ -135,14 +135,14 @@ describe('events auto-close sweep', () => {
     const first = await readEvent(eventId);
     expect(first.status).toBe('completed');
 
-    const closedOnSecondRun = await runEventAutoClose(NOW);
+    const secondRun = await runEventAutoClose(NOW);
     const second = await readEvent(eventId);
     expect(second.status).toBe('completed');
     // The autoClosedAt stamp is from the first sweep — untouched by the second.
     expect(second.autoClosedAt.toMillis()).toBe(first.autoClosedAt.toMillis());
     expect(second.updatedAt.toMillis()).toBe(first.updatedAt.toMillis());
     // Nothing this file seeded is closable a second time.
-    expect(closedOnSecondRun).toBe(0);
+    expect(secondRun.closed).toBe(0);
   });
 
   it('never closes draft or cancelled events, however far past they are', async () => {
@@ -221,6 +221,87 @@ describe('events auto-close – concurrent status change', () => {
 
     expect(await closeEvent(eventId)).toBe(false);
   });
+});
+
+describe('events auto-close – bounded work per run', () => {
+  it('credits every attendee when the going-list exceeds the concurrency chunk', async () => {
+    // ATTENDANCE_CREDIT_CONCURRENCY is 25, so 60 attendees spans three chunks.
+    // Chunking bounds burst load; it must not drop or double-credit anyone at a
+    // chunk boundary.
+    const eventId = await seedEvent(longPast);
+    const uids = Array.from(
+      { length: 60 },
+      (_, i) => `autoclose-bulk-${Date.now()}-${String(i).padStart(3, '0')}`,
+    );
+    const batch = adminDb.batch();
+    for (const uid of uids) {
+      batch.set(adminDb.collection('events').doc(eventId).collection('rsvps').doc(uid), {
+        status: 'going',
+        updatedAt: Timestamp.fromDate(NOW),
+      });
+    }
+    await batch.commit();
+
+    await runEventAutoClose(NOW);
+
+    const progress = await Promise.all(
+      uids.map((uid) => adminDb.collection('badgeProgress').doc(uid).get()),
+    );
+    const credits = progress.map((snap) => snap.data()?.completedEventsAttended);
+    // Every attendee credited exactly once — no gaps, no doubles.
+    expect(credits).toEqual(uids.map(() => 1));
+  }, 120_000);
+
+  it('stops reading at the scanned-candidate cap even when nothing is due', async () => {
+    // The cap bounds READS, which MAX_CLOSURES_PER_RUN cannot: these candidates
+    // all match the coarse query (published, started before the cutoff) but none
+    // is due, so a sweep without a scan bound would page through all of them.
+    const notDueStart = new Date(NOW.getTime() - AUTO_CLOSE_GRACE_MS - 3 * HOUR);
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      ids.push(
+        await seedEvent({
+          startsAt: new Date(notDueStart.getTime() + i),
+          // Still inside its grace window → matched by the query, skipped in memory.
+          endsAt: new Date(NOW.getTime() - 60_000),
+        }),
+      );
+    }
+
+    const result = await runEventAutoClose(NOW, { maxClosures: 200, maxCandidatesScanned: 3 });
+
+    // THE point of the cap: reads stop at the budget. Asserting only
+    // `closed === 0` would pass with no cap at all, since none of these is due.
+    expect(result.scanned).toBe(3);
+    expect(result.closed).toBe(0);
+    // All still published — the cap changed how much was read, not correctness.
+    for (const id of ids) {
+      expect((await readEvent(id)).status).toBe('published');
+    }
+  }, 60_000);
+
+  it('honours the closure cap and drains the remainder on the next run', async () => {
+    const dueIds: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      dueIds.push(
+        await seedEvent({
+          startsAt: new Date(NOW.getTime() - 40 * HOUR + i),
+          endsAt: new Date(NOW.getTime() - 38 * HOUR),
+        }),
+      );
+    }
+
+    const firstRun = await runEventAutoClose(NOW, { maxClosures: 2, maxCandidatesScanned: 2000 });
+    expect(firstRun.closed).toBe(2);
+
+    // Oldest-first: the sweep drains the rest on subsequent runs rather than
+    // stranding them.
+    await runEventAutoClose(NOW, { maxClosures: 2, maxCandidatesScanned: 2000 });
+    await runEventAutoClose(NOW, { maxClosures: 2, maxCandidatesScanned: 2000 });
+    for (const id of dueIds) {
+      expect((await readEvent(id)).status).toBe('completed');
+    }
+  }, 90_000);
 });
 
 describe('events auto-close paging', () => {
