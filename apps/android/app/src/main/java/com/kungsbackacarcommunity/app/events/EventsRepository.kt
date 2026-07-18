@@ -24,6 +24,17 @@ interface EventsRepository {
     /** Published events, soonest first; Loading until the first snapshot. */
     fun observePublishedEvents(): Flow<EventsListState>
 
+    /**
+     * Past events — status `completed`, most recent first; Loading until the
+     * first snapshot. An event reaches `completed` either from the hourly
+     * `events-autoClose` sweep (effective end + 6h) or from its creator/an
+     * admin calling `events.complete`; both are terminal and mean the same
+     * thing, so one query covers the whole archive. Teasers of completed
+     * events are readable by any authenticated user; their member-gated
+     * details, chat and group-drive roster stay closed.
+     */
+    fun observePastEvents(): Flow<EventsListState>
+
     /** A single event's teaser doc; null when missing/unreadable. */
     fun observeEvent(eventId: String): Flow<EventSummary?>
 

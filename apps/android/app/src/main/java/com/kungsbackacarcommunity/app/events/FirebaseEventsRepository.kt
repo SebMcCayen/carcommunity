@@ -31,7 +31,19 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * the events the screen would show first as the collection grows without
  * bound over the app's lifetime. Uses the existing `events` composite index
  * (status ASC, startsAt ASC — firebase/firestore.indexes.json), so no new
- * index is required. Member-gated details and RSVP writes rely on the
+ * index is required.
+ *
+ * The past/archive list ([observePastEvents]) is the same shape with
+ * `status == completed` and the order reversed (most recent first). It needs
+ * **no new index either**: a Firestore composite index is traversable in both
+ * directions, so `(status ASC, startsAt ASC)` also serves
+ * `(status DESC, startsAt DESC)`, and with `status` pinned by an equality
+ * filter the two differ only in the `startsAt` direction. This matters more
+ * than the usual index note — no workflow deploys `firestore.indexes.json`,
+ * and a missing index makes a query return an EMPTY list rather than an
+ * error, which here would look exactly like "no past events yet".
+ *
+ * Member-gated details and RSVP writes rely on the
  * Security Rules; an RSVP is a direct owner write of exactly
  * `{ status, updatedAt }`. Construction is guarded ([createIfAvailable]
  * returns null without Firebase).
@@ -55,6 +67,24 @@ class FirebaseEventsRepository private constructor(
                     }
                     val events = snapshot?.documents?.mapNotNull { it.toEventSummary() } ?: emptyList()
                     trySend(EventsListState.Loaded(Events.sortedForList(events)))
+                }
+        awaitClose { registration.remove() }
+    }
+
+    override fun observePastEvents(): Flow<EventsListState> = callbackFlow {
+        val registration =
+            firestore
+                .collection(EVENTS)
+                .whereEqualTo("status", EventStatus.COMPLETED.wire)
+                .orderBy(STARTS_AT, Query.Direction.DESCENDING)
+                .limit(Events.PAST_EVENTS_QUERY_LIMIT)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        trySend(EventsListState.Error)
+                        return@addSnapshotListener
+                    }
+                    val events = snapshot?.documents?.mapNotNull { it.toEventSummary() } ?: emptyList()
+                    trySend(EventsListState.Loaded(Events.sortedForPastList(events)))
                 }
         awaitClose { registration.remove() }
     }

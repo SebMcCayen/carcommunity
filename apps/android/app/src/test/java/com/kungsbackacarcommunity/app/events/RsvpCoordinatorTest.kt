@@ -16,6 +16,8 @@ class RsvpCoordinatorTest {
 
         override fun observePublishedEvents(): Flow<EventsListState> = flowOf(EventsListState.Loading)
 
+        override fun observePastEvents(): Flow<EventsListState> = flowOf(EventsListState.Loading)
+
         override fun observeEvent(eventId: String): Flow<EventSummary?> = flowOf(null)
 
         override fun observeEventDetail(eventId: String): Flow<EventDetail?> = flowOf(null)
