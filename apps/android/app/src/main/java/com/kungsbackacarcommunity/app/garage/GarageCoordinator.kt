@@ -27,22 +27,35 @@ class GarageCoordinator(
     private val state = MutableStateFlow<VehicleSaveStatus>(VehicleSaveStatus.Idle)
     val saveStatus: StateFlow<VehicleSaveStatus> = state.asStateFlow()
 
-    /** Adds when [editingVehicleId] is null, otherwise updates it. */
-    suspend fun save(input: VehicleInput, editingVehicleId: String?) {
-        if (state.value == VehicleSaveStatus.Saving) return
+    /**
+     * Adds when [editingVehicleId] is null, otherwise updates it.
+     *
+     * @return the saved vehicle's id — the NEW id minted by garage-addVehicle on
+     *   an add, or [editingVehicleId] on an update — or null when the save did
+     *   not happen (failed, or a re-entrant call while another save is in
+     *   flight). The add-photo flow needs the new id to key
+     *   `vehicleImages/{uid}/{vehicleId}/`, which does not exist until the
+     *   vehicle does.
+     */
+    suspend fun save(input: VehicleInput, editingVehicleId: String?): String? {
+        if (state.value == VehicleSaveStatus.Saving) return null
         state.value = VehicleSaveStatus.Saving
-        try {
-            if (editingVehicleId == null) {
-                repository.addVehicle(input)
-            } else {
-                repository.updateVehicle(editingVehicleId, input)
-            }
+        return try {
+            val vehicleId =
+                if (editingVehicleId == null) {
+                    repository.addVehicle(input)
+                } else {
+                    repository.updateVehicle(editingVehicleId, input)
+                    editingVehicleId
+                }
             state.value = VehicleSaveStatus.Saved
+            vehicleId
         } catch (cancellation: CancellationException) {
             state.value = VehicleSaveStatus.Idle
             throw cancellation
         } catch (failure: Exception) {
             state.value = VehicleSaveStatus.Failed
+            null
         }
     }
 

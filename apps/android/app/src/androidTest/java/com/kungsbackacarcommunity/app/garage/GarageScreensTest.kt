@@ -39,7 +39,6 @@ class GarageScreensTest {
                     onAdd = { added++ },
                     onEdit = {},
                     onDelete = {},
-                    onBack = {},
                 )
             }
         }
@@ -58,7 +57,6 @@ class GarageScreensTest {
                     onAdd = {},
                     onEdit = { edited = it },
                     onDelete = {},
-                    onBack = {},
                 )
             }
         }
@@ -90,6 +88,76 @@ class GarageScreensTest {
         assertEquals("Saab", saved?.make)
         assertEquals(1990, saved?.modelYear)
         assertEquals(VehiclePowertrain.PETROL, saved?.powertrain)
+    }
+
+    @Test
+    fun form_addMode_offersExactlyTheFourPowertrains() {
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial = VehicleForm(),
+                    isEdit = false,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        // The four Seb asked for are offered...
+        listOf(
+            R.string.garage_powertrain_petrol,
+            R.string.garage_powertrain_diesel,
+            R.string.garage_powertrain_hybrid,
+            R.string.garage_powertrain_electric,
+        ).forEach { composeTestRule.onNodeWithText(str(it)).performScrollTo().assertIsDisplayed() }
+        // ...and the retired two are not offered on a NEW vehicle.
+        composeTestRule.onNodeWithText(str(R.string.garage_powertrain_plug_in_hybrid)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.garage_powertrain_other)).assertDoesNotExist()
+    }
+
+    @Test
+    fun form_editingARetiredPowertrain_stillShowsItSelected() {
+        // Backward compat at the UI layer: a pre-existing plug-in hybrid must
+        // not render with nothing selected.
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial = VehicleForm(powertrain = VehiclePowertrain.PLUG_IN_HYBRID),
+                    isEdit = true,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.garage_powertrain_plug_in_hybrid))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun form_addMode_offersThePhotoSection() {
+        // The add form could not attach a photo at all before: onChangePhoto was
+        // hard-null in add mode, which hid the whole section.
+        var picked = 0
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial = VehicleForm(),
+                    isEdit = false,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = {},
+                    onCancel = {},
+                    onChangePhoto = { picked++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.garage_photoAdd)).performScrollTo().performClick()
+        assertEquals(1, picked)
     }
 
     @Test

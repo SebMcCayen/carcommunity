@@ -565,7 +565,6 @@
     <string name="garage_mainCarBadge">Main car</string>
     <string name="garage_setMainCar">Set as main car</string>
     <string name="garage_unsetMainCar">Remove main car</string>
-    <string name="garage_headerImageAlt">Garage header image</string>
     <string name="garage_photoAlt">Vehicle photo</string>
     <string name="garage_photoAdd">Add photo</string>
     <string name="garage_photoChange">Change photo</string>
@@ -839,9 +838,7 @@
     <string name="shell_socialCrownHunt">Crown Hunt</string>
     <string name="shell_socialPartners">Partners</string>
     <string name="shell_socialBillboards">Billboards</string>
-    <string name="shell_garageTitle">Garage</string>
     <string name="shell_garageFriends">Friends</string>
-    <string name="shell_garageVehicles">Cars</string>
     <string name="shell_garageBadges">Badges</string>
     <string name="shell_garagePoints">Points</string>
     <string name="shell_garageSubscription">Membership</string>

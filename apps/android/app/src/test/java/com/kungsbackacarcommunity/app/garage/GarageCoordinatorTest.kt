@@ -1,10 +1,14 @@
 package com.kungsbackacarcommunity.app.garage
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,13 +19,18 @@ class GarageCoordinatorTest {
         val updated = mutableListOf<Pair<String, VehicleInput>>()
         val deleted = mutableListOf<String>()
         val mainSet = mutableListOf<Pair<String, Boolean>>()
+        val imagePaths = mutableListOf<Pair<String, String>>()
         var failWith: Exception? = null
+
+        /** The id the fake garage-addVehicle mints for the next add. */
+        var newVehicleId: String = "new-vehicle-1"
 
         override fun observeGarage(uid: String): Flow<GarageState> = flowOf(GarageState.Loading)
 
-        override suspend fun addVehicle(input: VehicleInput) {
+        override suspend fun addVehicle(input: VehicleInput): String {
             failWith?.let { throw it }
             added += input
+            return newVehicleId
         }
 
         override suspend fun updateVehicle(vehicleId: String, input: VehicleInput) {
@@ -31,6 +40,7 @@ class GarageCoordinatorTest {
 
         override suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String) {
             failWith?.let { throw it }
+            imagePaths += vehicleId to imagePath
         }
 
         override suspend fun setMainVehicle(vehicleId: String, isMain: Boolean) {
@@ -86,6 +96,57 @@ class GarageCoordinatorTest {
         }
         assertTrue(rethrown)
         assertEquals(VehicleSaveStatus.Idle, coordinator.saveStatus.value)
+    }
+
+    // --- save() returns the vehicle id -------------------------------------
+    // The add-photo flow is built on this: vehicleImages/{uid}/{vehicleId}/
+    // cannot be keyed until garage-addVehicle mints the id, so a save that
+    // reports success without returning the NEW id silently costs the vehicle
+    // its photo. These pin the exact id, not merely "non-null".
+
+    @Test
+    fun `an add returns the NEW id minted by the backend`() = runTest {
+        val repo = FakeRepo().apply { newVehicleId = "minted-abc" }
+        val coordinator = GarageCoordinator(repo)
+        assertEquals("minted-abc", coordinator.save(input, editingVehicleId = null))
+    }
+
+    @Test
+    fun `an update returns the id being edited`() = runTest {
+        val repo = FakeRepo().apply { newVehicleId = "must-not-be-used" }
+        val coordinator = GarageCoordinator(repo)
+        // The edited car's own id — never the add path's minted id.
+        assertEquals("v1", coordinator.save(input, editingVehicleId = "v1"))
+    }
+
+    @Test
+    fun `a failed save returns null so no photo is uploaded`() = runTest {
+        val repo = FakeRepo().apply { failWith = IllegalStateException("limit") }
+        val coordinator = GarageCoordinator(repo)
+        assertNull(coordinator.save(input, editingVehicleId = null))
+    }
+
+    @Test
+    fun `a re-entrant save returns null instead of a bogus id`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = GarageCoordinator(repo)
+        // Drive the guard directly: a second save while one is Saving is a
+        // no-op, and must NOT report an id the caller would attach a photo to.
+        val gate = CompletableDeferred<Unit>()
+        val slowRepo =
+            object : GarageRepository by repo {
+                override suspend fun addVehicle(input: VehicleInput): String {
+                    gate.await()
+                    return "first"
+                }
+            }
+        val slow = GarageCoordinator(slowRepo)
+        val first = async { slow.save(input, editingVehicleId = null) }
+        // Wait until the first save has actually flipped the status to Saving.
+        while (slow.saveStatus.value != VehicleSaveStatus.Saving) yield()
+        assertNull(slow.save(input, editingVehicleId = null))
+        gate.complete(Unit)
+        assertEquals("first", first.await())
     }
 
     @Test

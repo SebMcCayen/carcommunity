@@ -36,8 +36,15 @@ class FirebaseGarageRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override suspend fun addVehicle(input: VehicleInput) {
-        call(ADD_VEHICLE, input.toData())
+    override suspend fun addVehicle(input: VehicleInput): String {
+        val result = call(ADD_VEHICLE, input.toData())
+        // garage-addVehicle responds { vehicleId }. A response without a usable
+        // id is a broken contract, not a soft failure: the caller would have no
+        // path to key the vehicle's photo under, so fail loudly rather than
+        // report a success the photo step cannot act on.
+        val vehicleId = (result?.get("vehicleId") as? String)?.takeIf { it.isNotBlank() }
+        return vehicleId
+            ?: throw IllegalStateException("$ADD_VEHICLE returned no vehicleId")
     }
 
     override suspend fun updateVehicle(vehicleId: String, input: VehicleInput) {
@@ -58,9 +65,18 @@ class FirebaseGarageRepository private constructor(
         call(DELETE_VEHICLE, mapOf<String, Any?>("vehicleId" to vehicleId))
     }
 
-    private suspend fun call(name: String, data: Map<String, Any?>) {
-        functions.getHttpsCallable(name).call(data)
-            .awaitOrThrow { "$name failed without a cause" }
+    /**
+     * Invokes [name] and returns its response map, or null when the callable
+     * responded with absent or non-map data. Callers that need a field
+     * (addVehicle's `vehicleId`) validate it themselves; the rest ignore the
+     * result.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun call(name: String, data: Map<String, Any?>): Map<String, Any?>? {
+        val result =
+            functions.getHttpsCallable(name).call(data)
+                .awaitOrThrow { "$name failed without a cause" }
+        return result.getData() as? Map<String, Any?>
     }
 
     companion object {
