@@ -38,10 +38,12 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * **no new index either**: a Firestore composite index is traversable in both
  * directions, so `(status ASC, startsAt ASC)` also serves
  * `(status DESC, startsAt DESC)`, and with `status` pinned by an equality
- * filter the two differ only in the `startsAt` direction. This matters more
- * than the usual index note — no workflow deploys `firestore.indexes.json`,
- * and a missing index makes a query return an EMPTY list rather than an
- * error, which here would look exactly like "no past events yet".
+ * filter the two differ only in the `startsAt` direction. Worth stating
+ * because no workflow deploys `firestore.indexes.json` — a composite index
+ * this repo needs but has not deployed is a hand-deploy, not a CI failure.
+ * A genuinely missing composite index would surface as a
+ * `FAILED_PRECONDITION` listener error (and therefore as
+ * [EventsListState.Error] here), not as a silently empty list.
  *
  * Member-gated details and RSVP writes rely on the
  * Security Rules; an RSVP is a direct owner write of exactly

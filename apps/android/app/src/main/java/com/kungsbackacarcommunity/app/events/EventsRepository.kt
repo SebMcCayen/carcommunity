@@ -29,9 +29,15 @@ interface EventsRepository {
      * first snapshot. An event reaches `completed` either from the hourly
      * `events-autoClose` sweep (effective end + 6h) or from its creator/an
      * admin calling `events.complete`; both are terminal and mean the same
-     * thing, so one query covers the whole archive. Teasers of completed
-     * events are readable by any authenticated user; their member-gated
-     * details, chat and group-drive roster stay closed.
+     * thing, so one query covers the whole archive.
+     *
+     * REQUIRES the `firestore.rules` change that lets a non-admin read a
+     * `completed` teaser (PR #455). Until those rules are deployed the
+     * snapshot listener is denied and this emits [EventsListState.Error] for
+     * every non-admin — the rule on `events/{eventId}` still reads
+     * `status == 'published'`. Member-gated details, chat and the
+     * group-drive roster stay `published`-gated either way: an ended event
+     * can be looked up, not re-entered.
      */
     fun observePastEvents(): Flow<EventsListState>
 

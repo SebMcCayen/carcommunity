@@ -34,8 +34,13 @@ enum class EventsListTab {
 /**
  * Events list (Phase 12 slice 9; past/archive tab added alongside
  * `events-autoClose`). Stateless: renders the given [state] for the selected
- * [tab] and reports taps. Any authenticated user sees the teaser list —
- * published *and* completed; member-gated detail lives on [EventDetailScreen].
+ * [tab] and reports taps; member-gated detail lives on [EventDetailScreen].
+ *
+ * Any authenticated user sees the published teaser list. The completed list
+ * behind [EventsListTab.PAST] additionally requires the `firestore.rules`
+ * change from PR #455 — see [EventsRepository.observePastEvents]. This screen
+ * renders whatever [state] it is handed and makes no claim about which reads
+ * the rules currently permit.
  *
  * The two tabs are two different queries, so the caller owns [tab] and swaps
  * [state] to match. Creating an event belongs to the upcoming tab only: the
