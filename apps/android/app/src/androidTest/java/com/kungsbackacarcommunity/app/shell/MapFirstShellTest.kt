@@ -455,13 +455,40 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
 
-        // Dismiss the hub the way a user must: tap the uncovered strip of map above
-        // the card (derived from the measured card top — see the strip test).
-        val cardTop =
-            composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).getUnclippedBoundsInRoot().top
-        val stripMidYPx = with(composeTestRule.density) { cardTop.toPx() } / 2f
-        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).performTouchInput {
-            click(Offset(width / 2f, -stripMidYPx))
+        // Dismiss the hub the way a user must: tap the uncovered strip of live map
+        // ABOVE the card. The tap is dispatched on the map-home node at a positive,
+        // in-bounds offset — never on the hub node with a negative Y to reach
+        // "outside" its own bounds, which relies on out-of-bounds dispatch and is
+        // brittle. The Y is still DERIVED, not magic: it is the midpoint between the
+        // map's top and the card's measured top, converted through the test density,
+        // so it is provably inside the strip at any density or window size.
+        val cardTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(CHAT_HUB_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        val mapTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(MAP_HOME_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        // Guard the premise: if the card ever covered the map's top there would be no
+        // strip, and the tap below would land on the card and silently not dismiss.
+        assertTrue(
+            "expected an uncovered map strip above the card (map top $mapTopPx, " +
+                "card top $cardTopPx)",
+            cardTopPx > mapTopPx,
+        )
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).performTouchInput {
+            // Node-relative: the midpoint of the strip, measured down from the map's
+            // own top edge.
+            click(Offset(width / 2f, (cardTopPx - mapTopPx) / 2f))
         }
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 

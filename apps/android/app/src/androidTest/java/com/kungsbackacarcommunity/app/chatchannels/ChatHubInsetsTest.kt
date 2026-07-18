@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -94,7 +93,8 @@ class ChatHubInsetsTest {
 
         val hostRoot = composeTestRule.onNodeWithTag(HOST_TAG).fetchSemanticsNode().root
         val hubRoot = composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).fetchSemanticsNode().root
-        Log.w("ChatHubInsets", "hostRoot=$hostRoot hubRoot=$hubRoot")
+        // Not logged: assertSame already prints both roots on failure, and a WARN
+        // on every passing run is just CI noise (same reason as ChatHubTabLabelTest).
 
         assertSame(
             "The chat hub must compose in the host window's root. A different root " +
@@ -165,7 +165,8 @@ class ChatHubInsetsTest {
         }
         composeTestRule.waitForIdle()
 
-        Log.w("ChatHubInsets", "keyboard-down: nav=$nav ime=$ime union=$union")
+        // Not logged: nav/ime/union each appear in the assumption and assertion
+        // messages below, so they are visible exactly when they matter.
         // Not a failure — an environment that cannot exercise the claim. A union of
         // 0 on a device with no nav bar is correct AND is what the broken popup
         // produced, so asserting it would bank a meaningless pass.

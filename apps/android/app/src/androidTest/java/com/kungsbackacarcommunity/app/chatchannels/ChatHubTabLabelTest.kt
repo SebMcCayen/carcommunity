@@ -74,6 +74,12 @@ class ChatHubTabLabelTest {
     fun everyTabLabelFitsItsTabInBothLocalesAtEveryWidthAndFontScale() {
         prepareMeasurers()
         val failures = mutableListOf<String>()
+        // The full matrix, kept for the failure report only. Emitting it
+        // unconditionally floods CI instrumentation logs on PASSING runs; it is
+        // genuinely useful when something DOES truncate (it is what pinned the
+        // fontScale finding), so it rides along with the assertion message and is
+        // logged only when there is a failure to diagnose.
+        val matrix = mutableListOf<String>()
         for ((fontScale, pair) in measurers) {
             val (measurer, style) = pair
             for (language in listOf("en", "sv")) {
@@ -81,11 +87,9 @@ class ChatHubTabLabelTest {
                     val tabWidthPx = tabWidthPx(widthDp)
                     for ((key, label) in labelsFor(language)) {
                         val fitting = largestFittingSp(measurer, style, label, tabWidthPx)
-                        Log.w(
-                            "ChatHubTabLabel",
+                        matrix +=
                             "fs=$fontScale $language ${widthDp}dp $key=\"$label\" " +
-                                "tab=${tabWidthPx}px fits@${fitting ?: "NONE"}sp",
-                        )
+                                "tab=${tabWidthPx}px fits@${fitting ?: "NONE"}sp"
                         if (fitting == null) {
                             failures +=
                                 "$language @${widthDp}dp fontScale=$fontScale: \"$label\" " +
@@ -96,8 +100,12 @@ class ChatHubTabLabelTest {
                 }
             }
         }
+        if (failures.isNotEmpty()) {
+            Log.w("ChatHubTabLabel", "measured matrix:\n" + matrix.joinToString("\n"))
+        }
         assertTrue(
-            "Chat-hub tab labels that would truncate:\n" + failures.joinToString("\n"),
+            "Chat-hub tab labels that would truncate:\n" + failures.joinToString("\n") +
+                "\n\nFull measured matrix:\n" + matrix.joinToString("\n"),
             failures.isEmpty(),
         )
     }
@@ -160,10 +168,8 @@ class ChatHubTabLabelTest {
                     ).size.width > textWidthPx
                 }
                 .map { it.second }
-        Log.w(
-            "ChatHubTabLabel",
-            "PRE-FIX fs=$fontScale overflow @360dp (text width ${textWidthPx}px): $overflowing",
-        )
+        // Deliberately not logged: every caller already names `overflowing` in its
+        // assertion message, so a WARN here would only add noise to passing runs.
         return overflowing
     }
 
