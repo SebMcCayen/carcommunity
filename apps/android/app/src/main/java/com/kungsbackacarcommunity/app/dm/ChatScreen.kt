@@ -6,11 +6,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,12 +27,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -102,7 +109,12 @@ fun ChatScreen(
 
     AeroPage(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
-        modifier = modifier.imePadding(),
+        // The IME *and* the navigation-bar inset (their union, so the taller of
+        // the two wins rather than double-counting), matching the group channels'
+        // composer: keyboard down the input clears the nav bar, keyboard up it
+        // lifts above the IME. Plain imePadding() left the input under the nav bar
+        // whenever the keyboard was down.
+        modifier = modifier.windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         scrollable = false,
         onTitleClick = onViewProfile,
     ) {
@@ -232,6 +244,17 @@ private fun MessageList(
     onMessageLongPress: (DmMessage) -> Unit,
 ) {
     val listState = rememberLazyListState()
+    // Is the soft keyboard up? Read as a plain inset rather than the experimental
+    // `WindowInsets.isImeVisible`. A LazyColumn holds its scroll OFFSET, not its
+    // bottom edge, so when the composer's ime padding shrinks the viewport the
+    // newest message would otherwise slide out under the keyboard.
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    // derivedStateOf so the per-frame inset animation doesn't recompose the list
+    // 60 times a second — only the two transitions (up / down) propagate.
+    val imeVisible by remember(imeInsets, density) {
+        derivedStateOf { imeInsets.getBottom(density) > 0 }
+    }
     // The optional "load older" row is a single item prepended before the
     // messages, so every message's LazyColumn index is shifted by +1 while it is
     // present. Track that offset so the auto-scroll targets the real last item.
@@ -252,6 +275,22 @@ private fun MessageList(
             // Index into the LazyColumn, not the messages list: account for the
             // header so we land on the newest message rather than the one before.
             listState.animateScrollToItem(messages.lastIndex + headerOffset)
+        }
+    }
+
+    // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
+    // newest message — but only for a reader who was already at the bottom, so
+    // tapping the composer while reading history doesn't yank them down. Guarded
+    // on the RISING edge, so closing the keyboard (which grows the viewport back)
+    // moves nothing.
+    LaunchedEffect(imeVisible) {
+        if (!imeVisible) return@LaunchedEffect
+        val layoutInfo = listState.layoutInfo
+        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val totalItems = layoutInfo.totalItemsCount
+        if (totalItems == 0) return@LaunchedEffect
+        if (lastVisibleIndex >= totalItems - 2) {
+            listState.animateScrollToItem(totalItems - 1)
         }
     }
 

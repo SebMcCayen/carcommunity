@@ -39,10 +39,26 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/kcc_crown_gold" />
 
+        <!-- windowSoftInputMode=adjustResize is REQUIRED, not cosmetic. Left
+             unset, the window defaults to SOFT_INPUT_ADJUST_UNSPECIFIED and the
+             framework is free to resolve it to legacy ADJUST_PAN — which it does
+             on a window whose content draws behind the system bars. Pan moves the
+             WHOLE window up by the keyboard height, and the chat composer ALSO
+             pads itself by WindowInsets.ime, so the input travelled twice the
+             keyboard's height and parked itself in the middle of the screen (and
+             the message list scrolled off the top with it).
+
+             Declaring adjustResize does not reinstate legacy resizing here:
+             enableEdgeToEdge() sets decorFitsSystemWindows=false, under which the
+             platform stops resizing/panning for the IME altogether and dispatches
+             it purely as a WindowInsets.ime inset. The declaration's whole job is
+             to take PAN off the table, leaving the app's own imePadding as the
+             single thing that moves the composer. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.KCC">
+            android:theme="@style/Theme.KCC"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
