@@ -491,6 +491,88 @@ describe('events lifecycle transitions', () => {
   });
 });
 
+describe('events-complete – creator or admin', () => {
+  it('lets the member who created an event end it, with no admin audit record', async () => {
+    const member = await createMemberUser('events-creator-complete');
+    await signInAs(member);
+    // A member-created event is published immediately (post-moderation).
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    const result = await call('events-complete', { eventId });
+    expect((result.data as { status: string }).status).toBe('completed');
+    expect((await adminDb.collection('events').doc(eventId).get()).data()!.status).toBe(
+      'completed',
+    );
+
+    // adminAuditEvents stays a log of ADMIN actions: a member ending their own
+    // event must not write their uid into an adminId field.
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.complete')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.empty).toBe(true);
+  });
+
+  it('refuses a member who did not create the event', async () => {
+    const creator = await createMemberUser('events-complete-creator');
+    await signInAs(creator);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    const stranger = await createMemberUser('events-complete-stranger');
+    await signInAs(stranger);
+    expect(await callableErrorCode(call('events-complete', { eventId }))).toBe(
+      'functions/permission-denied',
+    );
+    // Still live for its actual organiser.
+    expect((await adminDb.collection('events').doc(eventId).get()).data()!.status).toBe(
+      'published',
+    );
+  });
+
+  it('refuses a signed-in caller who is neither member nor admin', async () => {
+    const creator = await createMemberUser('events-complete-nonmember-target');
+    await signInAs(creator);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    await signInAs(regularUser);
+    expect(await callableErrorCode(call('events-complete', { eventId }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('lets an admin end a member’s event and audits that one', async () => {
+    const member = await createMemberUser('events-admin-completes');
+    await signInAs(member);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    await signInAs(adminUser);
+    await call('events-complete', { eventId });
+    const completed = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(completed.status).toBe('completed');
+    // autoClosedAt distinguishes an auto-close from a hand-completed event, so
+    // the callable must NOT stamp it (events/scheduled.ts documents this as the
+    // sweep's only trace, standing in for the audit record it does not write).
+    expect(completed.autoClosedAt).toBeUndefined();
+
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.complete')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.size).toBe(1);
+    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
+  });
+});
+
 describe('events-onRsvpWrite trigger', () => {
   it('maintains rsvpCounts across create, change, and delete', async () => {
     const eventId = await createDraftEvent();

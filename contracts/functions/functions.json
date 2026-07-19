@@ -192,8 +192,8 @@
     {
       "name": "events.complete",
       "domain": "events",
-      "description": "Marks a published event completed; going-RSVP attendees receive badge attendance credit (first_event / five_events, Phase 9f). Deployed via grouped export as events-complete (functions/src/events/eventLifecycle.ts).",
-      "access": "admin",
+      "description": "Marks a published event completed (\"ended\"); going-RSVP attendees receive badge attendance credit (first_event / five_events, Phase 9f). Callable by an admin/owner OR by the member who created the event (createdByUserId); any other member is permission-denied. A member ending their own event writes no adminAuditEvents record — that log stays a record of admin actions. Events also reach completed unattended a few hours after they end, via the events-autoClose scheduled sweep (functions/src/events/scheduled.ts), which applies identical semantics including the attendance credit. Deployed via grouped export as events-complete (functions/src/events/eventLifecycle.ts).",
+      "access": "member",
       "appCheck": true,
       "status": "implemented",
       "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/complete)"

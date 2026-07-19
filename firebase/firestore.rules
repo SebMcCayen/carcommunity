@@ -280,11 +280,27 @@ service cloud.firestore {
     // limit can never be bypassed by talking to Firestore.
     // -------------------------------------------------------------------------
     match /events/{eventId} {
-      // Only published events are visible to non-admin users
+      // Published AND completed events are visible to non-admin users
       // (contracts/schemas/events.schema.json eventStatus). Member-created
       // events are published, so they are readable on exactly the same terms
       // as organiser-created ones — no read-rule change needed.
-      allow read: if (isAuthenticated() && resource.data.status == 'published') || isAdmin();
+      //
+      // `completed` is readable because the events-autoClose sweep
+      // (functions/src/events/scheduled.ts) now makes that status the normal
+      // end state of EVERY event a few hours after it finishes, rather than a
+      // rare admin action. Keeping it admin-only would make each event vanish
+      // from members the morning after — including for the attendees who
+      // RSVP'd — and would break any teaser read that outlives the event (a
+      // detail screen opened from a push notification, an archive/past list).
+      // This exposes nothing new: the same teaser document was already
+      // readable by the same users while the event was published, and it is
+      // teaser-safe by construction (the exact location and description live
+      // in details/private, which stays published-gated below — an ended
+      // event closes its detail, roster and chat).
+      // `draft` and `cancelled` remain admin-only.
+      allow read: if (isAuthenticated()
+          && resource.data.status in ['published', 'completed'])
+        || isAdmin();
       // No client writes: events.create/update/publish/cancel/complete only.
 
       // Member-gated detail document (exact location, description). The
