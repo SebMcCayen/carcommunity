@@ -6,11 +6,17 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -99,7 +105,16 @@ fun EventChatScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            // The IME *and* the navigation-bar inset (their union, so the taller
+            // of the two wins rather than double-counting), matching the group
+            // channels' and DM composers. Event chat had NO inset handling at all:
+            // its composer sat under the nav bar with the keyboard down and behind
+            // the keyboard with it up.
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
@@ -143,7 +158,18 @@ fun EventChatScreen(
                             modifier = Modifier.weight(1f),
                         )
                     } else {
+                        val listState = rememberLazyListState()
+                        // Keyboard just came up: the screen's ime padding shrank
+                        // this list's viewport from the bottom and a LazyColumn
+                        // holds its scroll OFFSET, not its bottom edge, so the
+                        // newest message would slide under the composer. Same
+                        // shared rising-edge re-pin as the group channels and DM
+                        // threads — and, as there, only for a reader already at
+                        // the bottom, so tapping the input while reading history
+                        // doesn't yank them down.
+                        RepinToNewestOnImeRise(listState)
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {

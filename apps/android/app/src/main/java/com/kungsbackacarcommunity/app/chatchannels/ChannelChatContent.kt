@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
@@ -533,6 +534,11 @@ private fun ChannelMessageList(
             listState.animateScrollToItem(messages.lastIndex + headerOffset)
         }
     }
+
+    // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
+    // newest message — shared with the DM thread and event chat so the three
+    // surfaces cannot drift apart.
+    RepinToNewestOnImeRise(listState)
 
     LazyColumn(
         state = listState,

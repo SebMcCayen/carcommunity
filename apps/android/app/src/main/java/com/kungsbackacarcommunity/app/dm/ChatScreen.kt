@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
@@ -102,9 +106,21 @@ fun ChatScreen(
 
     AeroPage(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
-        modifier = modifier.imePadding(),
+        modifier = modifier,
         scrollable = false,
         onTitleClick = onViewProfile,
+        // The IME *and* the navigation-bar inset (their union, so the taller of
+        // the two wins rather than double-counting), matching the group channels'
+        // composer: keyboard down the input clears the nav bar, keyboard up it
+        // lifts above the IME. Plain imePadding() left the input under the nav bar
+        // whenever the keyboard was down.
+        //
+        // Passed as contentWindowInsets rather than folded into `modifier`: the
+        // page's background Surface draws at its own node's size, so padding in
+        // its modifier chain would shrink the background and leave a bare band
+        // under the transparent nav bar. AeroPage applies this inside the Surface,
+        // where it already applies the status-bar inset for the same reason.
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (threadLoading && messages.isEmpty()) {
@@ -254,6 +270,11 @@ private fun MessageList(
             listState.animateScrollToItem(messages.lastIndex + headerOffset)
         }
     }
+
+    // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
+    // newest message — shared with the group channels and event chat so the three
+    // surfaces cannot drift apart.
+    RepinToNewestOnImeRise(listState)
 
     LazyColumn(
         state = listState,
