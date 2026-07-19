@@ -18,8 +18,9 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Kronjakt (crown hunt) screen (Phase 12 slice 16). Stateless: lists active
- * reward points and reports collect taps. Collecting requires an active member
- * (the backend also enforces this); the actual GPS capture lands with the map/
+ * reward points and reports collect taps. Collecting requires passing the
+ * member gate (the backend enforces the same gate, and while member gating is
+ * disabled both admit any signed-in, non-suspended user); the GPS capture
  * background-location slice, so a collect with no position shows a "needs
  * location" hint rather than a failed claim.
  */
@@ -27,13 +28,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 fun CrownHuntScreen(
     pointsState: CrownHuntPointsState,
     claimStatus: CrownHuntClaimStatus,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     onCollect: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AeroPage(title = stringResource(R.string.crownHunt_screenTitle), modifier = modifier) {
-        if (!isActiveMember) {
+        if (!passesMemberGate) {
             InfoCard(
                 title = stringResource(R.string.subscription_teaserTitle),
                 body = stringResource(R.string.subscription_memberRequiredBody),

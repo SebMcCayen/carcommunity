@@ -221,9 +221,21 @@ describe('incidents.report + listNearby', () => {
     expect(ids.has(malformedRef.id)).toBe(false);
   });
 
-  it('rejects a non-member reporter with permission-denied', async () => {
+  it('ADMITS a non-member reporter while member gating is disabled', async () => {
     const nonMember = await createProvisionedUser('inc-nonmember');
     await signInAs(nonMember);
+    const result = await call('incidents-report', {
+      type: 'hazard',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+    });
+    expect(result.data).toBeTruthy();
+  });
+
+  it('STILL rejects a suspended reporter with permission-denied', async () => {
+    const suspended = await createProvisionedUser('inc-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     const code = await callableErrorCode(
       call('incidents-report', { type: 'hazard', latitude: KBA.latitude, longitude: KBA.longitude }),
     );

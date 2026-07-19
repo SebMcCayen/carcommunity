@@ -311,7 +311,18 @@ describe('offers and the three-tier privacy split', () => {
     await signInAs(adminUser);
     await call('partners-setOfferStatus', { offerId: created.offerId, action: 'activate' });
 
+    // Was: permission-denied for a free user. Member gating is disabled, so
+    // the code is revealed to any signed-in, non-suspended user.
     await signInAs(freeUser);
+    const freeReveal = (
+      await call('partners-showOfferCode', { offerId: created.offerId })
+    ).data as { code: string | null };
+    expect(freeReveal.code).toBe('KCC10');
+
+    // Teeth: a suspended user is still refused the code.
+    const suspended = await createProvisionedUser('partners-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(
       await callableErrorCode(call('partners-showOfferCode', { offerId: created.offerId })),
     ).toBe('functions/permission-denied');

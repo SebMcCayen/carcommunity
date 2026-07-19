@@ -1,10 +1,15 @@
 /**
  * Shared authorization context for member-gated callables (Phase 9d).
  *
- * Loads the caller's backend-managed users/{uid} access state and applies
- * canAccessMemberFeatures (suspension always overrides entitlement, deleted
- * accounts have no access). Backend state is the source of truth —
- * client-supplied claims are never trusted for the decision.
+ * Loads the caller's backend-managed users/{uid} access state and applies the
+ * member gate (suspension always overrides entitlement, deleted accounts have
+ * no access). Backend state is the source of truth — client-supplied claims
+ * are never trusted for the decision.
+ *
+ * Member gating is currently DISABLED via shared/memberGating.ts, so the
+ * "member" assertions below currently assert only signed-in + not suspended +
+ * not deleted. Suspension and deletion still close every door. See
+ * shared/memberGating.ts for the switch and the re-locking procedure.
  */
 
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -12,12 +17,11 @@ import type { CallableRequest } from 'firebase-functions/v2/https';
 import { db } from '../firebase';
 import {
   canAccessAdminFeatures,
-  canAccessMemberFeatures,
-  hasBackendAccess,
   isRestricted,
   toUserAccessState,
   type UserAccessState,
 } from './access';
+import { backendGateAllows, memberGateAllows } from './memberGating';
 
 export interface AuthenticatedActor {
   uid: string;
@@ -44,10 +48,17 @@ export async function requireActiveActor(request: CallableRequest): Promise<Auth
   return { uid: auth.uid, state };
 }
 
-/** Asserts an active member (requireActiveActor + activeMember entitlement). */
+/**
+ * Asserts an active member (requireActiveActor + activeMember entitlement).
+ *
+ * NOTE: member gating is currently DISABLED (see shared/memberGating.ts), so
+ * this presently asserts only requireActiveActor semantics — signed in,
+ * not suspended, not deleted. The entitlement check returns when
+ * MEMBER_GATING_ENABLED is flipped back to true; call sites need no change.
+ */
 export async function requireMemberActor(request: CallableRequest): Promise<AuthenticatedActor> {
   const actor = await requireActiveActor(request);
-  if (!canAccessMemberFeatures(actor.state)) {
+  if (!memberGateAllows(actor.state)) {
     throw new HttpsError('permission-denied', 'Member subscription required.');
   }
   return actor;
@@ -59,12 +70,17 @@ export async function requireMemberActor(request: CallableRequest): Promise<Auth
  * callables a member may drive but where an admin caller takes a different
  * path — the returned `isAdmin` says which, decided from the backend-managed
  * users/{uid} role, never from a client-supplied claim.
+ *
+ * NOTE: member gating is currently DISABLED (see shared/memberGating.ts), so
+ * the entitlement half of that assertion is bypassed and every signed-in,
+ * non-suspended, non-deleted caller passes. `isAdmin` is unaffected — it is
+ * still decided from the backend role, so admin-only branches stay admin-only.
  */
 export async function requireMemberOrAdminActor(
   request: CallableRequest,
 ): Promise<MemberOrAdminActor> {
   const actor = await requireActiveActor(request);
-  if (!hasBackendAccess(actor.state)) {
+  if (!backendGateAllows(actor.state)) {
     throw new HttpsError('permission-denied', 'Member subscription required.');
   }
   return { ...actor, isAdmin: canAccessAdminFeatures(actor.state) };

@@ -298,12 +298,30 @@ describe('Firestore – Kronjakt (Phase 9h)', () => {
     });
   });
 
-  it('members read active points; drafts and non-members are denied', async () => {
+  it('members read active points; drafts stay denied', async () => {
     const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
     await assertSucceeds(getDoc(doc(memberFs, 'crownHuntPoints', 'p-active')));
     await assertFails(getDoc(doc(memberFs, 'crownHuntPoints', 'p-draft')));
+  });
+
+  it('non-members read active points while member gating is disabled', async () => {
+    // Was: denied. isActiveMember() currently means signed-in + not suspended
+    // (firebase/firestore.rules switch). Re-locking restores the denial.
     const freeFs = testEnv.authenticatedContext(OTHER).firestore();
-    await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'p-active')));
+    await assertSucceeds(getDoc(doc(freeFs, 'crownHuntPoints', 'p-active')));
+    // The draft embargo is NOT part of the member gate and must still hold.
+    await assertFails(getDoc(doc(freeFs, 'crownHuntPoints', 'p-draft')));
+  });
+
+  it('STILL denies a suspended user, entitled or not', async () => {
+    const suspendedMember = testEnv
+      .authenticatedContext('ch-susp-member', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedMember, 'crownHuntPoints', 'p-active')));
+    const suspendedFree = testEnv
+      .authenticatedContext('ch-susp-free', { suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedFree, 'crownHuntPoints', 'p-active')));
   });
 
   it('claims are owner-only member reads; risk data is fully backend-only', async () => {
@@ -391,15 +409,25 @@ describe('Firestore – partners (Phase 9i)', () => {
     await assertFails(getDoc(doc(freeFs, 'offers', 'of-draft')));
   });
 
-  it('member detail is member-gated; the secret code is unreadable by everyone', async () => {
+  it('offer detail is readable by members and (gating disabled) free users; the secret code is unreadable by everyone', async () => {
     const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
     await assertSucceeds(getDoc(doc(memberFs, 'offers', 'of-active', 'details', 'member')));
+    // Was: denied. Re-locking the firestore.rules isActiveMember() switch
+    // restores the member-only detail tier.
     const freeFs = testEnv.authenticatedContext(FREE).firestore();
-    await assertFails(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
-    // The discount code tier is closed even to members and admin clients.
+    await assertSucceeds(getDoc(doc(freeFs, 'offers', 'of-active', 'details', 'member')));
+    // The discount code tier is closed even to members and admin clients —
+    // the unlock does NOT reach it (it is not member-gated, it is backend-only).
     await assertFails(getDoc(doc(memberFs, 'offers', 'of-active', 'secret', 'code')));
     const adminFs = testEnv.authenticatedContext('partner-admin', { admin: true }).firestore();
     await assertFails(getDoc(doc(adminFs, 'offers', 'of-active', 'secret', 'code')));
+  });
+
+  it('STILL denies offer detail to a suspended user', async () => {
+    const suspendedFs = testEnv
+      .authenticatedContext('offers-susp-detail', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedFs, 'offers', 'of-active', 'details', 'member')));
   });
 
   it('applications are never client-readable — not even by the submitter', async () => {
@@ -429,9 +457,26 @@ describe('Firestore – partners (Phase 9i)', () => {
         note: 'x',
       }),
     );
+    // Free users may now bookmark too (member gating disabled); shape rules
+    // and the suspension guard are unaffected.
     const freeFs = testEnv.authenticatedContext(FREE).firestore();
+    await assertSucceeds(
+      setDoc(doc(freeFs, 'users', FREE, 'savedOffers', 'of-active'), {
+        offerId: 'of-active',
+        savedAt: serverTimestamp(),
+      }),
+    );
     await assertFails(
       setDoc(doc(freeFs, 'users', FREE, 'savedOffers', 'of-active'), {
+        offerId: 'mismatched-id',
+        savedAt: serverTimestamp(),
+      }),
+    );
+    const suspendedFs = testEnv
+      .authenticatedContext('offers-suspended', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(
+      setDoc(doc(suspendedFs, 'users', 'offers-suspended', 'savedOffers', 'of-active'), {
         offerId: 'of-active',
         savedAt: serverTimestamp(),
       }),
@@ -1149,8 +1194,17 @@ describe('Firestore – events (Phase 9b)', () => {
     await assertFails(getDoc(doc(ctx.firestore(), 'events', PUBLISHED)));
   });
 
-  it('non-members cannot read the member-gated detail document', async () => {
+  it('non-members CAN read the detail document while member gating is disabled', async () => {
+    // Was: denied. Re-locking (firestore.rules isActiveMember) restores it.
     const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'private')));
+  });
+
+  it('STILL denies the detail document to suspended users', async () => {
+    const ctx = testEnv.authenticatedContext('ev-suspended', {
+      activeMember: true,
+      suspended: true,
+    });
     await assertFails(getDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'details', 'private')));
   });
 
@@ -1228,18 +1282,36 @@ describe('Firestore – events (Phase 9b)', () => {
   });
 
   it('members cannot RSVP to a draft event', async () => {
+    // The document must be otherwise VALID, or this passes on the shape check
+    // instead of the draft embargo it is meant to pin.
     await assertFails(
       setDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'rsvps', MEMBER), {
         status: 'going',
+        updatedAt: serverTimestamp(),
       }),
     );
   });
 
-  it('non-members cannot RSVP', async () => {
+  it('non-members CAN RSVP while member gating is disabled', async () => {
     const ctx = testEnv.authenticatedContext(NON_MEMBER);
-    await assertFails(
+    await assertSucceeds(
       setDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'rsvps', NON_MEMBER), {
         status: 'going',
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('STILL blocks a suspended user from RSVPing', async () => {
+    // Teeth: an otherwise-valid RSVP from an entitled but suspended user.
+    const ctx = testEnv.authenticatedContext('rsvp-suspended', {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'events', PUBLISHED, 'rsvps', 'rsvp-suspended'), {
+        status: 'going',
+        updatedAt: serverTimestamp(),
       }),
     );
   });
@@ -1335,8 +1407,13 @@ describe('Firestore – event chat (Phase 9c)', () => {
     );
   });
 
-  it('non-members cannot read chat even with a going RSVP', async () => {
+  it('non-members with a going RSVP CAN read chat while member gating is disabled', async () => {
     const ctx = testEnv.authenticatedContext(FREE_GOING);
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', EVENT, 'messages', 'msg-1')));
+  });
+
+  it('STILL denies chat to a suspended user with a going RSVP', async () => {
+    const ctx = testEnv.authenticatedContext(FREE_GOING, { suspended: true });
     await assertFails(getDoc(doc(ctx.firestore(), 'events', EVENT, 'messages', 'msg-1')));
   });
 
@@ -1892,10 +1969,18 @@ describe('Firestore – group drive roster (Phase 11 rules)', () => {
     );
   });
 
-  it('non-members cannot read; nobody writes directly', async () => {
+  it('non-members CAN read while member gating is disabled; nobody writes directly', async () => {
     const freeCtx = testEnv.authenticatedContext('gd-free');
-    await assertFails(
+    await assertSucceeds(
       getDoc(doc(freeCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
+    );
+    // Suspension still closes the read (teeth).
+    const suspendedCtx = testEnv.authenticatedContext('gd-suspended', {
+      activeMember: true,
+      suspended: true,
+    });
+    await assertFails(
+      getDoc(doc(suspendedCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
     );
     const memberCtx = testEnv.authenticatedContext('gd-member', { activeMember: true });
     await assertFails(
@@ -2095,14 +2180,24 @@ describe('Realtime Database – liveLocation (Phase 10)', () => {
     );
   });
 
-  it('non-members, suspended members, and strangers cannot read', async () => {
+  it('non-members CAN read while member gating is disabled', async () => {
+    // Was: denied. The activeMember term was removed from the
+    // liveLocation/$uid/latest read rule (firebase/database.rules.json switch).
     const nonMember = testEnv.authenticatedContext(NON_MEMBER);
-    await assertFails(dbGet(dbRef(nonMember.database(), `liveLocation/${SHARER}/latest`)));
+    await assertSucceeds(dbGet(dbRef(nonMember.database(), `liveLocation/${SHARER}/latest`)));
+  });
+
+  it('STILL denies suspended users, strangers to a session, and the unauthenticated', async () => {
+    // Teeth: the RTDB read rule bundles the suspension guard and BOTH
+    // liveLocationBlocks direction checks into one expression alongside the
+    // entitlement term. Removing the entitlement term must not take these out.
     const suspended = testEnv.authenticatedContext('loc-suspended', {
       activeMember: true,
       suspended: true,
     });
     await assertFails(dbGet(dbRef(suspended.database(), `liveLocation/${SHARER}/latest`)));
+    const suspendedFree = testEnv.authenticatedContext('loc-suspended-free', { suspended: true });
+    await assertFails(dbGet(dbRef(suspendedFree.database(), `liveLocation/${SHARER}/latest`)));
     const unauth = testEnv.unauthenticatedContext();
     await assertFails(dbGet(dbRef(unauth.database(), `liveLocation/${SHARER}/latest`)));
     // Sessions are private to their owner.
@@ -2208,11 +2303,20 @@ describe('Cloud Storage – ownership validation', () => {
     );
   });
 
-  it('non-member owner cannot read their route file (member-only route visuals)', async () => {
-    // Legacy parity: routeOverview is withheld from non-members even for
-    // their own drives; the Firestore metadata stays readable, the route
-    // file does not (Phase 9d).
+  it('non-member owner CAN read their route file while member gating is disabled', async () => {
+    // Was: denied (legacy parity — routeOverview withheld from non-members even
+    // for their own drives). Re-locking the storage.rules isActiveMember()
+    // switch restores that denial.
     const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
+    );
+  });
+
+  it('STILL denies a suspended non-member owner their route file', async () => {
+    // Teeth: storage.rules isActiveMember() bundles isNotSuspended(); the
+    // unlock must not drop it (the PR #428 vehicleImages regression).
+    const ctx = testEnv.authenticatedContext(OWNER, { suspended: true });
     await assertFails(
       getBytes(storageRef(ctx.storage(), `rideRoutes/${OWNER}/ride-xyz/route.bin`)),
     );

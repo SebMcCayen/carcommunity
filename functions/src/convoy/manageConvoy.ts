@@ -34,7 +34,8 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
+import { toUserAccessState } from '../shared/access';
+import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
   CONVOY_ALREADY_ENDED_MESSAGE,
@@ -99,15 +100,17 @@ function toDate(value: unknown): Date | null {
 
 /**
  * Reads a users/{uid} profile projection. Returns null when the user is missing
- * or cannot access member features — soft-deleted OR suspended OR not an active
- * member (canAccessMemberFeatures, suspension overrides entitlement). Every
+ * or fails the member gate — soft-deleted OR suspended OR (while gating is
+ * enabled) not an active member. Member gating is currently DISABLED (see
+ * shared/memberGating.ts), so today only missing/suspended/deleted users are
+ * skipped. When gating is re-enabled this again also skips non-members: every
  * convoy callable is member-gated, so a non-member invitee could never accept /
  * decline / see the convoy; treating them as null here means they are skipped
  * (as not_found) rather than written into memberUids/members and notified.
  */
 async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   const snap = await db.collection('users').doc(uid).get();
-  if (!snap.exists || !canAccessMemberFeatures(toUserAccessState(snap.data()))) {
+  if (!snap.exists || !memberGateAllows(toUserAccessState(snap.data()))) {
     return null;
   }
   return toProfileProjection(snap.data());

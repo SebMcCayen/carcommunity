@@ -45,8 +45,19 @@ import kotlinx.coroutines.launch
  * stored only after an explicit user action) → save via the `drives-save`
  * callable or discard (nothing stored).
  *
- * Entry is member-gated ([isActiveMember]); the callable is member-gated
- * backend-side too. Location and the callable are behind availability guards so
+ * Entry is member-gated ([passesMemberGate]) and the `drives-save` callable is
+ * member-gated backend-side too — but member gating is currently DISABLED on
+ * both sides (config/MemberGating.kt and functions/src/shared/memberGating.ts),
+ * so both currently admit any signed-in, non-suspended user.
+ *
+ * RE-LOCKING TRAP: these two gates must be re-locked TOGETHER, and they must
+ * also stay aligned with whatever gates the recording ENTRY (today the live
+ * -sharing path in AuthenticatedApp binds recording to `canShareLive`, which is
+ * flag-gated only). If saving is member-gated while recording is not, a
+ * non-member can record a drive and then be refused at save with no way to keep
+ * it — an unrecoverable prompt. That was a real, reported bug, not a theory.
+ *
+ * Location and the callable are behind availability guards so
  * a config-less CI build (no google-services.json, no device GPS) never
  * crashes: [DriveLocationController.createIfAvailable] may return null and
  * fixes simply never arrive.
@@ -54,7 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecordDriveScreen(
     coordinator: DriveRecordingCoordinator,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -136,7 +147,7 @@ fun RecordDriveScreen(
                 color = MaterialTheme.colorScheme.onBackground,
             )
 
-            if (!isActiveMember) {
+            if (!passesMemberGate) {
                 Text(
                     text = stringResource(R.string.savedDrives_memberRequired),
                     style = MaterialTheme.typography.bodyMedium,

@@ -161,16 +161,25 @@ describe('events callables – authorization', () => {
     );
   });
 
-  it('rejects a signed-in caller who is neither an active member nor an admin', async () => {
+  it('ADMITS a signed-in non-member to events-create while member gating is disabled', async () => {
     await signInAs(regularUser);
-    // events-create admits members as well as admins, but regularUser has no
-    // activeMember entitlement — so it is still permission-denied for them.
-    expect(await callableErrorCode(call('events-create', validCreate))).toBe(
-      'functions/permission-denied',
-    );
+    // Was: permission-denied (no activeMember entitlement). events-create now
+    // admits any signed-in, non-suspended caller; re-locking restores the deny.
+    const created = (await call('events-create', validCreate)).data as { eventId: string };
+    expect(typeof created.eventId).toBe('string');
+    // events-publish stays ADMIN-ONLY — the unlock does not touch admin gates.
     expect(
       await callableErrorCode(call('events-publish', { eventId: 'irrelevant' })),
     ).toBe('functions/permission-denied');
+  });
+
+  it('STILL rejects a suspended caller on events-create', async () => {
+    const suspended = await createProvisionedUser('events-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
+    expect(await callableErrorCode(call('events-create', validCreate))).toBe(
+      'functions/permission-denied',
+    );
   });
 
   it('keeps the rest of the events lifecycle admin-only for members', async () => {

@@ -22,7 +22,8 @@
  */
 
 import { z } from 'zod';
-import { canAccessMemberFeatures, type UserAccessState } from '../shared/access';
+import { type UserAccessState } from '../shared/access';
+import { memberGateAllows } from '../shared/memberGating';
 import type { EventStatus, RsvpStatus } from './events-core';
 
 /** Legacy limits (packages/shared/src/event-chat.ts). */
@@ -123,15 +124,19 @@ export type ChatEligibility =
   | { ok: false; code: 'permission-denied' | 'failed-precondition'; message: string };
 
 /**
- * Chat participation (read and post) requires: active member (suspension
- * overrides entitlement), a published event, and a going/maybe RSVP.
+ * Chat participation (read and post) requires: passing the member gate, a
+ * published event, and a going/maybe RSVP.
+ *
+ * Member gating is currently DISABLED (shared/memberGating.ts), so the member
+ * term currently means only "not suspended, not deleted". The event-status and
+ * RSVP requirements are unaffected.
  */
 export function guardChatParticipant(input: {
   state: UserAccessState;
   eventStatus: EventStatus | undefined;
   rsvpStatus: RsvpStatus | string | undefined;
 }): ChatEligibility {
-  if (!canAccessMemberFeatures(input.state)) {
+  if (!memberGateAllows(input.state)) {
     return {
       ok: false,
       code: 'permission-denied',

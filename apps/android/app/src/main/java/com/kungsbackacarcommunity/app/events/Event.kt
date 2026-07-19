@@ -79,7 +79,9 @@ data class EventDetail(
  * exposes. Times are carried as epoch millis and serialized to ISO-8601 UTC by
  * the repository ([Events.toIsoUtc]).
  *
- * An active member may drive `events-create` themselves: the callable stamps
+ * A caller who passes the member gate may drive `events-create` themselves
+ * (that is any signed-in, non-suspended user while member gating is disabled):
+ * the callable stamps
  * `createdByRole: 'member'` and publishes the event immediately (post-moderated
  * — admins take one down via the audited `events.cancel`). `isOfficial` is
  * forced false server-side for member-created events, which is why this input
@@ -157,16 +159,20 @@ object Events {
     }
 
     /**
-     * RSVP is allowed only for active members on a published event — mirrors
-     * the Firestore rule on events/{id}/rsvps/{uid} (owner + active member +
-     * published). Cancelled/completed/draft events are not RSVP-able.
+     * RSVP is allowed only for a caller who PASSES THE MEMBER GATE, on a
+     * published event — mirrors the Firestore rule on events/{id}/rsvps/{uid}
+     * (owner + isActiveMember() + published). "Passes the gate" rather than
+     * "is an active member" because both layers are switchable: while member
+     * gating is disabled (config/MemberGating.kt and the firestore.rules
+     * isActiveMember() switch) any signed-in, non-suspended user passes.
+     * Cancelled/completed/draft events are not RSVP-able either way.
      */
-    fun canRsvp(isActiveMember: Boolean, status: EventStatus): Boolean =
-        isActiveMember && status == EventStatus.PUBLISHED
+    fun canRsvp(passesMemberGate: Boolean, status: EventStatus): Boolean =
+        passesMemberGate && status == EventStatus.PUBLISHED
 
     /** Whether the exact-location / description detail may be requested. */
-    fun canSeeDetails(isActiveMember: Boolean, status: EventStatus): Boolean =
-        isActiveMember && status == EventStatus.PUBLISHED
+    fun canSeeDetails(passesMemberGate: Boolean, status: EventStatus): Boolean =
+        passesMemberGate && status == EventStatus.PUBLISHED
 
     /** Published events sorted by soonest start first (nulls last, stable). */
     fun sortedForList(events: List<EventSummary>): List<EventSummary> =

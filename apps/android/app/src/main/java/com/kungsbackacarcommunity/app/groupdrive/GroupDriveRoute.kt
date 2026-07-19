@@ -20,7 +20,7 @@ fun GroupDriveRoute(
     coordinator: GroupDriveCoordinator?,
     eventId: String,
     uid: String,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     eventStatus: EventStatus?,
     myRsvp: RsvpStatus?,
     onShowOnMap: ((List<String>) -> Unit)? = null,
@@ -40,7 +40,7 @@ fun GroupDriveRoute(
     GroupDriveScreen(
         participants = participants,
         myStatus = myStatus,
-        canJoin = GroupDrive.canJoin(isActiveMember, eventStatus, myRsvp),
+        canJoin = GroupDrive.canJoin(passesMemberGate, eventStatus, myRsvp),
         actionStatus = actionStatus,
         onJoin = { coordinator?.let { c -> scope.launch { c.join(eventId) } } },
         onSetStatus = { status -> coordinator?.let { c -> scope.launch { c.updateStatus(eventId, status) } } },

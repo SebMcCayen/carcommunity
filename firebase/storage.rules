@@ -25,8 +25,23 @@ service firebase.storage {
         && (!('suspended' in request.auth.token) || request.auth.token.suspended != true);
     }
 
+    // ---- MEMBER GATING SWITCH (Storage rules layer) ------------------------
+    // Member gating is currently DISABLED so every feature is testable without
+    // a subscription. The entitlement term is dropped; isAuthenticated() and
+    // isNotSuspended() are DELIBERATELY KEPT — this helper bundles the
+    // suspension guard for every call site (see the vehicleImages note below
+    // for what happened in PR #428 when that bundling was overlooked).
+    //
+    // TO RE-LOCK: restore the activeMember term, i.e. replace the return below
+    // with:
+    //   return isAuthenticated() && request.auth.token.activeMember == true
+    //     && isNotSuspended();
+    // then redeploy rules. Independent of functions/src/shared/memberGating.ts,
+    // firestore.rules, database.rules.json AND the Android UI switch in
+    // apps/android/.../config/MemberGating.kt — flip all FIVE together
+    // (memberGating.ts is the authoritative runbook).
     function isActiveMember() {
-      return isAuthenticated() && request.auth.token.activeMember == true && isNotSuspended();
+      return isAuthenticated() && isNotSuspended();
     }
 
     function isImage() {
@@ -84,10 +99,13 @@ service firebase.storage {
     // -------------------------------------------------------------------------
     // Ride route data:  rideRoutes/{userId}/{rideId}/{filename}   (Phase 9d)
     // route.bin (binary, polyline-encoded + optionally gzipped) and
-    // preview.png (static map image) both live under this owner+member-gated
-    // prefix — route visuals are member-only (legacy parity: routeOverview is
-    // withheld from non-members; drives saved during a previous membership
-    // keep their Firestore metadata readable, but route files stay gated).
+    // preview.png (static map image) both live under this owner + member-gated
+    // prefix. Member gating is currently DISABLED (see the isActiveMember()
+    // switch above), so today this is owner + non-suspended only. When gating
+    // is re-enabled, route visuals are member-only again (legacy parity:
+    // routeOverview is withheld from non-members; drives saved during a
+    // previous membership keep their Firestore metadata readable, but route
+    // files stay gated).
     // The former world-readable ridePreviewImages/ prefix is retired: ride
     // previews reveal the private route shape.
     // Max 50 MB per file. drives.delete removes this prefix with the drive.

@@ -182,9 +182,34 @@ describe('convoy-create gating + friend-only invites', () => {
     expect(await callableErrorCode(call('convoy-list', {}))).toBe('functions/unauthenticated');
   });
 
-  it('requires an active member', async () => {
+  it('admits a non-member while member gating is disabled', async () => {
+    // Was: permission-denied on the member gate. The call now gets PAST the
+    // gate and fails on the real reason instead: the only invitee is an
+    // unknown uid, so there is no one to put in the convoy.
     const free = await newFreeUser();
     await signInAs(free);
+    expect(await callableErrorCode(call('convoy-create', { inviteeUids: ['someone'] }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('lets a non-member actually CREATE a convoy with a real friend', async () => {
+    const freeOwner = await newFreeUser();
+    const friend = await newMember('FreeOwnerFriendC');
+    await makeFriends(freeOwner, friend);
+    await signInAs(freeOwner);
+    const result = (await call('convoy-create', { inviteeUids: [friend.uid] })).data as {
+      convoy: ConvoySummary;
+      invited: string[];
+    };
+    expect(result.invited).toEqual([friend.uid]);
+    expect(result.convoy.memberUids).toContain(friend.uid);
+  });
+
+  it('STILL rejects a suspended caller', async () => {
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('convoy-create', { inviteeUids: ['someone'] }))).toBe(
       'functions/permission-denied',
     );
@@ -235,12 +260,12 @@ describe('convoy-create gating + friend-only invites', () => {
     expect(items.docs.some((d) => d.data().relatedEntityId === result.convoy.convoyId)).toBe(true);
   });
 
-  it('skips a friend who is not an active member (not_found)', async () => {
+  it('INVITES a non-member friend while member gating is disabled', async () => {
     const owner = await newMember('MemberOwnerC');
     const friendMember = await newMember('ActiveFriendC');
-    // A friend of the owner who has no active-member entitlement: they could
-    // never accept/see a convoy, so convoy.create must skip them as not_found
-    // rather than writing them into memberUids/members and notifying them.
+    // Was: skipped as not_found, because a non-member could never accept/see a
+    // convoy. With gating disabled they can, so they are invited normally.
+    // Re-locking restores the skip (loadProfile in convoy/manageConvoy.ts).
     const freeFriend = await newFreeUser();
     await makeFriends(owner, friendMember);
     await makeFriends(owner, freeFriend);
@@ -250,9 +275,32 @@ describe('convoy-create gating + friend-only invites', () => {
       await call('convoy-create', { inviteeUids: [friendMember.uid, freeFriend.uid] })
     ).data as { convoy: ConvoySummary; invited: string[]; skipped: Array<{ uid: string; reason: string }> };
 
+    expect(result.invited.sort()).toEqual([friendMember.uid, freeFriend.uid].sort());
+    expect(result.skipped).toEqual([]);
+    expect(result.convoy.memberUids).toContain(freeFriend.uid);
+  });
+
+  it('STILL skips a SUSPENDED friend (not_found)', async () => {
+    // Teeth: loadProfile drops suspended/deleted invitees regardless of the
+    // gating switch — they must never be written in or notified.
+    const owner = await newMember('SuspOwnerC');
+    const friendMember = await newMember('ActiveFriendC2');
+    const suspendedFriend = await newFreeUser();
+    await makeFriends(owner, friendMember);
+    await makeFriends(owner, suspendedFriend);
+    await adminDb
+      .collection('users')
+      .doc(suspendedFriend.uid)
+      .set({ suspended: true }, { merge: true });
+
+    await signInAs(owner);
+    const result = (
+      await call('convoy-create', { inviteeUids: [friendMember.uid, suspendedFriend.uid] })
+    ).data as { convoy: ConvoySummary; invited: string[]; skipped: Array<{ uid: string; reason: string }> };
+
     expect(result.invited).toEqual([friendMember.uid]);
-    expect(result.skipped).toEqual([{ uid: freeFriend.uid, reason: 'not_found' }]);
-    // The non-member is not written into the convoy...
+    expect(result.skipped).toEqual([{ uid: suspendedFriend.uid, reason: 'not_found' }]);
+    const freeFriend = suspendedFriend;
     expect(result.convoy.memberUids).not.toContain(freeFriend.uid);
     expect(result.convoy.members.some((m) => m.uid === freeFriend.uid)).toBe(false);
     // ...and receives no invite notification.

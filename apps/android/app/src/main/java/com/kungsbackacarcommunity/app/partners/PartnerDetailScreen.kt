@@ -20,8 +20,10 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Partner company detail + its offers (Phase 12 slice 17). Stateless. Offers
- * show the teaser to any authenticated user; active members can save/unsave a
- * bookmark, expand the member detail, and reveal the discount code (callable).
+ * show the teaser to any authenticated user; a caller who passes the member
+ * gate can save/unsave a bookmark, expand the member detail, and reveal the
+ * discount code (callable). While member gating is disabled that is every
+ * signed-in, non-suspended user.
  * Only one offer is expanded at a time ([expandedOfferId]).
  */
 @Composable
@@ -29,7 +31,7 @@ fun PartnerDetailScreen(
     company: PartnerCompany?,
     offers: List<PartnerOffer>,
     savedOfferIds: Set<String>,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     expandedOfferId: String?,
     expandedOfferDetail: OfferMemberDetail?,
     codeStatus: OfferCodeStatus,
@@ -91,7 +93,7 @@ fun PartnerDetailScreen(
                 offers.forEach { offer ->
                     OfferCard(
                         offer = offer,
-                        isActiveMember = isActiveMember,
+                        passesMemberGate = passesMemberGate,
                         isSaved = savedOfferIds.contains(offer.id),
                         isExpanded = expandedOfferId == offer.id,
                         detail = if (expandedOfferId == offer.id) expandedOfferDetail else null,
@@ -108,7 +110,7 @@ fun PartnerDetailScreen(
 @Composable
 private fun OfferCard(
     offer: PartnerOffer,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     isSaved: Boolean,
     isExpanded: Boolean,
     detail: OfferMemberDetail?,
@@ -138,7 +140,7 @@ private fun OfferCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (!isActiveMember) {
+            if (!passesMemberGate) {
                 Text(
                     text = stringResource(R.string.partnerOffers_memberRequiredHint),
                     style = MaterialTheme.typography.bodySmall,

@@ -22,15 +22,15 @@ import kotlinx.coroutines.launch
 fun CrownHuntRoute(
     repository: CrownHuntRepository,
     coordinator: CrownHuntCoordinator?,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     onBack: () -> Unit,
     locationProvider: suspend () -> ClaimCoordinate? = { null },
     idempotencyKeyProvider: () -> String = { UUID.randomUUID().toString() },
 ) {
     val scope = rememberCoroutineScope()
     val pointsState by
-        remember(repository, isActiveMember) {
-            if (isActiveMember) repository.observeActivePoints() else flowOf(CrownHuntPointsState.Loaded(emptyList()))
+        remember(repository, passesMemberGate) {
+            if (passesMemberGate) repository.observeActivePoints() else flowOf(CrownHuntPointsState.Loaded(emptyList()))
         }
             .collectAsState(initial = CrownHuntPointsState.Loading)
     val claimStatus by
@@ -40,7 +40,7 @@ fun CrownHuntRoute(
     CrownHuntScreen(
         pointsState = pointsState,
         claimStatus = claimStatus,
-        isActiveMember = isActiveMember,
+        passesMemberGate = passesMemberGate,
         onCollect = { pointId ->
             coordinator?.let { c ->
                 scope.launch { c.claim(pointId, locationProvider(), idempotencyKeyProvider()) }

@@ -75,7 +75,8 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { canAccessMemberFeatures, toUserAccessState } from '../shared/access';
+import { toUserAccessState } from '../shared/access';
+import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
@@ -146,8 +147,11 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
 
 /**
  * Narrows client-supplied mention candidates to the ones actually worth a
- * notice: a real, active, non-suspended, non-deleted MEMBER whom the sender has
- * not blocked and who has not blocked the sender.
+ * notice: a real, non-suspended, non-deleted account that passes the member
+ * gate, whom the sender has not blocked and who has not blocked the sender.
+ *
+ * Member gating is currently DISABLED (shared/memberGating.ts), so non-member
+ * accounts are mentionable today; re-enabling it drops them again.
  *
  * Everything here is a DROP, never a throw. A uid that fails is either a race
  * (the member deleted their account, lost their subscription, or blocked the
@@ -180,7 +184,7 @@ async function resolveMentions(candidates: string[], senderUid: string): Promise
 
   return candidates.filter((_uid, index) => {
     const profile = profileSnaps[index]!;
-    if (!profile.exists || !canAccessMemberFeatures(toUserAccessState(profile.data()))) {
+    if (!profile.exists || !memberGateAllows(toUserAccessState(profile.data()))) {
       return false;
     }
     // Two block docs per candidate, in the order they were requested above.

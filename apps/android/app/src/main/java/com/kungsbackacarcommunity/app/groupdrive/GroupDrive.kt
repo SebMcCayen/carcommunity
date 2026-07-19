@@ -36,11 +36,14 @@ data class GroupDriveParticipant(
 
 object GroupDrive {
     /**
-     * Joining requires an active member, a published event, and a going/maybe
-     * RSVP — mirrors the backend join precondition and the roster read rule.
+     * Joining requires passing the member gate, a published event, and a
+     * going/maybe RSVP — mirrors the backend join precondition and the roster
+     * read rule. The gate is switchable: while member gating is disabled it
+     * admits any signed-in, non-suspended user, and the backend agrees
+     * (groupDrive.join's requireMemberActor resolves the same way).
      */
-    fun canJoin(isActiveMember: Boolean, eventStatus: EventStatus?, rsvp: RsvpStatus?): Boolean =
-        isActiveMember &&
+    fun canJoin(passesMemberGate: Boolean, eventStatus: EventStatus?, rsvp: RsvpStatus?): Boolean =
+        passesMemberGate &&
             eventStatus == EventStatus.PUBLISHED &&
             (rsvp == RsvpStatus.GOING || rsvp == RsvpStatus.MAYBE)
 

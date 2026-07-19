@@ -100,6 +100,7 @@ import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
+import com.kungsbackacarcommunity.app.config.MemberGating
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -731,13 +732,17 @@ fun AuthenticatedApp(
                     memberGated = false,
                     isActiveMember = profile?.activeMember == true,
                 )
-            // Viewing OTHERS on the map is the paid capability (backend parity:
-            // the liveLocation/$uid/latest RTDB read rule requires activeMember).
-            // A non-member gets a subscription upsell instead of the roster map.
+            // Viewing OTHERS on the map is the paid capability — but member
+            // gating is currently DISABLED (config/MemberGating.kt), so every
+            // signed-in user may view the roster. Backend parity holds: the
+            // liveLocation/$uid/latest RTDB read rule has had its activeMember
+            // term removed to match (firebase/database.rules.json). Re-locking
+            // BOTH restores the subscription upsell in place of the roster map.
             // ALSO flag-gated: a server-disabled LIVE_LOCATION flag must fully
             // block opening the roster map / starting RTDB reads, so require the
-            // flag (liveLocationEnabled) IN ADDITION to the active-member gate.
-            val canViewLiveOthers = liveLocationEnabled && profile?.activeMember == true
+            // flag (liveLocationEnabled) IN ADDITION to the member gate.
+            val canViewLiveOthers =
+                liveLocationEnabled && MemberGating.allows(profile?.activeMember == true)
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
@@ -797,11 +802,18 @@ fun AuthenticatedApp(
             // non-member an end-of-session prompt whose Save could only ever fail
             // with PERMISSION_DENIED, forever. The manual recorder
             // (RecordDriveScreen) already applies this same member rule.
+            // Member gating is currently DISABLED (config/MemberGating.kt) and
+            // drives-save admits any signed-in, non-suspended caller to match,
+            // so this resolves to true for everyone. Routing it through the
+            // switch (rather than the raw entitlement) is what keeps recording
+            // aligned with saving: gating recording on the RAW flag while the
+            // backend saves for everyone would invert the v0.8.0 bug — we would
+            // refuse to record drives the server would happily store.
             val canRecordDrive =
                 DriveRecordingGate.shouldRecord(
                     hasDrivesBackend = drivesRepository != null,
                     canShareLive = canShareLive,
-                    isActiveMember = profile?.activeMember == true,
+                    passesMemberGate = MemberGating.allows(profile?.activeMember == true),
                 )
 
             // Bind the recording lifecycle to the live-sharing state. Both calls
@@ -1199,8 +1211,11 @@ fun AuthenticatedApp(
                                     } else {
                                         // Distinguish WHY viewing is blocked: a
                                         // disabled LIVE_LOCATION flag → "not available"
-                                        // (an active member shouldn't see an upsell);
-                                        // otherwise it's the non-member subscription upsell.
+                                        // (someone who passes the member gate
+                                        // shouldn't see an upsell); otherwise it's
+                                        // the subscription upsell for a caller who
+                                        // fails the gate — unreachable while member
+                                        // gating is disabled, since everyone passes.
                                         scope.launch {
                                             snackbarHostState.showSnackbar(
                                                 if (!liveLocationEnabled) {
@@ -1386,17 +1401,25 @@ fun AuthenticatedApp(
                                     onOpenChat = { chatHubOpen = true },
                                     // Crowd-sourced incidents layer: draw the
                                     // fetched markers for everyone, and show the
-                                    // report control only when a repository is
+                                    // report control when a repository is
                                     // configured (guarded off in CI/no-Firebase)
-                                    // AND the user is an active member — the
-                                    // `incidents-report` callable is member-gated
-                                    // (requireMemberActor), so non-members must not
-                                    // see an action that would fail on submit.
+                                    // AND the caller passes the member gate.
+                                    // That gate is currently OPEN (member gating
+                                    // is disabled — config/MemberGating.kt), so
+                                    // every signed-in user sees the control, and
+                                    // the `incidents-report` callable admits them
+                                    // to match (requireMemberActor resolves to
+                                    // active-actor semantics while the backend
+                                    // switch is off). The two MUST stay aligned:
+                                    // if the callable is re-locked without this
+                                    // gate, non-members would see an action that
+                                    // fails on submit.
                                     incidentMarkers = incidentMarkers,
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                                     incidentReportingEnabled =
-                                        incidentController != null && profile?.activeMember == true,
+                                        incidentController != null &&
+                                            MemberGating.allows(profile?.activeMember == true),
                                     onReportIncident = { type ->
                                         incidentController?.let { controller ->
                                             scope.launch {
@@ -2238,7 +2261,7 @@ private fun RouteHost(
                     repository = eventsRepository,
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
                     chatEnabled = chatEnabled,
@@ -2258,7 +2281,7 @@ private fun RouteHost(
                 CrownHuntRoute(
                     repository = crownHuntRepository,
                     coordinator = crownHuntCoordinator,
-                    isActiveMember = profileActiveMember,
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {
@@ -2271,7 +2294,7 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    isActiveMember = profileActiveMember,
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {
