@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.chattime
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,19 +13,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.core.content.ContextCompat
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -61,13 +68,39 @@ data class ChatDateContext(
 @Composable
 fun rememberChatDateContext(): ChatDateContext {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
     // LocalLocale, not configuration.locales[0]: the composition local is
     // OBSERVABLE, so a locale change recomposes the conversation instead of
     // leaving last language's month names on screen (lint: NonObservableLocale).
     val locale = LocalLocale.current.platformLocale
     val use24Hour = DateFormat.is24HourFormat(context)
-    val zone = remember(configuration) { ZoneId.systemDefault() }
+    // The device's zone is NOT part of Configuration, so keying this off
+    // LocalConfiguration would leave a conversation that is open when the zone
+    // changes (a flight landing, a manual change) formatting against the old
+    // zone — wrong "Today"/"Yesterday" and separators cut at the wrong midnight.
+    // ACTION_TIMEZONE_CHANGED is the only signal that actually fires, so listen
+    // for it and re-read. Registered NOT_EXPORTED: it is a protected system
+    // broadcast, so nothing else may deliver it.
+    var zone by remember { mutableStateOf(ZoneId.systemDefault()) }
+    DisposableEffect(context) {
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(unused: Context?, intent: Intent?) {
+                    // getDefault() is cached by the platform; the broadcast is
+                    // dispatched after that cache is refreshed.
+                    zone = ZoneId.systemDefault()
+                }
+            }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(Intent.ACTION_TIMEZONE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        // A change that landed while this screen was being composed would
+        // otherwise be missed between the initial read and registration.
+        zone = ZoneId.systemDefault()
+        onDispose { context.unregisterReceiver(receiver) }
+    }
 
     val today by produceState(initialValue = LocalDate.now(zone), zone) {
         while (true) {
@@ -139,8 +172,11 @@ fun DaySeparatorRow(date: LocalDate, dates: ChatDateContext, modifier: Modifier 
 @Composable
 fun MessageTimeText(millis: Long?, dates: ChatDateContext, modifier: Modifier = Modifier) {
     if (millis == null) return
+    // Keyed on the fields ChatDateFormat.time actually reads — NOT on `dates`
+    // wholesale, whose `today` rolls over at midnight and would otherwise
+    // re-format every visible message's clock time for no reason.
     val time =
-        remember(millis, dates) {
+        remember(millis, dates.zone, dates.locale, dates.use24Hour) {
             ChatDateFormat.time(
                 millis = millis,
                 zone = dates.zone,
