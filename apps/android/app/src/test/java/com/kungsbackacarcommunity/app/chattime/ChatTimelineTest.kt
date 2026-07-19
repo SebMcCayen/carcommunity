@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chattime
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -208,12 +209,19 @@ class ChatTimelineTest {
     }
 
     /**
-     * Paging repeatedly must converge on the same thing as loading the whole
-     * conversation at once — the property that actually matters, tested against
-     * every prefix rather than one hand-picked split.
+     * Rebuilding over the UNION after an older page is prepended must beat the
+     * naive alternative of grouping each page independently and concatenating.
+     *
+     * Comparing `build(older + loaded)` to `build(all)` alone would prove
+     * nothing — `older + loaded` IS `all` by construction, so that assertion
+     * reduces to `render(x) == render(x)` and would hold against an
+     * implementation that emitted no separators whatsoever. The teeth here are
+     * the heading COUNT (exactly one per distinct local date) plus the explicit
+     * refutation of the per-page path at every seam that falls inside a day: a
+     * separator-less implementation makes `naive` and `whole` equal and fails.
      */
     @Test
-    fun pagination_anySplitAgreesWithTheWholeConversation() {
+    fun pagination_theUnionRebuildBeatsGroupingEachPageIndependently() {
         val all =
             listOf(
                 Msg("a", at(2026, 7, 17, 8, 0)),
@@ -225,17 +233,38 @@ class ChatTimelineTest {
             )
         val whole = render(build(all))
 
-        for (split in all.indices) {
+        // Three distinct local dates in the fixture → exactly three headings,
+        // none duplicated. Fails outright if separators are missing or doubled.
+        assertEquals(
+            "Expected one heading per distinct local date in $whole",
+            3,
+            whole.count { it.startsWith("day:") },
+        )
+
+        for (split in 1 until all.size) {
             val older = all.subList(0, split)
             val loaded = all.subList(split, all.size)
-            assertEquals(
-                "Prepending the first $split message(s) as an older page must " +
-                    "reproduce the whole-conversation grouping.",
-                whole,
-                render(build(older + loaded)),
-            )
+
+            // Grouping the pages separately and concatenating repeats the seam
+            // day's heading whenever the split lands mid-day. The real path
+            // rebuilds over the union, so it must NOT agree with that.
+            val naive = render(build(older)) + render(build(loaded))
+            val seamIsInsideOneDay = localDate(older.last()) == localDate(loaded.first())
+            if (seamIsInsideOneDay) {
+                assertNotEquals(
+                    "Splitting inside 2026-07-${localDate(loaded.first()).dayOfMonth} must not " +
+                        "produce the same timeline as the per-page concatenation, which " +
+                        "duplicates that day's heading.",
+                    whole,
+                    naive,
+                )
+            }
         }
     }
+
+    /** The local date a fixture message falls on, in the test's zone. */
+    private fun localDate(message: Msg): LocalDate =
+        java.time.Instant.ofEpochMilli(message.at!!).atZone(stockholm).toLocalDate()
 
     // --- Keys ------------------------------------------------------------------
 
@@ -260,4 +289,5 @@ class ChatTimelineTest {
             keys.contains(ChatTimelineItem.DaySeparator(LocalDate.of(2026, 7, 19)).key),
         )
     }
+
 }
