@@ -815,6 +815,11 @@
     <string name="chatHub_convoysRetry">Försök igen</string>
     <string name="chatHub_convoyUntitled">Konvoj</string>
     <string name="chatHub_convoyMembers">Medlemmar: %1$d</string>
+    <string name="chatTime_today">Idag</string>
+    <string name="chatTime_yesterday">Igår</string>
+    <string name="chatTime_daySeparatorFormat">EEEE d MMMM</string>
+    <string name="chatTime_daySeparatorFormatWithYear">EEEE d MMMM yyyy</string>
+    <string name="chatTime_messageSentAt">Skickat %1$s</string>
     <string name="shell_searchHint">Vart vill du?</string>
     <string name="shell_searchIcon">Sök</string>
     <string name="shell_loadingRoads">Laddar vägar…</string>

@@ -41,6 +41,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chattime.ChatDateContext
+import com.kungsbackacarcommunity.app.chattime.ChatTimeline
+import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
+import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
+import com.kungsbackacarcommunity.app.chattime.MessageTimeText
+import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
@@ -243,6 +249,19 @@ private fun MessageList(
     onLoadOlder: () -> Unit,
     onMessageLongPress: (DmMessage) -> Unit,
 ) {
+    val dates = rememberChatDateContext()
+    // Day separators are inserted by pure logic over the WHOLE list (see
+    // ChatTimeline) — including after an older page is prepended, which is what
+    // keeps the pagination seam from growing a duplicate or losing a heading.
+    val timeline =
+        remember(messages, dates.zone) {
+            ChatTimeline.build(
+                messages = messages,
+                zone = dates.zone,
+                id = { it.id },
+                timestampMillis = { it.createdAtMillis },
+            )
+        }
     val listState = rememberLazyListState()
     // Is the soft keyboard up? Read as a plain inset rather than the experimental
     // `WindowInsets.isImeVisible`. A LazyColumn holds its scroll OFFSET, not its
@@ -272,9 +291,11 @@ private fun MessageList(
         val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
         val isOwnSend = newest.senderUid == currentUid
         if (isOwnSend || nearBottom) {
-            // Index into the LazyColumn, not the messages list: account for the
-            // header so we land on the newest message rather than the one before.
-            listState.animateScrollToItem(messages.lastIndex + headerOffset)
+            // Index into the LAZY COLUMN, whose rows are the TIMELINE (messages
+            // interleaved with day separators), not the raw message list — plus
+            // the optional "load older" header. Using messages.lastIndex here
+            // would land short by one row per separator.
+            listState.animateScrollToItem(timeline.lastIndex + headerOffset)
         }
     }
 
@@ -312,22 +333,34 @@ private fun MessageList(
                 }
             }
         }
-        items(messages, key = { it.id }) { message ->
-            val isOwn = message.senderUid == currentUid
-            MessageBubble(
-                message = message,
-                isOwn = isOwn,
-                // Your own bubble carries no long-press: you can neither block nor
-                // report yourself.
-                onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
-            )
+        items(timeline, key = { it.key }) { item ->
+            when (item) {
+                is ChatTimelineItem.DaySeparator -> DaySeparatorRow(date = item.date, dates = dates)
+                is ChatTimelineItem.Message -> {
+                    val message = item.message
+                    val isOwn = message.senderUid == currentUid
+                    MessageBubble(
+                        message = message,
+                        isOwn = isOwn,
+                        dates = dates,
+                        // Your own bubble carries no long-press: you can neither
+                        // block nor report yourself.
+                        onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
+                    )
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: DmMessage, isOwn: Boolean, onLongPress: (() -> Unit)?) {
+private fun MessageBubble(
+    message: DmMessage,
+    isOwn: Boolean,
+    dates: ChatDateContext,
+    onLongPress: (() -> Unit)?,
+) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor =
@@ -336,10 +369,15 @@ private fun MessageBubble(message: DmMessage, isOwn: Boolean, onLongPress: (() -
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
-    Row(
+    // The time sits on the line ABOVE the bubble, aligned to the bubble's own
+    // edge (right for your messages, left for theirs) — the same placement the
+    // group channels use, where it shares the sender-name header line. A 1:1
+    // thread has no sender header, so the time gets that line to itself.
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start,
+        horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
     ) {
+        MessageTimeText(millis = message.createdAtMillis, dates = dates)
         Surface(
             color = bubbleColor,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(KccRadius.lg),
