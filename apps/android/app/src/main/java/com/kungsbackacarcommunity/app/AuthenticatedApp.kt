@@ -12,7 +12,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -46,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -1276,49 +1274,56 @@ fun AuthenticatedApp(
                             ),
                     )
                 } else {
-                    Scaffold(
-                        // The map is a single full-bleed surface composed BELOW
-                        // this Scaffold, so the Scaffold must not paint its
-                        // Material3 default (an opaque colorScheme.background)
-                        // over it — that blanks the map while leaving every piece
-                        // of chrome inside the Scaffold visible. Pages that hide
-                        // the map paint their own opaque background in the page
-                        // wrapper, so they never relied on this. Derived from the
-                        // same [mapCover] as setActive above, so "is it live" and
-                        // "is it painted over" cannot drift apart — and so a
-                        // Transparent cover (address search) still sees the map.
-                        containerColor =
-                            if (mapCover != MapCover.Opaque) {
-                                Color.Transparent
-                            } else {
-                                MaterialTheme.colorScheme.background
-                            },
-                        // Each tab manages its own top inset (the map is
-                        // full-bleed); the nav bar handles the bottom inset.
-                        contentWindowInsets = WindowInsets(0),
-                        bottomBar = {
-                            ShellBottomBar(
-                                selected = selectedTab,
-                                onSelect = { tab ->
-                                    // Create is an action, not a destination: open
-                                    // the Map and raise the single/convoy chooser
-                                    // rather than letting Create become the selected
-                                    // tab (so it can never get "stuck" selected).
-                                    if (tab == ShellTab.Create) {
-                                        selectedTab = ShellTab.Map
-                                        showCreateChooser = true
-                                    } else {
-                                        selectedTab = tab
-                                    }
+                    // The shell's page frame. Deliberately a Box + bottom bar
+                    // and NOT a Scaffold.
+                    //
+                    // Material3's Scaffold wraps its content in a Surface, and a
+                    // non-clickable Surface installs an empty `pointerInput {}`
+                    // whose only job is to BLOCK touch propagation to whatever is
+                    // drawn beneath it. The map is a single full-bleed surface
+                    // composed BELOW this frame, so that Surface swallowed every
+                    // pan / pinch / rotate before the MapView ever saw it: the
+                    // camera could then only be moved programmatically, which is
+                    // exactly the "map is locked to my location, I can't move it
+                    // with my fingers" bug. Making the Scaffold's container
+                    // transparent (v0.8.2) fixed the PAINTING but left the touch
+                    // blocking in place, which is why the map became visible but
+                    // stayed frozen.
+                    //
+                    // A Box installs no pointer-input node of its own, so a
+                    // gesture over empty map area falls through to the map, while
+                    // the chrome and the bottom bar - which draw their own
+                    // interactive nodes - keep receiving their touches exactly as
+                    // before.
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize().then(
+                                // What the Scaffold's containerColor did: paint an
+                                // opaque background under a page that hides the
+                                // map. Pages already paint their own (see
+                                // ShellTabPage), so this is belt-and-braces and,
+                                // like before, is derived from the same [mapCover]
+                                // as setActive, so "is it live" and "is it painted
+                                // over" cannot drift apart.
+                                if (mapCover == MapCover.Opaque) {
+                                    Modifier.background(MaterialTheme.colorScheme.background)
+                                } else {
+                                    Modifier
                                 },
-                                // While a session runs the centre "+" becomes the
-                                // STOP sign — the one way to end a session.
-                                isSharing = isSharing,
-                                onStopLiveShare = { stopLiveShare() },
-                            )
-                        },
-                    ) { padding ->
-                        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                            ),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    // What the Scaffold's content padding gave the
+                                    // body: clear of the bottom bar and of the
+                                    // navigation-bar inset the bar sits in. Each
+                                    // tab still manages its own top inset (the map
+                                    // is full-bleed).
+                                    .navigationBarsPadding()
+                                    .padding(bottom = ShellBottomBarHeight),
+                        ) {
                             // The map home's CHROME (search bar, floating controls, CTAs) — the
                             // map itself is the shell's single surface, composed above this and
                             // drawn behind it. This subtree is composed for EVERY tab, not just
@@ -1617,6 +1622,30 @@ fun AuthenticatedApp(
                                 }
                             }
                         }
+                        // Drawn AFTER the body so it sits on top, exactly the way
+                        // Scaffold's bottomBar slot did. NavigationBar applies its
+                        // own navigation-bar inset.
+                        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                            ShellBottomBar(
+                                selected = selectedTab,
+                                onSelect = { tab ->
+                                    // Create is an action, not a destination: open
+                                    // the Map and raise the single/convoy chooser
+                                    // rather than letting Create become the selected
+                                    // tab (so it can never get "stuck" selected).
+                                    if (tab == ShellTab.Create) {
+                                        selectedTab = ShellTab.Map
+                                        showCreateChooser = true
+                                    } else {
+                                        selectedTab = tab
+                                    }
+                                },
+                                // While a session runs the centre "+" becomes the
+                                // STOP sign - the one way to end a session.
+                                isSharing = isSharing,
+                                onStopLiveShare = { stopLiveShare() },
+                            )
+                        }
                     }
                 }
 
@@ -1817,7 +1846,7 @@ fun AuthenticatedApp(
  * wrapper exists to guarantee:
  *
  * - **Opaque.** [MaterialTheme.colorScheme.background] — the same container
- *   colour [Scaffold] gives the tabs today, so the pages look exactly as they
+ *   colour the shell frame gives the tabs today, so the pages look exactly as they
  *   did — so the map cannot show through the page it is behind.
  * - **Touch-blocking.** Every pointer event that reaches the page background is
  *   swallowed, so a drag over a tab's empty space can't pan the invisible map

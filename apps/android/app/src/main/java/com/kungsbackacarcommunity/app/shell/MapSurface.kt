@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -11,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.delay
@@ -336,6 +338,27 @@ class StubMapSurface(
     var contentCompositions: Int = 0
         private set
 
+    /**
+     * How many drag gestures have actually been DELIVERED to the map surface as
+     * touch events.
+     *
+     * The real camera gestures are handled inside the Mapbox MapView, which no
+     * instrumentation test can reach. What a test CAN pin down is the thing that
+     * broke in v0.8.3: whether a drag over the map area reaches the map surface
+     * at all, or is swallowed by the chrome composed on top of it. The shell used
+     * to draw its pages inside a Material3 [androidx.compose.material3.Scaffold],
+     * whose Surface installs an empty `pointerInput {}` purely to block touch
+     * propagation to whatever is beneath — so every pan died there and the camera
+     * could only ever be moved programmatically ("the map is locked to my
+     * location").
+     *
+     * The stub therefore installs the same kind of pointer-input node the real
+     * MapView has and counts the drags that reach it, which makes the delivery
+     * path itself assertable off-device.
+     */
+    var panGestureCount: Int = 0
+        private set
+
     override fun setActive(active: Boolean) {
         isActive = active
     }
@@ -412,7 +435,17 @@ class StubMapSurface(
             }
         }
         Box(
-            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier =
+                modifier
+                    // Stands in for the MapView's own camera-gesture handling: the
+                    // stub cannot pan a camera, but it CAN record that the drag
+                    // reached it, which is what [panGestureCount] exists to make
+                    // assertable. Nothing is consumed, so this never changes how
+                    // the surrounding chrome behaves.
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragStart = { panGestureCount += 1 }) { _, _ -> }
+                    }
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             Text(
