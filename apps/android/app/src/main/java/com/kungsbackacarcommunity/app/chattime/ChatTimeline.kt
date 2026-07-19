@@ -78,7 +78,11 @@ object ChatTimeline {
         timestampMillis: (T) -> Long?,
     ): List<ChatTimelineItem<T>> {
         if (messages.isEmpty()) return emptyList()
-        // One separator per day change, so at most 2n and usually far less.
+        // Sized for the COMMON case, not the worst one: a conversation has one
+        // separator per day CHANGE, so a realistic thread is n + a handful. The
+        // worst case (every message on its own day) is 2n and would grow the
+        // backing array once or twice — amortised O(1), and cheaper overall than
+        // making every ordinary conversation pay double the allocation up front.
         val items = ArrayList<ChatTimelineItem<T>>(messages.size + 1)
         var currentDay: LocalDate? = null
         for (message in messages) {
