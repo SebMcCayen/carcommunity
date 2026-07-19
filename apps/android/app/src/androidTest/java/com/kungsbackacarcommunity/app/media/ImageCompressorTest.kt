@@ -365,6 +365,71 @@ class ImageCompressorTest {
     }
 
     @Test
+    fun compressForPublicUpload_croppedRotatedPhoto_staysSharp() = runBlocking {
+        // The ordinary portrait phone photo: stored landscape 4000x3000 with
+        // ORIENTATION_ROTATE_90, so the image the user crops is 3000x4000.
+        // A crop's fractions are measured against THAT, but the decode bounds
+        // describe the stored frame — sized without swapping the axes, this
+        // decoded at 1/4 instead of 1/2 and the upload came out 750px on its
+        // longest side, under the maxDimension/2 bar.
+        val source =
+            jpegWithExif(gradientBitmap(4000, 3000)) {
+                setAttribute(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_ROTATE_90.toString(),
+                )
+            }
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        // 16:9 of the ORIENTED 3000x4000 frame: full width, 1687 of 4000 tall.
+        val crop = NormalizedCropRect(left = 0f, top = 0.29f, width = 1f, height = 1687f / 4000f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+            )
+        requireNotNull(result)
+
+        val bounds = decodeBounds(result.bytes)
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        assertTrue(
+            "a cropped ROTATED photo must clear the same bar as an unrotated one — " +
+                "got ${bounds.outWidth}x${bounds.outHeight}, expected the longest side " +
+                "at least ${ImageCompressor.VEHICLE_MAX_DIMENSION / 2}",
+            longest >= ImageCompressor.VEHICLE_MAX_DIMENSION / 2,
+        )
+        // The crop is landscape-in-portrait, so the output must be wider than tall
+        // — proof the rotation was applied before the cut, not after.
+        assertTrue(
+            "cropped output must be landscape (${bounds.outWidth}x${bounds.outHeight})",
+            bounds.outWidth > bounds.outHeight,
+        )
+        assertFalse(ImageCompressor.carriesStrippableMetadata(result.bytes))
+    }
+
+    @Test
+    fun orientationSwapsAxes_onlyForTheQuarterTurns() {
+        listOf(
+            ExifInterface.ORIENTATION_ROTATE_90,
+            ExifInterface.ORIENTATION_ROTATE_270,
+            ExifInterface.ORIENTATION_TRANSPOSE,
+            ExifInterface.ORIENTATION_TRANSVERSE,
+        ).forEach {
+            assertTrue("$it must swap axes", ImageCompressor.orientationSwapsAxes(it))
+        }
+        listOf(
+            ExifInterface.ORIENTATION_NORMAL,
+            ExifInterface.ORIENTATION_ROTATE_180,
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL,
+            ExifInterface.ORIENTATION_FLIP_VERTICAL,
+            ExifInterface.ORIENTATION_UNDEFINED,
+        ).forEach {
+            assertFalse("$it must NOT swap axes", ImageCompressor.orientationSwapsAxes(it))
+        }
+    }
+
+    @Test
     fun compressForPublicUpload_cropOnUndecodableImage_failsClosed() = runBlocking {
         // The strip fallback can only produce the WHOLE frame, which would
         // upload exactly the region the user cropped away (the house number, the

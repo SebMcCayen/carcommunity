@@ -268,15 +268,56 @@ object ImageCompressor {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
+        // A [crop]'s fractions are measured against the ORIENTED image — that is
+        // what the crop UI showed — while these bounds describe the image as
+        // STORED. For a 90°/270°/transpose/transverse orientation the two have
+        // their axes swapped, so sizing the decode from the stored bounds
+        // measures the retained region along the wrong axis. On the ordinary
+        // portrait phone photo (stored 4000x3000 + ROTATE_90) a 16:9 crop then
+        // decodes at 1/4 instead of 1/2 and the upload lands 750px on its
+        // longest side — under the maxDimension/2 bar. Swap first.
+        val orientation = readExifOrientation(bytes)
+        val swapsAxes = orientationSwapsAxes(orientation)
+        val orientedWidth = if (swapsAxes) bounds.outHeight else bounds.outWidth
+        val orientedHeight = if (swapsAxes) bounds.outWidth else bounds.outHeight
+
         val decodeOptions =
             BitmapFactory.Options().apply {
                 inSampleSize =
-                    sampleSizeForCrop(bounds.outWidth, bounds.outHeight, crop, maxDimension)
+                    sampleSizeForCrop(orientedWidth, orientedHeight, crop, maxDimension)
             }
         val decoded =
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions) ?: return null
-        return applyExifOrientation(decoded, bytes)
+        return applyExifOrientation(decoded, orientation)
     }
+
+    /**
+     * True when [orientation] exchanges the image's width and height — the
+     * quarter-turn orientations plus the two that combine a quarter turn with a
+     * flip. Anything else (normal, 180°, pure mirrors) preserves the axes.
+     *
+     * Internal (not private) purely so it is unit-testable.
+     */
+    internal fun orientationSwapsAxes(orientation: Int): Boolean =
+        orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+            orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+            orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+            orientation == ExifInterface.ORIENTATION_TRANSVERSE
+
+    /**
+     * The EXIF orientation tag of [bytes], or [ExifInterface.ORIENTATION_NORMAL]
+     * when it is absent or unreadable. Read once per decode and threaded through
+     * so the sample-size decision and the rotation cannot disagree.
+     */
+    private fun readExifOrientation(bytes: ByteArray): Int =
+        runCatching {
+            ByteArrayInputStream(bytes).use { input ->
+                ExifInterface(input).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL,
+                )
+            }
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
 
     /**
      * Cuts [crop] out of [bitmap], recycling the source once the cropped copy
@@ -502,18 +543,15 @@ object ImageCompressor {
         return scaled
     }
 
-    /** Rotates/flips [bitmap] to match the source [bytes] EXIF orientation. */
-    private fun applyExifOrientation(bitmap: Bitmap, bytes: ByteArray): Bitmap {
-        val orientation =
-            runCatching {
-                ByteArrayInputStream(bytes).use { input ->
-                    ExifInterface(input).getAttributeInt(
-                        ExifInterface.TAG_ORIENTATION,
-                        ExifInterface.ORIENTATION_NORMAL,
-                    )
-                }
-            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-
+    /**
+     * Rotates/flips [bitmap] to match [orientation] (from [readExifOrientation]).
+     *
+     * Takes the already-read tag rather than re-parsing the bytes so this and
+     * [orientationSwapsAxes] can never disagree about which orientation is in
+     * play — the sample size is chosen from the same value that decides the
+     * rotation.
+     */
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()
         when (orientation) {
             ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
