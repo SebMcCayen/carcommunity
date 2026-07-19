@@ -2,7 +2,8 @@
  * Incidents TTL sweep (navigation feature).
  *
  * incidents-cleanupExpired (every 15 minutes): deletes incidents whose
- * `expiresAt` has passed, in batches. Short-lived crowd-sourced markers must
+ * `expiresAt` has passed — and their `confirmations` sub-collection with them
+ * (recursiveDelete). Short-lived crowd-sourced markers must
  * disappear promptly; the read rule already hides expired docs (status +
  * `expiresAt > request.time`), and this sweep reclaims them.
  *
@@ -29,11 +30,12 @@ export async function runIncidentsCleanup(now: Date): Promise<{ deletedCount: nu
     if (expired.empty) {
       break;
     }
-    const batch = db.batch();
-    for (const doc of expired.docs) {
-      batch.delete(doc.ref);
-    }
-    await batch.commit();
+    // recursiveDelete, NOT a batched `delete` of the doc: deleting a Firestore
+    // document does not touch its sub-collections, so a plain batch delete
+    // would leave every `confirmations/{uid}` doc behind as an unreachable
+    // orphan that nothing ever collects. recursiveDelete removes the incident
+    // and its confirmation ledger together.
+    await Promise.all(expired.docs.map((doc) => db.recursiveDelete(doc.ref)));
     deletedCount += expired.size;
     if (expired.size < CLEANUP_BATCH_SIZE) {
       break;

@@ -33,6 +33,7 @@ import {
   connectFirestoreEmulator,
   doc as clientDoc,
   getDoc as clientGetDoc,
+  setDoc as clientSetDoc,
   getFirestore as getClientFirestore,
   type Firestore as ClientFirestore,
 } from 'firebase/firestore';
@@ -342,6 +343,15 @@ describe('incidents.remove', () => {
       'functions/permission-denied',
     );
 
+    // Seed a confirmation ledger doc so removal is proven to take the
+    // sub-collection with it (a plain doc delete would orphan it).
+    const ledgerRef = adminDb
+      .collection('incidents')
+      .doc(mine.id)
+      .collection('confirmations')
+      .doc('ghost-uid');
+    await ledgerRef.set({ uid: 'ghost-uid', createdAt: Timestamp.now() });
+
     // The owner can.
     await signInAs(member);
     const removed = (await call('incidents-remove', { incidentId: mine.id })).data as {
@@ -349,6 +359,7 @@ describe('incidents.remove', () => {
     };
     expect(removed.removed).toBe(true);
     expect((await adminDb.collection('incidents').doc(mine.id).get()).exists).toBe(false);
+    expect((await ledgerRef.get()).exists).toBe(false);
 
     // Removing again is an idempotent no-op success.
     const again = (await call('incidents-remove', { incidentId: mine.id })).data as {
@@ -399,6 +410,214 @@ describe('incidents.remove', () => {
   });
 });
 
+describe('incidents.confirm', () => {
+  it('lets another member confirm, counts once per user, and extends the expiry', async () => {
+    // A police report (1h TTL) so the extension is unambiguous: confirming
+    // later must push expiry to a full hour past the confirmation instant.
+    await signInAs(member);
+    const reported = (
+      await call('incidents-report', {
+        type: 'police',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string; expiresAt: string };
+
+    await signInAs(otherMember);
+    const first = (await call('incidents-confirm', { incidentId: reported.id })).data as {
+      incidentId: string;
+      confirmationCount: number;
+      expiresAt: string;
+      alreadyConfirmed: boolean;
+    };
+    expect(first.incidentId).toBe(reported.id);
+    expect(first.confirmationCount).toBe(1);
+    expect(first.alreadyConfirmed).toBe(false);
+    // Expiry moved out (the report was made moments ago, so a fresh TTL from
+    // now is strictly later than the original).
+    expect(Date.parse(first.expiresAt)).toBeGreaterThan(Date.parse(reported.expiresAt));
+
+    // Persisted: counter on the doc, ledger doc keyed by the confirming uid.
+    const stored = await adminDb.collection('incidents').doc(reported.id).get();
+    expect(stored.data()?.confirmationCount).toBe(1);
+    expect(
+      (stored.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis(),
+    ).toBe(Date.parse(first.expiresAt));
+    const ledger = await adminDb
+      .collection('incidents')
+      .doc(reported.id)
+      .collection('confirmations')
+      .doc(otherMember.uid)
+      .get();
+    expect(ledger.exists).toBe(true);
+    expect(ledger.data()?.uid).toBe(otherMember.uid);
+
+    // Same member again → idempotent success, NOT an error, and no double count
+    // or further extension.
+    const repeat = (await call('incidents-confirm', { incidentId: reported.id })).data as {
+      confirmationCount: number;
+      expiresAt: string;
+      alreadyConfirmed: boolean;
+    };
+    expect(repeat.alreadyConfirmed).toBe(true);
+    expect(repeat.confirmationCount).toBe(1);
+    expect(repeat.expiresAt).toBe(first.expiresAt);
+    const afterRepeat = await adminDb.collection('incidents').doc(reported.id).get();
+    expect(afterRepeat.data()?.confirmationCount).toBe(1);
+
+    // listNearby surfaces the count to the map.
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string; confirmationCount: number }> };
+    expect(nearby.incidents.find((i) => i.id === reported.id)?.confirmationCount).toBe(1);
+  });
+
+  it('concurrent double-taps by the same member count exactly once', async () => {
+    await signInAs(member);
+    const reported = (
+      await call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    // Fire several confirmations at once: the transaction's tx.create claim on
+    // confirmations/{uid} must serialize them into a single counted
+    // confirmation, never 2..5.
+    await signInAs(otherMember);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => call('incidents-confirm', { incidentId: reported.id })),
+    );
+    for (const r of results) {
+      expect((r.data as { confirmationCount: number }).confirmationCount).toBe(1);
+    }
+    const stored = await adminDb.collection('incidents').doc(reported.id).get();
+    expect(stored.data()?.confirmationCount).toBe(1);
+  });
+
+  it('refuses to let the reporter confirm their own report', async () => {
+    await signInAs(member);
+    const mine = (
+      await call('incidents-report', {
+        type: 'accident',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: mine.id }))).toBe(
+      'functions/permission-denied',
+    );
+    const stored = await adminDb.collection('incidents').doc(mine.id).get();
+    expect(stored.data()?.confirmationCount).toBeUndefined();
+  });
+
+  it('rejects a missing incident and an already-expired one', async () => {
+    await signInAs(otherMember);
+    expect(
+      await callableErrorCode(call('incidents-confirm', { incidentId: 'no-such-incident-id' })),
+    ).toBe('functions/not-found');
+
+    // An expired doc is invisible to readers already; confirming must not
+    // resurrect it.
+    const now = Date.now();
+    const deadRef = adminDb.collection('incidents').doc();
+    await deadRef.set({
+      type: 'hazard',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'user',
+      reporterUid: member.uid,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now - 5 * 60 * 60 * 1000)),
+      expiresAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+    });
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: deadRef.id }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('rejects confirming an imported (trafikverket) incident', async () => {
+    // The importer full-overwrites each tv_ doc every 30 minutes, so a
+    // confirmation written here would be silently wiped.
+    const now = Date.now();
+    const tvRef = adminDb.collection('incidents').doc('tv_reject-confirm-1');
+    await tvRef.set({
+      type: 'roadwork',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now)),
+      expiresAt: Timestamp.fromDate(new Date(now + 6 * 60 * 60 * 1000)),
+    });
+
+    await signInAs(otherMember);
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: tvRef.id }))).toBe(
+      'functions/failed-precondition',
+    );
+    expect((await tvRef.get()).data()?.confirmationCount).toBeUndefined();
+  });
+
+  it('is member-gated — a signed-in non-member cannot confirm', async () => {
+    await signInAs(member);
+    const reported = (
+      await call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    const nonMember = await createProvisionedUser('inc-nonmember');
+    await signInAs(nonMember);
+    // Matches incidents.report's gate, not listNearby's open read.
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: reported.id }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('denies direct client reads and writes of the confirmations ledger', async () => {
+    // The ledger must be callable-only: a member must not be able to forge a
+    // confirmation or enumerate who confirmed what.
+    await signInAs(member);
+    const reported = (
+      await call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    await signInAs(otherMember);
+    await call('incidents-confirm', { incidentId: reported.id });
+
+    const ledgerDoc = clientDoc(
+      clientDb,
+      'incidents',
+      reported.id,
+      'confirmations',
+      otherMember.uid,
+    );
+    await expect(clientGetDoc(ledgerDoc)).rejects.toThrow();
+    await expect(
+      clientSetDoc(clientDoc(clientDb, 'incidents', reported.id, 'confirmations', member.uid), {
+        uid: member.uid,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
 describe('incidents cleanup sweep', () => {
   it('deletes expired incidents and keeps active ones', async () => {
     const now = Date.now();
@@ -429,10 +648,17 @@ describe('incidents cleanup sweep', () => {
       expiresAt: Timestamp.fromDate(new Date(now + 60 * 60 * 1000)),
     });
 
+    // A confirmation ledger doc under the expired incident: deleting a
+    // document does NOT delete its sub-collections, so the sweep must
+    // recursiveDelete or this row survives forever as an unreachable orphan.
+    const orphanRef = expiredRef.collection('confirmations').doc('some-uid');
+    await orphanRef.set({ uid: 'some-uid', createdAt: Timestamp.fromDate(new Date(now)) });
+
     const result = await runIncidentsCleanup(new Date());
     expect(result.deletedCount).toBeGreaterThanOrEqual(1);
     expect((await expiredRef.get()).exists).toBe(false);
     expect((await activeRef.get()).exists).toBe(true);
+    expect((await orphanRef.get()).exists).toBe(false);
   });
 });
 

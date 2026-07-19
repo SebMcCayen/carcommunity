@@ -71,5 +71,8 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<IncidentVie
     // read the authoritative value via listNearby / Firestore reads.
     createdAt: null,
     expiresAt: expiresAt.toISOString(),
+    // A brand-new report has no confirmations yet; the field is not written to
+    // the document until the first incidents.confirm bumps it.
+    confirmationCount: 0,
   };
 });

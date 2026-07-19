@@ -62,5 +62,15 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
     return true;
   });
 
+  if (removed) {
+    // A document delete does not remove its sub-collections, so the transaction
+    // above leaves the `confirmations/{uid}` ledger orphaned. recursiveDelete
+    // cannot run inside a transaction, so sweep it immediately after the commit
+    // (the incident is already gone for readers at this point). Idempotent — a
+    // failure here at worst leaves orphans that the next report on the same id
+    // never sees, since ids are never reused.
+    await db.recursiveDelete(ref);
+  }
+
   return { removed };
 });

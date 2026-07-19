@@ -112,6 +112,9 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         note: (data.note as string | null) ?? null,
         createdAt: tsToIso(data.createdAt),
         expiresAt: tsToIso(data.expiresAt),
+        // Absent until the first confirmation writes it.
+        confirmationCount:
+          typeof data.confirmationCount === 'number' ? data.confirmationCount : 0,
       });
     }
   }

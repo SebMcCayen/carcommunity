@@ -16,7 +16,11 @@ import {
   parseListNearbyInput,
   parseRemoveInput,
   parseReportInput,
+  parseConfirmInput,
+  extendedExpiryFor,
   INCIDENT_TTL_MS,
+  INCIDENT_TYPES,
+  LIFETIME_CAP_MULTIPLIER,
 } from '../incidents/incidents-core';
 import {
   buildTrafikverketRequestBody,
@@ -330,5 +334,125 @@ describe('trafikverket-core', () => {
     expect(importedIncidentDocId('D1')).toBe('tv_D1');
     // Same input → same id (idempotent upsert).
     expect(importedIncidentDocId('X')).toBe(importedIncidentDocId('X'));
+  });
+});
+
+describe('incidents-core confirmation expiry extension', () => {
+  const T0 = new Date('2026-07-19T10:00:00.000Z');
+  const at = (ms: number) => new Date(T0.getTime() + ms);
+  const HOUR = 60 * 60 * 1000;
+
+  it('parses a confirm input and rejects a malformed one', () => {
+    expect(parseConfirmInput({ incidentId: 'abc123' })).toEqual({
+      ok: true,
+      input: { incidentId: 'abc123' },
+    });
+    // Path separators / traversal segments must never reach db.doc().
+    expect(parseConfirmInput({ incidentId: 'a/b' }).ok).toBe(false);
+    expect(parseConfirmInput({ incidentId: '..' }).ok).toBe(false);
+    expect(parseConfirmInput({}).ok).toBe(false);
+    // Strict schema: no extra keys (e.g. a client trying to smuggle an expiry).
+    expect(parseConfirmInput({ incidentId: 'a', expiresAt: 'x' }).ok).toBe(false);
+  });
+
+  it('resets expiry to a full fresh TTL from the confirmation instant', () => {
+    // A police report (1h TTL) created at T0, confirmed 45 min later: the
+    // marker should live a full hour from the confirmation, not from creation.
+    const result = extendedExpiryFor({
+      type: 'police',
+      createdAt: T0,
+      currentExpiresAt: at(HOUR),
+      now: at(0.75 * HOUR),
+    });
+    expect(result.expiresAt.getTime()).toBe(at(1.75 * HOUR).getTime());
+    expect(result.extended).toBe(true);
+  });
+
+  it('never moves the expiry backwards', () => {
+    // An incident already pushed out by earlier confirmations (expiry T0+30h)
+    // confirmed again at T0+11h: now + TTL is T0+23h, EARLIER than the expiry
+    // the doc already carries, so the existing later value must win — a
+    // confirmation must never SHORTEN an incident's life.
+    const result = extendedExpiryFor({
+      type: 'roadwork', // 12h TTL → cap at T0+36h, so the cap does not bind here
+      createdAt: T0,
+      currentExpiresAt: at(30 * HOUR),
+      now: at(11 * HOUR),
+    });
+    expect(result.expiresAt.getTime()).toBe(at(30 * HOUR).getTime());
+    expect(result.extended).toBe(false);
+  });
+
+  it('caps total lifetime — an incident cannot be confirmed into immortality', () => {
+    // Simulate a stream of confirmations, one every 10 minutes for 10 days.
+    // No matter how many land, expiresAt must never exceed the hard ceiling.
+    const type = 'roadwork';
+    const ttl = INCIDENT_TTL_MS[type];
+    const ceiling = T0.getTime() + LIFETIME_CAP_MULTIPLIER * ttl;
+    let expiresAt = new Date(T0.getTime() + ttl);
+    for (let t = 10 * 60 * 1000; t < 10 * 24 * HOUR; t += 10 * 60 * 1000) {
+      const now = at(t);
+      // Stop once the incident would actually be dead — the callable refuses to
+      // confirm an expired incident, so confirmations cannot resume after that.
+      if (now.getTime() >= expiresAt.getTime()) break;
+      expiresAt = extendedExpiryFor({ type, createdAt: T0, currentExpiresAt: expiresAt, now })
+        .expiresAt;
+      expect(expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
+    }
+    // The cap is genuinely reached (the test is not vacuously passing).
+    expect(expiresAt.getTime()).toBe(ceiling);
+  });
+
+  it('reports extended:false once the cap is hit, while the confirmation still counts', () => {
+    const type = 'hazard';
+    const ttl = INCIDENT_TTL_MS[type];
+    const atCap = new Date(T0.getTime() + LIFETIME_CAP_MULTIPLIER * ttl);
+    const result = extendedExpiryFor({
+      type,
+      createdAt: T0,
+      currentExpiresAt: atCap,
+      now: new Date(T0.getTime() + 2.5 * ttl),
+    });
+    expect(result.expiresAt.getTime()).toBe(atCap.getTime());
+    expect(result.extended).toBe(false);
+  });
+
+  it('anchors the cap to createdAt, not to the confirmation time', () => {
+    // The ceiling is a property of the report, so a late confirmation cannot
+    // buy more absolute lifetime than an early one.
+    const type = 'accident';
+    const ttl = INCIDENT_TTL_MS[type];
+    const early = extendedExpiryFor({
+      type,
+      createdAt: T0,
+      currentExpiresAt: at(ttl),
+      now: at(0.5 * ttl),
+    });
+    const late = extendedExpiryFor({
+      type,
+      createdAt: T0,
+      currentExpiresAt: at(ttl),
+      now: at(0.9 * ttl),
+    });
+    const ceiling = T0.getTime() + LIFETIME_CAP_MULTIPLIER * ttl;
+    expect(early.expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
+    expect(late.expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
+    expect(late.expiresAt.getTime()).toBeGreaterThan(early.expiresAt.getTime());
+  });
+
+  it('caps every incident type', () => {
+    for (const type of INCIDENT_TYPES) {
+      const ttl = INCIDENT_TTL_MS[type];
+      const result = extendedExpiryFor({
+        type,
+        createdAt: T0,
+        currentExpiresAt: at(ttl),
+        // Far-future confirmation attempt: the cap, not now+ttl, must bind.
+        now: at(100 * HOUR),
+      });
+      expect(result.expiresAt.getTime()).toBeLessThanOrEqual(
+        T0.getTime() + LIFETIME_CAP_MULTIPLIER * ttl,
+      );
+    }
   });
 });
