@@ -52,6 +52,14 @@ interface MapboxSearchClient {
  * never crashes the UI.
  *
  * @param language optional BCP-47 language for localized results/instructions.
+ *   Wired to the device locale (so "sv" for our members) and deliberately kept
+ *   as-is when searching abroad. It is a *presentation* parameter: Mapbox
+ *   matches the query against its own multilingual index regardless, and returns
+ *   the label in this language where a translation exists (falling back to the
+ *   local name where none does). Dropping it abroad would buy nothing for
+ *   matching and would cost Swedish turn-by-turn instructions — [route] uses the
+ *   same value, and a Swedish member wants "Sväng höger" whichever country the
+ *   road is in.
  */
 class HttpMapboxSearchClient(
     private val token: String,

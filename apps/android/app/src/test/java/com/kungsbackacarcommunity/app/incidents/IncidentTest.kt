@@ -364,4 +364,38 @@ class IncidentReportControllerTest {
         assertEquals(1, fake.listNearbyCalls)
         assertEquals(seeded, controller.nearbyIncidents.value)
     }
+
+    /**
+     * Pins the WIRE value, which is a cross-language contract: the importer in
+     * `functions/src/incidents/trafikverket.ts` writes the string `trafikverket`
+     * into Firestore, and nothing links the two languages at compile time. This
+     * has to stay a literal — asserting the constant against itself would prove
+     * nothing — so it is pinned once here and the constant is used everywhere
+     * else, including the assertions below.
+     */
+    @Test
+    fun `Trafikverket source constant matches the value the importer writes`() {
+        assertEquals("trafikverket", INCIDENT_SOURCE_TRAFIKVERKET)
+    }
+
+    @Test
+    fun `Trafikverket attribution shows only when imported data is loaded`() {
+        // Member reports rely on Incident.source's default rather than repeating
+        // the literal, so this test cannot drift from the model.
+        val userReport = Incident("u1", IncidentType.HAZARD, 12.07, 57.48)
+        val imported =
+            Incident(
+                "t1",
+                IncidentType.ROADWORK,
+                12.07,
+                57.48,
+                source = INCIDENT_SOURCE_TRAFIKVERKET,
+            )
+        // Sweden with imported roadwork on the map: we owe the credit.
+        assertTrue(hasTrafikverketData(listOf(userReport, imported)))
+        // Abroad (or a quiet Swedish area): the Sweden-only importer contributes
+        // nothing, so no Trafikverket data is on screen and no credit is shown.
+        assertFalse(hasTrafikverketData(emptyList()))
+        assertFalse(hasTrafikverketData(listOf(userReport)))
+    }
 }

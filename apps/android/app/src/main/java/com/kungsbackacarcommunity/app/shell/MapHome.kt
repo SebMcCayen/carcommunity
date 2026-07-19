@@ -203,6 +203,13 @@ fun MapHome(
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
     onReportIncident: (IncidentType) -> Unit = {},
+    // Whether any of the currently-loaded incidents actually came from
+    // Trafikverket (see `hasTrafikverketData`). Gates the "Källa: Trafikverket"
+    // credit in the layers popup so it appears exactly where their data is on
+    // screen — not, say, on a map in France, where the Sweden-only importer
+    // legitimately contributes nothing. Defaults false so callers/tests that do
+    // not wire incidents show no credit.
+    trafikverketDataShown: Boolean = false,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -510,6 +517,7 @@ fun MapHome(
             MapLayersPopup(
                 incidentsOn = incidentsLayerEnabled,
                 onIncidentsChange = onIncidentsLayerEnabledChange,
+                trafikverketDataShown = trafikverketDataShown,
                 trafficOn = trafficOn,
                 // Drive the night Switch off the IMMEDIATE user intent (the
                 // effective desired mode) rather than the SURFACE's mapMode, which
@@ -603,6 +611,7 @@ const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
 private fun MapLayersPopup(
     incidentsOn: Boolean,
     onIncidentsChange: (Boolean) -> Unit,
+    trafikverketDataShown: Boolean,
     trafficOn: Boolean,
     nightMode: Boolean,
     is3d: Boolean,
@@ -685,8 +694,11 @@ private fun MapLayersPopup(
                 // Attribution for the Trafikverket-sourced incidents drawn on the
                 // map layer (product-owner requirement: credit Trafikverket wherever
                 // we show their open data). Shown only while the incidents layer is
-                // on — with it off, no Trafikverket data is on screen to attribute.
-                if (incidentsOn) {
+                // on AND at least one loaded incident actually came from
+                // Trafikverket — with the layer off, or abroad where the Sweden-only
+                // importer contributes nothing, there is no Trafikverket data on
+                // screen to attribute.
+                if (incidentsOn && trafikverketDataShown) {
                     Text(
                         text = stringResource(R.string.incidents_sourceTrafikverket),
                         modifier = Modifier.padding(top = KccSpacing.s2),

@@ -17,7 +17,8 @@ class MapboxRequestsTest {
         assertTrue(url.startsWith("https://api.mapbox.com/search/searchbox/v1/forward?"))
         assertTrue(url.contains("q=Kungsbacka+torg"))
         assertTrue(url.contains("limit=6"))
-        // Country-biased to Sweden so businesses/POIs resolve in the right region.
+        // No live fix in this call, so the home fallback applies: Sweden-restricted
+        // so businesses/POIs resolve in the right region even with no position.
         assertTrue(url.contains("country=SE"))
         assertTrue(url.contains("access_token=pk.abc"))
         // `types` is left unset so POIs/businesses (e.g. Kungsmässan) are returned
@@ -47,9 +48,66 @@ class MapboxRequestsTest {
     }
 
     @Test
-    fun `forward search country bias can be disabled`() {
-        val url = MapboxRequests.forwardGeocode("cafe", token = "pk.abc", country = null)!!
+    fun `forward search home country restriction can be disabled`() {
+        val url = MapboxRequests.forwardGeocode("cafe", token = "pk.abc", homeCountry = null)!!
         assertFalse(url.contains("country="))
+    }
+
+    @Test
+    fun `forward search with a live fix is NOT country-restricted`() {
+        // The point of the abroad change: standing in Berlin, a search for a German
+        // address must not be filtered down to Swedish features (which returned an
+        // empty list). Proximity does the regional ranking instead.
+        val url =
+            MapboxRequests.forwardGeocode(
+                "Unter den Linden 1",
+                token = "pk.abc",
+                proximity = LatLng(longitude = 13.4050, latitude = 52.5200),
+            )!!
+        assertFalse(url.contains("country="))
+        assertTrue(url.contains("proximity=13.405000,52.520000"))
+    }
+
+    @Test
+    fun `forward search with a live fix in Sweden is unrestricted but locally biased`() {
+        // Local search quality is carried by the proximity decay, not the filter:
+        // with a real Kungsbacka fix the request is biased to the user's ACTUAL
+        // position, a stronger local signal than the old countrywide restriction.
+        val url =
+            MapboxRequests.forwardGeocode(
+                "Kungsmässan",
+                token = "pk.abc",
+                proximity = LatLng(longitude = 12.0757, latitude = 57.4874),
+            )!!
+        assertFalse(url.contains("country="))
+        assertTrue(url.contains("proximity=12.075700,57.487400"))
+    }
+
+    @Test
+    fun `forward search without a fix keeps BOTH home fallbacks`() {
+        // No position => no distance decay to lean on, so the country restriction
+        // is still doing real work. This path must behave exactly as it did before
+        // the abroad change: Kungsbacka centroid AND Sweden.
+        val url = MapboxRequests.forwardGeocode("torget", token = "pk.abc")!!
+        assertTrue(url.contains("proximity=12.073000,57.487400"))
+        assertTrue(url.contains("country=SE"))
+    }
+
+    @Test
+    fun `forward search language is sent regardless of where the user is`() {
+        // `language` is a presentation parameter, kept abroad so a Swedish member
+        // still gets Swedish labels (and, via the same value, Swedish turn
+        // instructions on a German motorway).
+        val abroad =
+            MapboxRequests.forwardGeocode(
+                "Hauptbahnhof",
+                token = "pk.abc",
+                proximity = LatLng(longitude = 11.5820, latitude = 48.1351),
+                language = "sv",
+            )!!
+        assertTrue(abroad.contains("language=sv"))
+        val home = MapboxRequests.forwardGeocode("torget", token = "pk.abc", language = "sv")!!
+        assertTrue(home.contains("language=sv"))
     }
 
     @Test
