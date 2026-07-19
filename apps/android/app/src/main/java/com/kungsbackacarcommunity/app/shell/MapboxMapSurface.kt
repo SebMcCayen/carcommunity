@@ -373,6 +373,20 @@ class MapboxMapSurface : MapSurface {
         val previous = convoyFitPoints
         convoyFitPoints = points?.takeIf { it.isNotEmpty() }
 
+        // Turning the fit ON or OFF is an explicit user act (the convoy bar's
+        // focus toggle), so — exactly like the my-location control — it resumes
+        // following and cancels any pending idle-return. Everything else that
+        // reaches this method is a position/roster tick, which must NOT resume
+        // following, or a user who had panned away would be yanked back every
+        // second. The two are told apart by the null transition: the fit stays
+        // non-null across ticks, so only a genuine toggle flips it.
+        val toggled = (previous == null) != (convoyFitPoints == null)
+        if (toggled) {
+            followController.onRecenterRequested()
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+        }
+
         if (convoyFitPoints == null) {
             // Convoy focus turned off — the user switched back to "me", left the
             // convoy, or the convoy ended. Forget the applied fit and glide back
@@ -388,10 +402,14 @@ class MapboxMapSurface : MapSurface {
             return
         }
 
-        // Turning it ON (or a genuinely different group) applies immediately
-        // rather than waiting for the next GPS fix, so the toggle feels like it
-        // did something.
-        applyConvoyFit()
+        // Applies immediately rather than waiting for the next GPS fix, so the
+        // toggle feels like it did something — but still behind the follow gate,
+        // so a position tick arriving while the user is mid-pan cannot steal the
+        // camera from them. A toggle always passes the gate, because the branch
+        // above just resumed following.
+        if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+            applyConvoyFit()
+        }
     }
 
     /**
