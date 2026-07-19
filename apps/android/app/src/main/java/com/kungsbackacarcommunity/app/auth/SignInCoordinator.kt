@@ -96,6 +96,19 @@ class SignInCoordinator(
             } catch (cancellation: CancellationException) {
                 state.value = SignInStatus.Idle
                 throw cancellation
+            } catch (cancelled: SignInCancelledException) {
+                // The USER dismissed the credential sheet. Not a fault, so it is
+                // dropped HERE — before any diagnostics document is written, so
+                // there is nothing to store, dedupe, or count. A pre-auth report
+                // auto-files a PUBLIC GitHub issue, and filing one for a
+                // cancellation "would report the app working correctly" (the same
+                // rule the live-share and friends reporters follow; see
+                // ClientErrorReporting.kt). This was issue #457.
+                //
+                // Idle, not Failed: the user chose to back out, so the login screen
+                // returns to its resting state instead of accusing them of an error.
+                state.value = SignInStatus.Idle
+                return
             } catch (unavailable: SignInUnavailableException) {
                 // Configuration gap, not a runtime error — never reported as a failure.
                 state.value = SignInStatus.Failed(SignInFailure.UNAVAILABLE)
