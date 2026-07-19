@@ -5,60 +5,116 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the promise TrafficPalette's KDoc makes: night congestion colours are
- * genuinely lighter than the day ones (so they read against the dark basemap),
- * and the day palette is untouched.
+ * Pins the promises TrafficPalette's KDoc makes about the night ramp: heavy is
+ * a DARK red and moderate a DARK yellow (not a pastel lift of the day palette),
+ * every level still clears the night basemap, the levels stay far enough apart
+ * to survive red-green colour blindness, and the day palette is untouched.
  */
 class TrafficPaletteTest {
+    /**
+     * A realistic stand-in for the Mapbox Standard style's night basemap, which
+     * is near-black rather than mid-grey. Every night colour is measured against
+     * this: "dark red" is only acceptable while it still stands off the map.
+     */
+    private val nightBasemapLum = TrafficPalette.relativeLuminance(0xFF2B2B2B.toInt())
+
+    /**
+     * The brief: heavy reads as a DARK red and moderate as a DARK yellow. Both
+     * are darker than the day pigment they replace — that is what makes them
+     * "dark" rather than the previous "lifted" pastel ramp, which is the change
+     * this test exists to stop being silently reverted.
+     */
     @Test
-    fun `night colours are lighter than their day counterparts`() {
+    fun `night heavy is a dark red and night moderate a dark yellow`() {
         val day = TrafficPalette.DAY
         val night = TrafficPalette.NIGHT
-        val pairs =
-            listOf(
-                "low" to (day.low to night.low),
-                "moderate" to (day.moderate to night.moderate),
-                "heavy" to (day.heavy to night.heavy),
-                "severe" to (day.severe to night.severe),
-                "unknown" to (day.unknown to night.unknown),
-            )
-        for ((name, colors) in pairs) {
-            val (dayColor, nightColor) = colors
-            val dayLum = TrafficPalette.relativeLuminance(dayColor)
-            val nightLum = TrafficPalette.relativeLuminance(nightColor)
-            assertTrue(
-                "night '$name' must be lighter than day (day=$dayLum, night=$nightLum) " +
-                    "or it cannot be picked out of a dark basemap",
-                nightLum > dayLum,
-            )
-        }
+
+        // Dark: darker than the day colour for the same level.
+        assertTrue(
+            "night heavy must be DARKER than the day heavy — it is a dark red",
+            TrafficPalette.relativeLuminance(night.heavy) <
+                TrafficPalette.relativeLuminance(day.heavy),
+        )
+        assertTrue(
+            "night moderate must be DARKER than the day moderate — it is a dark yellow",
+            TrafficPalette.relativeLuminance(night.moderate) <
+                TrafficPalette.relativeLuminance(day.moderate),
+        )
+
+        // Red: heavy's red channel dominates both others by a clear margin.
+        val hr = (night.heavy shr 16) and 0xFF
+        val hg = (night.heavy shr 8) and 0xFF
+        val hb = night.heavy and 0xFF
+        assertTrue("night heavy is red-dominant", hr > hg * 2 && hr > hb * 2)
+
+        // Yellow: red and green both high and close, blue clearly suppressed.
+        val mr = (night.moderate shr 16) and 0xFF
+        val mg = (night.moderate shr 8) and 0xFF
+        val mb = night.moderate and 0xFF
+        assertTrue("night moderate is yellow (red+green high)", mr > 0x80 && mg > 0x80)
+        assertTrue("night moderate is yellow (blue suppressed)", mb < mg / 2)
     }
 
     /**
-     * The two levels Seb actually reported ("the yellow and red part") are the
-     * ones that were failing, so they get a real bar rather than "any
-     * improvement". A mid-grey (#808080, luminance ~0.216) stands in for the
-     * night basemap's brightest roads: both must clear it comfortably, which the
-     * day values do NOT for severe.
+     * "Dark" must never collapse into "invisible" — that was the original
+     * complaint. Every night level has to clear the near-black basemap by a real
+     * margin, and the day palette's heavy/severe reds demonstrably do not, which
+     * is why the night ramp exists at all.
      */
     @Test
-    fun `night moderate and severe stand clear of a dark basemap`() {
-        val basemapLum = TrafficPalette.relativeLuminance(0xFF808080.toInt())
+    fun `every night colour stands clear of the near-black basemap`() {
         val night = TrafficPalette.NIGHT
+        val levels =
+            listOf(
+                "low" to night.low,
+                "moderate" to night.moderate,
+                "heavy" to night.heavy,
+                "severe" to night.severe,
+                "unknown" to night.unknown,
+            )
+        for ((name, color) in levels) {
+            val lum = TrafficPalette.relativeLuminance(color)
+            assertTrue(
+                "night '$name' (luminance $lum) must stand clear of the night " +
+                    "basemap ($nightBasemapLum) — dark must not mean invisible",
+                lum > nightBasemapLum * 3,
+            )
+        }
+        // The worst level is the most salient thing on the map.
+        assertTrue(
+            "severe must be brighter than heavy so the worst level pops most",
+            TrafficPalette.relativeLuminance(night.severe) >
+                TrafficPalette.relativeLuminance(night.heavy),
+        )
+    }
+
+    /**
+     * Luminance is the one cue a red-green colour-blind viewer keeps, so the
+     * distinction that actually drives a routing decision — moderate vs heavy —
+     * must be carried by brightness, not hue alone. Green `low` additionally
+     * carries a lifted blue channel so it does not collapse into the reds.
+     */
+    @Test
+    fun `night levels stay separable without colour vision`() {
+        val night = TrafficPalette.NIGHT
+        val moderate = TrafficPalette.relativeLuminance(night.moderate)
+        val heavy = TrafficPalette.relativeLuminance(night.heavy)
+        val low = TrafficPalette.relativeLuminance(night.low)
 
         assertTrue(
-            "night moderate must be well clear of the basemap",
-            TrafficPalette.relativeLuminance(night.moderate) > basemapLum * 2,
+            "moderate must be at least 2x heavy's luminance (was ${moderate / heavy}x)",
+            moderate > heavy * 2,
         )
         assertTrue(
-            "night severe must be clear of the basemap",
-            TrafficPalette.relativeLuminance(night.severe) > basemapLum,
+            "low must be at least 2x heavy's luminance (was ${low / heavy}x)",
+            low > heavy * 2,
         )
-        // Teeth: the DAY severe red is what was being drawn at night, and it is
-        // DARKER than that basemap — i.e. the old behaviour genuinely failed this.
+        // Green vs red is the classic confusion pair: low's blue channel is
+        // lifted well above the reds' so a deuteranope still has a hue cue.
+        val lowBlue = night.low and 0xFF
         assertTrue(
-            "day severe is darker than the dark basemap — this is the bug",
-            TrafficPalette.relativeLuminance(TrafficPalette.DAY.severe) < basemapLum,
+            "night low needs a lifted blue channel to separate it from the reds",
+            lowBlue > (night.heavy and 0xFF) * 2 && lowBlue > (night.severe and 0xFF),
         )
     }
 
