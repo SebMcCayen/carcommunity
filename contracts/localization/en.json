@@ -1005,12 +1005,10 @@
     "start": "Start",
     "exit": "Exit navigation",
     "recenter": "Recenter",
-    "reportIncident": "Report",
     "arrive": "Arrive at %1$s",
     "remaining": "%1$s · %2$s",
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",
-    "reportComingSoon": "Incident and roadwork reporting is coming soon.",
     "rerouting": "Rerouting…",
     "speedLimit": "Speed limit %1$d km/h",
     "currentSpeed": "Current speed %1$d km/h"

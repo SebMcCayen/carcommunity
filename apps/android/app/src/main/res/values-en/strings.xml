@@ -924,12 +924,10 @@
     <string name="turnByTurn_start">Start</string>
     <string name="turnByTurn_exit">Exit navigation</string>
     <string name="turnByTurn_recenter">Recenter</string>
-    <string name="turnByTurn_reportIncident">Report</string>
     <string name="turnByTurn_arrive">Arrive at %1$s</string>
     <string name="turnByTurn_remaining">%1$s · %2$s</string>
     <string name="turnByTurn_unavailable">Navigation isn\'t available here.</string>
     <string name="turnByTurn_permissionNeeded">Location access is required to navigate.</string>
-    <string name="turnByTurn_reportComingSoon">Incident and roadwork reporting is coming soon.</string>
     <string name="turnByTurn_rerouting">Rerouting…</string>
     <string name="turnByTurn_speedLimit">Speed limit %1$d km/h</string>
     <string name="turnByTurn_currentSpeed">Current speed %1$d km/h</string>

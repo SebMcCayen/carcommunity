@@ -1,8 +1,10 @@
 package com.kungsbackacarcommunity.app.incidents
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,6 +47,23 @@ object IncidentPalette {
     fun color(type: IncidentType): Color = Color(colorArgb(type))
 }
 
+/**
+ * The drawable carrying a category's glyph on the map marker.
+ *
+ * Separated from [IncidentMarkerStyle] (which is deliberately Android-free so
+ * its legibility rules can be unit-tested off-device) — this is the one place
+ * that turns an abstract [IncidentMarkerStyle.Glyph] into a resource id.
+ */
+@DrawableRes
+fun incidentGlyphRes(type: IncidentType): Int =
+    when (IncidentMarkerStyle.glyph(type)) {
+        IncidentMarkerStyle.Glyph.ACCIDENT -> R.drawable.ic_incident_accident
+        IncidentMarkerStyle.Glyph.ROADWORK -> R.drawable.ic_incident_roadwork
+        IncidentMarkerStyle.Glyph.HAZARD -> R.drawable.ic_incident_hazard
+        IncidentMarkerStyle.Glyph.POLICE -> R.drawable.ic_incident_police
+        IncidentMarkerStyle.Glyph.ROAD_CLOSED -> R.drawable.ic_incident_road_closed
+    }
+
 /** Localized label for an incident type. */
 @Composable
 fun incidentTypeLabel(type: IncidentType): String =
@@ -58,12 +79,17 @@ fun incidentTypeLabel(type: IncidentType): String =
 
 /**
  * The incident-report type picker: a simple dialog listing every
- * [IncidentType] with its category swatch. Picking one invokes [onPick] with
- * the chosen type (the host resolves the current location and reports it);
- * tapping outside or Cancel dismisses.
+ * [IncidentType] as the marker it will become — the category disc with its
+ * glyph — plus the label. Picking one invokes [onPick] with the chosen type
+ * (the host resolves the current location and reports it); tapping outside or
+ * Cancel dismisses.
  *
- * Deliberately icon-free (coloured swatch + label) so it compiles and UI-tests
- * without depending on any extended-icon set.
+ * Shared by the map home AND the turn-by-turn navigation view, so reporting is
+ * the same three taps whether the user is parked or driving.
+ *
+ * The glyphs are the app's own vector drawables rather than an extended Material
+ * icon set, so this still compiles and UI-tests without pulling in a dependency
+ * the project does not have.
  */
 @Composable
 fun IncidentTypePickerDialog(
@@ -109,13 +135,26 @@ private fun IncidentTypeRow(type: IncidentType, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s4),
     ) {
-        Column(
+        // The same disc + glyph the map draws, so the row a user picks looks
+        // like the marker their report will become. It was a bare colour
+        // swatch, which no longer matched the map once markers gained icons.
+        Box(
             modifier =
                 Modifier
-                    .size(KccSpacing.s5)
+                    .size(KccSpacing.s6)
                     .clip(CircleShape)
                     .background(IncidentPalette.color(type)),
-        ) {}
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(incidentGlyphRes(type)),
+                // The row already carries the label as its contentDescription;
+                // announcing the category twice would be noise.
+                contentDescription = null,
+                tint = Color(IncidentMarkerStyle.glyphColorArgb(type)),
+                modifier = Modifier.size(KccSpacing.s4),
+            )
+        }
         Text(text = label, style = MaterialTheme.typography.bodyLarge)
     }
 }
