@@ -51,8 +51,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
+import androidx.lifecycle.Lifecycle
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
+import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.common.MapboxOptions
@@ -209,11 +213,33 @@ fun TurnByTurnNavScreen(
                     )
             }
         }
-    val engine =
-        remember(mapView, maneuverView) {
-            TurnByTurnEngine(mapView, maneuverView, origin, destination, context)
-        }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Feature health: turn-by-turn's failure modes are SILENT. A route request
+    // that exhausts its retries leaves the user on a map with no route, no error
+    // text and no retry affordance, and nothing throws — so nothing is reported
+    // today. These assertions feed the existing auto-issue pipeline; see
+    // diagnostics/FeatureHealth.kt for the payload's PII rules and the
+    // once-per-session cap. Reaching this point already proves the access token
+    // is present (the blank-token guard returned above).
+    val health = rememberFeatureHealthReporter(accessTokenPresent = true)
+    val engine =
+        remember(mapView, maneuverView, health) {
+            TurnByTurnEngine(
+                mapView = mapView,
+                maneuverView = maneuverView,
+                origin = origin,
+                destination = destination,
+                context = context,
+                health = health,
+                // Sampled at callback time, never captured: a route request can
+                // fail long after the user has left the app, and a failure nobody
+                // is waiting on must not file an issue.
+                isForeground = {
+                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                },
+            )
+        }
 
     // Pick the navigation style from the app's day/night signal so turn-by-turn
     // matches the rest of the UI. Keyed on the theme, so a light/dark flip reloads
@@ -229,10 +255,27 @@ fun TurnByTurnNavScreen(
     }
 
     DisposableEffect(engine, lifecycleOwner) {
-        if (!MapboxNavigationApp.isSetup()) {
-            MapboxNavigationApp.setup(NavigationOptions.Builder(context).build())
+        // Feature health: if the nav session cannot be stood up at all, the whole
+        // screen is dead — no route, no guidance, no error. Cheap to assert and
+        // wrapped rather than restructured, so the happy path is untouched. The
+        // throwable itself is deliberately NOT reported: an exception message is
+        // the classic carrier of a path or identifier into a world-readable
+        // issue, and the kind alone is what triage needs.
+        val setupOk =
+            runCatching {
+                if (!MapboxNavigationApp.isSetup()) {
+                    MapboxNavigationApp.setup(NavigationOptions.Builder(context).build())
+                }
+                MapboxNavigationApp.attach(lifecycleOwner)
+            }.isSuccess
+        if (!setupOk) {
+            health.report(
+                kind = FeatureHealthKind.NavSessionInitFailed,
+                foreground =
+                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                surfaceShown = true,
+            )
         }
-        MapboxNavigationApp.attach(lifecycleOwner)
         val observer =
             object : MapboxNavigationObserver {
                 @SuppressLint("MissingPermission")
@@ -502,6 +545,14 @@ private class TurnByTurnEngine(
     private val origin: LatLng?,
     private val destination: LatLng,
     private val context: Context,
+    /**
+     * Feature-health sink for the SILENT nav failures — the ones that leave the
+     * screen looking fine but doing nothing. Reports carry the failure KIND only:
+     * never the destination, the origin, the route, or a router error message.
+     */
+    private val health: FeatureHealthReporter,
+    /** Whether the app is in front of the user, sampled at report time. */
+    private val isForeground: () -> Boolean,
 ) {
     /** True while the camera auto-follows the user (hides the re-centre button). */
     private val cameraFollowingFlow = MutableStateFlow(true)
@@ -776,6 +827,7 @@ private class TurnByTurnEngine(
                         // explicit-origin and current-location cases; routeRequestAttempts
                         // was already incremented when this attempt was issued.
                         routeRequested = false
+                        reportRouteFailureIfExhausted()
                     }
 
                     override fun onRoutesReady(
@@ -787,7 +839,34 @@ private class TurnByTurnEngine(
                     }
                 },
             )
-        }.onFailure { routeRequested = false }
+        }.onFailure {
+            routeRequested = false
+            reportRouteFailureIfExhausted()
+        }
+    }
+
+    /**
+     * Feature health: report a route request that has burned its whole retry
+     * budget, which is the point at which turn-by-turn becomes a silent dead end
+     * (a map, a following camera, and no route — with nothing thrown and nothing
+     * shown).
+     *
+     * Gated on the retry budget on purpose: a single failed attempt is routine
+     * (a momentary radio drop, a fix arriving before the network settles) and the
+     * next location fix retries it, so reporting one would be a false positive.
+     * Only exhaustion means the feature is actually broken for this user.
+     *
+     * The [RouterFailure] reasons are NOT reported — router messages can embed
+     * the request URL, and that URL contains the origin and destination
+     * coordinates. The issue is world-readable.
+     */
+    private fun reportRouteFailureIfExhausted() {
+        if (routeRequestAttempts < maxRouteRequestAttempts) return
+        health.report(
+            kind = FeatureHealthKind.NavRouteRequestFailed,
+            foreground = runCatching { isForeground() }.getOrDefault(false),
+            surfaceShown = true,
+        )
     }
 
     /** Release the render APIs; call from the composable's onDispose. */

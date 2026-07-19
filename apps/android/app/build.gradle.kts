@@ -140,6 +140,18 @@ android {
         // token-less build (which compiles the noNav stub) never advertises a
         // feature that can only reach the "navigation unavailable" stub.
         buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
+
+        // The pinned Mapbox Maps SDK version, sourced from the version catalog so
+        // it can never drift from the artifact actually on the classpath. Attached
+        // to feature-health reports (see diagnostics/FeatureHealth.kt) so a silent
+        // map-rendering regression names the SDK version it appeared on — the
+        // v0.8.1 blank-map bug arrived with an SDK/config change, and the version
+        // is the first thing anyone triaging such an issue asks for.
+        buildConfigField(
+            "String",
+            "MAPBOX_MAPS_SDK_VERSION",
+            "\"${libs.versions.mapbox.get()}\"",
+        )
     }
 
     signingConfigs {

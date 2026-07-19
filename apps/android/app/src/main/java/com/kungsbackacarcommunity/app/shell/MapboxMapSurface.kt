@@ -8,10 +8,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccPalette
+import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
+import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
+import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
+import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
+import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -25,6 +33,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
+import com.mapbox.maps.RenderModeType
 import com.mapbox.maps.Style
 import com.mapbox.maps.interactions.standard.generated.standardPoi
 import com.mapbox.maps.dsl.cameraOptions
@@ -177,6 +186,78 @@ class MapboxMapSurface : MapSurface {
     // (so the compass control rotates); held so it can be detached in onRelease.
     private var cameraChangeListener: OnCameraChangeListener? = null
 
+    // ---- Feature-health state (see diagnostics/FeatureHealth.kt) -------------
+    // Why any of this exists: release v0.8.1 shipped a map that rendered NOTHING
+    // and never threw, so no crash handler and no error-reporting call site ever
+    // fired. These facts are what let the watchdog tell "genuinely broken" apart
+    // from "offline / covered / not looked at yet", which is the whole difference
+    // between a useful auto-reporter and one that gets muted.
+    //
+    // Deliberately lives ONLY here, on the real surface: [StubMapSurface] (the
+    // CI / token-less path) has no GL surface to assert anything about and must
+    // stay completely inert.
+
+    // Whether the MapView was ever actually constructed and shown. Nothing about
+    // a surface that never appeared is worth asserting.
+    @Volatile
+    private var surfaceShown: Boolean = false
+
+    // Whether the map is currently visible to the user (see [setActive]). A map
+    // sitting behind an opaque tab is not a broken map.
+    @Volatile
+    private var surfaceActive: Boolean = true
+
+    // Whether the map has ever rendered a FULL frame (MapLoaded, or a render
+    // frame the SDK reports as complete). This is the positive health signal —
+    // the precise inverse of the v0.8.1 blank rectangle. Once true, the render
+    // watchdog is disarmed for good.
+    @Volatile
+    private var everRendered: Boolean = false
+
+    // Reporter for the SDK's own error callbacks, which fire from native threads
+    // outside the composition. Set while composed, cleared in onRelease.
+    @Volatile
+    private var healthReporter: FeatureHealthReporter? = null
+
+    // Whether the app is in the foreground, sampled from the composable's
+    // lifecycle. Read from the native error callbacks, which have no lifecycle
+    // of their own.
+    @Volatile
+    private var appInForeground: Boolean = true
+
+    // Subscriptions to the Maps SDK's own health callbacks; cancelled in
+    // onRelease alongside the gesture/camera listeners.
+    private var mapLoadingErrorSubscription: Cancelable? = null
+    private var mapLoadedSubscription: Cancelable? = null
+    private var renderFrameSubscription: Cancelable? = null
+
+    /**
+     * Record that the map produced a complete frame — it is demonstrably not
+     * blank. Disarms the render watchdog permanently.
+     */
+    private fun markRendered() {
+        everRendered = true
+    }
+
+    /**
+     * Funnel for the Maps SDK's `subscribeMapLoadingError` callback.
+     *
+     * The kind mapping (and the decision to ignore the noisy `SOURCE`/`TILE`
+     * types entirely) lives in the pure [mapLoadingErrorKindFor] so it is
+     * unit-tested rather than trusted. The error's own `message`, `sourceId` and
+     * `tileId` are deliberately DISCARDED: a tile id is a coordinate, a source
+     * id and a message can carry a URL, and the GitHub issue this feeds is
+     * world-readable.
+     */
+    private fun onMapLoadingError(typeName: String) {
+        val kind = mapLoadingErrorKindFor(typeName) ?: return
+        healthReporter?.report(
+            kind = kind,
+            foreground = appInForeground,
+            surfaceShown = surfaceShown && surfaceActive,
+        )
+    }
+
     // The overlay currently drawn on the map, so the recomposition-driven update
     // block only clears/recreates the annotations and re-fits the camera when the
     // overlay ACTUALLY changes — unrelated recompositions (traffic toggle,
@@ -300,6 +381,12 @@ class MapboxMapSurface : MapSurface {
         // refreshLocationComponent already uses after a permission grant, so the
         // puck comes back the same way it does there. A no-op until the map is
         // composed; wrapped defensively like every other native call.
+        //
+        // Also the feature-health "is the user actually looking at this?" signal:
+        // while inactive the map is covered by an opaque page, so a map that is
+        // not rendering is not a defect and the render watchdog must not accrue
+        // time (see the watchdog loop in [Content]).
+        surfaceActive = active
         val map = mapViewRef ?: return
         if (active) {
             refreshLocationComponent()
@@ -439,6 +526,47 @@ class MapboxMapSurface : MapSurface {
 
     @Composable
     override fun Content(modifier: Modifier) {
+        // ---- Feature health: the v0.8.1 blank-map detector -------------------
+        // A real access token is structurally guaranteed here (rememberMapSurface
+        // only builds this class when the token is non-blank), but it is read
+        // rather than assumed so the reported flag states a fact instead of a
+        // belief. The BOOLEAN is all that travels; the token value never does.
+        val accessTokenPresent = stringResource(R.string.mapbox_access_token).isNotBlank()
+        val health = rememberFeatureHealthReporter(accessTokenPresent = accessTokenPresent)
+        val healthLifecycle = LocalLifecycleOwner.current
+        DisposableEffect(health) {
+            healthReporter = health
+            onDispose { healthReporter = null }
+        }
+
+        // The render watchdog. This — not the SDK error listeners — is the check
+        // that would actually have caught v0.8.1, where the map simply never
+        // appeared and the SDK reported nothing at all.
+        //
+        // Every gate below exists to keep a benign condition from filing a public
+        // issue. Time accrues ONLY while the map is shown, uncovered, in the
+        // foreground, and the device has validated internet — so a tunnel, a
+        // plane, a dead SIM, a backgrounded app, or the user sitting on another
+        // tab all simply pause the clock instead of tripping it.
+        LaunchedEffect(health) {
+            val watchdog = MapRenderWatchdog()
+            while (!watchdog.isDisarmed) {
+                delay(HEALTH_TICK_MILLIS)
+                appInForeground =
+                    healthLifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                val eligible =
+                    surfaceShown && surfaceActive && appInForeground && health.isOnline()
+                val fired = watchdog.onTick(HEALTH_TICK_MILLIS, eligible, everRendered)
+                if (fired) {
+                    health.report(
+                        kind = FeatureHealthKind.MapRenderTimeout,
+                        foreground = appInForeground,
+                        surfaceShown = surfaceShown && surfaceActive,
+                    )
+                }
+            }
+        }
+
         val trafficOn by trafficFlow.collectAsState()
         val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
@@ -510,6 +638,42 @@ class MapboxMapSurface : MapSurface {
                 }
                 MapView(context).apply {
                     mapViewRef = this
+                    // The surface now genuinely exists and is on screen — from
+                    // here on, "the map is not rendering" is a statement worth
+                    // making. Feature-health only; see the class KDoc.
+                    surfaceShown = true
+                    everRendered = false
+                    // The Maps SDK's own health callbacks. Listener-based
+                    // detection is precise but only fires when the SDK NOTICES a
+                    // failure; the v0.8.1 blank map may have produced no callback
+                    // at all, which is why the watchdog in [Content] exists
+                    // alongside these rather than instead of them.
+                    runCatching {
+                        mapLoadingErrorSubscription =
+                            mapboxMap.subscribeMapLoadingError { error ->
+                                // Pass the TYPE NAME only. The error's message,
+                                // sourceId and tileId are dropped on the floor:
+                                // a tile id is a coordinate and a message can
+                                // carry a URL, and this feeds a PUBLIC issue.
+                                onMapLoadingError(error.type.name)
+                            }
+                    }
+                    runCatching {
+                        // "The map finished loading everything it needed" — the
+                        // strongest possible proof it is not blank.
+                        mapLoadedSubscription = mapboxMap.subscribeMapLoaded { markRendered() }
+                    }
+                    runCatching {
+                        // Backstop for the above: on a slow link MapLoaded can lag
+                        // well behind the first usable frame, and a FULL render
+                        // frame already proves the map drew its whole content.
+                        // Accepting either is what keeps the watchdog from firing
+                        // at a map the user can plainly see.
+                        renderFrameSubscription =
+                            mapboxMap.subscribeRenderFrameFinished { frame ->
+                                if (frame.renderMode == RenderModeType.FULL) markRendered()
+                            }
+                    }
                     // Drop the scale bar (distance/km ruler, upper-left); the
                     // map-first shell has no room for it.
                     runCatching { scalebar.updateSettings { enabled = false } }
@@ -741,6 +905,16 @@ class MapboxMapSurface : MapSurface {
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }
                 cameraChangeListener = null
+                // Feature-health subscriptions come down with everything else.
+                // The surface is gone, so nothing about it can be asserted until
+                // a new one is built (which resets surfaceShown/everRendered).
+                runCatching { mapLoadingErrorSubscription?.cancel() }
+                runCatching { mapLoadedSubscription?.cancel() }
+                runCatching { renderFrameSubscription?.cancel() }
+                mapLoadingErrorSubscription = null
+                mapLoadedSubscription = null
+                renderFrameSubscription = null
+                surfaceShown = false
                 longClickListener?.let { l ->
                     runCatching { mapView.gestures.removeOnMapLongClickListener(l) }
                 }
@@ -913,6 +1087,16 @@ class MapboxMapSurface : MapSurface {
     }
 
     private companion object {
+        /**
+         * How often the render watchdog samples its eligibility conditions.
+         *
+         * 1s: fine-grained enough that a brief window of connectivity or
+         * visibility is attributed correctly, coarse enough to be free (one
+         * boolean check per second, and the loop exits the moment the map
+         * renders — which on a healthy map is within the first few ticks).
+         */
+        const val HEALTH_TICK_MILLIS = 1_000L
+
         const val ROUTE_LINE_COLOR = 0xFF1A73E8.toInt()
         const val ROUTE_LINE_WIDTH = 6.0
         const val DEST_MARKER_COLOR = 0xFFD32F2F.toInt()
