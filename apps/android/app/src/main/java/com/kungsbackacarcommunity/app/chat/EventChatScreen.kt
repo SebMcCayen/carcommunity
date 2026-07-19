@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -157,7 +158,18 @@ fun EventChatScreen(
                             modifier = Modifier.weight(1f),
                         )
                     } else {
+                        val listState = rememberLazyListState()
+                        // Keyboard just came up: the screen's ime padding shrank
+                        // this list's viewport from the bottom and a LazyColumn
+                        // holds its scroll OFFSET, not its bottom edge, so the
+                        // newest message would slide under the composer. Same
+                        // shared rising-edge re-pin as the group channels and DM
+                        // threads — and, as there, only for a reader already at
+                        // the bottom, so tapping the input while reading history
+                        // doesn't yank them down.
+                        RepinToNewestOnImeRise(listState)
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
