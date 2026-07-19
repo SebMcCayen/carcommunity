@@ -226,7 +226,14 @@
     "noOtherMarkersSubtitle": "Live locations are only shown during active, time-limited sessions.",
     "memberRequiredTitle": "Membership is required to see other members' live locations.",
     "shareOwnFreeHint": "You can share your own position for free.",
-    "liveMarkerFallbackName": "Sharing live"
+    "liveMarkerFallbackName": "Sharing live",
+    "locationNeededTitle": "The map needs your location",
+    "locationPermissionBody": "Without location access the map can't show where you are, and directions and live sharing won't work.",
+    "locationServicesOffBody": "Location is switched off on your device, so the map can't show where you are. Turn it on to use the map fully.",
+    "locationAllow": "Allow location",
+    "locationOpenSettings": "Open settings",
+    "locationSettingsUnavailable": "Settings couldn't be opened on this device. Grant location access to the app manually.",
+    "locationDismiss": "Not now"
   },
   "events": {
     "title": "Events",

@@ -226,7 +226,14 @@
     "noOtherMarkersSubtitle": "Livepositioner visas endast under aktiva, tidsbegränsade sessioner.",
     "memberRequiredTitle": "Medlemskap krävs för att se andra medlemmars livepositioner.",
     "shareOwnFreeHint": "Du kan dela din egen position gratis.",
-    "liveMarkerFallbackName": "Delar live"
+    "liveMarkerFallbackName": "Delar live",
+    "locationNeededTitle": "Kartan behöver din plats",
+    "locationPermissionBody": "Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte.",
+    "locationServicesOffBody": "Platstjänster är avstängda på din enhet, så kartan kan inte visa var du är. Slå på dem för att använda kartan fullt ut.",
+    "locationAllow": "Tillåt plats",
+    "locationOpenSettings": "Öppna inställningar",
+    "locationSettingsUnavailable": "Inställningarna kunde inte öppnas på den här enheten. Ge appen platsåtkomst manuellt.",
+    "locationDismiss": "Inte nu"
   },
   "events": {
     "title": "Träffar",

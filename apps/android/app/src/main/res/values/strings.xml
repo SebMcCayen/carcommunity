@@ -204,6 +204,13 @@
     <string name="map_memberRequiredTitle">Medlemskap krävs för att se andra medlemmars livepositioner.</string>
     <string name="map_shareOwnFreeHint">Du kan dela din egen position gratis.</string>
     <string name="map_liveMarkerFallbackName">Delar live</string>
+    <string name="map_locationNeededTitle">Kartan behöver din plats</string>
+    <string name="map_locationPermissionBody">Utan platsåtkomst kan kartan inte visa var du är, och vägbeskrivningar och livedelning fungerar inte.</string>
+    <string name="map_locationServicesOffBody">Platstjänster är avstängda på din enhet, så kartan kan inte visa var du är. Slå på dem för att använda kartan fullt ut.</string>
+    <string name="map_locationAllow">Tillåt plats</string>
+    <string name="map_locationOpenSettings">Öppna inställningar</string>
+    <string name="map_locationSettingsUnavailable">Inställningarna kunde inte öppnas på den här enheten. Ge appen platsåtkomst manuellt.</string>
+    <string name="map_locationDismiss">Inte nu</string>
     <string name="events_title">Träffar</string>
     <string name="events_placeholder">Träfflistan kommer snart.</string>
     <string name="events_screenSubtitle">Kommande träffar och community-evenemang.</string>

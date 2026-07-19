@@ -204,6 +204,13 @@
     <string name="map_memberRequiredTitle">Membership is required to see other members\' live locations.</string>
     <string name="map_shareOwnFreeHint">You can share your own position for free.</string>
     <string name="map_liveMarkerFallbackName">Sharing live</string>
+    <string name="map_locationNeededTitle">The map needs your location</string>
+    <string name="map_locationPermissionBody">Without location access the map can\'t show where you are, and directions and live sharing won\'t work.</string>
+    <string name="map_locationServicesOffBody">Location is switched off on your device, so the map can\'t show where you are. Turn it on to use the map fully.</string>
+    <string name="map_locationAllow">Allow location</string>
+    <string name="map_locationOpenSettings">Open settings</string>
+    <string name="map_locationSettingsUnavailable">Settings couldn\'t be opened on this device. Grant location access to the app manually.</string>
+    <string name="map_locationDismiss">Not now</string>
     <string name="events_title">Events</string>
     <string name="events_placeholder">Event list coming soon.</string>
     <string name="events_screenSubtitle">Upcoming events and community gatherings.</string>

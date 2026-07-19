@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app
 
 import android.Manifest
-import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -57,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -64,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -74,7 +75,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
@@ -152,6 +154,14 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
+import com.kungsbackacarcommunity.app.location.LocationAccess
+import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
+import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
+import com.kungsbackacarcommunity.app.location.currentLocationAccess
+import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
+import com.kungsbackacarcommunity.app.location.openAppLocationSettings
+import com.kungsbackacarcommunity.app.location.openDeviceLocationSettings
+import com.kungsbackacarcommunity.app.location.shouldShowLocationRationale
 import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
@@ -548,28 +558,76 @@ fun AuthenticatedApp(
             // start once permission arrives). Requested once per session (a
             // saveable guard) so returning to the Map tab does not re-nag after a
             // denial; the stub (config-less / CI) no-ops refreshLocationComponent.
+            // Bumped whenever the runtime location state may have changed (a
+            // permission answer, or coming back from Settings). The platform
+            // exposes no observable for either, so the state is re-read on this
+            // key rather than polled.
+            var locationAccessProbe by remember { mutableIntStateOf(0) }
             val locationPermissionLauncher =
                 rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
                 ) { granted ->
                     if (granted) mapSurface.refreshLocationComponent()
+                    // Re-read on BOTH answers: a denial is what raises the
+                    // explanation card, and it used to be dropped silently.
+                    locationAccessProbe++
                 }
             var mapLocationPermissionRequested by rememberSaveable { mutableStateOf(false) }
-            LaunchedEffect(selectedTab, mapSurface, hasMapboxToken) {
-                // Never on the config-less/CI stub: it has no puck and must not
-                // trigger a system location-permission prompt (stub-map contract).
+
+            // Re-read on every resume so returning from the system settings page
+            // — the one place a permanent denial or the device location switch
+            // can be fixed — clears the card without the user hunting for a
+            // refresh. Granting elsewhere and coming back must Just Work.
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) locationAccessProbe++
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+
+            // Never on the config-less/CI stub: it has no puck, must not trigger a
+            // system permission prompt, and must not grow a card the instrumented
+            // UI tests never expected (stub-map contract).
+            val locationAccess =
+                if (hasMapboxToken) {
+                    // Keyed on the probe so a grant/denial/settings round-trip is
+                    // picked up; `context` is stable for the composition.
+                    remember(locationAccessProbe, context) { currentLocationAccess(context) }
+                } else {
+                    LocationAccess.GRANTED
+                }
+            val locationRemedy =
+                remember(locationAccessProbe, context, mapLocationPermissionRequested) {
+                    locationPermissionRemedy(
+                        canShowRationale = shouldShowLocationRationale(context),
+                        alreadyAsked = mapLocationPermissionRequested,
+                    )
+                }
+            // Dismissal is per-visit, not a preference: `remember` (not
+            // rememberSaveable) and reset when the map is covered, matching the
+            // map's other transient UI. The map is genuinely broken without a
+            // position, so "Not now" silences the card for this look at the map
+            // rather than forever — but it never re-appears while the user stays
+            // on the tab, so it cannot nag on recomposition.
+            // (Reset when the map is covered — see the LaunchedEffect below,
+            // which lives where `mapCover` is in scope.)
+            var locationPromptDismissed by remember { mutableStateOf(false) }
+            var locationSettingsUnavailable by remember { mutableStateOf(false) }
+
+            LaunchedEffect(selectedTab, mapSurface, hasMapboxToken, locationAccess) {
                 if (selectedTab != ShellTab.Map || !hasMapboxToken) return@LaunchedEffect
-                val granted =
-                    ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                    ) == PackageManager.PERMISSION_GRANTED
                 when {
                     // Already granted (this or a previous session): re-apply the
                     // component so the puck shows the moment the map is on screen.
-                    granted -> mapSurface.refreshLocationComponent()
+                    locationAccess == LocationAccess.GRANTED ->
+                        mapSurface.refreshLocationComponent()
                     // Not granted and not yet asked this session: prompt once.
-                    !mapLocationPermissionRequested -> {
+                    // A denial now falls through to the explanation card below
+                    // instead of vanishing.
+                    locationAccess == LocationAccess.PERMISSION_DENIED &&
+                        !mapLocationPermissionRequested -> {
                         mapLocationPermissionRequested = true
                         locationPermissionLauncher.launch(
                             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -1032,6 +1090,19 @@ fun AuthenticatedApp(
                         else -> MapCover.None
                     }
 
+                // Collapse the location prompt as soon as another page covers the
+                // map, matching how the map's other transient UI is reset (see
+                // MapHome's LaunchedEffect(covered)). "Not now" is a momentary
+                // affordance, not a preference: it silences the card for this look
+                // at the map, and the next visit re-evaluates. The failed-to-open
+                // -settings note is cleared with it — it describes one attempt.
+                LaunchedEffect(mapCover) {
+                    if (mapCover != MapCover.None) {
+                        locationPromptDismissed = false
+                        locationSettingsUnavailable = false
+                    }
+                }
+
                 val backResult = ShellNavigation.onBack(selectedTab, route)
                 BackHandler(enabled = backResult != ShellBackResult.Exit) {
                     when (backResult) {
@@ -1486,6 +1557,53 @@ fun AuthenticatedApp(
                                         }
                                     },
                                 )
+
+                                // Location explanation, over the map rather than
+                                // inside MapHome so the map chrome stays one
+                                // concern. Anchored to the bottom so it does not
+                                // sit under the search bar / profile button.
+                                if (locationAccess.isBlocked && !locationPromptDismissed) {
+                                    LocationAccessPrompt(
+                                        access = locationAccess,
+                                        remedy = locationRemedy,
+                                        settingsUnavailable = locationSettingsUnavailable,
+                                        onFix = {
+                                            when {
+                                                // The system dialog can still be
+                                                // raised — much shorter than a
+                                                // trip through Settings.
+                                                locationAccess ==
+                                                    LocationAccess.PERMISSION_DENIED &&
+                                                    locationRemedy ==
+                                                    LocationPermissionRemedy.REQUEST_AGAIN -> {
+                                                    mapLocationPermissionRequested = true
+                                                    locationPermissionLauncher.launch(
+                                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                                    )
+                                                }
+                                                // Master switch off → the device
+                                                // location page. The app's own
+                                                // permission page cannot fix this.
+                                                locationAccess ==
+                                                    LocationAccess.SERVICES_OFF ->
+                                                    locationSettingsUnavailable =
+                                                        !openDeviceLocationSettings(context)
+                                                // Permanently denied → this app's
+                                                // details page, the only place the
+                                                // permission can still be granted.
+                                                else ->
+                                                    locationSettingsUnavailable =
+                                                        !openAppLocationSettings(context)
+                                            }
+                                        },
+                                        onDismiss = { locationPromptDismissed = true },
+                                        modifier =
+                                            Modifier
+                                                .align(Alignment.BottomCenter)
+                                                .navigationBarsPadding()
+                                                .padding(KccSpacing.s4),
+                                    )
+                                }
                             }
 
                             // The other tabs render as an opaque page over the map, crossfaded so
@@ -2381,6 +2499,10 @@ private fun RouteHost(
                     coordinator = notificationsCoordinator,
                     uid = uid,
                     onBack = onClose,
+                    // Lets a friend-request row be accepted/declined in place.
+                    // Null in a config-less build: the inbox then renders
+                    // without friend actions.
+                    friendsRepository = friendsRepository,
                 )
             } else {
                 LoadingScreen()
