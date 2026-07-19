@@ -1011,7 +1011,9 @@
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",
     "reportComingSoon": "Incident and roadwork reporting is coming soon.",
-    "rerouting": "Rerouting…"
+    "rerouting": "Rerouting…",
+    "speedLimit": "Speed limit %1$d km/h",
+    "currentSpeed": "Current speed %1$d km/h"
   },
   "incidents": {
     "reportButton": "Report incident",

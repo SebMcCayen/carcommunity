@@ -37,6 +37,12 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  * @param destinationLabel human-readable destination name for the header.
  * @param onExit leave the navigation view.
  * @param onReportIncident report an incident/roadwork (wired by the host).
+ * @param isLiveSharing whether a live-location session is running (unused here;
+ *   the real impl keeps the live control on screen while driving).
+ * @param canShareLive whether the caller may start a session (unused here).
+ * @param onStartLiveShare start a live-sharing session (unused here).
+ * @param onHideMeNow the privacy stop (unused here).
+ * @param onOpenLiveShareDetails open the full live-location screen (unused here).
  */
 @Composable
 fun TurnByTurnNavScreen(
@@ -46,6 +52,14 @@ fun TurnByTurnNavScreen(
     onExit: () -> Unit,
     onReportIncident: () -> Unit,
     modifier: Modifier = Modifier,
+    // Present ONLY to keep this stub's signature identical to the real src/nav
+    // implementation, so the single host call site compiles in both builds.
+    // Unused: this screen renders an "unavailable" panel and owns no map.
+    @Suppress("UNUSED_PARAMETER") isLiveSharing: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") canShareLive: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") onStartLiveShare: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onHideMeNow: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onOpenLiveShareDetails: () -> Unit = {},
 ) {
     BackHandler { onExit() }
     Box(
