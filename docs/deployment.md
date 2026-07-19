@@ -54,13 +54,49 @@ CI runs on every push and pull request targeting `main`. Path filters ensure tha
 | Workflow                  | Trigger paths                                                                | What it validates                                                    |
 | ------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `ci.yml`                  | All paths                                                                    | API, mobile, admin, shared lint/typecheck/test/build                 |
-| `validate-functions.yml`  | `functions/**`, `firebase.json`                                     | Functions lint, typecheck, unit tests, build                         |
+| `validate-functions.yml`  | `functions/**`, `firebase.json`                                              | Functions lint, typecheck, unit tests, build                         |
 | `test-firebase-rules.yml` | `firebase/*.rules`, `firebase/*.json`, `functions/src/**/*.emulator.test.ts` | Firebase Emulator integration tests (Firestore, RTDB, Storage rules) |
 | `validate-admin-web.yml`  | `apps/admin/**`, `packages/shared/**`                                        | Admin web lint, typecheck, tests, build                              |
 | `codeql.yml`              | All paths                                                                    | CodeQL security analysis (JS/TS)                                     |
 | `dependency-review.yml`   | Pull requests only                                                           | Dependency vulnerability review                                      |
 
 Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
+
+## Firestore Index Drift
+
+Firestore composite indexes are the one part of the deploy that fails **silently in CI and loudly in production**:
+
+- A query with no matching index fails with `9 FAILED_PRECONDITION: The query requires an index` — it does **not** return an empty result.
+- The Firestore emulator auto-creates whatever index a query asks for, so the rules and functions test suites pass whether or not `firebase deploy --only firestore:indexes` was ever run.
+
+On 2026-07-19 this took `friend-list` down for every caller: nine indexes declared in `firebase/firestore.indexes.json` had never reached the production project.
+
+`scripts/check-index-drift.mjs` closes that gap by diffing the deployed index list against the repo file, normalising away the implicit trailing `__name__` field that the Admin API returns and the repo file omits. It reports both directions:
+
+| Direction              | Severity           | Meaning                                                                              |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| Declared, not deployed | **fatal** (exit 1) | Queries needing the index are failing in production right now                        |
+| Deployed, not declared | warning            | Leftover from a field rename or a hand-created index — costs storage, breaks nothing |
+
+Run it locally against production. The Firebase CLI comes from the `functions` pnpm workspace, which a root `npm install` does not cover, so install that first on a fresh checkout:
+
+```bash
+pnpm -C functions install          # provides functions/node_modules/.bin/firebase
+node scripts/check-index-drift.mjs --project kungsbacka-car-community
+```
+
+To diff against a captured index dump without credentials (useful when debugging the check itself):
+
+```bash
+node scripts/check-index-drift.mjs --deployed prod-indexes.json
+```
+
+The fix for fatal drift is always `firebase deploy --only firestore:indexes --project kungsbacka-car-community`. The script itself never deploys.
+
+In CI the check is split in two, deliberately:
+
+- `check-index-drift.yml` runs **daily on a schedule** (and on demand) in the `production` environment, because listing deployed indexes needs WIF credentials. It is not a PR check: a credentialed check on every PR would fail on fork PRs and fail closed on secret rotation, blocking merges for changes unrelated to indexes. It skips with a notice rather than failing when the WIF secrets are absent.
+- The normalisation and diff logic is unit-tested in `scripts/check-index-drift.test.mjs` and runs on **every PR** through `ci.yml` (`npm run test:scripts`), with no credentials.
 
 ## Production Deployment
 

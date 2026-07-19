@@ -48,6 +48,12 @@ jobs:
       - name: Root test
         run: npm test
 
+      - name: Repo script tests
+        # Covers scripts/*.test.mjs — notably the Firestore index drift
+        # normalisation/diff logic, whose credentialed half runs on a schedule
+        # in check-index-drift.yml rather than on PRs.
+        run: npm run test:scripts
+
       - name: Root build
         run: npm run build
 
