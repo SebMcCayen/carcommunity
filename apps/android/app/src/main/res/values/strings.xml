@@ -449,6 +449,13 @@
     <string name="convoy_barEndConfirmBody">Detta avslutar konvojen för alla, inte bara för dig. Sammanfattningen av körningen sparas.</string>
     <string name="convoy_barEndConfirmAction">Avsluta konvojen</string>
     <string name="convoy_barConfirmCancel">Avbryt</string>
+    <string name="convoy_barFocusMe">Kartan följer dig. Tryck för att hålla hela konvojen i bild</string>
+    <string name="convoy_barFocusConvoy">Kartan håller hela konvojen i bild. Tryck för att följa dig igen</string>
+    <string name="convoy_awarenessMemberOnMap">%1$s i konvojen</string>
+    <string name="convoy_awarenessArrowSingle">%1$s är utanför kartan, klockan %2$d, %3$s bort</string>
+    <string name="convoy_awarenessArrowGroup">%1$s och %2$d till är utanför kartan, klockan %3$d, %4$s bort</string>
+    <string name="convoy_awarenessDistanceMeters">%1$d m</string>
+    <string name="convoy_awarenessDistanceKm">%1$s km</string>
     <string name="memberProfile_title">Profil</string>
     <string name="memberProfile_unknownMember">Medlem</string>
     <string name="memberProfile_unavailable">Den här profilen är inte tillgänglig.</string>

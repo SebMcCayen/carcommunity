@@ -88,6 +88,64 @@ data class MapIncidentMarker(
 )
 
 /**
+ * A point in the map view's own pixel space, as the renderer projected it.
+ * Origin is the view's top-left, y grows downward.
+ */
+data class MapScreenPoint(
+    val x: Float,
+    val y: Float,
+)
+
+/**
+ * A settled snapshot of where the camera is.
+ *
+ * Deliberately ROUNDED (see [MapCameraSnapshot.of]) rather than raw. The map
+ * emits a camera change on every animation frame; a snapshot carrying full
+ * precision would therefore be a new value ~60 times a second and re-run every
+ * consumer with it. Rounding to about a metre, a hundredth of a zoom level and a
+ * whole degree makes consecutive frames of a settled camera compare EQUAL, so
+ * `StateFlow`'s own de-duplication collapses them and only real camera movement
+ * propagates.
+ */
+data class MapCameraSnapshot(
+    val latitude: Double,
+    val longitude: Double,
+    val zoom: Double,
+    val bearing: Double,
+    val pitch: Double,
+) {
+    companion object {
+        /** Rounds a raw camera state into a de-duplicable snapshot. */
+        fun of(
+            latitude: Double,
+            longitude: Double,
+            zoom: Double,
+            bearing: Double,
+            pitch: Double,
+        ): MapCameraSnapshot =
+            MapCameraSnapshot(
+                // 5 decimal places of latitude is a bit over a metre — finer than
+                // the camera movement anyone can see, coarser than float noise.
+                latitude = round(latitude, COORDINATE_DECIMALS),
+                longitude = round(longitude, COORDINATE_DECIMALS),
+                zoom = round(zoom, ZOOM_DECIMALS),
+                bearing = round(bearing, 0),
+                pitch = round(pitch, 0),
+            )
+
+        private const val COORDINATE_DECIMALS = 5
+        private const val ZOOM_DECIMALS = 2
+
+        private fun round(value: Double, decimals: Int): Double {
+            if (!value.isFinite()) return 0.0
+            var factor = 1.0
+            repeat(decimals) { factor *= 10.0 }
+            return kotlin.math.round(value * factor) / factor
+        }
+    }
+}
+
+/**
  * A user gesture on the map asking "navigate to this place?".
  *
  * Raised by BOTH map gestures that mean the same thing, so they resolve to the
@@ -162,6 +220,49 @@ interface MapSurface {
 
     /** The crowd-sourced incident markers to draw (the shared incidents layer). */
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
+
+    /**
+     * Where the camera currently is, or null before the map has one.
+     *
+     * Exists for the convoy awareness overlay, which needs the camera CENTRE and
+     * BEARING to work out which way an off-screen member lies (see
+     * `map/ConvoyEdgeGeometry.kt`). Rounded and de-duplicated, so a settled
+     * camera does not re-run the overlay every frame. A surface with no real
+     * camera (the stub) leaves this null forever.
+     */
+    val cameraSnapshot: StateFlow<MapCameraSnapshot?>
+
+    /**
+     * Project a geographic coordinate into the map view's pixel space, or null
+     * when there is no map to project with (not composed, no style, or the stub).
+     *
+     * This is the renderer's OWN projection, deliberately, because it is the only
+     * thing that accounts exactly for zoom, rotation AND pitch. Reimplementing it
+     * would mean reimplementing the camera's projection matrix.
+     *
+     * Two caveats the caller must handle, both documented on
+     * `ConvoyEdgeGeometry.isProjectionTrustworthy`: the returned point may be far
+     * outside the viewport, and for a coordinate behind a TILTED camera it may be
+     * folded back into view rather than being honestly off-screen.
+     */
+    fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
+
+    /**
+     * Frame [points] (with padding) instead of following the user, or pass null
+     * to go back to normal follow.
+     *
+     * This is how "keep the whole convoy in view" is expressed, and it is routed
+     * through the surface's EXISTING follow path rather than moving the camera
+     * itself: the same manual-gesture detach, the same idle-return timer, and the
+     * same deference to a route overlay all apply unchanged. Two camera owners
+     * fighting each other is the failure mode of this feature, so there is
+     * exactly one.
+     *
+     * Clearing it (null) restores the normal framing, including the zoom, so a
+     * convoy that ends cannot leave the camera stuck zoomed out over the group.
+     * A no-op beyond storing the value on the stub.
+     */
+    fun setConvoyFit(points: List<MapPoint>?)
 
     /**
      * The most recent "navigate to this place?" gesture, or null when none is
@@ -314,6 +415,28 @@ class StubMapSurface(
 
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
+
+    // The stub has no camera, so it never has a position to report and never
+    // projects anything: the convoy overlay simply draws nothing on it, which is
+    // exactly right for CI and the token-less build.
+    private val cameraSnapshotFlow = MutableStateFlow<MapCameraSnapshot?>(null)
+    override val cameraSnapshot: StateFlow<MapCameraSnapshot?> = cameraSnapshotFlow.asStateFlow()
+
+    private val convoyFitFlow = MutableStateFlow<List<MapPoint>?>(null)
+    /** Last value passed to [setConvoyFit] — observable so tests can assert the wiring. */
+    val convoyFit: StateFlow<List<MapPoint>?> = convoyFitFlow.asStateFlow()
+
+    override fun setConvoyFit(points: List<MapPoint>?) {
+        convoyFitFlow.value = points
+    }
+
+    /** No camera on the stub, so nothing can be projected. */
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? = null
+
+    /** Test hook: pin a camera snapshot so overlay logic can be exercised off-device. */
+    fun setCameraSnapshotForTest(snapshot: MapCameraSnapshot?) {
+        cameraSnapshotFlow.value = snapshot
+    }
 
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0

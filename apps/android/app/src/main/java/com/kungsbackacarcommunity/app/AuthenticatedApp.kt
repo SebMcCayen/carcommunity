@@ -104,6 +104,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
+import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
@@ -154,9 +155,15 @@ import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
+import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
+import com.kungsbackacarcommunity.app.map.ConvoyCameraPlan
+import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
+import com.kungsbackacarcommunity.app.map.ConvoyFocusStore
+import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
@@ -197,6 +204,7 @@ import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
+import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
@@ -217,6 +225,8 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1115,12 +1125,115 @@ fun AuthenticatedApp(
                 // null (rather than a bar that draws nothing) is what makes "not in
                 // a convoy" compose literally nothing at all — no empty bar, no
                 // placeholder, and no space reserved in the top chrome column.
+                // ---- Convoy map awareness + camera focus ----------------------
+                //
+                // Two features off one source of truth: where the other people in
+                // the convoy are (drawn as markers, or as edge arrows once they
+                // leave the viewport) and what the camera frames (just you, or the
+                // whole group). Both need the same input — the live positions of
+                // the convoy's accepted members — so it is resolved once, here.
+                val activeConvoy = ConvoyBar.activeConvoy(convoyBarStatus)
+
+                // Session-scoped, and reset whenever the active convoy changes
+                // identity — including to null, which is "left / ended". That reset
+                // is what guarantees the camera goes back to normal instead of
+                // being left zoomed out over a group that no longer exists.
+                val convoyFocusStore = remember { ConvoyFocusStore() }
+                LaunchedEffect(activeConvoy?.convoyId) {
+                    convoyFocusStore.onActiveConvoyChanged(activeConvoy?.convoyId)
+                }
+                val convoyFocusMode by convoyFocusStore.mode.collectAsState()
+
+                // Accepted members whose live position this convoy may read (the
+                // backend already narrows that — see ConvoySummary.livePositionUids);
+                // own uid dropped because the user is the puck, not a marker.
+                val convoyLiveUids =
+                    remember(activeConvoy?.convoyId, activeConvoy?.livePositionUids, uid) {
+                        activeConvoy
+                            ?.livePositionUids
+                            .orEmpty()
+                            .filter { it.isNotBlank() && it != uid }
+                            .distinct()
+                    }
+                // One per-uid RTDB read each, combined — the same no-collection-scan
+                // shape MapRoute uses, because the rules grant per-uid reads only.
+                val convoyMarkersFlow: Flow<List<LiveMarker?>> =
+                    remember(liveLocationRepository, convoyLiveUids) {
+                        if (liveLocationRepository == null || convoyLiveUids.isEmpty()) {
+                            flowOf(emptyList())
+                        } else {
+                            combine(
+                                convoyLiveUids.map { liveLocationRepository.observeLatest(it) },
+                            ) { it.toList() }
+                        }
+                    }
+                val convoyMarkers by convoyMarkersFlow.collectAsState(initial = emptyList())
+                val convoyMemberPositions =
+                    remember(convoyMarkers) {
+                        convoyMarkers.filterNotNull().map { it.toConvoyMemberPosition() }
+                    }
+
+                // The user's own live position. Only available while they are
+                // live-sharing; without it the fit simply frames the others (and
+                // falls back to plain follow when there is too little to fit).
+                val ownLiveMarkerFlow: Flow<LiveMarker?> =
+                    remember(uid, liveLocationRepository, activeConvoy?.convoyId) {
+                        if (liveLocationRepository != null && uid.isNotBlank() && activeConvoy != null) {
+                            liveLocationRepository.observeLatest(uid)
+                        } else {
+                            flowOf(null)
+                        }
+                    }
+                val ownLiveMarker by ownLiveMarkerFlow.collectAsState(initial = null)
+
+                // Push the framing decision at the map surface, which applies it
+                // inside its EXISTING follow path (see MapSurface.setConvoyFit).
+                // Null means "follow me" — and that is also what the planner
+                // returns when it has too little to fit, so the restore path is the
+                // same code as the never-enabled path rather than a special case
+                // somebody can forget to write.
+                LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions) {
+                    val plan =
+                        ConvoyFocusPlanner.plan(
+                            mode = convoyFocusMode,
+                            ownPosition =
+                                ownLiveMarker?.let { ConvoyLatLng(it.latitude, it.longitude) },
+                            memberPositions =
+                                convoyMemberPositions.map {
+                                    ConvoyLatLng(it.latitude, it.longitude)
+                                },
+                        )
+                    mapSurface.setConvoyFit(
+                        when (plan) {
+                            is ConvoyCameraPlan.FollowSelf -> null
+                            is ConvoyCameraPlan.FitConvoy ->
+                                plan.points.map { MapPoint(it.longitude, it.latitude) }
+                        },
+                    )
+                }
+
+                // Composes nothing at all unless there is somebody to draw, so a
+                // convoy where nobody is sharing yet adds no layer to the map.
+                val convoyOverlaySlot: (@Composable () -> Unit)? =
+                    if (convoyMemberPositions.isNotEmpty()) {
+                        {
+                            ConvoyMapAwarenessOverlay(
+                                mapSurface = mapSurface,
+                                members = convoyMemberPositions,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 val convoyBarSlot: (@Composable (Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {
                         { compact ->
                             ConvoyStatusBar(
                                 state = convoyBarState,
                                 compact = compact,
+                                focusMode = convoyFocusMode,
+                                onFocusModeChange = { convoyFocusStore.setMode(it) },
                                 // Only ever reached for the OWNER (a member's leave
                                 // has no callable and renders disabled); the bar
                                 // confirms before this fires.
@@ -1536,6 +1649,9 @@ fun AuthenticatedApp(
                                     // Convoy status bar above the search row (full
                                     // variant, with the explanation line).
                                     convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
+                                    // Convoy member markers + off-screen direction
+                                    // arrows, drawn on the map under the chrome.
+                                    convoyOverlay = convoyOverlaySlot,
                                 )
                             }
 

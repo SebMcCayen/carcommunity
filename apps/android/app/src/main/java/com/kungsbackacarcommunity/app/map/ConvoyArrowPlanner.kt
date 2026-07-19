@@ -1,0 +1,311 @@
+package com.kungsbackacarcommunity.app.map
+
+import com.kungsbackacarcommunity.app.live.LiveMarker
+import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry.ProjectedPoint
+import java.time.Instant
+
+/**
+ * One convoy member's known live position, as the map awareness layer sees it.
+ *
+ * [imagePath] is the Storage path of the member's garage MAIN-CAR photo — the
+ * same field the live marker already carries ([com.kungsbackacarcommunity.app.live.LiveMainCar.imagePath])
+ * and the same identity the map uses for a member elsewhere. The arrow does not
+ * invent a second way of saying who someone is; it renders the same car photo
+ * the on-screen marker does, so an arrow turning into a marker is continuous.
+ *
+ * [updatedAtMillis] is when the position was recorded, or null when the producer
+ * did not say. Null is NOT treated as stale — a member we can see but cannot
+ * date is better shown than silently dropped.
+ */
+data class ConvoyMemberPosition(
+    val uid: String,
+    val latitude: Double,
+    val longitude: Double,
+    val displayName: String? = null,
+    val imagePath: String? = null,
+    val updatedAtMillis: Long? = null,
+)
+
+/**
+ * Adapts a live marker into the awareness layer's view of a convoy member.
+ *
+ * The main-car photo path is carried straight through, so the arrow and the
+ * marker show the SAME identity the live-share already publishes rather than a
+ * second, parallel one.
+ *
+ * A `recordedAt` that will not parse is treated as unknown (null) rather than as
+ * "now" or as "ancient": an unparseable timestamp says nothing about the
+ * position's age in either direction, and guessing in either direction is a way
+ * to either hide a live member or point at a ghost.
+ */
+fun LiveMarker.toConvoyMemberPosition(): ConvoyMemberPosition =
+    ConvoyMemberPosition(
+        uid = uid,
+        latitude = latitude,
+        longitude = longitude,
+        displayName = displayName,
+        imagePath = mainCar?.imagePath,
+        updatedAtMillis =
+            recordedAtIso?.let { iso -> runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull() },
+    )
+
+/**
+ * How one convoy member should be drawn this frame.
+ *
+ * The two states are mutually exclusive by construction — they come out of a
+ * single pass over a single list — so a member can never be both an on-screen
+ * marker and an edge arrow at the same time.
+ */
+sealed interface ConvoyMemberPlacement {
+    val member: ConvoyMemberPosition
+
+    /** The member is inside the viewport: draw the normal marker at [point]. */
+    data class OnScreen(
+        override val member: ConvoyMemberPosition,
+        val point: ProjectedPoint,
+    ) : ConvoyMemberPlacement
+
+    /**
+     * The member is outside the viewport: draw an arrow pinned at [point] on the
+     * viewport edge, rotated [angleDegrees] clockwise from screen-up.
+     *
+     * [extraCount] is how many FURTHER off-screen members this arrow stands for
+     * (0 when it represents exactly one person) — see
+     * [ConvoyArrowPlanner.plan] for how members are merged. [distanceMeters] is
+     * the represented member's distance from the camera centre.
+     */
+    data class OffScreen(
+        override val member: ConvoyMemberPosition,
+        val point: ProjectedPoint,
+        val angleDegrees: Double,
+        val distanceMeters: Double,
+        val extraCount: Int,
+    ) : ConvoyMemberPlacement
+}
+
+/** Everything the overlay needs to draw for one camera frame. */
+data class ConvoyPlacements(
+    val onScreen: List<ConvoyMemberPlacement.OnScreen> = emptyList(),
+    val offScreen: List<ConvoyMemberPlacement.OffScreen> = emptyList(),
+)
+
+/**
+ * Decides, for one camera frame, which convoy members are drawn as normal
+ * markers and which as edge arrows.
+ *
+ * ## Handling many members off screen
+ * Ringing the viewport in arrows is worse than useless: at a glance it says
+ * nothing, and it covers the map you are trying to drive by. Two rules
+ * therefore reduce the set, in this order.
+ *
+ * 1. **Merge by direction.** Members whose arrows would point within the same
+ *    [SECTOR_DEGREES] sector are one arrow — they are, from the driver's seat,
+ *    the same answer to "which way?". The arrow takes the NEAREST member's
+ *    identity (the one you will meet first) and carries a `+N` badge for the
+ *    rest.
+ * 2. **Cap.** At most [MAX_ARROWS] arrows survive, the nearest first. Members
+ *    in a dropped sector are not lost from the count: they are folded into the
+ *    `+N` of the nearest surviving arrow, so the badges across the screen always
+ *    add up to every off-screen member.
+ *
+ * With a 12-sector wheel and a cap of four, a convoy scattered in every
+ * direction shows four honest arrows plus counts, not twelve chips fighting for
+ * the same corner.
+ *
+ * ## Degenerate inputs
+ * - **Stale position.** Older than [STALE_AFTER_MS] and the member is dropped
+ *   entirely — no arrow, no marker. A stale arrow is worse than no arrow: it
+ *   points confidently at where somebody used to be.
+ * - **Unknown position.** Members without a live position never reach here.
+ * - **A member at the camera centre.** Their bearing is undefined. They are also
+ *   trivially on screen, so they are classified as [ConvoyMemberPlacement.OnScreen]
+ *   without consulting the bearing at all — the projection is authoritative for
+ *   anything inside the viewport, and [MIN_ARROW_DISTANCE_METERS] is a second
+ *   guard for the pathological case of a projection that claims otherwise.
+ * - **The viewer themselves** is filtered by the caller (they are the puck).
+ */
+object ConvoyArrowPlanner {
+
+    /** Width of one direction bucket. 360 / 30 = 12 sectors around the screen. */
+    const val SECTOR_DEGREES: Double = 30.0
+
+    /** Most edge arrows drawn at once, however many members are off screen. */
+    const val MAX_ARROWS: Int = 4
+
+    /** Positions older than this are dropped rather than pointed at. */
+    const val STALE_AFTER_MS: Long = 2 * 60 * 1000L
+
+    /**
+     * A member closer than this to the camera centre never gets an arrow: at
+     * that separation the bearing is numerical noise and they are on screen
+     * anyway.
+     */
+    const val MIN_ARROW_DISTANCE_METERS: Double = 5.0
+
+    /** Viewport slack for the inside/outside decision (hysteresis, px). */
+    const val VIEWPORT_MARGIN_PX: Float = 24f
+
+    /**
+     * Plan one frame.
+     *
+     * @param members every convoy member with a known live position, excluding
+     *   the viewer.
+     * @param project the map SDK's own coordinate→pixel projection. Returning
+     *   null (no map, no style yet) drops the member for this frame.
+     * @param cameraLatitude / [cameraLongitude] the camera centre — the origin
+     *   every bearing is measured from, which is what makes the arrows agree
+     *   with what is actually framed rather than with where the user's GPS is.
+     * @param cameraBearing the camera's own bearing; see
+     *   [ConvoyEdgeGeometry.screenAngleDegrees].
+     * @param edgeInsetPx how far in from the viewport edge to pin the arrows.
+     * @param nowMillis wall clock, injected so staleness is testable.
+     */
+    fun plan(
+        members: List<ConvoyMemberPosition>,
+        cameraLatitude: Double,
+        cameraLongitude: Double,
+        cameraBearing: Double,
+        viewportWidth: Float,
+        viewportHeight: Float,
+        edgeInsetPx: Float,
+        nowMillis: Long,
+        project: (ConvoyMemberPosition) -> ProjectedPoint?,
+    ): ConvoyPlacements {
+        if (viewportWidth <= 0f || viewportHeight <= 0f) return ConvoyPlacements()
+
+        val onScreen = mutableListOf<ConvoyMemberPlacement.OnScreen>()
+        // Off-screen candidates, one per member, before merging and capping.
+        val candidates = mutableListOf<Candidate>()
+
+        for (member in members) {
+            if (isStale(member.updatedAtMillis, nowMillis)) continue
+
+            val geographicBearing =
+                ConvoyEdgeGeometry.initialBearingDegrees(
+                    fromLatitude = cameraLatitude,
+                    fromLongitude = cameraLongitude,
+                    toLatitude = member.latitude,
+                    toLongitude = member.longitude,
+                )
+            val screenAngle =
+                ConvoyEdgeGeometry.screenAngleDegrees(geographicBearing, cameraBearing)
+            val distance =
+                ConvoyEdgeGeometry.distanceMeters(
+                    fromLatitude = cameraLatitude,
+                    fromLongitude = cameraLongitude,
+                    toLatitude = member.latitude,
+                    toLongitude = member.longitude,
+                )
+
+            val projected = project(member)
+            // A projection we cannot trust is a point behind a tilted camera
+            // folded back into view (see isProjectionTrustworthy): treat it as
+            // off screen, because that is where it is.
+            val trustworthy =
+                projected != null &&
+                    ConvoyEdgeGeometry.isProjectionTrustworthy(
+                        point = projected,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
+                        expectedScreenAngle = screenAngle,
+                    )
+
+            if (projected == null) continue
+
+            val inside =
+                trustworthy &&
+                    ConvoyEdgeGeometry.isInsideViewport(
+                        point = projected,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
+                        marginPx = VIEWPORT_MARGIN_PX,
+                    )
+
+            if (inside || distance < MIN_ARROW_DISTANCE_METERS) {
+                onScreen += ConvoyMemberPlacement.OnScreen(member = member, point = projected)
+            } else {
+                candidates += Candidate(member, screenAngle, distance)
+            }
+        }
+
+        return ConvoyPlacements(
+            onScreen = onScreen,
+            offScreen =
+                mergeAndCap(
+                    candidates = candidates,
+                    viewportWidth = viewportWidth,
+                    viewportHeight = viewportHeight,
+                    edgeInsetPx = edgeInsetPx,
+                ),
+        )
+    }
+
+    /** Whether a recorded-at stamp is old enough to stop trusting. */
+    fun isStale(updatedAtMillis: Long?, nowMillis: Long): Boolean {
+        if (updatedAtMillis == null) return false
+        return nowMillis - updatedAtMillis > STALE_AFTER_MS
+    }
+
+    private fun mergeAndCap(
+        candidates: List<Candidate>,
+        viewportWidth: Float,
+        viewportHeight: Float,
+        edgeInsetPx: Float,
+    ): List<ConvoyMemberPlacement.OffScreen> {
+        if (candidates.isEmpty()) return emptyList()
+
+        // 1. Merge by direction sector; the nearest member in a sector speaks
+        //    for it. Ties broken by uid so the arrow does not swap identity
+        //    between frames when two members are equidistant.
+        val bySector =
+            candidates.groupBy { sectorOf(it.screenAngle) }
+                .map { (_, inSector) ->
+                    val representative =
+                        inSector.minWith(
+                            compareBy({ it.distanceMeters }, { it.member.uid }),
+                        )
+                    Merged(representative, extraCount = inSector.size - 1)
+                }
+                .sortedWith(
+                    compareBy(
+                        { it.representative.distanceMeters },
+                        { it.representative.member.uid },
+                    ),
+                )
+
+        // 2. Cap. Everyone in a dropped sector is folded into the nearest
+        //    surviving arrow's badge, so the counts on screen still account for
+        //    every off-screen member.
+        val kept = bySector.take(MAX_ARROWS)
+        val foldedIn = bySector.drop(MAX_ARROWS).sumOf { it.extraCount + 1 }
+
+        return kept.mapIndexed { index, merged ->
+            val angle = merged.representative.screenAngle
+            ConvoyMemberPlacement.OffScreen(
+                member = merged.representative.member,
+                point =
+                    ConvoyEdgeGeometry.edgePoint(
+                        angleDegrees = angle,
+                        viewportWidth = viewportWidth,
+                        viewportHeight = viewportHeight,
+                        insetPx = edgeInsetPx,
+                    ),
+                angleDegrees = angle,
+                distanceMeters = merged.representative.distanceMeters,
+                extraCount = merged.extraCount + if (index == 0) foldedIn else 0,
+            )
+        }
+    }
+
+    /** Which of the 360/[SECTOR_DEGREES] direction buckets an angle falls in. */
+    fun sectorOf(screenAngle: Double): Int =
+        (ConvoyEdgeGeometry.normalizeDegrees(screenAngle) / SECTOR_DEGREES).toInt()
+
+    private data class Candidate(
+        val member: ConvoyMemberPosition,
+        val screenAngle: Double,
+        val distanceMeters: Double,
+    )
+
+    private data class Merged(val representative: Candidate, val extraCount: Int)
+}
