@@ -2,6 +2,38 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 14,
+      "versionName": "0.8.3",
+      "releaseDate": "2026-07-19",
+      "highlights": [
+        "Garaget: dina bilar direkt på sidan, nu med foto",
+        "Stoppknapp för live-delning – spara eller släng körningen",
+        "Kartan blinkar inte längre vit"
+      ],
+      "changes": [
+        "Garaget visar dina bilar och ”Lägg till bil” direkt på sidan – omvägen via ”Bilar” är borta",
+        "Lägg till foto på bilen redan när du lägger in den",
+        "Drivlina att välja mellan: bensin, diesel, hybrid och el",
+        "Rättat: rubriken ”Lägg till bil” hamnade bakom statusfältet",
+        "Under en live-delning blir plusknappen en stoppknapp – tryck för att avsluta var du än är i appen",
+        "När du stoppar väljer du att spara körningen till Historik eller slänga den, och du får en kontrollfråga innan något raderas",
+        "Rättat: ”Kunde inte spara körningen”",
+        "Rättat: kartan blinkade vitt när sökrutan öppnades eller stängdes och vid långt tryck",
+        "Tryck på ett företag eller en plats på kartan så frågar appen om du vill åka dit",
+        "Sökresultat på kartan sorteras med närmaste först",
+        "Tydligare trafikfärger i mörkt läge",
+        "När du rapporterar en händelse syns din markör på kartan direkt",
+        "Vänsökningen bryr sig inte om stora eller små bokstäver – ”gt86” hittar ”Gt86_swe”",
+        "Vänförfrågningar visar vad som gick fel i stället för ”Något gick fel”, och skickade förfrågningar syns som väntande",
+        "Träffar avslutas automatiskt när de är slut, och du som skapat en träff kan markera den som avslutad",
+        "Ny flik ”Tidigare” där du kan bläddra bland avslutade träffar",
+        "Chattens flikrubriker kapas inte längre",
+        "Skrivrutan i chatten lägger sig ovanför tangentbordet i stället för att hoppa upp",
+        "Undersidorna under Socialt ligger i bokstavsordning",
+        "Rättat: ”Vad är nytt” visas igen när appen har uppdaterats"
+      ]
+    },
+    {
       "versionCode": 13,
       "versionName": "0.8.2",
       "releaseDate": "2026-07-19",
