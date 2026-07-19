@@ -145,9 +145,14 @@ fun currentLocationAccess(context: Context): LocationAccess =
     )
 
 /**
- * `shouldShowRequestPermissionRationale` for fine location. False when the
- * Compose context has no Activity behind it (previews/tests), which routes to
- * the Settings remedy — the conservative choice, since it always works.
+ * `shouldShowRequestPermissionRationale` for fine location, or false when the
+ * Compose context has no Activity behind it (previews/tests).
+ *
+ * This is one of TWO inputs and does not by itself decide anything: false here
+ * only sends the user to Settings once [locationPermissionRemedy] also sees
+ * that we have in fact asked. A caller that has never asked still re-prompts,
+ * which is the correct reading of a false — the flag is false before the first
+ * ask too.
  */
 fun shouldShowLocationRationale(context: Context): Boolean =
     context.findActivity()?.let {
