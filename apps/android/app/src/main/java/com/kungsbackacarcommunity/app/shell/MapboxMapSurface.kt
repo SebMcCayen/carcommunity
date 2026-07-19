@@ -22,6 +22,7 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
+import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
 import com.mapbox.android.gestures.RotateGestureDetector
@@ -1115,10 +1116,13 @@ class MapboxMapSurface : MapSurface {
 
         const val ROUTE_LINE_COLOR = 0xFF1A73E8.toInt()
         const val ROUTE_LINE_WIDTH = 6.0
-        const val DEST_MARKER_COLOR = 0xFFD32F2F.toInt()
-        const val DEST_MARKER_RADIUS = 9.0
-        const val DEST_MARKER_STROKE = 2.0
-        const val DEST_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+        // Destination-pin styling is SHARED with the turn-by-turn navigation
+        // map's end-of-route marker (see [MapMarkerStyle]): the same destination
+        // must not change appearance the moment the user presses "Start".
+        const val DEST_MARKER_COLOR = MapMarkerStyle.DEST_MARKER_COLOR
+        const val DEST_MARKER_RADIUS = MapMarkerStyle.DEST_MARKER_RADIUS
+        const val DEST_MARKER_STROKE = MapMarkerStyle.DEST_MARKER_STROKE
+        const val DEST_MARKER_STROKE_COLOR = MapMarkerStyle.DEST_MARKER_STROKE_COLOR
 
         // Incident circles: the per-marker fill colour is supplied by the host
         // (category colour); a white stroke keeps them legible on any basemap.
