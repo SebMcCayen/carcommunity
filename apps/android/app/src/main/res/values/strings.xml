@@ -832,6 +832,8 @@
     <string name="shell_liveShareOff">Liveplats</string>
     <string name="shell_recenter">Centrera</string>
     <string name="shell_menu">Meny</string>
+    <string name="shell_panelDragHandle">Dra nedåt för att stänga</string>
+    <string name="shell_panelDismiss">Stäng</string>
     <string name="shell_tabMap">Karta</string>
     <string name="shell_tabHistory">Historik</string>
     <string name="shell_tabCreate">Skapa</string>

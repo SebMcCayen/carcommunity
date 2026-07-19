@@ -909,6 +909,8 @@
     "liveShareOff": "Live location",
     "recenter": "Recenter",
     "menu": "Menu",
+    "panelDragHandle": "Drag down to close",
+    "panelDismiss": "Close",
     "tabMap": "Map",
     "tabHistory": "History",
     "tabCreate": "Create",

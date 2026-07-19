@@ -195,9 +195,14 @@ import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
+import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
+import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
+import com.kungsbackacarcommunity.app.shell.GARAGE_PANEL_TEST_TAG
+import com.kungsbackacarcommunity.app.shell.HISTORY_PANEL_TEST_TAG
+import com.kungsbackacarcommunity.app.shell.SOCIAL_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
@@ -242,34 +247,6 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
  * the same register as the map's own short camera eases.
  */
 private const val SHELL_TAB_FADE_MILLIS = 200
-
-/**
- * What is drawn over the shell's single map surface.
- *
- * The map is composed once for the whole signed-in shell and never disposed, so
- * "which page is the user on" is, from the map's point of view, only ever this
- * question: can they see it, and can they touch it? Two different answers hang
- * off that — whether the surface stays live ([MapSurface.setActive]) and whether
- * the map home's chrome stands down — and they are NOT the same answer, which is
- * exactly why this is one enum and not a pair of booleans that can drift.
- */
-private enum class MapCover {
-    /** Nothing over it: the map home. Visible, live, interactive. */
-    None,
-
-    /**
-     * Chrome over a map the user can still see (the address search). The surface
-     * stays LIVE — it is showing the route and the puck — but the map home's own
-     * chrome stands down, because it is not the page in front any more.
-     */
-    Transparent,
-
-    /**
-     * The map is hidden entirely (a non-map tab, a full-screen route,
-     * turn-by-turn). Nothing to see, so the surface is stood down.
-     */
-    Opaque,
-}
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -1005,33 +982,30 @@ fun AuthenticatedApp(
                     route = null
                 }
 
+                // What, if anything, is drawn over the map. Delegated to the
+                // unit-tested [ShellNavigation.mapCover] so production and its
+                // tests can't drift; everything downstream (standing the surface
+                // down, clearing its semantics, standing the map home's chrome
+                // down, gating the chat hub) derives from this ONE value.
+                val mapCover =
+                    ShellNavigation.mapCover(
+                        tab = selectedTab,
+                        route = route,
+                        navigating = navDestination != null,
+                        navSearchOpen = navSearchOpen,
+                    )
+
                 // System Back: close an open route first; from a non-Map tab
                 // return to the Map tab; from Map exit the app (no handler). The
                 // decision is delegated to the unit-tested ShellNavigation.onBack
                 // so production back behaviour and its tests can't drift. Nested
                 // route BackHandlers compose deeper and take priority while
                 // enabled, so this only fires at a route's own root.
-                // What, if anything, is drawn over the map — the SINGLE source of
-                // truth for every "the map isn't the thing on screen" decision in
-                // the shell. Everything downstream (standing the surface down,
-                // clearing its semantics, standing the map home's chrome down,
-                // gating the chat hub) derives from this one value rather than
-                // re-deriving its own condition, so they cannot drift apart as
-                // pages are added.
-                val mapCover =
-                    when {
-                        // Turn-by-turn brings its own full-screen map.
-                        navDestination != null -> MapCover.Opaque
-                        // The address search is the one page that draws its chrome
-                        // over a map the user is still looking at (it shows the
-                        // route it just drew, and the puck).
-                        navSearchOpen -> MapCover.Transparent
-                        // Full-screen routes and the non-map tabs both hide it.
-                        route != null -> MapCover.Opaque
-                        selectedTab != ShellTab.Map -> MapCover.Opaque
-                        else -> MapCover.None
-                    }
-
+                //
+                // Back is also the panels' non-gesture dismissal: from History,
+                // Social or Garage it returns to the Map tab, which is exactly
+                // what pulling the panel down does. A drag-to-dismiss overlay
+                // needs a route that is not a drag.
                 val backResult = ShellNavigation.onBack(selectedTab, route)
                 BackHandler(enabled = backResult != ShellBackResult.Exit) {
                     when (backResult) {
@@ -1324,11 +1298,12 @@ fun AuthenticatedApp(
                             Modifier.fillMaxSize().then(
                                 // What the Scaffold's containerColor did: paint an
                                 // opaque background under a page that hides the
-                                // map. Pages already paint their own (see
-                                // ShellTabPage), so this is belt-and-braces and,
-                                // like before, is derived from the same [mapCover]
-                                // as setActive, so "is it live" and "is it painted
-                                // over" cannot drift apart.
+                                // map. Only OPAQUE covers get it: the History /
+                                // Social / Garage panels are translucent and must
+                                // keep showing the live map through and above
+                                // them, which is exactly why this is derived from
+                                // the same [mapCover] as setActive, so "is it live"
+                                // and "is it painted over" cannot drift apart.
                                 if (mapCover == MapCover.Opaque) {
                                     Modifier.background(MaterialTheme.colorScheme.background)
                                 } else {
@@ -1505,7 +1480,10 @@ fun AuthenticatedApp(
                                     ShellTab.Map, ShellTab.Create -> Unit
 
                                     ShellTab.History ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = HISTORY_PANEL_TEST_TAG,
+                                        ) {
                                             if (drivesRepository != null) {
                                                 DrivesRoute(
                                                     repository = drivesRepository,
@@ -1520,7 +1498,10 @@ fun AuthenticatedApp(
                                         }
 
                                     ShellTab.Social ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = SOCIAL_PANEL_TEST_TAG,
+                                        ) {
                                             HubScreen(
                                                 title = stringResource(R.string.shell_socialTitle),
                                                 // Alphabetical by the DISPLAYED, localized label
@@ -1633,7 +1614,10 @@ fun AuthenticatedApp(
                                     // signed-in user (no longer member-gated, PR
                                     // #428); only the repo needs to be wired.
                                     ShellTab.Garage ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = GARAGE_PANEL_TEST_TAG,
+                                        ) {
                                             if (garageRepository != null) {
                                                 GarageRoute(
                                                     repository = garageRepository,
@@ -1865,38 +1849,6 @@ fun AuthenticatedApp(
     }
 }
 
-/**
- * A non-map bottom-nav tab's page, drawn over the still-composed map home.
- *
- * The map is no longer disposed when you leave the Map tab (it stays alive so
- * returning to it can't blank the screen), which makes it a live, pannable
- * MapView sitting directly underneath these pages. That imposes two things this
- * wrapper exists to guarantee:
- *
- * - **Opaque.** [MaterialTheme.colorScheme.background] — the same container
- *   colour the shell frame gives the tabs today, so the pages look exactly as they
- *   did — so the map cannot show through the page it is behind.
- * - **Touch-blocking.** Every pointer event that reaches the page background is
- *   swallowed, so a drag over a tab's empty space can't pan the invisible map
- *   underneath and leave the camera somewhere new. Consumption happens on the
- *   Main pass, which children see first, so the page's own buttons and lists
- *   keep working normally.
- */
-@Composable
-private fun ShellTabPage(content: @Composable () -> Unit) {
-    Surface(
-        modifier =
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        awaitPointerEvent().changes.forEach { it.consume() }
-                    }
-                }
-            },
-        color = MaterialTheme.colorScheme.background,
-        content = content,
-    )
-}
 
 /**
  * Height of [ShellBottomBar]. Mirrors the Material3 [NavigationBar] container
