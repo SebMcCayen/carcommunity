@@ -102,7 +102,7 @@ fun EventsListScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                EventsListState.Error -> {
+                is EventsListState.Error -> {
                     Text(
                         text = stringResource(R.string.events_error),
                         style = MaterialTheme.typography.bodyMedium,

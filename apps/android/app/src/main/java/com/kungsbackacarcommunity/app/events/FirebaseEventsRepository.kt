@@ -34,16 +34,31 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * index is required.
  *
  * The past/archive list ([observePastEvents]) is the same shape with
- * `status == completed` and the order reversed (most recent first). It needs
- * **no new index either**: a Firestore composite index is traversable in both
- * directions, so `(status ASC, startsAt ASC)` also serves
- * `(status DESC, startsAt DESC)`, and with `status` pinned by an equality
- * filter the two differ only in the `startsAt` direction. Worth stating
- * because no workflow deploys `firestore.indexes.json` — a composite index
- * this repo needs but has not deployed is a hand-deploy, not a CI failure.
- * A genuinely missing composite index would surface as a
- * `FAILED_PRECONDITION` listener error (and therefore as
- * [EventsListState.Error] here), not as a silently empty list.
+ * `status == completed` and the order reversed (most recent first), and it
+ * DOES need its own index: `events (status ASC, startsAt DESC)`.
+ *
+ * An earlier version of this comment claimed the opposite — that because a
+ * composite index is traversable in both directions and `status` is pinned by
+ * an equality filter, `(status ASC, startsAt ASC)` also serves this query.
+ * That is wrong, and it is why the Past tab showed a permanent error while
+ * Upcoming worked. Firestore matches an index whose field ordering equals the
+ * query's ordering or is its EXACT full reverse. This query's ordering is
+ * `(status ASC, startsAt DESC)`; the declared index is
+ * `(status ASC, startsAt ASC)`, whose only other usable reading is
+ * `(status DESC, startsAt DESC)`. Neither matches, so the listener fails with
+ * `FAILED_PRECONDITION`. Every other equality-plus-descending query in this
+ * repo (moderationReports, offers, announcements, crownHuntPoints, …)
+ * declares its DESCENDING entry explicitly; this query was the sole exception.
+ *
+ * `firestore.indexes.json` is a HAND-DEPLOY — no workflow ships it — so adding
+ * the entry does not fix a running app until someone runs
+ * `firebase deploy --only firestore:indexes`.
+ *
+ * Both deploy-gated failure modes surface as [EventsListState.Error] carrying
+ * the Firestore status name, never as a silently empty list:
+ * `FAILED_PRECONDITION` (index not deployed) and `PERMISSION_DENIED` (the
+ * `completed`-teaser read rule not deployed). [EventsErrorReporting] auto-files
+ * exactly those two and stays quiet for the offline codes.
  *
  * Member-gated details and RSVP writes rely on the
  * Security Rules; an RSVP is a direct owner write of exactly
@@ -64,7 +79,10 @@ class FirebaseEventsRepository private constructor(
                 .limit(Events.PUBLISHED_EVENTS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(EventsListState.Error)
+                        // Tag with the Firestore status name only (never the
+                        // exception text) so the route can auto-file structural
+                        // faults and ignore "no signal".
+                        trySend(EventsListState.Error(error.firestoreCode()))
                         return@addSnapshotListener
                     }
                     val events = snapshot?.documents?.mapNotNull { it.toEventSummary() } ?: emptyList()
@@ -82,7 +100,7 @@ class FirebaseEventsRepository private constructor(
                 .limit(Events.PAST_EVENTS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(EventsListState.Error)
+                        trySend(EventsListState.Error(error.firestoreCode()))
                         return@addSnapshotListener
                     }
                     val events = snapshot?.documents?.mapNotNull { it.toEventSummary() } ?: emptyList()
@@ -281,6 +299,19 @@ class FirebaseEventsRepository private constructor(
         }
     }
 }
+
+/**
+ * The bare Firestore status name (`FAILED_PRECONDITION`, `PERMISSION_DENIED`,
+ * `UNAVAILABLE`, …) for a listener error, or null when the failure is not a
+ * [FirebaseFirestoreException].
+ *
+ * Deliberately drops everything else. The value reaches a PUBLIC GitHub issue
+ * via the error-reporting pipeline, and `Exception.message` from Firestore
+ * embeds the failing query — including the index-creation URL, which carries
+ * the project id. A status name is the whole diagnosis and leaks nothing.
+ */
+private fun Exception.firestoreCode(): String? =
+    (this as? FirebaseFirestoreException)?.code?.name
 
 /** Minimal Task -> suspend bridge (no kotlinx-coroutines-play-services dep). */
 private suspend fun <T> Task<T>.awaitResult(): T =
