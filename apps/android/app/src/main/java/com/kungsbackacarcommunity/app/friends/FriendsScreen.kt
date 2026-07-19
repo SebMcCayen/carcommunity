@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.friends
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -524,6 +525,7 @@ private fun ErrorBanner(text: String, onDismiss: () -> Unit) {
  * is how a backend outage, being signed out and a dropped connection all read
  * identically there.
  */
+@StringRes
 internal fun FriendActionError.messageRes(): Int =
     when (this) {
         FriendActionError.SignedOut -> R.string.friends_errorSignedOut
