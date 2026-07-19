@@ -94,7 +94,8 @@ class FirebaseIncidentRepository private constructor(
 object IncidentResponseParser {
     /**
      * Parses the `incidents-listNearby` payload
-     * (`{ incidents: [ { id, type, latitude, longitude, note?, source? }, ... ] }`).
+     * (`{ incidents: [ { id, type, latitude, longitude, note?, source?,
+     * reporterUid?, createdAt? }, ... ] }`).
      */
     fun parseListNearby(data: Map<String, Any?>?): List<Incident> {
         val raw = data?.get("incidents") as? List<*> ?: return emptyList()
@@ -122,6 +123,12 @@ object IncidentResponseParser {
             longitude = longitude,
             note = map["note"] as? String,
             source = (map["source"] as? String) ?: "user",
+            // Both already travel on the backend's IncidentView; they were simply
+            // discarded before the detail sheet existed. Absent/malformed values
+            // degrade to null rather than dropping the whole row — a marker with
+            // an unknown age is still worth drawing.
+            reporterUid = map["reporterUid"] as? String,
+            createdAtIso = map["createdAt"] as? String,
         )
     }
 }

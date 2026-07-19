@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -77,14 +78,22 @@ data class MapRouteOverlay(
 /**
  * A crowd-sourced incident marker to draw on the map (the Waze-style layer,
  * shared by all users). Shell-owned and self-contained so the [MapSurface] seam
- * stays free of the incidents package's types: [colorArgb] is the category
- * colour resolved by the host, [id] identifies the marker for de-duplication.
+ * stays free of the incidents package's types: [colorArgb] and [iconRes] are the
+ * category colour and glyph RESOLVED BY THE HOST, and [id] identifies the marker
+ * both for de-duplication and for reporting a tap back ([MapSurface.emitIncidentTap]).
+ *
+ * The category itself deliberately does not cross this seam — the surface is
+ * handed a colour and a drawable and knows nothing about `IncidentType`, exactly
+ * as it was handed a colour before. The glyph is what makes categories
+ * distinguishable at a glance; the colour on its own never did.
  */
 data class MapIncidentMarker(
     val id: String,
     val longitude: Double,
     val latitude: Double,
     val colorArgb: Int,
+    /** Drawable res of the white category glyph drawn on the marker badge. */
+    @DrawableRes val iconRes: Int,
 )
 
 /**
@@ -174,6 +183,23 @@ interface MapSurface {
      */
     val placeRequest: StateFlow<MapPlaceRequest?>
 
+    /**
+     * The id of the incident marker most recently TAPPED, or null when none is
+     * pending. The host observes this to open the incident detail sheet, then
+     * calls [consumeIncidentTap] to clear it.
+     *
+     * Deliberately a THIRD, separate flow rather than another producer of
+     * [placeRequest]: a tap on an incident marker means "tell me about this
+     * incident", which is a different intent from the two gestures that mean
+     * "navigate to this place" — routing it through [placeRequest] would open a
+     * route preview to the crash you were asking about.
+     *
+     * Only the id crosses the seam. The surface has no idea what an incident IS
+     * (it was handed a colour, a glyph and an id to draw), so the host resolves
+     * the id back to the incident it already holds.
+     */
+    val incidentTap: StateFlow<String?>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
@@ -192,6 +218,16 @@ interface MapSurface {
 
     /** Clear the pending [placeRequest] once the host has opened the preview for it. */
     fun consumePlaceRequest()
+
+    /**
+     * Record a tap on the incident marker with [incidentId]. Called by the real
+     * surface's annotation click listener; also drivable by the stub/tests to
+     * simulate the tap without a GL surface.
+     */
+    fun emitIncidentTap(incidentId: String)
+
+    /** Clear the pending [incidentTap] once the host has opened the sheet for it. */
+    fun consumeIncidentTap()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
@@ -315,6 +351,9 @@ class StubMapSurface(
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
+    private val incidentTapFlow = MutableStateFlow<String?>(null)
+    override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
@@ -377,6 +416,14 @@ class StubMapSurface(
 
     override fun consumePlaceRequest() {
         placeRequestFlow.value = null
+    }
+
+    override fun emitIncidentTap(incidentId: String) {
+        incidentTapFlow.value = incidentId
+    }
+
+    override fun consumeIncidentTap() {
+        incidentTapFlow.value = null
     }
 
     /** No rotatable camera on the stub, so resetting to north is a no-op. */

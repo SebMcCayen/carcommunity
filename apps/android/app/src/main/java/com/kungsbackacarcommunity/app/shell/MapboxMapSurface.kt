@@ -22,6 +22,7 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
+import com.kungsbackacarcommunity.app.map.IncidentMarkerBitmaps
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -53,9 +54,13 @@ import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.compass.compass
@@ -144,6 +149,9 @@ class MapboxMapSurface : MapSurface {
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
+    private val incidentTapFlow = MutableStateFlow<String?>(null)
+    override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
     // The map long-click gesture listener ("hold to navigate here"); held so it
     // can be detached in onRelease.
     private var longClickListener: OnMapLongClickListener? = null
@@ -177,7 +185,20 @@ class MapboxMapSurface : MapSurface {
     private var lastPoint: Point? = null
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
-    private var incidentMarkerManager: CircleAnnotationManager? = null
+    // Incidents are POINT annotations (an icon), not circles: the categories have
+    // to be told apart at a glance on a moving map, which a coloured dot cannot
+    // do. Point annotations also carry a per-annotation click listener, which is
+    // what makes the markers tappable.
+    private var incidentMarkerManager: PointAnnotationManager? = null
+    // Maps a drawn annotation back to the incident id it represents, so a click
+    // can be reported across the seam. Keyed on the annotation's own id rather
+    // than a coordinate so two incidents reported at the same spot stay distinct.
+    // Rebuilt on every redraw and cleared with the manager.
+    private val incidentIdsByAnnotation = mutableMapOf<String, String>()
+
+    // The incident annotation click listener, held so it can be detached in
+    // onRelease alongside the map's other listeners.
+    private var incidentClickListener: OnPointAnnotationClickListener? = null
     // The incident markers currently drawn, so a recomposition only clears and
     // redraws them when the set ACTUALLY changes (unrelated recompositions must
     // not flicker the layer). Reset to null whenever the manager is (re)created
@@ -337,8 +358,16 @@ class MapboxMapSurface : MapSurface {
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
         // The Content update lambda observes this flow and (re)draws the incident
-        // circles when the set changes, so publishing the value is enough.
+        // badges when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun emitIncidentTap(incidentId: String) {
+        incidentTapFlow.value = incidentId
+    }
+
+    override fun consumeIncidentTap() {
+        incidentTapFlow.value = null
     }
 
     override fun emitLongPress(point: MapPoint) {
@@ -859,7 +888,42 @@ class MapboxMapSurface : MapSurface {
                         // flow value so markers fetched while the style was still
                         // loading are rendered (not lost).
                         runCatching {
-                            incidentMarkerManager = annotations.createCircleAnnotationManager()
+                            val incidentManager = annotations.createPointAnnotationManager()
+                            // Never let the symbol layer's collision detection drop
+                            // an incident: in a Swedish town centre a dozen imported
+                            // roadwork markers overlap, and Mapbox's default is to
+                            // HIDE the ones that collide — which would silently lose
+                            // incidents from the map. Overlapping badges are the
+                            // lesser evil; a missing accident is not.
+                            incidentManager.iconAllowOverlap = true
+                            incidentManager.iconIgnorePlacement = true
+                            // Tap an incident badge → publish its id so the host can
+                            // open the detail sheet.
+                            //
+                            // This is an ANNOTATION click, not a map click: the
+                            // annotation plugin hit-tests its own symbols first and
+                            // we return true to consume the event, so the tap never
+                            // falls through to the basemap-POI interaction (which
+                            // would open a "navigate here?" preview for the crash the
+                            // user was asking about). Pan/pinch/rotate and the
+                            // long-press "navigate here" gesture are all untouched —
+                            // none of them is a tap.
+                            val incidentClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    val incidentId = incidentIdsByAnnotation[annotation.id]
+                                    if (incidentId != null) {
+                                        emitIncidentTap(incidentId)
+                                        true
+                                    } else {
+                                        // An annotation we do not recognise (a redraw
+                                        // raced the tap): leave the event unconsumed
+                                        // rather than swallowing it.
+                                        false
+                                    }
+                                }
+                            incidentClickListener = incidentClick
+                            incidentManager.addClickListener(incidentClick)
+                            incidentMarkerManager = incidentManager
                             lastAppliedIncidents = null
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
                         }
@@ -959,8 +1023,18 @@ class MapboxMapSurface : MapSurface {
                 // fresh map's camera-change listener re-populates this once it emits.
                 bearingFlow.value = 0f
                 routeLineManager = null
+                // Detach the incident click listener before dropping the manager,
+                // so a torn-down map cannot keep publishing taps.
+                incidentClickListener?.let { l ->
+                    runCatching { incidentMarkerManager?.removeClickListener(l) }
+                }
+                incidentClickListener = null
                 destMarkerManager = null
                 incidentMarkerManager = null
+                // The annotations are gone with their manager, so the lookup that
+                // described them must go too — otherwise a stale annotation id
+                // could resolve to an incident on the NEXT map.
+                incidentIdsByAnnotation.clear()
                 // Managers are gone, so a later re-init must redraw the overlay
                 // and the incident markers.
                 lastAppliedOverlay = null
@@ -1004,26 +1078,44 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
-     * Clears and redraws the incident circles (one coloured circle per marker).
-     * A no-op until the manager exists (style loaded). Every native call is
-     * wrapped defensively so a partial/failed draw degrades rather than crashing.
+     * Clears and redraws the incident badges — one category-icon point annotation
+     * per marker — and rebuilds the annotation-id → incident-id lookup the click
+     * listener resolves taps through. A no-op until the manager exists (style
+     * loaded). Every native call is wrapped defensively so a partial/failed draw
+     * degrades rather than crashing.
      *
-     * On-device verification note: annotation rendering runs only on a
-     * token-provisioned device, so it is verified on device.
+     * The lookup is cleared FIRST and repopulated as annotations are created, so
+     * it can never outlive the annotations it describes and hand the click
+     * listener a stale incident id after a redraw.
+     *
+     * A marker whose badge bitmap cannot be built is skipped rather than drawn
+     * plain: an un-iconed dot is exactly the indistinguishable marker this change
+     * exists to remove, and a silently-wrong category is worse than one absent
+     * pin.
+     *
+     * On-device verification note: annotation rendering and hit-testing run only
+     * on a token-provisioned device, so they are verified on device.
      */
     private fun applyIncidentMarkers(markers: List<MapIncidentMarker>) {
         val manager = incidentMarkerManager ?: return
         runCatching { manager.deleteAll() }
+        incidentIdsByAnnotation.clear()
+        val context = mapViewRef?.context ?: return
         for (marker in markers) {
             runCatching {
-                manager.create(
-                    CircleAnnotationOptions()
-                        .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                        .withCircleRadius(INCIDENT_MARKER_RADIUS)
-                        .withCircleColor(marker.colorArgb)
-                        .withCircleStrokeWidth(INCIDENT_MARKER_STROKE)
-                        .withCircleStrokeColor(INCIDENT_MARKER_STROKE_COLOR),
-                )
+                val bitmap =
+                    IncidentMarkerBitmaps.marker(
+                        context = context,
+                        iconRes = marker.iconRes,
+                        colorArgb = marker.colorArgb,
+                    ) ?: return@runCatching
+                val annotation =
+                    manager.create(
+                        PointAnnotationOptions()
+                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                            .withIconImage(bitmap),
+                    )
+                incidentIdsByAnnotation[annotation.id] = marker.id
             }
         }
     }
@@ -1124,11 +1216,10 @@ class MapboxMapSurface : MapSurface {
         const val DEST_MARKER_STROKE = MapMarkerStyle.DEST_MARKER_STROKE
         const val DEST_MARKER_STROKE_COLOR = MapMarkerStyle.DEST_MARKER_STROKE_COLOR
 
-        // Incident circles: the per-marker fill colour is supplied by the host
-        // (category colour); a white stroke keeps them legible on any basemap.
-        const val INCIDENT_MARKER_RADIUS = 8.0
-        const val INCIDENT_MARKER_STROKE = 2.0
-        const val INCIDENT_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+        // Incident markers are no longer circles — they are category-icon badges
+        // built by [IncidentMarkerBitmaps] from the geometry in
+        // [com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle], so the
+        // old radius/stroke constants live there now rather than here.
 
         // Camera-fit padding (dp; multiplied by display density → px before use):
         // extra room at the bottom for the summary sheet.
