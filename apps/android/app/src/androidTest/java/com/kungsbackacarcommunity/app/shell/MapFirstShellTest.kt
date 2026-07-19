@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -648,6 +649,49 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * The v0.8.3 regression, pinned: a drag over open map area must REACH the map
+     * surface.
+     *
+     * The camera's follow / 10-second idle-return logic was already correct (see
+     * CameraFollowControllerTest) and is driven entirely by the Mapbox gesture
+     * listeners — so it could never release, because the gestures never arrived.
+     * The shell drew its pages inside a Material3 Scaffold, and Scaffold wraps its
+     * content in a Surface whose empty `pointerInput {}` exists purely to block
+     * touch propagation to whatever is drawn beneath it. The map is composed BELOW
+     * that frame, so every pan died in the Scaffold and the camera could only be
+     * moved programmatically: "locked to my location".
+     *
+     * This asserts the delivery path itself, which is the half that broke. The
+     * swipe is aimed at the LEFT-centre of the map, derived from the map home's
+     * measured bounds: clear of the search bar at the top, of the right-side
+     * floating controls, and of the bottom bar — i.e. genuinely open map.
+     */
+    @Test
+    fun dragOverOpenMap_reachesTheMapSurface() {
+        val surface = StubMapSurface(initialState = MapLoadState.Loaded, autoLoad = false)
+        setShell(mapSurface = surface)
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        assertEquals("no gesture should have been delivered yet", 0, surface.panGestureCount)
+
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).performTouchInput {
+            // Node-relative and density-independent: a horizontal drag across the
+            // left quarter of the map, at its vertical midpoint.
+            swipe(
+                start = Offset(width * 0.2f, height / 2f),
+                end = Offset(width * 0.6f, height / 2f),
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        assertEquals(
+            "a drag over open map must reach the map surface - if this is 0 the " +
+                "chrome above the map is swallowing pointer events again",
+            1,
+            surface.panGestureCount,
+        )
     }
 
     @Test
