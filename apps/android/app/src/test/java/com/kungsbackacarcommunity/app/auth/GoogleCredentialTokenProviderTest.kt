@@ -36,16 +36,32 @@ class GoogleCredentialTokenProviderTest {
     }
 
     @Test
+    fun `no google account maps to its own actionable exception`() {
+        val mapped =
+            GoogleCredentialTokenProvider.toSignInException(
+                NoCredentialException("no google account on device"),
+            )
+
+        assertTrue(
+            "A device with no Google account must map to " +
+                "SignInNoGoogleAccountException so the coordinator can show " +
+                "actionable guidance, but got ${mapped.javaClass.simpleName}",
+            mapped is SignInNoGoogleAccountException,
+        )
+    }
+
+    @Test
     fun `genuine credential faults stay reportable and keep their diagnostic code`() {
         // Deliberately NOT filtered: each of these is something an admin needs to
         // see. Over-filtering blinds the diagnostics pipeline.
+        // NoCredentialException is absent by design — see the test above; it is
+        // now an actionable user-side state, not a fault.
         val faults =
             listOf(
                 GetCredentialProviderConfigurationException("misconfigured"),
                 GetCredentialUnknownException("unknown"),
                 GetCredentialUnsupportedException("unsupported device"),
                 GetCredentialInterruptedException("interrupted"),
-                NoCredentialException("no google account on device"),
             )
 
         for (fault in faults) {

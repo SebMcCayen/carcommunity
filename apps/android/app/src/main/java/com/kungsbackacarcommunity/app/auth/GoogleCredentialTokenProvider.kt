@@ -7,6 +7,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 
@@ -72,29 +73,44 @@ class GoogleCredentialTokenProvider(
          * report genuine FAULTS"). A user who opens the sheet and presses back is
          * the app working correctly.
          *
-         * Dropped (mapped to [SignInCancelledException], never reported):
-         * - [GetCredentialCancellationException] — the user dismissed the sheet.
+         * Dropped (never reported), because each is an EXPECTED outcome the user
+         * can either live with or fix themselves:
+         * - [GetCredentialCancellationException] -> [SignInCancelledException]:
+         *   the user dismissed the sheet.
+         * - [NoCredentialException] -> [SignInNoGoogleAccountException]: there is
+         *   no Google account on the device. The sign-in screen now tells the user
+         *   exactly that and offers a route to the add-account screen, so this is
+         *   an actionable prerequisite rather than a fault. (When #457 was fixed
+         *   this one was kept reportable ON PURPOSE, because back then it was a
+         *   dead end the user could do nothing about; making it actionable is what
+         *   changes the answer.)
          *
          * Everything else stays a reported [SignInFailedException], deliberately:
-         * a provider misconfiguration, an unsupported device, an interrupted
-         * flow, or a device with no Google account are all things an admin needs
-         * to see. Do NOT widen this branch without the same reasoning — over-
-         * filtering silently blinds the diagnostics pipeline, which is a worse
-         * failure mode than a little noise.
+         * a provider misconfiguration, an unsupported device or an interrupted
+         * flow are all things an admin needs to see. Do NOT widen this branch
+         * without the same reasoning — over-filtering silently blinds the
+         * diagnostics pipeline, which is a worse failure mode than a little noise.
+         * The test for "may I drop this?" is whether the USER has a concrete next
+         * step; if they don't, keep the visibility.
          *
          * Never logs tokens or credential contents. The stable androidx error
          * TYPE (e.g. `androidx.credentials.TYPE_NO_CREDENTIAL`) rides along as the
          * PII-safe diagnostic code; the concrete subtype is preserved via `cause`.
          */
         internal fun toSignInException(exception: GetCredentialException): Exception =
-            if (exception is GetCredentialCancellationException) {
-                SignInCancelledException("User dismissed the Google credential sheet.")
-            } else {
-                SignInFailedException(
-                    "Google credential flow did not complete.",
-                    exception,
-                    diagnosticCode = exception.type,
-                )
+            when (exception) {
+                is GetCredentialCancellationException ->
+                    SignInCancelledException("User dismissed the Google credential sheet.")
+
+                is NoCredentialException ->
+                    SignInNoGoogleAccountException("No Google account on this device.")
+
+                else ->
+                    SignInFailedException(
+                        "Google credential flow did not complete.",
+                        exception,
+                        diagnosticCode = exception.type,
+                    )
             }
 
         /**
