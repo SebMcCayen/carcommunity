@@ -32,9 +32,11 @@ object ChatListPinning {
      * back down. "At the bottom" is the last item or the one before it, matching
      * the near-bottom tolerance the new-message auto-scroll already uses.
      *
-     * A list that has not been laid out yet (lastVisibleIndex -1) with one or two
-     * items still counts as "at the bottom" — everything there is fits, so the
-     * pin is a no-op rather than a yank.
+     * A list that has not been laid out yet reports lastVisibleIndex -1, which
+     * clears the threshold only for a SINGLE item (-1 >= 1 - 2). That is
+     * deliberate: with one item the pin is a no-op, and beyond that nothing is
+     * known about where the reader is, so the effect defers to the new-message
+     * auto-scroll rather than guessing.
      *
      * @param lastVisibleIndex index of the last visible item, or -1 when the list
      *   has not been laid out yet.

@@ -44,9 +44,19 @@ class ChatListPinningTest {
     }
 
     @Test
-    fun aShortNotYetLaidOutListStillPins() {
-        // Nothing has been measured (lastVisibleIndex -1) but everything fits, so
-        // the pin is a no-op rather than a yank.
+    fun aSingleItemNotYetLaidOutListPins() {
+        // Nothing has been measured (lastVisibleIndex -1), but with one item the
+        // pin is a no-op rather than a yank.
         assertTrue(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = -1, totalItemsCount = 1))
+    }
+
+    @Test
+    fun aNotYetLaidOutListOfTwoOrMoreDoesNotPin() {
+        // -1 >= 2 - 2 is false. Deliberate, and pinned here because the boundary
+        // is easy to "fix" into a yank: with nothing measured, the effect knows
+        // nothing about where the reader is and defers to the new-message
+        // auto-scroll instead of guessing.
+        assertFalse(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = -1, totalItemsCount = 2))
+        assertFalse(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = -1, totalItemsCount = 20))
     }
 }
