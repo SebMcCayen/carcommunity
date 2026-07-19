@@ -28,14 +28,14 @@
  * cwd — so a copy of this script under the repo-root scripts/ cannot resolve
  * firebase-admin no matter which directory you invoke it from.
  *
- * Usage (from the repo root):
+ * Usage — every command below runs from functions/, starting at the repo root:
  *   cd functions
  *   npm ci                                  # provides firebase-admin
  *   npx tsc                                 # builds lib/, so the import below resolves
  *   GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json \
  *     node scripts/backfill-display-name-lower.mjs --project <projectId> [--apply]
  *
- * Equivalently, from functions/: `npm run backfill:display-name-lower -- --project <projectId>`
+ * The last line is equivalently `npm run backfill:display-name-lower -- --project <projectId>`
  * (the npm script only wraps the `node` invocation; `npm ci` and `npx tsc` are
  * still required first).
  *
