@@ -131,7 +131,9 @@ class ManifestSoftInputModeTest {
             if (text.getOrNull(searchFrom)?.isWhitespace() != true) continue
             val end = text.indexOf('>', start)
             if (end < 0) continue
-            val element = text.substring(start, end)
+            // end + 1 so the element string INCLUDES the closing '>', matching
+            // the KDoc and making the assertion failure output a complete tag.
+            val element = text.substring(start, end + 1)
             if (element.contains("android:name=\".MainActivity\"")) return element
         }
         throw AssertionError(
