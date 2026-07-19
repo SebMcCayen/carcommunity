@@ -5,12 +5,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the promises TrafficPalette's KDoc makes about the night ramp: heavy is
- * a DARK red and moderate a DARK yellow (not a pastel lift of the day palette),
- * every level still clears the night basemap, the levels stay far enough apart
- * to survive red-green colour blindness, and the day palette is untouched.
- */
-/**
  * Colour-vision-deficiency simulation, test-only.
  *
  * Implements Viénot, Brettel & Mollon (1999): gamma-expand sRGB, convert to LMS
@@ -106,6 +100,12 @@ private object Cvd {
  */
 private const val MIN_CVD_DELTA_E = 18.0
 
+/**
+ * Pins the promises TrafficPalette's KDoc makes about the night ramp: heavy is
+ * a DARK red and moderate a DARK yellow (not a pastel lift of the day palette),
+ * every level still clears the night basemap, every pair of levels stays apart
+ * under simulated red-green colour blindness, and the day palette is untouched.
+ */
 class TrafficPaletteTest {
     /**
      * A realistic stand-in for the Mapbox Standard style's night basemap, which
