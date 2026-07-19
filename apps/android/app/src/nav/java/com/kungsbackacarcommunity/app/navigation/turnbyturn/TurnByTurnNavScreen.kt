@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
@@ -671,9 +672,18 @@ fun TurnByTurnNavScreen(
         // reported symptom, and a hardcoded light veil would simply have
         // reintroduced it after dark.
         //
-        // Not composed at all once the transition is over, so it can never
-        // intercept a touch meant for the map (the mistake PR #464 fixed, where
-        // an always-present Surface swallowed every gesture).
+        // While it IS up it swallows every pointer event, the same way
+        // [ShellTabPage] does for the pages drawn over the shell map. An opaque
+        // overlay that does not block input is worse than no overlay: a Box with
+        // only `background`/`alpha` registers no pointer-input modifier, so taps
+        // and drags fall straight through to the chrome and the map beneath it —
+        // the user would be hitting the exit bar, the report control or a pan
+        // gesture they cannot see, for up to STYLE_TIMEOUT_MILLIS on a slow
+        // style load.
+        //
+        // Once the transition is over it is not composed AT ALL, so it cannot go
+        // on eating gestures meant for the map — the mistake PR #464 fixed,
+        // where an always-present Surface swallowed every one of them.
         if (phase.veilVisible) {
             val veilAlpha by
                 animateFloatAsState(
@@ -686,7 +696,17 @@ fun TurnByTurnNavScreen(
                     Modifier
                         .matchParentSize()
                         .alpha(veilAlpha)
-                        .background(MaterialTheme.colorScheme.surface),
+                        .background(MaterialTheme.colorScheme.surface)
+                        // Consumed on the Main pass, which children see first;
+                        // the veil has no children, so this simply ends every
+                        // gesture here instead of letting it reach a sibling.
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent().changes.forEach { it.consume() }
+                                }
+                            }
+                        },
             )
         }
     }
