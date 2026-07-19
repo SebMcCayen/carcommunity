@@ -299,15 +299,30 @@ fun TurnByTurnNavScreen(
                     engine.detach(mapboxNavigation)
                 }
             }
-        MapboxNavigationApp.registerObserver(observer)
+        // Guarded for the same reason the setup above is: once `setupOk` is false
+        // we are knowingly proceeding against a MapboxNavigationApp that may not
+        // be in the state it expects, and a throw here would crash the screen we
+        // just finished reporting as degraded. Registering anyway (rather than
+        // returning early) is deliberate — MapboxNavigationApp attaches queued
+        // observers if it is set up later, so a transient setup failure can still
+        // recover into a working session, whereas an early return would disable
+        // navigation for the lifetime of this composition.
+        runCatching { MapboxNavigationApp.registerObserver(observer) }
         onDispose {
             // Order matters: detach the app FIRST so this lifecycle owner leaving
             // fires the observer's onDetached → TurnByTurnEngine.detach() (which
             // unregisters the route/location/progress observers AND stops the trip
             // session). Unregistering the observer before detaching would suppress
             // onDetached and leak those observers + the running trip session.
-            MapboxNavigationApp.detach(lifecycleOwner)
-            MapboxNavigationApp.unregisterObserver(observer)
+            //
+            // The two SDK calls are individually guarded so that one throwing
+            // cannot skip the other — and, more importantly, cannot skip
+            // engine.cancel()/mapView.onDestroy() below. Those two are OURS and
+            // are not optional: the MapView is created in `remember` outside this
+            // effect, so failing to destroy it leaks a GL surface for the rest of
+            // the process. Teardown must always complete.
+            runCatching { MapboxNavigationApp.detach(lifecycleOwner) }
+            runCatching { MapboxNavigationApp.unregisterObserver(observer) }
             engine.cancel()
             mapView.onDestroy()
         }
