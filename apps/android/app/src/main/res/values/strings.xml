@@ -308,6 +308,8 @@
     <string name="auth_deleteAccountNote">Du kan radera ditt konto via vår hemsida enligt våra villkor.</string>
     <string name="auth_loading">Laddar...</string>
     <string name="auth_errorGeneric">Inloggningen misslyckades. Försök igen.</string>
+    <string name="auth_errorNoGoogleAccount">Det finns inget Google-konto på telefonen. Lägg till ett under Inställningar &gt; Konton och logga in igen.</string>
+    <string name="auth_addGoogleAccountButton">Lägg till Google-konto</string>
     <string name="auth_loggedInAs">Inloggad</string>
     <string name="auth_signOut">Logga ut</string>
     <string name="auth_devLoginLabel">[DEV] Platshållar-inloggning (ej produktion)</string>

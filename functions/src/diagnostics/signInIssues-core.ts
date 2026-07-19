@@ -124,6 +124,18 @@ export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
   'GetCredentialProviderConfigurationException',
   'GetCredentialUnknownException',
   'GetCredentialUnsupportedException',
+  // RETAINED DELIBERATELY, for the same reason as the cancellation entry above
+  // and on the same terms. NoCredentialException means there is no Google
+  // account on the device; the Android client now drops it at the source (see
+  // GoogleCredentialTokenProvider.toSignInException) because the sign-in screen
+  // names the problem and offers a route to the add-account settings, making it
+  // an expected, user-fixable state rather than a fault. Note this REVERSES the
+  // call made when #457 was fixed, which kept it reportable precisely because it
+  // was then a dead end — making it actionable is what changed the answer.
+  // Pre-fix installs in the closed test group still send it, so the entry stays:
+  // removing it would collapse those legacy reports into the shared `Unknown`
+  // bucket that exists to surface genuinely NEW failures. Remove this entry once
+  // no pre-fix client version is in the wild.
   'NoCredentialException',
   // Firebase Auth hierarchy.
   'FirebaseAuthException',
