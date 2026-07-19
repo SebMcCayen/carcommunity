@@ -290,4 +290,86 @@ class FriendsCoordinatorTest {
         coordinator.resetAdd()
         assertEquals(AddFriendState.Idle, coordinator.add.value)
     }
+
+    // --- empty list is NOT a failure (regression, 2026-07-19) -----------------
+    // Conflating "you have no friends yet" with "the load failed" is how a
+    // total backend outage could look like an ordinary empty state (and vice
+    // versa). These two must be different STATES, not just different strings.
+
+    @Test
+    fun `an empty friends list is a loaded state, not an error`() = runTest {
+        val repo = FakeRepo().apply { listResult = loaded(emptyList()) }
+        val reporter = FakeReporter()
+        val coordinator = FriendsCoordinator(repo, reporter)
+
+        coordinator.load()
+
+        val status = coordinator.status.value
+        assertTrue("empty list must be Loaded, got $status", status is FriendsStatus.Loaded)
+        assertEquals(emptyList<FriendSummary>(), (status as FriendsStatus.Loaded).friends)
+        // An empty list is an expected outcome and must never file an issue.
+        assertTrue("empty list must not be reported", reporter.reports.isEmpty())
+    }
+
+    @Test
+    fun `a failed load is an error state, distinguishable from an empty list`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                listResult =
+                    FriendsResult.Failed(FriendActionError.TemporarilyUnavailable, "UNAVAILABLE")
+            }
+        val coordinator = FriendsCoordinator(repo, FakeReporter())
+
+        coordinator.load()
+
+        assertEquals(
+            FriendsStatus.Error(FriendActionError.TemporarilyUnavailable),
+            coordinator.status.value,
+        )
+    }
+
+    @Test
+    fun `a backend-unavailable load is reported as a genuine fault`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                listResult =
+                    FriendsResult.Failed(FriendActionError.TemporarilyUnavailable, "UNAVAILABLE")
+            }
+        val reporter = FakeReporter()
+
+        FriendsCoordinator(repo, reporter).load()
+
+        // THE REGRESSION: the production outage produced no report at all, so it
+        // stayed invisible until a human noticed and described it by hand.
+        assertEquals(1, reporter.reports.size)
+        val report = reporter.reports.single()
+        assertEquals("friends.list", report.feature)
+        assertEquals("UNAVAILABLE", report.code)
+        assertTrue(
+            "report must say it is the backend, got: ${report.message}",
+            report.message.contains("cannot serve"),
+        )
+    }
+
+    @Test
+    fun `an expected refusal on load is not reported`() = runTest {
+        // Being signed out / not a member is a normal, actionable outcome — it
+        // must be shown specifically but must NOT file an issue.
+        for (expected in listOf(
+            FriendActionError.SignedOut,
+            FriendActionError.NotMember,
+            FriendActionError.Network,
+        )) {
+            val repo = FakeRepo().apply { listResult = FriendsResult.Failed(expected, "X") }
+            val reporter = FakeReporter()
+            val coordinator = FriendsCoordinator(repo, reporter)
+
+            coordinator.load()
+
+            // Still surfaced to the user, and surfaced SPECIFICALLY...
+            assertEquals(FriendsStatus.Error(expected), coordinator.status.value)
+            // ...but never filed as a fault.
+            assertTrue("$expected must not be reported", reporter.reports.isEmpty())
+        }
+    }
 }

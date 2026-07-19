@@ -429,6 +429,7 @@
     "errorNetwork": "No connection. Check your internet and try again.",
     "errorNotAddable": "This member can't be added right now.",
     "errorRequestGone": "That request is no longer available.",
+    "errorTemporarilyUnavailable": "Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.",
     "errorGeneric": "Something went wrong. Please try again."
   },
   "convoy": {
@@ -442,7 +443,6 @@
     "decline": "Decline",
     "createTitle": "New convoy",
     "pickFriendsTitle": "Invite friends",
-    "friendsUnavailable": "Your friends couldn't be loaded right now.",
     "friendsRetry": "Try again",
     "noFriends": "Add some friends first to invite them to a convoy.",
     "createSubmit": "Create convoy",

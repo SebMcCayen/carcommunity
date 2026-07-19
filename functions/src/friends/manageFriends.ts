@@ -45,8 +45,9 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { Timestamp } from 'firebase-admin/firestore';
-import type { DocumentSnapshot } from 'firebase-admin/firestore';
+import type { DocumentSnapshot, QuerySnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
@@ -54,8 +55,11 @@ import { writeInAppNotification } from '../notifications/deliver';
 import {
   ALREADY_FRIENDS_MESSAGE,
   AMBIGUOUS_NICKNAME_MESSAGE,
+  BACKEND_UNAVAILABLE_MESSAGE,
+  isMissingIndexError,
   NICKNAME_NOT_FOUND_MESSAGE,
   NOT_ADDABLE_MESSAGE,
+  REASON_BACKEND_UNAVAILABLE,
   REASON_ALREADY_FRIENDS,
   REASON_AMBIGUOUS_NICKNAME,
   REASON_NICKNAME_NOT_FOUND,
@@ -610,6 +614,74 @@ export interface ListFriendsResult {
   outgoing: FriendRequestSummary[];
 }
 
+/**
+ * Reads the caller's friend graph (friends + both pending-request directions).
+ *
+ * Every query is bounded so a large friend graph can't turn this callable into
+ * an unbounded read (cost/latency guard). The caps are generous safety
+ * ceilings; results are sorted in memory by the caller.
+ *
+ * A Firestore "requires an index" failure is translated into a specific,
+ * retryable `unavailable` HttpsError instead of escaping as an opaque INTERNAL
+ * — see isMissingIndexError() in friends-core.ts for why that mattered enough
+ * to encode. The log line is the operator-facing half: it names the callable
+ * and carries the original message, which embeds the console URL that creates
+ * the missing index.
+ */
+async function readFriendGraph(
+  uid: string,
+): Promise<[QuerySnapshot, QuerySnapshot, QuerySnapshot]> {
+  try {
+    return await Promise.all([
+      // orderBy BEFORE limit so that, if a cap is ever hit, the truncation is
+      // deterministic and keeps the SAME items the presented order surfaces
+      // (rather than an arbitrary document-ID-ordered subset). The friend doc's
+      // timestamp field is `createdAt` (friends-core buildFriendshipDocument);
+      // the output's `friendsSince` is derived from it and sorted ascending, so
+      // truncation keeps the oldest friendships — matching the presented order.
+      // No where clause → covered by Firestore's automatic single-field index.
+      db
+        .collection('users')
+        .doc(uid)
+        .collection('friends')
+        .orderBy('createdAt', 'asc')
+        .limit(MAX_FRIENDS_RETURNED)
+        .get(),
+      // Pending requests are presented most-recent-first; orderBy createdAt desc
+      // BEFORE limit so a hit cap keeps the NEWEST requests instead of an
+      // arbitrary subset that could drop them. Needs the composite index
+      // [toUid ASC, status ASC, createdAt DESC] (firebase/firestore.indexes.json).
+      db
+        .collection('friendRequests')
+        .where('toUid', '==', uid)
+        .where('status', '==', 'pending')
+        .orderBy('createdAt', 'desc')
+        .limit(MAX_PENDING_REQUESTS_RETURNED)
+        .get(),
+      // Same as incoming, for outgoing requests. Needs the composite index
+      // [fromUid ASC, status ASC, createdAt DESC].
+      db
+        .collection('friendRequests')
+        .where('fromUid', '==', uid)
+        .where('status', '==', 'pending')
+        .orderBy('createdAt', 'desc')
+        .limit(MAX_PENDING_REQUESTS_RETURNED)
+        .get(),
+    ]);
+  } catch (error) {
+    if (isMissingIndexError(error)) {
+      logger.error('friend.list is missing a Firestore composite index', {
+        // The Firestore message embeds the console link that creates the index.
+        firestoreMessage: (error as Error).message,
+      });
+      throw new HttpsError('unavailable', BACKEND_UNAVAILABLE_MESSAGE, {
+        reason: REASON_BACKEND_UNAVAILABLE,
+      });
+    }
+    throw error;
+  }
+}
+
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsResult> => {
   const actor = await requireMemberActor(request);
 
@@ -618,45 +690,7 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsRe
     throw new HttpsError('invalid-argument', parsed.message);
   }
 
-  // Every query is bounded so a large friend graph can't turn this callable
-  // into an unbounded read (cost/latency guard). The caps are generous safety
-  // ceilings; results are still sorted in memory below.
-  const [friendsSnap, incomingSnap, outgoingSnap] = await Promise.all([
-    // orderBy BEFORE limit so that, if a cap is ever hit, the truncation is
-    // deterministic and keeps the SAME items the presented order surfaces
-    // (rather than an arbitrary document-ID-ordered subset). The friend doc's
-    // timestamp field is `createdAt` (friends-core buildFriendshipDocument);
-    // the output's `friendsSince` is derived from it and sorted ascending, so
-    // truncation keeps the oldest friendships — matching the presented order.
-    // No where clause → covered by Firestore's automatic single-field index.
-    db
-      .collection('users')
-      .doc(actor.uid)
-      .collection('friends')
-      .orderBy('createdAt', 'asc')
-      .limit(MAX_FRIENDS_RETURNED)
-      .get(),
-    // Pending requests are presented most-recent-first; orderBy createdAt desc
-    // BEFORE limit so a hit cap keeps the NEWEST requests instead of an
-    // arbitrary subset that could drop them. Needs the composite index
-    // [toUid ASC, status ASC, createdAt DESC] (firebase/firestore.indexes.json).
-    db
-      .collection('friendRequests')
-      .where('toUid', '==', actor.uid)
-      .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .limit(MAX_PENDING_REQUESTS_RETURNED)
-      .get(),
-    // Same as incoming, for outgoing requests. Needs the composite index
-    // [fromUid ASC, status ASC, createdAt DESC].
-    db
-      .collection('friendRequests')
-      .where('fromUid', '==', actor.uid)
-      .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
-      .limit(MAX_PENDING_REQUESTS_RETURNED)
-      .get(),
-  ]);
+  const [friendsSnap, incomingSnap, outgoingSnap] = await readFriendGraph(actor.uid);
 
   const fallback = new Date(0);
   const toRequest = (doc: DocumentSnapshot): FriendRequestSummary =>

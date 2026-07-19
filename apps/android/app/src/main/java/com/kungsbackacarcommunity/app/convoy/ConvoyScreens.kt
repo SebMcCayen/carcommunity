@@ -43,6 +43,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
+import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -293,7 +294,13 @@ fun CreateConvoyScreen(
                 is FriendsStatus.Error ->
                     item(key = "friends-error") {
                         Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                            InfoNoticeCard(text = stringResource(R.string.convoy_friendsUnavailable))
+                            // Render the SPECIFIC mapped failure, not one flat
+                            // notice. The picker used to show
+                            // convoy_friendsUnavailable for every error, so a
+                            // backend outage, an expired session and a dropped
+                            // connection were indistinguishable here — and the
+                            // user was given no advice they could act on.
+                            InfoNoticeCard(text = stringResource(friendsStatus.error.messageRes()))
                             // Only when a retry can actually work (a live
                             // coordinator); a null-repo build shows the notice alone.
                             if (onRetryFriends != null) {

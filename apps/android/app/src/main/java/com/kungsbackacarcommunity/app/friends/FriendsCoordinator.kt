@@ -45,15 +45,17 @@ sealed interface AddFriendState {
  * so it is unit-testable with a fake repository. There is no live listener, so
  * every successful mutation re-fetches the snapshot via [load].
  *
- * ERROR REPORTING: every [FriendActionError.Generic] surfaced to the user is
- * reported through [errorReporter] (the shared `errors-reportClientError`
- * pipeline, which dedupes and files a GitHub issue). Generic is precisely the
- * "we could not classify this" case — the one that a user can only describe as
- * "Something went wrong" — so it is the case that must reach us. The other
- * categories are normal, actionable outcomes of what the user typed (unknown
- * nickname, already friends, request already sent, ...) or of connectivity
- * ([FriendActionError.Network]); filing an issue for those would bury the real
- * faults in noise, so they are deliberately NOT reported.
+ * ERROR REPORTING: exactly two categories are reported through [errorReporter]
+ * (the shared `errors-reportClientError` pipeline, which dedupes and files a
+ * GitHub issue) — see [reportIfFault], which is the enforcing code:
+ *  - [FriendActionError.Generic]: the "we could not classify this" case, the
+ *    one a user can only describe as "Something went wrong".
+ *  - [FriendActionError.TemporarilyUnavailable]: classified, but still our
+ *    fault — the backend answered that it cannot serve the request.
+ * The other categories are normal, actionable outcomes of what the user typed
+ * (unknown nickname, already friends, request already sent, ...) or of
+ * connectivity ([FriendActionError.Network]); filing an issue for those would
+ * bury the real faults in noise, so they are deliberately NOT reported.
  *
  * The reported `message` is a fixed, app-generated string plus the unmapped
  * status code — never the nickname the user typed, and never any other user
@@ -63,16 +65,34 @@ class FriendsCoordinator(
     private val repository: FriendsRepository,
     private val errorReporter: ClientErrorReporter? = null,
 ) {
-    /** Reports an unclassified failure; other categories are intentionally skipped. */
-    private fun reportIfGeneric(
+    /**
+     * Reports a genuine fault; normal, actionable outcomes are skipped.
+     *
+     * Two categories qualify. [FriendActionError.Generic] is the unclassified
+     * one — the failure a user can only describe as "something went wrong".
+     * [FriendActionError.TemporarilyUnavailable] is classified but is still OUR
+     * fault (the backend answered "I cannot serve this"), and it is exactly the
+     * class of failure that went unnoticed in production for days because it
+     * was rendered as an ordinary load error and never reported.
+     *
+     * Everything else — an unknown nickname, an already-sent request, being
+     * signed out, a dropped connection — is a normal outcome, and filing issues
+     * for those would bury the real faults in noise.
+     */
+    private fun reportIfFault(
         operation: String,
         error: FriendActionError,
         diagnostic: FriendErrorDiagnostic,
     ) {
-        if (error != FriendActionError.Generic) return
+        val message = when (error) {
+            FriendActionError.Generic -> "friend-$operation failed with an unmapped error"
+            FriendActionError.TemporarilyUnavailable ->
+                "friend-$operation failed: backend reported it cannot serve the request"
+            else -> return
+        }
         errorReporter?.report(
             feature = "friends.$operation",
-            message = "friend-$operation failed with an unmapped error",
+            message = message,
             code = diagnostic ?: "UNKNOWN",
         )
     }
@@ -106,14 +126,14 @@ class FriendsCoordinator(
                         )
                 is FriendsResult.Failed -> {
                     statusState.value = FriendsStatus.Error(result.error)
-                    reportIfGeneric("list", result.error, result.diagnostic)
+                    reportIfFault("list", result.error, result.diagnostic)
                 }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
             statusState.value = FriendsStatus.Error(FriendActionError.Generic)
-            reportIfGeneric("list", FriendActionError.Generic, error::class.java.simpleName)
+            reportIfFault("list", FriendActionError.Generic, error::class.java.simpleName)
         }
     }
 
@@ -139,7 +159,7 @@ class FriendsCoordinator(
                     SendRequestResult.NowFriends -> AddFriendState.Sent(nowFriends = true)
                     is SendRequestResult.Ambiguous -> AddFriendState.Chooser(result.candidates)
                     is SendRequestResult.Failed -> {
-                        reportIfGeneric("sendRequest", result.error, result.diagnostic)
+                        reportIfFault("sendRequest", result.error, result.diagnostic)
                         AddFriendState.Error(result.error)
                     }
                 }
@@ -151,7 +171,7 @@ class FriendsCoordinator(
             throw cancellation
         } catch (error: Exception) {
             addState.value = AddFriendState.Error(FriendActionError.Generic)
-            reportIfGeneric("sendRequest", FriendActionError.Generic, error::class.java.simpleName)
+            reportIfFault("sendRequest", FriendActionError.Generic, error::class.java.simpleName)
         }
     }
 
@@ -169,7 +189,7 @@ class FriendsCoordinator(
                 RespondResult.Accepted, RespondResult.Declined -> load()
                 is RespondResult.Failed -> {
                     rowError.value = result.error
-                    reportIfGeneric("respondRequest", result.error, result.diagnostic)
+                    reportIfFault("respondRequest", result.error, result.diagnostic)
                     // The request may be gone/handled server-side — resync so the
                     // stale row disappears rather than lingering.
                     load()
@@ -179,7 +199,7 @@ class FriendsCoordinator(
             throw cancellation
         } catch (error: Exception) {
             rowError.value = FriendActionError.Generic
-            reportIfGeneric("respondRequest", FriendActionError.Generic, error::class.java.simpleName)
+            reportIfFault("respondRequest", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
             inFlightRows.update { it - requestId }
         }
@@ -195,14 +215,14 @@ class FriendsCoordinator(
                 RemoveResult.Removed -> load()
                 is RemoveResult.Failed -> {
                     rowError.value = result.error
-                    reportIfGeneric("remove", result.error, result.diagnostic)
+                    reportIfFault("remove", result.error, result.diagnostic)
                 }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
             rowError.value = FriendActionError.Generic
-            reportIfGeneric("remove", FriendActionError.Generic, error::class.java.simpleName)
+            reportIfFault("remove", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
             inFlightRows.update { it - friendUid }
         }

@@ -3,6 +3,7 @@ import {
   buildFriendRequestDocument,
   buildFriendshipDocument,
   friendRequestId,
+  isMissingIndexError,
   parseListInput,
   parseRemoveFriendInput,
   parseRespondRequestInput,
@@ -204,5 +205,58 @@ describe('friends-core summaries', () => {
     );
     expect(summary.direction).toBe('outgoing');
     expect(summary.otherUser).toEqual({ uid: 'b', displayName: 'Bob', avatarPath: 'pb' });
+  });
+});
+
+/**
+ * REGRESSION (2026-07-19): production `friend.list` failed for every caller
+ * because the friendRequests composite indexes had never been deployed. The
+ * Firestore rejection escaped the callable as an opaque INTERNAL, so the app
+ * showed a generic "couldn't load your friends" on both the Friends page and
+ * the convoy invite picker and the deployment fault looked like an app bug.
+ *
+ * The exact shape below — a plain Error carrying a NUMERIC gRPC `code` 9 and
+ * the "The query requires an index." message — is copied from the real
+ * production log line for `friend-list`.
+ */
+describe('isMissingIndexError', () => {
+  const missingIndex = () =>
+    Object.assign(
+      new Error(
+        '9 FAILED_PRECONDITION: The query requires an index. You can create it here: ' +
+          'https://console.firebase.google.com/v1/r/project/example/firestore/indexes?create_composite=abc',
+      ),
+      { code: 9 },
+    );
+
+  it('recognises the production missing-index rejection', () => {
+    expect(isMissingIndexError(missingIndex())).toBe(true);
+  });
+
+  it('is case-insensitive about the message', () => {
+    expect(
+      isMissingIndexError(Object.assign(new Error('The Query REQUIRES AN INDEX.'), { code: 9 })),
+    ).toBe(true);
+  });
+
+  it('does not claim an unrelated failed-precondition', () => {
+    // Same gRPC status, different cause: must NOT be reported as a missing
+    // index, or a genuine business-rule refusal would be mislabelled as a
+    // backend outage and auto-reported as a fault.
+    expect(
+      isMissingIndexError(Object.assign(new Error('9 FAILED_PRECONDITION: doc changed'), { code: 9 })),
+    ).toBe(false);
+  });
+
+  it('does not match the right message under a different status code', () => {
+    expect(
+      isMissingIndexError(Object.assign(new Error('the query requires an index'), { code: 5 })),
+    ).toBe(false);
+  });
+
+  it('tolerates non-error inputs', () => {
+    for (const value of [null, undefined, 'boom', 42, {}]) {
+      expect(isMissingIndexError(value)).toBe(false);
+    }
   });
 });

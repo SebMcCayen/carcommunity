@@ -429,6 +429,7 @@
     "errorNetwork": "Ingen anslutning. Kontrollera din internetanslutning och försök igen.",
     "errorNotAddable": "Den här medlemmen kan inte läggas till just nu.",
     "errorRequestGone": "Förfrågan är inte längre tillgänglig.",
+    "errorTemporarilyUnavailable": "Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.",
     "errorGeneric": "Något gick fel. Försök igen."
   },
   "convoy": {
@@ -442,7 +443,6 @@
     "decline": "Avböj",
     "createTitle": "Ny konvoj",
     "pickFriendsTitle": "Bjud in vänner",
-    "friendsUnavailable": "Dina vänner kunde inte laddas just nu.",
     "friendsRetry": "Försök igen",
     "noFriends": "Lägg till några vänner först för att bjuda in dem till en konvoj.",
     "createSubmit": "Skapa konvoj",
