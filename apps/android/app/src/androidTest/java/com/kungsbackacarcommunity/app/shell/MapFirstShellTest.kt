@@ -395,13 +395,39 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertDoesNotExist()
     }
 
+    /**
+     * Renders [MapHome] on its own (stub surface) so the Trafikverket-attribution
+     * wiring can be driven directly; the shell-level [setShell] build has no
+     * Firebase and therefore never loads any incidents at all.
+     */
+    private fun setMapHome(trafikverketDataShown: Boolean) {
+        composeTestRule.setContent {
+            KccTheme {
+                MapHome(
+                    mapSurface = StubMapSurface(),
+                    isLiveSharing = false,
+                    canShareLive = false,
+                    participantCount = 0,
+                    userLabel = "Test",
+                    onSearch = {},
+                    onStartLiveShare = {},
+                    onHideMeNow = {},
+                    onOpenLiveShareDetails = {},
+                    onRecenter = {},
+                    moreMenuEntries = emptyList(),
+                    trafikverketDataShown = trafikverketDataShown,
+                )
+            }
+        }
+    }
+
     @Test
-    fun layersPopup_incidentsToggle_gatesTrafikverketAttribution() {
-        setShell()
+    fun layersPopup_showsTrafikverketAttribution_whenTheirDataIsLoaded() {
+        setMapHome(trafikverketDataShown = true)
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
-        // The incidents layer defaults ON, so the "Källa: Trafikverket" attribution
-        // for the Trafikverket-sourced incidents is shown alongside the toggle row.
+        // The incidents layer defaults ON and Trafikverket-sourced incidents are
+        // loaded, so we owe (and show) the "Källa: Trafikverket" credit.
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).assertIsDisplayed()
         composeTestRule
             .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
@@ -409,6 +435,21 @@ class MapFirstShellTest {
         // Turning the incidents layer off removes the attribution (no Trafikverket
         // data is on screen to credit) — the conditional wiring this test guards.
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun layersPopup_hidesTrafikverketAttribution_whenNoneOfTheirDataIsLoaded() {
+        // The abroad case: the layer is on, but the Sweden-only importer
+        // contributes nothing outside Sweden, so there is no Trafikverket data on
+        // screen and crediting them would be a false claim. (Same for a Swedish
+        // area with no active imported incidents.)
+        setMapHome(trafikverketDataShown = false)
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).assertIsDisplayed()
         composeTestRule
             .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
             .assertDoesNotExist()

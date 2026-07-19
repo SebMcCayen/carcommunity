@@ -364,4 +364,17 @@ class IncidentReportControllerTest {
         assertEquals(1, fake.listNearbyCalls)
         assertEquals(seeded, controller.nearbyIncidents.value)
     }
+
+    @Test
+    fun `Trafikverket attribution shows only when imported data is loaded`() {
+        val userReport = Incident("u1", IncidentType.HAZARD, 12.07, 57.48, source = "user")
+        val imported =
+            Incident("t1", IncidentType.ROADWORK, 12.07, 57.48, source = "trafikverket")
+        // Sweden with imported roadwork on the map: we owe the credit.
+        assertTrue(hasTrafikverketData(listOf(userReport, imported)))
+        // Abroad (or a quiet Swedish area): the Sweden-only importer contributes
+        // nothing, so no Trafikverket data is on screen and no credit is shown.
+        assertFalse(hasTrafikverketData(emptyList()))
+        assertFalse(hasTrafikverketData(listOf(userReport)))
+    }
 }

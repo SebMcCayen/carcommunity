@@ -286,11 +286,18 @@ object MapboxRequests {
     const val GEOCODE_LIMIT = 6
 
     /**
-     * Default country bias (ISO 3166-1 alpha-2). The app is a Kungsbacka/Sweden
-     * community app, so results are constrained to Sweden — this both localizes
-     * the ranking and keeps the small result set relevant.
+     * Country restriction (ISO 3166-1 alpha-2) for the HOME-FALLBACK search
+     * only — see [forwardGeocode]. This is NOT applied when the caller has a
+     * live location fix.
+     *
+     * It used to be an unconditional filter, which meant a Kungsbacka member
+     * driving abroad could not search a foreign address at all: the API was
+     * asked for Swedish features only, so a German street returned nothing. The
+     * app is still Sweden-focused (we import no other country's road data), but
+     * a member on a road trip must still be able to type an address and be
+     * routed to it.
      */
-    const val DEFAULT_COUNTRY = "SE"
+    const val HOME_COUNTRY = "SE"
 
     /**
      * Fallback proximity bias (Kungsbacka town centroid, lng/lat) used when the
@@ -300,7 +307,11 @@ object MapboxRequests {
      * "Kungsmässan" could surface a same-named place elsewhere before the local
      * mall. Biasing to the app's home region keeps *nearby* results first even
      * before a fix arrives; a real user fix (when present) always takes priority
-     * over this constant. Sweden-wide relevance is still enforced by [country].
+     * over this constant.
+     *
+     * This constant and [HOME_COUNTRY] are one package: they are the single
+     * assumption "we do not know where you are, so assume you are home". A live
+     * fix replaces the whole package, not half of it.
      */
     private val DEFAULT_PROXIMITY = LatLng(longitude = 12.0730, latitude = 57.4874)
 
@@ -316,11 +327,26 @@ object MapboxRequests {
      * unchanged. `/forward` (not `/suggest` + `/retrieve`) is used deliberately:
      * it needs no interactive session token yet still returns coordinates inline.
      *
-     * Results are biased to the app's locale/region: [proximity] toward the user
-     * when known (falling back to [DEFAULT_PROXIMITY], the Kungsbacka centroid,
-     * when no fix is available so *nearby* results still rank first), [country]
-     * (Sweden by default), and [language] for localized labels. `types` is left
-     * unset deliberately: the Search Box `/forward` endpoint then returns every
+     * Regional relevance comes from ONE of two mutually exclusive modes:
+     *
+     *  - **Live fix** ([proximity] non-null): bias to the user's actual position
+     *    and apply NO country restriction. Search Box applies a distance decay
+     *    to relevance, so standing in Kungsbacka the Swedish results still come
+     *    first, and standing in Berlin the German ones do. This is what makes
+     *    searching a foreign address work at all while abroad — the previous
+     *    unconditional `country=SE` returned an empty list there.
+     *
+     *  - **No fix** ([proximity] null — permission denied, no fix yet, or the
+     *    lookup raced [NavigationController.refreshOrigin]): fall back to the
+     *    home assumption, i.e. [DEFAULT_PROXIMITY] *and* [homeCountry]. With no
+     *    position there is no distance decay to lean on, so the country
+     *    restriction is still doing real work here and is deliberately kept —
+     *    this path behaves exactly as it did before. (Turn-by-turn needs a fix
+     *    to route from anyway, so "abroad with no fix" is not a flow that
+     *    worked before this change either.)
+     *
+     * [language] localizes the returned labels. `types` is left unset
+     * deliberately: the Search Box `/forward` endpoint then returns every
      * feature type — POIs/businesses (e.g. "Kungsmässan") alongside addresses,
      * streets and places — rather than an address-only subset. Returns null for a
      * blank query so callers never issue an empty request.
@@ -331,12 +357,12 @@ object MapboxRequests {
         proximity: LatLng? = null,
         language: String? = null,
         limit: Int = GEOCODE_LIMIT,
-        country: String? = DEFAULT_COUNTRY,
+        homeCountry: String? = HOME_COUNTRY,
     ): String? {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return null
         // Real user location first; else bias to the app's home region so nearby
-        // POIs still outrank same-named places elsewhere in Sweden.
+        // POIs still outrank same-named places elsewhere.
         val bias = proximity ?: DEFAULT_PROXIMITY
         val sb =
             StringBuilder("https://api.mapbox.com/search/searchbox/v1/forward")
@@ -345,8 +371,11 @@ object MapboxRequests {
                 .append("&access_token=").append(encode(token))
         sb.append("&proximity=")
             .append(fmt(bias.longitude)).append(",").append(fmt(bias.latitude))
-        if (!country.isNullOrBlank()) {
-            sb.append("&country=").append(encode(country))
+        // Country restriction ONLY on the home-fallback path (see KDoc): with a
+        // live fix the proximity decay does the regional ranking, and pinning to
+        // Sweden would make the app unusable outside it.
+        if (proximity == null && !homeCountry.isNullOrBlank()) {
+            sb.append("&country=").append(encode(homeCountry))
         }
         if (!language.isNullOrBlank()) {
             sb.append("&language=").append(encode(language))

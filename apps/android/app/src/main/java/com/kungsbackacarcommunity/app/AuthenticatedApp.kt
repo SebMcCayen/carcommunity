@@ -190,6 +190,7 @@ import com.kungsbackacarcommunity.app.incidents.Incident
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
+import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -515,6 +516,11 @@ fun AuthenticatedApp(
                         )
                     }
                 }
+            // Whether the loaded incidents include any Trafikverket-imported row,
+            // i.e. whether their open data is actually on screen. Gates the
+            // "Källa: Trafikverket" credit in the layers popup.
+            val trafikverketDataShown =
+                remember(nearbyIncidents) { hasTrafikverketData(nearbyIncidents) }
             // Visibility of the "Traffic alerts" layer (Trafikverket + crowd-sourced
             // incidents) toggled from the map-layers popup. Defaults ON (the shared
             // road-info layer is visible to all users); persisted so the choice
@@ -1436,6 +1442,10 @@ fun AuthenticatedApp(
                                     // gate, non-members would see an action that
                                     // fails on submit.
                                     incidentMarkers = incidentMarkers,
+                                    // Credit Trafikverket only while their data is
+                                    // actually on the map (so: not abroad, where the
+                                    // Sweden-only importer contributes nothing).
+                                    trafikverketDataShown = trafikverketDataShown,
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                                     incidentReportingEnabled =
