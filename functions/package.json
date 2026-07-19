@@ -15,6 +15,8 @@
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
     "emulators:start": "firebase emulators:start --config ../firebase.json",
     "emulators:test": "pnpm build && firebase emulators:exec --only auth,functions,firestore,database,storage --project demo-test --config ../firebase.json 'pnpm test:emulator'",
+    "backfill:display-name-lower": "node scripts/backfill-display-name-lower.mjs",
+    "set-first-admin": "node scripts/set-first-admin.mjs",
     "lockfile:check": "node scripts/deploy-lockfile.mjs check",
     "lockfile:sync": "node scripts/deploy-lockfile.mjs sync"
   },
