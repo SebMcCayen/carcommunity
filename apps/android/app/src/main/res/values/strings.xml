@@ -928,7 +928,6 @@
     <string name="turnByTurn_rerouting">Söker ny väg…</string>
     <string name="turnByTurn_speedLimit">Hastighetsgräns %1$d km/h</string>
     <string name="turnByTurn_currentSpeed">Aktuell hastighet %1$d km/h</string>
-    <string name="turnByTurn_liveShare">Live-position</string>
     <string name="incidents_reportButton">Rapportera händelse</string>
     <string name="incidents_reportTitle">Rapportera en händelse</string>
     <string name="incidents_reportSubtitle">Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.</string>

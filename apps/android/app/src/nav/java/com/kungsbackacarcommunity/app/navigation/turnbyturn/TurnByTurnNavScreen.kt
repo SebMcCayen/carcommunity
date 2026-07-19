@@ -594,18 +594,27 @@ const val TURN_BY_TURN_SPEED_TEST_TAG = "turn_by_turn_speed"
  * roads, where Mapbox coverage thins out) the limit sign is simply absent — the
  * readout degrades to the current speed alone rather than showing a stale or
  * guessed number.
+ *
+ * A null [speed] means no location fix has arrived YET (the state the screen
+ * opens in), not "no speed". It renders as 0 km/h rather than as nothing: the
+ * readout is fixed nav chrome, and a gap where it belongs during the seconds
+ * before the first fix reads as a broken HUD, then shoves the rest of the
+ * bottom row sideways when the number pops in. 0 is also the honest reading for
+ * a car that has just started — it matches [NavSpeedInfo.currentKmh]'s own
+ * contract, which already maps a missing GPS speed to 0 for exactly this
+ * reason, so the readout never blanks once it is on screen either.
  */
 @Composable
 private fun SpeedReadout(
     speed: NavSpeedInfo?,
     modifier: Modifier = Modifier,
 ) {
-    if (speed == null) return
+    val shown = speed ?: NavSpeedInfo(currentKmh = 0, postedLimitKmh = null)
     // TalkBack reads ONE phrase per element ("Current speed 72 km/h", "Speed
     // limit 50 km/h") rather than the bare glyphs, which on their own are two
     // context-free numbers. clearAndSetSemantics replaces the children's nodes
     // instead of adding to them, so the digits aren't announced twice.
-    val currentDescription = stringResource(R.string.turnByTurn_currentSpeed, speed.currentKmh)
+    val currentDescription = stringResource(R.string.turnByTurn_currentSpeed, shown.currentKmh)
     Row(
         modifier = modifier.testTag(TURN_BY_TURN_SPEED_TEST_TAG),
         verticalAlignment = Alignment.Bottom,
@@ -624,7 +633,7 @@ private fun SpeedReadout(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = speed.currentKmh.toString(),
+                    text = shown.currentKmh.toString(),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -635,7 +644,7 @@ private fun SpeedReadout(
                 )
             }
         }
-        val limit = speed.postedLimitKmh
+        val limit = shown.postedLimitKmh
         if (limit != null) {
             val limitDescription = stringResource(R.string.turnByTurn_speedLimit, limit)
             // The posted-limit sign, drawn in the European (Vienna Convention)
@@ -954,10 +963,26 @@ private class TurnByTurnEngine(
      * the app theme) and initialises the route-line layers.
      */
     fun loadStyleAndInit(styleUri: String) {
+        // Retire the previous marker manager BEFORE the new style is loaded,
+        // while its own style is still the current one. A manager cannot be
+        // carried across a style reload: in Maps SDK 11.26.0 the annotation
+        // plugin's `onStyleChanged` is an empty method and AnnotationManagerImpl
+        // registers no style-loaded listener of its own, so nothing re-adds its
+        // GeoJSON source and layer to the new style — a reused manager would
+        // hold a live annotation the map no longer draws. Recreating is
+        // therefore correct; dropping the old reference on the floor was not.
+        // `removeAnnotationManager` is the disposal the plugin exposes: it drops
+        // the manager from the plugin's own manager list and calls its
+        // `onDestroy`, which removes the associated layers and sources from the
+        // style, clears the style images and annotation maps, and unregisters
+        // the map interactions the manager registered. Only the annotations
+        // were being cleaned up before, so those map-level registrations and
+        // list entries accumulated one set per day/night flip.
+        releaseDestMarkerManager()
         runCatching {
             mapView.mapboxMap.loadStyle(styleUri) { style ->
                 runCatching { routeLineView.initializeLayers(style) }
-                // (Re)create the destination-marker manager against the freshly
+                // Create the destination-marker manager against the freshly
                 // loaded style and redraw the marker. A style reload (day/night
                 // flip) drops every annotation, so the marker has to be redrawn
                 // here rather than only once at startup.
@@ -967,6 +992,17 @@ private class TurnByTurnEngine(
                 }
             }
         }
+    }
+
+    /**
+     * Disposes the current destination-marker manager, if any, and clears the
+     * reference. Safe to call when there is none.
+     */
+    private fun releaseDestMarkerManager() {
+        val manager = destMarkerManager ?: return
+        destMarkerManager = null
+        runCatching { manager.deleteAll() }
+        runCatching { mapView.annotations.removeAnnotationManager(manager) }
     }
 
     /**
@@ -1280,7 +1316,9 @@ private class TurnByTurnEngine(
             runCatching { mapView.mapboxMap.removeOnCameraChangeListener(listener) }
         }
         cameraChangeListener = null
-        runCatching { destMarkerManager?.deleteAll() }
-        destMarkerManager = null
+        // Same disposal as a style reload: deleting the annotations alone left
+        // the manager registered with the annotation plugin and its map
+        // interactions live.
+        releaseDestMarkerManager()
     }
 }

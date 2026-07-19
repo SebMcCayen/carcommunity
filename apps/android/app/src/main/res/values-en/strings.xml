@@ -928,7 +928,6 @@
     <string name="turnByTurn_rerouting">Rerouting…</string>
     <string name="turnByTurn_speedLimit">Speed limit %1$d km/h</string>
     <string name="turnByTurn_currentSpeed">Current speed %1$d km/h</string>
-    <string name="turnByTurn_liveShare">Live location</string>
     <string name="incidents_reportButton">Report incident</string>
     <string name="incidents_reportTitle">Report an incident</string>
     <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>

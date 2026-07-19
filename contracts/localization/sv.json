@@ -1006,8 +1006,7 @@
     "reportComingSoon": "Rapportering av händelser och vägarbeten kommer snart.",
     "rerouting": "Söker ny väg…",
     "speedLimit": "Hastighetsgräns %1$d km/h",
-    "currentSpeed": "Aktuell hastighet %1$d km/h",
-    "liveShare": "Live-position"
+    "currentSpeed": "Aktuell hastighet %1$d km/h"
   },
   "incidents": {
     "reportButton": "Rapportera händelse",
