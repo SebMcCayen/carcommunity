@@ -19,10 +19,12 @@ private object Cvd {
     enum class Deficiency(val label: String) {
         DEUTAN("deuteranopia"),
         PROTAN("protanopia"),
+        TRITAN("tritanopia"),
     }
 
     val DEUTAN = Deficiency.DEUTAN
     val PROTAN = Deficiency.PROTAN
+    val TRITAN = Deficiency.TRITAN
 
     private fun expand(v: Double) =
         if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
@@ -56,12 +58,17 @@ private object Cvd {
                 l2 = l
                 m2 = 0.494207 * l + 1.24827 * s
             }
+            Deficiency.TRITAN -> {
+                l2 = l
+                m2 = m
+            }
         }
+        val s2 = if (deficiency == Deficiency.TRITAN) -0.395913 * l + 0.801109 * m else s
 
         // LMS -> sRGB
-        val or = 0.0809444479 * l2 + -0.1305044090 * m2 + 0.1167721260 * s
-        val og = -0.0102485335 * l2 + 0.0540193266 * m2 + -0.1136147080 * s
-        val ob = -0.0003652968 * l2 + -0.0041216147 * m2 + 0.6935114210 * s
+        val or = 0.0809444479 * l2 + -0.1305044090 * m2 + 0.1167721260 * s2
+        val og = -0.0102485335 * l2 + 0.0540193266 * m2 + -0.1136147080 * s2
+        val ob = -0.0003652968 * l2 + -0.0041216147 * m2 + 0.6935114210 * s2
 
         return (0xFF shl 24) or
             (compress(or / 255.0) shl 16) or
@@ -224,7 +231,9 @@ class TrafficPaletteTest {
      *
      * Without this, nothing stopped `low` (free-flowing green) and `severe` (the
      * worst jam) from simulating to near-identical colours — which is exactly
-     * what the first cut of the night ramp did, at ΔE 16.11 under protanopia.
+     * what the first cut of the night ramp did, at ΔE 17.91 under protanopia
+     * (its worst pair overall was `heavy`/`severe` at ΔE 16.24 under
+     * deuteranopia).
      * A driver who cannot tell those apart reads a severe jam as clear road.
      */
     @Test
@@ -292,6 +301,54 @@ class TrafficPaletteTest {
             "simulated low must stay clearly bluer than simulated severe: " +
                 "${low and 0xFF} vs ${severe and 0xFF}",
             (low and 0xFF) > (severe and 0xFF) + 30,
+        )
+    }
+
+    /**
+     * Pins the KDoc's tritanopia paragraph, which is the one place the note
+     * concedes a limitation rather than claiming a win. A conceded limitation is
+     * still a factual claim, so it gets teeth too — this is the same failure
+     * mode the rest of this file exists to prevent.
+     *
+     * Two halves, and only one of them is a floor:
+     *  - `low` vs every other level MUST stay far apart under tritanopia
+     *    (`low` simulates to a blue, everything else to a yellow), because
+     *    "is the road clear or not" has to survive every deficiency;
+     *  - `moderate` vs `severe` is deliberately NOT given a floor. It measures
+     *    ΔE 2.84 and the KDoc says so out loud. Asserting it stays broken would
+     *    be an odd thing to pin, so this only checks that the KDoc's stated
+     *    number is still the truth — if a future tweak separates them, this
+     *    fails and the KDoc's concession must be rewritten as a win.
+     */
+    @Test
+    fun `tritanopia keeps low readable and the KDoc's conceded collapse is accurate`() {
+        val night = TrafficPalette.NIGHT
+        val low = Cvd.simulate(night.low, Cvd.TRITAN)
+        for ((name, color) in
+            listOf(
+                "moderate" to night.moderate,
+                "heavy" to night.heavy,
+                "severe" to night.severe,
+            )) {
+            val delta = Cvd.deltaE(low, Cvd.simulate(color, Cvd.TRITAN))
+            assertTrue(
+                "a tritanope must still tell free-flowing low from $name, but they " +
+                    "are only %.2f apart".format(delta),
+                delta > 100.0,
+            )
+        }
+
+        // The conceded collapse, held to the number the KDoc prints.
+        val moderateSevere =
+            Cvd.deltaE(
+                Cvd.simulate(night.moderate, Cvd.TRITAN),
+                Cvd.simulate(night.severe, Cvd.TRITAN),
+            )
+        assertTrue(
+            "TrafficPalette's KDoc states moderate/severe collapse to ΔE 2.84 under " +
+                "tritanopia; it now measures %.2f, so that paragraph is stale"
+                    .format(moderateSevere),
+            moderateSevere < 5.0,
         )
     }
 

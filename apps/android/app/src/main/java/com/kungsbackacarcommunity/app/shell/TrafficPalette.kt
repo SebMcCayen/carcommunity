@@ -61,10 +61,19 @@ data class CongestionColors(
  *    almost none, giving ΔE 21.12. The "~2x luminance gap from the reds" claim
  *    only ever held for `low` vs `heavy`, not `low` vs `severe`.
  *  - `moderate` vs `heavy` is separated by luminance (~3.3x) AND chroma, so it
- *    is the most robust pair — but "survives any form of colour blindness" is
- *    broader than the tests check: tritanopia is deliberately NOT pinned, since
- *    the blue-yellow deficiency is rare and the ramp is built on exactly that
- *    axis. Tritanopes retain the red/green cue that dichromats lose.
+ *    is the most robust pair under red-green deficiency — but the older claim
+ *    that it "survives any form of colour blindness" is still too broad, and
+ *    saying so is the whole point of this note. Under TRITANOPIA the ramp does
+ *    partially collapse: `moderate` simulates to #B7B700 and `severe` to
+ *    #B1B100, i.e. ΔE 2.84 — indistinguishable. What survives tritanopia is
+ *    `low` against everything else (`low` simulates to a blue #8282FF, ΔE 130+
+ *    from every other level), so "is the road clear or not" still reads; "how
+ *    bad is the jam" does not. Tritanopia is accepted rather than fixed: it
+ *    affects ~0.01% of people, and the yellow→red half of the ramp is built on
+ *    exactly the axis tritanopes lose, so separating it would mean giving up
+ *    the universal traffic colour convention for the red-green majority. The
+ *    tests pin the part that does survive and deliberately do not pin
+ *    `moderate`/`severe` under tritanopia.
  */
 object TrafficPalette {
     /** Original palette — tuned for the bright basemap. Do not change casually. */
