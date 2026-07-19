@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 16,
+      "versionName": "0.8.5",
+      "releaseDate": "2026-07-19",
+      "highlights": [
+        "Hastighet och skyltad hastighet under körning",
+        "Navigering fungerar även utomlands",
+        "Tidsstämplar och datum i chatten"
+      ],
+      "changes": [
+        "Vägbeskrivningen visar nu din hastighet och, där det finns data, skyltad hastighet",
+        "Målet visas med en tydlig markör och kompassen sitter som på kartsidan",
+        "Du kan styra din live-position även medan du navigerar",
+        "Sök och navigera till adresser utomlands – bra på bilresan ner genom Europa",
+        "Chatten visar tidsstämplar och samlar meddelanden under varje datum",
+        "Skrivrutan i chatten ligger nu kvar ovanför tangentbordet",
+        "Träffar under ”Tidigare” laddas igen",
+        "Tydligare trafikfärger i mörkt läge och enhetliga knappfärger på kartan"
+      ]
+    },
+    {
       "versionCode": 15,
       "versionName": "0.8.4",
       "releaseDate": "2026-07-19",
