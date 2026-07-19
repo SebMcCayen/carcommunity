@@ -122,9 +122,14 @@ jobs:
         #    route-preview "Start" button drives turn-by-turn INSIDE the app. When
         #    ABSENT (secret unset), the token is empty, the token-less src/noNav stub
         #    is compiled, and "Start" hands off to the device's maps app — the build
-        #    still succeeds either way. So this env line is a no-op until the
-        #    MAPBOX_DOWNLOADS_TOKEN production secret is added; adding that secret is
-        #    the single switch that ships in-app navigation.
+        #    still succeeds either way — which makes this the single switch that
+        #    ships in-app navigation. The secret IS now set in the `production`
+        #    environment, so release builds compile the real src/nav; removing it
+        #    (or setting it empty) would silently downgrade releases back to the
+        #    hand-off stub without failing the build. `src/nav` is
+        #    also compiled on PRs by the `nav-variant-compile` job in
+        #    validate-android.yml, so a compile error there no longer waits for a
+        #    release build to surface.
         env:
           ORG_GRADLE_PROJECT_MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
           ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
