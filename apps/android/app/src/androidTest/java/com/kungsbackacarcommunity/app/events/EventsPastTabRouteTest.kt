@@ -83,7 +83,7 @@ class EventsPastTabRouteTest {
                     repository = repo,
                     rsvpCoordinator = null,
                     uid = "u1",
-                    isActiveMember = true,
+                    passesMemberGate = true,
                     chatRepository = null,
                     chatCoordinator = null,
                     chatEnabled = false,
