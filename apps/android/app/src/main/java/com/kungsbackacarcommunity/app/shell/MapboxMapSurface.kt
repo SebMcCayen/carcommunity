@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.LaunchedEffect
@@ -533,7 +534,14 @@ class MapboxMapSurface : MapSurface {
         // belief. The BOOLEAN is all that travels; the token value never does.
         val accessTokenPresent = stringResource(R.string.mapbox_access_token).isNotBlank()
         val health = rememberFeatureHealthReporter(accessTokenPresent = accessTokenPresent)
-        val healthLifecycle = LocalLifecycleOwner.current
+        // The watchdog below is deliberately keyed on `health` alone, so a change
+        // of lifecycle owner (a different NavBackStackEntry / host) does NOT
+        // restart the blank-map clock and lose the time already accrued. That
+        // makes the coroutine outlive the owner it launched with, so it must read
+        // the CURRENT owner on every tick rather than the one it captured —
+        // otherwise it would gate reporting on a stale, permanently-DESTROYED
+        // lifecycle and either suppress every report or mislabel `foreground`.
+        val healthLifecycle by rememberUpdatedState(LocalLifecycleOwner.current)
         DisposableEffect(health) {
             healthReporter = health
             onDispose { healthReporter = null }
@@ -557,7 +565,15 @@ class MapboxMapSurface : MapSurface {
                 val eligible =
                     surfaceShown && surfaceActive && appInForeground && health.isOnline()
                 val fired = watchdog.onTick(HEALTH_TICK_MILLIS, eligible, everRendered)
-                if (fired) {
+                // Re-read `everRendered` instead of reusing the snapshot above.
+                // It is @Volatile because the Maps SDK sets it from its NATIVE
+                // callback threads, so it can flip to true between the tick
+                // decision and this report — precisely in the marginal case this
+                // watchdog targets, a map that finally renders around the timeout
+                // boundary. The report files a WORLD-READABLE GitHub issue, so a
+                // "map never rendered" claim about a map that just rendered is
+                // exactly the false positive worth one extra volatile read.
+                if (fired && !everRendered) {
                     health.report(
                         kind = FeatureHealthKind.MapRenderTimeout,
                         foreground = appInForeground,

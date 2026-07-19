@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -215,6 +216,16 @@ fun TurnByTurnNavScreen(
         }
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // The engine is remembered on (mapView, maneuverView, health) and must STAY
+    // that way — adding the lifecycle owner as a key would tear down and rebuild
+    // the whole navigation session (trip session, route, camera) just because the
+    // host changed. So the owner is read through a rememberUpdatedState instead:
+    // the remembered `isForeground` lambda below then samples the CURRENT owner
+    // rather than the one captured when the engine was built, which would
+    // otherwise be a permanently-DESTROYED lifecycle reporting `foreground=false`
+    // for the rest of the session.
+    val currentLifecycleOwner by rememberUpdatedState(lifecycleOwner)
+
     // Feature health: turn-by-turn's failure modes are SILENT. A route request
     // that exhausts its retries leaves the user on a map with no route, no error
     // text and no retry affordance, and nothing throws — so nothing is reported
@@ -236,7 +247,8 @@ fun TurnByTurnNavScreen(
                 // fail long after the user has left the app, and a failure nobody
                 // is waiting on must not file an issue.
                 isForeground = {
-                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                    currentLifecycleOwner.lifecycle.currentState
+                        .isAtLeast(Lifecycle.State.RESUMED)
                 },
             )
         }
