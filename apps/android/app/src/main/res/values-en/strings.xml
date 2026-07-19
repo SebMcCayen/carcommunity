@@ -580,6 +580,9 @@
     <string name="garage_photoUploading">Uploading…</string>
     <string name="garage_photoUploadError">Couldn’t upload the image. Please try again.</string>
     <string name="garage_photoTooLarge">The image is too large.</string>
+    <string name="garage_photoCropTitle">Crop photo</string>
+    <string name="garage_photoCropHint">Drag to position and pinch to zoom. The area inside the frame is what others will see.</string>
+    <string name="garage_photoCropConfirm">Use photo</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>

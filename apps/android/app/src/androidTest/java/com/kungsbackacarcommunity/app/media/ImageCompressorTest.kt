@@ -6,12 +6,15 @@ import android.graphics.Color
 import android.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -156,8 +159,11 @@ class ImageCompressorTest {
     }
 
     /** Writes [attrs] onto a fresh JPEG and returns the resulting bytes. */
-    private fun jpegWithExif(attrs: ExifInterface.() -> Unit): ByteArray {
-        val bitmap = gradientBitmap(64, 64)
+    private fun jpegWithExif(attrs: ExifInterface.() -> Unit): ByteArray =
+        jpegWithExif(gradientBitmap(64, 64), attrs)
+
+    /** Writes [attrs] onto a JPEG encoded from [bitmap] (which is recycled). */
+    private fun jpegWithExif(bitmap: Bitmap, attrs: ExifInterface.() -> Unit): ByteArray {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File.createTempFile("exif-meta", ".jpg", context.cacheDir)
         return try {
@@ -168,6 +174,263 @@ class ImageCompressorTest {
             file.delete()
             bitmap.recycle()
         }
+    }
+
+    /**
+     * True when [bytes] expose usable coordinates. `android.media.ExifInterface`
+     * has no `latLong` property (that is androidx's); it fills a float[2] and
+     * reports whether it found a fix.
+     */
+    private fun hasLatLong(bytes: ByteArray): Boolean =
+        ByteArrayInputStream(bytes).use { ExifInterface(it) }.getLatLong(FloatArray(2))
+
+    /** The GPS + device tags a phone camera embeds; the audit's leak vector. */
+    private val geotag: ExifInterface.() -> Unit = {
+        setAttribute(ExifInterface.TAG_GPS_LATITUDE, "57/1,29/1,13/1")
+        setAttribute(ExifInterface.TAG_GPS_LATITUDE_REF, "N")
+        setAttribute(ExifInterface.TAG_GPS_LONGITUDE, "12/1,4/1,15/1")
+        setAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF, "E")
+        setAttribute(ExifInterface.TAG_MAKE, "ACME")
+        setAttribute(ExifInterface.TAG_MODEL, "Phone X")
+        setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, "2024:01:01 12:00:00")
+    }
+
+    /** A bitmap whose left half is red and right half is blue. */
+    private fun halvesBitmap(width: Int, height: Int): Bitmap {
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            val rowOffset = y * width
+            for (x in 0 until width) {
+                pixels[rowOffset + x] = if (x < width / 2) Color.RED else Color.BLUE
+            }
+        }
+        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+    }
+
+    // ---------------------------------------------------------------------
+    // Crop step (vehicle photo). The crop is a PARAMETER of the sanitiser, so
+    // these tests are simultaneously the crop's correctness proof and the proof
+    // that cropping did not open a route around EXIF/GPS stripping.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun compressForPublicUpload_croppedGeotaggedPhoto_isStillStripped() = runBlocking {
+        // THE regression test for the audit finding, extended to the crop flow:
+        // a geotagged photo that the user cropped must come back cropped AND
+        // free of every strip tag. If a future change ever crops OUTSIDE the
+        // compressor and uploads those bytes, this fails.
+        val source = jpegWithExif(halvesBitmap(1600, 1200), geotag)
+        assertTrue(
+            "precondition: the source really is geotagged",
+            ImageCompressor.carriesStrippableMetadata(source),
+        )
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        // The right (blue) half, trimmed to the 16:9 the cards render at.
+        val crop = NormalizedCropRect(left = 0.5f, top = 0.125f, width = 0.5f, height = 0.75f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+            )
+
+        assertNotNull("a decodable photo must sanitise successfully", result)
+        requireNotNull(result)
+        assertEquals("image/jpeg", result.contentType)
+        assertFalse(
+            "a CROPPED vehicle photo must still carry no GPS/identifying EXIF — " +
+                "cropping must not become a route around compressForPublicUpload",
+            ImageCompressor.carriesStrippableMetadata(result.bytes),
+        )
+        assertFalse(
+            "the cropped upload must expose no coordinates",
+            hasLatLong(result.bytes),
+        )
+    }
+
+    @Test
+    fun compressForPublicUpload_cropSelectsTheRequestedRegion() = runBlocking {
+        // Proves the crop is genuinely applied (and to the right region): the
+        // source is red|blue, the crop takes the blue half, so every sampled
+        // pixel of the output must be blue-dominant.
+        val source = jpegWithExif(halvesBitmap(1600, 1200), geotag)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        val crop = NormalizedCropRect(left = 0.5f, top = 0.125f, width = 0.5f, height = 0.75f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+            )
+        requireNotNull(result)
+
+        val decoded = BitmapFactory.decodeByteArray(result.bytes, 0, result.bytes.size)
+        assertNotNull(decoded)
+        try {
+            // 16:9 out of a 4:3 source cropped to half width: 800x900 source
+            // pixels, so the output must be that ratio (JPEG dimensions are
+            // exact; allow a pixel of rounding).
+            val ratio = decoded.width.toFloat() / decoded.height.toFloat()
+            assertEquals(
+                "cropped output must carry the requested aspect ratio",
+                800f / 900f,
+                ratio,
+                0.02f,
+            )
+            listOf(0.1f, 0.5f, 0.9f).forEach { fx ->
+                listOf(0.1f, 0.5f, 0.9f).forEach { fy ->
+                    val pixel =
+                        decoded.getPixel(
+                            (decoded.width * fx).toInt().coerceIn(0, decoded.width - 1),
+                            (decoded.height * fy).toInt().coerceIn(0, decoded.height - 1),
+                        )
+                    assertTrue(
+                        "crop must keep only the BLUE half — sampled ($fx,$fy) got " +
+                            "r=${Color.red(pixel)} b=${Color.blue(pixel)}",
+                        Color.blue(pixel) > Color.red(pixel),
+                    )
+                }
+            }
+        } finally {
+            decoded.recycle()
+        }
+    }
+
+    @Test
+    fun compressForPublicUpload_cropOnUndecodableImage_failsClosed() = runBlocking {
+        // The strip fallback can only produce the WHOLE frame, which would
+        // upload exactly the region the user cropped away (the house number, the
+        // neighbour's plate). With a crop requested there is no safe fallback,
+        // so it must fail closed and the caller must skip the upload.
+        val garbage = ByteArray(2048) { 0x7F }
+        val picked = PickedImage(bytes = garbage, contentType = "image/jpeg")
+        val crop = NormalizedCropRect(left = 0.25f, top = 0.25f, width = 0.5f, height = 0.28f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+            )
+
+        assertNull("an undecodable pick with a crop must fail closed", result)
+    }
+
+    @Test
+    fun compressForPublicUpload_fullFrameCropBehavesLikeNoCrop() = runBlocking {
+        // A full-frame rect is what the crop screen emits when the box has not
+        // been measured. It must NOT opt out of the strip fallback, or an
+        // unmeasured crop box would turn a recoverable pick into a failed one.
+        val source = jpegWithExif(geotag)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+
+        val cropped =
+            ImageCompressor.compressForPublicUpload(picked, crop = NormalizedCropRect.FULL)
+        val uncropped = ImageCompressor.compressForPublicUpload(picked, crop = null)
+
+        assertNotNull(cropped)
+        assertNotNull(uncropped)
+        requireNotNull(cropped)
+        assertFalse(ImageCompressor.carriesStrippableMetadata(cropped.bytes))
+    }
+
+    @Test
+    fun decodeForCrop_orientsThePreviewLikeTheReencode() = runBlocking {
+        // The crop UI must show the photo the same way up as the re-encode will
+        // save it; otherwise the user frames a sideways photo and gets an
+        // upright, wrongly-cropped one.
+        val landscape = gradientBitmap(2000, 1000)
+        val source =
+            jpegWithExif(landscape) {
+                setAttribute(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_ROTATE_90.toString(),
+                )
+            }
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+
+        val preview = ImageCompressor.decodeForCrop(picked)
+
+        assertNotNull(preview)
+        requireNotNull(preview)
+        try {
+            assertTrue(
+                "ORIENTATION_ROTATE_90 must make the PREVIEW portrait too " +
+                    "(${preview.width}x${preview.height})",
+                preview.height > preview.width,
+            )
+            assertTrue(
+                "preview must be downscaled for display",
+                maxOf(preview.width, preview.height) <= ImageCompressor.VEHICLE_MAX_DIMENSION * 2,
+            )
+        } finally {
+            preview.recycle()
+        }
+    }
+
+    @Test
+    fun decodeForCrop_undecodableImage_returnsNull() = runBlocking {
+        assertNull(
+            ImageCompressor.decodeForCrop(
+                PickedImage(bytes = ByteArray(1024) { 0x11 }, contentType = "image/jpeg"),
+            ),
+        )
+    }
+
+    @Test
+    fun naiveCropLibraryOutput_wouldLeakGps() {
+        // Teeth by contrast, and the reason the crop step returns a WINDOW
+        // rather than an image: this is what a typical crop library hands back —
+        // it re-encodes the crop and deliberately copies the source EXIF forward
+        // so the result "keeps its metadata". Uploading that Uri/byte array
+        // directly, as the obvious integration would, republishes the owner's
+        // coordinates from a photo that LOOKS freshly encoded.
+        //
+        // Nothing in production may produce bytes this way; if this ever stops
+        // leaking, the contrast is moot but the guarantee above still stands.
+        val source = jpegWithExif(halvesBitmap(800, 600), geotag)
+        val decoded = BitmapFactory.decodeByteArray(source, 0, source.size)
+        val cropped = Bitmap.createBitmap(decoded, 400, 0, 400, 600)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("naive-crop", ".jpg", context.cacheDir)
+        val leaked =
+            try {
+                file.writeBytes(jpegBytes(cropped, 90))
+                val from = ByteArrayInputStream(source).use { ExifInterface(it) }
+                ExifInterface(file.absolutePath).apply {
+                    setAttribute(
+                        ExifInterface.TAG_GPS_LATITUDE,
+                        from.getAttribute(ExifInterface.TAG_GPS_LATITUDE),
+                    )
+                    setAttribute(
+                        ExifInterface.TAG_GPS_LATITUDE_REF,
+                        from.getAttribute(ExifInterface.TAG_GPS_LATITUDE_REF),
+                    )
+                    setAttribute(
+                        ExifInterface.TAG_GPS_LONGITUDE,
+                        from.getAttribute(ExifInterface.TAG_GPS_LONGITUDE),
+                    )
+                    setAttribute(
+                        ExifInterface.TAG_GPS_LONGITUDE_REF,
+                        from.getAttribute(ExifInterface.TAG_GPS_LONGITUDE_REF),
+                    )
+                    saveAttributes()
+                }
+                file.readBytes()
+            } finally {
+                file.delete()
+                cropped.recycle()
+                decoded.recycle()
+            }
+
+        assertTrue(
+            "a crop-library-shaped output carries the source's GPS forward — " +
+                "which is exactly why the crop step must not produce upload bytes",
+            ImageCompressor.carriesStrippableMetadata(leaked),
+        )
+        assertTrue(hasLatLong(leaked))
     }
 
     @Test

@@ -628,7 +628,10 @@
     "photoChange": "Change photo",
     "photoUploading": "Uploading…",
     "photoUploadError": "Couldn’t upload the image. Please try again.",
-    "photoTooLarge": "The image is too large."
+    "photoTooLarge": "The image is too large.",
+    "photoCropTitle": "Crop photo",
+    "photoCropHint": "Drag to position and pinch to zoom. The area inside the frame is what others will see.",
+    "photoCropConfirm": "Use photo"
   },
   "badges": {
     "screenTitle": "Awards",
