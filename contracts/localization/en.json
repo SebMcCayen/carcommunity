@@ -889,6 +889,13 @@
     "convoyUntitled": "Convoy",
     "convoyMembers": "Members: %1$d"
   },
+  "chatTime": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "daySeparatorFormat": "EEEE, d MMMM",
+    "daySeparatorFormatWithYear": "EEEE, d MMMM yyyy",
+    "messageSentAt": "Sent at %1$s"
+  },
   "shell": {
     "searchHint": "Where to?",
     "searchIcon": "Search",
@@ -1004,7 +1011,9 @@
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",
     "reportComingSoon": "Incident and roadwork reporting is coming soon.",
-    "rerouting": "Rerouting…"
+    "rerouting": "Rerouting…",
+    "speedLimit": "Speed limit %1$d km/h",
+    "currentSpeed": "Current speed %1$d km/h"
   },
   "incidents": {
     "reportButton": "Report incident",

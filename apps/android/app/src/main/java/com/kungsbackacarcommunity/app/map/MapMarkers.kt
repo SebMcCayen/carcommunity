@@ -200,3 +200,32 @@ object MapMarkers {
         return cameraFor(focus)
     }
 }
+
+/**
+ * The map's shared MARKER STYLING — the visual language every destination pin in
+ * the app is drawn with, wherever it is drawn.
+ *
+ * Lives here (next to the marker model, no Android/Mapbox imports) rather than
+ * inside one renderer because there are now TWO renderers drawing the same
+ * concept: the shell's [com.kungsbackacarcommunity.app.shell.MapboxMapSurface]
+ * route-preview overlay, and the turn-by-turn navigation map's end-of-route
+ * marker. They MUST look identical — a destination that changes appearance the
+ * moment you press "Start" reads as a different thing — so the values are stated
+ * once and both renderers read them.
+ *
+ * ARGB ints and pixel-ish radii, matching the Mapbox annotation options that
+ * consume them (`withCircleRadius` / `withCircleColor` / `withCircleStroke*`).
+ */
+object MapMarkerStyle {
+    /** Destination pin fill: the app's marker red. */
+    const val DEST_MARKER_COLOR: Int = 0xFFD32F2F.toInt()
+
+    /** Destination pin radius. */
+    const val DEST_MARKER_RADIUS: Double = 9.0
+
+    /** Destination pin outline width — keeps the dot legible on any basemap. */
+    const val DEST_MARKER_STROKE: Double = 2.0
+
+    /** Destination pin outline colour (white). */
+    const val DEST_MARKER_STROKE_COLOR: Int = 0xFFFFFFFF.toInt()
+}

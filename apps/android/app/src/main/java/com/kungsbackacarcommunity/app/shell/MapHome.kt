@@ -754,9 +754,15 @@ private fun LayerToggleRow(
  *   member-gated on the backend), Stop/Hide stay reachable in the sharing state.
  * A "More options" row always opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
  * for the complete controls + privacy details. Each action closes the popup.
+ *
+ * `internal`, not private, because turn-by-turn navigation shows THIS sheet too:
+ * a live-location session keeps running while the user navigates, so the
+ * controls for it have to stay reachable there — and they must be the same
+ * sheet, with the same wording and the same privacy escape hatch, not a second
+ * live-sharing UI that can drift from this one.
  */
 @Composable
-private fun LiveSharePopup(
+internal fun LiveSharePopup(
     isSharing: Boolean,
     canShareLive: Boolean,
     onStart: () -> Unit,
@@ -1203,8 +1209,18 @@ private fun ParticipantChip(count: Int) {
     }
 }
 
+/**
+ * One floating round map control — the shared shape/size/elevation/haptics of
+ * the map's right-side stack (compass, live-location, layers, recenter, chat).
+ *
+ * `internal`, not private, because the turn-by-turn navigation screen draws the
+ * SAME controls (see `navigation/turnbyturn/TurnByTurnNavScreen.kt`): its
+ * compass and live-location buttons must be the same control as the map home's,
+ * not a look-alike, so a change to the map's control language reaches
+ * navigation automatically instead of drifting from it.
+ */
 @Composable
-private fun CircleControl(
+internal fun CircleControl(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,

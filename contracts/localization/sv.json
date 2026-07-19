@@ -889,6 +889,13 @@
     "convoyUntitled": "Konvoj",
     "convoyMembers": "Medlemmar: %1$d"
   },
+  "chatTime": {
+    "today": "Idag",
+    "yesterday": "Igår",
+    "daySeparatorFormat": "EEEE d MMMM",
+    "daySeparatorFormatWithYear": "EEEE d MMMM yyyy",
+    "messageSentAt": "Skickat %1$s"
+  },
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",
@@ -1004,7 +1011,9 @@
     "unavailable": "Navigering är inte tillgänglig här.",
     "permissionNeeded": "Platsåtkomst krävs för att navigera.",
     "reportComingSoon": "Rapportering av händelser och vägarbeten kommer snart.",
-    "rerouting": "Söker ny väg…"
+    "rerouting": "Söker ny väg…",
+    "speedLimit": "Hastighetsgräns %1$d km/h",
+    "currentSpeed": "Aktuell hastighet %1$d km/h"
   },
   "incidents": {
     "reportButton": "Rapportera händelse",

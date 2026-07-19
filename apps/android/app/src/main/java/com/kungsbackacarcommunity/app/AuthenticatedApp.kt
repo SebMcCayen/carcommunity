@@ -1113,6 +1113,24 @@ fun AuthenticatedApp(
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
+                        // Live location keeps running while the user navigates, so
+                        // its control has to come WITH them into the navigation
+                        // screen — wired to the same coordinator and the same
+                        // start/hide actions as the map home's control below, so
+                        // there is one live-sharing behaviour, not two.
+                        isLiveSharing = isSharing,
+                        canShareLive = canShareLive,
+                        onStartLiveShare = { requestStartSingleSession() },
+                        onHideMeNow = {
+                            val c = liveLocationCoordinator
+                            if (c != null) {
+                                scope.launch { c.hideMeNow() }
+                            } else {
+                                openLiveShareFallback()
+                            }
+                            BackgroundLocationController.stop(context)
+                        },
+                        onOpenLiveShareDetails = { openLiveShareFallback() },
                     )
                 } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
