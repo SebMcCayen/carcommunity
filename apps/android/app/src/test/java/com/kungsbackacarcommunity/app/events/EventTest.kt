@@ -95,6 +95,45 @@ class EventTest {
         assertFalse(payload.containsKey("locationName"))
     }
 
+    @Test
+    fun `past list is most recent first`() {
+        val sorted =
+            Events.sortedForPastList(
+                listOf(
+                    event("old", 1_000L),
+                    event("newest", 3_000L),
+                    event("middle", 2_000L),
+                ),
+            )
+        assertEquals(listOf("newest", "middle", "old"), sorted.map { it.id })
+    }
+
+    @Test
+    fun `past list is the reverse of the upcoming order, not the same order`() {
+        // Pins the direction itself: a past view that reused sortedForList
+        // would show the oldest event at the top of the archive.
+        val events = listOf(event("a", 1_000L), event("b", 2_000L), event("c", 3_000L))
+        val upcoming = Events.sortedForList(events).map { it.id }
+        val past = Events.sortedForPastList(events).map { it.id }
+        assertEquals(upcoming.reversed(), past)
+    }
+
+    @Test
+    fun `an event with no start time sorts last in the past list, not first`() {
+        // nullsLast wraps the DESCENDING comparator. Reversing the ascending
+        // comparator instead would float the unknown-time event to the top of
+        // the archive and claim it is the most recent thing that happened.
+        val sorted =
+            Events.sortedForPastList(
+                listOf(
+                    event("unknown", null),
+                    event("older", 1_000L),
+                    event("newer", 2_000L),
+                ),
+            )
+        assertEquals(listOf("newer", "older", "unknown"), sorted.map { it.id })
+    }
+
     private fun createInput() =
         CreateEventInput(
             title = "Cars & Coffee",

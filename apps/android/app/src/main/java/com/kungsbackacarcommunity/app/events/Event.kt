@@ -143,6 +143,17 @@ object Events {
     const val PUBLISHED_EVENTS_QUERY_LIMIT = 200L
 
     /**
+     * Maximum completed events the past/archive listener subscribes to (most
+     * recent first, matching [sortedForPastList]). Smaller than
+     * [PUBLISHED_EVENTS_QUERY_LIMIT] on purpose: `completed` is the terminal
+     * state of *every* event once `events-autoClose` has run, so this
+     * collection only ever grows, while interest in it falls off sharply with
+     * age. The bound keeps the snapshot finite; the oldest events fall off the
+     * end, which is the correct end to lose.
+     */
+    const val PAST_EVENTS_QUERY_LIMIT = 100L
+
+    /**
      * Maps an `events-create` callable error code onto a [CreateEventFailure].
      * Accepts both the Firebase Android SDK's enum name (`RESOURCE_EXHAUSTED`)
      * and the wire/`HttpsError` spelling (`resource-exhausted`) so the mapping
@@ -178,6 +189,18 @@ object Events {
     fun sortedForList(events: List<EventSummary>): List<EventSummary> =
         events.sortedWith(
             compareBy(nullsLast<Long>()) { it.startsAtMillis },
+        )
+
+    /**
+     * Past (completed) events sorted most-recent-first — the reverse of
+     * [sortedForList]. An event with no readable `startsAt` sorts LAST here as
+     * well, not first: `nullsLast` is applied to the descending comparator
+     * rather than reversing the ascending one, so a missing time never
+     * masquerades as the newest thing in the archive.
+     */
+    fun sortedForPastList(events: List<EventSummary>): List<EventSummary> =
+        events.sortedWith(
+            compareBy(nullsLast(reverseOrder<Long>())) { it.startsAtMillis },
         )
 
     /** Backend field limits (events-core.ts eventFieldsSchema). */

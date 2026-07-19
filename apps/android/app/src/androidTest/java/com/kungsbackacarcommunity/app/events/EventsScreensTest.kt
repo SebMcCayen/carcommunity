@@ -64,6 +64,109 @@ class EventsScreensTest {
     }
 
     @Test
+    fun list_pastTab_showsItsOwnEmptyState_notTheUpcomingOne() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(emptyList()),
+                    onOpenEvent = {},
+                    tab = EventsListTab.PAST,
+                    onSelectTab = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_noPastTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_noUpcomingTitle)).assertDoesNotExist()
+    }
+
+    @Test
+    fun list_pastTab_showsCompletedEventWithHeldBadge() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state =
+                        EventsListState.Loaded(
+                            listOf(event("done-1", status = EventStatus.COMPLETED)),
+                        ),
+                    onOpenEvent = {},
+                    tab = EventsListTab.PAST,
+                    onSelectTab = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Cars & Coffee").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_completedBadge))
+            .performScrollTo()
+            .assertIsDisplayed()
+        // "Held" is not "Cancelled" — a completed event ran, it wasn't called off.
+        composeTestRule.onNodeWithText(str(R.string.events_cancelledBadge)).assertDoesNotExist()
+    }
+
+    @Test
+    fun list_publishedEvent_showsNoHeldBadge() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(listOf(event())),
+                    onOpenEvent = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_completedBadge)).assertDoesNotExist()
+    }
+
+    @Test
+    fun list_tappingPastTab_reportsSelection() {
+        var selected: EventsListTab? = null
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(emptyList()),
+                    onOpenEvent = {},
+                    tab = EventsListTab.UPCOMING,
+                    onSelectTab = { selected = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_tabPast)).performClick()
+        assertEquals(EventsListTab.PAST, selected)
+    }
+
+    @Test
+    fun list_pastTab_hidesTheCreateButton() {
+        // "Create event" is offered on the upcoming tab and withheld on the
+        // archive even though onCreateEvent is non-null in both cases.
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(emptyList()),
+                    onOpenEvent = {},
+                    tab = EventsListTab.PAST,
+                    onSelectTab = {},
+                    onCreateEvent = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_createButton)).assertDoesNotExist()
+    }
+
+    @Test
+    fun list_upcomingTab_stillShowsTheCreateButton() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(emptyList()),
+                    onOpenEvent = {},
+                    tab = EventsListTab.UPCOMING,
+                    onSelectTab = {},
+                    onCreateEvent = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.events_createButton)).assertIsDisplayed()
+    }
+
+    @Test
     fun detail_member_canRsvp() {
         var answer: RsvpStatus? = null
         composeTestRule.setContent {

@@ -210,6 +210,12 @@
     <string name="events_officialBadge">Officiell träff</string>
     <string name="events_noUpcomingTitle">Inga kommande träffar</string>
     <string name="events_noUpcomingBody">Håll utkik – träffinformation dyker upp här snart.</string>
+    <string name="events_tabUpcoming">Kommande</string>
+    <string name="events_tabPast">Tidigare</string>
+    <string name="events_pastSubtitle">Träffar som redan har varit.</string>
+    <string name="events_noPastTitle">Inga tidigare träffar</string>
+    <string name="events_noPastBody">När en träff har varit hamnar den här, så att du kan gå tillbaka och titta på den.</string>
+    <string name="events_completedBadge">Avslutad</string>
     <string name="events_memberRequiredTitle">Eventdetaljer kräver KCC Medlem.</string>
     <string name="events_memberRequiredBody">Som medlem kan du se exakt plats, mer information och RSVP.</string>
     <string name="events_memberGateBody">KCC Medlem krävs för att se exakt plats, eventinformation och RSVP.</string>

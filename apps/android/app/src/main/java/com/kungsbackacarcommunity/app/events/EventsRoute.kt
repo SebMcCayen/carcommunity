@@ -69,6 +69,9 @@ fun EventsRoute(
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showGroupDrive by rememberSaveable { mutableStateOf(false) }
     var showCreate by rememberSaveable { mutableStateOf(false) }
+    // Upcoming vs past. Saveable so a rotation does not silently drop the user
+    // back onto the upcoming tab while they are reading the archive.
+    var listTab by rememberSaveable { mutableStateOf(EventsListTab.UPCOMING) }
     // Bumped by the "try again" affordance to re-subscribe the observe flows.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     val selected = selectedEventId
@@ -124,12 +127,22 @@ fun EventsRoute(
             return
         }
 
+        // One tab is subscribed at a time: `remember(listTab, ...)` tears the
+        // previous listener down when the tab flips, so browsing the archive
+        // does not leave the upcoming query attached (and vice versa).
         val listState by
-            remember(repository, reloadKey) { repository.observePublishedEvents() }
+            remember(repository, reloadKey, listTab) {
+                when (listTab) {
+                    EventsListTab.UPCOMING -> repository.observePublishedEvents()
+                    EventsListTab.PAST -> repository.observePastEvents()
+                }
+            }
                 .collectAsState(initial = EventsListState.Loading)
         EventsListScreen(
             state = listState,
             onOpenEvent = { selectedEventId = it },
+            tab = listTab,
+            onSelectTab = { listTab = it },
             onRetry = { reloadKey++ },
             onBack = onBack,
             onCreateEvent = { showCreate = true },

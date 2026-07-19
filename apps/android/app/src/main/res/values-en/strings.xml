@@ -210,6 +210,12 @@
     <string name="events_officialBadge">Official event</string>
     <string name="events_noUpcomingTitle">No upcoming events</string>
     <string name="events_noUpcomingBody">Stay tuned — event information will appear here soon.</string>
+    <string name="events_tabUpcoming">Upcoming</string>
+    <string name="events_tabPast">Past</string>
+    <string name="events_pastSubtitle">Events that have already been held.</string>
+    <string name="events_noPastTitle">No past events</string>
+    <string name="events_noPastBody">Once an event has been held it moves here, so you can look it up afterwards.</string>
+    <string name="events_completedBadge">Held</string>
     <string name="events_memberRequiredTitle">Event details require KCC Membership.</string>
     <string name="events_memberRequiredBody">As a member you can see exact location, more information and RSVP.</string>
     <string name="events_memberGateBody">KCC Membership is required to see exact location, event details, and RSVP.</string>
