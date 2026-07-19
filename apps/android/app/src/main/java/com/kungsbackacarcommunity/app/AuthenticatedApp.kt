@@ -1139,6 +1139,7 @@ fun AuthenticatedApp(
                 // loads once. Someone joining or leaving elsewhere therefore shows
                 // up on the next refresh rather than instantly; acceptable for a
                 // head-count, and the alternative is a second source of truth.
+
                 // The SHARED-destination repository. Deliberately the "no backend"
                 // one: `convoy-setDestination` / `convoy-clearDestination` are not
                 // deployed (see the ConvoyDestination file KDoc for the contract
