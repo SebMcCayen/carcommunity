@@ -16,8 +16,10 @@
         //
         // TO RE-LOCK: put `auth.token.activeMember == true && ` back at the
         // start of the non-owner branch, then redeploy database rules.
-        // Independent of functions/src/shared/memberGating.ts, firestore.rules
-        // and storage.rules — all four switches must be flipped together.
+        // Independent of functions/src/shared/memberGating.ts, firestore.rules,
+        // storage.rules AND the Android UI switch in
+        // apps/android/.../config/MemberGating.kt — all FIVE switches must be
+        // flipped together (memberGating.ts is the authoritative runbook).
         "latest": {
           ".read": "auth != null && (auth.uid == $uid || (auth.token.suspended != true && !root.child('liveLocationBlocks').child($uid).child(auth.uid).exists() && !root.child('liveLocationBlocks').child(auth.uid).child($uid).exists()))"
         }

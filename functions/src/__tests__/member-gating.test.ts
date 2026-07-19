@@ -22,7 +22,9 @@ function state(overrides: Partial<UserAccessState> = {}): UserAccessState {
 describe('MEMBER_GATING_ENABLED', () => {
   it('is currently false — features are unlocked for testing', () => {
     // Flipping this to true re-locks the callable layer. If you flip it, the
-    // three rules-layer switches must be flipped too (see memberGating.ts).
+    // other FOUR switches must be flipped too — the three rules layers AND the
+    // Android UI switch (config/MemberGating.kt). See memberGating.ts, the
+    // authoritative runbook.
     expect(MEMBER_GATING_ENABLED).toBe(false);
   });
 });

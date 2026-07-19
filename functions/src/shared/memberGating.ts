@@ -7,11 +7,13 @@
  * constant, and re-locking is a one-value change per layer.
  *
  * ===========================================================================
- * HOW TO RE-LOCK (four separate switches — ALL must be flipped together)
+ * HOW TO RE-LOCK (FIVE separate switches — ALL must be flipped together)
  * ===========================================================================
- * Rules files cannot read this TypeScript constant, so each enforcement layer
- * carries its own switch. They are NOT kept in sync automatically. Flip all
- * four, then redeploy functions AND rules (see docs below).
+ * This file is the authoritative re-locking runbook. Neither rules files nor
+ * Kotlin can read this TypeScript constant, so each enforcement layer carries
+ * its own switch. They are NOT kept in sync automatically.
+ *
+ * FOUR BACKEND switches (1-4) + ONE ANDROID UI switch (5). Flip all five.
  *
  *   1. Callables (this file):
  *        MEMBER_GATING_ENABLED = false   ->   true
@@ -29,8 +31,20 @@
  *      restore the `auth.token.activeMember == true &&` term (the suspension
  *      and liveLocationBlocks terms are already there and must stay).
  *
+ *   5. apps/android/app/src/main/java/com/kungsbackacarcommunity/app/config/
+ *      MemberGating.kt:
+ *        const val ENABLED = false   ->   true
+ *      ...then ship a new Android build. THIS ONE IS EASY TO FORGET AND
+ *      FORGETTING IT IS NOT COSMETIC: the backend would refuse actions the UI
+ *      still offers, which is precisely the bug class this PR was built to
+ *      fix (a non-member could record a drive they could never save). If you
+ *      cannot ship the app and backend together, re-lock the UI FIRST — an
+ *      app that hides a working feature is recoverable; an app that offers a
+ *      failing one is not.
+ *
  * Deploy after flipping — the switches are inert until then:
  *   firebase deploy --only functions,firestore:rules,storage,database
+ * ...plus a new Android release for (5).
  *
  * ===========================================================================
  * WHAT IS *NOT* BYPASSED (safety guards that always apply)
@@ -69,8 +83,10 @@ import {
  * The single switch for every member-gated callable. `false` = all features
  * unlocked for any signed-in, non-suspended, non-deleted account.
  *
- * Set back to `true` to re-lock the callable layer (and flip the three rules
- * switches listed in this module's docs — they are separate).
+ * Set back to `true` to re-lock the callable layer — and flip the OTHER FOUR
+ * switches listed in this module's docs (three rules files + the Android UI
+ * switch in config/MemberGating.kt). They are separate and are not kept in
+ * sync automatically.
  */
 export const MEMBER_GATING_ENABLED = false;
 

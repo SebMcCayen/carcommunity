@@ -47,13 +47,14 @@ class MemberGatingTest {
     @Test
     fun `gating is currently disabled`() {
         // Flipping MemberGating.ENABLED back to true re-locks the UI layer.
-        // The three backend switches must be flipped with it — see
-        // config/MemberGating.kt for the full re-locking procedure.
+        // The FOUR backend switches (callables + firestore/storage/database
+        // rules) must be flipped with it — see config/MemberGating.kt, and
+        // functions/src/shared/memberGating.ts for the authoritative runbook.
         assertFalse(MemberGating.ENABLED)
     }
 
     @Test
-    fun `allows admits everyone while disabled`() {
+    fun `allows returns true for members and non-members alike while gating is disabled`() {
         assertTrue(MemberGating.allows(isActiveMember = false))
         assertTrue(MemberGating.allows(isActiveMember = true))
     }

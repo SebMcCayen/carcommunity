@@ -13,11 +13,17 @@ package com.kungsbackacarcommunity.app.config
  * open, while re-locking the backend without the app produces the exact bug
  * class this change fixes — a screen that offers an action the server refuses.
  *
- * TO RE-LOCK, flip all four switches together and redeploy:
- *   1. [ENABLED] = true                               (this file)
+ * TO RE-LOCK, flip all FIVE switches together and redeploy:
+ *   1. [ENABLED] = true                               (this file, + ship a build)
  *   2. functions/src/shared/memberGating.ts           MEMBER_GATING_ENABLED = true
- *   3. firebase/firestore.rules + firebase/storage.rules   isActiveMember()
- *   4. firebase/database.rules.json                   liveLocation/$uid/latest
+ *   3. firebase/firestore.rules                       isActiveMember()
+ *   4. firebase/storage.rules                         isActiveMember()
+ *   5. firebase/database.rules.json                   liveLocation/$uid/latest
+ *
+ * functions/src/shared/memberGating.ts is the authoritative runbook and spells
+ * each edit out. If the app and backend cannot ship together, re-lock THIS
+ * switch first: an app that hides a working feature is recoverable, an app that
+ * offers a failing one is not.
  *
  * Member *messaging* is deliberately untouched: the subscription screen still
  * reports real entitlement (it is passed the true `activeMember` value, not the

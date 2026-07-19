@@ -1236,12 +1236,19 @@ fun AuthenticatedApp(
                                     onOpenChat = { chatHubOpen = true },
                                     // Crowd-sourced incidents layer: draw the
                                     // fetched markers for everyone, and show the
-                                    // report control only when a repository is
+                                    // report control when a repository is
                                     // configured (guarded off in CI/no-Firebase)
-                                    // AND the user is an active member — the
-                                    // `incidents-report` callable is member-gated
-                                    // (requireMemberActor), so non-members must not
-                                    // see an action that would fail on submit.
+                                    // AND the caller passes the member gate.
+                                    // That gate is currently OPEN (member gating
+                                    // is disabled — config/MemberGating.kt), so
+                                    // every signed-in user sees the control, and
+                                    // the `incidents-report` callable admits them
+                                    // to match (requireMemberActor resolves to
+                                    // active-actor semantics while the backend
+                                    // switch is off). The two MUST stay aligned:
+                                    // if the callable is re-locked without this
+                                    // gate, non-members would see an action that
+                                    // fails on submit.
                                     incidentMarkers = incidentMarkers,
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },

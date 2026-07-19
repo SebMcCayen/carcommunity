@@ -8,10 +8,15 @@ For PostgreSQL data model (current `services/api` implementation) see [data-mode
 > document says "member-gated", "member-only", or "active members", that gate is
 > currently **open to any signed-in, non-suspended user** so the whole app can be
 > tested without a subscription. The described design is the intended one and is
-> restored by flipping four switches — see
+> restored by flipping **five** switches — four backend (this document's scope:
+> `functions/src/shared/memberGating.ts`, `firebase/firestore.rules`,
+> `firebase/storage.rules`, `firebase/database.rules.json`) **plus the Android UI
+> switch** in `apps/android/.../config/MemberGating.kt`, which is outside this
+> document's scope but must be flipped and shipped with them — see
 > `functions/src/shared/memberGating.ts` for the authoritative re-locking
-> procedure. **Suspension, deletion, ownership, admin-only and rate-limit rules
-> are unaffected and still enforced.**
+> procedure. Re-locking the backend without the app leaves the UI offering
+> actions the server refuses. **Suspension, deletion, ownership, admin-only and
+> rate-limit rules are unaffected and still enforced.**
 
 ## Overview
 
