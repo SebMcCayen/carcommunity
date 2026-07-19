@@ -27,9 +27,19 @@
  *
  *   3. firebase/storage.rules — the identical isActiveMember() edit as (2).
  *
- *   4. firebase/database.rules.json — liveLocation/$uid/latest ".read":
- *      restore the `auth.token.activeMember == true &&` term (the suspension
- *      and liveLocationBlocks terms are already there and must stay).
+ *   4. firebase/database.rules.json — liveLocation/$uid/latest ".read".
+ *      NOTE: that file is strict JSON and carries NO explanatory comment (it
+ *      is the repo's only rules file that cannot), so this entry is the only
+ *      documentation of the edit — keep it accurate.
+ *      Restore the entitlement term at the START of the non-owner branch:
+ *        "auth != null && (auth.uid == $uid || (auth.token.suspended != true
+ *          && ...liveLocationBlocks checks...))"
+ *        ->
+ *        "auth != null && (auth.uid == $uid || (auth.token.activeMember == true
+ *          && auth.token.suspended != true && ...liveLocationBlocks checks...))"
+ *      The suspension term and BOTH liveLocationBlocks direction checks are
+ *      already present and MUST stay — that single expression bundles all
+ *      three guards, and only the entitlement term was removed.
  *
  *   5. apps/android/app/src/main/java/com/kungsbackacarcommunity/app/config/
  *      MemberGating.kt:
