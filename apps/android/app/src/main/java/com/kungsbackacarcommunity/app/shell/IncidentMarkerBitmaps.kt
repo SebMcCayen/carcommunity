@@ -9,6 +9,7 @@ import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
@@ -66,20 +67,29 @@ internal object IncidentMarkerBitmaps {
         // Both rings sit OUTSIDE the disc, so the image is the disc plus twice
         // each ring width.
         val size = discDiameter + 2f * (lightRing + darkRing)
-        val sizePx = size.roundToInt().coerceAtLeast(1)
+        // CEIL, never round: `size` is a dp→px float, so rounding down would
+        // give a bitmap fractionally smaller than the geometry drawn into it and
+        // clip the outermost hairline — which is the element carrying contrast
+        // against a light basemap. Losing it to a rounding artefact at some
+        // densities would quietly undo the legibility guarantee.
+        val sizePx = ceil(size).toInt().coerceAtLeast(1)
 
         val bitmap = createBitmap(sizePx, sizePx)
         val canvas = Canvas(bitmap)
         val centre = sizePx / 2f
+        // Radii are derived from the bitmap's ACTUAL size rather than the float
+        // it was rounded up from, so the centre and the outer edge can never
+        // disagree about where the edge is.
+        val outerRadius = sizePx / 2f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         // 1. Outer dark hairline (carries a light basemap).
         paint.color = IncidentMarkerStyle.RING_DARK
-        canvas.drawCircle(centre, centre, size / 2f, paint)
+        canvas.drawCircle(centre, centre, outerRadius, paint)
 
         // 2. Light ring (carries a dark basemap).
         paint.color = IncidentMarkerStyle.RING_LIGHT
-        canvas.drawCircle(centre, centre, size / 2f - darkRing, paint)
+        canvas.drawCircle(centre, centre, outerRadius - darkRing, paint)
 
         // 3. Category disc.
         paint.color = discColorArgb

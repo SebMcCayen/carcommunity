@@ -85,6 +85,20 @@ object NavHandoff {
     const val FADE_MILLIS: Int = 200
 
     /**
+     * The alpha the veil is FIRST drawn at, before any animation runs.
+     *
+     * Zero, and it has to be stated explicitly rather than inferred from the
+     * starting phase. [NavHandoffPhase.VeilIn] targets `1f`, so an animation
+     * that simply initialises to its first target — which is what
+     * `animateFloatAsState` does — would begin fully opaque and there would be
+     * no fade IN at all: the map would hard-cut to the veil and only the
+     * fade-out would animate. That is a snap wearing a dissolve's KDoc, so the
+     * starting value is a named constant the UI seeds its animation with and
+     * [NavHandoffTest] pins against the target.
+     */
+    const val VEIL_START_ALPHA: Float = 0f
+
+    /**
      * Hard cap (ms) on how long [NavHandoffPhase.Loading] may last before the
      * veil is torn down anyway.
      *

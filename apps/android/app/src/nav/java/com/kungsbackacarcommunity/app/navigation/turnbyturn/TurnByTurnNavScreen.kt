@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -685,12 +685,20 @@ fun TurnByTurnNavScreen(
         // on eating gestures meant for the map — the mistake PR #464 fixed,
         // where an always-present Surface swallowed every one of them.
         if (phase.veilVisible) {
-            val veilAlpha by
-                animateFloatAsState(
+            // An explicit Animatable seeded at NavHandoff.VEIL_START_ALPHA, NOT
+            // animateFloatAsState: that initialises to its first target, and the
+            // first target here is the opaque 1f of VeilIn — so it would snap
+            // straight to opaque and only the fade-OUT would ever animate. The
+            // dissolve away from the map home is half the point, so the starting
+            // value has to be stated rather than inferred.
+            val veil = remember { Animatable(NavHandoff.VEIL_START_ALPHA) }
+            LaunchedEffect(phase.veilTargetAlpha) {
+                veil.animateTo(
                     targetValue = phase.veilTargetAlpha,
                     animationSpec = tween(NavHandoff.FADE_MILLIS),
-                    label = "navHandoffVeil",
                 )
+            }
+            val veilAlpha = veil.value
             Box(
                 modifier =
                     Modifier

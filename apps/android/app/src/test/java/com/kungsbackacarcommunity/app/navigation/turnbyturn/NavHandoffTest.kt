@@ -57,6 +57,28 @@ class NavHandoffTest {
         assertEquals(1f, NavHandoffPhase.Loading.veilTargetAlpha, 0f)
     }
 
+    /**
+     * **There must be a fade IN, not a cut to opaque.**
+     *
+     * The veil starts transparent and its first phase targets opaque, so the
+     * user sees the map home dissolve away rather than being replaced. This is
+     * easy to lose without noticing: an animation that initialises to its own
+     * first target value — which is exactly what `animateFloatAsState` does —
+     * would begin at [NavHandoffPhase.VeilIn]'s `1f` and snap, leaving only the
+     * fade-out animating while the KDoc still promised a dissolve. The UI
+     * therefore seeds its animation from [NavHandoff.VEIL_START_ALPHA], and this
+     * asserts that value genuinely differs from what the first phase drives to.
+     */
+    @Test
+    fun veilStartsTransparentSoTheEntryActuallyFadesIn() {
+        assertEquals(0f, NavHandoff.VEIL_START_ALPHA, 0f)
+        assertTrue(
+            "The veil's starting alpha must differ from VeilIn's target, or the " +
+                "entry is a hard cut to opaque rather than a dissolve",
+            NavHandoff.VEIL_START_ALPHA != NavHandoffPhase.VeilIn.veilTargetAlpha,
+        )
+    }
+
     /** Once the map has drawn, the veil goes away entirely. */
     @Test
     fun veilClearsAfterTheStyleIsUp() {
