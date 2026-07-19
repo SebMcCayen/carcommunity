@@ -70,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -182,6 +183,7 @@ import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
+import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
@@ -1449,89 +1451,100 @@ fun AuthenticatedApp(
                                         ShellTabPage {
                                             HubScreen(
                                                 title = stringResource(R.string.shell_socialTitle),
+                                                // Alphabetical by the DISPLAYED, localized label
+                                                // (Issue 4) — see sortedHubEntriesByLabel. The
+                                                // declaration order below is therefore not the
+                                                // shown order, and English and Swedish order
+                                                // differently, which is correct. Sorting wraps
+                                                // the list rather than reordering the source so
+                                                // each entry's availability gating stays exactly
+                                                // where it was.
                                                 entries =
-                                                    listOf(
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_friendsTitle),
-                                                            Icons.Filled.Groups,
-                                                            if (friendsRepository != null) {
-                                                                { route = ShellRoute.Friends }
-                                                            } else {
-                                                                null
-                                                            },
+                                                    sortedHubEntriesByLabel(
+                                                        listOf(
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_friendsTitle),
+                                                                Icons.Filled.Groups,
+                                                                if (friendsRepository != null) {
+                                                                    { route = ShellRoute.Friends }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            // Convoys intentionally removed from
+                                                            // the Social menu (Issue 11): the
+                                                            // convoy feature stays reachable via
+                                                            // the "+" Create chooser's "Convoy"
+                                                            // option and the chat hub's Convoys
+                                                            // tab. Only this menu entry is gone.
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialEvents),
+                                                                Icons.Filled.Event,
+                                                                if (eventsRepository != null) {
+                                                                    { route = ShellRoute.Events }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialNotifications),
+                                                                Icons.Filled.Notifications,
+                                                                if (notificationsRepository != null) {
+                                                                    { route = ShellRoute.Notifications }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialCrownHunt),
+                                                                Icons.Filled.EmojiEvents,
+                                                                if (crownHuntRepository != null &&
+                                                                    FeatureGate.isAvailable(
+                                                                        flags = flags,
+                                                                        flag = FeatureFlag.CROWN_HUNT,
+                                                                        memberGated = false,
+                                                                        isActiveMember = profile?.activeMember == true,
+                                                                    )
+                                                                ) {
+                                                                    { route = ShellRoute.CrownHunt }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialPartners),
+                                                                Icons.Filled.Storefront,
+                                                                if (partnersRepository != null &&
+                                                                    FeatureGate.isAvailable(
+                                                                        flags = flags,
+                                                                        flag = FeatureFlag.PARTNERS,
+                                                                        memberGated = false,
+                                                                        isActiveMember = profile?.activeMember == true,
+                                                                    )
+                                                                ) {
+                                                                    { route = ShellRoute.Partners }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialBillboards),
+                                                                Icons.Filled.Campaign,
+                                                                if (billboardsRepository != null &&
+                                                                    FeatureGate.isAvailable(
+                                                                        flags = flags,
+                                                                        flag = FeatureFlag.DIGITAL_BILLBOARDS,
+                                                                        memberGated = false,
+                                                                        isActiveMember = profile?.activeMember == true,
+                                                                    )
+                                                                ) {
+                                                                    { route = ShellRoute.Billboards }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
                                                         ),
-                                                        // Convoys intentionally removed from
-                                                        // the Social menu (Issue 11): the
-                                                        // convoy feature stays reachable via
-                                                        // the "+" Create chooser's "Convoy"
-                                                        // option and the chat hub's Convoys
-                                                        // tab. Only this menu entry is gone.
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_socialEvents),
-                                                            Icons.Filled.Event,
-                                                            if (eventsRepository != null) {
-                                                                { route = ShellRoute.Events }
-                                                            } else {
-                                                                null
-                                                            },
-                                                        ),
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_socialNotifications),
-                                                            Icons.Filled.Notifications,
-                                                            if (notificationsRepository != null) {
-                                                                { route = ShellRoute.Notifications }
-                                                            } else {
-                                                                null
-                                                            },
-                                                        ),
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_socialCrownHunt),
-                                                            Icons.Filled.EmojiEvents,
-                                                            if (crownHuntRepository != null &&
-                                                                FeatureGate.isAvailable(
-                                                                    flags = flags,
-                                                                    flag = FeatureFlag.CROWN_HUNT,
-                                                                    memberGated = false,
-                                                                    isActiveMember = profile?.activeMember == true,
-                                                                )
-                                                            ) {
-                                                                { route = ShellRoute.CrownHunt }
-                                                            } else {
-                                                                null
-                                                            },
-                                                        ),
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_socialPartners),
-                                                            Icons.Filled.Storefront,
-                                                            if (partnersRepository != null &&
-                                                                FeatureGate.isAvailable(
-                                                                    flags = flags,
-                                                                    flag = FeatureFlag.PARTNERS,
-                                                                    memberGated = false,
-                                                                    isActiveMember = profile?.activeMember == true,
-                                                                )
-                                                            ) {
-                                                                { route = ShellRoute.Partners }
-                                                            } else {
-                                                                null
-                                                            },
-                                                        ),
-                                                        HubEntry(
-                                                            stringResource(R.string.shell_socialBillboards),
-                                                            Icons.Filled.Campaign,
-                                                            if (billboardsRepository != null &&
-                                                                FeatureGate.isAvailable(
-                                                                    flags = flags,
-                                                                    flag = FeatureFlag.DIGITAL_BILLBOARDS,
-                                                                    memberGated = false,
-                                                                    isActiveMember = profile?.activeMember == true,
-                                                                )
-                                                            ) {
-                                                                { route = ShellRoute.Billboards }
-                                                            } else {
-                                                                null
-                                                            },
-                                                        ),
+                                                        locale = LocalConfiguration.current.locales[0],
                                                     ),
                                             )
                                         }

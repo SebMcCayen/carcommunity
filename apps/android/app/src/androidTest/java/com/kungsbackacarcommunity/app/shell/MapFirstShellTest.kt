@@ -568,9 +568,20 @@ class MapFirstShellTest {
 
     /**
      * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
-     * rememberSaveable but the popup only renders while the map shell is the
-     * active branch, so leaving the Map tab has to CLEAR the flag — otherwise the
-     * hub silently stays "open" and pops up again on returning to the map.
+     * rememberSaveable but the hub only renders while the map shell is the active
+     * branch, so losing that gate has to CLEAR the flag — otherwise the hub
+     * silently stays "open" and pops up again on returning to the map.
+     *
+     * The hub is dismissed via the map strip BEFORE switching tabs, because that is
+     * the only way a user can leave the Map tab: the hub's card covers the bottom
+     * nav bar, so a tap on a tab lands on the card and is inert. That was equally
+     * true of the previous Popup presentation — that popup window was touch-modal
+     * (its flags carried no FLAG_NOT_TOUCH_MODAL), so it swallowed the tap the same
+     * way. Only a test-injected click reached the tab, because Compose dispatches it
+     * straight to the node's own window and so bypassed the popup entirely; now that
+     * the hub composes in the host window (see ChatHubInsetsTest for why it must),
+     * the injected click meets the same card a finger does. The old sequence
+     * therefore asserted a path no user could take.
      */
     @Test
     fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
@@ -579,15 +590,61 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
-        // Leaving the Map tab loses the popup's gating condition: the hub goes away
-        // (with the map home) rather than floating over another tab.
+        // A tab tap while the hub is open is inert — the card is in the way. This
+        // genuinely models a physical tap: performClick() is not a semantics-action
+        // shortcut, it delegates to performTouchInput { click() } (ActionsKt
+        // .performClick -> Actions_androidKt.performClickImpl -> performTouchInput),
+        // so the event is hit-tested against whatever is actually on top. If the card
+        // did not block it, the shell would switch tabs and the hub would vanish.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+
+        // Dismiss the hub the way a user must: tap the uncovered strip of live map
+        // ABOVE the card. The tap is dispatched on the map-home node at a positive,
+        // in-bounds offset — never on the hub node with a negative Y to reach
+        // "outside" its own bounds, which relies on out-of-bounds dispatch and is
+        // brittle. The Y is still DERIVED, not magic: it is the midpoint between the
+        // map's top and the card's measured top, converted through the test density,
+        // so it is provably inside the strip at any density or window size.
+        val cardTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(CHAT_HUB_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        val mapTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(MAP_HOME_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        // Guard the premise: if the card ever covered the map's top there would be no
+        // strip, and the tap below would land on the card and silently not dismiss.
+        assertTrue(
+            "expected an uncovered map strip above the card (map top $mapTopPx, " +
+                "card top $cardTopPx)",
+            cardTopPx > mapTopPx,
+        )
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).performTouchInput {
+            // Node-relative: the midpoint of the strip, measured down from the map's
+            // own top edge.
+            click(Offset(width / 2f, (cardTopPx - mapTopPx) / 2f))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+
+        // Now the tabs are reachable again: leaving the Map tab takes the map home
+        // away rather than floating it under another tab.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab restores the map WITHOUT re-opening the hub —
-        // the flag was cleared when the gate was lost, so the user gets the map,
-        // not a chat hub they never re-opened.
+        // the user gets the map, not a chat hub they never re-opened.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()

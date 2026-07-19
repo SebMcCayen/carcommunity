@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import java.text.Collator
+import java.util.Locale
 
 /** A single entry in a hub screen; [onClick] null hides the row (unavailable). */
 data class HubEntry(
@@ -22,6 +24,33 @@ data class HubEntry(
     val icon: ImageVector,
     val onClick: (() -> Unit)?,
 )
+
+/**
+ * Orders hub entries alphabetically by their DISPLAYED, localized
+ * [HubEntry.label] under [locale]'s own collation rules — never by enum name,
+ * resource key or declaration order, so the list reads alphabetically in
+ * whatever language the user is actually seeing.
+ *
+ * The two locales therefore order DIFFERENTLY, which is correct: e.g. Social's
+ * entries sort Billboards → Crown Hunt → Events → Friends → Notifications →
+ * Partners in English, but Anslagstavlor → Aviseringar → Event → Kronjakt →
+ * Partners → Vänner in Swedish.
+ *
+ * Uses [Collator] rather than a plain string sort because Kotlin's natural
+ * ordering is by UTF-16 code unit, which mis-sorts Swedish: å/ä/ö sort AFTER z
+ * in Swedish, but their code points would place them right after z only by luck
+ * and, more importantly, "Ä" (U+00C4) would sort after every unaccented capital
+ * rather than by Swedish rules. [Collator.SECONDARY] makes the sort ignore case
+ * (so a label's capitalization cannot jump it up the list) while still keeping
+ * accented letters distinct from their base letters.
+ *
+ * Stable: [sortedWith] preserves the declared order of entries whose labels
+ * collate equally.
+ */
+fun sortedHubEntriesByLabel(entries: List<HubEntry>, locale: Locale): List<HubEntry> {
+    val collator = Collator.getInstance(locale).apply { strength = Collator.SECONDARY }
+    return entries.sortedWith { a, b -> collator.compare(a.label, b.label) }
+}
 
 /**
  * A simple scrollable hub: a title and a vertical list of navigable entries.
