@@ -57,10 +57,12 @@ data class FriendsData(
  *
  * [Generic] is the LAST-RESORT sink for a failure we could not classify (an
  * unmapped callable code, or a non-callable throwable such as an App Check
- * token failure). It is the only category that is reported to the backend
- * error pipeline — see FriendsRoute — because it is the only one that
+ * token failure). It is reported to the backend error pipeline because it
  * represents a genuine, undiagnosed runtime fault rather than a normal,
- * actionable outcome of what the user typed.
+ * actionable outcome of what the user typed. [TemporarilyUnavailable] is the
+ * only OTHER reported category — it is classified, but the fault is still ours.
+ * FriendsCoordinator.reportIfFault is the enforcing code; the full rationale
+ * for which categories do and do not reach the pipeline lives there.
  */
 enum class FriendActionError {
     SignedOut,
@@ -73,6 +75,22 @@ enum class FriendActionError {
     NotAddable,
     RequestGone,
     Network,
+
+    /**
+     * The backend is reachable but cannot serve the request right now — the
+     * fault is OURS, not the caller's, and retrying is the only useful advice.
+     *
+     * Raised by `friend-list` as `unavailable` + `details.reason =
+     * BACKEND_UNAVAILABLE` (today: a Firestore query with no deployed composite
+     * index). Distinct from [Network], which means the DEVICE could not reach
+     * us and where the user's connection is the thing to check — telling
+     * someone to check their signal when the server is misconfigured sends them
+     * chasing a problem they cannot fix.
+     *
+     * Reported to the backend error pipeline alongside [Generic]: it is a
+     * genuine fault, even though it is classified rather than unknown.
+     */
+    TemporarilyUnavailable,
     Generic,
 }
 
@@ -180,6 +198,7 @@ object FriendsErrorMapper {
     const val REASON_REQUEST_ALREADY_SENT = "REQUEST_ALREADY_SENT"
     const val REASON_NICKNAME_NOT_FOUND = "NICKNAME_NOT_FOUND"
     const val REASON_SELF_REQUEST = "SELF_REQUEST"
+    const val REASON_BACKEND_UNAVAILABLE = "BACKEND_UNAVAILABLE"
 
     fun mapSend(error: FriendCallableError): SendRequestResult =
         when (error.reason) {
@@ -238,6 +257,31 @@ object FriendsErrorMapper {
             FriendErrorCode.PermissionDenied -> FriendActionError.NotMember
             FriendErrorCode.Unavailable -> FriendActionError.Network
             else -> FriendActionError.Generic
+        }
+
+    /**
+     * Maps a `friend-list` failure. Separate from [mapGeneric] because loading
+     * the snapshot has a failure mode the mutations do not: the backend can be
+     * reachable yet unable to serve the read at all
+     * ([FriendActionError.TemporarilyUnavailable]).
+     *
+     * WHY THIS EXISTS (regression guard, 2026-07-19): production `friend-list`
+     * failed for every caller because the friendRequests composite indexes had
+     * never been deployed. That surfaced as an opaque INTERNAL, which
+     * [mapGeneric] collapsed to [FriendActionError.Generic] — rendered as a
+     * flat "couldn't load your friends" on BOTH the Friends page and the convoy
+     * invite picker, with nothing to distinguish a backend outage from being
+     * signed out, from a dropped connection, or from simply having no friends
+     * yet. An empty list is NOT a failure and never reaches this mapper.
+     *
+     * The reason discriminator is checked BEFORE the bare code, matching
+     * [mapSend]: `unavailable` alone cannot distinguish "we are misconfigured"
+     * from "your connection dropped", and those two want opposite advice.
+     */
+    fun mapList(error: FriendCallableError): FriendActionError =
+        when {
+            error.reason == REASON_BACKEND_UNAVAILABLE -> FriendActionError.TemporarilyUnavailable
+            else -> mapGeneric(error)
         }
 }
 

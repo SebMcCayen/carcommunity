@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.friends
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -179,5 +180,65 @@ class FriendsErrorMapperTest {
             FriendActionError.Generic,
             FriendsErrorMapper.mapGeneric(error(FriendErrorCode.NotFound)),
         )
+    }
+
+    // --- friend-list load failures (regression, 2026-07-19) --------------------
+    // Production friend-list failed for EVERY caller because the friendRequests
+    // composite indexes had never been deployed. It surfaced as an opaque
+    // INTERNAL, which mapGeneric collapsed to Generic and both the Friends page
+    // and the convoy invite picker rendered as one flat "couldn't load your
+    // friends" — indistinguishable from being signed out, from a dropped
+    // connection, or from having no friends at all.
+
+    @Test
+    fun `list backend-unavailable is distinct from an unclassified failure`() {
+        val backendDown =
+            FriendsErrorMapper.mapList(
+                error(FriendErrorCode.Unavailable, reason = FriendsErrorMapper.REASON_BACKEND_UNAVAILABLE),
+            )
+        val unknown = FriendsErrorMapper.mapList(error(FriendErrorCode.Other))
+
+        assertEquals(FriendActionError.TemporarilyUnavailable, backendDown)
+        assertEquals(FriendActionError.Generic, unknown)
+        // THE REGRESSION: pre-fix these were the same value, so the UI could not
+        // tell a backend outage from an unknown app fault.
+        assertNotEquals(backendDown, unknown)
+    }
+
+    @Test
+    fun `list backend-unavailable is distinct from a dropped connection`() {
+        // Both arrive as `unavailable`; only the reason separates them, and they
+        // want OPPOSITE advice ("check your internet" vs "nothing is wrong with
+        // your account, it's us").
+        val backendDown =
+            FriendsErrorMapper.mapList(
+                error(FriendErrorCode.Unavailable, reason = FriendsErrorMapper.REASON_BACKEND_UNAVAILABLE),
+            )
+        val offline = FriendsErrorMapper.mapList(error(FriendErrorCode.Unavailable))
+
+        assertEquals(FriendActionError.TemporarilyUnavailable, backendDown)
+        assertEquals(FriendActionError.Network, offline)
+        assertNotEquals(backendDown, offline)
+    }
+
+    @Test
+    fun `list keeps the specific auth and member categories`() {
+        assertEquals(
+            FriendActionError.SignedOut,
+            FriendsErrorMapper.mapList(error(FriendErrorCode.Unauthenticated)),
+        )
+        assertEquals(
+            FriendActionError.NotMember,
+            FriendsErrorMapper.mapList(error(FriendErrorCode.PermissionDenied)),
+        )
+    }
+
+    @Test
+    fun `every error category renders a distinct user-facing message`() {
+        // A category that maps to the same string as another is a category that
+        // does not exist as far as the user is concerned. Guards the whole point
+        // of this fix: specific failures must READ specifically.
+        val all = FriendActionError.values().toList()
+        assertEquals(all.size, all.map { it.messageRes() }.distinct().size)
     }
 }

@@ -155,6 +155,50 @@ export const REQUEST_ALREADY_SENT_MESSAGE = 'You already have a pending request 
 export const NOT_ADDABLE_MESSAGE = 'This user cannot be added right now.';
 export const REQUEST_NOT_FOUND_MESSAGE = 'Friend request not found.';
 export const REQUEST_NOT_PENDING_MESSAGE = 'This friend request has already been handled.';
+export const BACKEND_UNAVAILABLE_MESSAGE =
+  'The friends service is temporarily unavailable. Try again shortly.';
+
+/**
+ * gRPC status code 9 (FAILED_PRECONDITION), the status Firestore returns when a
+ * query has no backing composite index. Compared numerically because the
+ * Firestore SDK surfaces a plain `Error` carrying a `code` NUMBER — there is no
+ * exported error class to instanceof against.
+ */
+const GRPC_FAILED_PRECONDITION = 9;
+
+/**
+ * True when `error` is Firestore's "the query requires an index" failure.
+ *
+ * WHY THIS EXISTS (regression guard, 2026-07-19): `friend.list` range-scans
+ * `friendRequests` with two equality filters plus an `orderBy('createdAt')`,
+ * which REQUIRES the composite indexes declared in
+ * firebase/firestore.indexes.json. Those indexes are deployed by hand
+ * (`firebase deploy --only firestore:indexes`) and had never been deployed to
+ * production, so every `friend.list` call failed with FAILED_PRECONDITION. The
+ * raw throw escaped the callable as an opaque INTERNAL, which the Android
+ * client could only render as "your friends couldn't be loaded" on BOTH the
+ * Friends page and the convoy invite picker — a deployment fault that was
+ * indistinguishable from an app bug and therefore invisible for days.
+ *
+ * Classifying it here turns that silence into a specific, retryable signal
+ * (`unavailable` + REASON_BACKEND_UNAVAILABLE) plus a server log naming the
+ * missing index, so the NEXT missing index is diagnosable from the error alone.
+ *
+ * NOTE: the message text is matched only to narrow an already-narrow status —
+ * FAILED_PRECONDITION is otherwise unused by this callable's own reads — so a
+ * wording change upstream degrades to the generic path, never to a wrong one.
+ */
+export function isMissingIndexError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  if (code !== GRPC_FAILED_PRECONDITION) {
+    return false;
+  }
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' && message.toLowerCase().includes('requires an index');
+}
 
 /**
  * `details.reason` discriminators carried on the HttpsError of every
@@ -177,6 +221,20 @@ export const REASON_ALREADY_FRIENDS = 'ALREADY_FRIENDS';
 export const REASON_REQUEST_ALREADY_SENT = 'REQUEST_ALREADY_SENT';
 export const REASON_NICKNAME_NOT_FOUND = 'NICKNAME_NOT_FOUND';
 export const REASON_SELF_REQUEST = 'SELF_REQUEST';
+
+/**
+ * Attached by `friend.list` when the read failed for a reason that is the
+ * BACKEND's fault and not the caller's — today, a Firestore query with no
+ * deployed composite index (see {@link isMissingIndexError}).
+ *
+ * Distinct from every reason above: those describe a business-rule "no" that
+ * the user can act on, whereas this one means the service is broken and the
+ * only useful advice is "try again". The client both renders a specific
+ * retryable message for it AND auto-reports it, because — unlike an ambiguous
+ * nickname or an already-sent request — it is a genuine fault we must hear
+ * about.
+ */
+export const REASON_BACKEND_UNAVAILABLE = 'BACKEND_UNAVAILABLE';
 
 /**
  * The denormalized, case-folded search key stored on `users/{uid}` as

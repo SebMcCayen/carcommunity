@@ -27,7 +27,7 @@ class FirebaseFriendsRepository private constructor(
             onFailure = {
                 val callableError = it.toCallableError()
                 FriendsResult.Failed(
-                    FriendsErrorMapper.mapGeneric(callableError),
+                    FriendsErrorMapper.mapList(callableError),
                     callableError.rawCode,
                 )
             },

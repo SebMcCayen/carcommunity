@@ -390,6 +390,7 @@
     <string name="friends_errorNetwork">No connection. Check your internet and try again.</string>
     <string name="friends_errorNotAddable">This member can\'t be added right now.</string>
     <string name="friends_errorRequestGone">That request is no longer available.</string>
+    <string name="friends_errorTemporarilyUnavailable">Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.</string>
     <string name="friends_errorGeneric">Something went wrong. Please try again.</string>
     <string name="convoy_title">Convoys</string>
     <string name="convoy_createAction">Create a convoy</string>
@@ -401,7 +402,6 @@
     <string name="convoy_decline">Decline</string>
     <string name="convoy_createTitle">New convoy</string>
     <string name="convoy_pickFriendsTitle">Invite friends</string>
-    <string name="convoy_friendsUnavailable">Your friends couldn\'t be loaded right now.</string>
     <string name="convoy_friendsRetry">Try again</string>
     <string name="convoy_noFriends">Add some friends first to invite them to a convoy.</string>
     <string name="convoy_createSubmit">Create convoy</string>

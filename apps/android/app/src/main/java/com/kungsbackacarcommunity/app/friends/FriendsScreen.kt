@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.friends
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -514,8 +515,18 @@ private fun ErrorBanner(text: String, onDismiss: () -> Unit) {
     }
 }
 
-/** The `friends.*` string for a mapped [FriendActionError]. */
-private fun FriendActionError.messageRes(): Int =
+/**
+ * The `friends.*` string for a mapped [FriendActionError].
+ *
+ * `internal` rather than private because the convoy invite picker renders the
+ * SAME failures from the same shared [FriendsCoordinator] and must not
+ * re-describe them. It previously carried its own single flat "your friends
+ * couldn't be loaded right now" notice for every [FriendsStatus.Error], which
+ * is how a backend outage, being signed out and a dropped connection all read
+ * identically there.
+ */
+@StringRes
+internal fun FriendActionError.messageRes(): Int =
     when (this) {
         FriendActionError.SignedOut -> R.string.friends_errorSignedOut
         FriendActionError.NotMember -> R.string.friends_errorNotMember
@@ -527,5 +538,6 @@ private fun FriendActionError.messageRes(): Int =
         FriendActionError.NotAddable -> R.string.friends_errorNotAddable
         FriendActionError.RequestGone -> R.string.friends_errorRequestGone
         FriendActionError.Network -> R.string.friends_errorNetwork
+        FriendActionError.TemporarilyUnavailable -> R.string.friends_errorTemporarilyUnavailable
         FriendActionError.Generic -> R.string.friends_errorGeneric
     }
