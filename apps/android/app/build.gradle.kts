@@ -265,6 +265,12 @@ dependencies {
         implementation(libs.mapbox.nav.ui.maps)
         implementation(libs.mapbox.nav.tripdata)
         implementation(libs.mapbox.nav.ui.components)
+        // MapboxManeuverView (ui-components) extends ConstraintLayout, but
+        // Mapbox declares constraintlayout as an `implementation` dep, so it is
+        // NOT on our compile classpath transitively. Without it Kotlin cannot
+        // resolve the supertype — and therefore cannot see the view as a
+        // `View` either, breaking the AndroidView factory in src/nav.
+        implementation(libs.androidx.constraintlayout)
     }
 
     // Google Play Services — fused location provider (Phase 12 slice 6)

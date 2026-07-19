@@ -13,6 +13,10 @@ mapbox = "11.26.0"
 # Mapbox Navigation SDK v3 — core framework 3.26.0 depends on & is tested with
 # Maps SDK v11.26.0 (the `mapbox` version above), keeping the two aligned.
 mapboxNav = "3.26.0"
+# Required only when the Nav SDK is present: MapboxManeuverView extends
+# androidx.constraintlayout.widget.ConstraintLayout, which the Mapbox
+# artifacts do not expose transitively (see app/build.gradle.kts).
+constraintlayout = "2.2.1"
 googleServices = "4.5.0"
 credentials = "1.6.0"
 googleid = "1.2.0"
@@ -62,6 +66,7 @@ mapbox-nav-navigation = { group = "com.mapbox.navigationcore", name = "navigatio
 mapbox-nav-ui-maps = { group = "com.mapbox.navigationcore", name = "ui-maps", version.ref = "mapboxNav" }
 mapbox-nav-tripdata = { group = "com.mapbox.navigationcore", name = "tripdata", version.ref = "mapboxNav" }
 mapbox-nav-ui-components = { group = "com.mapbox.navigationcore", name = "ui-components", version.ref = "mapboxNav" }
+androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 
 # Google Play Services — fused location provider (Phase 12 slice 6)
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
