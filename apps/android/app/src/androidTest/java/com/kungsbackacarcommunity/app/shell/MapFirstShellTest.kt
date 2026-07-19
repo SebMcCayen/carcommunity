@@ -686,11 +686,15 @@ class MapFirstShellTest {
         }
         composeTestRule.waitForIdle()
 
-        assertEquals(
+        // Asserted as "at least one", not an exact count: the invariant under test
+        // is that the drag REACHED the map, and how many drag starts one swipe
+        // decomposes into is incidental to that. Pre-fix this is 0, so the teeth
+        // are unaffected.
+        assertTrue(
             "a drag over open map must reach the map surface - if this is 0 the " +
-                "chrome above the map is swallowing pointer events again",
-            1,
-            surface.panGestureCount,
+                "chrome above the map is swallowing pointer events again " +
+                "(was ${surface.panGestureCount})",
+            surface.panGestureCount > 0,
         )
     }
 
