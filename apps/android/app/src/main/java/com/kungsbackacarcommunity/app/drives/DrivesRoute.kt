@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import kotlinx.coroutines.launch
 
 /**
@@ -23,12 +25,27 @@ import kotlinx.coroutines.launch
 fun DrivesRoute(
     repository: DrivesRepository,
     uid: String,
+    errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
 ) {
     // Bumped by the "try again" affordance to re-subscribe the observe flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
     val state by
         remember(repository, uid, reloadKey) { repository.observeDrives(uid) }
             .collectAsState(initial = DrivesState.Loading)
+
+    // Auto-file a GENUINE load failure (never the empty list). Keyed so it fires
+    // once per entry into the Error state and once per retry, not per
+    // recomposition; the backend dedups across users on top of that.
+    val loadError = state as? DrivesState.Error
+    LaunchedEffect(loadError != null, reloadKey) {
+        if (loadError != null) {
+            errorReporter?.report(
+                feature = FEATURE_DRIVES_LIST,
+                message = "Saved-drives owner query failed to load",
+                code = loadError.code,
+            )
+        }
+    }
     val coordinator = remember(repository) { DrivesCoordinator(repository) }
     val deleteStatus by coordinator.deleteStatus.collectAsState()
     val scope = rememberCoroutineScope()
@@ -75,3 +92,6 @@ fun DrivesRoute(
             )
     }
 }
+
+/** Stable feature key for the saved-drives list (a backend fingerprint input). */
+private const val FEATURE_DRIVES_LIST = "drives.list"

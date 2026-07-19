@@ -19,11 +19,14 @@ import com.mapbox.android.gestures.RotateGestureDetector
 import com.mapbox.android.gestures.ShoveGestureDetector
 import com.mapbox.android.gestures.StandardScaleGestureDetector
 import com.mapbox.bindgen.Value
+import com.mapbox.common.Cancelable
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
+import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.interactions.standard.generated.standardPoi
 import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.animation.MapAnimationOptions.Companion.mapAnimationOptions
@@ -127,12 +130,18 @@ class MapboxMapSurface : MapSurface {
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
 
-    private val longPressFlow = MutableStateFlow<MapPoint?>(null)
-    override val longPress: StateFlow<MapPoint?> = longPressFlow.asStateFlow()
+    private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
+    override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
-    // The map long-click gesture listener (Google-Maps "hold to navigate here");
-    // held so it can be detached in onRelease.
+    // The map long-click gesture listener ("hold to navigate here"); held so it
+    // can be detached in onRelease.
     private var longClickListener: OnMapLongClickListener? = null
+
+    // Cancels the single-tap place interaction that raises a named
+    // [placeRequest]. The Interactions API hands back a Cancelable per
+    // registration rather than a removable listener, so it is held and cancelled
+    // in onRelease alongside the gesture listeners.
+    private val placeInteractions = mutableListOf<Cancelable>()
 
     // "Camera follows me" state. The controller owns the follow/idle DECISION
     // (pure, unit-tested); the 10-second countdown is [idleReturnJob], a coroutine
@@ -250,11 +259,15 @@ class MapboxMapSurface : MapSurface {
     }
 
     override fun emitLongPress(point: MapPoint) {
-        longPressFlow.value = point
+        placeRequestFlow.value = MapPlaceRequest(point = point, name = null)
     }
 
-    override fun consumeLongPress() {
-        longPressFlow.value = null
+    override fun emitPlaceTap(point: MapPoint, name: String?) {
+        placeRequestFlow.value = MapPlaceRequest(point = point, name = name)
+    }
+
+    override fun consumePlaceRequest() {
+        placeRequestFlow.value = null
     }
 
     override fun refreshLocationComponent() {
@@ -523,22 +536,58 @@ class MapboxMapSurface : MapSurface {
                         }
                     cameraChangeListener = camListener
                     runCatching { mapboxMap.addOnCameraChangeListener(camListener) }
-                    // Long-press (hold) anywhere on the map to navigate there,
-                    // Google-Maps style: publish the pressed lng/lat so the host
-                    // opens the route preview for it. This is the hold gesture only
-                    // — pan/zoom/rotate (drag/pinch/two-finger) are untouched, so it
-                    // never conflicts with normal map manipulation. Returning true
-                    // marks the long-press handled.
+                    // Long-press (hold) anywhere on the map to navigate there:
+                    // publish the pressed lng/lat so the host opens the route
+                    // preview for it. This is the hold gesture only — pan/zoom/
+                    // rotate (drag/pinch/two-finger) are untouched, so it never
+                    // conflicts with normal map manipulation. Returning true marks
+                    // the long-press handled.
                     val longPressListener =
                         OnMapLongClickListener { point ->
-                            // Publish through the shared hook (not longPressFlow
-                            // directly) so all long-press publishing goes through
-                            // one place and stays consistent with the stub surface.
+                            // Publish through the shared hook (not placeRequestFlow
+                            // directly) so all publishing goes through one place and
+                            // stays consistent with the stub surface.
                             emitLongPress(MapPoint(point.longitude(), point.latitude()))
                             true
                         }
                     longClickListener = longPressListener
                     runCatching { gestures.addOnMapLongClickListener(longPressListener) }
+                    // Single tap on a place the basemap already draws (a shop, a
+                    // petrol station, a workshop) → the same "navigate here?"
+                    // preview the hold gesture raises, but carrying the place's own
+                    // name so the preview can say where the user is going.
+                    //
+                    // Uses the Standard style's typed `poi` FEATURESET via the
+                    // Interactions API rather than queryRenderedFeatures: Standard
+                    // ships as a style IMPORT whose internal layer ids are private
+                    // and unstable, so there is no layer id to query against that
+                    // would keep working across basemap updates. The featureset is
+                    // the style's public, versioned contract for exactly this, and
+                    // hands back a typed name + geometry instead of raw JSON.
+                    // ClickInteraction.standardPoi defaults its importId to
+                    // "basemap" — the same import [STANDARD_IMPORT_ID] configures
+                    // for lightPreset/show3dObjects, i.e. the one Style.STANDARD
+                    // actually loads.
+                    //
+                    // Returning true marks the tap handled so it stops here and
+                    // does not fall through to the rest of the map.
+                    runCatching {
+                        placeInteractions +=
+                            mapboxMap.addInteraction(
+                                ClickInteraction.standardPoi { poi, _ ->
+                                    // A poi feature's geometry is a non-null Point.
+                                    val point = poi.geometry
+                                    emitPlaceTap(
+                                        point = MapPoint(point.longitude(), point.latitude()),
+                                        // Blank/absent names fall back to the host's
+                                        // dropped-pin label rather than previewing an
+                                        // unnamed destination.
+                                        name = poi.name?.trim()?.takeIf { it.isNotEmpty() },
+                                    )
+                                    true
+                                },
+                            )
+                    }
                     // Camera-manipulation gestures (pan/zoom/rotate/tilt): any of
                     // them means the user is taking over the camera. On BEGIN they
                     // stop "follow me" and halt any pending idle-return; the 10s
@@ -605,7 +654,11 @@ class MapboxMapSurface : MapSurface {
                         // value could be stale) so a map (re)created while 3D is
                         // OFF opens with the buildings hidden, not re-shown.
                         runCatching { apply3dObjects(style, is3dFlow.value) }
-                        runCatching { addTrafficLayer(style) }
+                        // Built for the CURRENT preset (flow read directly — this
+                        // runs async at style-load, so a captured value could be
+                        // stale), so a map that loads straight into night mode gets
+                        // the night congestion colours without waiting for a toggle.
+                        runCatching { addTrafficLayer(style, mapModeFlow.value) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
                         // Route line + destination marker managers, created once
                         // the style is ready. Drawn from the current flow value
@@ -658,6 +711,14 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.mapboxMap.style?.let { applyLightPreset(it, mapMode) }
                 }
+                // Re-colour congestion for the current preset. The light preset
+                // only re-lights the BASEMAP — our traffic layer is our own layer,
+                // so its colours do not follow it and have to be switched here, or
+                // the day palette would stay on a night map (which is exactly what
+                // made heavy/severe traffic unreadable in the dark).
+                runCatching {
+                    mapView.mapboxMap.style?.let { applyTrafficColors(it, mapMode) }
+                }
                 // (Re)draw the route line + destination marker only when the
                 // overlay actually changes; unrelated recompositions (traffic
                 // toggle, live-sharing pulse) must not re-clear/redraw the route
@@ -684,6 +745,10 @@ class MapboxMapSurface : MapSurface {
                     runCatching { mapView.gestures.removeOnMapLongClickListener(l) }
                 }
                 longClickListener = null
+                // Interactions are cancelled rather than removed (the Interactions
+                // API hands back a Cancelable per registration, not a listener).
+                placeInteractions.forEach { interaction -> runCatching { interaction.cancel() } }
+                placeInteractions.clear()
                 // Detach the camera-gesture (follow) listeners and stop the timer.
                 moveListener?.let { l -> runCatching { mapView.gestures.removeOnMoveListener(l) } }
                 scaleListener?.let { l -> runCatching { mapView.gestures.removeOnScaleListener(l) } }
@@ -921,13 +986,40 @@ class MapboxMapSurface : MapSurface {
             if (marker?.isLiveSharing == true) LIVE_SHARE_PULSE_COLOR else DEFAULT_PULSE_COLOR
 
         /**
+         * The `match` expression colouring congestion lines for [mode], built
+         * from the pure [TrafficPalette] table (which owns the day/night colour
+         * decision and is unit-tested off-device).
+         */
+        fun congestionColorExpression(mode: MapMode): Expression {
+            val colors = TrafficPalette.colors(mode)
+            return Expression.match {
+                get("congestion")
+                literal("low")
+                color(colors.low)
+                literal("moderate")
+                color(colors.moderate)
+                literal("heavy")
+                color(colors.heavy)
+                literal("severe")
+                color(colors.severe)
+                // Default (e.g. "unknown"): neutral grey.
+                color(colors.unknown)
+            }
+        }
+
+        /**
          * Adds the Mapbox traffic vector source + a congestion-coloured line
          * layer (green → yellow → orange → red), initially hidden. Idempotent:
          * a no-op if the source/layer already exist (e.g. after a style
          * reload). Placed in the Standard style's "middle" slot so it sits
          * under labels.
+         *
+         * Colours/width are applied for [mode] here and re-applied by
+         * [applyTrafficColors] whenever the day/night preset flips, so a layer
+         * added while the map is already in night mode starts legible rather
+         * than waiting for a toggle.
          */
-        fun addTrafficLayer(style: Style) {
+        fun addTrafficLayer(style: Style, mode: MapMode) {
             if (style.styleSourceExists(TRAFFIC_SOURCE_ID)) return
             style.addSource(
                 vectorSource(TRAFFIC_SOURCE_ID) { url(TRAFFIC_TILESET) },
@@ -936,25 +1028,26 @@ class MapboxMapSurface : MapSurface {
                 lineLayer(TRAFFIC_LAYER_ID, TRAFFIC_SOURCE_ID) {
                     sourceLayer(TRAFFIC_SOURCE_LAYER)
                     slot("middle")
-                    lineWidth(2.5)
+                    lineWidth(TrafficPalette.lineWidth(mode))
                     visibility(Visibility.NONE)
-                    lineColor(
-                        Expression.match {
-                            get("congestion")
-                            literal("low")
-                            rgb(76.0, 175.0, 80.0)
-                            literal("moderate")
-                            rgb(255.0, 193.0, 7.0)
-                            literal("heavy")
-                            rgb(255.0, 111.0, 0.0)
-                            literal("severe")
-                            rgb(211.0, 47.0, 47.0)
-                            // Default (e.g. "unknown"): neutral grey.
-                            rgb(158.0, 158.0, 158.0)
-                        },
-                    )
+                    lineColor(congestionColorExpression(mode))
                 },
             )
+        }
+
+        /**
+         * Re-colours the congestion layer for the current day/night preset.
+         * A no-op until the layer is added.
+         *
+         * Deliberately separate from [applyTrafficVisibility]: the two are
+         * orthogonal (a hidden layer still gets re-coloured, so switching the
+         * layer on at night shows night colours immediately), and visibility is
+         * applied eagerly on every update.
+         */
+        fun applyTrafficColors(style: Style, mode: MapMode) {
+            val layer = style.getLayerAs<LineLayer>(TRAFFIC_LAYER_ID) ?: return
+            layer.lineColor(congestionColorExpression(mode))
+            layer.lineWidth(TrafficPalette.lineWidth(mode))
         }
 
         /**

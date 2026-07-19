@@ -179,6 +179,47 @@ describe('garage-addVehicle', () => {
     ).toBe('functions/invalid-argument');
   });
 
+  it('round-trips each of the four offered powertrains verbatim', async () => {
+    await signInAs(member);
+    for (const powertrain of ['petrol', 'diesel', 'hybrid', 'electric']) {
+      const { vehicleId } = (
+        await call('garage-addVehicle', { ...validAdd, model: `PT ${powertrain}`, powertrain })
+      ).data as { vehicleId: string };
+      const docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+      expect(docData.powertrain).toBe(powertrain);
+      await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+    }
+  });
+
+  it('still stores a RETIRED powertrain verbatim, never remapping it', async () => {
+    // Backward compatibility, end-to-end: a shipped client (<= v0.8.0) still
+    // offers "Laddhybrid"/"Annat". The add must succeed and the stored value
+    // must be exactly what was sent — no silent plug_in_hybrid -> hybrid
+    // rewrite, which would misreport the owner's car.
+    await signInAs(member);
+    for (const powertrain of ['plug_in_hybrid', 'other']) {
+      const { vehicleId } = (
+        await call('garage-addVehicle', { ...validAdd, model: `Legacy ${powertrain}`, powertrain })
+      ).data as { vehicleId: string };
+      const docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+      expect(docData.powertrain).toBe(powertrain);
+
+      // ...and editing another field leaves the retired value untouched, so a
+      // pre-existing car is not corrupted by an unrelated edit.
+      await call('garage-updateVehicle', { vehicleId, make: 'Saab' });
+      const afterEdit = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+      expect(afterEdit.make).toBe('Saab');
+      expect(afterEdit.powertrain).toBe(powertrain);
+
+      // ...and the owner can migrate it forward to one of the four.
+      await call('garage-updateVehicle', { vehicleId, powertrain: 'hybrid' });
+      expect((await adminDb.collection('vehicles').doc(vehicleId).get()).data()!.powertrain).toBe(
+        'hybrid',
+      );
+      await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+    }
+  });
+
   it('enforces the per-user cap of 5 vehicles', async () => {
     await signInAs(otherMember);
     for (let i = 0; i < 5; i += 1) {

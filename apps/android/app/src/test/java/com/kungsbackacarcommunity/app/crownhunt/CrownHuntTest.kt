@@ -35,4 +35,9 @@ class CrownHuntTest {
         assertEquals(CrownHuntPointStatus.PAUSED, CrownHuntPointStatus.fromWire("paused"))
         assertNull(CrownHuntPointStatus.fromWire("live"))
     }
+
+    @Test
+    fun `active points query limit is two hundred`() {
+        assertEquals(200L, CrownHunt.ACTIVE_POINTS_QUERY_LIMIT)
+    }
 }

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.friends
 
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -43,10 +44,39 @@ sealed interface AddFriendState {
  * Orchestrates the friends screen (load + add + respond + remove). Pure Kotlin
  * so it is unit-testable with a fake repository. There is no live listener, so
  * every successful mutation re-fetches the snapshot via [load].
+ *
+ * ERROR REPORTING: every [FriendActionError.Generic] surfaced to the user is
+ * reported through [errorReporter] (the shared `errors-reportClientError`
+ * pipeline, which dedupes and files a GitHub issue). Generic is precisely the
+ * "we could not classify this" case — the one that a user can only describe as
+ * "Something went wrong" — so it is the case that must reach us. The other
+ * categories are normal, actionable outcomes of what the user typed (unknown
+ * nickname, already friends, request already sent, ...) or of connectivity
+ * ([FriendActionError.Network]); filing an issue for those would bury the real
+ * faults in noise, so they are deliberately NOT reported.
+ *
+ * The reported `message` is a fixed, app-generated string plus the unmapped
+ * status code — never the nickname the user typed, and never any other user
+ * content (the pipeline's no-PII rule).
  */
 class FriendsCoordinator(
     private val repository: FriendsRepository,
+    private val errorReporter: ClientErrorReporter? = null,
 ) {
+    /** Reports an unclassified failure; other categories are intentionally skipped. */
+    private fun reportIfGeneric(
+        operation: String,
+        error: FriendActionError,
+        diagnostic: FriendErrorDiagnostic,
+    ) {
+        if (error != FriendActionError.Generic) return
+        errorReporter?.report(
+            feature = "friends.$operation",
+            message = "friend-$operation failed with an unmapped error",
+            code = diagnostic ?: "UNKNOWN",
+        )
+    }
+
     private val statusState = MutableStateFlow<FriendsStatus>(FriendsStatus.Loading)
     val status: StateFlow<FriendsStatus> = statusState.asStateFlow()
 
@@ -74,12 +104,16 @@ class FriendsCoordinator(
                             incoming = result.data.incoming,
                             outgoing = result.data.outgoing,
                         )
-                is FriendsResult.Failed -> statusState.value = FriendsStatus.Error(result.error)
+                is FriendsResult.Failed -> {
+                    statusState.value = FriendsStatus.Error(result.error)
+                    reportIfGeneric("list", result.error, result.diagnostic)
+                }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             statusState.value = FriendsStatus.Error(FriendActionError.Generic)
+            reportIfGeneric("list", FriendActionError.Generic, error::class.java.simpleName)
         }
     }
 
@@ -104,15 +138,20 @@ class FriendsCoordinator(
                     SendRequestResult.Requested -> AddFriendState.Sent(nowFriends = false)
                     SendRequestResult.NowFriends -> AddFriendState.Sent(nowFriends = true)
                     is SendRequestResult.Ambiguous -> AddFriendState.Chooser(result.candidates)
-                    is SendRequestResult.Failed -> AddFriendState.Error(result.error)
+                    is SendRequestResult.Failed -> {
+                        reportIfGeneric("sendRequest", result.error, result.diagnostic)
+                        AddFriendState.Error(result.error)
+                    }
                 }
-            // A landed request/friendship changes the pending lists — refresh.
+            // A landed request/friendship changes the pending lists — refresh, so
+            // the new outgoing "waiting for a reply" row appears immediately.
             if (addState.value is AddFriendState.Sent) load()
         } catch (cancellation: CancellationException) {
             addState.value = AddFriendState.Idle
             throw cancellation
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             addState.value = AddFriendState.Error(FriendActionError.Generic)
+            reportIfGeneric("sendRequest", FriendActionError.Generic, error::class.java.simpleName)
         }
     }
 
@@ -130,6 +169,7 @@ class FriendsCoordinator(
                 RespondResult.Accepted, RespondResult.Declined -> load()
                 is RespondResult.Failed -> {
                     rowError.value = result.error
+                    reportIfGeneric("respondRequest", result.error, result.diagnostic)
                     // The request may be gone/handled server-side — resync so the
                     // stale row disappears rather than lingering.
                     load()
@@ -137,8 +177,9 @@ class FriendsCoordinator(
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             rowError.value = FriendActionError.Generic
+            reportIfGeneric("respondRequest", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
             inFlightRows.update { it - requestId }
         }
@@ -152,12 +193,16 @@ class FriendsCoordinator(
         try {
             when (val result = repository.remove(friendUid)) {
                 RemoveResult.Removed -> load()
-                is RemoveResult.Failed -> rowError.value = result.error
+                is RemoveResult.Failed -> {
+                    rowError.value = result.error
+                    reportIfGeneric("remove", result.error, result.diagnostic)
+                }
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             rowError.value = FriendActionError.Generic
+            reportIfGeneric("remove", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
             inFlightRows.update { it - friendUid }
         }

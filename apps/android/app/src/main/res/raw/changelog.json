@@ -2,6 +2,93 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 11,
+      "versionName": "0.8.0",
+      "releaseDate": "2026-07-17",
+      "highlights": [
+        "Nämn någon med @ i chatten",
+        "Blockera och anmäl direkt i chatten",
+        "Se vilka som kommer på träffen"
+      ],
+      "changes": [
+        "Skriv @ i chatten för att nämna någon – den du nämner får en notis",
+        "Långt tryck på ett meddelande låter dig blockera eller anmäla avsändaren",
+        "Träffar visar nu deltagarlistan, och du kan skapa egna träffar",
+        "Spara platser på kartan och nå dem snabbt igen",
+        "Tryck på ett namn i chatten för att öppna medlemmens profil",
+        "Egna notisinställningar för chatt och socialt",
+        "Konvojer har fått namn och du kan bjuda in vänner direkt",
+        "Garaget: dina egna bilar är inte längre låsta bakom medlemskap",
+        "Kartans lagerval och trafikinformation fungerar mer tillförlitligt",
+        "Mjukare övergångar mellan appens flikar",
+        "Rättat mörkt läge på appens bakgrund",
+        "Körhistoriken samlar en körning till ett pass"
+      ]
+    },
+    {
+      "versionCode": 10,
+      "versionName": "0.7.0",
+      "releaseDate": "2026-07-15",
+      "highlights": [
+        "Bilprofiler och foton i garaget",
+        "Sök, vägbeskrivning och omdirigering",
+        "Konvojer och medlemsprofiler"
+      ],
+      "changes": [
+        "Garaget har fått bilprofiler med foton",
+        "Navigationen räknar om vägen automatiskt om du svänger fel",
+        "Sök efter platser, adresser och sevärdheter – med senaste sökningar",
+        "Skapa och hantera konvojer",
+        "Chatten har tre kanaler: gemenskap, konvoj och vänner",
+        "Öppna andra medlemmars profiler",
+        "Introduktion vid första inloggningen",
+        "Kartan följer din bil medan du kör, med egen bilmarkör",
+        "Rikare körhistorik",
+        "Live-positionsdelning: fri att se, medlemskap för att dela",
+        "Bilder komprimeras och platsdata rensas före uppladdning",
+        "Rättad trafikinformation på kartan"
+      ]
+    },
+    {
+      "versionCode": 9,
+      "versionName": "0.6.0",
+      "releaseDate": "2026-07-14",
+      "highlights": [
+        "Vägbeskrivning steg för steg",
+        "”Vad är nytt” efter varje uppdatering",
+        "Kartan följer systemets mörka läge"
+      ],
+      "changes": [
+        "Turn-by-turn-navigation med röstguidning",
+        "Ny ”Vad är nytt”-ruta efter uppdatering och en egen sida i inställningarna",
+        "Kartan följer systemets dag- och nattläge",
+        "Kompass och hopfällbar sökruta på kartan",
+        "Skärmen släcks inte medan du kör",
+        "Meddelanden i chatten rensas automatiskt efter en tid",
+        "Rättad trafikinformation från Trafikverket",
+        "Snyggare popup-rutor"
+      ]
+    },
+    {
+      "versionCode": 8,
+      "versionName": "0.5.0",
+      "releaseDate": "2026-07-13",
+      "highlights": [
+        "Vägarbeten och olyckor på kartan",
+        "Live-positionsdelning i en popup",
+        "Omgjord meny"
+      ],
+      "changes": [
+        "Vägarbeten och olyckor visas på kartan",
+        "Live-positionsdelning öppnas som en popup direkt över kartan",
+        "Menyn är omorganiserad så att fler sidor nås snabbare",
+        "Mjukare centrering när du trycker på GPS-knappen",
+        "Ta bort enskilda körningar ur historiken",
+        "Uppstädad vänlista",
+        "Förbättrad sökruta på kartan"
+      ]
+    },
+    {
       "versionCode": 7,
       "versionName": "0.4.0",
       "releaseDate": "2026-07-12",

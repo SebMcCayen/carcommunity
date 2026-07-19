@@ -86,6 +86,25 @@ data class MapIncidentMarker(
 )
 
 /**
+ * A user gesture on the map asking "navigate to this place?".
+ *
+ * Raised by BOTH map gestures that mean the same thing, so they resolve to the
+ * SAME confirmation instead of two parallel ones:
+ * - a long-press on open map — [name] is null (nothing is there to name, so the
+ *   host reverse-geocodes / falls back to a "dropped pin" label);
+ * - a single tap on a place the basemap already draws (a shop, a petrol
+ *   station, a restaurant) — [name] is that place's own label, so the
+ *   confirmation can say where the user is actually going.
+ *
+ * The distinction is deliberately only the [name]: everything downstream (the
+ * preview, the route, the confirmation) treats the two identically.
+ */
+data class MapPlaceRequest(
+    val point: MapPoint,
+    val name: String?,
+)
+
+/**
  * Seam between the map-first shell and the actual map renderer.
  *
  * The entire shell (search bar, "Loading roads…" state, floating controls,
@@ -143,25 +162,34 @@ interface MapSurface {
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
 
     /**
-     * The coordinate of the most recent map long-press (hold), or null when none
-     * is pending. The host observes this to open the navigation preview for the
-     * pressed point (Google-Maps "long-press to navigate here"), then calls
-     * [consumeLongPress] to clear it. The real surface publishes to it from the
-     * map's long-click gesture; the stub exposes it for the same wiring/tests.
+     * The most recent "navigate to this place?" gesture, or null when none is
+     * pending. The host observes this to open the navigation preview for the
+     * requested place, then calls [consumePlaceRequest] to clear it.
+     *
+     * ONE flow for both gestures ([emitLongPress] and [emitPlaceTap]) so a
+     * long-press and a place tap can never drift into two different
+     * confirmations — see [MapPlaceRequest].
      */
-    val longPress: StateFlow<MapPoint?>
+    val placeRequest: StateFlow<MapPlaceRequest?>
 
     /** Recentre the camera on the user's position. */
     fun recenter()
 
     /**
-     * Record a long-press at [point]. Called by the real surface's long-click
-     * gesture listener; also drivable by the stub/tests to simulate the gesture.
+     * Record a long-press on open map at [point] (no place name available).
+     * Called by the real surface's long-click gesture listener; also drivable by
+     * the stub/tests to simulate the gesture.
      */
     fun emitLongPress(point: MapPoint)
 
-    /** Clear the pending [longPress] once the host has opened the preview for it. */
-    fun consumeLongPress()
+    /**
+     * Record a single tap on a basemap place at [point], named [name]. Called by
+     * the real surface's place-tap interaction; also drivable by the stub/tests.
+     */
+    fun emitPlaceTap(point: MapPoint, name: String?)
+
+    /** Clear the pending [placeRequest] once the host has opened the preview for it. */
+    fun consumePlaceRequest()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
@@ -179,16 +207,21 @@ interface MapSurface {
     fun refreshLocationComponent()
 
     /**
-     * Whether the map is the page the user is actually looking at.
+     * Whether the map is actually visible to the user.
      *
-     * The map home stays COMPOSED while the user is on another bottom-nav tab
-     * (History / Social / Garage) so its GL surface and loaded style survive the
-     * trip — disposing it made returning to the Map tab rebuild the whole
-     * `MapView` and blank the screen for a beat. The price of keeping it alive is
-     * that a fully-covered map would otherwise keep pulsing its puck (continuous
-     * GL redraw) and keep consuming location fixes for a page nobody can see, so
-     * the shell calls `setActive(false)` when it is covered and `setActive(true)`
-     * when it comes back.
+     * The map stays COMPOSED for the whole signed-in shell — every bottom-nav
+     * tab, every full-screen route, the address search and turn-by-turn — so its
+     * GL surface and loaded style survive every navigation. Disposing it made
+     * coming back rebuild the whole `MapView` and blank the screen for a beat.
+     * The price of keeping it alive is that a map nobody can see would otherwise
+     * keep pulsing its puck (continuous GL redraw) and keep consuming location
+     * fixes, so the shell calls `setActive(false)` while something OPAQUE covers
+     * it and `setActive(true)` when it is visible again.
+     *
+     * Note "visible", not "the active page": the address-search overlay draws its
+     * chrome over a map the user is still looking at (it shows the route and the
+     * puck), so the map stays ACTIVE underneath it. Only a page that actually
+     * hides the map stands it down.
      *
      * Deactivating only stands the location component down; the surface, the
      * style and the camera are all left intact, which is the whole point.
@@ -222,7 +255,17 @@ interface MapSurface {
      */
     fun setIncidentMarkers(markers: List<MapIncidentMarker>)
 
-    /** The map view itself, filling [modifier]. */
+    /**
+     * The map view itself, filling [modifier].
+     *
+     * Composed at exactly ONE place in the whole signed-in shell (see
+     * `AuthenticatedApp`), underneath every page, and never left behind by a
+     * navigation. Each entry into the composition builds a fresh `MapView` and
+     * re-runs the style load on the real surface, and the window has nothing to
+     * show until that first GL frame lands — so a second call site (or a call
+     * site inside a page that can be navigated away from) is a blank-flash bug,
+     * not a style choice.
+     */
     @Composable
     fun Content(modifier: Modifier)
 }
@@ -267,8 +310,8 @@ class StubMapSurface(
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
 
-    private val longPressFlow = MutableStateFlow<MapPoint?>(null)
-    override val longPress: StateFlow<MapPoint?> = longPressFlow.asStateFlow()
+    private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
+    override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
@@ -302,11 +345,15 @@ class StubMapSurface(
     }
 
     override fun emitLongPress(point: MapPoint) {
-        longPressFlow.value = point
+        placeRequestFlow.value = MapPlaceRequest(point = point, name = null)
     }
 
-    override fun consumeLongPress() {
-        longPressFlow.value = null
+    override fun emitPlaceTap(point: MapPoint, name: String?) {
+        placeRequestFlow.value = MapPlaceRequest(point = point, name = name)
+    }
+
+    override fun consumePlaceRequest() {
+        placeRequestFlow.value = null
     }
 
     /** No rotatable camera on the stub, so resetting to north is a no-op. */

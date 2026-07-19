@@ -131,6 +131,16 @@ object Events {
     const val MEMBER_EVENT_RATE_LIMIT_PER_DAY = 3
 
     /**
+     * Maximum published events the Firestore listener subscribes to (soonest
+     * start first, matching [sortedForList]). Keeps the snapshot bounded as
+     * the `events` collection grows without bound over the app's lifetime;
+     * events starting furthest in the future simply fall off the list —
+     * acceptable since the screen is a soonest-first upcoming-events feed,
+     * not a full history.
+     */
+    const val PUBLISHED_EVENTS_QUERY_LIMIT = 200L
+
+    /**
      * Maps an `events-create` callable error code onto a [CreateEventFailure].
      * Accepts both the Firebase Android SDK's enum name (`RESOURCE_EXHAUSTED`)
      * and the wire/`HttpsError` spelling (`resource-exhausted`) so the mapping

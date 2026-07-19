@@ -3,8 +3,10 @@ package com.kungsbackacarcommunity.app.garage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -18,15 +20,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Garage list (Phase 12 slice 13). Stateless apart from the delete-confirm
  * dialog. Any signed-in user may add/manage their own cars (no longer
  * member-gated); adding is limited only by the max-5 cap (backend-enforced).
+ *
+ * This is what the Garage TAB shows: the user's cars and the "Add vehicle"
+ * button are visible on landing, with no hub screen in between. Back is handled
+ * centrally by the shell, so this renders no Back affordance.
  */
 @Composable
 fun GarageScreen(
@@ -34,7 +46,6 @@ fun GarageScreen(
     onAdd: () -> Unit,
     onEdit: (Vehicle) -> Unit,
     onDelete: (String) -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
     // Sets (true) or clears (false) a car as the user's main car; max 1 enforced
     // by the backend. No-op wiring in previews/tests when the coordinator is absent.
@@ -128,6 +139,7 @@ private fun VehicleCard(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
+            VehiclePhoto(vehicle.imagePath)
             Text(
                 text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
                 style = MaterialTheme.typography.titleMedium,
@@ -188,5 +200,32 @@ private fun VehicleCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * The car's photo, resolved from its Storage path at render time. Mirrors the
+ * member-profile card's photo (same 16:9 crop), so a car looks the same in its
+ * owner's garage as it does on their public profile.
+ *
+ * Renders nothing when the car has no photo, or while/if the URL cannot be
+ * resolved (config-less build) — the card simply starts at its title, exactly
+ * as it did before photos existed.
+ */
+@Composable
+private fun VehiclePhoto(imagePath: String?) {
+    val context = LocalContext.current
+    val url = rememberStorageImageUrl(context, imagePath)
+    if (url != null) {
+        AsyncImage(
+            model = url,
+            contentDescription = stringResource(R.string.garage_photoAlt),
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(KccRadius.sm)),
+        )
     }
 }

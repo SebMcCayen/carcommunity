@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.garage
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -71,5 +72,61 @@ class VehicleValidationTest {
         assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))
         assertEquals(VehiclePowertrain.ELECTRIC, VehiclePowertrain.fromWire("electric"))
         assertNull(VehiclePowertrain.fromWire("steam"))
+    }
+
+    // --- the offered four --------------------------------------------------
+
+    @Test
+    fun `the form offers exactly Petrol Diesel Hybrid Electric in that order`() {
+        // Pins the SPECIFIC set and order Seb asked for, not just a count: this
+        // list is what VehicleFormScreen renders.
+        assertEquals(
+            listOf(
+                VehiclePowertrain.PETROL,
+                VehiclePowertrain.DIESEL,
+                VehiclePowertrain.HYBRID,
+                VehiclePowertrain.ELECTRIC,
+            ),
+            VehiclePowertrain.selectable(),
+        )
+    }
+
+    @Test
+    fun `the four offered powertrains carry the wire values the backend accepts`() {
+        assertEquals(
+            listOf("petrol", "diesel", "hybrid", "electric"),
+            VehiclePowertrain.selectable().map { it.wire },
+        )
+    }
+
+    @Test
+    fun `retired powertrains are never offered`() {
+        assertFalse(VehiclePowertrain.PLUG_IN_HYBRID.isSelectable)
+        assertFalse(VehiclePowertrain.OTHER.isSelectable)
+        assertFalse(VehiclePowertrain.selectable().contains(VehiclePowertrain.PLUG_IN_HYBRID))
+        assertFalse(VehiclePowertrain.selectable().contains(VehiclePowertrain.OTHER))
+    }
+
+    // --- backward compatibility --------------------------------------------
+
+    @Test
+    fun `retired wire values still parse so existing vehicles keep loading`() {
+        // Load-bearing: FirebaseGarageRepository.toVehicle drops the WHOLE
+        // vehicle when fromWire returns null, so if these ever stopped parsing,
+        // every pre-existing plug-in-hybrid / other car would vanish from its
+        // owner's garage — silently, with no error anywhere.
+        assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))
+        assertEquals(VehiclePowertrain.OTHER, VehiclePowertrain.fromWire("other"))
+    }
+
+    @Test
+    fun `a vehicle keeping a retired powertrain still validates and round-trips it`() {
+        // Editing (say) a plug-in hybrid's mileage must not force a powertrain
+        // change, and must not rewrite the stored value to something else.
+        val form = valid().copy(powertrain = VehiclePowertrain.PLUG_IN_HYBRID)
+        assertNull(VehicleValidation.validate(form, year))
+        val input = VehicleValidation.toInput(form, year)
+        assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, input!!.powertrain)
+        assertEquals("plug_in_hybrid", input.powertrain.wire)
     }
 }

@@ -45,8 +45,21 @@ class IncidentReportController(
 
     /**
      * Reports an incident of [type] at the caller's CURRENT location. Returns
-     * [ReportOutcome.NoLocation] when no fix is available (nothing is sent), and
-     * refreshes the nearby list on success so the new marker appears at once.
+     * [ReportOutcome.NoLocation] when no fix is available (nothing is sent).
+     *
+     * A [ReportOutcome.Success] means the reporter's own marker is IN
+     * [nearbyIncidents] — the promise the success message makes ("your report is
+     * on the map") is kept by this method, not delegated. The created incident
+     * comes back from the write itself and is added here; the follow-up [refresh]
+     * is only to pick up anything else that has appeared nearby, and is
+     * best-effort by design.
+     *
+     * That ordering is the whole point. This used to report Success on the
+     * strength of the write and leave the pin to [refresh] — a SECOND round-trip
+     * (`listNearby`, which unlike the write needs a composite index and an extra
+     * read permission) whose failures [refresh] deliberately swallows. Every way
+     * that call could fail produced the same silent result: "your report is on
+     * the map", and no marker.
      */
     suspend fun report(type: IncidentType, note: String? = null): ReportOutcome {
         // Rethrow cancellation so structured concurrency is honoured; only a real
@@ -60,16 +73,31 @@ class IncidentReportController(
                 null
             } ?: return ReportOutcome.NoLocation
         return try {
-            repository.report(type, here, note)
-            // refresh() handles its own non-cancellation failures internally, so a
-            // failed refresh never fails the report; cancellation still propagates.
+            val reported = repository.report(type, here, note)
+            // Best-effort sweep for everything else nearby. refresh() handles its
+            // own non-cancellation failures internally, so a failed refresh never
+            // fails the report; cancellation still propagates.
             refresh(here)
+            // The promised marker, applied LAST and from the write alone, so a
+            // refresh that succeeded (and replaced the whole list) can't drop it
+            // and a refresh that failed can't prevent it. add() is id-keyed, so a
+            // refresh that already returned this incident is not doubled up.
+            add(reported)
             ReportOutcome.Success
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Throwable) {
             ReportOutcome.Failed(error)
         }
+    }
+
+    /**
+     * Adds (or replaces, by id) a single incident in [nearbyIncidents]. Keyed on
+     * id so a later fetch that also returns it cannot double it up.
+     */
+    private fun add(incident: Incident) {
+        nearbyFlow.value =
+            nearbyFlow.value.filterNot { it.id == incident.id } + incident
     }
 
     /**

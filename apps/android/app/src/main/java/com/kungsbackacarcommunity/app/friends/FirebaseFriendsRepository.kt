@@ -24,7 +24,13 @@ class FirebaseFriendsRepository private constructor(
     override suspend fun list(): FriendsResult =
         callForData(LIST, emptyMap()).fold(
             onSuccess = { FriendsResult.Loaded(FriendsResponseParser.parseList(it)) },
-            onFailure = { FriendsResult.Failed(FriendsErrorMapper.mapGeneric(it.toCallableError())) },
+            onFailure = {
+                val callableError = it.toCallableError()
+                FriendsResult.Failed(
+                    FriendsErrorMapper.mapGeneric(callableError),
+                    callableError.rawCode,
+                )
+            },
         )
 
     override suspend fun sendRequestByNickname(nickname: String): SendRequestResult =
@@ -45,7 +51,13 @@ class FirebaseFriendsRepository private constructor(
             mapOf("requestId" to requestId, "action" to if (accept) "accept" else "decline"),
         ).fold(
             onSuccess = { FriendsResponseParser.parseRespondSuccess(it) },
-            onFailure = { RespondResult.Failed(FriendsErrorMapper.mapRespond(it.toCallableError())) },
+            onFailure = {
+                val callableError = it.toCallableError()
+                RespondResult.Failed(
+                    FriendsErrorMapper.mapRespond(callableError),
+                    callableError.rawCode,
+                )
+            },
         )
 
     override suspend fun remove(friendUid: String): RemoveResult =
@@ -53,7 +65,13 @@ class FirebaseFriendsRepository private constructor(
             // The `removed` boolean is idempotent bookkeeping — either value is a
             // success (the friend is gone). Only a thrown error is a failure.
             onSuccess = { RemoveResult.Removed },
-            onFailure = { RemoveResult.Failed(FriendsErrorMapper.mapGeneric(it.toCallableError())) },
+            onFailure = {
+                val callableError = it.toCallableError()
+                RemoveResult.Failed(
+                    FriendsErrorMapper.mapGeneric(callableError),
+                    callableError.rawCode,
+                )
+            },
         )
 
     private suspend fun callForData(
@@ -105,15 +123,30 @@ class FirebaseFriendsRepository private constructor(
     }
 }
 
-/** Translates a raw callable failure into the pure, testable error shape. */
+/**
+ * Translates a raw callable failure into the pure, testable error shape.
+ *
+ * A throwable that is NOT a [FirebaseFunctionsException] never reaches the
+ * callable at all — an App Check token failure, or the empty-payload guard in
+ * [FirebaseFriendsRepository.callForData]. It has no status code, so it maps to
+ * [FriendErrorCode.Other]; its class name is carried as `rawCode` so the error
+ * report identifies WHICH of those it was instead of collapsing them all into
+ * an indistinguishable "Something went wrong".
+ */
 private fun Throwable.toCallableError(): FriendCallableError {
     val functionsError = this as? FirebaseFunctionsException
-        ?: return FriendCallableError(FriendErrorCode.Other, reason = null, candidates = emptyList())
+        ?: return FriendCallableError(
+            code = FriendErrorCode.Other,
+            reason = null,
+            candidates = emptyList(),
+            rawCode = this::class.java.simpleName,
+        )
     val details = functionsError.details
     return FriendCallableError(
         code = functionsError.code.toFriendErrorCode(),
         reason = FriendsResponseParser.reasonOf(details),
         candidates = FriendsResponseParser.parseCandidates(details),
+        rawCode = functionsError.code.name,
     )
 }
 
@@ -125,5 +158,11 @@ private fun FirebaseFunctionsException.Code.toFriendErrorCode(): FriendErrorCode
         FirebaseFunctionsException.Code.NOT_FOUND -> FriendErrorCode.NotFound
         FirebaseFunctionsException.Code.ALREADY_EXISTS -> FriendErrorCode.AlreadyExists
         FirebaseFunctionsException.Code.FAILED_PRECONDITION -> FriendErrorCode.FailedPrecondition
+        // Transport-level failures the user can act on by retrying: the SDK
+        // reports a lost/absent connection as UNAVAILABLE and a server-side
+        // timeout as DEADLINE_EXCEEDED.
+        FirebaseFunctionsException.Code.UNAVAILABLE,
+        FirebaseFunctionsException.Code.DEADLINE_EXCEEDED,
+        -> FriendErrorCode.Unavailable
         else -> FriendErrorCode.Other
     }

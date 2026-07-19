@@ -110,19 +110,19 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  *   broadcast control opens a transparent [Popup] *over* the map (no dimming
  *   scrim, same idiom as the layers popup) presenting the live-location options
  *   rather than toggling sharing directly.
- * @param canShareLive whether the caller may START a session (live-location flag
- *   on AND active member); mirrors the backend member check. When false the
- *   popup shows the membership teaser instead of the duration/start controls.
- *   Stop / Hide-me-now are governed by [isLiveSharing] (not this flag), so they
- *   appear only while a session is already active; the details entry point
+ * @param canShareLive whether the caller may START a session — i.e. whether the
+ *   LIVE_LOCATION feature flag is on. This is NOT a membership check: sharing
+ *   your OWN position is FREE (backend parity — live-startSession requires only
+ *   an authenticated, non-suspended caller), and only VIEWING others is
+ *   member-gated. When false the popup shows a fallback teaser instead of the
+ *   start control. Hide-me-now is governed by [isLiveSharing] (not this flag), so
+ *   it appears only while a session is already active; the details entry point
  *   stays reachable regardless.
  * @param onStartLiveShare request starting a Single (solo live-sharing) session;
  *   only offered when [canShareLive]. The 1h/2h/4h duration choice is NOT made
  *   here anymore — this hands off to the single-session start flow (the same one
  *   the "+" Create → Single session raises), which is where the duration is
  *   picked. Keeps the broadcast control a one-tap "start sharing" affordance.
- * @param onStopLiveShare stop the active session (wired to
- *   LiveLocationCoordinator.stop); offered while sharing.
  * @param onHideMeNow privacy stop — remove my position now (wired to
  *   LiveLocationCoordinator.hideMeNow); offered while sharing.
  * @param onOpenLiveShareDetails open the full LiveLocationScreen for the
@@ -157,7 +157,6 @@ fun MapHome(
     avatarUrl: String? = null,
     onSearch: () -> Unit,
     onStartLiveShare: () -> Unit,
-    onStopLiveShare: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenLiveShareDetails: () -> Unit,
     onRecenter: () -> Unit,
@@ -326,13 +325,15 @@ fun MapHome(
 
     // Test hook only — a testTag (not contentDescription) so the internal tag
     // string never leaks into TalkBack. The container itself is decorative.
+    //
+    // This composable is the map's CHROME, not the map: the surface itself is
+    // composed once by the shell, underneath every page, and this draws over it.
+    // It deliberately does NOT call [MapSurface.Content] — doing so would put a
+    // second MapView call site in a subtree that navigation disposes, which is
+    // the blank-flash bug (see MapSurface.Content). Everything here reaches the
+    // map through the [mapSurface] hooks instead. The Box stays transparent so
+    // the shell's map shows through.
     Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
-        // Full-bleed map (behind everything). The user's own position is drawn
-        // by the surface itself (the Mapbox location puck at the real GPS
-        // location), so it stays put when the map pans — there is deliberately
-        // no centre-locked Compose "You" overlay here.
-        mapSurface.Content(Modifier.fillMaxSize())
-
         // Transparent outside-tap catcher, shown only while the search bar is
         // expanded: a tap on the open map area collapses it back to the round
         // icon. It's composed here, above the map but below every later overlay
@@ -540,7 +541,6 @@ fun MapHome(
                 isSharing = isLiveSharing,
                 canShareLive = canShareLive,
                 onStart = onStartLiveShare,
-                onStop = onStopLiveShare,
                 onHideMeNow = onHideMeNow,
                 onOpenDetails = onOpenLiveShareDetails,
                 onDismiss = { liveOpen = false },
@@ -742,7 +742,6 @@ private fun LiveSharePopup(
     isSharing: Boolean,
     canShareLive: Boolean,
     onStart: () -> Unit,
-    onStop: () -> Unit,
     onHideMeNow: () -> Unit,
     onOpenDetails: () -> Unit,
     onDismiss: () -> Unit,
@@ -810,17 +809,11 @@ private fun LiveSharePopup(
                 )
                 when {
                     isSharing -> {
-                        // Stopping is authenticated-gated (not member-gated) on the
-                        // backend, so it is always offered while a session is active.
-                        Button(
-                            onClick = {
-                                onStop()
-                                onDismiss()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = stringResource(R.string.liveLocation_stop))
-                        }
+                        // No Stop here: ending a session is the bottom bar's STOP
+                        // sign, so there is ONE stop control and it always raises
+                        // the save/discard summary. "Hide me now" stays — it is a
+                        // different thing (an immediate privacy escape hatch that
+                        // works even while suspended, when stopSession does not).
                         OutlinedButton(
                             onClick = {
                                 onHideMeNow()
@@ -846,8 +839,10 @@ private fun LiveSharePopup(
                         }
                     }
                     else -> {
-                        // Starting is member-gated (backend parity) — show the
-                        // membership teaser instead of the start controls.
+                        // Reached only when the LIVE_LOCATION flag is off (the
+                        // server-side kill switch) — starting is NOT member-gated.
+                        // TODO: the teaser string still says "membership
+                        // required", which is not why the control is hidden.
                         Text(
                             text = stringResource(R.string.liveLocation_memberRequiredToShare),
                             style = MaterialTheme.typography.bodyMedium,

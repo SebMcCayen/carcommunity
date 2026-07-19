@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import { DISPLAY_NAME_MAX_LENGTH } from './provisioning';
+import { toSearchKey } from '../friends/friends-core';
 
 /**
  * The callable exists solely to complete onboarding, so all three consents
@@ -70,7 +71,9 @@ function isSet(value: unknown): boolean {
  *
  * - Consent timestamps and `onboardingCompletedAt` are written only when not
  *   already set — repeat calls are idempotent and preserve original values.
- * - `displayName` is updated whenever provided.
+ * - `displayName` is updated whenever provided, together with its case-folded
+ *   `displayNameLower` search key (always written as a pair — friend nickname
+ *   resolution reads only the key).
  * - `updatedAt` is always refreshed on both documents.
  */
 export function computeOnboardingWrites(
@@ -83,6 +86,10 @@ export function computeOnboardingWrites(
   };
   if (input.displayName !== undefined) {
     profileUpdate.displayName = input.displayName;
+    // Kept in LOCKSTEP with displayName: friend nickname resolution queries
+    // `displayNameLower` only, so a displayName written without refreshing this
+    // key would make the member unfindable (or findable under their OLD name).
+    profileUpdate.displayNameLower = toSearchKey(input.displayName);
   }
   if (!isSet(existing.onboardingCompletedAt)) {
     profileUpdate.onboardingCompletedAt = serverTimestamp();

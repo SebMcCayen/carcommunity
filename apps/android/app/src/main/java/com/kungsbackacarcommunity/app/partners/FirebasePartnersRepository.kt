@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -18,6 +19,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * [PartnersRepository] backed by Firestore listeners (active companies/offers,
  * member offer detail, saved bookmarks) and the partners-showOfferCode callable
  * (europe-west1), Phase 12 slice 17. Guarded ([createIfAvailable]).
+ *
+ * The active-companies and active-offers listeners are bounded to
+ * [Partners.ACTIVE_COMPANIES_QUERY_LIMIT] / [Partners.ACTIVE_OFFERS_QUERY_LIMIT]
+ * (createdAt descending) — see those constants' KDoc for the new composite
+ * indexes this requires.
  */
 class FirebasePartnersRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -29,6 +35,8 @@ class FirebasePartnersRepository private constructor(
             firestore
                 .collection(COMPANIES)
                 .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .limit(Partners.ACTIVE_COMPANIES_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(CompaniesState.Error)
@@ -46,6 +54,8 @@ class FirebasePartnersRepository private constructor(
             firestore
                 .collection(OFFERS)
                 .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                .limit(Partners.ACTIVE_OFFERS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         // Keep the last known offers on a transient listener error
@@ -135,6 +145,7 @@ class FirebasePartnersRepository private constructor(
     companion object {
         private const val COMPANIES = "companies"
         private const val OFFERS = "offers"
+        private const val CREATED_AT = "createdAt"
         private const val DETAILS = "details"
         private const val MEMBER = "member"
         private const val USERS = "users"

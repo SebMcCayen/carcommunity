@@ -14,7 +14,7 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
-import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -27,7 +27,7 @@ fun ConversationListRoute(
     repository: DmRepository,
     uid: String,
     onOpenConversation: (DmConversation) -> Unit,
-    errorReporter: ClientErrorReporter? = defaultClientErrorReporter(),
+    errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
 ) {
     // A retry bumps [retryKey], re-subscribing the inbox listener (a transient
     // failure — offline, or a not-yet-active composite index — can then recover
@@ -60,17 +60,6 @@ fun ConversationListRoute(
 
 /** Stable feature key for the Messages inbox (matches the backend fingerprint input). */
 private const val FEATURE_CONVERSATION_LIST = "messages.conversationList"
-
-/**
- * Builds the Firebase-backed [ClientErrorReporter] from the local context, or
- * null in a config-less build. Isolated as the route's default so callers don't
- * have to thread it through, and tests can inject a fake.
- */
-@Composable
-private fun defaultClientErrorReporter(): ClientErrorReporter? {
-    val context = LocalContext.current
-    return remember(context) { FirebaseClientErrorReporter.createIfAvailable(context) }
-}
 
 /**
  * Thread integration route for the conversation with [otherUid]. The

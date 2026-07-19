@@ -2,8 +2,14 @@ package com.kungsbackacarcommunity.app.navigation
 
 import java.net.URLEncoder
 import java.util.Locale
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Pure (Android-free, Mapbox-free) core for the address-search + directions
@@ -222,6 +228,52 @@ object PolylineCodec {
             points.add(LatLng(longitude = lng / precision, latitude = lat / precision))
         }
         return points
+    }
+}
+
+/**
+ * Great-circle geometry + result ordering for search. Pure, so the ordering
+ * rule is unit-tested without the network or a device.
+ */
+object NavGeo {
+    /** Mean Earth radius (m) — the standard spherical approximation. */
+    private const val EARTH_RADIUS_METERS = 6_371_000.0
+
+    /**
+     * Great-circle (haversine) distance in metres between two coordinates.
+     * Spherical, not ellipsoidal: at the scale that decides "which of these
+     * search results is nearest" the difference is far below the precision of
+     * the fix itself, and it never has to be exact — only correctly ORDERED.
+     */
+    fun distanceMeters(from: LatLng, to: LatLng): Double {
+        val lat1 = Math.toRadians(from.latitude)
+        val lat2 = Math.toRadians(to.latitude)
+        val dLat = lat2 - lat1
+        val dLng = Math.toRadians(to.longitude - from.longitude)
+        val a =
+            sin(dLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(dLng / 2).pow(2)
+        return 2 * EARTH_RADIUS_METERS * asin(min(1.0, sqrt(a)))
+    }
+
+    /**
+     * Search results ordered nearest-first from [origin].
+     *
+     * The API is already given a proximity bias, but that only BIASES relevance
+     * ranking — it is free to put a better-matching further place above a nearer
+     * one, so "Statoil" could list a branch three towns away above the one down
+     * the road. For a driving app the ordering people actually want from a list
+     * of matches is "which of these is closest to me", so the bias picks the
+     * candidates and this decides their order.
+     *
+     * A null [origin] (permission denied, or no fix yet) keeps the API's own
+     * relevance order untouched — with no location, "nearest" has no meaning, and
+     * an arbitrary re-shuffle would be strictly worse than what the API returned.
+     *
+     * Stable: equidistant results keep their relative API order.
+     */
+    fun nearestFirst(results: List<PlaceSuggestion>, origin: LatLng?): List<PlaceSuggestion> {
+        if (origin == null) return results
+        return results.sortedBy { distanceMeters(origin, it.point) }
     }
 }
 

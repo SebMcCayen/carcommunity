@@ -55,6 +55,11 @@ class EventTest {
     }
 
     @Test
+    fun `published events query limit is two hundred`() {
+        assertEquals(200L, Events.PUBLISHED_EVENTS_QUERY_LIMIT)
+    }
+
+    @Test
     fun `isValidForCreate enforces required fields and bounds`() {
         val ok = createInput()
         assertTrue(Events.isValidForCreate(ok))

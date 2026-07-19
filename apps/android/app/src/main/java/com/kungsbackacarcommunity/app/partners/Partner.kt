@@ -75,4 +75,26 @@ object Partners {
     /** Offers belonging to a company, in stable order (by title). */
     fun offersForCompany(offers: List<PartnerOffer>, companyId: String): List<PartnerOffer> =
         offers.filter { it.companyId == companyId }.sortedBy { it.title.lowercase(Locale.ROOT) }
+
+    /**
+     * Maximum active companies the Firestore listener subscribes to (newest
+     * first by createdAt, though the list itself displays alphabetically by
+     * name). Keeps the snapshot bounded as `companies` grows without bound.
+     * Requires the `companies` composite index (status ASC, createdAt DESC)
+     * added alongside this constant — see firebase/firestore.indexes.json and
+     * the PR description for the required index deploy.
+     */
+    const val ACTIVE_COMPANIES_QUERY_LIMIT = 150L
+
+    /**
+     * Maximum active offers the Firestore listener subscribes to (newest
+     * first by createdAt). Keeps the snapshot bounded as `offers` grows
+     * without bound. Requires the `offers` composite index (status ASC,
+     * createdAt DESC) added alongside this constant — the collection already
+     * has a `companyId, status, createdAt` composite index, but that one
+     * doesn't apply here since this query has no `companyId` equality filter.
+     * See firebase/firestore.indexes.json and the PR description for the
+     * required index deploy.
+     */
+    const val ACTIVE_OFFERS_QUERY_LIMIT = 200L
 }

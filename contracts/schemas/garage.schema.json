@@ -6,8 +6,8 @@
   "$defs": {
     "vehiclePowertrain": {
       "type": "string",
-      "enum": ["petrol", "diesel", "hybrid", "plug_in_hybrid", "electric", "other"],
-      "description": "Powertrain type (packages/shared/src/garage.ts VEHICLE_POWERTRAINS)."
+      "enum": ["petrol", "diesel", "hybrid", "electric", "plug_in_hybrid", "other"],
+      "description": "Powertrain type ACCEPTED on the wire and stored in Firestore (functions/src/garage/garage-core.ts VEHICLE_POWERTRAINS). Clients OFFER only the first four (SELECTABLE_VEHICLE_POWERTRAINS: petrol, diesel, hybrid, electric). `plug_in_hybrid` and `other` are retired: no client offers them, but they are still accepted and stored verbatim so vehicles created before the four-option change are neither corrupted nor dropped, and shipped clients that still send them keep working."
     },
     "vehicle": {
       "type": "object",

@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -30,7 +31,11 @@ interface BillboardsRepository {
 
 /**
  * [BillboardsRepository] backed by a Firestore listener on active billboards
- * plus the billboards-recordInteraction callable (europe-west1). Guarded.
+ * plus the billboards-recordInteraction callable (europe-west1). The listener
+ * is bounded to [Billboards.ACTIVE_BILLBOARDS_QUERY_LIMIT] (createdAt
+ * ascending — see that constant's KDoc for the ordering trade-off) using the
+ * existing `billboards` composite index, so no new index deploy is needed.
+ * Guarded.
  */
 class FirebaseBillboardsRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -42,6 +47,8 @@ class FirebaseBillboardsRepository private constructor(
             firestore
                 .collection(BILLBOARDS)
                 .whereEqualTo("status", "active")
+                .orderBy(CREATED_AT, Query.Direction.ASCENDING)
+                .limit(Billboards.ACTIVE_BILLBOARDS_QUERY_LIMIT)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         trySend(BillboardsState.Error)
@@ -77,6 +84,7 @@ class FirebaseBillboardsRepository private constructor(
 
     companion object {
         private const val BILLBOARDS = "billboards"
+        private const val CREATED_AT = "createdAt"
         private const val REGION = "europe-west1"
         private const val RECORD_INTERACTION = "billboards-recordInteraction"
 

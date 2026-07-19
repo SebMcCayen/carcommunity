@@ -31,6 +31,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MAX_SYNC_AUDIENCE_SIZE } from '../notifications/adminSend-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -89,6 +90,56 @@ async function signInAs(user: TestUser): Promise<void> {
 }
 
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
+
+/**
+ * Seeds `count` docs matching an audience query filter (e.g. role: 'admin'
+ * or activeMember: true), with only the first `eligibleCount` of them
+ * eligible (the rest are `suspended: true`). Used to prove the audience-cap
+ * check runs against the RAW matched count, not the post-eligibility-filter
+ * count: an over-cap RAW match must be rejected even when very few of those
+ * users are actually eligible to receive anything.
+ */
+async function seedAudienceUsers(
+  prefix: string,
+  count: number,
+  matchFields: Record<string, unknown>,
+  eligibleCount: number,
+): Promise<string[]> {
+  const uids: string[] = [];
+  let batch = adminDb.batch();
+  let opsInBatch = 0;
+  for (let i = 0; i < count; i++) {
+    const uid = `${prefix}-${i}`;
+    uids.push(uid);
+    batch.set(adminDb.collection('users').doc(uid), {
+      ...matchFields,
+      suspended: i >= eligibleCount,
+    });
+    opsInBatch += 1;
+    if (opsInBatch === 500) {
+      await batch.commit();
+      batch = adminDb.batch();
+      opsInBatch = 0;
+    }
+  }
+  if (opsInBatch > 0) await batch.commit();
+  return uids;
+}
+
+async function deleteUsers(uids: string[]): Promise<void> {
+  let batch = adminDb.batch();
+  let opsInBatch = 0;
+  for (const uid of uids) {
+    batch.delete(adminDb.collection('users').doc(uid));
+    opsInBatch += 1;
+    if (opsInBatch === 500) {
+      await batch.commit();
+      batch = adminDb.batch();
+      opsInBatch = 0;
+    }
+  }
+  if (opsInBatch > 0) await batch.commit();
+}
 
 let adminUser: TestUser;
 let target: TestUser;
@@ -222,4 +273,71 @@ describe('notifications-adminSend delivery', () => {
       .get();
     expect(snap.exists).toBe(false);
   });
+});
+
+describe('notifications-adminSend audience size cap (bounded query, not post-filter)', () => {
+  // Regression coverage for the admins / members / free_users branches of
+  // resolveRecipients: the audience query itself is bounded with
+  // .limit(MAX_SYNC_AUDIENCE_SIZE + 1) and rejected on the RAW matched size,
+  // the same way the all_users branch always has been. Each seeded audience
+  // here has far more matching users than the cap, but only a handful are
+  // actually eligible (the rest are suspended) — proving the cap is enforced
+  // against the raw query result, not the post-eligibility-filter count. A
+  // regression back to "fetch everything, filter, then check the eligible
+  // count" would let these through (only ~10 eligible recipients), instead
+  // of rejecting.
+  const overCap = MAX_SYNC_AUDIENCE_SIZE + 1;
+  const eligibleSlice = 10;
+
+  it('rejects an over-cap admins audience on the raw matched size', async () => {
+    await signInAs(adminUser);
+    const uids = await seedAudienceUsers('cap-admins', overCap, { role: 'admin' }, eligibleSlice);
+    try {
+      const code = await callableErrorCode(
+        call('notifications-adminSend', {
+          ...baseSend,
+          audience: 'admins',
+          idempotencyKey: `cap-admins-${Date.now()}`,
+        }),
+      );
+      expect(code).toBe('functions/invalid-argument');
+    } finally {
+      await deleteUsers(uids);
+    }
+  }, 60_000);
+
+  it('rejects an over-cap members audience on the raw matched size', async () => {
+    await signInAs(adminUser);
+    const uids = await seedAudienceUsers('cap-members', overCap, { activeMember: true }, eligibleSlice);
+    try {
+      const code = await callableErrorCode(
+        call('notifications-adminSend', {
+          ...baseSend,
+          audience: 'members',
+          idempotencyKey: `cap-members-${Date.now()}`,
+        }),
+      );
+      expect(code).toBe('functions/invalid-argument');
+    } finally {
+      await deleteUsers(uids);
+    }
+  }, 60_000);
+
+  it('rejects an over-cap free_users audience on the raw matched size', async () => {
+    await signInAs(adminUser);
+    const uids = await seedAudienceUsers('cap-free', overCap, { activeMember: false }, eligibleSlice);
+    try {
+      const code = await callableErrorCode(
+        call('notifications-adminSend', {
+          ...baseSend,
+          audience: 'free_users',
+          confirmed: true,
+          idempotencyKey: `cap-free-${Date.now()}`,
+        }),
+      );
+      expect(code).toBe('functions/invalid-argument');
+    } finally {
+      await deleteUsers(uids);
+    }
+  }, 60_000);
 });

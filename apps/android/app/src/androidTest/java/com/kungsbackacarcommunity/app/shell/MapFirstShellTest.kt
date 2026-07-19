@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -19,6 +21,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -163,6 +166,143 @@ class MapFirstShellTest {
 
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+    }
+
+    /** Opens the address-search overlay the way a user does: expand the bar, tap it. */
+    private fun openNavSearch() {
+        composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).performClick()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+    }
+
+    /**
+     * The reported bug: pressing the search bar flashed white, and so did leaving
+     * it.
+     *
+     * The map home and the address search each used to call MapSurface.Content,
+     * and the shell picked between them — so opening the search DISPOSED the map
+     * home's MapView (AndroidView.onRelease -> MapView.onDestroy) and the search
+     * built a brand-new one, re-running loadStyle(STANDARD) from scratch; closing
+     * did the same in reverse. Between a new SurfaceView attaching and its first
+     * GL frame there is nothing to show, and that gap lasts a whole style load —
+     * that is the flash, once each way.
+     *
+     * Guarded exactly as the tab case is: ONE entry into the composition for the
+     * whole round-trip. On the real surface each entry is a fresh MapView + style
+     * load, so "still 1" is precisely "nothing was rebuilt, so nothing can flash".
+     */
+    @Test
+    fun openingAndClosingSearch_keepsTheMapComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        openNavSearch()
+        // The search is up, over the SAME map — not a second one.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        // Leave the search the way a user does.
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+
+        // Still the same map: had it been disposed either way, this would be 2 or 3.
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * Same bug, the other reported route in: holding a finger on the map flashed
+     * white before the "navigate here?" question appeared. A long-press opens the
+     * very same search overlay, so it was the same teardown — and it must stay
+     * fixed even though nothing about the gesture looks like navigation.
+     */
+    @Test
+    fun longPressingTheMap_opensTheNavigatePreview_withoutRebuildingTheMap() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        // The gesture the real surface publishes when the user holds the map.
+        composeTestRule.runOnIdle { surface.emitLongPress(MapPoint(12.0757, 57.4874)) }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * A single tap on a place the basemap draws must reach the SAME preview a
+     * long-press does — that is the whole point of the two gestures sharing one
+     * hook — and carry the place's name, not a generic dropped pin.
+     */
+    @Test
+    fun tappingAPlace_opensTheSameNavigatePreview_named() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+
+        composeTestRule.runOnIdle {
+            surface.emitPlaceTap(MapPoint(12.0757, 57.4874), name = "Bilverkstan")
+        }
+        composeTestRule.waitForIdle()
+
+        // Same overlay as the long-press, showing the tapped place BY NAME — not
+        // as a generic dropped pin. The name lands in more than one node (the
+        // search field and the destination card both carry it), so assert on the
+        // set rather than a single match.
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
+        composeTestRule.onAllNodesWithText("Bilverkstan").onFirst().assertExists()
+        composeTestRule
+            .onNodeWithText(str(R.string.addressSearch_droppedPin))
+            .assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+    }
+
+    /**
+     * The search draws over a map the user can still SEE (it shows the route and
+     * the puck), so unlike a tab or a route it must not stand the surface down.
+     * This is the distinction the shell's single `mapCover` exists to keep: the
+     * map home's chrome steps back, the map itself stays live.
+     */
+    @Test
+    fun searchOverlay_leavesTheMapActive_unlikeATab() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+
+        openNavSearch()
+        composeTestRule.runOnIdle {
+            assertTrue("the search shows the live map behind it", surface.isActive)
+        }
+
+        // A tab, by contrast, hides it entirely — so that one does stand it down.
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.runOnIdle { assertFalse(surface.isActive) }
+    }
+
+    /**
+     * A full-screen route hides the map completely, so it must stand the surface
+     * down — but it must NOT dispose it. Routes were the gap left open when the
+     * tab case was fixed; the map now outlives them too.
+     */
+    @Test
+    fun openingARoute_standsTheMapDown_butKeepsItComposed() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.settingsMenu_title)).assertIsDisplayed()
+
+        composeTestRule.runOnIdle {
+            assertFalse("a hidden map must not keep burning GPS/GPU", surface.isActive)
+            assertEquals("but it must not be rebuilt either", 1, surface.contentCompositions)
+        }
     }
 
     /**
@@ -428,9 +568,20 @@ class MapFirstShellTest {
 
     /**
      * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
-     * rememberSaveable but the popup only renders while the map shell is the
-     * active branch, so leaving the Map tab has to CLEAR the flag — otherwise the
-     * hub silently stays "open" and pops up again on returning to the map.
+     * rememberSaveable but the hub only renders while the map shell is the active
+     * branch, so losing that gate has to CLEAR the flag — otherwise the hub
+     * silently stays "open" and pops up again on returning to the map.
+     *
+     * The hub is dismissed via the map strip BEFORE switching tabs, because that is
+     * the only way a user can leave the Map tab: the hub's card covers the bottom
+     * nav bar, so a tap on a tab lands on the card and is inert. That was equally
+     * true of the previous Popup presentation — that popup window was touch-modal
+     * (its flags carried no FLAG_NOT_TOUCH_MODAL), so it swallowed the tap the same
+     * way. Only a test-injected click reached the tab, because Compose dispatches it
+     * straight to the node's own window and so bypassed the popup entirely; now that
+     * the hub composes in the host window (see ChatHubInsetsTest for why it must),
+     * the injected click meets the same card a finger does. The old sequence
+     * therefore asserted a path no user could take.
      */
     @Test
     fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
@@ -439,15 +590,61 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
-        // Leaving the Map tab loses the popup's gating condition: the hub goes away
-        // (with the map home) rather than floating over another tab.
+        // A tab tap while the hub is open is inert — the card is in the way. This
+        // genuinely models a physical tap: performClick() is not a semantics-action
+        // shortcut, it delegates to performTouchInput { click() } (ActionsKt
+        // .performClick -> Actions_androidKt.performClickImpl -> performTouchInput),
+        // so the event is hit-tested against whatever is actually on top. If the card
+        // did not block it, the shell would switch tabs and the hub would vanish.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+
+        // Dismiss the hub the way a user must: tap the uncovered strip of live map
+        // ABOVE the card. The tap is dispatched on the map-home node at a positive,
+        // in-bounds offset — never on the hub node with a negative Y to reach
+        // "outside" its own bounds, which relies on out-of-bounds dispatch and is
+        // brittle. The Y is still DERIVED, not magic: it is the midpoint between the
+        // map's top and the card's measured top, converted through the test density,
+        // so it is provably inside the strip at any density or window size.
+        val cardTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(CHAT_HUB_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        val mapTopPx =
+            with(composeTestRule.density) {
+                composeTestRule
+                    .onNodeWithTag(MAP_HOME_TEST_TAG)
+                    .getUnclippedBoundsInRoot()
+                    .top
+                    .toPx()
+            }
+        // Guard the premise: if the card ever covered the map's top there would be no
+        // strip, and the tap below would land on the card and silently not dismiss.
+        assertTrue(
+            "expected an uncovered map strip above the card (map top $mapTopPx, " +
+                "card top $cardTopPx)",
+            cardTopPx > mapTopPx,
+        )
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).performTouchInput {
+            // Node-relative: the midpoint of the strip, measured down from the map's
+            // own top edge.
+            click(Offset(width / 2f, (cardTopPx - mapTopPx) / 2f))
+        }
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+
+        // Now the tabs are reachable again: leaving the Map tab takes the map home
+        // away rather than floating it under another tab.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab restores the map WITHOUT re-opening the hub —
-        // the flag was cleared when the gate was lost, so the user gets the map,
-        // not a chat hub they never re-opened.
+        // the user gets the map, not a chat hub they never re-opened.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()

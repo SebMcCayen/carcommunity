@@ -23,7 +23,7 @@ class FirebaseIncidentRepository private constructor(
     private val functions: FirebaseFunctions,
 ) : IncidentRepository {
 
-    override suspend fun report(type: IncidentType, location: LatLng, note: String?) {
+    override suspend fun report(type: IncidentType, location: LatLng, note: String?): Incident {
         val payload =
             buildMap<String, Any> {
                 put("type", type.wire)
@@ -31,7 +31,12 @@ class FirebaseIncidentRepository private constructor(
                 put("longitude", location.longitude)
                 note?.trim()?.takeIf { it.isNotEmpty() }?.let { put("note", it) }
             }
-        callForData(REPORT, payload)
+        val data = callForData(REPORT, payload)
+        // The callable answers with the created incident view (id + the stored
+        // fields). Parse it rather than discarding it, so the reporter's own pin
+        // does not depend on a separate listNearby round-trip landing.
+        return IncidentResponseParser.parseIncident(data)
+            ?: throw IllegalStateException("$REPORT returned no usable incident")
     }
 
     override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
@@ -83,27 +88,40 @@ class FirebaseIncidentRepository private constructor(
 }
 
 /**
- * Pure SDK→model parser for the `incidents-listNearby` payload
- * (`{ incidents: [ { id, type, latitude, longitude, note?, source? }, ... ] }`).
- * Unknown types and malformed rows are dropped rather than crashing the map.
+ * Pure SDK→model parser for the `incidents-*` payloads. Unknown types and
+ * malformed rows are dropped rather than crashing the map.
  */
 object IncidentResponseParser {
+    /**
+     * Parses the `incidents-listNearby` payload
+     * (`{ incidents: [ { id, type, latitude, longitude, note?, source? }, ... ] }`).
+     */
     fun parseListNearby(data: Map<String, Any?>?): List<Incident> {
         val raw = data?.get("incidents") as? List<*> ?: return emptyList()
-        return raw.mapNotNull { row ->
-            val map = row as? Map<*, *> ?: return@mapNotNull null
-            val id = map["id"] as? String ?: return@mapNotNull null
-            val type = IncidentType.fromWire(map["type"] as? String) ?: return@mapNotNull null
-            val latitude = (map["latitude"] as? Number)?.toDouble() ?: return@mapNotNull null
-            val longitude = (map["longitude"] as? Number)?.toDouble() ?: return@mapNotNull null
-            Incident(
-                id = id,
-                type = type,
-                latitude = latitude,
-                longitude = longitude,
-                note = map["note"] as? String,
-                source = (map["source"] as? String) ?: "user",
-            )
-        }
+        return raw.mapNotNull { row -> parseRow(row) }
+    }
+
+    /**
+     * Parses the `incidents-report` payload — the created incident view itself
+     * (the same row shape as a listNearby entry, not wrapped in a list). Null
+     * when the payload is missing or malformed.
+     */
+    fun parseIncident(data: Map<String, Any?>?): Incident? = parseRow(data)
+
+    /** The shared row shape, used by both payloads. */
+    private fun parseRow(row: Any?): Incident? {
+        val map = row as? Map<*, *> ?: return null
+        val id = map["id"] as? String ?: return null
+        val type = IncidentType.fromWire(map["type"] as? String) ?: return null
+        val latitude = (map["latitude"] as? Number)?.toDouble() ?: return null
+        val longitude = (map["longitude"] as? Number)?.toDouble() ?: return null
+        return Incident(
+            id = id,
+            type = type,
+            latitude = latitude,
+            longitude = longitude,
+            note = map["note"] as? String,
+            source = (map["source"] as? String) ?: "user",
+        )
     }
 }

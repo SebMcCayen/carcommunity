@@ -5,6 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  LEGACY_VEHICLE_POWERTRAINS,
+  SELECTABLE_VEHICLE_POWERTRAINS,
+  VEHICLE_POWERTRAINS,
   buildVehicleDocument,
   buildVehicleUpdate,
   isValidVehicleImagePath,
@@ -25,6 +28,85 @@ const validAdd = {
   modelYear: 2025,
   powertrain: 'petrol',
 };
+
+describe('garage-core powertrain vocabulary', () => {
+  it('offers exactly Petrol, Diesel, Hybrid, Electric — in that order', () => {
+    // Pins the SPECIFIC four Seb asked for (and their order, which is the
+    // order the Android form renders), not merely the count.
+    expect(SELECTABLE_VEHICLE_POWERTRAINS).toEqual(['petrol', 'diesel', 'hybrid', 'electric']);
+  });
+
+  it('retires plug_in_hybrid and other without deleting them', () => {
+    expect(LEGACY_VEHICLE_POWERTRAINS).toEqual(['plug_in_hybrid', 'other']);
+    // Retired means "not offered", never "not accepted".
+    for (const retired of LEGACY_VEHICLE_POWERTRAINS) {
+      expect(SELECTABLE_VEHICLE_POWERTRAINS).not.toContain(retired);
+      expect(VEHICLE_POWERTRAINS).toContain(retired);
+    }
+  });
+
+  it('accepts a strict superset of what it offers', () => {
+    expect(VEHICLE_POWERTRAINS).toEqual([
+      'petrol',
+      'diesel',
+      'hybrid',
+      'electric',
+      'plug_in_hybrid',
+      'other',
+    ]);
+  });
+
+  it('accepts every offered powertrain on add', () => {
+    for (const powertrain of SELECTABLE_VEHICLE_POWERTRAINS) {
+      expect(parseAddVehicleInput({ ...validAdd, powertrain }, NOW).ok).toBe(true);
+    }
+  });
+
+  // --- backward compatibility -------------------------------------------
+  // Shipped clients (<= v0.8.0) still OFFER the retired values, and existing
+  // Firestore documents still HOLD them. Rejecting either would break real
+  // users mid-rollout, so both stay accepted and are stored verbatim.
+
+  it('still accepts retired powertrains on add, so shipped clients keep working', () => {
+    for (const powertrain of LEGACY_VEHICLE_POWERTRAINS) {
+      expect(parseAddVehicleInput({ ...validAdd, powertrain }, NOW).ok).toBe(true);
+    }
+  });
+
+  it('still accepts retired powertrains on update, so an existing car stays editable', () => {
+    for (const powertrain of LEGACY_VEHICLE_POWERTRAINS) {
+      expect(parseUpdateVehicleInput({ vehicleId: 'v1', powertrain }, NOW).ok).toBe(true);
+    }
+  });
+
+  it('stores a retired powertrain verbatim — never remapped', () => {
+    // The corruption guard: no silent plug_in_hybrid -> hybrid rewrite.
+    const parsed = parseAddVehicleInput({ ...validAdd, powertrain: 'plug_in_hybrid' }, NOW);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const doc = buildVehicleDocument(parsed.input, 'uid-1', serverTimestamp);
+    expect(doc.powertrain).toBe('plug_in_hybrid');
+
+    const updated = parseUpdateVehicleInput({ vehicleId: 'v1', powertrain: 'other' }, NOW);
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(buildVehicleUpdate(updated.input, serverTimestamp).update.powertrain).toBe('other');
+  });
+
+  it('migrates a retired vehicle forward when the owner picks one of the four', () => {
+    const parsed = parseUpdateVehicleInput({ vehicleId: 'v1', powertrain: 'hybrid' }, NOW);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const { update, changedFields } = buildVehicleUpdate(parsed.input, serverTimestamp);
+    expect(update.powertrain).toBe('hybrid');
+    expect(changedFields).toContain('powertrain');
+  });
+
+  it('still rejects a value that was never in the vocabulary', () => {
+    expect(parseAddVehicleInput({ ...validAdd, powertrain: 'nuclear' }, NOW).ok).toBe(false);
+    expect(parseUpdateVehicleInput({ vehicleId: 'v1', powertrain: 'steam' }, NOW).ok).toBe(false);
+  });
+});
 
 describe('garage-core input parsing', () => {
   it('accepts a valid vehicle and rejects malformed inputs', () => {

@@ -21,12 +21,22 @@
  *  - TODO: Add social sharing card (must exclude owner identity, location, and exact metadata).
  */
 
+/**
+ * Powertrain values ACCEPTED on the wire / stored in Firestore.
+ *
+ * Clients OFFER only the first four (petrol, diesel, hybrid, electric).
+ * `plug_in_hybrid` and `other` are RETIRED: no client offers them, but they are
+ * still accepted and stored verbatim so pre-existing vehicles are neither
+ * corrupted nor dropped. functions/src/garage/garage-core.ts is the source of
+ * truth (SELECTABLE_VEHICLE_POWERTRAINS / LEGACY_VEHICLE_POWERTRAINS); this
+ * copy must mirror it.
+ */
 export const VEHICLE_POWERTRAINS = [
   'petrol',
   'diesel',
   'hybrid',
-  'plug_in_hybrid',
   'electric',
+  'plug_in_hybrid',
   'other',
 ] as const;
 export type VehiclePowertrain = (typeof VEHICLE_POWERTRAINS)[number];

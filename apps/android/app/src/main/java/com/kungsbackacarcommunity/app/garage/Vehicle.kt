@@ -9,18 +9,43 @@ package com.kungsbackacarcommunity.app.garage
  * Kotlin — JVM-testable.
  */
 
-/** Vehicle powertrain (vehicles/{id}.powertrain). */
-enum class VehiclePowertrain(val wire: String) {
-    PETROL("petrol"),
-    DIESEL("diesel"),
-    HYBRID("hybrid"),
-    PLUG_IN_HYBRID("plug_in_hybrid"),
-    ELECTRIC("electric"),
-    OTHER("other"),
+/**
+ * Vehicle powertrain (vehicles/{id}.powertrain).
+ *
+ * Mirrors garage-core.ts. The vocabulary is deliberately WIDER than what the
+ * form offers: [selectable] is the product-facing set (Petrol / Diesel / Hybrid
+ * / Electric, in that order), while [PLUG_IN_HYBRID] and [OTHER] are RETIRED —
+ * no longer offered, but still parsed, stored and rendered.
+ *
+ * Keeping the retired constants is load-bearing, not tidiness: the Firestore
+ * read path drops a whole vehicle when [fromWire] returns null
+ * (FirebaseGarageRepository.toVehicle), so deleting them would make every
+ * pre-existing plug-in-hybrid / other car silently VANISH from its owner's
+ * garage and public profile. Do not remove them while any vehicle still holds
+ * the value.
+ */
+enum class VehiclePowertrain(val wire: String, val isSelectable: Boolean) {
+    PETROL("petrol", isSelectable = true),
+    DIESEL("diesel", isSelectable = true),
+    HYBRID("hybrid", isSelectable = true),
+    ELECTRIC("electric", isSelectable = true),
+
+    /** Retired (see the enum KDoc): still parsed/rendered, never offered. */
+    PLUG_IN_HYBRID("plug_in_hybrid", isSelectable = false),
+
+    /** Retired (see the enum KDoc): still parsed/rendered, never offered. */
+    OTHER("other", isSelectable = false),
     ;
 
     companion object {
         fun fromWire(value: String?): VehiclePowertrain? = values().firstOrNull { it.wire == value }
+
+        /**
+         * The powertrains the add/edit form offers, in render order: exactly
+         * Petrol, Diesel, Hybrid, Electric. Retired values are excluded, so a
+         * NEW vehicle can only ever be created with one of these four.
+         */
+        fun selectable(): List<VehiclePowertrain> = values().filter { it.isSelectable }
     }
 }
 

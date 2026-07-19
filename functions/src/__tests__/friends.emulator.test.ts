@@ -46,7 +46,16 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { friendRequestId } from '../friends/friends-core';
+import {
+  REASON_ALREADY_FRIENDS,
+  REASON_AMBIGUOUS_NICKNAME,
+  REASON_NICKNAME_NOT_FOUND,
+  REASON_NOT_ADDABLE,
+  REASON_REQUEST_ALREADY_SENT,
+  REASON_SELF_REQUEST,
+  friendRequestId,
+  toSearchKey,
+} from '../friends/friends-core';
 import { NICKNAME_SCAN_LIMIT } from '../friends/manageFriends';
 
 const PROJECT_ID = 'demo-test';
@@ -89,6 +98,24 @@ async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
   }
 }
 
+/**
+ * The `details.reason` discriminator of a failed callable, or 'no-error'. The
+ * CODE alone cannot identify a failure (already-exists covers two outcomes,
+ * failed-precondition covers two more), so the client maps on this — which
+ * makes it a contract these tests must pin.
+ */
+async function callableErrorReason(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+    return 'no-error';
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      return (error as unknown as { details?: { reason?: unknown } }).details?.reason;
+    }
+    throw error;
+  }
+}
+
 let userSeq = 0;
 
 async function newMember(displayName: string): Promise<TestUser> {
@@ -105,7 +132,11 @@ async function newMember(displayName: string): Promise<TestUser> {
   await adminDb
     .collection('users')
     .doc(uid)
-    .set({ activeMember: true, displayName }, { merge: true });
+    // displayNameLower mirrors what the real write paths (auth/provisioning.ts,
+    // auth/onboarding-core.ts) persist alongside displayName. Nickname
+    // resolution queries ONLY this key, so a helper that wrote displayName
+    // alone would make every seeded member unfindable.
+    .set({ activeMember: true, displayName, displayNameLower: toSearchKey(displayName) }, { merge: true });
   return { uid, email, password };
 }
 
@@ -178,7 +209,7 @@ async function seedRestrictedProfiles(displayName: string, count: number): Promi
       adminDb
         .collection('users')
         .doc(`restricted-${displayName}-${i}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`)
-        .set({ displayName, suspended: true }),
+        .set({ displayName, displayNameLower: toSearchKey(displayName), suspended: true }),
     ),
   );
 }
@@ -325,6 +356,165 @@ describe('friend-sendRequest gating + resolution', () => {
     expect(await callableErrorCode(call('friend-sendRequest', { nickname }))).toBe(
       'functions/failed-precondition',
     );
+  });
+});
+
+/**
+ * Seb's v0.8.0 report: a member named 'Gt86_swe' could not be found by
+ * searching 'gt86_swe' (resolution was an exact, CASE-SENSITIVE match on
+ * `displayName`), and 'gt86' found nobody either. These pin the matching
+ * contract the module KDoc now states — including what is deliberately NOT
+ * matched, so the capability can't be silently overclaimed later.
+ */
+describe('friend-sendRequest nickname matching (case-insensitive + prefix)', () => {
+  it('resolves a nickname typed in ANY case', async () => {
+    const target = await newMember('Gt86_swe');
+    const searcher = await newMember('CaseSearcher');
+    await signInAs(searcher);
+
+    // Seb typed 'gt86_swe' for a member named 'Gt86_swe' and got not-found.
+    for (const typed of ['gt86_swe', 'GT86_SWE', 'Gt86_Swe', '  gt86_swe  ']) {
+      const sent = (await call('friend-sendRequest', { nickname: typed })).data as {
+        status: string;
+        request: { toUid: string };
+      };
+      expect(sent.status).toBe('requested');
+      expect(sent.request.toUid).toBe(target.uid);
+      // Clear the pending request so each casing exercises a fresh resolution
+      // rather than tripping the already-sent guard.
+      await adminDb.collection('friendRequests').doc(friendRequestId(searcher.uid, target.uid)).delete();
+    }
+  });
+
+  // NOTE (test isolation): every emulator test file shares ONE Firestore, and
+  // resolution now matches by PREFIX — so display names must be unique by
+  // PREFIX, not merely distinct. Reusing 'Gt86_*' here would make these searches
+  // ambiguous against the case test's 'Gt86_swe' above. Hence the deliberately
+  // unrelated 'Zqx99_*' / 'Wvy77_*' stems.
+  it('resolves a PREFIX of a nickname (Seb: typing "zqx99" must find "Zqx99_swe")', async () => {
+    const target = await newMember('Zqx99_swe');
+    const searcher = await newMember('PrefixSearcher');
+    await signInAs(searcher);
+
+    const sent = (await call('friend-sendRequest', { nickname: 'zqx99' })).data as {
+      status: string;
+      request: { toUid: string };
+    };
+    expect(sent.status).toBe('requested');
+    expect(sent.request.toUid).toBe(target.uid);
+  });
+
+  it('does NOT match a mid-word or trailing substring (documented non-capability)', async () => {
+    await newMember('Wvy77_swe');
+    const searcher = await newMember('SubSearcher');
+    await signInAs(searcher);
+
+    // Firestore has no substring/contains operator: matching is prefix-only.
+    // If this ever starts passing, the module KDoc's "NOT matched" claim and the
+    // errorNotFound copy ("try the first few letters") are both wrong.
+    for (const typed of ['77_swe', 'vy77_swe', '_swe']) {
+      expect(await callableErrorCode(call('friend-sendRequest', { nickname: typed }))).toBe(
+        'functions/not-found',
+      );
+    }
+  });
+
+  it('prefers an EXACT match over longer prefix matches instead of asking to disambiguate', async () => {
+    // 'exactnick' is an exact match; 'exactnickextra' also starts with it.
+    const exact = await newMember('ExactNick');
+    await newMember('ExactNickExtra');
+    const searcher = await newMember('ExactSearcher');
+    await signInAs(searcher);
+
+    const sent = (await call('friend-sendRequest', { nickname: 'exactnick' })).data as {
+      status: string;
+      request: { toUid: string };
+    };
+    expect(sent.status).toBe('requested');
+    expect(sent.request.toUid).toBe(exact.uid);
+  });
+
+  it('returns AMBIGUOUS_NICKNAME with candidates when a PREFIX matches several members', async () => {
+    await newMember('PfxAmbigOne');
+    await newMember('PfxAmbigTwo');
+    const searcher = await newMember('PfxAmbigSearcher');
+    await signInAs(searcher);
+
+    try {
+      await call('friend-sendRequest', { nickname: 'pfxambig' });
+      throw new Error('expected AMBIGUOUS_NICKNAME');
+    } catch (error) {
+      const details = (error as unknown as { details?: { reason?: string; candidates?: unknown[] } })
+        .details;
+      expect(details?.reason).toBe(REASON_AMBIGUOUS_NICKNAME);
+      // The client re-calls with a resolved { toUid } from this list.
+      expect(details?.candidates?.length).toBe(2);
+    }
+  });
+});
+
+
+/**
+ * Every sendRequest failure must carry a `details.reason`. The Android client
+ * maps on it to render a SPECIFIC message; without it, distinct outcomes
+ * collapse into one hedged string (already-friends vs request-already-sent) or
+ * into the generic "Something went wrong".
+ */
+describe('friend-sendRequest failure reasons', () => {
+  it('tags not-found, self, already-sent and already-friends distinctly', async () => {
+    const target = await newMember('ReasonTarget');
+    const caller = await newMember('ReasonCaller');
+    await signInAs(caller);
+
+    expect(await callableErrorReason(call('friend-sendRequest', { nickname: 'NoSuchNickReason' })))
+      .toBe(REASON_NICKNAME_NOT_FOUND);
+    expect(await callableErrorReason(call('friend-sendRequest', { nickname: 'ReasonCaller' })))
+      .toBe(REASON_SELF_REQUEST);
+    expect(await callableErrorReason(call('friend-sendRequest', { toUid: caller.uid })))
+      .toBe(REASON_SELF_REQUEST);
+
+    // First send succeeds; the second is a DISTINCT outcome from already-friends.
+    await call('friend-sendRequest', { nickname: 'ReasonTarget' });
+    expect(await callableErrorReason(call('friend-sendRequest', { nickname: 'ReasonTarget' })))
+      .toBe(REASON_REQUEST_ALREADY_SENT);
+
+    // Accept, then re-send → now it IS already-friends.
+    await signInAs(target);
+    const listed = (await call('friend-list', {})).data as { incoming: { requestId: string }[] };
+    await call('friend-respondRequest', { requestId: listed.incoming[0]!.requestId, action: 'accept' });
+    await signInAs(caller);
+    expect(await callableErrorReason(call('friend-sendRequest', { nickname: 'ReasonTarget' })))
+      .toBe(REASON_ALREADY_FRIENDS);
+  });
+
+  it('uses the SAME opaque NOT_ADDABLE reason in both block directions', async () => {
+    // PRIVACY: the blocked party must never be able to tell that they were
+    // blocked, nor which side blocked. Both directions must be indistinguishable
+    // in code, message AND reason — otherwise the client could infer it.
+    const blocker = await newMember('BlockReasonA');
+    const blocked = await newMember('BlockReasonB');
+    await adminDb.collection('userBlocks').doc(blocker.uid).collection('blocked').doc(blocked.uid).set({
+      createdAt: new Date(),
+    });
+
+    // The BLOCKED party sends to the blocker (they must learn nothing).
+    await signInAs(blocked);
+    const blockedSideReason = await callableErrorReason(
+      call('friend-sendRequest', { toUid: blocker.uid }),
+    );
+    const blockedSideCode = await callableErrorCode(call('friend-sendRequest', { toUid: blocker.uid }));
+
+    // The BLOCKER sends to the party they blocked.
+    await signInAs(blocker);
+    const blockerSideReason = await callableErrorReason(
+      call('friend-sendRequest', { toUid: blocked.uid }),
+    );
+    const blockerSideCode = await callableErrorCode(call('friend-sendRequest', { toUid: blocked.uid }));
+
+    expect(blockedSideReason).toBe(REASON_NOT_ADDABLE);
+    expect(blockerSideReason).toBe(REASON_NOT_ADDABLE);
+    expect(blockedSideReason).toBe(blockerSideReason);
+    expect(blockedSideCode).toBe(blockerSideCode);
   });
 });
 

@@ -23,10 +23,25 @@
  *    respondRequest's accept and sendRequest's reverse-pending auto-accept).
  *    A DECLINE is deliberately silent: the requester is never told they were
  *    turned down.
- *  - Nickname (displayName) is NOT unique: sendRequest resolves an exact
- *    match; 0 → not-found, 1 → proceed, >1 → failed-precondition
+ *  - Nickname (displayName) is NOT unique. sendRequest resolves it
+ *    CASE-INSENSITIVELY by PREFIX against the denormalized `displayNameLower`
+ *    key (toSearchKey in friends-core.ts), never against `displayName`:
+ *      * matched:     'gt86_swe', 'GT86_SWE' and 'gt86' all resolve 'Gt86_swe'
+ *                     (any case; any leading substring of the nickname).
+ *      * NOT matched: '86_swe' / 'swe' — a mid-word or trailing substring.
+ *                     Firestore supports no substring/contains operator, and
+ *                     an exact+prefix range query is the whole capability here.
+ *                     There is deliberately no fuzzy/edit-distance matching and
+ *                     no external search service.
+ *    An EXACT (case-insensitive) match always wins over longer prefix matches.
+ *    Otherwise: 0 matches → not-found, 1 → proceed, >1 → failed-precondition
  *    (AMBIGUOUS_NICKNAME) carrying a candidate list in the error details so
  *    the client can re-call with a resolved { toUid }.
+ *  - Every sendRequest failure carries a `details.reason` discriminator
+ *    (friends-core.ts REASON_*) because the HttpsError code alone is ambiguous
+ *    — 'already-exists' covers both already-friends and request-already-sent,
+ *    'failed-precondition' covers both ambiguous-nickname and not-addable.
+ *    NOT_ADDABLE stays opaque in both block directions (see friends-core.ts).
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -41,6 +56,12 @@ import {
   AMBIGUOUS_NICKNAME_MESSAGE,
   NICKNAME_NOT_FOUND_MESSAGE,
   NOT_ADDABLE_MESSAGE,
+  REASON_ALREADY_FRIENDS,
+  REASON_AMBIGUOUS_NICKNAME,
+  REASON_NICKNAME_NOT_FOUND,
+  REASON_NOT_ADDABLE,
+  REASON_REQUEST_ALREADY_SENT,
+  REASON_SELF_REQUEST,
   REQUEST_ALREADY_SENT_MESSAGE,
   REQUEST_NOT_FOUND_MESSAGE,
   REQUEST_NOT_PENDING_MESSAGE,
@@ -52,9 +73,11 @@ import {
   parseRemoveFriendInput,
   parseRespondRequestInput,
   parseSendRequestInput,
+  prefixUpperBound,
   toFriendRequestSummary,
   toFriendSummary,
   toProfileProjection,
+  toSearchKey,
   type FriendRequestSummary,
   type FriendSummary,
   type NicknameCandidate,
@@ -153,6 +176,12 @@ async function isBlockedEitherWay(a: string, b: string): Promise<boolean> {
 /**
  * Resolves the sendRequest target to a concrete, addable uid + profile.
  * Throws the appropriate HttpsError for not-found / ambiguous nickname / self.
+ *
+ * MATCHING (see the module KDoc for the full contract): case-insensitive
+ * PREFIX matching over the denormalized `displayNameLower` key. An exact
+ * (case-insensitive) match always wins over longer prefix matches; otherwise a
+ * single prefix match resolves and several become AMBIGUOUS_NICKNAME. Mid-word
+ * substrings are NOT matched.
  */
 async function resolveTarget(
   callerUid: string,
@@ -161,45 +190,81 @@ async function resolveTarget(
   if (input.toUid !== undefined) {
     const profile = await loadProfile(input.toUid);
     if (!profile) {
-      throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
+      throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE, {
+        reason: REASON_NICKNAME_NOT_FOUND,
+      });
     }
     if (input.toUid === callerUid) {
-      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE, {
+        reason: REASON_SELF_REQUEST,
+      });
     }
     return { uid: input.toUid, profile };
   }
 
-  // Nickname path: displayName is NOT unique. Exact match, then filter out the
-  // caller and restricted accounts — soft-deleted OR suspended — so a request
-  // can't be created for, nor a restricted user surfaced by nickname resolution
-  // as, a target that respondRequest's accept guard would later reject.
-  const nickname = input.nickname as string;
+  // Nickname path: displayName is NOT unique, and Firestore has no
+  // case-insensitive operator — so we range-scan the denormalized lowercase key
+  // `displayNameLower` as a PREFIX ([key, prefixUpperBound(key))), then filter
+  // out the caller and restricted accounts — soft-deleted OR suspended — so a
+  // request can't be created for, nor a restricted user surfaced by nickname
+  // resolution as, a target that respondRequest's accept guard would later
+  // reject.
+  //
+  // Ordering by `displayNameLower` ASC keeps the page deterministic and puts an
+  // EXACT match first (within a prefix range the exact key is the shortest
+  // string and equal keys are adjacent), so when the page saturates and we fall
+  // back to the picker the intended member heads the candidate list. Single-
+  // field range + orderBy on the SAME field needs no composite index (covered
+  // by the automatic single-field index).
+  const searchKey = toSearchKey(input.nickname as string);
   const query = await db
     .collection('users')
-    .where('displayName', '==', nickname)
+    .where('displayNameLower', '>=', searchKey)
+    .where('displayNameLower', '<', prefixUpperBound(searchKey))
+    .orderBy('displayNameLower', 'asc')
     .limit(NICKNAME_SCAN_LIMIT)
     .get();
 
   // Firestore applies `.limit()` BEFORE we filter, so a page that fills up to
-  // the cap may hide further ACTIVE same-name matches beyond it. When the raw
-  // page saturates the cap we cannot prove uniqueness → treat as ambiguous
-  // rather than risk resolving to a single wrong target.
+  // the cap may hide further ACTIVE prefix matches beyond it. When the raw page
+  // saturates the cap we cannot prove uniqueness → treat as ambiguous rather
+  // than risk resolving to a single wrong target. (The exact match is exempt:
+  // per the ordering argument above it is always on the page when it exists.)
   const saturated = query.size >= NICKNAME_SCAN_LIMIT;
-  // Did the caller's own account match the nickname? Tracked before filtering it
-  // out so a self-only match can surface the dedicated self error, not not-found.
+  // Did the caller's own account match? Tracked before filtering it out so a
+  // self-only match can surface the dedicated self error, not not-found.
   const callerMatched = query.docs.some((doc) => doc.id === callerUid);
   const matches = query.docs.filter(
     (doc) => doc.id !== callerUid && !isRestricted(toUserAccessState(doc.data())),
   );
 
-  // >1 active match, OR a saturated page we can't prove is unique → ambiguous.
+  // An EXACT (case-insensitive) match is unambiguous by intent: someone typing
+  // a member's whole nickname means THAT member, even when other members'
+  // nicknames merely start with it ('gt86' must reach 'gt86' itself, not open a
+  // picker just because 'gt86_swe' also exists). Only a duplicated exact name —
+  // the pre-existing ambiguity this callable already had — stays ambiguous.
+  //
+  // Gated on !saturated for the SAME reason as the ambiguity check below: on a
+  // saturated page we have not seen every row in the range, so a second ACTIVE
+  // account with this exact name could sit beyond it and `exact.length === 1`
+  // would not prove uniqueness. A saturated page therefore falls through to the
+  // picker (which lists the exact match first — it sorts first in the range).
+  const exact = matches.filter((doc) => doc.data()?.displayNameLower === searchKey);
+  if (!saturated && exact.length === 1) {
+    const only = exact[0]!;
+    return { uid: only.id, profile: toProfileProjection(only.data()) };
+  }
+
+  // >1 match (several exact duplicates, or several members sharing the prefix),
+  // OR a saturated page we can't prove is unique → ambiguous; the client shows
+  // the candidate picker and re-calls with a resolved { toUid }.
   if (matches.length > 1 || saturated) {
     const candidates: NicknameCandidate[] = matches.slice(0, AMBIGUOUS_CANDIDATE_LIMIT).map((doc) => {
       const projection = toProfileProjection(doc.data());
       return { uid: doc.id, displayName: projection.displayName, avatarPath: projection.avatarPath };
     });
     throw new HttpsError('failed-precondition', AMBIGUOUS_NICKNAME_MESSAGE, {
-      reason: 'AMBIGUOUS_NICKNAME',
+      reason: REASON_AMBIGUOUS_NICKNAME,
       candidates,
     });
   }
@@ -209,9 +274,13 @@ async function resolveTarget(
     // so the client shows "you can't friend yourself" instead of a generic
     // not-found. Otherwise it truly resolves to nobody addressable.
     if (callerMatched) {
-      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+      throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE, {
+        reason: REASON_SELF_REQUEST,
+      });
     }
-    throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE);
+    throw new HttpsError('not-found', NICKNAME_NOT_FOUND_MESSAGE, {
+      reason: REASON_NICKNAME_NOT_FOUND,
+    });
   }
   const only = matches[0]!;
   return { uid: only.id, profile: toProfileProjection(only.data()) };
@@ -236,19 +305,20 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
   const { uid: targetUid, profile: targetProfile } = await resolveTarget(actor.uid, parsed.input);
 
   if (targetUid === actor.uid) {
-    throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE);
+    throw new HttpsError('invalid-argument', SELF_REQUEST_MESSAGE, { reason: REASON_SELF_REQUEST });
   }
 
   if (await isBlockedEitherWay(actor.uid, targetUid)) {
-    // Neutral — never reveals which side blocked (privacy).
-    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    // Neutral — never reveals which side blocked (privacy). The reason is the
+    // same opaque NOT_ADDABLE in both directions.
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, { reason: REASON_NOT_ADDABLE });
   }
 
   const callerProfile = await loadProfile(actor.uid);
   if (!callerProfile) {
     // The actor gate already loaded users/{caller}; a missing profile here is
     // an inconsistent state rather than a client error.
-    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+    throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, { reason: REASON_NOT_ADDABLE });
   }
 
   const now = new Date();
@@ -273,13 +343,17 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
       ]);
 
     if (alreadyFriend.exists) {
-      throw new HttpsError('already-exists', ALREADY_FRIENDS_MESSAGE);
+      throw new HttpsError('already-exists', ALREADY_FRIENDS_MESSAGE, {
+        reason: REASON_ALREADY_FRIENDS,
+      });
     }
 
     // Blocking is honoured in BOTH directions. Neutral failed-precondition
     // (never reveals who blocked whom), matching respondRequest's accept path.
     if (callerBlockedTarget.exists || targetBlockedCaller.exists) {
-      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE);
+      throw new HttpsError('failed-precondition', NOT_ADDABLE_MESSAGE, {
+        reason: REASON_NOT_ADDABLE,
+      });
     }
 
     // The other party already has a pending request to the caller → befriend
@@ -307,7 +381,9 @@ export const sendRequest = onCall(CALLABLE_OPTS, async (request): Promise<SendRe
     }
 
     if (outgoing.exists && outgoing.data()?.status === 'pending') {
-      throw new HttpsError('already-exists', REQUEST_ALREADY_SENT_MESSAGE);
+      throw new HttpsError('already-exists', REQUEST_ALREADY_SENT_MESSAGE, {
+        reason: REASON_REQUEST_ALREADY_SENT,
+      });
     }
 
     // New request, or re-opening a previously declined/accepted (now unfriended)

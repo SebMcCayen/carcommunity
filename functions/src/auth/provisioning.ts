@@ -12,6 +12,8 @@
  * (FieldValue.serverTimestamp() in production code).
  */
 
+import { toSearchKey } from '../friends/friends-core';
+
 export const DISPLAY_NAME_MAX_LENGTH = 120;
 
 /** Fallback shown until the user picks a display name during onboarding. */
@@ -48,8 +50,14 @@ export function buildUserProfileDocument(
   input: ProvisionUserInput,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
+  const displayName = resolveInitialDisplayName(input.displayName);
   return {
-    displayName: resolveInitialDisplayName(input.displayName),
+    displayName,
+    // Denormalized case-folded search key — friend nickname resolution queries
+    // this, never `displayName`. Written in LOCKSTEP with `displayName` on every
+    // path that sets it (here and computeOnboardingWrites) so the two can never
+    // drift; see toSearchKey in friends/friends-core.ts.
+    displayNameLower: toSearchKey(displayName),
     role: 'user',
     activeMember: false,
     suspended: false,

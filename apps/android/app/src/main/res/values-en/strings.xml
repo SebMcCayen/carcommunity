@@ -365,7 +365,7 @@
     <string name="friends_requestSent">Friend request sent.</string>
     <string name="friends_nowFriends">You\'re now friends!</string>
     <string name="friends_chooseMember">Choose a member</string>
-    <string name="friends_chooseMemberBody">Several members use that nickname. Pick the one you meant.</string>
+    <string name="friends_chooseMemberBody">Several members match that nickname. Pick the one you meant.</string>
     <string name="friends_chooseCancel">Cancel</string>
     <string name="friends_removeConfirmTitle">Remove friend?</string>
     <string name="friends_removeConfirmBody">You\'ll no longer be friends. You can send a new request later.</string>
@@ -377,8 +377,11 @@
     <string name="friends_errorSignedOut">Please sign in to manage friends.</string>
     <string name="friends_errorNotMember">Friends are available to active members.</string>
     <string name="friends_errorInvalid">Enter a valid nickname.</string>
-    <string name="friends_errorNotFound">No member found with that nickname.</string>
-    <string name="friends_errorAlreadyFriends">You\'re already connected with this member, or a request is already pending.</string>
+    <string name="friends_errorSelfRequest">That\'s you! You can\'t send yourself a friend request.</string>
+    <string name="friends_errorNotFound">No member found matching that nickname. Check the spelling, or try the first few letters.</string>
+    <string name="friends_errorAlreadyFriends">You\'re already friends with this member.</string>
+    <string name="friends_errorRequestAlreadySent">You\'ve already sent this member a request. You\'ll see it under \"Pending requests\" until they reply.</string>
+    <string name="friends_errorNetwork">No connection. Check your internet and try again.</string>
     <string name="friends_errorNotAddable">This member can\'t be added right now.</string>
     <string name="friends_errorRequestGone">That request is no longer available.</string>
     <string name="friends_errorGeneric">Something went wrong. Please try again.</string>
@@ -502,6 +505,10 @@
     <string name="savedDrives_promptNotPublic">Drive history is not public.</string>
     <string name="savedDrives_saveAction">Save drive</string>
     <string name="savedDrives_discardAction">Discard drive</string>
+    <string name="savedDrives_discardConfirmTitle">Discard the drive?</string>
+    <string name="savedDrives_discardConfirmBody">All data from the drive is deleted immediately and cannot be recovered.</string>
+    <string name="savedDrives_discardConfirmAction">Discard the drive</string>
+    <string name="savedDrives_discardConfirmCancel">Cancel</string>
     <string name="savedDrives_saveError">Could not save the drive. Please try again.</string>
     <string name="savedDrives_discardError">Could not discard the drive. Please try again.</string>
     <string name="savedDrives_noDriveSaved">No drive was saved.</string>
@@ -561,7 +568,6 @@
     <string name="garage_mainCarBadge">Main car</string>
     <string name="garage_setMainCar">Set as main car</string>
     <string name="garage_unsetMainCar">Remove main car</string>
-    <string name="garage_headerImageAlt">Garage header image</string>
     <string name="garage_photoAlt">Vehicle photo</string>
     <string name="garage_photoAdd">Add photo</string>
     <string name="garage_photoChange">Change photo</string>
@@ -835,9 +841,7 @@
     <string name="shell_socialCrownHunt">Crown Hunt</string>
     <string name="shell_socialPartners">Partners</string>
     <string name="shell_socialBillboards">Billboards</string>
-    <string name="shell_garageTitle">Garage</string>
     <string name="shell_garageFriends">Friends</string>
-    <string name="shell_garageVehicles">Cars</string>
     <string name="shell_garageBadges">Badges</string>
     <string name="shell_garagePoints">Points</string>
     <string name="shell_garageSubscription">Membership</string>

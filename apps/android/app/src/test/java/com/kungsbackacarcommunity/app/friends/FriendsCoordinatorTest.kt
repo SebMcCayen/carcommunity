@@ -43,8 +43,90 @@ class FriendsCoordinatorTest {
         override suspend fun remove(friendUid: String): RemoveResult = removeResult
     }
 
+    /** Captures what the shared error pipeline would receive. */
+    private class FakeReporter : com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter {
+        data class Report(val feature: String, val message: String, val code: String?)
+
+        val reports = mutableListOf<Report>()
+
+        override fun report(feature: String, message: String, code: String?) {
+            reports += Report(feature, message, code)
+        }
+    }
+
     private fun loaded(friends: List<FriendSummary>) =
         FriendsResult.Loaded(FriendsData(friends, emptyList(), emptyList()))
+
+    // --- error reporting -------------------------------------------------------
+    // Seb's report was an undiagnosable "Something went wrong" that filed no
+    // issue. Generic is exactly the unclassified case, so it MUST reach the
+    // pipeline carrying the raw code — and the ordinary outcomes must NOT, or
+    // the real faults drown in noise.
+
+    @Test
+    fun `an unclassified send failure is reported with its raw code`() = runTest {
+        val reporter = FakeReporter()
+        val repo =
+            FakeRepo().apply {
+                sendResult = SendRequestResult.Failed(FriendActionError.Generic, "INTERNAL")
+            }
+        FriendsCoordinator(repo, reporter).sendRequestByNickname("Gt86_swe")
+
+        assertEquals(1, reporter.reports.size)
+        val report = reporter.reports.single()
+        assertEquals("friends.sendRequest", report.feature)
+        assertEquals("INTERNAL", report.code)
+        // PRIVACY: the pipeline files a PUBLIC GitHub issue. The nickname the
+        // user typed is their content and must never ride along.
+        assertTrue(!report.message.contains("Gt86_swe"))
+        assertTrue(!(report.code ?: "").contains("Gt86_swe"))
+    }
+
+    @Test
+    fun `expected outcomes are never reported`() = runTest {
+        for (error in
+            listOf(
+                FriendActionError.NotFound,
+                FriendActionError.AlreadyFriends,
+                FriendActionError.RequestAlreadySent,
+                FriendActionError.SelfRequest,
+                FriendActionError.NotAddable,
+                FriendActionError.Invalid,
+                FriendActionError.Network,
+                FriendActionError.SignedOut,
+                FriendActionError.NotMember,
+            )) {
+            val reporter = FakeReporter()
+            val repo = FakeRepo().apply { sendResult = SendRequestResult.Failed(error) }
+            FriendsCoordinator(repo, reporter).sendRequestByNickname("Someone")
+            assertTrue("$error must not be reported", reporter.reports.isEmpty())
+        }
+    }
+
+    @Test
+    fun `an unclassified list failure is reported`() = runTest {
+        val reporter = FakeReporter()
+        val repo =
+            FakeRepo().apply {
+                listResult = FriendsResult.Failed(FriendActionError.Generic, "UNAVAILABLE_TOKEN")
+            }
+        FriendsCoordinator(repo, reporter).load()
+
+        assertEquals(1, reporter.reports.size)
+        assertEquals("friends.list", reporter.reports.single().feature)
+        assertEquals("UNAVAILABLE_TOKEN", reporter.reports.single().code)
+    }
+
+    @Test
+    fun `a null reporter (config-less build) never breaks the flow`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                sendResult = SendRequestResult.Failed(FriendActionError.Generic, "INTERNAL")
+            }
+        val coordinator = FriendsCoordinator(repo, errorReporter = null)
+        coordinator.sendRequestByNickname("Someone")
+        assertEquals(AddFriendState.Error(FriendActionError.Generic), coordinator.add.value)
+    }
 
     @Test
     fun `load publishes the snapshot`() = runTest {

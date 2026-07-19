@@ -48,17 +48,40 @@ data class FriendsData(
  * reason). The screen renders each via a `friends.*` string. `NotAddable` is
  * deliberately neutral — it must never reveal whether the caller was blocked or
  * did the blocking.
+ *
+ * [AlreadyFriends] and [RequestAlreadySent] both arrive as `already-exists` and
+ * are separated by `details.reason`; before that discriminator existed the two
+ * shared one hedged string ("...or a request is already pending"). Likewise
+ * [Network] is split out of what used to collapse into [Generic], so a dropped
+ * connection reads as a retryable network problem rather than an app fault.
+ *
+ * [Generic] is the LAST-RESORT sink for a failure we could not classify (an
+ * unmapped callable code, or a non-callable throwable such as an App Check
+ * token failure). It is the only category that is reported to the backend
+ * error pipeline — see FriendsRoute — because it is the only one that
+ * represents a genuine, undiagnosed runtime fault rather than a normal,
+ * actionable outcome of what the user typed.
  */
 enum class FriendActionError {
     SignedOut,
     NotMember,
     Invalid,
+    SelfRequest,
     NotFound,
-    AlreadyExists,
+    AlreadyFriends,
+    RequestAlreadySent,
     NotAddable,
     RequestGone,
+    Network,
     Generic,
 }
+
+/**
+ * The unmapped status/throwable identifier behind a failure, carried alongside
+ * the mapped [FriendActionError] purely so an unclassified ([FriendActionError.Generic])
+ * failure can be REPORTED with enough detail to diagnose. Never rendered.
+ */
+typealias FriendErrorDiagnostic = String?
 
 /** Outcome of `friend-sendRequest`. */
 sealed interface SendRequestResult {
@@ -71,7 +94,10 @@ sealed interface SendRequestResult {
     /** The nickname matched several members; the caller must pick one. */
     data class Ambiguous(val candidates: List<FriendUser>) : SendRequestResult
 
-    data class Failed(val error: FriendActionError) : SendRequestResult
+    data class Failed(
+        val error: FriendActionError,
+        val diagnostic: FriendErrorDiagnostic = null,
+    ) : SendRequestResult
 }
 
 /** Outcome of `friend-respondRequest`. */
@@ -80,21 +106,30 @@ sealed interface RespondResult {
 
     data object Declined : RespondResult
 
-    data class Failed(val error: FriendActionError) : RespondResult
+    data class Failed(
+        val error: FriendActionError,
+        val diagnostic: FriendErrorDiagnostic = null,
+    ) : RespondResult
 }
 
 /** Outcome of `friend-remove` (idempotent). */
 sealed interface RemoveResult {
     data object Removed : RemoveResult
 
-    data class Failed(val error: FriendActionError) : RemoveResult
+    data class Failed(
+        val error: FriendActionError,
+        val diagnostic: FriendErrorDiagnostic = null,
+    ) : RemoveResult
 }
 
 /** Outcome of `friend-list`. */
 sealed interface FriendsResult {
     data class Loaded(val data: FriendsData) : FriendsResult
 
-    data class Failed(val error: FriendActionError) : FriendsResult
+    data class Failed(
+        val error: FriendActionError,
+        val diagnostic: FriendErrorDiagnostic = null,
+    ) : FriendsResult
 }
 
 /**
@@ -109,6 +144,8 @@ enum class FriendErrorCode {
     NotFound,
     AlreadyExists,
     FailedPrecondition,
+    /** Transport-level: no/lost connectivity or a server-side timeout. */
+    Unavailable,
     Other,
 }
 
@@ -116,11 +153,19 @@ enum class FriendErrorCode {
  * Pure representation of a callable failure: the [code], the optional
  * `details.reason` discriminator, and any ambiguity [candidates] carried in
  * `details.candidates`.
+ *
+ * [rawCode] is the ORIGINAL, unmapped identifier of the failure — the callable
+ * status name (e.g. "INTERNAL", "UNAVAILABLE") or, when the throwable was not a
+ * callable exception at all, its class name. [FriendErrorCode.Other] is a sink
+ * that erases exactly the information needed to diagnose a report of
+ * "Something went wrong", so the raw value is preserved here and attached to
+ * the error report (never shown to the user, never PII).
  */
 data class FriendCallableError(
     val code: FriendErrorCode,
     val reason: String?,
     val candidates: List<FriendUser>,
+    val rawCode: String? = null,
 )
 
 /**
@@ -131,28 +176,46 @@ data class FriendCallableError(
 object FriendsErrorMapper {
     const val REASON_AMBIGUOUS = "AMBIGUOUS_NICKNAME"
     const val REASON_NOT_ADDABLE = "NOT_ADDABLE"
+    const val REASON_ALREADY_FRIENDS = "ALREADY_FRIENDS"
+    const val REASON_REQUEST_ALREADY_SENT = "REQUEST_ALREADY_SENT"
+    const val REASON_NICKNAME_NOT_FOUND = "NICKNAME_NOT_FOUND"
+    const val REASON_SELF_REQUEST = "SELF_REQUEST"
 
     fun mapSend(error: FriendCallableError): SendRequestResult =
-        when {
-            // Ambiguity and not-addable are reason-tagged (both arrive under
-            // failed-precondition); check the reason before the bare code so we
-            // never mis-route a picker or leak block direction.
-            error.reason == REASON_AMBIGUOUS -> SendRequestResult.Ambiguous(error.candidates)
-            error.reason == REASON_NOT_ADDABLE -> SendRequestResult.Failed(FriendActionError.NotAddable)
-            else -> SendRequestResult.Failed(sendErrorFor(error.code))
+        when (error.reason) {
+            // Reason-tagged failures are checked BEFORE the bare code: several
+            // distinct outcomes share one code ('already-exists' =
+            // already-friends OR request-already-sent; 'failed-precondition' =
+            // ambiguous OR not-addable), so the code alone cannot pick the right
+            // message and must never mis-route a picker or leak block direction.
+            REASON_AMBIGUOUS -> SendRequestResult.Ambiguous(error.candidates)
+            REASON_NOT_ADDABLE -> SendRequestResult.Failed(FriendActionError.NotAddable)
+            REASON_ALREADY_FRIENDS -> SendRequestResult.Failed(FriendActionError.AlreadyFriends)
+            REASON_REQUEST_ALREADY_SENT ->
+                SendRequestResult.Failed(FriendActionError.RequestAlreadySent)
+            REASON_NICKNAME_NOT_FOUND -> SendRequestResult.Failed(FriendActionError.NotFound)
+            REASON_SELF_REQUEST -> SendRequestResult.Failed(FriendActionError.SelfRequest)
+            else -> SendRequestResult.Failed(sendErrorFor(error.code), error.rawCode)
         }
 
+    /**
+     * Code-only fallback for a send failure with no `details.reason` — e.g. an
+     * older backend, or a failure raised before the callable's own handler runs.
+     */
     private fun sendErrorFor(code: FriendErrorCode): FriendActionError =
         when (code) {
             FriendErrorCode.Unauthenticated -> FriendActionError.SignedOut
             FriendErrorCode.PermissionDenied -> FriendActionError.NotMember
             FriendErrorCode.InvalidArgument -> FriendActionError.Invalid
             FriendErrorCode.NotFound -> FriendActionError.NotFound
-            FriendErrorCode.AlreadyExists -> FriendActionError.AlreadyExists
+            // Untagged 'already-exists': we cannot tell already-friends from
+            // request-already-sent, so fall back to the friendship reading.
+            FriendErrorCode.AlreadyExists -> FriendActionError.AlreadyFriends
             // A failed-precondition on send that isn't reason-tagged is treated
             // as the neutral not-addable case (the only documented non-ambiguous
             // precondition failure for this callable).
             FriendErrorCode.FailedPrecondition -> FriendActionError.NotAddable
+            FriendErrorCode.Unavailable -> FriendActionError.Network
             FriendErrorCode.Other -> FriendActionError.Generic
         }
 
@@ -165,6 +228,7 @@ object FriendsErrorMapper {
             FriendErrorCode.NotFound,
             FriendErrorCode.FailedPrecondition,
             -> FriendActionError.RequestGone
+            FriendErrorCode.Unavailable -> FriendActionError.Network
             else -> FriendActionError.Generic
         }
 
@@ -172,6 +236,7 @@ object FriendsErrorMapper {
         when (error.code) {
             FriendErrorCode.Unauthenticated -> FriendActionError.SignedOut
             FriendErrorCode.PermissionDenied -> FriendActionError.NotMember
+            FriendErrorCode.Unavailable -> FriendActionError.Network
             else -> FriendActionError.Generic
         }
 }

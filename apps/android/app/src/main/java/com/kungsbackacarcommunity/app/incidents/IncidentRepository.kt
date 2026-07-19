@@ -8,8 +8,16 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  * against it (a fake in tests, [FirebaseIncidentRepository] on device).
  */
 interface IncidentRepository {
-    /** Reports an incident of [type] at [location]; throws on failure. */
-    suspend fun report(type: IncidentType, location: LatLng, note: String? = null)
+    /**
+     * Reports an incident of [type] at [location]; throws on failure.
+     *
+     * Returns the CREATED incident (the callable answers with it, id and all),
+     * so the caller can put it on the map from the write alone. It used to return
+     * Unit and the map only learned about the report via a follow-up
+     * [listNearby] — a second, independently-failing round-trip standing between
+     * "reported" and the pin the user was promised.
+     */
+    suspend fun report(type: IncidentType, location: LatLng, note: String? = null): Incident
 
     /**
      * Active, unexpired incidents within [radiusMeters] of [center]. The

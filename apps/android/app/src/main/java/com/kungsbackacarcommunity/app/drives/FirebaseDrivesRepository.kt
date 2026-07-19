@@ -5,6 +5,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.channels.awaitClose
@@ -29,7 +30,7 @@ class FirebaseDrivesRepository private constructor(
                 .whereEqualTo(FIELD_USER_ID, uid)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        trySend(DrivesState.Error)
+                        trySend(DrivesState.Error(code = error.code.name))
                         return@addSnapshotListener
                     }
                     val drives = snapshot?.documents?.mapNotNull { it.toSavedDrive() } ?: emptyList()
@@ -48,8 +49,14 @@ class FirebaseDrivesRepository private constructor(
                     if (task.isSuccessful) {
                         continuation.resume(Unit)
                     } else {
+                        val cause =
+                            task.exception
+                                ?: IllegalStateException("$SAVE_DRIVE failed without a cause")
+                        // Surface the callable's status name to the pure domain:
+                        // `drives-save` is member-gated, so PERMISSION_DENIED is a
+                        // permanent refusal rather than something to retry.
                         continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$SAVE_DRIVE failed without a cause"),
+                            DriveSaveException(code = cause.callableStatusCode(), cause = cause),
                         )
                     }
                 }
@@ -88,6 +95,15 @@ class FirebaseDrivesRepository private constructor(
         }
     }
 }
+
+/**
+ * The callable status name (`PERMISSION_DENIED`, `UNAVAILABLE`, …) for a failed
+ * callable, or null when the failure was not a callable status (e.g. a raw
+ * network/IO error). Kept private to this Firebase layer so the status crosses
+ * into the domain only as a plain [String].
+ */
+private fun Throwable.callableStatusCode(): String? =
+    (this as? FirebaseFunctionsException)?.code?.name
 
 private fun DocumentSnapshot.toSavedDrive(): SavedDrive? {
     if (!exists()) return null
