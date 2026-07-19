@@ -233,6 +233,7 @@
     "locationAllow": "Allow location",
     "locationOpenSettings": "Open settings",
     "locationSettingsUnavailable": "Settings couldn't be opened on this device. Grant location access to the app manually.",
+    "locationServicesSettingsUnavailable": "Settings couldn't be opened on this device. Turn on location in your device settings.",
     "locationDismiss": "Not now"
   },
   "events": {

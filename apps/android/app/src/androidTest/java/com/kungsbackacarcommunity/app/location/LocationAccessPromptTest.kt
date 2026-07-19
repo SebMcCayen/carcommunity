@@ -97,6 +97,20 @@ class LocationAccessPromptTest {
     }
 
     @Test
+    fun settingsUnavailable_advisesPerDestinationNotGenerically() {
+        // The failed-to-open note must follow the DESTINATION that failed. A
+        // services-off user has already granted the permission, so telling them
+        // to "grant location access to the app" sends them after something they
+        // already have — the exact wrong-remedy trap this prompt exists to
+        // avoid, reintroduced in the fallback. (Caught in review on #482.)
+        show(LocationAccess.SERVICES_OFF, settingsUnavailable = true)
+        composeTestRule.onNodeWithText(str(R.string.map_locationServicesSettingsUnavailable))
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.map_locationSettingsUnavailable))
+            .assertDoesNotExist()
+    }
+
+    @Test
     fun actionsAreReported() {
         var fixed = 0
         var dismissed = 0

@@ -78,8 +78,18 @@ fun LocationAccessPrompt(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
             if (settingsUnavailable) {
+                // Per DESTINATION, not one generic line: the two cases fail on
+                // different settings screens and want opposite manual advice.
+                // Telling a services-off user to "grant location access to the
+                // app" would send them after a permission they already have —
+                // the same wrong-remedy trap this whole prompt exists to avoid.
+                val fallback = when (access) {
+                    LocationAccess.SERVICES_OFF ->
+                        R.string.map_locationServicesSettingsUnavailable
+                    else -> R.string.map_locationSettingsUnavailable
+                }
                 Text(
-                    text = stringResource(R.string.map_locationSettingsUnavailable),
+                    text = stringResource(fallback),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )

@@ -233,6 +233,7 @@
     "locationAllow": "Tillåt plats",
     "locationOpenSettings": "Öppna inställningar",
     "locationSettingsUnavailable": "Inställningarna kunde inte öppnas på den här enheten. Ge appen platsåtkomst manuellt.",
+    "locationServicesSettingsUnavailable": "Inställningarna kunde inte öppnas på den här enheten. Slå på platstjänster i enhetens inställningar.",
     "locationDismiss": "Inte nu"
   },
   "events": {
