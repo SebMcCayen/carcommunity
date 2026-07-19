@@ -1030,8 +1030,16 @@ class MapboxMapSurface : MapSurface {
      */
     private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
         if (markers == lastAppliedIncidents) return
-        applyIncidentMarkers(markers)
-        lastAppliedIncidents = markers
+        // Cache ONLY a complete draw. An incomplete one (the style handle not
+        // available yet, so a marker image could not be uploaded) would
+        // otherwise be remembered as applied, and every later update carrying
+        // the same markers would short-circuit here — leaving those incidents
+        // drawn as blank, icon-less annotations for as long as the set did not
+        // change. Declining to cache costs one redundant redraw and makes the
+        // next update repair it.
+        if (applyIncidentMarkers(markers)) {
+            lastAppliedIncidents = markers
+        }
     }
 
     /**
@@ -1053,10 +1061,15 @@ class MapboxMapSurface : MapSurface {
      * On-device verification note: annotation rendering runs only on a
      * token-provisioned device, so the drawn result is verified on device.
      */
-    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>) {
-        val manager = incidentMarkerManager ?: return
+    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>): Boolean {
+        val manager = incidentMarkerManager ?: return false
         val style = mapViewRef?.mapboxMap?.style
         val context = appContext
+        // Every image this draw needs must be on the style, or the annotations
+        // below would reference a name the style does not know and render as
+        // nothing. Tracked so the CALLER can decline to cache an incomplete draw
+        // and simply try again on the next update.
+        var complete = true
         runCatching { manager.deleteAll() }
         for (marker in markers) {
             val imageId =
@@ -1066,23 +1079,28 @@ class MapboxMapSurface : MapSurface {
                     glyphColorArgb = marker.glyphColorArgb,
                 )
             // Register this category's image on first use against the current
-            // style. Skipped when the style handle is unavailable, in which case
-            // the marker below simply does not draw — never a crash.
-            if (style != null && context != null && imageId !in registeredIncidentImages) {
+            // style. If the style handle or context is unavailable the image
+            // cannot be uploaded, so this draw is incomplete — never a crash.
+            if (imageId !in registeredIncidentImages) {
                 val bitmap =
-                    IncidentMarkerBitmaps.create(
-                        context = context,
-                        iconRes = marker.iconRes,
-                        discColorArgb = marker.colorArgb,
-                        glyphColorArgb = marker.glyphColorArgb,
-                    )
-                if (bitmap != null) {
-                    val added = runCatching { style.addImage(imageId, bitmap) }.isSuccess
-                    // Only remember it as registered once the upload actually
-                    // succeeded, so a transient failure retries next redraw
-                    // rather than permanently marking the icon as present.
-                    if (added) registeredIncidentImages.add(imageId)
-                }
+                    if (style != null && context != null) {
+                        IncidentMarkerBitmaps.create(
+                            context = context,
+                            iconRes = marker.iconRes,
+                            discColorArgb = marker.colorArgb,
+                            glyphColorArgb = marker.glyphColorArgb,
+                        )
+                    } else {
+                        null
+                    }
+                // Only remember it as registered once the upload actually
+                // succeeded, so a transient failure retries on the next redraw
+                // rather than permanently marking the icon as present.
+                val added =
+                    bitmap != null &&
+                        style != null &&
+                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
+                if (added) registeredIncidentImages.add(imageId) else complete = false
             }
             runCatching {
                 manager.create(
@@ -1095,6 +1113,7 @@ class MapboxMapSurface : MapSurface {
                 )
             }
         }
+        return complete
     }
 
     /**
