@@ -70,20 +70,17 @@ object ImageCompressor {
     const val DEFAULT_JPEG_QUALITY: Int = 80
 
     /**
-     * Floor on the crop fraction used to size the decode. Guards the
-     * `maxDimension / fraction` division against a pathologically small (or
-     * zero-ish) rect producing an absurd decode request.
+     * Ceiling on the pixels a single decode may allocate, before the crop is cut
+     * out of it. Sizing the decode so the CROPPED REGION reaches [maxDimension]
+     * necessarily decodes the whole frame larger than the region; on a very
+     * large source at a deep zoom that could run to hundreds of megabytes.
+     *
+     * 32 Mpx is ~128 MB at ARGB_8888 — comfortably above any decode a real pick
+     * needs (a 108 MP phone photo at maximum zoom lands around 27 Mpx, and picks
+     * are already capped at [MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES] anyway),
+     * so this only ever bites the pathological case.
      */
-    private const val MIN_CROP_FRACTION: Float = 0.05f
-
-    /**
-     * Hard cap on how much larger than [maxDimension] a cropped decode may be.
-     * A deep zoom asks for a big decode so the crop stays sharp; this keeps that
-     * bounded (at 1600px that is a 12800px decode budget — beyond any phone
-     * camera, so it never bites in practice, it only stops the pathological
-     * case from allocating unboundedly).
-     */
-    private const val MAX_CROP_DECODE_FACTOR: Int = 8
+    private const val MAX_DECODE_PIXELS: Long = 32_000_000L
 
     /**
      * Downscales + re-encodes [picked] to JPEG off the main thread. Returns a
@@ -220,21 +217,10 @@ object ImageCompressor {
         // there is nothing sensible to re-encode.
         if (maxDimension <= 0 || quality !in 0..100) return null
 
-        // A crop selects a REGION of the source, so the decode must keep enough
-        // pixels for that region — not for the whole frame — to still fill
-        // maxDimension. Decoding a 4x zoom crop at the frame's sample size would
-        // hand back a soft, upscaled-looking photo. Bounded so an extreme zoom
-        // cannot ask for a decode far larger than the source.
-        val decodeDimension =
-            if (crop != null && crop.isValid() && !crop.isFullFrame()) {
-                val widest = maxOf(crop.width, crop.height).coerceAtLeast(MIN_CROP_FRACTION)
-                (maxDimension / widest).toInt().coerceIn(maxDimension, maxDimension * MAX_CROP_DECODE_FACTOR)
-            } else {
-                maxDimension
-            }
-
         // 1-2. Decode at the nearest power-of-two down-sample, oriented per EXIF.
-        var bitmap = decodeOriented(picked.bytes, decodeDimension) ?: return null
+        // The crop is passed in so the sample size is chosen for the REGION that
+        // survives the crop, not the whole frame (see [sampleSizeForCrop]).
+        var bitmap = decodeOriented(picked.bytes, maxDimension, crop) ?: return null
 
         // 3. Apply the user's crop, then scale so the longest side fits.
         try {
@@ -270,7 +256,11 @@ object ImageCompressor {
      * EXIF orientation, the user would frame a sideways photo and get an
      * upright, wrongly-cropped one (or the reverse).
      */
-    private fun decodeOriented(bytes: ByteArray, maxDimension: Int): Bitmap? {
+    private fun decodeOriented(
+        bytes: ByteArray,
+        maxDimension: Int,
+        crop: NormalizedCropRect? = null,
+    ): Bitmap? {
         if (maxDimension <= 0) return null
 
         // Read bounds only (no pixels) to compute an efficient sample size.
@@ -280,7 +270,8 @@ object ImageCompressor {
 
         val decodeOptions =
             BitmapFactory.Options().apply {
-                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxDimension)
+                inSampleSize =
+                    sampleSizeForCrop(bounds.outWidth, bounds.outHeight, crop, maxDimension)
             }
         val decoded =
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions) ?: return null
@@ -445,6 +436,50 @@ object ImageCompressor {
         var longest = maxOf(width, height)
         while (longest > maxDimension) {
             longest /= 2
+            sample *= 2
+        }
+        return sample
+    }
+
+    /**
+     * [sampleSizeFor], but measured against the region that SURVIVES [crop]
+     * rather than the whole frame — because only that region is uploaded.
+     *
+     * Sizing the decode by the frame is the bug this exists to avoid: sampling
+     * is a property of the pixels you KEEP. A 8000x1000 panorama cropped to
+     * 16:9 keeps a 1778x1000 region; sampled by the frame (longest side 8000)
+     * that decodes at 1/8 and the crop yields a 222px-wide upload — soft and
+     * tiny — even though the source held 1778px of it. Sampled by the region it
+     * decodes at 1/2 and yields 889px, the same "at least half of
+     * [maxDimension]" bar the uncropped path has always met.
+     *
+     * Deliberately NOT `maxDimension / min(crop.width, crop.height)`: the needed
+     * decode depends on the SOURCE's aspect too, and that form ignores it — on a
+     * 12000x9000 source at maximum zoom it asks for a full-resolution 108 Mpx
+     * decode (~411 MB at ARGB_8888, a near-certain OOM) where sizing by the
+     * region asks for 27 Mpx.
+     *
+     * The result is then floored by [MAX_DECODE_PIXELS], since a decode sized
+     * for the region still materialises the whole frame.
+     *
+     * Internal (not private) purely so it is JVM-unit-testable without a device.
+     */
+    internal fun sampleSizeForCrop(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        crop: NormalizedCropRect?,
+        maxDimension: Int,
+    ): Int {
+        if (sourceWidth <= 0 || sourceHeight <= 0 || maxDimension <= 0) return 1
+        val window = crop?.takeIf { it.isValid() } ?: NormalizedCropRect.FULL
+        val regionWidth = (window.width * sourceWidth).toInt().coerceAtLeast(1)
+        val regionHeight = (window.height * sourceHeight).toInt().coerceAtLeast(1)
+
+        var sample = sampleSizeFor(regionWidth, regionHeight, maxDimension)
+        // The decode covers the FULL frame even though the sample size was
+        // chosen for the region, so bound what that can allocate.
+        val totalPixels = sourceWidth.toLong() * sourceHeight.toLong()
+        while (totalPixels / (sample.toLong() * sample.toLong()) > MAX_DECODE_PIXELS) {
             sample *= 2
         }
         return sample

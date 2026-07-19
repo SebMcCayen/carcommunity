@@ -299,6 +299,72 @@ class ImageCompressorTest {
     }
 
     @Test
+    fun compressForPublicUpload_croppedWideSource_staysSharp() = runBlocking {
+        // End-to-end cover for the sample-size regression: the decode must be
+        // sized for the region that survives the crop, not the frame. Sized by
+        // the frame, this 16:9 crop of a wide source came back ~220px on its
+        // longest side; sized by the region it clears maxDimension/2.
+        val source = jpegBytes(gradientBitmap(6400, 800), 95)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        // Full height, 16:9 => 1422px of the 6400px width.
+        val crop = NormalizedCropRect(left = 0.3f, top = 0f, width = 1422f / 6400f, height = 1f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+            )
+        requireNotNull(result)
+
+        val bounds = decodeBounds(result.bytes)
+        val longest = maxOf(bounds.outWidth, bounds.outHeight)
+        assertTrue(
+            "a cropped wide source must not decode to a sliver — got " +
+                "${bounds.outWidth}x${bounds.outHeight}, expected the longest side " +
+                "at least ${ImageCompressor.VEHICLE_MAX_DIMENSION / 2}",
+            longest >= ImageCompressor.VEHICLE_MAX_DIMENSION / 2,
+        )
+    }
+
+    @Test
+    fun compressForPublicUpload_panoramaCroppedToSquare_keepsFullResolution() = runBlocking {
+        // End-to-end form of the sample-size regression, asserting the ACTUAL
+        // output dimensions rather than a bound that would hold either way.
+        // A 6000x1000 panorama cropped to its middle 1000x1000 square retains
+        // 1000x1000 real pixels, and scaleToMax never upscales, so the output
+        // must be exactly that. Sized by the frame it came out 250x250.
+        val source = jpegBytes(gradientBitmap(6000, 1000), 95)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        val square = NormalizedCropRect(left = 1f / 3f, top = 0f, width = 1f / 6f, height = 1f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = square,
+            )
+        requireNotNull(result)
+
+        val bounds = decodeBounds(result.bytes)
+        // Exact, not a bound: 1000x1000 is every retained pixel. The pre-fix
+        // code produced 250x250 here, which passes any ">= something small"
+        // assertion, so the dimensions are pinned directly.
+        assertEquals(
+            "cropped width (got ${bounds.outWidth}x${bounds.outHeight})",
+            1000,
+            bounds.outWidth,
+        )
+        assertEquals(
+            "cropped height (got ${bounds.outWidth}x${bounds.outHeight})",
+            1000,
+            bounds.outHeight,
+        )
+        // The sanitiser still ran on this path: a re-encode carries no EXIF.
+        assertFalse(ImageCompressor.carriesStrippableMetadata(result.bytes))
+    }
+
+    @Test
     fun compressForPublicUpload_cropOnUndecodableImage_failsClosed() = runBlocking {
         // The strip fallback can only produce the WHOLE frame, which would
         // upload exactly the region the user cropped away (the house number, the
