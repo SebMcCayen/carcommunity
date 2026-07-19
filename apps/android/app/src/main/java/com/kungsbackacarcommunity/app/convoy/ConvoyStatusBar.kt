@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -28,10 +32,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole convoy status bar. */
 const val CONVOY_BAR_TEST_TAG = "convoy_bar"
@@ -41,6 +47,15 @@ const val CONVOY_BAR_INVITE_TAG = "convoy_bar_invite"
 
 /** Test tag on the bar's leave / end-convoy control. */
 const val CONVOY_BAR_LEAVE_TAG = "convoy_bar_leave"
+
+/** Test tag on the bar's set/change shared-destination control. */
+const val CONVOY_BAR_DESTINATION_SET_TAG = "convoy_bar_destination_set"
+
+/** Test tag on the bar's clear shared-destination control. */
+const val CONVOY_BAR_DESTINATION_CLEAR_TAG = "convoy_bar_destination_clear"
+
+/** Test tag on the bar's "start navigation to the shared destination" control. */
+const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate"
 
 /**
  * A compact, full-width bar describing the convoy the user is currently in:
@@ -78,6 +93,21 @@ const val CONVOY_BAR_LEAVE_TAG = "convoy_bar_leave"
  *   their explanatory content descriptions here for accessibility.
  * @param onEndConvoy invoked (after the user confirms) when the OWNER ends the
  *   convoy. Never invoked for a member.
+ * @param onSetDestination open the place picker to set (or replace) the convoy's
+ *   SHARED destination. Invoked only after the overwrite confirmation, when the
+ *   current destination was set by somebody else. No-op today: the control is
+ *   disabled while [ConvoyDestinations.availability] is
+ *   [ConvoyDestinationAvailability.BackendMissing].
+ * @param onClearDestination clear the shared destination. Offered only to the
+ *   member who set it or to the convoy owner ([ConvoyBarState.canClearDestination]).
+ * @param onNavigateToDestination start turn-by-turn to the shared destination.
+ *   Carries the coordinate + a display label and hands off to the SAME navigation
+ *   entry point the map's search flow uses — there is no second navigation path.
+ * @param navigationEvent what just happened to the destination the viewer is
+ *   already navigating to. Drives the dismissible banner; see
+ *   [ConvoyDestinationNavigationEvent] for why a cleared destination never
+ *   cancels a running navigation.
+ * @param onDismissNavigationEvent acknowledge that banner.
  */
 @Composable
 fun ConvoyStatusBar(
@@ -85,8 +115,15 @@ fun ConvoyStatusBar(
     onEndConvoy: (String) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    onSetDestination: () -> Unit = {},
+    onClearDestination: (String) -> Unit = {},
+    onNavigateToDestination: (LatLng, String) -> Unit = { _, _ -> },
+    navigationEvent: ConvoyDestinationNavigationEvent =
+        ConvoyDestinationNavigationEvent.Unchanged,
+    onDismissNavigationEvent: () -> Unit = {},
 ) {
     var confirmEnd by remember { mutableStateOf(false) }
+    var confirmOverwrite by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
@@ -172,6 +209,38 @@ fun ConvoyStatusBar(
                 }
             }
 
+            // The SHARED destination: where the whole convoy is heading. One
+            // member picks it, everyone else gets a one-tap "start navigation".
+            // No callable exists for setting or clearing it yet, so both controls
+            // render disabled — see the ConvoyDestination file KDoc.
+            ConvoyDestinationRow(
+                state = state,
+                onSetDestination = {
+                    // Replacing somebody ELSE's destination changes where the
+                    // whole group is heading, so it confirms first. Replacing
+                    // your own does not: a confirmation on a correction you are
+                    // making to your own pick only trains people to dismiss the
+                    // dialog that matters.
+                    if (state.destinationState is ConvoyDestinationState.SetByOther) {
+                        confirmOverwrite = true
+                    } else {
+                        onSetDestination()
+                    }
+                },
+                onClearDestination = { onClearDestination(state.convoyId) },
+                onNavigateToDestination = onNavigateToDestination,
+            )
+
+            // What happened to the destination the viewer is CURRENTLY driving
+            // to. Deliberately a message, never an interruption: a destination
+            // that is cleared or replaced mid-drive leaves the running
+            // turn-by-turn alone.
+            ConvoyDestinationNavigationBanner(
+                event = navigationEvent,
+                onDismiss = onDismissNavigationEvent,
+                onNavigateToNew = onNavigateToDestination,
+            )
+
             // The honest one-liner for whatever is disabled above. Dropped in the
             // navigation variant, where the top of the screen belongs to the
             // maneuver instructions.
@@ -185,6 +254,18 @@ fun ConvoyStatusBar(
             if (!compact && noticeRes != null) {
                 Text(
                     text = stringResource(noticeRes),
+                    modifier = Modifier.padding(bottom = KccSpacing.s1),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // The destination's own explanation line, kept separate from the
+            // invite/leave one above because it is waiting on a DIFFERENT pair of
+            // callables and will stop being true at a different time.
+            if (!compact && ConvoyDestinations.notice == ConvoyDestinationNotice.BackendMissing) {
+                Text(
+                    text = stringResource(R.string.convoy_barDestinationNotice),
                     modifier = Modifier.padding(bottom = KccSpacing.s1),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -217,5 +298,227 @@ fun ConvoyStatusBar(
                 }
             },
         )
+    }
+
+    // Replacing a destination SOMEONE ELSE chose redirects the whole group, and
+    // the person who chose it is not the one tapping. Name them when we can, so
+    // the decision is made against a person rather than against an abstraction.
+    if (confirmOverwrite) {
+        val setter =
+            (state.destinationState as? ConvoyDestinationState.SetByOther)
+                ?.destination
+                ?.setByDisplayName
+        AlertDialog(
+            onDismissRequest = { confirmOverwrite = false },
+            title = { Text(stringResource(R.string.convoy_barDestinationOverwriteTitle)) },
+            text = {
+                Text(
+                    if (setter != null) {
+                        stringResource(R.string.convoy_barDestinationOverwriteBody, setter)
+                    } else {
+                        stringResource(R.string.convoy_barDestinationOverwriteBodyUnknown)
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmOverwrite = false
+                        onSetDestination()
+                    },
+                ) {
+                    Text(stringResource(R.string.convoy_barDestinationOverwriteAction))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmOverwrite = false }) {
+                    Text(stringResource(R.string.convoy_barConfirmCancel))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * The shared-destination row: what the convoy is heading for, who chose it, and
+ * the three affordances around it (start navigation / set-or-change / clear).
+ *
+ * Always rendered, including in the compact navigation variant — a driver
+ * following a convoy is precisely the person who needs "where are we going" and
+ * "take me there" within reach. What the compact variant drops is the
+ * explanation LINE, not the controls, and the disabled controls keep their
+ * explanatory content descriptions either way so the honesty survives for
+ * screen-reader users.
+ */
+@Composable
+private fun ConvoyDestinationRow(
+    state: ConvoyBarState,
+    onSetDestination: () -> Unit,
+    onClearDestination: () -> Unit,
+    onNavigateToDestination: (LatLng, String) -> Unit,
+) {
+    val wired = ConvoyDestinations.isWired
+    val destination =
+        when (val d = state.destinationState) {
+            is ConvoyDestinationState.SetByMe -> d.destination
+            is ConvoyDestinationState.SetByOther -> d.destination
+            ConvoyDestinationState.None -> null
+        }
+    val unnamed = stringResource(R.string.convoy_barDestinationUnnamed)
+    // A long-press on open map has no name to carry, so a nameless destination
+    // gets a generic label rather than raw coordinates read out at a driver.
+    val placeLabel = destination?.label?.takeIf { it.isNotBlank() } ?: unnamed
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Place,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text =
+                when (state.destinationState) {
+                    ConvoyDestinationState.None ->
+                        stringResource(R.string.convoy_barDestinationNone)
+                    is ConvoyDestinationState.SetByMe ->
+                        stringResource(R.string.convoy_barDestinationSetByMe, placeLabel)
+                    is ConvoyDestinationState.SetByOther ->
+                        destination?.setByDisplayName?.let { name ->
+                            stringResource(R.string.convoy_barDestinationSetByOther, placeLabel, name)
+                        } ?: stringResource(
+                            R.string.convoy_barDestinationSetByOtherUnknown,
+                            placeLabel,
+                        )
+                },
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        // "Take me there" — the whole point of the feature for everyone who did
+        // not set it. It hands the coordinate to the SAME navigation entry point
+        // the map search flow uses; there is no convoy-specific navigation path.
+        if (destination != null) {
+            IconButton(
+                onClick = { onNavigateToDestination(destination.point, placeLabel) },
+                enabled = wired,
+                modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_NAVIGATE_TAG),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Navigation,
+                    contentDescription =
+                        stringResource(
+                            if (wired) {
+                                R.string.convoy_barDestinationNavigate
+                            } else {
+                                R.string.convoy_barDestinationNavigateUnavailable
+                            },
+                        ),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
+        // Set / change. Any accepted member may set one (see the callable
+        // contract); replacing someone else's confirms first, upstream of here.
+        IconButton(
+            onClick = onSetDestination,
+            enabled = wired && !state.busy,
+            modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_SET_TAG),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.AddLocationAlt,
+                contentDescription =
+                    stringResource(
+                        when {
+                            !wired -> R.string.convoy_barDestinationSetUnavailable
+                            destination != null -> R.string.convoy_barDestinationChange
+                            else -> R.string.convoy_barDestinationSet
+                        },
+                    ),
+            )
+        }
+
+        // Clear — offered only where the server would allow it (setter or owner),
+        // so the control is not a button that exists to be refused.
+        if (destination != null && state.canClearDestination) {
+            IconButton(
+                onClick = onClearDestination,
+                enabled = wired && !state.busy,
+                modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_CLEAR_TAG),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Clear,
+                    contentDescription =
+                        stringResource(
+                            if (wired) {
+                                R.string.convoy_barDestinationClear
+                            } else {
+                                R.string.convoy_barDestinationClearUnavailable
+                            },
+                        ),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The dismissible line shown when the destination the viewer is ALREADY
+ * navigating to is cleared or replaced underneath them.
+ *
+ * This is a message, never an interruption. Their turn-by-turn keeps running in
+ * both cases — see [ConvoyDestinationNavigationEvent] for why cancelling
+ * somebody's route mid-road is the worst option available. When the destination
+ * was replaced rather than removed, switching is offered as one explicit tap.
+ */
+@Composable
+private fun ConvoyDestinationNavigationBanner(
+    event: ConvoyDestinationNavigationEvent,
+    onDismiss: () -> Unit,
+    onNavigateToNew: (LatLng, String) -> Unit,
+) {
+    if (event is ConvoyDestinationNavigationEvent.Unchanged) return
+    val unnamed = stringResource(R.string.convoy_barDestinationUnnamed)
+    Column(modifier = Modifier.fillMaxWidth().padding(top = KccSpacing.s1)) {
+        Text(
+            text =
+                when (event) {
+                    is ConvoyDestinationNavigationEvent.Cleared ->
+                        stringResource(R.string.convoy_barDestinationClearedWhileNavigating)
+                    is ConvoyDestinationNavigationEvent.Replaced ->
+                        stringResource(R.string.convoy_barDestinationChangedWhileNavigating)
+                    ConvoyDestinationNavigationEvent.Unchanged -> ""
+                },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+            if (event is ConvoyDestinationNavigationEvent.Replaced) {
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        onNavigateToNew(
+                            event.destination.point,
+                            event.destination.label?.takeIf { it.isNotBlank() } ?: unnamed,
+                        )
+                    },
+                    enabled = ConvoyDestinations.isWired,
+                ) {
+                    Text(stringResource(R.string.convoy_barDestinationNavigateNew))
+                }
+            }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.convoy_barDestinationDismissNotice))
+            }
+        }
     }
 }
