@@ -19,16 +19,34 @@ data class CongestionColors(
  *
  * Day and night are two palettes, not one palette and a tint. The day colours
  * are mid-tone pigments chosen to read against a WHITE basemap; under the
- * Standard style's night `lightPreset` the whole map drops to dark greys, and
- * against that the day `moderate` amber and `severe` deep red sit too close to
- * the basemap's own lightness to pick out — which is exactly the "can't see
- * where the traffic is at night" complaint. The night palette keeps the same
- * hues, so the layer still reads green → yellow → orange → red at a glance, but
- * lifts every level clear of a dark background.
+ * Standard style's night `lightPreset` the whole map drops to near-black, and
+ * against that the day `heavy` orange and `severe` deep red sit too close to the
+ * basemap's own lightness to pick out — the "can't see where the traffic is at
+ * night" complaint.
  *
- * The invariant this promises, and that TrafficPaletteTest pins directly:
- * every night colour is LIGHTER (higher relative luminance) than its day
- * counterpart, and the day palette is byte-for-byte unchanged.
+ * The night palette is deliberately NOT a pastel lift of the day one. Seb's
+ * brief is that congestion should read as DARK RED (heavy) and DARK YELLOW
+ * (moderate) — saturated, road-map pigments rather than washed-out highlighter
+ * colours — while still clearing the basemap by enough luminance to be seen.
+ * The invariants TrafficPaletteTest pins:
+ *
+ *  - `heavy` is a dark red and `moderate` a dark yellow (red-dominant /
+ *    red+green-dominant, and both darker than their day counterparts, which is
+ *    what makes them "dark" rather than "lifted");
+ *  - every night level still clears the night basemap's own lightness, so
+ *    "dark" never degrades back into "invisible";
+ *  - `moderate` and `heavy` are far apart in luminance, which is the cue a
+ *    red-green colour-blind viewer actually has;
+ *  - the day palette is byte-for-byte unchanged.
+ *
+ * Colour-blind note: the classic confusion pair here is `low` (green) against
+ * `heavy`/`severe` (red). Rather than abandoning the universal traffic
+ * green→red convention, the night `low` carries a lifted BLUE channel (a cool,
+ * slightly teal green): to a trichromat it still reads plainly green, while to a
+ * deuteranope the blue channel and the ~2x luminance gap keep it apart from the
+ * reds. `moderate` vs `heavy` — the distinction that actually matters when
+ * deciding whether to take a road — is separated by luminance alone, so it
+ * survives any form of colour blindness.
  */
 object TrafficPalette {
     /** Original palette — tuned for the bright basemap. Do not change casually. */
@@ -41,14 +59,26 @@ object TrafficPalette {
             unknown = 0xFF9E9E9E.toInt(),
         )
 
-    /** Lifted for the dark basemap; same hues, higher lightness. */
+    /**
+     * Tuned for the near-black night basemap: saturated, deep pigments that stay
+     * well clear of the background without bleaching into highlighter colours.
+     *
+     * - `low`   cool green — free flow; deliberately the least attention-grabbing.
+     * - `moderate` dark yellow (mustard/ochre) — bright enough to spot at a
+     *   glance, which is the level users scan for.
+     * - `heavy` dark red — the requested "dark red", ~3.5x darker than moderate
+     *   so the two never blur together.
+     * - `severe` a hotter, brighter red so the WORST level is the most salient
+     *   thing on the map; it is the one exception to "darker at night".
+     * - `unknown` dark grey — present but ignorable.
+     */
     val NIGHT =
         CongestionColors(
-            low = 0xFF66BB6A.toInt(),
-            moderate = 0xFFFFE04D.toInt(),
-            heavy = 0xFFFF9E3D.toInt(),
-            severe = 0xFFFF5C5C.toInt(),
-            unknown = 0xFFBDBDBD.toInt(),
+            low = 0xFF2E9E6B.toInt(),
+            moderate = 0xFFC9A227.toInt(),
+            heavy = 0xFFB3261E.toInt(),
+            severe = 0xFFE5484D.toInt(),
+            unknown = 0xFF757575.toInt(),
         )
 
     /** Line width (px) of the congestion layer for the day basemap. */

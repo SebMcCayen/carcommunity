@@ -428,12 +428,17 @@ fun MapHome(
             )
             // 1b. Report-incident control — opens the type picker. Shown only
             //     when incident reporting is available (a repository configured).
+            //     Deliberately takes CircleControl's DEFAULT surface/onSurface
+            //     colours (like the compass and recenter controls) rather than
+            //     the amber warning colour: it is an "open the report picker"
+            //     affordance, not a live warning state, and an always-amber
+            //     button in a stack of neutral ones reads as a permanent alert.
+            //     Colour in this stack is reserved for ACTIVE state (the green
+            //     live-share control).
             if (incidentReportingEnabled) {
                 CircleControl(
                     icon = Icons.Filled.Warning,
                     contentDescription = stringResource(R.string.incidents_reportButton),
-                    containerColor = statusColors.warning,
-                    contentColor = Color.White,
                     onClick = { reportOpen = true },
                     modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
                 )
@@ -459,12 +464,13 @@ fun MapHome(
                     } else {
                         MaterialTheme.colorScheme.surface
                     },
-                contentColor =
-                    if (layersActive) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                // The GLYPH always takes the same onSurface colour as every other
+                // control in this stack — near-white on the dark theme, ink on the
+                // light one. It used to switch to onPrimaryContainer while active,
+                // which in the dark theme is crownGold, i.e. a yellow layers icon
+                // that matched nothing else on the map. The active state is carried
+                // by the container tint above, not by recolouring the icon.
+                contentColor = MaterialTheme.colorScheme.onSurface,
                 onClick = { layersOpen = true },
                 modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
             )

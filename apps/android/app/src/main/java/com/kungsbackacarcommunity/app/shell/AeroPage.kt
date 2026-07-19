@@ -1,14 +1,16 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,6 +57,14 @@ val AeroPageBottomPadding: Dp = KccSpacing.s6
  * @param onTitleClick makes the title header itself tappable. Null (the default)
  *   keeps it inert — the plain header every other page renders. Used where the
  *   title names a member (the DM thread), so tapping it opens their profile.
+ * @param contentWindowInsets extra insets to hold the page's CONTENT clear of —
+ *   the DM thread passes `ime.union(navigationBars)` so its composer rides above
+ *   the keyboard and the nav bar. Applied on the inner chrome [Column], NOT via
+ *   [modifier]: the background [Surface] draws at its own node's size, so any
+ *   padding anywhere in the Surface's modifier chain shrinks the page background
+ *   and leaves a bare band under the (transparent, edge-to-edge) system bars.
+ *   Same reason the status-bar inset is applied here rather than outside.
+ *   Null (the default) leaves every other page byte-identical.
  */
 @Composable
 fun AeroPage(
@@ -64,18 +74,29 @@ fun AeroPage(
     horizontalPadding: Dp = AeroPageHorizontalPadding,
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(KccSpacing.s4),
     onTitleClick: (() -> Unit)? = null,
+    contentWindowInsets: WindowInsets? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val scrollState = rememberScrollState()
         // Fixed chrome: the status-bar inset and the top breathing room live on
         // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
-        // the title/content can never scroll up under the status bar.
+        // the title/content can never scroll up under the status bar. Any caller
+        // insets join them here, INSIDE the background Surface, for the same
+        // reason: the page background must still paint edge to edge behind the
+        // transparent system bars.
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
+                    .then(
+                        if (contentWindowInsets != null) {
+                            Modifier.windowInsetsPadding(contentWindowInsets)
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(top = AeroPageTopSpacing),
         ) {
             // Scrollable content: only the title + caller content (and the gutter /

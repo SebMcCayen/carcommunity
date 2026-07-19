@@ -6,7 +6,15 @@ import kotlinx.coroutines.flow.Flow
 sealed interface EventsListState {
     data object Loading : EventsListState
 
-    data object Error : EventsListState
+    /**
+     * The listener failed. [code] is the Firestore status name when one was
+     * available (e.g. `FAILED_PRECONDITION` for a missing composite index,
+     * `PERMISSION_DENIED` for a rules denial, `UNAVAILABLE` when offline) —
+     * carried so the route can tell a STRUCTURAL fault apart from "this phone
+     * has no signal" and auto-file only the former. A bare status name, never
+     * exception text: see [EventsErrorReporting].
+     */
+    data class Error(val code: String? = null) : EventsListState
 
     data class Loaded(val events: List<EventSummary>) : EventsListState
 }
@@ -31,13 +39,17 @@ interface EventsRepository {
      * admin calling `events.complete`; both are terminal and mean the same
      * thing, so one query covers the whole archive.
      *
-     * REQUIRES the `firestore.rules` change that lets a non-admin read a
-     * `completed` teaser (PR #455). Until those rules are deployed the
-     * snapshot listener is denied and this emits [EventsListState.Error] for
-     * every non-admin — the rule on `events/{eventId}` still reads
-     * `status == 'published'`. Member-gated details, chat and the
-     * group-drive roster stay `published`-gated either way: an ended event
-     * can be looked up, not re-entered.
+     * Two DEPLOY-GATED preconditions, both of which surface as
+     * [EventsListState.Error] rather than an empty list when unmet:
+     *  - the `firestore.rules` clause letting a non-admin read a `completed`
+     *    teaser (present on main) — otherwise `PERMISSION_DENIED`;
+     *  - the `events` (status ASC, startsAt **DESC**) composite index —
+     *    otherwise `FAILED_PRECONDITION`. The ascending index does NOT cover
+     *    this query; see [FirebaseEventsRepository].
+     *
+     * Member-gated details, chat and the group-drive roster stay
+     * `published`-gated either way: an ended event can be looked up, not
+     * re-entered.
      */
     fun observePastEvents(): Flow<EventsListState>
 

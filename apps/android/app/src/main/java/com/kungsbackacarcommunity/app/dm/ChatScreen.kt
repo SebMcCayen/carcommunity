@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -27,20 +26,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -115,14 +112,21 @@ fun ChatScreen(
 
     AeroPage(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
+        modifier = modifier,
+        scrollable = false,
+        onTitleClick = onViewProfile,
         // The IME *and* the navigation-bar inset (their union, so the taller of
         // the two wins rather than double-counting), matching the group channels'
         // composer: keyboard down the input clears the nav bar, keyboard up it
         // lifts above the IME. Plain imePadding() left the input under the nav bar
         // whenever the keyboard was down.
-        modifier = modifier.windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
-        scrollable = false,
-        onTitleClick = onViewProfile,
+        //
+        // Passed as contentWindowInsets rather than folded into `modifier`: the
+        // page's background Surface draws at its own node's size, so padding in
+        // its modifier chain would shrink the background and leave a bare band
+        // under the transparent nav bar. AeroPage applies this inside the Surface,
+        // where it already applies the status-bar inset for the same reason.
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (threadLoading && messages.isEmpty()) {
@@ -263,17 +267,6 @@ private fun MessageList(
             )
         }
     val listState = rememberLazyListState()
-    // Is the soft keyboard up? Read as a plain inset rather than the experimental
-    // `WindowInsets.isImeVisible`. A LazyColumn holds its scroll OFFSET, not its
-    // bottom edge, so when the composer's ime padding shrinks the viewport the
-    // newest message would otherwise slide out under the keyboard.
-    val density = LocalDensity.current
-    val imeInsets = WindowInsets.ime
-    // derivedStateOf so the per-frame inset animation doesn't recompose the list
-    // 60 times a second — only the two transitions (up / down) propagate.
-    val imeVisible by remember(imeInsets, density) {
-        derivedStateOf { imeInsets.getBottom(density) > 0 }
-    }
     // The optional "load older" row is a single item prepended before the
     // messages, so every message's LazyColumn index is shifted by +1 while it is
     // present. Track that offset so the auto-scroll targets the real last item.
@@ -300,20 +293,9 @@ private fun MessageList(
     }
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
-    // newest message — but only for a reader who was already at the bottom, so
-    // tapping the composer while reading history doesn't yank them down. Guarded
-    // on the RISING edge, so closing the keyboard (which grows the viewport back)
-    // moves nothing.
-    LaunchedEffect(imeVisible) {
-        if (!imeVisible) return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val totalItems = layoutInfo.totalItemsCount
-        if (totalItems == 0) return@LaunchedEffect
-        if (lastVisibleIndex >= totalItems - 2) {
-            listState.animateScrollToItem(totalItems - 1)
-        }
-    }
+    // newest message — shared with the group channels and event chat so the three
+    // surfaces cannot drift apart.
+    RepinToNewestOnImeRise(listState)
 
     LazyColumn(
         state = listState,

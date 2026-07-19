@@ -1209,7 +1209,8 @@ class MapboxMapSurface : MapSurface {
 
         /**
          * Adds the Mapbox traffic vector source + a congestion-coloured line
-         * layer (green → yellow → orange → red), initially hidden. Idempotent:
+         * layer (green → yellow → red, see [TrafficPalette] for the day/night
+         * ramps), initially hidden. Idempotent:
          * a no-op if the source/layer already exist (e.g. after a style
          * reload). Placed in the Standard style's "middle" slot so it sits
          * under labels.

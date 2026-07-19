@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -66,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -535,19 +534,6 @@ private fun ChannelMessageList(
             )
         }
     val listState = rememberLazyListState()
-    // Is the soft keyboard up? Read as a plain inset rather than the experimental
-    // `WindowInsets.isImeVisible`. Drives the re-scroll below: the composer's
-    // ime padding shrinks the list's viewport from the bottom, and a LazyColumn
-    // holds its scroll OFFSET, not its bottom edge — so without this the newest
-    // message slides out under the keyboard the moment the user taps the input,
-    // which is the half of the bug a padding fix alone does not address.
-    val density = LocalDensity.current
-    val imeInsets = WindowInsets.ime
-    // derivedStateOf so the per-frame inset animation doesn't recompose the list
-    // 60 times a second — only the two transitions (up / down) propagate.
-    val imeVisible by remember(imeInsets, density) {
-        derivedStateOf { imeInsets.getBottom(density) > 0 }
-    }
     // The optional "load older" row is a single item prepended before the
     // messages, so every message's LazyColumn index is shifted by +1 while it is
     // present. Track that offset so the auto-scroll targets the real last item.
@@ -571,20 +557,9 @@ private fun ChannelMessageList(
     }
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
-    // newest message. Only when the reader was already at the bottom — someone
-    // who has scrolled up to read history and then taps the composer should not
-    // be yanked back down. Guarded on the RISING edge (imeVisible) so closing the
-    // keyboard, which grows the viewport again, moves nothing.
-    LaunchedEffect(imeVisible) {
-        if (!imeVisible) return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val totalItems = layoutInfo.totalItemsCount
-        if (totalItems == 0) return@LaunchedEffect
-        if (lastVisibleIndex >= totalItems - 2) {
-            listState.animateScrollToItem(totalItems - 1)
-        }
-    }
+    // newest message — shared with the DM thread and event chat so the three
+    // surfaces cannot drift apart.
+    RepinToNewestOnImeRise(listState)
 
     LazyColumn(
         state = listState,

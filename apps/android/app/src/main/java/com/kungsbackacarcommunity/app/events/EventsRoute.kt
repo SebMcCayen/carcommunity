@@ -19,6 +19,8 @@ import com.kungsbackacarcommunity.app.blocking.BlockedUsersState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRoute
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
@@ -63,6 +65,11 @@ fun EventsRoute(
     // with no member-profile repository, which leaves both inert rather than
     // navigating into a route that could only render a permanent spinner.
     onViewProfile: ((String) -> Unit)? = null,
+    // Auto-files a STRUCTURAL events-list failure (a missing composite index or
+    // a rules gap) as a deduplicated public GitHub issue, so the class of bug
+    // that made the Past tab dead-end announces itself if it ever recurs.
+    // Null in a config-less build, which the `?.` is the whole handling for.
+    errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -138,6 +145,36 @@ fun EventsRoute(
                 }
             }
                 .collectAsState(initial = EventsListState.Loading)
+
+        // Auto-file a STRUCTURAL list failure. Gated twice on purpose:
+        //  - EventsErrorReporting.shouldReport ignores offline/transient codes,
+        //    so a user in a tunnel never files a bug, and fires at most once
+        //    per tab per process however many times they retry;
+        //  - the effect is keyed on (tab, code, retry) so it is evaluated on
+        //    entry into the error state rather than on every recomposition.
+        // Only a literal feature key, a literal app-authored sentence and a
+        // Firestore status name cross this boundary — the resulting GitHub
+        // issue is public, so no exception text, uid or query value may.
+        val listError = listState as? EventsListState.Error
+        LaunchedEffect(listTab, listError?.code, listError != null, reloadKey) {
+            val code = listError?.code ?: return@LaunchedEffect
+            val feature =
+                when (listTab) {
+                    EventsListTab.UPCOMING -> EventsErrorReporting.FEATURE_UPCOMING_LIST
+                    EventsListTab.PAST -> EventsErrorReporting.FEATURE_PAST_LIST
+                }
+            if (!EventsErrorReporting.shouldReport(feature, code)) return@LaunchedEffect
+            errorReporter?.report(
+                feature = feature,
+                message =
+                    when (listTab) {
+                        EventsListTab.UPCOMING -> EventsErrorReporting.MESSAGE_UPCOMING_LIST
+                        EventsListTab.PAST -> EventsErrorReporting.MESSAGE_PAST_LIST
+                    },
+                code = code,
+            )
+        }
+
         EventsListScreen(
             state = listState,
             onOpenEvent = { selectedEventId = it },
