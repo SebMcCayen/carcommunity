@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -41,16 +42,7 @@ class GoogleCredentialTokenProvider(
                 CredentialManager.create(activityContext)
                     .getCredential(activityContext, request)
             } catch (exception: GetCredentialException) {
-                // Never log tokens or credential contents. Carry the Credential
-                // Manager error TYPE (a stable androidx constant, e.g.
-                // `androidx.credentials.TYPE_NO_CREDENTIAL`) as a PII-safe
-                // diagnostic code so the diagnostics pipeline can report the real
-                // status; the concrete subtype is preserved via `cause`.
-                throw SignInFailedException(
-                    "Google credential flow did not complete.",
-                    exception,
-                    diagnosticCode = exception.type,
-                )
+                throw toSignInException(exception)
             }
 
         val credential = result.credential
@@ -65,6 +57,45 @@ class GoogleCredentialTokenProvider(
 
     companion object {
         private const val WEB_CLIENT_ID_RESOURCE = "default_web_client_id"
+
+        /**
+         * Maps a Credential Manager failure onto the app's sign-in exception
+         * vocabulary. This is where a USER CANCELLATION is separated from a real
+         * fault, and it is the whole fix for issue #457.
+         *
+         * A pre-auth sign-in report auto-files a PUBLIC GitHub issue
+         * (functions/src/diagnostics/signInIssues-core.ts). So the line drawn here
+         * is the one the other two reporting pipelines in this repo already draw:
+         * the live-share reporter does not auto-file `NotMember`, and the friends
+         * reporter excludes business-rule refusals, because filing those "would
+         * report the app working correctly" (see ClientErrorReporting.kt — "Only
+         * report genuine FAULTS"). A user who opens the sheet and presses back is
+         * the app working correctly.
+         *
+         * Dropped (mapped to [SignInCancelledException], never reported):
+         * - [GetCredentialCancellationException] — the user dismissed the sheet.
+         *
+         * Everything else stays a reported [SignInFailedException], deliberately:
+         * a provider misconfiguration, an unsupported device, an interrupted
+         * flow, or a device with no Google account are all things an admin needs
+         * to see. Do NOT widen this branch without the same reasoning — over-
+         * filtering silently blinds the diagnostics pipeline, which is a worse
+         * failure mode than a little noise.
+         *
+         * Never logs tokens or credential contents. The stable androidx error
+         * TYPE (e.g. `androidx.credentials.TYPE_NO_CREDENTIAL`) rides along as the
+         * PII-safe diagnostic code; the concrete subtype is preserved via `cause`.
+         */
+        internal fun toSignInException(exception: GetCredentialException): Exception =
+            if (exception is GetCredentialCancellationException) {
+                SignInCancelledException("User dismissed the Google credential sheet.")
+            } else {
+                SignInFailedException(
+                    "Google credential flow did not complete.",
+                    exception,
+                    diagnosticCode = exception.type,
+                )
+            }
 
         /**
          * Runtime lookup by name is required because the resource only exists
