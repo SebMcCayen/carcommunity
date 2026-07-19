@@ -1,0 +1,105 @@
+name: Firestore index drift
+
+# Detects declared-but-not-deployed Firestore composite indexes — the failure
+# that took `friend-list` down in production on 2026-07-19 (see
+# scripts/check-index-drift.mjs for the full story).
+#
+# Why this is a SCHEDULED job and not a PR check: reading the deployed index
+# list needs production credentials (WIF, `environment: production`). A PR check
+# needing those would fail on every fork PR and would fail closed the moment a
+# secret rotated — turning an informational drift report into a merge blocker
+# for changes that have nothing to do with indexes. The pure-logic half of this
+# check (normalisation + diff, scripts/check-index-drift.test.mjs) DOES run on
+# every PR via the root CI workflow; only the part that must talk to prod lives
+# here.
+#
+# This job is READ-ONLY. It never deploys. When it fails, the fix is a human
+# running: firebase deploy --only firestore:indexes --project kungsbacka-car-community
+
+on:
+  schedule:
+    # 05:15 UTC daily — off the hour to avoid GitHub's scheduler pile-up.
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check-drift:
+    name: Compare deployed indexes against the repo
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Check WIF credentials are available
+        id: creds
+        # Skip (not fail) when the secrets are absent: this job is a diagnostic,
+        # and a fork or an unprovisioned environment should stay quiet rather
+        # than produce a red run nobody can fix. A genuinely missing deploy
+        # setup already fails loudly in the deploy workflows.
+        env:
+          WIF_PROVIDER: ${{ secrets.WIF_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$WIF_PROVIDER" ] || [ -z "$WIF_SERVICE_ACCOUNT" ]; then
+            echo "::notice::WIF_PROVIDER / WIF_SERVICE_ACCOUNT are not configured — skipping the index drift check."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            # scripts/setup-wif.sh restricts token exchange to refs/heads/main,
+            # so a workflow_dispatch from any other ref would die at auth with an
+            # opaque permissions error. Say why instead.
+            echo "::notice::The WIF provider only issues tokens for refs/heads/main; got $GITHUB_REF. Skipping."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to Google Cloud via Workload Identity Federation
+        if: steps.creds.outputs.available == 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup pnpm
+        if: steps.creds.outputs.available == 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        if: steps.creds.outputs.available == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install pnpm dependencies (for firebase-tools)
+        if: steps.creds.outputs.available == 'true'
+        working-directory: functions
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for index drift
+        if: steps.creds.outputs.available == 'true'
+        # Exits 1 only for declared-but-NOT-deployed indexes (queries are
+        # failing right now); deployed-but-not-declared leftovers are warnings.
+        # The `| tee` keeps the report for the job summary without hiding a
+        # failure: GitHub runs `run:` steps under `bash -e -o pipefail`, so the
+        # script's non-zero exit still fails the step.
+        run: node scripts/check-index-drift.mjs --project kungsbacka-car-community | tee "$RUNNER_TEMP/drift.txt"
+
+      - name: Summarise
+        if: always() && steps.creds.outputs.available == 'true'
+        run: |
+          {
+            echo '### Firestore index drift'
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/drift.txt" 2>/dev/null || echo 'The check did not produce output — see the step log.'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
