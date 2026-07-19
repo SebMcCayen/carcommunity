@@ -42,10 +42,21 @@
  * The script fails fast if none is set and prints the resolved project before
  * acting.
  *
+ * WHY THIS LIVES UNDER functions/: it imports `firebase-admin`, which is a
+ * dependency of functions/ only (functions/ is deliberately NOT a root npm
+ * workspace, so the repo root has no node_modules providing it). Node resolves
+ * bare specifiers by walking up from the SCRIPT'S OWN directory, not the shell's
+ * cwd — so a copy of this script under the repo-root scripts/ cannot resolve
+ * firebase-admin no matter which directory you invoke it from.
+ *
  * Auth: uses Application Default Credentials. Run it where ADC is present as
  * a project owner — the simplest being Google Cloud Shell:
  *
+ *   cd functions
+ *   npm ci                                  # provides firebase-admin
  *   FIREBASE_PROJECT_ID=<project-id> node scripts/set-first-admin.mjs <email> --yes
+ *
+ * (This script needs no `npx tsc` build — it imports nothing from lib/.)
  *
  * (or set GOOGLE_APPLICATION_CREDENTIALS to a service-account key locally).
  * A confirmation flag (`--yes`, or CONFIRM=1) is REQUIRED so an account is
@@ -68,7 +79,7 @@ const confirmed = args.includes('--yes') || process.env.CONFIRM === '1';
 const email = args.find((arg) => !arg.startsWith('--'));
 
 if (!email) {
-  console.error('Usage: node scripts/set-first-admin.mjs <email> --yes');
+  console.error('Usage (from functions/): node scripts/set-first-admin.mjs <email> --yes');
   process.exit(1);
 }
 

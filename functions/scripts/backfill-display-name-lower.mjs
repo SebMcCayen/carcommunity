@@ -21,10 +21,23 @@
  * so re-running is safe and cheap. Documents without a string `displayName` are
  * left untouched (nothing to derive a key from).
  *
+ * WHY THIS LIVES UNDER functions/: it imports `firebase-admin`, which is a
+ * dependency of functions/ only (functions/ is deliberately NOT a root npm
+ * workspace, so the repo root has no node_modules providing it). Node resolves
+ * bare specifiers by walking up from the SCRIPT'S OWN directory, not the shell's
+ * cwd — so a copy of this script under the repo-root scripts/ cannot resolve
+ * firebase-admin no matter which directory you invoke it from.
+ *
  * Usage (from the repo root):
- *   cd functions && npx tsc                 # build, so the import below resolves
+ *   cd functions
+ *   npm ci                                  # provides firebase-admin
+ *   npx tsc                                 # builds lib/, so the import below resolves
  *   GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json \
  *     node scripts/backfill-display-name-lower.mjs --project <projectId> [--apply]
+ *
+ * Equivalently, from functions/: `npm run backfill:display-name-lower -- --project <projectId>`
+ * (the npm script only wraps the `node` invocation; `npm ci` and `npx tsc` are
+ * still required first).
  *
  * Defaults to a DRY RUN that only reports what it would change; pass --apply to
  * write. Batched at 400 writes (under Firestore's 500-op limit).
@@ -32,7 +45,7 @@
 
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { toSearchKey } from '../functions/lib/friends/friends-core.js';
+import { toSearchKey } from '../lib/friends/friends-core.js';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
