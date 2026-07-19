@@ -477,7 +477,19 @@
     "errorInviteGone": "That invite is no longer available.",
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
-    "errorGeneric": "Something went wrong. Please try again."
+    "errorGeneric": "Something went wrong. Please try again.",
+    "barMembers": "%1$d in convoy",
+    "barInvite": "Invite more",
+    "barLeave": "Leave convoy",
+    "barEnd": "End convoy",
+    "barNoticeInvite": "Inviting more people to an ongoing convoy isn't available yet.",
+    "barNoticeInviteAndLeave": "Inviting more people, and leaving an ongoing convoy, aren't available yet.",
+    "barLeaveUnavailable": "Leave convoy (not available yet)",
+    "barInviteUnavailable": "Invite more (not available yet)",
+    "barEndConfirmTitle": "End convoy?",
+    "barEndConfirmBody": "This ends the convoy for everyone, not just for you. The drive summary is saved.",
+    "barEndConfirmAction": "End convoy",
+    "barConfirmCancel": "Cancel"
   },
   "memberProfile": {
     "title": "Profile",

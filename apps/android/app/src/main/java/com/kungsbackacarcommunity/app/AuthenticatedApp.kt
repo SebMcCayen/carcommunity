@@ -99,8 +99,12 @@ import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.config.MemberGating
+import com.kungsbackacarcommunity.app.convoy.ConvoyBar
+import com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator
+import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
+import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
@@ -1088,6 +1092,47 @@ fun AuthenticatedApp(
                     mapSurface.setActive(mapCover != MapCover.Opaque)
                 }
 
+                // Convoy status bar, hoisted here so the map home and turn-by-turn
+                // navigation share ONE coordinator and therefore one source of
+                // convoy truth — the same snapshot, the same member count, the same
+                // in-flight guard — instead of each fetching its own. A null
+                // repository (config-less build) yields no coordinator and no bar.
+                //
+                // There is no live listener on the convoy tree (the callable set is
+                // re-fetched after each mutation — see ConvoyCoordinator), so this
+                // loads once. Someone joining or leaving elsewhere therefore shows
+                // up on the next refresh rather than instantly; acceptable for a
+                // head-count, and the alternative is a second source of truth.
+                val convoyBarCoordinator =
+                    remember(convoyRepository) { convoyRepository?.let { ConvoyCoordinator(it) } }
+                LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
+                val convoyBarStatus: ConvoyListStatus =
+                    convoyBarCoordinator?.status?.collectAsState()?.value
+                        ?: ConvoyListStatus.Loading
+                val convoyBarBusy =
+                    convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
+                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy)
+                // null (rather than a bar that draws nothing) is what makes "not in
+                // a convoy" compose literally nothing at all — no empty bar, no
+                // placeholder, and no space reserved in the top chrome column.
+                val convoyBarSlot: (@Composable (Boolean) -> Unit)? =
+                    if (convoyBarState != null && convoyBarCoordinator != null) {
+                        { compact ->
+                            ConvoyStatusBar(
+                                state = convoyBarState,
+                                compact = compact,
+                                // Only ever reached for the OWNER (a member's leave
+                                // has no callable and renders disabled); the bar
+                                // confirms before this fires.
+                                onEndConvoy = { convoyId ->
+                                    scope.launch { convoyBarCoordinator.end(convoyId) }
+                                },
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 if (navDestination != null) {
                     // Full-screen turn-by-turn navigation, entered from the route
                     // preview's "Start" button. Owns its own Back handling and map
@@ -1131,6 +1176,9 @@ fun AuthenticatedApp(
                             BackgroundLocationController.stop(context)
                         },
                         onOpenLiveShareDetails = { openLiveShareFallback() },
+                        // Compact variant: below the maneuver banner, no
+                        // explanation line (see the screen's KDoc).
+                        convoyBar = convoyBarSlot?.let { bar -> { bar(true) } },
                     )
                 } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
@@ -1485,6 +1533,9 @@ fun AuthenticatedApp(
                                             }
                                         }
                                     },
+                                    // Convoy status bar above the search row (full
+                                    // variant, with the explanation line).
+                                    convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
                                 )
                             }
 

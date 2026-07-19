@@ -477,7 +477,19 @@
     "errorInviteGone": "Inbjudan är inte längre tillgänglig.",
     "errorCannotStart": "Konvojen kan inte längre startas.",
     "errorAlreadyEnded": "Konvojen är redan avslutad.",
-    "errorGeneric": "Något gick fel. Försök igen."
+    "errorGeneric": "Något gick fel. Försök igen.",
+    "barMembers": "%1$d i konvojen",
+    "barInvite": "Bjud in fler",
+    "barLeave": "Lämna konvojen",
+    "barEnd": "Avsluta konvojen",
+    "barNoticeInvite": "Att bjuda in fler till en pågående konvoj går inte än.",
+    "barNoticeInviteAndLeave": "Att bjuda in fler, och att lämna en pågående konvoj, går inte än.",
+    "barLeaveUnavailable": "Lämna konvojen (går inte än)",
+    "barInviteUnavailable": "Bjud in fler (går inte än)",
+    "barEndConfirmTitle": "Avsluta konvojen?",
+    "barEndConfirmBody": "Detta avslutar konvojen för alla, inte bara för dig. Sammanfattningen av körningen sparas.",
+    "barEndConfirmAction": "Avsluta konvojen",
+    "barConfirmCancel": "Avbryt"
   },
   "memberProfile": {
     "title": "Profil",
