@@ -2,6 +2,19 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 12,
+      "versionName": "0.8.1",
+      "releaseDate": "2026-07-19",
+      "highlights": [
+        "Vägbeskrivning direkt i appen",
+        "Kartan syns igen på startsidan"
+      ],
+      "changes": [
+        "Starta en vägbeskrivning och få svängvisning inne i appen – du skickas inte längre vidare till en annan kartapp",
+        "Rättat: kartan visades inte på startsidan"
+      ]
+    },
+    {
       "versionCode": 11,
       "versionName": "0.8.0",
       "releaseDate": "2026-07-17",

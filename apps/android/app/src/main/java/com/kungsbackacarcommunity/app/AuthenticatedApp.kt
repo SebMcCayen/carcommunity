@@ -1277,6 +1277,22 @@ fun AuthenticatedApp(
                     )
                 } else {
                     Scaffold(
+                        // The map is a single full-bleed surface composed BELOW
+                        // this Scaffold, so the Scaffold must not paint its
+                        // Material3 default (an opaque colorScheme.background)
+                        // over it — that blanks the map while leaving every piece
+                        // of chrome inside the Scaffold visible. Pages that hide
+                        // the map paint their own opaque background in the page
+                        // wrapper, so they never relied on this. Derived from the
+                        // same [mapCover] as setActive above, so "is it live" and
+                        // "is it painted over" cannot drift apart — and so a
+                        // Transparent cover (address search) still sees the map.
+                        containerColor =
+                            if (mapCover != MapCover.Opaque) {
+                                Color.Transparent
+                            } else {
+                                MaterialTheme.colorScheme.background
+                            },
                         // Each tab manages its own top inset (the map is
                         // full-bleed); the nav bar handles the bottom inset.
                         contentWindowInsets = WindowInsets(0),
