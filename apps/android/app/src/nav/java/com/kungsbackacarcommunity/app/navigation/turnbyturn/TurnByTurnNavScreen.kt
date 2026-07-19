@@ -1006,6 +1006,22 @@ private class TurnByTurnEngine(
     private val styleLoadedFlow = MutableStateFlow(false)
     val styleLoaded: StateFlow<Boolean> = styleLoadedFlow.asStateFlow()
 
+    /**
+     * Identifies the most recent [loadStyleAndInit] request, so a completing
+     * load can tell whether it is still the one being waited on.
+     *
+     * A system light/dark flip re-keys the caller's effect and starts a SECOND
+     * style load, which can overlap the first — and the first one completing
+     * would otherwise report "the map is painting real content" while the map is
+     * in fact mid-way through loading the newer style, revealing the veil onto
+     * exactly the blank frames it exists to hide. Only the newest request is
+     * allowed to end the handoff.
+     *
+     * Main-thread only, like the rest of this class's mutable state: both the
+     * callers (Compose effects) and Mapbox's style callback run there.
+     */
+    private var styleLoadToken = 0
+
     private val viewportDataSource = MapboxNavigationViewportDataSource(mapView.mapboxMap)
     private val navigationCamera =
         NavigationCamera(mapView.mapboxMap, mapView.camera, viewportDataSource)
@@ -1141,6 +1157,9 @@ private class TurnByTurnEngine(
         // were being cleaned up before, so those map-level registrations and
         // list entries accumulated one set per day/night flip.
         releaseDestMarkerManager()
+        // Claim this request. Anything still in flight from an earlier one is
+        // now stale and must not be allowed to end the handoff.
+        val token = ++styleLoadToken
         val loaded =
             runCatching {
                 mapView.mapboxMap.loadStyle(styleUri) { style ->
@@ -1158,14 +1177,20 @@ private class TurnByTurnEngine(
                     // the route line and destination marker are in place, so the
                     // reveal never lands on a basemap that is still missing the
                     // route the user just asked for.
-                    styleLoadedFlow.value = true
+                    //
+                    // Only if this is still the CURRENT request: a theme flip
+                    // during the handoff starts a newer load, and letting this
+                    // older one report success would reveal the veil onto the
+                    // newer style's blank frames — the flash, reintroduced.
+                    if (token == styleLoadToken) styleLoadedFlow.value = true
                 }
             }.isSuccess
         // A throw here means no style load was ever started, so the callback above
         // will never run and would strand the veil until its timeout. Release it
         // now: a map with no style is a bad screen, but a permanently veiled one
-        // is a dead screen.
-        if (!loaded) styleLoadedFlow.value = true
+        // is a dead screen. Token-guarded for the same reason as the success
+        // path — a newer request in flight is still going to report for itself.
+        if (!loaded && token == styleLoadToken) styleLoadedFlow.value = true
     }
 
     /**
