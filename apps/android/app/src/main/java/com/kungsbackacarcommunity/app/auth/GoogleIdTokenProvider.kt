@@ -17,6 +17,24 @@ interface SignInDiagnosticInfo {
 class SignInUnavailableException(message: String) : Exception(message)
 
 /**
+ * Raised when the USER dismissed the Google credential sheet (swiped it away or
+ * pressed back). This is a deliberate user choice, NOT a fault: the app did
+ * exactly what it should.
+ *
+ * It exists as its own type purely so [SignInCoordinator] can drop it before the
+ * diagnostics pipeline sees it. A pre-auth sign-in report auto-files a PUBLIC
+ * GitHub issue (functions/src/diagnostics/signInIssues-core.ts), so reporting a
+ * cancellation would file an issue for the app WORKING CORRECTLY — the same line
+ * the client error reporter already draws for expected business outcomes ("not a
+ * member", "recipient blocked"; see ClientErrorReporting.kt, "Only report genuine
+ * FAULTS"). Issue #457 was exactly this: one user tapping back.
+ *
+ * Deliberately NOT a [SignInFailedException] subclass — the coordinator selects on
+ * type, and a subclass would be caught by the reporting branch.
+ */
+class SignInCancelledException(message: String) : Exception(message)
+
+/**
  * Raised when the credential flow or the Firebase exchange fails. Wraps the
  * concrete cause and, when available, carries its PII-safe [diagnosticCode]
  * (see [SignInDiagnosticInfo]) so the diagnostics pipeline can report the real
@@ -37,7 +55,8 @@ class SignInFailedException(
 fun interface GoogleIdTokenProvider {
     /**
      * @throws SignInUnavailableException when sign-in is not configured.
-     * @throws SignInFailedException when the flow fails or is dismissed.
+     * @throws SignInCancelledException when the user dismissed the credential sheet.
+     * @throws SignInFailedException when the flow genuinely fails.
      */
     suspend fun fetchGoogleIdToken(): String
 }

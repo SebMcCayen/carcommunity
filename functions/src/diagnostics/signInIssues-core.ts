@@ -107,6 +107,18 @@ export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
   'SignInUnavailableException',
   // AndroidX Credential Manager.
   'GetCredentialException',
+  // RETAINED DELIBERATELY, even though a current client never sends it.
+  // GetCredentialCancellationException is a USER CANCELLATION (the sheet was
+  // dismissed), and since the fix for issue #457 the Android client drops it at
+  // the source — no diagnostics report is written at all (see
+  // GoogleCredentialTokenProvider.toSignInException). The entry stays because
+  // OLDER installs still in the closed test group DO send it: keeping it
+  // allowlisted contains those legacy reports in their existing single
+  // fingerprint/issue, whereas removing it would collapse them into the shared
+  // `Unknown` bucket — the very bucket that exists to surface genuinely NEW,
+  // unrecognised failures. Polluting `Unknown` with a known-benign, formerly
+  // high-volume type costs more debugging signal than it saves. Remove this
+  // entry once no pre-fix client version is in the wild.
   'GetCredentialCancellationException',
   'GetCredentialInterruptedException',
   'GetCredentialProviderConfigurationException',

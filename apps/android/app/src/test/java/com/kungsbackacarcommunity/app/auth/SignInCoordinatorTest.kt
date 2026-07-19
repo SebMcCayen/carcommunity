@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.auth
 
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -246,5 +247,71 @@ class SignInCoordinatorTest {
 
         coordinator.resetFailure()
         assertEquals(SignInStatus.Idle, coordinator.status.value)
+    }
+
+    // ---------------------------------------------------------------------
+    // Issue #457 — a USER CANCELLATION must not reach the diagnostics pipeline.
+    //
+    // The observable these assert on is the one that matters: whether a report
+    // was handed to the SignInFailureReporter at all, and (for the control case)
+    // with which errorType. A pre-auth report auto-files a PUBLIC GitHub issue,
+    // so "reported.isEmpty()" here is literally "no public issue is filed".
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `user cancelling the credential sheet writes no diagnostics report`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<SignInFailureDetails>()
+        val coordinator =
+            SignInCoordinator(
+                {
+                    // Driven through the REAL mapping, so this fails if either half
+                    // of the fix regresses: the provider mapping OR the coordinator
+                    // branch that drops it.
+                    throw GoogleCredentialTokenProvider.toSignInException(
+                        GetCredentialCancellationException("user dismissed the sheet"),
+                    )
+                },
+                repository,
+                { details -> reported += details },
+            )
+
+        coordinator.signIn()
+
+        // Nothing submitted => no diagnosticsReports doc => no GitHub issue.
+        assertTrue(
+            "A cancelled sign-in must not be reported, but got: ${reported.map { it.errorType }}",
+            reported.isEmpty(),
+        )
+        // And the user is simply back at the login screen — not accused of an error.
+        assertEquals(SignInStatus.Idle, coordinator.status.value)
+        assertTrue(repository.receivedTokens.isEmpty())
+    }
+
+    @Test
+    fun `a genuine credential failure is still reported`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<SignInFailureDetails>()
+        val coordinator =
+            SignInCoordinator(
+                {
+                    throw SignInFailedException(
+                        "Google credential flow did not complete.",
+                        IllegalStateException("provider misconfigured"),
+                        diagnosticCode = "androidx.credentials.TYPE_PROVIDER_CONFIGURATION",
+                    )
+                },
+                repository,
+                { details -> reported += details },
+            )
+
+        coordinator.signIn()
+
+        // The control case: the filter must NOT swallow real faults.
+        val details = reported.single()
+        assertEquals("IllegalStateException", details.errorType)
+        assertEquals(SignInStep.CREDENTIAL_FETCH, details.step)
+        assertEquals("androidx.credentials.TYPE_PROVIDER_CONFIGURATION", details.statusCode)
+        assertEquals(SignInStatus.Failed(SignInFailure.GENERIC), coordinator.status.value)
     }
 }
