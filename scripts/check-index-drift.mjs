@@ -191,13 +191,29 @@ function fetchDeployedIndexes(projectId) {
   // `firestore:indexes` is a read-only listing; the caller needs
   // datastore.indexes.list on the project (the Firebase deploy service account
   // already has it via roles/datastore.owner).
-  const stdout = execFileSync(
-    FIREBASE_BIN,
-    ['firestore:indexes', '--project', projectId, '--json'],
-    // stderr passes through so an auth failure is readable in the job log
-    // rather than being swallowed into an opaque non-zero exit.
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], cwd: REPO_ROOT },
-  );
+  let stdout;
+  try {
+    stdout = execFileSync(
+      FIREBASE_BIN,
+      ['firestore:indexes', '--project', projectId, '--json'],
+      // stderr passes through so an auth failure is readable in the job log
+      // rather than being swallowed into an opaque non-zero exit.
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], cwd: REPO_ROOT },
+    );
+  } catch (error) {
+    // firebase-tools lives in the FUNCTIONS pnpm workspace, which a plain root
+    // `npm install` does not populate — so a fresh checkout hits ENOENT here.
+    // Node's bare "spawn ... ENOENT" gives no hint about which install is
+    // missing, so say it outright.
+    if (error.code === 'ENOENT') {
+      throw new Error(
+        `firebase-tools not found at ${FIREBASE_BIN}. It is a dependency of the ` +
+          'functions workspace (pnpm), which the root npm install does not cover — ' +
+          'run `pnpm -C functions install` first, or pass --deployed <file.json>.',
+      );
+    }
+    throw error;
+  }
   return JSON.parse(stdout);
 }
 

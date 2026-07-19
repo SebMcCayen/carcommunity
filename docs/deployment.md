@@ -78,10 +78,17 @@ On 2026-07-19 this took `friend-list` down for every caller: nine indexes declar
 | Declared, not deployed | **fatal** (exit 1) | Queries needing the index are failing in production right now                        |
 | Deployed, not declared | warning            | Leftover from a field rename or a hand-created index — costs storage, breaks nothing |
 
-Run it locally against production:
+Run it locally against production. The Firebase CLI comes from the `functions` pnpm workspace, which a root `npm install` does not cover, so install that first on a fresh checkout:
 
 ```bash
+pnpm -C functions install          # provides functions/node_modules/.bin/firebase
 node scripts/check-index-drift.mjs --project kungsbacka-car-community
+```
+
+To diff against a captured index dump without credentials (useful when debugging the check itself):
+
+```bash
+node scripts/check-index-drift.mjs --deployed prod-indexes.json
 ```
 
 The fix for fatal drift is always `firebase deploy --only firestore:indexes --project kungsbacka-car-community`. The script itself never deploys.

@@ -77,7 +77,12 @@ jobs:
         if: steps.creds.outputs.available == 'true'
         uses: actions/setup-node@v5
         with:
-          node-version: 24
+          # 22, not the repo-wide 24: this job installs the FUNCTIONS workspace
+          # (for firebase-tools), and functions/package.json declares
+          # engines.node "22". Matches validate-functions.yml,
+          # deploy-firebase-functions.yml and test-firebase-rules.yml — every
+          # other workflow that installs that workspace.
+          node-version: 22
 
       - name: Install pnpm dependencies (for firebase-tools)
         if: steps.creds.outputs.available == 'true'
