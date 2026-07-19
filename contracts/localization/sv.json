@@ -889,6 +889,13 @@
     "convoyUntitled": "Konvoj",
     "convoyMembers": "Medlemmar: %1$d"
   },
+  "chatTime": {
+    "today": "Idag",
+    "yesterday": "Igår",
+    "daySeparatorFormat": "EEEE d MMMM",
+    "daySeparatorFormatWithYear": "EEEE d MMMM yyyy",
+    "messageSentAt": "Skickat %1$s"
+  },
   "shell": {
     "searchHint": "Vart vill du?",
     "searchIcon": "Sök",

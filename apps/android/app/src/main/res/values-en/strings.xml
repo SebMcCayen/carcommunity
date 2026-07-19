@@ -815,6 +815,11 @@
     <string name="chatHub_convoysRetry">Try again</string>
     <string name="chatHub_convoyUntitled">Convoy</string>
     <string name="chatHub_convoyMembers">Members: %1$d</string>
+    <string name="chatTime_today">Today</string>
+    <string name="chatTime_yesterday">Yesterday</string>
+    <string name="chatTime_daySeparatorFormat">EEEE, d MMMM</string>
+    <string name="chatTime_daySeparatorFormatWithYear">EEEE, d MMMM yyyy</string>
+    <string name="chatTime_messageSentAt">Sent at %1$s</string>
     <string name="shell_searchHint">Where to?</string>
     <string name="shell_searchIcon">Search</string>
     <string name="shell_loadingRoads">Loading roads…</string>

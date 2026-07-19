@@ -65,6 +65,12 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
+import com.kungsbackacarcommunity.app.chattime.ChatDateContext
+import com.kungsbackacarcommunity.app.chattime.ChatTimeline
+import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
+import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
+import com.kungsbackacarcommunity.app.chattime.MessageTimeText
+import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
@@ -514,6 +520,19 @@ private fun ChannelMessageList(
     onViewProfile: ((String) -> Unit)?,
     onMessageLongPress: (ChannelMessage) -> Unit,
 ) {
+    val dates = rememberChatDateContext()
+    // Day separators are inserted by pure logic over the WHOLE list (see
+    // ChatTimeline) — including after an older page is prepended, which is what
+    // keeps the pagination seam from growing a duplicate or losing a heading.
+    val timeline =
+        remember(messages, dates.zone) {
+            ChatTimeline.build(
+                messages = messages,
+                zone = dates.zone,
+                id = { it.id },
+                timestampMillis = { it.createdAtMillis },
+            )
+        }
     val listState = rememberLazyListState()
     // The optional "load older" row is a single item prepended before the
     // messages, so every message's LazyColumn index is shifted by +1 while it is
@@ -529,9 +548,11 @@ private fun ChannelMessageList(
         val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
         val isOwnSend = newest.senderUid == currentUid
         if (isOwnSend || nearBottom) {
-            // Index into the LazyColumn, not the messages list: account for the
-            // header so we land on the newest message rather than the one before.
-            listState.animateScrollToItem(messages.lastIndex + headerOffset)
+            // Index into the LAZY COLUMN, whose rows are the TIMELINE (messages
+            // interleaved with day separators), not the raw message list — plus
+            // the optional "load older" header. Using messages.lastIndex here
+            // would land short by one row per separator.
+            listState.animateScrollToItem(timeline.lastIndex + headerOffset)
         }
     }
 
@@ -558,14 +579,19 @@ private fun ChannelMessageList(
                 }
             }
         }
-        items(messages, key = { it.id }) { message ->
-            ChannelMessageRow(
-                message = message,
-                isOwn = message.senderUid == currentUid,
-                mentionDisplayNames = mentionDisplayNames,
-                onViewProfile = onViewProfile,
-                onLongPress = { onMessageLongPress(message) },
-            )
+        items(timeline, key = { it.key }) { item ->
+            when (item) {
+                is ChatTimelineItem.DaySeparator -> DaySeparatorRow(date = item.date, dates = dates)
+                is ChatTimelineItem.Message ->
+                    ChannelMessageRow(
+                        message = item.message,
+                        isOwn = item.message.senderUid == currentUid,
+                        mentionDisplayNames = mentionDisplayNames,
+                        dates = dates,
+                        onViewProfile = onViewProfile,
+                        onLongPress = { onMessageLongPress(item.message) },
+                    )
+            }
         }
     }
 }
@@ -575,14 +601,20 @@ private fun ChannelMessageRow(
     message: ChannelMessage,
     isOwn: Boolean,
     mentionDisplayNames: Map<String, String>,
+    dates: ChatDateContext,
     onViewProfile: ((String) -> Unit)?,
     onLongPress: () -> Unit,
 ) {
     if (isOwn) {
-        Row(
+        // The time sits on the line ABOVE the bubble, aligned to the bubble's own
+        // (right) edge. Your own messages carry no sender header, so this line is
+        // the counterpart of the sender-name line on an incoming message — which
+        // keeps the stamp in the same place on every message in the thread.
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalAlignment = Alignment.End,
         ) {
+            MessageTimeText(millis = message.createdAtMillis, dates = dates)
             // Your own bubble carries no long-press: you can neither block nor
             // report yourself.
             ChannelBubble(
@@ -631,17 +663,26 @@ private fun ChannelMessageRow(
                 },
         )
         Column {
-            Text(
-                text = senderName,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier =
-                    if (openProfile != null) {
-                        Modifier.clickable(role = Role.Button, onClick = openProfile)
-                    } else {
-                        Modifier
-                    },
-            )
+            // Sender name and time share the header line above the bubble, the
+            // conventional group-chat header. Only the NAME is the profile tap
+            // target — the time is inert, so a mis-tap can't navigate.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = senderName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier =
+                        if (openProfile != null) {
+                            Modifier.clickable(role = Role.Button, onClick = openProfile)
+                        } else {
+                            Modifier
+                        },
+                )
+                MessageTimeText(millis = message.createdAtMillis, dates = dates)
+            }
             ChannelBubble(
                 message = message,
                 isOwn = false,
