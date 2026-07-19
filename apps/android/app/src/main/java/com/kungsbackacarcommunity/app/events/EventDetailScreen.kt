@@ -136,8 +136,11 @@ fun EventDetailScreen(
 
             // Member-gated detail: exact location + full description, or a gate.
             // Detail (exact location/description) only when the rules would
-            // actually serve it: active member AND published. Non-members see
-            // the membership gate; a member on a non-published event sees
+            // actually serve it: passes the member gate AND published. A
+            // caller who fails the gate sees the membership upsell INSTEAD of
+            // the detail (that copy is the block, not a hint beside it, so it
+            // disappears while gating is disabled); someone who passes but is
+            // on a non-published event sees
             // neither (the cancelled notice above already explains the state).
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
                 DetailCard(detail)
@@ -148,7 +151,7 @@ fun EventDetailScreen(
                 )
             }
 
-            // RSVP row — members only, published events only.
+            // RSVP row — gate-passers only, published events only.
             if (Events.canRsvp(passesMemberGate, event.status)) {
                 Text(
                     text = stringResource(R.string.events_rsvpCountsLabel),

@@ -49,9 +49,12 @@ object EventChat {
     const val MESSAGE_MAX_LENGTH = 1000
 
     /**
-     * Chat participation (read + post) requires an active member, a published
-     * event, and a going/maybe RSVP — mirrors guardChatParticipant and the
-     * Firestore message read rule.
+     * Chat participation (read + post) requires passing the member gate, a
+     * published event, and a going/maybe RSVP — mirrors guardChatParticipant
+     * and the Firestore message read rule. The gate is switchable: while
+     * member gating is disabled it admits any signed-in, non-suspended user,
+     * and guardChatParticipant resolves the same way. The event-status and
+     * RSVP requirements are NOT part of the gate and always apply.
      */
     fun canParticipate(
         passesMemberGate: Boolean,

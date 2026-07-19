@@ -1211,8 +1211,11 @@ fun AuthenticatedApp(
                                     } else {
                                         // Distinguish WHY viewing is blocked: a
                                         // disabled LIVE_LOCATION flag → "not available"
-                                        // (an active member shouldn't see an upsell);
-                                        // otherwise it's the non-member subscription upsell.
+                                        // (someone who passes the member gate
+                                        // shouldn't see an upsell); otherwise it's
+                                        // the subscription upsell for a caller who
+                                        // fails the gate — unreachable while member
+                                        // gating is disabled, since everyone passes.
                                         scope.launch {
                                             snackbarHostState.showSnackbar(
                                                 if (!liveLocationEnabled) {

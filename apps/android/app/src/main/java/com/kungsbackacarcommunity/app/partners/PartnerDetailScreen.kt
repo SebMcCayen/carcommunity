@@ -20,8 +20,10 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
  * Partner company detail + its offers (Phase 12 slice 17). Stateless. Offers
- * show the teaser to any authenticated user; active members can save/unsave a
- * bookmark, expand the member detail, and reveal the discount code (callable).
+ * show the teaser to any authenticated user; a caller who passes the member
+ * gate can save/unsave a bookmark, expand the member detail, and reveal the
+ * discount code (callable). While member gating is disabled that is every
+ * signed-in, non-suspended user.
  * Only one offer is expanded at a time ([expandedOfferId]).
  */
 @Composable

@@ -86,17 +86,24 @@ sealed interface RecordingState {
 /**
  * Whether a live-sharing session should ALSO record a drive for History.
  *
- * This mirrors the backend's gate rather than the live-sharing one, and the
+ * This mirrors the SAVE gate rather than the live-sharing one, and the
  * distinction is the whole point. Sharing your OWN position is FREE
- * (live-startSession only needs requireActiveActor), but SAVING a drive is
- * member-only (drives-save uses requireMemberActor — and note that gate has no
+ * (live-startSession only needs requireActiveActor), whereas SAVING a drive is
+ * member-gated (drives-save uses requireMemberActor — and note that gate has no
  * admin/owner bypass, unlike requireMemberOrAdminActor). Gating the recording on
  * the sharing rule instead of the saving rule is what shipped in v0.8.0: a
  * non-member's session recorded a drive, the end-of-session prompt then forced a
  * save/discard choice, and Save could only ever fail with PERMISSION_DENIED.
  *
+ * Member gating is currently DISABLED, so BOTH gates are open and everyone
+ * records and saves. That does not make this function redundant — it makes it
+ * load-bearing in the other direction: pass the GATE RESULT here
+ * (MemberGating.allows(...)), never the raw activeMember entitlement, or the
+ * app would refuse to record drives the backend would happily store. Whichever
+ * way the switches are set, recording and saving must agree.
+ *
  * [RecordDriveScreen] already applies exactly this rule to the manual recorder
- * (it refuses to record without an active membership); this keeps the
+ * (it refuses to record without passing the member gate); this keeps the
  * live-sharing entry point honest with it, so no recording is started that
  * cannot be saved.
  */
