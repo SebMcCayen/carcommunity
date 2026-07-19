@@ -27,13 +27,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 fun CrownHuntScreen(
     pointsState: CrownHuntPointsState,
     claimStatus: CrownHuntClaimStatus,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     onCollect: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AeroPage(title = stringResource(R.string.crownHunt_screenTitle), modifier = modifier) {
-        if (!isActiveMember) {
+        if (!passesMemberGate) {
             InfoCard(
                 title = stringResource(R.string.subscription_teaserTitle),
                 body = stringResource(R.string.subscription_memberRequiredBody),

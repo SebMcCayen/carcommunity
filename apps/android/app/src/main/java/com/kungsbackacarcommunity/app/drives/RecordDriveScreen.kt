@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
  * stored only after an explicit user action) → save via the `drives-save`
  * callable or discard (nothing stored).
  *
- * Entry is member-gated ([isActiveMember]) and the `drives-save` callable is
+ * Entry is member-gated ([passesMemberGate]) and the `drives-save` callable is
  * member-gated backend-side too — but member gating is currently DISABLED on
  * both sides (config/MemberGating.kt and functions/src/shared/memberGating.ts),
  * so both currently admit any signed-in, non-suspended user.
@@ -65,7 +65,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RecordDriveScreen(
     coordinator: DriveRecordingCoordinator,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -147,7 +147,7 @@ fun RecordDriveScreen(
                 color = MaterialTheme.colorScheme.onBackground,
             )
 
-            if (!isActiveMember) {
+            if (!passesMemberGate) {
                 Text(
                     text = stringResource(R.string.savedDrives_memberRequired),
                     style = MaterialTheme.typography.bodyMedium,

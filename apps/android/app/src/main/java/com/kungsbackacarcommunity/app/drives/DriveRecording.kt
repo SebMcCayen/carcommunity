@@ -104,11 +104,16 @@ object DriveRecordingGate {
     /**
      * @param hasDrivesBackend false in a config-less/CI build with no drives
      *   repository — live sharing still works, nothing records.
-     * @param isActiveMember the backend-managed `users/{uid}.activeMember`
-     *   entitlement, the same flag drives-save enforces.
+     * @param passesMemberGate whether the caller passes the MEMBER GATE that
+     *   drives-save enforces — NOT the raw `users/{uid}.activeMember`
+     *   entitlement. While member gating is disabled
+     *   (functions/src/shared/memberGating.ts, config/MemberGating.kt) that
+     *   gate is open to any signed-in, non-suspended user, so callers must
+     *   pass `MemberGating.allows(...)` here rather than the raw flag. Passing
+     *   the raw flag would refuse to record drives the backend would save.
      */
-    fun shouldRecord(hasDrivesBackend: Boolean, canShareLive: Boolean, isActiveMember: Boolean): Boolean =
-        hasDrivesBackend && canShareLive && isActiveMember
+    fun shouldRecord(hasDrivesBackend: Boolean, canShareLive: Boolean, passesMemberGate: Boolean): Boolean =
+        hasDrivesBackend && canShareLive && passesMemberGate
 }
 
 /**

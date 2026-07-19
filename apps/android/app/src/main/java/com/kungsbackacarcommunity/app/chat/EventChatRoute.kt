@@ -35,7 +35,7 @@ fun EventChatRoute(
     coordinator: ChatCoordinator?,
     eventId: String,
     currentUid: String,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     eventStatus: EventStatus?,
     myRsvp: RsvpStatus?,
     onBack: () -> Unit,
@@ -45,7 +45,7 @@ fun EventChatRoute(
     onViewProfile: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
-    val canParticipate = EventChat.canParticipate(isActiveMember, eventStatus, myRsvp)
+    val canParticipate = EventChat.canParticipate(passesMemberGate, eventStatus, myRsvp)
 
     // The ChatCoordinator is shared across events; clear any prior send/report
     // status when the event changes so a stale message doesn't leak into a

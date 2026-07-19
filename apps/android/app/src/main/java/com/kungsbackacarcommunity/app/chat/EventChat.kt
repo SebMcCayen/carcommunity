@@ -54,11 +54,11 @@ object EventChat {
      * Firestore message read rule.
      */
     fun canParticipate(
-        isActiveMember: Boolean,
+        passesMemberGate: Boolean,
         eventStatus: EventStatus?,
         rsvp: RsvpStatus?,
     ): Boolean =
-        isActiveMember &&
+        passesMemberGate &&
             eventStatus == EventStatus.PUBLISHED &&
             (rsvp == RsvpStatus.GOING || rsvp == RsvpStatus.MAYBE)
 

@@ -161,12 +161,12 @@ object Events {
      * the Firestore rule on events/{id}/rsvps/{uid} (owner + active member +
      * published). Cancelled/completed/draft events are not RSVP-able.
      */
-    fun canRsvp(isActiveMember: Boolean, status: EventStatus): Boolean =
-        isActiveMember && status == EventStatus.PUBLISHED
+    fun canRsvp(passesMemberGate: Boolean, status: EventStatus): Boolean =
+        passesMemberGate && status == EventStatus.PUBLISHED
 
     /** Whether the exact-location / description detail may be requested. */
-    fun canSeeDetails(isActiveMember: Boolean, status: EventStatus): Boolean =
-        isActiveMember && status == EventStatus.PUBLISHED
+    fun canSeeDetails(passesMemberGate: Boolean, status: EventStatus): Boolean =
+        passesMemberGate && status == EventStatus.PUBLISHED
 
     /** Published events sorted by soonest start first (nulls last, stable). */
     fun sortedForList(events: List<EventSummary>): List<EventSummary> =

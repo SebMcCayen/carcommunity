@@ -52,7 +52,7 @@ class EventAttendeesScreenTest {
     private fun setDetail(
         attendees: EventAttendeesState,
         onOpenMember: ((String) -> Unit)? = {},
-        isActiveMember: Boolean = true,
+        passesMemberGate: Boolean = true,
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -60,7 +60,7 @@ class EventAttendeesScreenTest {
                     event = publishedEvent,
                     detail = null,
                     myRsvp = null,
-                    isActiveMember = isActiveMember,
+                    passesMemberGate = passesMemberGate,
                     rsvpStatus = RsvpStatusUi.Idle,
                     onRsvp = {},
                     onBack = {},
@@ -178,7 +178,7 @@ class EventAttendeesScreenTest {
     fun attendees_hiddenFromNonMembers() {
         // Non-members see the membership gate, never the roster — same gate as
         // the exact location/description.
-        setDetail(EventAttendeesState.Loaded(listOf(EventAttendee("u1", "Alice"))), isActiveMember = false)
+        setDetail(EventAttendeesState.Loaded(listOf(EventAttendee("u1", "Alice"))), passesMemberGate = false)
         composeTestRule.onNodeWithTag(ATTENDEES_SECTION_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithText("Alice").assertDoesNotExist()
     }

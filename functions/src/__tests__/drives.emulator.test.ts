@@ -163,16 +163,38 @@ describe('drives-save', () => {
   });
 
   /**
-   * Regression (v0.8.0 "Could not save the drive"): the owner/admin ROLE does
-   * NOT bypass the member entitlement here. saveDrive gates on
-   * requireMemberActor (activeMember only), not requireMemberOrAdminActor
-   * (role bypass), so an owner whose users/{uid}.activeMember is false is
-   * refused exactly like any free user. This is the whole delta between
-   * live-startSession (requireActiveActor — free, succeeded) and drives-save
-   * (requireMemberActor — refused) for the same account in the same session.
+   * Regression (v0.8.0 "Could not save the drive") — now INVERTED, because
+   * this PR is the fix for it.
+   *
+   * The diagnosis, preserved: the owner/admin ROLE does NOT bypass the member
+   * entitlement here. saveDrive gates on requireMemberActor (activeMember
+   * only), not requireMemberOrAdminActor (role bypass), so an owner whose
+   * users/{uid}.activeMember was false got refused exactly like a free user.
+   * That was the whole delta between live-startSession (requireActiveActor —
+   * free, succeeded) and drives-save (requireMemberActor — refused) for the
+   * same account in the same session.
+   *
+   * The role still does not bypass anything — that asymmetry is untouched.
+   * What changed is the gate itself: member gating is DISABLED
+   * (functions/src/shared/memberGating.ts), so requireMemberActor now resolves
+   * to active-actor semantics and the unentitled owner saves like anyone else.
+   * Re-locking (MEMBER_GATING_ENABLED = true) restores the refusal — and the
+   * original bug with it, unless the recording ENTRY is gated to match.
    */
-  it('rejects an owner without an active membership (the role does not bypass)', async () => {
+  it('SAVES for an owner without an active membership (gating disabled)', async () => {
     await signInAs(unentitledOwner);
+    const saved = (await call('drives-save', validSave)).data as { rideId: string };
+    expect(typeof saved.rideId).toBe('string');
+  });
+
+  it('STILL rejects a SUSPENDED owner (role never bypassed suspension either)', async () => {
+    // Teeth: the unlock must not hand a suspended owner access via their role.
+    const suspendedOwner = await createProvisionedUser('drives-susp-owner');
+    await adminDb
+      .collection('users')
+      .doc(suspendedOwner.uid)
+      .set({ role: 'owner', activeMember: false, suspended: true }, { merge: true });
+    await signInAs(suspendedOwner);
     expect(await callableErrorCode(call('drives-save', validSave))).toBe(
       'functions/permission-denied',
     );

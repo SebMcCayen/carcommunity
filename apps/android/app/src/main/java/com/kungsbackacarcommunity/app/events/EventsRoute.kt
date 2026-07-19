@@ -46,7 +46,7 @@ fun EventsRoute(
     repository: EventsRepository,
     rsvpCoordinator: RsvpCoordinator?,
     uid: String,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
     chatEnabled: Boolean,
@@ -156,7 +156,7 @@ fun EventsRoute(
             coordinator = chatCoordinator,
             eventId = selected,
             currentUid = uid,
-            isActiveMember = isActiveMember,
+            passesMemberGate = passesMemberGate,
             eventStatus = event?.status,
             myRsvp = myRsvp,
             onBack = { showChat = false },
@@ -172,7 +172,7 @@ fun EventsRoute(
             coordinator = groupDriveCoordinator,
             eventId = selected,
             uid = uid,
-            isActiveMember = isActiveMember,
+            passesMemberGate = passesMemberGate,
             eventStatus = event?.status,
             myRsvp = myRsvp,
             onShowOnMap = onShowOnMap,
@@ -182,8 +182,8 @@ fun EventsRoute(
     }
 
     val detail by
-        remember(selected, isActiveMember) {
-            if (isActiveMember) repository.observeEventDetail(selected) else flowOf(null)
+        remember(selected, passesMemberGate) {
+            if (passesMemberGate) repository.observeEventDetail(selected) else flowOf(null)
         }
             .collectAsState(initial = null)
     val rsvpStatus by
@@ -206,7 +206,7 @@ fun EventsRoute(
     // viewer's block list: someone the viewer blocked is invisible here just as
     // they are in chat and on profiles. The count rendered beside the list
     // stays the server's public tally — see EventAttendees.stateFor.
-    val attendeesVisible = Events.canSeeDetails(isActiveMember, event?.status ?: EventStatus.DRAFT)
+    val attendeesVisible = Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
     var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
     var attendees by remember(selected) {
         mutableStateOf<EventAttendeesState>(EventAttendeesState.Loading)
@@ -234,16 +234,16 @@ fun EventsRoute(
         chatEnabled &&
             chatRepository != null &&
             chatCoordinator != null &&
-            EventChat.canParticipate(isActiveMember, event?.status, myRsvp)
+            EventChat.canParticipate(passesMemberGate, event?.status, myRsvp)
     val groupDriveEligible =
         groupDriveRepository != null &&
-            GroupDrive.canJoin(isActiveMember, event?.status, myRsvp)
+            GroupDrive.canJoin(passesMemberGate, event?.status, myRsvp)
 
     EventDetailScreen(
         event = event,
         detail = detail,
         myRsvp = myRsvp,
-        isActiveMember = isActiveMember,
+        passesMemberGate = passesMemberGate,
         rsvpStatus = rsvpStatus,
         isLoading = eventLoading,
         onRsvp = { answer ->

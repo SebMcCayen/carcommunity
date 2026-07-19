@@ -39,8 +39,8 @@ object GroupDrive {
      * Joining requires an active member, a published event, and a going/maybe
      * RSVP — mirrors the backend join precondition and the roster read rule.
      */
-    fun canJoin(isActiveMember: Boolean, eventStatus: EventStatus?, rsvp: RsvpStatus?): Boolean =
-        isActiveMember &&
+    fun canJoin(passesMemberGate: Boolean, eventStatus: EventStatus?, rsvp: RsvpStatus?): Boolean =
+        passesMemberGate &&
             eventStatus == EventStatus.PUBLISHED &&
             (rsvp == RsvpStatus.GOING || rsvp == RsvpStatus.MAYBE)
 

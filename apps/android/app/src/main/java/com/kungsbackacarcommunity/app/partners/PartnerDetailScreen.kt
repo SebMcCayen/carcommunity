@@ -29,7 +29,7 @@ fun PartnerDetailScreen(
     company: PartnerCompany?,
     offers: List<PartnerOffer>,
     savedOfferIds: Set<String>,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     expandedOfferId: String?,
     expandedOfferDetail: OfferMemberDetail?,
     codeStatus: OfferCodeStatus,
@@ -91,7 +91,7 @@ fun PartnerDetailScreen(
                 offers.forEach { offer ->
                     OfferCard(
                         offer = offer,
-                        isActiveMember = isActiveMember,
+                        passesMemberGate = passesMemberGate,
                         isSaved = savedOfferIds.contains(offer.id),
                         isExpanded = expandedOfferId == offer.id,
                         detail = if (expandedOfferId == offer.id) expandedOfferDetail else null,
@@ -108,7 +108,7 @@ fun PartnerDetailScreen(
 @Composable
 private fun OfferCard(
     offer: PartnerOffer,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     isSaved: Boolean,
     isExpanded: Boolean,
     detail: OfferMemberDetail?,
@@ -138,7 +138,7 @@ private fun OfferCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (!isActiveMember) {
+            if (!passesMemberGate) {
                 Text(
                     text = stringResource(R.string.partnerOffers_memberRequiredHint),
                     style = MaterialTheme.typography.bodySmall,

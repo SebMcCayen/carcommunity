@@ -25,9 +25,26 @@ package com.kungsbackacarcommunity.app.config
  * switch first: an app that hides a working feature is recoverable, an app that
  * offers a failing one is not.
  *
- * Member *messaging* is deliberately untouched: the subscription screen still
- * reports real entitlement (it is passed the true `activeMember` value, not the
- * gated one) and upsell copy elsewhere still renders. Only the blocking stops.
+ * WHAT THIS DOES TO UPSELL COPY — read before assuming messaging survives.
+ *
+ * The subscription screen DOES still report real entitlement: it is passed the
+ * true `activeMember` value, not the gated one (see SubscriptionRoute's call
+ * site in AuthenticatedApp — deliberately the one place that keeps the raw
+ * flag).
+ *
+ * But in Events, Kronjakt and Partners the member copy IS the block, not a
+ * hint beside it: each renders an upsell and then returns instead of the
+ * content (`CrownHuntScreen` returns from the page, `PartnerDetailScreen`
+ * returns from the column, `EventDetailScreen` shows the InfoCard in place of
+ * the DetailCard). There is no way to keep that copy while unlocking access —
+ * showing "membership required" over content the backend now serves would be
+ * the same class of lie in the other direction. So while gating is disabled
+ * those three screens show the feature instead of the upsell, by design.
+ *
+ * This is why the gated value is threaded as `passesMemberGate`, not
+ * `isActiveMember`: those parameters carry a GATE RESULT, and they also decide
+ * which Firestore flows to subscribe to (e.g. CrownHuntRoute). Conflating them
+ * with the entitlement is what makes this easy to get wrong.
  */
 object MemberGating {
     /**

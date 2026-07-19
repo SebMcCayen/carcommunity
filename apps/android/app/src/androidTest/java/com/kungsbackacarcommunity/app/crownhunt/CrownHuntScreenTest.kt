@@ -43,7 +43,7 @@ class CrownHuntScreenTest {
                 CrownHuntScreen(
                     pointsState = CrownHuntPointsState.Loaded(emptyList()),
                     claimStatus = CrownHuntClaimStatus.Idle,
-                    isActiveMember = false,
+                    passesMemberGate = false,
                     onCollect = {},
                     onBack = {},
                 )
@@ -61,7 +61,7 @@ class CrownHuntScreenTest {
                 CrownHuntScreen(
                     pointsState = CrownHuntPointsState.Loaded(listOf(point())),
                     claimStatus = CrownHuntClaimStatus.Idle,
-                    isActiveMember = true,
+                    passesMemberGate = true,
                     onCollect = { collected = it },
                     onBack = {},
                 )
@@ -79,7 +79,7 @@ class CrownHuntScreenTest {
                 CrownHuntScreen(
                     pointsState = CrownHuntPointsState.Loaded(listOf(point())),
                     claimStatus = CrownHuntClaimStatus.NeedsLocation,
-                    isActiveMember = true,
+                    passesMemberGate = true,
                     onCollect = {},
                     onBack = {},
                 )
@@ -97,7 +97,7 @@ class CrownHuntScreenTest {
                     claimStatus = CrownHuntClaimStatus.Done(
                         ClaimOutcome(CrownHuntClaimResult.AWARDED, 50, 150),
                     ),
-                    isActiveMember = true,
+                    passesMemberGate = true,
                     onCollect = {},
                     onBack = {},
                 )

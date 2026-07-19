@@ -54,7 +54,7 @@ fun EventDetailScreen(
     event: EventSummary?,
     detail: EventDetail?,
     myRsvp: RsvpStatus?,
-    isActiveMember: Boolean,
+    passesMemberGate: Boolean,
     rsvpStatus: RsvpStatusUi,
     onRsvp: (RsvpStatus) -> Unit,
     onBack: () -> Unit,
@@ -139,9 +139,9 @@ fun EventDetailScreen(
             // actually serve it: active member AND published. Non-members see
             // the membership gate; a member on a non-published event sees
             // neither (the cancelled notice above already explains the state).
-            if (Events.canSeeDetails(isActiveMember, event.status)) {
+            if (Events.canSeeDetails(passesMemberGate, event.status)) {
                 DetailCard(detail)
-            } else if (!isActiveMember) {
+            } else if (!passesMemberGate) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
                     body = stringResource(R.string.events_memberRequiredBody),
@@ -149,7 +149,7 @@ fun EventDetailScreen(
             }
 
             // RSVP row — members only, published events only.
-            if (Events.canRsvp(isActiveMember, event.status)) {
+            if (Events.canRsvp(passesMemberGate, event.status)) {
                 Text(
                     text = stringResource(R.string.events_rsvpCountsLabel),
                     style = MaterialTheme.typography.labelLarge,
@@ -446,7 +446,7 @@ private fun EventDetailPreview() {
                 ),
             detail = EventDetail("Bring your car.", "Torg", "Storgatan 1", 57.0, 12.0),
             myRsvp = RsvpStatus.GOING,
-            isActiveMember = true,
+            passesMemberGate = true,
             rsvpStatus = RsvpStatusUi.Idle,
             onRsvp = {},
             onBack = {},

@@ -280,7 +280,7 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = true,
-                isActiveMember = false,
+                passesMemberGate = false,
             ),
         )
     }
@@ -291,7 +291,7 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = true,
-                isActiveMember = true,
+                passesMemberGate = true,
             ),
         )
     }
@@ -302,7 +302,7 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = false,
                 canShareLive = true,
-                isActiveMember = true,
+                passesMemberGate = true,
             ),
         )
     }
@@ -313,7 +313,7 @@ class DriveRecordingTest {
             DriveRecordingGate.shouldRecord(
                 hasDrivesBackend = true,
                 canShareLive = false,
-                isActiveMember = true,
+                passesMemberGate = true,
             ),
         )
     }

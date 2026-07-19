@@ -31,10 +31,10 @@ class EventTest {
 
     @Test
     fun `canRsvp requires an active member on a published event`() {
-        assertTrue(Events.canRsvp(isActiveMember = true, status = EventStatus.PUBLISHED))
-        assertFalse(Events.canRsvp(isActiveMember = false, status = EventStatus.PUBLISHED))
-        assertFalse(Events.canRsvp(isActiveMember = true, status = EventStatus.CANCELLED))
-        assertFalse(Events.canRsvp(isActiveMember = true, status = EventStatus.COMPLETED))
+        assertTrue(Events.canRsvp(passesMemberGate = true, status = EventStatus.PUBLISHED))
+        assertFalse(Events.canRsvp(passesMemberGate = false, status = EventStatus.PUBLISHED))
+        assertFalse(Events.canRsvp(passesMemberGate = true, status = EventStatus.CANCELLED))
+        assertFalse(Events.canRsvp(passesMemberGate = true, status = EventStatus.COMPLETED))
     }
 
     @Test

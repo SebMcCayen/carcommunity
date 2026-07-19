@@ -802,11 +802,18 @@ fun AuthenticatedApp(
             // non-member an end-of-session prompt whose Save could only ever fail
             // with PERMISSION_DENIED, forever. The manual recorder
             // (RecordDriveScreen) already applies this same member rule.
+            // Member gating is currently DISABLED (config/MemberGating.kt) and
+            // drives-save admits any signed-in, non-suspended caller to match,
+            // so this resolves to true for everyone. Routing it through the
+            // switch (rather than the raw entitlement) is what keeps recording
+            // aligned with saving: gating recording on the RAW flag while the
+            // backend saves for everyone would invert the v0.8.0 bug — we would
+            // refuse to record drives the server would happily store.
             val canRecordDrive =
                 DriveRecordingGate.shouldRecord(
                     hasDrivesBackend = drivesRepository != null,
                     canShareLive = canShareLive,
-                    isActiveMember = profile?.activeMember == true,
+                    passesMemberGate = MemberGating.allows(profile?.activeMember == true),
                 )
 
             // Bind the recording lifecycle to the live-sharing state. Both calls
@@ -2251,7 +2258,7 @@ private fun RouteHost(
                     repository = eventsRepository,
                     rsvpCoordinator = rsvpCoordinator,
                     uid = uid,
-                    isActiveMember = MemberGating.allows(profileActiveMember),
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     chatRepository = chatRepository,
                     chatCoordinator = chatCoordinator,
                     chatEnabled = chatEnabled,
@@ -2271,7 +2278,7 @@ private fun RouteHost(
                 CrownHuntRoute(
                     repository = crownHuntRepository,
                     coordinator = crownHuntCoordinator,
-                    isActiveMember = MemberGating.allows(profileActiveMember),
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {
@@ -2284,7 +2291,7 @@ private fun RouteHost(
                     repository = partnersRepository,
                     offerCodeCoordinator = offerCodeCoordinator,
                     uid = uid,
-                    isActiveMember = MemberGating.allows(profileActiveMember),
+                    passesMemberGate = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
                 )
             } else {
