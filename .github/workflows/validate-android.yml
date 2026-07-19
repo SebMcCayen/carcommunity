@@ -84,6 +84,98 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
+  nav-variant-compile:
+    name: nav-variant-compile (Mapbox Navigation SDK)
+    runs-on: ubuntu-latest
+    # WHY THIS JOB EXISTS
+    # ------------------
+    # `validate-android` above runs WITHOUT MAPBOX_DOWNLOADS_TOKEN, so
+    # `navSdkEnabled` is false (app/build.gradle.kts) and the source-set swap
+    # compiles the token-less stub `app/src/nav` -> `app/src/noNav`. Everything
+    # under `app/src/nav/**` — the real Mapbox Navigation SDK v3 turn-by-turn
+    # implementation — is therefore NOT on the compile path of any other job on
+    # a PR or a push. Before this job, `src/nav` was compiled only by
+    # `build-android-release.yml`, which is `workflow_dispatch`-only, i.e. a
+    # compile error there could only be discovered while cutting a release.
+    #
+    # This job closes that gap: it supplies the token so the real `src/nav`
+    # source set is selected, and compiles it. It is a COMPILE-ONLY gate — no
+    # emulator, no signing, no release artifacts.
+    #
+    # SECRET SCOPE
+    # ------------
+    # MAPBOX_DOWNLOADS_TOKEN lives in the `production` environment (there is no
+    # repo-level copy), so the job must opt into that environment to read it.
+    # That grants the job read access to the rest of the production secrets for
+    # its duration, which is why it is deliberately kept to checkout + Gradle
+    # compile and references only the one token. If least privilege matters more
+    # later, move MAPBOX_DOWNLOADS_TOKEN into a dedicated environment holding
+    # nothing else and point `environment:` at that instead — no other change is
+    # needed here.
+    environment: production
+    # GitHub does not expose secrets to `pull_request` runs from a FORK. Without
+    # the token this job would silently compile the noNav stub and report green
+    # while covering nothing, so it is skipped outright on fork PRs rather than
+    # claiming coverage it does not have. Fork changes to `src/nav` are covered
+    # only once merged (the `push: main` run of this workflow).
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Require the Mapbox downloads token
+        env:
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: |
+          # This job's entire value is compiling the nav source set. Without the
+          # token Gradle would fall back to the noNav stub and pass green, so a
+          # missing/removed secret must FAIL loudly instead of degrading into
+          # false coverage. Never echo the token itself.
+          if [ -z "${MAPBOX_DOWNLOADS_TOKEN:-}" ]; then
+            echo "::error::MAPBOX_DOWNLOADS_TOKEN is not available to this job, so app/src/nav cannot be compiled. Set it as a secret in the 'production' environment."
+            exit 1
+          fi
+          echo "MAPBOX_DOWNLOADS_TOKEN is present."
+
+      - name: Compile the nav-enabled variant (app/src/nav)
+        working-directory: apps/android
+        env:
+          ORG_GRADLE_PROJECT_MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: ./gradlew --no-daemon :app:compileDebugKotlin
+
+      - name: Assert the nav source set was actually compiled
+        run: |
+          set -euo pipefail
+          # Guard against false-green: `compileDebugKotlin` succeeds for BOTH
+          # source sets, so a broken token would produce a passing noNav build.
+          # BuildConfig.NAV_SDK_ENABLED is generated from the SAME `navSdkEnabled`
+          # value that drives the src/nav vs src/noNav swap, so asserting it is
+          # true proves the real nav code was on the compile path.
+          BUILD_CONFIG="$(find apps/android/app/build/generated -name BuildConfig.java -path '*debug*' | head -n1)"
+          if [ -z "$BUILD_CONFIG" ]; then
+            echo "::error::Generated debug BuildConfig.java not found — cannot verify which source set was compiled."
+            exit 1
+          fi
+          if ! grep -q 'NAV_SDK_ENABLED = true' "$BUILD_CONFIG"; then
+            echo "::error::NAV_SDK_ENABLED is not true — the token-less src/noNav stub was compiled, so app/src/nav was NOT type-checked by this job."
+            grep -n 'NAV_SDK_ENABLED' "$BUILD_CONFIG" || true
+            exit 1
+          fi
+          echo "NAV_SDK_ENABLED = true — app/src/nav was compiled."
+
   instrumented-tests:
     name: instrumented-tests (Compose UI)
     runs-on: ubuntu-latest

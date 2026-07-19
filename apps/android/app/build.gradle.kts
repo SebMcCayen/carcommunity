@@ -140,6 +140,18 @@ android {
         // token-less build (which compiles the noNav stub) never advertises a
         // feature that can only reach the "navigation unavailable" stub.
         buildConfigField("boolean", "NAV_SDK_ENABLED", navSdkEnabled.toString())
+
+        // The pinned Mapbox Maps SDK version, sourced from the version catalog so
+        // it can never drift from the artifact actually on the classpath. Attached
+        // to feature-health reports (see diagnostics/FeatureHealth.kt) so a silent
+        // map-rendering regression names the SDK version it appeared on — the
+        // v0.8.1 blank-map bug arrived with an SDK/config change, and the version
+        // is the first thing anyone triaging such an issue asks for.
+        buildConfigField(
+            "String",
+            "MAPBOX_MAPS_SDK_VERSION",
+            "\"${libs.versions.mapbox.get()}\"",
+        )
     }
 
     signingConfigs {
@@ -253,6 +265,12 @@ dependencies {
         implementation(libs.mapbox.nav.ui.maps)
         implementation(libs.mapbox.nav.tripdata)
         implementation(libs.mapbox.nav.ui.components)
+        // MapboxManeuverView (ui-components) extends ConstraintLayout, but
+        // Mapbox declares constraintlayout as an `implementation` dep, so it is
+        // NOT on our compile classpath transitively. Without it Kotlin cannot
+        // resolve the supertype — and therefore cannot see the view as a
+        // `View` either, breaking the AndroidView factory in src/nav.
+        implementation(libs.androidx.constraintlayout)
     }
 
     // Google Play Services — fused location provider (Phase 12 slice 6)

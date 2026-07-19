@@ -3,6 +3,13 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Read-only connectivity check (normal permission, no runtime grant, no
+         user-visible prompt). Used ONLY to suppress feature-health reports while
+         the device is offline: a user in a tunnel or out of data cannot load map
+         tiles, and filing a public GitHub issue for that would be a false
+         positive. See diagnostics/NetworkStatus.kt. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Live-location background sharing (Phase 12 slice 6). Runtime grant of the
          location + notification permissions is DEFERRED (no device available). -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
