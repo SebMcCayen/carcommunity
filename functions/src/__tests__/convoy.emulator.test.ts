@@ -148,6 +148,14 @@ interface ConvoyMember {
   role: 'owner' | 'member';
   inviteStatus: 'invited' | 'accepted' | 'declined';
 }
+interface ConvoyDestination {
+  latitude: number;
+  longitude: number;
+  label: string | null;
+  setByUid: string;
+  setByDisplayName: string | null;
+  setAt: string | null;
+}
 interface ConvoySummary {
   convoyId: string;
   ownerUid: string;
@@ -156,6 +164,7 @@ interface ConvoySummary {
   memberUids: string[];
   viewer: { role: string; inviteStatus: string } | null;
   livePositionUids: string[];
+  destination: ConvoyDestination | null;
   summary: { durationSeconds: number; participantUids: string[]; participantCount: number; distanceMeters: number | null } | null;
 }
 
@@ -477,5 +486,418 @@ describe('convoys Firestore rules', () => {
     await expect(getDoc(doc(firestore, 'convoys', convoyId))).rejects.toMatchObject({
       code: 'permission-denied',
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// convoy-leave / convoy-invite / convoy-setDestination / convoy-clearDestination
+//
+// displayNames in this file all carry the `C` suffix: the emulator suite shares
+// ONE Firestore with no isolation between files, so a bare "Owner" would collide
+// with another file's fixtures and flake.
+// ---------------------------------------------------------------------------
+
+/** Creates an owner + one accepted member, returning both and the convoy id. */
+async function convoyWithAcceptedMember(
+  ownerName: string,
+  memberName: string,
+): Promise<{ owner: TestUser; member: TestUser; convoyId: string }> {
+  const owner = await newMember(ownerName);
+  const member = await newMember(memberName);
+  await makeFriends(owner, member);
+  await signInAs(owner);
+  const created = (await call('convoy-create', { inviteeUids: [member.uid] })).data as {
+    convoy: ConvoySummary;
+  };
+  const convoyId = created.convoy.convoyId;
+  await signInAs(member);
+  await call('convoy-respond', { convoyId, action: 'accept' });
+  return { owner, member, convoyId };
+}
+
+describe('convoy-leave', () => {
+  it('removes an ACCEPTED member from every membership collection', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('LeaveOwnerC', 'LeaverC');
+
+    await signInAs(member);
+    const left = (await call('convoy-leave', { convoyId })).data as {
+      convoy: ConvoySummary;
+      remainingMemberCount: number;
+    };
+    // Only the owner is left, and the convoy is NOT auto-ended.
+    expect(left.remainingMemberCount).toBe(1);
+    expect(left.convoy.status).not.toBe('ended');
+    expect(left.convoy.memberUids).not.toContain(member.uid);
+    expect(left.convoy.members.some((m) => m.uid === member.uid)).toBe(false);
+    expect(left.convoy.livePositionUids).toEqual([owner.uid]);
+    // The caller is no longer a member, so viewer is null rather than a lie.
+    expect(left.convoy.viewer).toBeNull();
+
+    // The stored doc agrees (memberUids is what the rules read gate uses).
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.memberUids).not.toContain(member.uid);
+    expect(stored.data()!.memberProfiles[member.uid]).toBeUndefined();
+
+    // The leaver has actually lost their read on the convoy doc...
+    await expect(getDoc(doc(firestore, 'convoys', convoyId))).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    // ...and the convoy no longer appears in their list.
+    const list = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    expect(list.convoys.some((c) => c.convoyId === convoyId)).toBe(false);
+
+    // Leaving twice is not-found (they are no longer a member) — never a
+    // silent success that would imply they were still in it.
+    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe('functions/not-found');
+  });
+
+  it('refuses the OWNER (they must end the convoy for everyone instead)', async () => {
+    const { owner, convoyId } = await convoyWithAcceptedMember('OwnerStaysC', 'StayerC');
+    await signInAs(owner);
+    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe(
+      'functions/failed-precondition',
+    );
+    // The convoy is untouched — the owner is still in it.
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.memberUids).toContain(owner.uid);
+    expect(stored.data()!.status).not.toBe('ended');
+    // convoy-end is the owner's actual path, and it still works.
+    const ended = (await call('convoy-end', { convoyId })).data as { convoy: ConvoySummary };
+    expect(ended.convoy.status).toBe('ended');
+  });
+
+  it('refuses a still-INVITED member, an outsider, and an ended convoy', async () => {
+    const owner = await newMember('InviteOnlyOwnerC');
+    const invitee = await newMember('NeverAnsweredC');
+    await makeFriends(owner, invitee);
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [invitee.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    // Invited but not accepted: there is nothing to leave — respond is the path.
+    await signInAs(invitee);
+    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe(
+      'functions/failed-precondition',
+    );
+
+    // A total outsider gets not-found, so a convoy cannot be probed.
+    const outsider = await newMember('LeaveOutsiderC');
+    await signInAs(outsider);
+    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe('functions/not-found');
+
+    // Ended convoy: nothing to leave.
+    await signInAs(invitee);
+    await call('convoy-respond', { convoyId, action: 'accept' });
+    await signInAs(owner);
+    await call('convoy-end', { convoyId });
+    await signInAs(invitee);
+    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+});
+
+describe('convoy-invite', () => {
+  it('lets ANY accepted member grow the convoy with THEIR OWN friend', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('GrowOwnerC', 'GrowMemberC');
+    // A friend of the MEMBER, and deliberately NOT a friend of the owner — the
+    // friend edge is checked against the inviter, not the owner.
+    const newcomer = await newMember('NewcomerC');
+    await makeFriends(member, newcomer);
+
+    await signInAs(member);
+    const result = (await call('convoy-invite', { convoyId, inviteeUids: [newcomer.uid] })).data as {
+      convoy: ConvoySummary;
+      invited: string[];
+      skipped: Array<{ uid: string; reason: string }>;
+    };
+    expect(result.invited).toEqual([newcomer.uid]);
+    expect(result.skipped).toEqual([]);
+    expect(result.convoy.memberUids).toContain(newcomer.uid);
+    const entry = result.convoy.members.find((m) => m.uid === newcomer.uid)!;
+    expect(entry.role).toBe('member');
+    expect(entry.inviteStatus).toBe('invited');
+    // Not accepted yet, so not in the live-position set.
+    expect(result.convoy.livePositionUids).not.toContain(newcomer.uid);
+
+    // Same 'convoy_invite' notification path as convoy-create.
+    const items = await adminDb
+      .collection('notifications')
+      .doc(newcomer.uid)
+      .collection('items')
+      .get();
+    expect(items.docs.some((d) => d.data().relatedEntityId === convoyId)).toBe(true);
+
+    // The newcomer can accept and join for real.
+    await signInAs(newcomer);
+    const accepted = (await call('convoy-respond', { convoyId, action: 'accept' })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(accepted.convoy.livePositionUids.sort()).toEqual(
+      [owner.uid, member.uid, newcomer.uid].sort(),
+    );
+  });
+
+  it('skips non-friends, self, duplicates, and people ALREADY in the convoy', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('SkipOwnerC', 'SkipMemberC');
+    const stranger = await newMember('InviteStrangerC');
+    const friend = await newMember('InviteFriendC');
+    await makeFriends(owner, friend);
+
+    await signInAs(owner);
+    const result = (
+      await call('convoy-invite', {
+        convoyId,
+        inviteeUids: [friend.uid, stranger.uid, member.uid, owner.uid, friend.uid],
+      })
+    ).data as { invited: string[]; skipped: Array<{ uid: string; reason: string }> };
+
+    expect(result.invited).toEqual([friend.uid]);
+    const reasons = Object.fromEntries(result.skipped.map((s) => [s.uid, s.reason]));
+    expect(reasons[stranger.uid]).toBe('not_friend');
+    // Already in the convoy — distinct from `duplicate` (listed twice in THIS
+    // request), which is what the second friend.uid gets.
+    expect(reasons[member.uid]).toBe('already_member');
+    expect(reasons[owner.uid]).toBe('self');
+    expect(result.skipped.some((s) => s.uid === friend.uid && s.reason === 'duplicate')).toBe(true);
+  });
+
+  it('honours blocks against the INVITER and against every other accepted member', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('BlockOwnerC', 'BlockMemberC');
+    // A friend of the member who has blocked the OWNER: they must not be pulled
+    // into a convoy with someone they blocked, even though the inviter is fine.
+    const blocker = await newMember('BlockerC');
+    await makeFriends(member, blocker);
+    await signInAs(blocker);
+    await call('blocking-block', { targetUserId: owner.uid });
+
+    await signInAs(member);
+    // The only requested uid is dropped, so there is no one left to add →
+    // failed-precondition. The block is never surfaced as its own error or
+    // reason (in a mixed batch it is the neutral `not_found`), so the inviter
+    // cannot infer who blocked whom.
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [blocker.uid] })),
+    ).toBe('functions/failed-precondition');
+
+    // ...and they are genuinely not in the convoy.
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.memberUids).not.toContain(blocker.uid);
+  }, 60_000);
+
+  it('refuses a still-invited caller, an outsider, and an ended convoy', async () => {
+    const owner = await newMember('InvGateOwnerC');
+    const pending = await newMember('InvGatePendingC');
+    const theirFriend = await newMember('InvGateFriendC');
+    await makeFriends(owner, pending);
+    await makeFriends(pending, theirFriend);
+
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [pending.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    // Invited-but-unanswered: not in the convoy yet, so cannot grow it.
+    await signInAs(pending);
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [theirFriend.uid] })),
+    ).toBe('functions/failed-precondition');
+
+    // Outsider → not-found (no probing).
+    const outsider = await newMember('InvGateOutsiderC');
+    await signInAs(outsider);
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [theirFriend.uid] })),
+    ).toBe('functions/not-found');
+
+    // Ended convoy cannot grow.
+    await signInAs(pending);
+    await call('convoy-respond', { convoyId, action: 'accept' });
+    await signInAs(owner);
+    await call('convoy-end', { convoyId });
+    await signInAs(pending);
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [theirFriend.uid] })),
+    ).toBe('functions/failed-precondition');
+  }, 60_000);
+});
+
+describe('convoy shared destination', () => {
+  it('any accepted member sets it; every member reads it off the summary', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('DestOwnerC', 'DestMemberC');
+
+    // A MEMBER (not the owner) sets it — the peer-group decision.
+    await signInAs(member);
+    const set = (
+      await call('convoy-setDestination', {
+        convoyId,
+        latitude: 57.4879,
+        longitude: 12.076,
+        label: '  Kungsbacka torg  ',
+      })
+    ).data as { convoy: ConvoySummary };
+    expect(set.convoy.destination).toMatchObject({
+      latitude: 57.4879,
+      longitude: 12.076,
+      label: 'Kungsbacka torg', // trimmed
+      setByUid: member.uid, // server-stamped from auth, never client-supplied
+      setByDisplayName: 'DestMemberC', // denormalized, no profile fetch needed
+    });
+    expect(set.convoy.destination!.setAt).not.toBeNull();
+
+    // The OWNER receives it through the convoy read path they already use —
+    // no second listener, no separate read.
+    await signInAs(owner);
+    const list = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    const seen = list.convoys.find((c) => c.convoyId === convoyId)!;
+    expect(seen.destination!.latitude).toBe(57.4879);
+    expect(seen.destination!.setByUid).toBe(member.uid);
+
+    // Setting REPLACES (last write wins, one destination per convoy).
+    const replaced = (
+      await call('convoy-setDestination', { convoyId, latitude: 57.7, longitude: 11.97 })
+    ).data as { convoy: ConvoySummary };
+    expect(replaced.convoy.destination).toMatchObject({
+      latitude: 57.7,
+      longitude: 11.97,
+      label: null, // no label on the new pick — not inherited from the old one
+      setByUid: owner.uid,
+    });
+  });
+
+  it('validates coordinates, label length, and rejects a still-invited caller', async () => {
+    const owner = await newMember('DestGateOwnerC');
+    const pending = await newMember('DestGatePendingC');
+    await makeFriends(owner, pending);
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [pending.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    for (const bad of [
+      { latitude: 91, longitude: 0 },
+      { latitude: 0, longitude: 181 },
+      { latitude: 'x', longitude: 0 },
+      { latitude: 0, longitude: 0, label: 'x'.repeat(121) },
+    ]) {
+      expect(await callableErrorCode(call('convoy-setDestination', { convoyId, ...bad }))).toBe(
+        'functions/invalid-argument',
+      );
+    }
+
+    // A forming convoy MAY have a destination — agreeing where to go is exactly
+    // what happens before rolling.
+    const onForming = (
+      await call('convoy-setDestination', { convoyId, latitude: 57.5, longitude: 12.0 })
+    ).data as { convoy: ConvoySummary };
+    expect(onForming.convoy.status).toBe('forming');
+    expect(onForming.convoy.destination).not.toBeNull();
+
+    // Invited-but-unanswered cannot set it.
+    await signInAs(pending);
+    expect(
+      await callableErrorCode(call('convoy-setDestination', { convoyId, latitude: 0, longitude: 0 })),
+    ).toBe('functions/failed-precondition');
+
+    // Outsider → not-found (no probing).
+    const outsider = await newMember('DestOutsiderC');
+    await signInAs(outsider);
+    expect(
+      await callableErrorCode(call('convoy-setDestination', { convoyId, latitude: 0, longitude: 0 })),
+    ).toBe('functions/not-found');
+  }, 60_000);
+
+  it('clears only for the SETTER or the OWNER, and is an idempotent no-op when empty', async () => {
+    const owner = await newMember('ClearOwnerC');
+    const setter = await newMember('ClearSetterC');
+    const other = await newMember('ClearOtherC');
+    await makeFriends(owner, setter);
+    await makeFriends(owner, other);
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [setter.uid, other.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+    await signInAs(setter);
+    await call('convoy-respond', { convoyId, action: 'accept' });
+    await signInAs(other);
+    await call('convoy-respond', { convoyId, action: 'accept' });
+
+    await signInAs(setter);
+    await call('convoy-setDestination', { convoyId, latitude: 57.4, longitude: 12.0 });
+
+    // A third accepted member may NOT wipe a plan the group is following. They
+    // know the convoy exists, so permission-denied (not not-found) is honest.
+    await signInAs(other);
+    expect(await callableErrorCode(call('convoy-clearDestination', { convoyId }))).toBe(
+      'functions/permission-denied',
+    );
+
+    // The setter can clear their own.
+    await signInAs(setter);
+    const cleared = (await call('convoy-clearDestination', { convoyId })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(cleared.convoy.destination).toBeNull();
+    // Clearing nothing is a no-op, not an error (two people tapping at once).
+    const again = (await call('convoy-clearDestination', { convoyId })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(again.convoy.destination).toBeNull();
+
+    // The OWNER can clear someone else's (the moderation path).
+    await signInAs(other);
+    await call('convoy-setDestination', { convoyId, latitude: 57.6, longitude: 12.1 });
+    await signInAs(owner);
+    const ownerCleared = (await call('convoy-clearDestination', { convoyId })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(ownerCleared.convoy.destination).toBeNull();
+  }, 60_000);
+
+  it('SURVIVES convoy-end untouched (a record of where the convoy was headed)', async () => {
+    const { owner, convoyId } = await convoyWithAcceptedMember('EndDestOwnerC', 'EndDestMemberC');
+    await signInAs(owner);
+    await call('convoy-setDestination', {
+      convoyId,
+      latitude: 57.4879,
+      longitude: 12.076,
+      label: 'Slutmål',
+    });
+    const ended = (await call('convoy-end', { convoyId })).data as { convoy: ConvoySummary };
+    expect(ended.convoy.status).toBe('ended');
+    // Reaching it did NOT end the convoy — the owner did — and ending did not
+    // wipe the destination.
+    expect(ended.convoy.destination).toMatchObject({
+      latitude: 57.4879,
+      longitude: 12.076,
+      label: 'Slutmål',
+    });
+
+    // An ended convoy's destination is inert: it can be neither set nor cleared.
+    expect(
+      await callableErrorCode(call('convoy-setDestination', { convoyId, latitude: 0, longitude: 0 })),
+    ).toBe('functions/failed-precondition');
+    expect(await callableErrorCode(call('convoy-clearDestination', { convoyId }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('keeps the destination out of reach of direct client writes', async () => {
+    const { owner, convoyId } = await convoyWithAcceptedMember('RulesDestOwnerC', 'RulesDestMemberC');
+    await signInAs(owner);
+    // The convoy doc stays callable-only — a client cannot forge a destination
+    // (or an attribution) by writing the field directly.
+    await expect(
+      setDoc(
+        doc(firestore, 'convoys', convoyId),
+        { destination: { latitude: 0, longitude: 0, setByUid: 'someone-else' } },
+        { merge: true },
+      ),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 });
