@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.garage
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -234,6 +235,21 @@ fun GarageRoute(
         val cropping = cropPreview
         val candidate = cropCandidate
         if (cropping != null && candidate != null) {
+            // Release the preview's pixels as soon as it can no longer be drawn.
+            // A VEHICLE_MAX_DIMENSION decode is several megabytes, and picking
+            // photo after photo would otherwise leave a string of them alive
+            // until the collector got round to them.
+            //
+            // onDispose, NOT the cancel/confirm handlers: recycle() on a bitmap
+            // Compose is still drawing throws "Canvas: trying to use a recycled
+            // bitmap". Clearing the state only SCHEDULES the screen's removal,
+            // so recycling there races the outgoing frame. onDispose runs after
+            // the subtree is gone, which is the first moment no draw can
+            // reference it. Keyed on the bitmap so swapping previews releases
+            // the outgoing one too.
+            DisposableEffect(cropping) {
+                onDispose { cropping.recycle() }
+            }
             // The crop step REPLACES the form for as long as it is open rather
             // than stacking on top of it: the form's own fields keep their state
             // (they are rememberSaveable, and the `key(editingId)` below is
