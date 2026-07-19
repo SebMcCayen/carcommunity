@@ -858,11 +858,13 @@ describe('Firestore – diagnostics reports (Phase 9n)', () => {
   });
 
 // ---------------------------------------------------------------------------
-// Firestore: moderation reports field validation (Phase 9o)
-// Reporter identity pinned, whitelisted shape, status starts pending.
+// Firestore: moderationReports is callable-only
+// The Phase 9o client `create` path is REMOVED — chatchannels.reportMessage /
+// dm.reportMessage / moderation.reportUser (and events.reportChatMessage for
+// event chat) are the only writers. Admins read and may move `status` only.
 // ---------------------------------------------------------------------------
 
-describe('Firestore – moderation reports validation (Phase 9o)', () => {
+describe('Firestore – moderationReports is callable-only', () => {
   const REPORTER = 'mod-reporter';
   const validReport = {
     reportedBy: REPORTER,
@@ -884,9 +886,13 @@ describe('Firestore – moderation reports validation (Phase 9o)', () => {
     });
   });
 
-  it('accepts a valid report from its own reporter', async () => {
+  it('denies a client create even in the previously-valid shape', async () => {
+    // The exact document the Phase 9o rules used to accept. A client create is
+    // now denied outright: it bypasses the report callables' eligibility check
+    // on the surface being reported, their per-reporter rate limit, their
+    // dedup, and the message snapshot.
     const ctx = testEnv.authenticatedContext(REPORTER);
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'moderationReports/valid-1'), {
         ...validReport,
         createdAt: serverTimestamp(),
@@ -894,41 +900,52 @@ describe('Firestore – moderation reports validation (Phase 9o)', () => {
     );
   });
 
-  it('rejects spoofed reporters, bad shapes, and non-pending status', async () => {
+  it('denies a client create aimed at an arbitrary target', async () => {
     const ctx = testEnv.authenticatedContext(REPORTER);
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/spoof'), {
+      setDoc(doc(ctx.firestore(), 'moderationReports/arbitrary'), {
         ...validReport,
-        reportedBy: 'someone-else',
+        targetType: 'message',
+        targetId: 'a-message-in-a-dm-they-are-not-party-to',
         createdAt: serverTimestamp(),
       }),
     );
+  });
+
+  it('denies an admin client create too (callables use the Admin SDK)', async () => {
+    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/extra'), {
+      setDoc(doc(admin.firestore(), 'moderationReports/admin-create'), {
         ...validReport,
-        extraField: 'x',
         createdAt: serverTimestamp(),
       }),
     );
+  });
+
+  it('denies reads of the per-target report summary to everyone but admins', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'moderationUserSummaries/bad-actor'), {
+        reportedUserId: 'bad-actor',
+        reporterCount: 3,
+        totalSubmissions: 5,
+        lastReportAt: serverTimestamp(),
+      });
+    });
+    const reporter = testEnv.authenticatedContext(REPORTER);
+    await assertFails(getDoc(doc(reporter.firestore(), 'moderationUserSummaries/bad-actor')));
+    // Least of all the reported user themselves — the count is a moderation
+    // signal, and surfacing it would be both a harassment vector and a way to
+    // work out who reported whom.
+    const target = testEnv.authenticatedContext('bad-actor');
+    await assertFails(getDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor')));
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/badtype'), {
-        ...validReport,
-        targetType: 'vehicle',
-        createdAt: serverTimestamp(),
-      }),
+      setDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor'), { reporterCount: 0 }),
     );
+    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor')));
+    // Admin-READ-only: the aggregate is callable-maintained, not admin-editable.
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/resolved'), {
-        ...validReport,
-        status: 'reviewed',
-        createdAt: serverTimestamp(),
-      }),
-    );
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/clientts'), {
-        ...validReport,
-        createdAt: new Date(),
-      }),
+      updateDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor'), { reporterCount: 0 }),
     );
   });
 
@@ -1933,9 +1950,13 @@ describe('Firestore – suspension enforcement', () => {
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'accountDeletionRequests', SUSPENDED)));
   });
 
-  it('suspended user retains access to support paths (reports, settings)', async () => {
+  it('suspended user retains access to support paths (settings)', async () => {
     const ctx = testEnv.authenticatedContext(SUSPENDED, { suspended: true });
-    await assertSucceeds(
+    // Filing a report is no longer a direct write for ANYONE (the collection is
+    // callable-only now), so the support path a suspended user keeps here is
+    // the settings write; report eligibility is decided in the callables'
+    // actor gates, not in these rules.
+    await assertFails(
       setDoc(doc(ctx.firestore(), 'moderationReports', 'suspended-report'), {
         reportedBy: SUSPENDED,
         targetType: 'user',
