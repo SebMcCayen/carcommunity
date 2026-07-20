@@ -1146,13 +1146,21 @@ fun AuthenticatedApp(
                 // they are waiting on), so it refuses every call without touching
                 // the network and the bar's destination controls render disabled.
                 //
-                // WHEN THE BACKEND LANDS this single line becomes
+                // WHEN THE BACKEND LANDS the body of this remember becomes
                 // `FirebaseConvoyDestinationRepository.createIfAvailable(context)
                 //     ?: UnavailableConvoyDestinationRepository`
                 // and ConvoyDestinations.availability is flipped to Wired. That is
                 // the whole client change — everything below already works.
+                //
+                // It is wrapped in `remember` now, while the value is still a
+                // stable object and the wrapper looks redundant, precisely so that
+                // swap stays a one-line edit. `createIfAvailable` builds a NEW
+                // instance per call; assigned directly it would produce a
+                // different repository on every recomposition, which changes a key
+                // of the remember below and would rebuild ConvoyCoordinator each
+                // time — re-running load() and resetting convoy state in a loop.
                 val convoyDestinationRepository: ConvoyDestinationRepository =
-                    UnavailableConvoyDestinationRepository
+                    remember { UnavailableConvoyDestinationRepository }
                 val convoyBarCoordinator =
                     remember(convoyRepository, convoyDestinationRepository) {
                         convoyRepository?.let {
