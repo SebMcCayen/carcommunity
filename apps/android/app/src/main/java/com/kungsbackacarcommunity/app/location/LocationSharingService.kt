@@ -303,6 +303,19 @@ class LocationSharingService : Service() {
      * end, sign-out) — calling stopSession again would be redundant traffic.
      */
     private fun stopSharingLocally() {
+        // Same reasoning as stopSharingAndSelf(): stopSelf() is NOT synchronous,
+        // so between here and onDestroy() the observer could emit once more. A
+        // Continue landing after stopForeground(STOP_FOREGROUND_REMOVE) would
+        // re-post via notify() — and a notify()d notification is not tied to the
+        // service, so it would outlive it as a permanent "sharing your location"
+        // notice with nothing behind it. Cancelling here also breaks the ticker
+        // loop, whose `while (isActive)` would otherwise still be live.
+        //
+        // Safe to self-cancel: this is always reached from inside sessionJob, and
+        // the rest of this method never suspends, so it runs to completion.
+        sessionJob?.cancel()
+        sessionJob = null
+
         fusedClient?.removeLocationUpdates(locationCallback)
         fusedClient = null
         stopForeground(STOP_FOREGROUND_REMOVE)
