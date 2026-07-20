@@ -169,7 +169,7 @@ fun ConvoyMapAwarenessOverlay(
                 contentDescription =
                     stringResource(
                         R.string.convoy_awarenessMemberOnMap,
-                        placement.member.displayName.orEmpty(),
+                        placement.member.spokenName(),
                     ),
                 modifier = Modifier,
             )
@@ -195,9 +195,22 @@ fun ConvoyMapAwarenessOverlay(
  * because an arrow means nothing to a screen reader — which way as a clock
  * direction relative to the way the map is facing.
  */
+/**
+ * The member's name as a screen reader should say it.
+ *
+ * A live position can arrive without a display name, and `orEmpty()` would then
+ * build descriptions that open with nothing at all — " in the convoy", " is off
+ * the map, at 2 o'clock, 400 m away". Fall back to the same generic
+ * `convoy_unknownMember` label the rest of the convoy UI already uses, so the
+ * sentence always has a subject.
+ */
+@Composable
+private fun ConvoyMemberPosition.spokenName(): String =
+    displayName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.convoy_unknownMember)
+
 @Composable
 private fun directionDescription(placement: ConvoyMemberPlacement.OffScreen): String {
-    val name = placement.member.displayName.orEmpty()
+    val name = placement.member.spokenName()
     val clock = clockPositionOf(placement.angleDegrees)
     val km = (placement.distanceMeters / 1000.0)
     val distance =

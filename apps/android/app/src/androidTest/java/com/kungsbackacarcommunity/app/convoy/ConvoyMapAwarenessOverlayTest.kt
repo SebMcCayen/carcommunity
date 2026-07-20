@@ -9,6 +9,8 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import androidx.compose.ui.semantics.SemanticsProperties
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -148,6 +150,49 @@ class ConvoyMapAwarenessOverlayTest {
      * A tick longer than the window would let an arrow outlive its own bound by
      * more than the window itself.
      */
+    /**
+     * A live position can arrive with no display name. The spoken description
+     * must still have a subject — never open with an empty string (" is off the
+     * map, at 12 o'clock, 55 km away").
+     */
+    @Test
+    fun anArrowForANamelessMemberStillGetsASpokenSubject() {
+        val mapSurface = surface()
+        val nameless =
+            ConvoyMemberPosition(
+                uid = "nameless",
+                latitude = cameraLat + 0.5,
+                longitude = cameraLng,
+                displayName = null,
+                imagePath = null,
+                updatedAtMillis = t0,
+            )
+
+        composeTestRule.setContent {
+            ConvoyMapAwarenessOverlay(
+                mapSurface = mapSurface,
+                members = listOf(nameless),
+                nowMillis = { t0 },
+            )
+        }
+
+        val description =
+            composeTestRule
+                .onNodeWithTag(CONVOY_EDGE_ARROW_TAG + "nameless")
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.ContentDescription]
+                .first()
+
+        assertFalse(
+            "content description must not start with an empty name: '$description'",
+            description.startsWith(" "),
+        )
+        assertTrue(
+            "content description should name the member: '$description'",
+            description.isNotBlank(),
+        )
+    }
+
     @Test
     fun theStaleTickIsShorterThanTheStalenessWindow() {
         // JUnit's assertTrue, NOT Kotlin's `assert`: the latter is gated on the
