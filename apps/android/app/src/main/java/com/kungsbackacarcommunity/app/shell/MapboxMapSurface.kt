@@ -194,7 +194,10 @@ class MapboxMapSurface : MapSurface {
     // can be reported across the seam. Keyed on the annotation's own id rather
     // than a coordinate so two incidents reported at the same spot stay distinct.
     // Rebuilt on every redraw and cleared with the manager.
-    private val incidentIdsByAnnotation = mutableMapOf<String, String>()
+    //
+    // Module-visible rather than private only so unit tests can seed a drawn
+    // badge without a GL surface (annotations cannot be created off-device).
+    internal val incidentIdsByAnnotation = mutableMapOf<String, String>()
 
     // The incident annotation click listener, held so it can be detached in
     // onRelease alongside the map's other listeners.
@@ -910,16 +913,7 @@ class MapboxMapSurface : MapSurface {
                             // none of them is a tap.
                             val incidentClick =
                                 OnPointAnnotationClickListener { annotation ->
-                                    val incidentId = incidentIdsByAnnotation[annotation.id]
-                                    if (incidentId != null) {
-                                        emitIncidentTap(incidentId)
-                                        true
-                                    } else {
-                                        // An annotation we do not recognise (a redraw
-                                        // raced the tap): leave the event unconsumed
-                                        // rather than swallowing it.
-                                        false
-                                    }
+                                    onIncidentAnnotationClicked(annotation.id)
                                 }
                             incidentClickListener = incidentClick
                             incidentManager.addClickListener(incidentClick)
@@ -1063,6 +1057,46 @@ class MapboxMapSurface : MapSurface {
         if (overlay == lastAppliedOverlay) return
         applyRouteOverlay(mapView, overlay)
         lastAppliedOverlay = overlay
+    }
+
+    /**
+     * Handles a tap on one of THIS surface's incident badges, returning whether
+     * the tap was consumed.
+     *
+     * **Always returns true.** The annotation plugin resolves the tapped symbol
+     * against its own live annotation map BEFORE invoking this listener and
+     * bails out itself when it finds nothing (`AnnotationManagerImpl`'s click
+     * interaction returns false without calling any listener). So by the time we
+     * are called the tap has definitionally landed on a badge belonging to the
+     * incidents manager — which makes consuming it always the correct answer,
+     * whether or not we can still name the incident.
+     *
+     * Returning false instead would hand the tap onward to the next registered
+     * interaction, which is the basemap-POI click that raises a "navigate here?"
+     * preview. Offering to route the user to a petrol station because they
+     * tapped an accident badge is worse than any no-op.
+     *
+     * An id we cannot resolve means [incidentIdsByAnnotation] has drifted out of
+     * step with the annotations actually drawn — the two are written together in
+     * [applyIncidentMarkers], so they can only diverge if a native call there
+     * failed and was swallowed. Rather than eat the gesture silently we treat it
+     * as the cache-invalidation signal it is and force a full redraw, which
+     * rebuilds the lookup from the current markers so the next tap resolves.
+     * Nothing is shown to the user: the condition is an internal desync with no
+     * meaning to them, and it repairs itself before they can tap again.
+     */
+    internal fun onIncidentAnnotationClicked(annotationId: String): Boolean {
+        val incidentId = incidentIdsByAnnotation[annotationId]
+        if (incidentId != null) {
+            emitIncidentTap(incidentId)
+            return true
+        }
+        // Reset-then-reapply: the same idiom used wherever the manager is
+        // (re)created or torn down. It can only cause an extra redraw, never
+        // skip one, so it cannot strand the layer in a half-drawn state.
+        lastAppliedIncidents = null
+        applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
+        return true
     }
 
     /**
