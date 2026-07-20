@@ -1186,6 +1186,27 @@ fun AuthenticatedApp(
                             ConvoyDestinationNavigationEvent.Unchanged,
                         )
                     }
+                // Both of the above are session-scoped, so they must be cleared
+                // when the ACTIVE CONVOY changes identity — including to null,
+                // which is "left it / it ended".
+                //
+                // Without this they leak across convoys: leave a convoy while
+                // navigating to its destination and the banner ("the shared
+                // destination was removed") is still on screen when you join the
+                // next one, now describing a convoy you are no longer in. Worse,
+                // `previousConvoyDestination` would still hold the OLD convoy's
+                // destination, so the first comparison inside the new convoy is
+                // against a place from the previous one and can fabricate a
+                // "destination changed" event that never happened.
+                //
+                // Declared BEFORE the event effect so that on a convoy switch the
+                // reset runs first and the comparison below starts from a clean
+                // slate. (#487 does the same thing for camera focus via
+                // ConvoyFocusStore.onActiveConvoyChanged.)
+                LaunchedEffect(convoyBarState?.convoyId) {
+                    previousConvoyDestination = null
+                    convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                }
                 LaunchedEffect(currentConvoyDestination, navDestination) {
                     val event =
                         ConvoyDestinations.navigationEvent(

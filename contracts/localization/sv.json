@@ -477,6 +477,7 @@
     "errorInviteGone": "Inbjudan är inte längre tillgänglig.",
     "errorCannotStart": "Konvojen kan inte längre startas.",
     "errorAlreadyEnded": "Konvojen är redan avslutad.",
+    "errorNotAllowed": "Bara den som satte destinationen, eller konvojens ägare, kan ta bort den.",
     "errorGeneric": "Något gick fel. Försök igen.",
     "barMembers": "%1$d i konvojen",
     "barInvite": "Bjud in fler",

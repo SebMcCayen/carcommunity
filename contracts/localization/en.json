@@ -477,6 +477,7 @@
     "errorInviteGone": "That invite is no longer available.",
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
+    "errorNotAllowed": "Only the person who set the destination, or the convoy owner, can clear it.",
     "errorGeneric": "Something went wrong. Please try again.",
     "barMembers": "%1$d in convoy",
     "barInvite": "Invite more",

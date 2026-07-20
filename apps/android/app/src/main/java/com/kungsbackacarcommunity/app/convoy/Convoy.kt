@@ -107,6 +107,17 @@ enum class ConvoyActionError {
     InviteGone,
     CannotStart,
     AlreadyEnded,
+
+    /**
+     * The caller IS a member, but is not permitted to do this particular thing —
+     * today only clearing a shared destination someone else set when you are not
+     * the convoy owner (see [ConvoyErrorMapper.mapClearDestination]).
+     *
+     * Distinct from [NotMember], which says you are not in the convoy at all.
+     * Telling a member they are "not a member" for an authorization refusal
+     * sends them looking for a membership problem that does not exist.
+     */
+    NotAllowed,
     Generic,
 }
 
@@ -229,7 +240,11 @@ object ConvoyErrorMapper {
     fun mapClearDestination(code: ConvoyErrorCode): ConvoyActionError =
         when (code) {
             ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
-            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            // NOT NotMember: for clear, permission-denied is specifically the
+            // member-but-not-setter-or-owner refusal described above. Every other
+            // convoy callable reserves permission-denied for a genuine
+            // non-member, which is why this is the one mapper that differs.
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotAllowed
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
             ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
