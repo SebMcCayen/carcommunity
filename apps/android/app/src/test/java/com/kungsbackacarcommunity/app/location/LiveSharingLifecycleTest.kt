@@ -243,4 +243,56 @@ class LiveSharingLifecycleTest {
         assertEquals(now + 5_000L, store.anchorFor("s1", now + 5_000L))
     }
 
+
+    /**
+     * Regression: a transient read failure must NOT reset the ceiling. The
+     * repository maps read errors to a null session, so SESSION_ABSENT can mean
+     * "tunnel" rather than "ended". Clearing the anchor there would let a
+     * restart within the same session re-anchor a fresh budget — reopening the
+     * hole the anchor exists to close.
+     */
+    @Test
+    fun `an absent session does not reset the ceiling`() {
+        val store = InMemorySharingAnchorStore()
+        val noExpiry = session(expiresAtMillis = null)
+        val lifecycle = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(lifecycle.onObservation(true, noExpiry, now))
+
+        // The node goes unreadable — the first null only starts the grace
+        // window, and it has to persist past it to stop.
+        assertContinue(lifecycle.onObservation(true, null, now))
+        assertStopped(
+            LiveSharingStopReason.SESSION_ABSENT,
+            lifecycle.onObservation(
+                true,
+                null,
+                now + LiveSharingLifecycle.ABSENT_GRACE_MILLIS,
+            ),
+        )
+
+        // The read recovers and the service restarts on the SAME session. The
+        // original anchor must still bound it.
+        val restarted = LiveSharingLifecycle(anchorStore = store)
+        assertStopped(
+            LiveSharingStopReason.EXPIRED,
+            restarted.onObservation(true, noExpiry, now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS),
+        )
+    }
+
+    /** Sign-out is also not proof the session ended, so it keeps the anchor. */
+    @Test
+    fun `signing out does not reset the ceiling`() {
+        val store = InMemorySharingAnchorStore()
+        val noExpiry = session(expiresAtMillis = null)
+        val lifecycle = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(lifecycle.onObservation(true, noExpiry, now))
+        assertStopped(LiveSharingStopReason.SIGNED_OUT, lifecycle.onTick(false, now + 1_000L))
+
+        val restarted = LiveSharingLifecycle(anchorStore = store)
+        assertStopped(
+            LiveSharingStopReason.EXPIRED,
+            restarted.onObservation(true, noExpiry, now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS),
+        )
+    }
+
 }

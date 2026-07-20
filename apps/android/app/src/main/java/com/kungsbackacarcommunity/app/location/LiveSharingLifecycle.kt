@@ -194,11 +194,32 @@ class LiveSharingLifecycle(
     }
 
     /**
-     * Sharing has ended for good, so the persisted anchor is dead weight — drop
-     * it rather than leave it to be re-read by a later, unrelated session.
+     * Stops, dropping the persisted anchor ONLY on positive evidence that the
+     * session is genuinely over.
+     *
+     * Clearing it on every reason would reopen the hole the anchor exists to
+     * close. [LiveSharingStopReason.SESSION_ABSENT] does not mean "ended" — the
+     * repository maps read failures to a null session, so a long tunnel is
+     * indistinguishable from an erased node, and that is precisely why the
+     * absent path has a grace window rather than stopping outright. Clearing on
+     * it would let a restart within the same `sessionId` re-anchor a fresh
+     * 4h05m, in exactly the unparseable-expiry case the ceiling bounds.
+     *
+     * [LiveSharingStopReason.SIGNED_OUT] is treated the same way, which is
+     * stricter than it strictly needs to be: the session can still be ACTIVE
+     * server-side, so if the user signs back in and resumes it the original
+     * bound should still apply.
+     *
+     * Retaining an anchor costs nothing — it is a single entry keyed by
+     * `sessionId`, superseded by the next session and never read by one with a
+     * different id. Erring toward keeping the bound is the safe direction.
      */
     private fun stop(reason: LiveSharingStopReason): LiveSharingDecision {
-        anchorStore.clear()
+        if (reason == LiveSharingStopReason.SESSION_ENDED ||
+            reason == LiveSharingStopReason.EXPIRED
+        ) {
+            anchorStore.clear()
+        }
         return LiveSharingDecision.Stop(reason)
     }
 
