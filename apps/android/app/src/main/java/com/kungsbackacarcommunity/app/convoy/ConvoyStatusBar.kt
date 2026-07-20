@@ -445,6 +445,12 @@ fun ConvoyStatusBar(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // NOTE: this is the RAW `onSetDestination` parameter, not
+                        // the confirm-first wrapper handed to ConvoyDestinationRow
+                        // above. That wrapper is an argument expression and binds
+                        // nothing in this scope, so confirming here goes straight
+                        // to the host's picker and cannot re-open this dialog.
+                        // The ordering below is therefore not load-bearing either.
                         confirmOverwrite = false
                         onSetDestination?.invoke()
                     },
