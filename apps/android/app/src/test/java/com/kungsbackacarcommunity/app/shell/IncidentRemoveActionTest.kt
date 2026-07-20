@@ -5,6 +5,9 @@ import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentRepository
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -139,4 +142,60 @@ class IncidentRemoveActionTest {
 
         assertEquals("theirs", openSheetIncident(surface, controller)?.id)
     }
+
+    @Test
+    fun `a late removal does not close a sheet the user opened for a different incident`() =
+        runTest {
+            // The interleaving the test above does NOT cover, because it emits
+            // the second tap only after the removal has already finished:
+            //
+            //   1. tap A, press remove — the call goes out;
+            //   2. dismiss the sheet while it is still in flight;
+            //   3. tap B — a new sheet opens;
+            //   4. A's removal comes back successful.
+            //
+            // Step 4 must not close B's sheet. The tap channel is a single
+            // slot, so an unconditional consume on success clears whatever is
+            // in it — which by then is B, an incident nobody asked to remove
+            // and which is still on the map.
+            val seeded = listOf(incidentAt("mine"), incidentAt("theirs"))
+            val gate = CompletableDeferred<Unit>()
+            val repository =
+                object : IncidentRepository {
+                    override suspend fun report(
+                        type: IncidentType,
+                        location: LatLng,
+                        note: String?,
+                    ): Incident = Incident(id = "new", type = type, longitude = 0.0, latitude = 0.0)
+
+                    override suspend fun listNearby(
+                        center: LatLng,
+                        radiusMeters: Double,
+                    ): List<Incident> = seeded
+
+                    // Holds the removal open so the taps below land in the
+                    // middle of it, rather than before or after.
+                    override suspend fun remove(incidentId: String) = gate.await()
+                }
+            val controller = controllerWith(repository)
+            val surface = StubMapSurface(autoLoad = false)
+
+            surface.emitIncidentTap("mine")
+            val removal = async { runIncidentRemoval(controller, surface, "mine") }
+            runCurrent()
+
+            // The user dismisses, then opens a different incident, all while
+            // the first removal is still out.
+            surface.consumeIncidentTap()
+            surface.emitIncidentTap("theirs")
+
+            gate.complete(Unit)
+            assertTrue("the removal should have been accepted", removal.await())
+
+            assertEquals(
+                "a late removal of another incident closed the sheet the user is looking at",
+                "theirs",
+                openSheetIncident(surface, controller)?.id,
+            )
+        }
 }

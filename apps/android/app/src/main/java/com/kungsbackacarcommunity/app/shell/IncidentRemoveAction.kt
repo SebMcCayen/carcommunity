@@ -23,6 +23,15 @@ import com.kungsbackacarcommunity.app.incidents.IncidentReportController
  *    used to, before the outcome was even known — made a removal that never
  *    happened look identical to one that did, and took the incident away from
  *    the user before they could retry it.
+ *
+ * The accepted case consumes the tap ONLY IF the pending tap is still the
+ * incident that was removed. `incidentTap` is a single slot, not a queue, so an
+ * unconditional consume clears whatever happens to be in it by the time the
+ * backend answers — which is not necessarily what was asked about. Keeping the
+ * sheet open across the round-trip is what opens that window: the user can
+ * dismiss mid-flight, tap a DIFFERENT incident, and have the first removal land
+ * afterwards and close the second incident's sheet, an incident nobody asked to
+ * remove and which is still on the map.
  */
 suspend fun runIncidentRemoval(
     controller: IncidentReportController,
@@ -30,7 +39,7 @@ suspend fun runIncidentRemoval(
     incidentId: String,
 ): Boolean {
     val removed = controller.remove(incidentId)
-    if (removed) {
+    if (removed && mapSurface.incidentTap.value == incidentId) {
         mapSurface.consumeIncidentTap()
     }
     return removed
