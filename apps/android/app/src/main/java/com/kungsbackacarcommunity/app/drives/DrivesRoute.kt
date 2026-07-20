@@ -64,6 +64,15 @@ fun DrivesRoute(
         }
     }
 
+    // The stats level is folded over the loaded list, so it is only valid while
+    // the drives are Loaded. If they leave Loaded WHILE stats is open (a
+    // transient Firestore listener error, a retry/resubscribe), permanently exit
+    // the level back to the list — the list renders the real loading/error state,
+    // whereas an empty-drives fold would read as a misleading "no drives" page.
+    LaunchedEffect(showStats, loaded == null) {
+        if (showStats && loaded == null) showStats = false
+    }
+
     val selected = loaded?.drives?.firstOrNull { it.rideId == selectedRideId }
 
     // System/gesture Back unwinds one internal level (detail/stats -> list); at
@@ -77,22 +86,34 @@ fun DrivesRoute(
         coordinator.reset()
     }
 
-    when {
-        selectedRideId != null && selected != null ->
-            SavedDriveDetailScreen(
-                drive = selected,
-                deleteStatus = deleteStatus,
-                onDelete = { rideId -> scope.launch { coordinator.delete(rideId) } },
-                onBack = {
-                    selectedRideId = null
-                    coordinator.reset()
-                },
-            )
+    val level =
+        drivesLevel(
+            hasSelectedDrive = selectedRideId != null && selected != null,
+            showStats = showStats,
+            isLoaded = loaded != null,
+        )
+    when (level) {
+        DrivesLevel.DETAIL ->
+            // `selected` is non-null on this branch (see [drivesLevel]); the
+            // null-check re-establishes the smart cast for the compiler.
+            selected?.let { drive ->
+                SavedDriveDetailScreen(
+                    drive = drive,
+                    deleteStatus = deleteStatus,
+                    onDelete = { rideId -> scope.launch { coordinator.delete(rideId) } },
+                    onBack = {
+                        selectedRideId = null
+                        coordinator.reset()
+                    },
+                )
+            }
 
-        showStats ->
-            DriveStatsScreen(drives = loaded?.drives ?: emptyList())
+        DrivesLevel.STATS ->
+            // `loaded` is non-null on this branch (see [drivesLevel]); never fed
+            // an empty fold when the drives have left the Loaded state.
+            loaded?.let { DriveStatsScreen(drives = it.drives) }
 
-        else ->
+        DrivesLevel.LIST ->
             DrivesListScreen(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
@@ -101,6 +122,25 @@ fun DrivesRoute(
             )
     }
 }
+
+/** The mutually-exclusive internal levels [DrivesRoute] can render, in priority order. */
+internal enum class DrivesLevel { DETAIL, STATS, LIST }
+
+/**
+ * Pure routing decision for [DrivesRoute]. Both drill-in levels are only valid
+ * while their backing data is present: detail needs the selected drive to still
+ * resolve ([hasSelectedDrive]), and stats needs the drive list to still be
+ * Loaded ([isLoaded]). When either backing datum drops out (a transient listener
+ * error, a retry/resubscribe), this falls back to [DrivesLevel.LIST] so the list
+ * screen can render the real loading/error state instead of a stale or empty
+ * drill-in view.
+ */
+internal fun drivesLevel(hasSelectedDrive: Boolean, showStats: Boolean, isLoaded: Boolean): DrivesLevel =
+    when {
+        hasSelectedDrive -> DrivesLevel.DETAIL
+        showStats && isLoaded -> DrivesLevel.STATS
+        else -> DrivesLevel.LIST
+    }
 
 /** Stable feature key for the saved-drives list (a backend fingerprint input). */
 private const val FEATURE_DRIVES_LIST = "drives.list"

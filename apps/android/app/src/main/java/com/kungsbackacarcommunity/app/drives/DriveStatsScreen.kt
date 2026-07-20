@@ -13,8 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.util.Calendar
 
@@ -54,7 +54,7 @@ fun DriveStatsScreen(
                     text = stringResource(R.string.savedDrives_statsEmpty),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
                 )
             }
             return@AeroPage
@@ -104,8 +104,8 @@ fun DriveStatsScreen(
 private fun StatsCard(header: String, content: @Composable ColumnScope.() -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
             Text(
                 text = header,

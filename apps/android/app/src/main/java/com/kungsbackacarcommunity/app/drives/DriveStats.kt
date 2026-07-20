@@ -7,9 +7,10 @@ package com.kungsbackacarcommunity.app.drives
  * ([FirebaseDrivesRepository.observeDrives]) is an owner query with no `limit`,
  * so the snapshot already carries the member's ENTIRE drive history in memory.
  * A client-side fold over that list is therefore a correct lifetime total, not a
- * per-page total. If the read model ever gains pagination, these figures would
- * silently become "loaded drives only" and would need a backend aggregate — see
- * the PR notes.
+ * per-page total. WARNING: this correctness depends on the drives list being
+ * FULLY loaded (not paginated). If the read model ever gains pagination, these
+ * figures would silently become "loaded drives only" and would need a backend
+ * aggregate instead of this fold.
  *
  * Every figure reuses the same per-drive fields the list already shows
  * (server-computed distance/duration/average speed); nothing here reads route
