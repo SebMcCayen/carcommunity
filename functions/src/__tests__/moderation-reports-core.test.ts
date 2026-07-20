@@ -403,6 +403,28 @@ describe('buildUserReportRepeatUpdate', () => {
 describe('buildUserSummaryUpdate', () => {
   const increment = (by: number) => `INCREMENT(${by})`;
 
+  it('names its timestamp exactly as the report documents do', () => {
+    // The summary and the report rows are read side by side during triage. Two
+    // near-identical spellings (`lastReportAt` / `lastReportedAt`) for the same
+    // concept is how a later admin query silently reads undefined, so the name
+    // is pinned against the report builder rather than written out twice.
+    const reportKeys = Object.keys(buildUserReportDocument(
+      {
+        reportedUserId: 'u2',
+        reporterUserId: 'u1',
+        reason: 'spam',
+        details: undefined,
+        snapshot: { displayName: null, avatarPath: null },
+      },
+      ts,
+    ));
+    const timestampKey = reportKeys.find((key) => key.startsWith('last'));
+    expect(timestampKey).toBe('lastReportedAt');
+    expect(
+      Object.keys(buildUserSummaryUpdate({ reportedUserId: 'u2', newReporter: true }, increment, ts)),
+    ).toContain(timestampKey);
+  });
+
   it('counts a distinct reporter only when the report document is new', () => {
     expect(
       buildUserSummaryUpdate({ reportedUserId: 'u2', newReporter: true }, increment, ts),

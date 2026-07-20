@@ -928,7 +928,7 @@ describe('Firestore – moderationReports is callable-only', () => {
         reportedUserId: 'bad-actor',
         reporterCount: 3,
         totalSubmissions: 5,
-        lastReportAt: serverTimestamp(),
+        lastReportedAt: serverTimestamp(),
       });
     });
     const reporter = testEnv.authenticatedContext(REPORTER);

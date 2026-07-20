@@ -545,6 +545,6 @@ export function buildUserSummaryUpdate(
     reportedUserId: input.reportedUserId,
     reporterCount: increment(input.newReporter ? 1 : 0),
     totalSubmissions: increment(1),
-    lastReportAt: ts,
+    lastReportedAt: ts,
   };
 }

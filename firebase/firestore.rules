@@ -828,7 +828,7 @@ service cloud.firestore {
     }
 
     // moderationUserSummaries – per-reported-user aggregate
-    // ({reporterCount, totalSubmissions, lastReportAt}), maintained in the same
+    // ({reporterCount, totalSubmissions, lastReportedAt}), maintained in the same
     // transaction as a moderation.reportUser write. Exists so the admin queue
     // can answer "how many DIFFERENT people have reported this person" in one
     // document read instead of a scan. Admin-only read: the counts are a
