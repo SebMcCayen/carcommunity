@@ -430,12 +430,28 @@ class StubMapSurface(
         convoyFitFlow.value = points
     }
 
-    /** No camera on the stub, so nothing can be projected. */
-    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? = null
+    // Test hook: the projection the stub should report, or null for "no map".
+    private var projectionForTest: ((Double, Double) -> MapScreenPoint?)? = null
+
+    /**
+     * No camera on the stub, so nothing can be projected — unless a test has
+     * installed a projection via [setProjectionForTest].
+     */
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? =
+        projectionForTest?.invoke(latitude, longitude)
 
     /** Test hook: pin a camera snapshot so overlay logic can be exercised off-device. */
     fun setCameraSnapshotForTest(snapshot: MapCameraSnapshot?) {
         cameraSnapshotFlow.value = snapshot
+    }
+
+    /**
+     * Test hook: stand in for the renderer's coordinate→pixel projection, so the
+     * convoy awareness overlay can be driven without a real Mapbox surface.
+     * Null (the default) keeps the stub's "there is no map" behaviour.
+     */
+    fun setProjectionForTest(projection: ((Double, Double) -> MapScreenPoint?)?) {
+        projectionForTest = projection
     }
 
     /** Number of [recenter] calls — used by tests to assert the wiring. */

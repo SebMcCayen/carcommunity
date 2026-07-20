@@ -14,11 +14,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,12 +108,37 @@ fun ConvoyMapAwarenessOverlay(
 
         val edgeInsetPx = with(LocalDensity.current) { EDGE_INSET.toPx() }
 
+        // TIME is the fourth thing that can change the answer, and unlike the
+        // camera, the roster and the viewport, nothing emits when it passes.
+        //
+        // A member who loses signal mid-drive does NOT disappear from [members]:
+        // their RTDB `latest` node is left behind by the publisher and keeps
+        // re-arriving unchanged (see LiveLocationRepository.recordedAtIso). So
+        // with the camera settled — parked at the meet point waiting for the rest
+        // of the convoy, the single most common convoy state — every `remember`
+        // key below stays equal, `plan` is never re-run, and the arrow goes on
+        // pointing confidently at a position its owner left ten minutes ago.
+        // That is exactly the outcome ConvoyArrowPlanner's STALE_AFTER_MS exists
+        // to prevent, and without this tick the planner is simply never asked
+        // again to apply it.
+        //
+        // So: re-ask on a timer. The tick is derived from STALE_AFTER_MS rather
+        // than written as its own constant, so the two cannot drift apart.
+        var staleTick by remember { mutableStateOf(nowMillis()) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(STALE_TICK_MS)
+                staleTick = nowMillis()
+            }
+        }
+
         // Recomputed whenever the camera settles somewhere new, the roster
-        // changes, or the viewport is resized — the three things that can change
-        // the answer. The projection call reaches into the live map, which is why
-        // it is keyed on the snapshot rather than memoised on the members alone.
+        // changes, the viewport is resized, or the staleness tick fires — the
+        // four things that can change the answer. The projection call reaches
+        // into the live map, which is why it is keyed on the snapshot rather than
+        // memoised on the members alone.
         val placements =
-            remember(snapshot, members, viewportSize, edgeInsetPx) {
+            remember(snapshot, members, viewportSize, edgeInsetPx, staleTick) {
                 ConvoyArrowPlanner.plan(
                     members = members,
                     cameraLatitude = snapshot.latitude,
@@ -120,7 +147,9 @@ fun ConvoyMapAwarenessOverlay(
                     viewportWidth = viewportSize.x.toFloat(),
                     viewportHeight = viewportSize.y.toFloat(),
                     edgeInsetPx = edgeInsetPx,
-                    nowMillis = nowMillis(),
+                    // The tick IS the clock reading, so the value that decided to
+                    // recompute is the same one the staleness test uses.
+                    nowMillis = staleTick,
                     project = { member ->
                         mapSurface.screenPositionFor(member.latitude, member.longitude)?.let {
                             ConvoyEdgeGeometry.ProjectedPoint(it.x, it.y)
@@ -344,3 +373,23 @@ private val PHOTO_SIZE = 34.dp
 // How far in from the viewport edge the arrows are pinned, so the chip and its
 // pointer stay fully on screen and clear of the rounded display corners.
 private val EDGE_INSET = 36.dp
+
+/**
+ * How often the overlay re-asks the planner purely because time has passed.
+ *
+ * A QUARTER of [ConvoyArrowPlanner.STALE_AFTER_MS] (so: 30s against the 2-minute
+ * staleness window), derived rather than hard-coded so the two cannot drift.
+ *
+ * The interval sets the worst-case overshoot: a position that crosses the
+ * staleness threshold immediately after a tick keeps its arrow until the next
+ * one, so a stale member is visible for at most
+ * `STALE_AFTER_MS + STALE_TICK_MS` — **2.5 minutes**, against a 2-minute bound.
+ * That slack is deliberate. Tightening it buys accuracy nobody can perceive (the
+ * arrow is already two minutes wrong at the moment it is due to vanish; the
+ * argument for removing it does not get materially stronger in the following 30
+ * seconds) and costs a wakeup and a full replan every few seconds for the whole
+ * time a convoy is on screen. 30s keeps the guarantee honest — the arrow always
+ * goes, and goes soon — at four replans a minute, each O(n log n) over at most
+ * MAX_CONVOY_INVITEES members of cheap trigonometry.
+ */
+internal val STALE_TICK_MS: Long = ConvoyArrowPlanner.STALE_AFTER_MS / 4
