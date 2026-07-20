@@ -9,10 +9,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
 import com.kungsbackacarcommunity.app.design.KccDarkColors
 import com.kungsbackacarcommunity.app.design.KccLightColors
+import com.kungsbackacarcommunity.app.design.ThemeController
+import com.kungsbackacarcommunity.app.design.ThemePreference
+import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.kungsbackacarcommunity.app.auth.AuthState
@@ -84,6 +88,12 @@ class MainActivity : ComponentActivity() {
     private val featureFlagsStore by lazy {
         FeatureFlagsStore(FirebaseFeatureFlagsRepository.createIfAvailable(applicationContext))
     }
+
+    // The user's Automatic/Light/Dark choice (Settings -> Appearance).
+    // Device-local SharedPreferences, so it is available before sign-in and
+    // survives process death; collected in setContent so a change re-themes the
+    // running app with no restart.
+    private val themePreferenceStore by lazy { ThemePreferenceStore(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -223,6 +233,31 @@ class MainActivity : ComponentActivity() {
                 signInCoordinator?.status?.collectAsState()?.value ?: SignInStatus.Idle
             val flags by featureFlagsStore.flags.collectAsState()
 
+            // THE app-wide light/dark decision, made exactly once, here.
+            // isSystemInDarkTheme() is an input to it — not the answer — so an
+            // explicit Light/Dark preference wins over the system flipping
+            // (scheduled sunset->sunrise, battery saver, manual toggle).
+            // Everything downstream reads the result: KccTheme via AppRoot, the
+            // OS bar tinting below, and the map's day/night default through
+            // LocalKccDarkTheme.
+            val themePreference by themePreferenceStore.preference.collectAsState()
+            val appDark = themePreference.resolveDark(isSystemInDarkTheme())
+
+            // Lets the Settings screen read and change the preference without
+            // threading two more parameters through AuthenticatedApp and
+            // RouteHost. Re-created when the preference changes so `preference`
+            // reports the current value.
+            val themeController =
+                remember(themePreference) {
+                    object : ThemeController {
+                        override val preference = themePreference
+
+                        override fun setPreference(preference: ThemePreference) {
+                            themePreferenceStore.set(preference)
+                        }
+                    }
+                }
+
             // Tear down a single-session drive recording when the signed-in user
             // goes away. The recording is process-scoped ON PURPOSE (its lifetime
             // is the live session's, which outlives the Activity — see
@@ -255,7 +290,10 @@ class MainActivity : ComponentActivity() {
             // resolved darkness recomputes the nav-bar tint and the bar icon
             // (light/dark) contrast on every sign-in/out, so the OS bars always
             // match the surface actually drawn behind them.
-            val displayDark = authState == AuthState.SignedOut || isSystemInDarkTheme()
+            //
+            // [appDark] — not isSystemInDarkTheme() — so the bars follow the
+            // user's theme preference along with the rest of the app.
+            val displayDark = authState == AuthState.SignedOut || appDark
             val window = window
             DisposableEffect(displayDark) {
                 window.navigationBarColor = translucentSystemNavBarColor(displayDark)
@@ -270,6 +308,8 @@ class MainActivity : ComponentActivity() {
             AppRoot(
                 authState = authState,
                 signInStatus = signInStatus,
+                darkTheme = appDark,
+                themeController = themeController,
                 onSignInClick = {
                     signInCoordinator?.let { coordinator ->
                         lifecycleScope.launch { coordinator.signIn() }

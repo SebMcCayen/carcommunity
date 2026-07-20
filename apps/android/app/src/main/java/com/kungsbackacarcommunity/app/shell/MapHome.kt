@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +76,7 @@ import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
@@ -210,6 +211,17 @@ fun MapHome(
     // legitimately contributes nothing. Defaults false so callers/tests that do
     // not wire incidents show no credit.
     trafikverketDataShown: Boolean = false,
+    /**
+     * The shell-owned holder for the manual day/night override (null inside it =
+     * follow the app theme).
+     *
+     * Supplied by the shell so the user's choice outlives this composable, which
+     * is disposed whenever a full-screen route opens — see the detailed note at
+     * the usage site. Passed as the state holder rather than a value + callback
+     * so callers that don't hoist keep working with local state instead of
+     * getting an inert toggle.
+     */
+    nightModeOverrideState: MutableState<MapMode?>? = null,
     // Optional convoy status bar, composed as the FIRST row of the top chrome
     // column (above the search row) while — and only while — the caller is in a
     // convoy. A slot rather than convoy parameters so the shell keeps knowing
@@ -257,26 +269,54 @@ fun MapHome(
     // dropping the user's manual override — until the system theme flipped or the
     // user toggled manually again. Applying the effective mode here means the
     // manual choice survives a surface swap.
-    // Persisted with [rememberSaveable] (not plain [remember]) so the user's manual
-    // day/night override survives configuration changes / activity recreation (e.g.
-    // rotation). With plain remember it would reset to null on rotation and the
-    // effect below would immediately snap the map back to [systemDefaultMode],
-    // dropping the manual choice. MapMode is a simple enum, so a name-based Saver
-    // stores the nullable value.
-    var desiredMapMode by rememberSaveable(
-        stateSaver = Saver(
-            save = { it?.name },
-            // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
-            // e.g. after an app update that renames/removes an enum value, or
-            // corrupted saved state — which would crash activity recreation.
-            // entries.find returns null for an unknown name (falls back to
-            // "follow system") instead of throwing.
-            restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
-        ),
-    ) { mutableStateOf<MapMode?>(null) }
-    val systemInDark = isSystemInDarkTheme()
-    val systemDefaultMode = if (systemInDark) MapMode.Night else MapMode.Day
-    LaunchedEffect(mapSurface, systemInDark, desiredMapMode) {
+    // The user's manual day/night override, or null while the map follows the
+    // app theme.
+    //
+    // HOISTED when [nightModeOverrideState] is supplied, and that hoisting is a
+    // BUG FIX, not a refactor. Holding this state inside MapHome made the
+    // override survive rotation (rememberSaveable) but NOT navigation: the
+    // shell composes MapHome in the `else` branch of its route switch, so
+    // opening any full-screen route (Settings, Garage, Events, a chat...)
+    // removes MapHome from the composition entirely. rememberSaveable only
+    // survives recreation of the SAME composition slot — it is discarded on
+    // disposal, with no SaveableStateHolder here to retain it — so coming back
+    // from a route reset the override to null and the effect below immediately
+    // snapped the map to [systemDefaultMode]. With the system on dark that read
+    // as "the map keeps switching itself back to Night mode as I navigate
+    // around the app", which is exactly the reported bug. Owned by the shell
+    // (which outlives the route switch), the choice now sticks.
+    //
+    // Callers that don't hoist (previews, UI tests) fall back to local state and
+    // behave exactly as before, so the toggle still works in isolation.
+    val desiredMapModeState =
+        nightModeOverrideState
+            // Still rememberSaveable for the un-hoisted case: survives rotation
+            // / activity recreation. MapMode is a simple enum, so a name-based
+            // Saver stores the nullable value.
+            ?: rememberSaveable(
+                stateSaver = Saver(
+                    save = { it?.name },
+                    // SAFE parse: MapMode.valueOf(...) THROWS on an unknown constant name —
+                    // e.g. after an app update that renames/removes an enum value, or
+                    // corrupted saved state — which would crash activity recreation.
+                    // entries.find returns null for an unknown name (falls back to
+                    // "follow system") instead of throwing.
+                    restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
+                ),
+            ) { mutableStateOf<MapMode?>(null) }
+    var desiredMapMode by desiredMapModeState
+
+    // Follows the APP theme, not the raw system setting: with an explicit
+    // Light/Dark preference (Settings -> Appearance) the map's default day/night
+    // must match the app the user chose, otherwise picking Light in bright
+    // sunshine would still leave a night-styled map. LocalKccDarkTheme is the
+    // resolved value KccTheme is actually rendering with, which equals
+    // isSystemInDarkTheme() when the preference is Automatic — so the original
+    // "live-follow the system sunset->sunrise flip" behaviour is unchanged on
+    // the default setting.
+    val appInDark = LocalKccDarkTheme.current
+    val systemDefaultMode = if (appInDark) MapMode.Night else MapMode.Day
+    LaunchedEffect(mapSurface, appInDark, desiredMapMode) {
         mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
@@ -608,6 +648,9 @@ const val MAP_HOME_LAYERS_POPUP_TAG = "map_home_layers_popup"
 /** Test tag on the incidents ("Traffic alerts") layer toggle switch. */
 const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
 
+/** Test tag on the map day/night ("Night mode") layer toggle switch. */
+const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
+
 /** Test tag on the floating live-location broadcast control. */
 const val MAP_HOME_LIVE_TAG = "map_home_live"
 
@@ -712,6 +755,7 @@ private fun MapLayersPopup(
                     label = stringResource(R.string.shell_layersNightMode),
                     checked = nightMode,
                     onCheckedChange = onNightModeChange,
+                    switchTestTag = MAP_HOME_LAYERS_NIGHT_TAG,
                 )
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layers3d),

@@ -12,7 +12,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +70,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
+import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
@@ -343,8 +343,16 @@ fun TurnByTurnNavScreen(
     // Pick the navigation style from the app's day/night signal so turn-by-turn
     // matches the rest of the UI. Keyed on the theme, so a light/dark flip reloads
     // the map with the matching style.
+    //
+    // That signal is LocalKccDarkTheme (the darkness KccTheme actually resolved),
+    // NOT isSystemInDarkTheme(): with the Appearance preference set to Light or
+    // Dark the system value is no longer what the app renders, so reading it here
+    // would drop the user into a night-styled navigation screen inside a light
+    // app. This screen composes inside AppRoot's KccTheme, so the local is
+    // provided. On the default Automatic preference the two are identical, so
+    // navigation styling is unchanged for anyone who never opens the setting.
     val navStyleUri =
-        if (isSystemInDarkTheme()) {
+        if (LocalKccDarkTheme.current) {
             NavigationStyles.NAVIGATION_NIGHT_STYLE
         } else {
             NavigationStyles.NAVIGATION_DAY_STYLE

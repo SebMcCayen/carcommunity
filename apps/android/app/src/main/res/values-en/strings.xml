@@ -144,6 +144,13 @@
     <string name="settingsMenu_version">Version %1$s</string>
     <string name="settingsMenu_aboutSection">About the app</string>
     <string name="settingsMenu_whatsNew">What’s new</string>
+    <string name="settingsMenu_appearanceSection">Appearance</string>
+    <string name="settingsMenu_themeAutomatic">Automatic</string>
+    <string name="settingsMenu_themeAutomaticDescription">Follows your device’s light or dark setting</string>
+    <string name="settingsMenu_themeLight">Light</string>
+    <string name="settingsMenu_themeLightDescription">Always light, whatever the device does</string>
+    <string name="settingsMenu_themeDark">Dark</string>
+    <string name="settingsMenu_themeDarkDescription">Always dark, whatever the device does</string>
     <string name="privacySettings_title">Privacy</string>
     <string name="privacySettings_partnerStatsTitle">Anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsBody">I want to contribute anonymised partner statistics.</string>

@@ -51,6 +51,19 @@ val LocalKccStatusColors = staticCompositionLocalOf {
     )
 }
 
+/**
+ * Whether the [KccTheme] currently in effect is the dark scheme.
+ *
+ * Read this instead of `isSystemInDarkTheme()` anywhere inside the app's theme:
+ * the system value is only one input to the decision (the user's
+ * [ThemePreference] can override it), so calling the system directly renders
+ * against a theme the app is not actually using.
+ *
+ * Defaults to false for composables outside a [KccTheme] (previews, isolated
+ * component tests); every real screen is inside one.
+ */
+val LocalKccDarkTheme = staticCompositionLocalOf { false }
+
 private val LightColorScheme = lightColorScheme(
     primary = KccLightColors.brandPrimary,
     onPrimary = KccPalette.inkBlack,
@@ -148,7 +161,15 @@ fun KccTheme(
         success = if (darkTheme) KccDarkColors.statusSuccess else KccLightColors.statusSuccess,
         warning = if (darkTheme) KccDarkColors.statusWarning else KccLightColors.statusWarning,
     )
-    CompositionLocalProvider(LocalKccStatusColors provides statusColors) {
+    CompositionLocalProvider(
+        LocalKccStatusColors provides statusColors,
+        // Publish the RESOLVED darkness so descendants that need to know
+        // whether the app is currently dark (the map's day/night default) read
+        // the theme actually in effect instead of calling isSystemInDarkTheme()
+        // themselves. Without this they bypass the user's theme preference and
+        // silently follow the system — which is the bug this replaced.
+        LocalKccDarkTheme provides darkTheme,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = KccTypography,

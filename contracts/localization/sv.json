@@ -158,7 +158,14 @@
     "terms": "Användarvillkor",
     "version": "Version %1$s",
     "aboutSection": "Om appen",
-    "whatsNew": "Vad är nytt"
+    "whatsNew": "Vad är nytt",
+    "appearanceSection": "Utseende",
+    "themeAutomatic": "Automatiskt",
+    "themeAutomaticDescription": "Följer enhetens ljusa eller mörka läge",
+    "themeLight": "Ljust",
+    "themeLightDescription": "Alltid ljust, oavsett vad enheten gör",
+    "themeDark": "Mörkt",
+    "themeDarkDescription": "Alltid mörkt, oavsett vad enheten gör"
   },
   "privacySettings": {
     "title": "Integritet",
