@@ -434,8 +434,9 @@ fun MapHome(
             val statusColors = LocalKccStatusColors.current
             // 1. Report-incident control — opens the type picker. Shown only
             //    when incident reporting is available (a repository configured);
-            //    when it is not, the live-location control leads the stack and
-            //    nothing else shifts, so the stack has no gap and no placeholder.
+            //    when it is not, the remaining controls close up by one slot and
+            //    live-location leads — no gap, no placeholder holding its place.
+            //    Their order relative to each other is what does not change.
             //    Deliberately takes CircleControl's DEFAULT surface/onSurface
             //    colours (like the compass and recenter controls) rather than
             //    the amber warning colour: it is an "open the report picker"

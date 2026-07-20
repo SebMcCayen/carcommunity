@@ -642,9 +642,12 @@ class MapboxMapSurface : MapSurface {
      * town camera when there is no fix yet), keeping the current 3D tilt, and —
      * when [resetBearingToNorth] — rotating back to north-up in the same move.
      * Shared by the my-location control ([recenter]), the compass
-     * ([recenterNorthUp]) and the 10-second idle-return timer so the re-centre
-     * animation is identical for all three. A no-op until the map is composed;
-     * wrapped defensively so a missing fix/permission never crashes.
+     * ([recenterNorthUp]) and the 10-second idle-return timer: same target, same
+     * zoom, same pitch, same easing and duration for all three, so a re-centre
+     * never looks like a different gesture depending on what triggered it. The
+     * ONE thing that varies is [resetBearingToNorth] — the compass alone folds a
+     * rotation back to north into this same camera update. A no-op until the map
+     * is composed; wrapped defensively so a missing fix/permission never crashes.
      *
      * With no fix ([lastPoint] null — no location yet, or permission denied) the
      * camera still moves, to the default town camera, which is the established
