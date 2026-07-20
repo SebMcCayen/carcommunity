@@ -39,7 +39,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
@@ -65,6 +65,7 @@ import {
   buildMemberEntry,
   computeConvoySummary,
   isAcceptedConvoyMember,
+  isBlockedAgainstAnyPeer,
   isConvoyMember,
   memberEntry,
   parseConvoyIdInput,
@@ -73,6 +74,7 @@ import {
   parseListConvoysInput,
   parseRespondConvoyInput,
   parseSetConvoyDestinationInput,
+  resolvePeerBlockPairs,
   toConvoyDestination,
   toConvoySummary,
   toProfileProjection,
@@ -159,26 +161,66 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
  * The reason is still the neutral `not_found`, so nothing about who blocked
  * whom leaks to the inviter.
  *
- * Per-invitee reads run concurrently (index-aligned outcomes), but the output
- * arrays are assembled sequentially in REQUEST order, which clients rely on.
- * The self/duplicate/already-member classification runs in each task's
- * synchronous prologue (before the first await), so `seen` is populated in
- * request order too.
+ * The peer block matrix is resolved ONCE up front (resolvePeerBlockPairs) in
+ * candidates + peers reads rather than per-invitee-per-peer point reads, which
+ * would be 2·candidates·peers — 1200 reads at the shipped bounds. See the
+ * cost note on resolvePeerBlockPairs.
+ *
+ * Per-invitee reads run concurrently (index-aligned outcomes), and the ORDERED
+ * outcome list is returned so the caller can reclassify an entry (convoy.invite
+ * does, for uids a concurrent invite already added) without losing the REQUEST
+ * order clients rely on. The self/duplicate/already-member classification runs
+ * in each task's synchronous prologue (before the first await), so `seen` is
+ * populated in request order too.
  */
 type InviteeOutcome =
   | { kind: 'invited'; uid: string; profile: ProfileProjection }
   | { kind: 'skipped'; skip: SkippedInvitee };
+
+/** Uids this blocker has blocked, out of `blockedUids` (≤ BLOCK_LOOKUP_CHUNK_SIZE). */
+async function queryBlockedSubset(blockerUid: string, blockedUids: string[]): Promise<string[]> {
+  const snap = await db
+    .collection('userBlocks')
+    .doc(blockerUid)
+    .collection('blocked')
+    .where(FieldPath.documentId(), 'in', blockedUids)
+    .get();
+  return snap.docs.map((doc) => doc.id);
+}
+
+/** Splits an ordered outcome list into the two response arrays, in request order. */
+function partitionInviteeOutcomes(outcomes: InviteeOutcome[]): {
+  invited: Array<{ uid: string; profile: ProfileProjection }>;
+  skipped: SkippedInvitee[];
+} {
+  const invited: Array<{ uid: string; profile: ProfileProjection }> = [];
+  const skipped: SkippedInvitee[] = [];
+  for (const outcome of outcomes) {
+    if (outcome.kind === 'invited') {
+      invited.push({ uid: outcome.uid, profile: outcome.profile });
+    } else {
+      skipped.push(outcome.skip);
+    }
+  }
+  return { invited, skipped };
+}
 
 async function resolveInvitees(
   inviterUid: string,
   requestedUids: string[],
   existingMemberUids: string[],
   blockPeerUids: string[],
-): Promise<{ invited: Array<{ uid: string; profile: ProfileProjection }>; skipped: SkippedInvitee[] }> {
+): Promise<InviteeOutcome[]> {
   const existing = new Set(existingMemberUids);
   const seen = new Set<string>();
 
-  const outcomes = await Promise.all(
+  const peerBlockPairs = await resolvePeerBlockPairs(
+    requestedUids,
+    blockPeerUids,
+    queryBlockedSubset,
+  );
+
+  return Promise.all(
     requestedUids.map(async (uid): Promise<InviteeOutcome> => {
       if (uid === inviterUid) {
         return { kind: 'skipped', skip: { uid, reason: 'self' } };
@@ -191,24 +233,20 @@ async function resolveInvitees(
         return { kind: 'skipped', skip: { uid, reason: 'already_member' } };
       }
 
-      const [friendSnap, inviterBlockedThem, theyBlockedInviter, profile, peerBlocks] =
-        await Promise.all([
-          friendshipRef(inviterUid, uid).get(),
-          blockRef(inviterUid, uid).get(),
-          blockRef(uid, inviterUid).get(),
-          loadProfile(uid),
-          Promise.all(
-            blockPeerUids.flatMap((peerUid) => [
-              blockRef(peerUid, uid).get(),
-              blockRef(uid, peerUid).get(),
-            ]),
-          ),
-        ]);
+      const [friendSnap, inviterBlockedThem, theyBlockedInviter, profile] = await Promise.all([
+        friendshipRef(inviterUid, uid).get(),
+        blockRef(inviterUid, uid).get(),
+        blockRef(uid, inviterUid).get(),
+        loadProfile(uid),
+      ]);
 
       if (
         inviterBlockedThem.exists ||
         theyBlockedInviter.exists ||
-        peerBlocks.some((snap) => snap.exists)
+        // Resolved up front for the whole batch, not per pair — see
+        // resolvePeerBlockPairs. Same semantics: a block in EITHER direction
+        // against ANY accepted peer drops the candidate.
+        isBlockedAgainstAnyPeer(uid, blockPeerUids, peerBlockPairs)
       ) {
         // Neutral reason — never reveals a block edge (privacy parity with
         // friends/dm, which never distinguish who blocked whom in
@@ -227,18 +265,6 @@ async function resolveInvitees(
       return { kind: 'invited', uid, profile };
     }),
   );
-
-  // Assemble outputs in request order (index-aligned to requestedUids).
-  const invited: Array<{ uid: string; profile: ProfileProjection }> = [];
-  const skipped: SkippedInvitee[] = [];
-  for (const outcome of outcomes) {
-    if (outcome.kind === 'invited') {
-      invited.push({ uid: outcome.uid, profile: outcome.profile });
-    } else {
-      skipped.push(outcome.skip);
-    }
-  }
-  return { invited, skipped };
 }
 
 /**
@@ -303,7 +329,9 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   // account, not self, not listed twice). A brand-new convoy has no existing
   // members and no other members to check blocks against, so both peer sets are
   // empty here — which is the only difference from convoy.invite.
-  const { invited, skipped } = await resolveInvitees(actor.uid, inviteeUids, [], []);
+  const { invited, skipped } = partitionInviteeOutcomes(
+    await resolveInvitees(actor.uid, inviteeUids, [], []),
+  );
 
   if (invited.length === 0) {
     throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
@@ -646,6 +674,15 @@ export interface InviteToConvoyResult {
  * Notification: reuses the exact create path (writeInAppNotification under the
  * 'convoy_invite' category via notifyInvitees) rather than inventing a second
  * one, so an invitee's opt-out works identically however they were invited.
+ *
+ * IDEMPOTENT in the uid sense: inviting someone who is already in the convoy —
+ * whether they were there before the call or a concurrent invite added them
+ * mid-call — SUCCEEDS with `invited: []` and an `already_member` skip, because
+ * the post-state the caller asked for is the post-state that exists. Only a
+ * request in which nothing was addable AND nothing was already a member is a
+ * failed-precondition; that caller really did ask for something that did not
+ * happen. No new response field is needed: the count of `invited` and the
+ * `already_member` reason already say which of the two it was.
  */
 export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToConvoyResult> => {
   const actor = await requireMemberActor(request);
@@ -681,7 +718,7 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   }
 
   const inviterProfile = await loadProfile(actor.uid);
-  const { invited, skipped } = await resolveInvitees(
+  const outcomes = await resolveInvitees(
     actor.uid,
     inviteeUids,
     existingMemberUids,
@@ -690,12 +727,35 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
     // a block between them and a new invitee is not yet a shared room.
     acceptedMemberUids(preData).filter((uid) => uid !== actor.uid),
   );
+  const { invited } = partitionInviteeOutcomes(outcomes);
 
+  // IDEMPOTENCE, not "no valid invitees". Nothing to add is only an ERROR when
+  // none of the requested uids is already in the convoy: then the caller asked
+  // for something that genuinely did not happen (non-friends, strangers) and
+  // deserves to hear so. If at least one was `already_member`, the state they
+  // asked for is the state that exists — the honest answer is success with
+  // `invited: []` and the reason in `skipped`, not a failure that a client has
+  // to translate back into "actually, fine".
+  const alreadyMember = outcomes.some(
+    (o) => o.kind === 'skipped' && o.skip.reason === 'already_member',
+  );
   if (invited.length === 0) {
-    throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
+    if (!alreadyMember) {
+      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
+    }
+    const current = await ref.get();
+    return {
+      convoy: toConvoySummary(convoyId, current.data() ?? {}, actor.uid, toIso),
+      invited: [],
+      skipped: partitionInviteeOutcomes(outcomes).skipped,
+    };
   }
 
   let addedUids: string[] = [];
+  // Uids a CONCURRENT invite added between the pre-read and this transaction.
+  // Reclassified as `already_member` below rather than failing the call: the
+  // desired state is already true, and the race is not the caller's business.
+  const racedUids = new Set<string>();
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -715,8 +775,18 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
     const currentMemberUids = Array.isArray(data.memberUids) ? (data.memberUids as string[]) : [];
     const currentSet = new Set(currentMemberUids);
     const stillNew = invited.filter((i) => !currentSet.has(i.uid));
+    racedUids.clear();
+    for (const invitee of invited) {
+      if (currentSet.has(invitee.uid)) racedUids.add(invitee.uid);
+    }
     if (stillNew.length === 0) {
-      throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
+      // Every requested invitee was added by a concurrent invite while this
+      // call was resolving them. The post-state the caller asked for is the
+      // post-state that exists, so this is an idempotent no-op: they come back
+      // as `already_member` skips, not a failed-precondition. (The transaction
+      // may be retried, hence racedUids being rebuilt from scratch each pass.)
+      addedUids = [];
+      return;
     }
     if (currentMemberUids.length + stillNew.length > MAX_CONVOY_SIZE) {
       // Refuse the whole batch rather than adding a prefix of it: silently
@@ -760,6 +830,18 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
     inviterProfile?.displayName ?? null,
     convoyId,
     typeof freshData.title === 'string' ? freshData.title : null,
+  );
+
+  // Reclassify the raced uids IN PLACE in the ordered outcome list rather than
+  // appending them, so `skipped` stays in REQUEST order even in the race.
+  const { skipped } = partitionInviteeOutcomes(
+    racedUids.size === 0
+      ? outcomes
+      : outcomes.map((outcome) =>
+          outcome.kind === 'invited' && racedUids.has(outcome.uid)
+            ? { kind: 'skipped', skip: { uid: outcome.uid, reason: 'already_member' } }
+            : outcome,
+        ),
   );
 
   return {
@@ -844,22 +926,28 @@ export const setDestination = onCall(
       >;
       const setByDisplayName = toProfileProjection(profiles[actor.uid]).displayName;
 
-      tx.set(
-        ref,
-        {
-          // The whole object at once — not field-by-field — so no reader ever
-          // sees a new coordinate paired with the previous label.
-          destination: {
-            latitude,
-            longitude,
-            label: label ?? null,
-            setByUid: actor.uid,
-            setByDisplayName,
-            setAt: Timestamp.fromDate(new Date()),
-          },
+      // tx.update (NOT set-with-merge) because a merge deep-merges nested maps:
+      // omitting `label` under a merge would leave the PREVIOUS pick's label
+      // attached to the new coordinates — exactly the half-updated destination
+      // this write is supposed to make unobservable. update() replaces the
+      // whole `destination` map, so the object below is the object stored.
+      tx.update(ref, {
+        destination: {
+          latitude,
+          longitude,
+          // Stored ABSENT when there is no label (including blank-after-trim),
+          // as the schema and the field docs both say — not as null. Wire-side
+          // this is unchanged: toConvoyDestination maps a missing label to
+          // `label: null` either way.
+          ...(label === undefined ? {} : { label }),
+          setByUid: actor.uid,
+          setByDisplayName,
+          // Server clock, not the function instance's wall clock: a runtime
+          // Date is skewed per instance and not monotonic across them, which
+          // would make setAt useless for ordering two near-simultaneous picks.
+          setAt: FieldValue.serverTimestamp(),
         },
-        { merge: true },
-      );
+      });
     });
 
     const fresh = await ref.get();

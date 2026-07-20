@@ -44,7 +44,7 @@ import {
 } from 'firebase/firestore';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { Timestamp, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PROJECT_ID = 'demo-test';
@@ -687,6 +687,51 @@ describe('convoy-invite', () => {
     expect(stored.data()!.memberUids).not.toContain(blocker.uid);
   }, 60_000);
 
+  it('is IDEMPOTENT when everyone requested is already in the convoy', async () => {
+    const { owner, convoyId } = await convoyWithAcceptedMember('IdemOwnerC', 'IdemMemberC');
+    const friend = await newMember('IdemFriendC');
+    const stranger = await newMember('IdemStrangerC');
+    await makeFriends(owner, friend);
+
+    await signInAs(owner);
+    const first = (await call('convoy-invite', { convoyId, inviteeUids: [friend.uid] }))
+      .data as { invited: string[] };
+    expect(first.invited).toEqual([friend.uid]);
+
+    // TEETH: this second call previously threw failed-precondition ("No one
+    // could be added"), even though the post-state the caller asked for is
+    // exactly the post-state that exists. Nothing to add is a SUCCESS with an
+    // empty `invited`, not an error the client has to re-interpret.
+    const again = (await call('convoy-invite', { convoyId, inviteeUids: [friend.uid] })).data as {
+      convoy: ConvoySummary;
+      invited: string[];
+      skipped: Array<{ uid: string; reason: string }>;
+    };
+    expect(again.invited).toEqual([]);
+    expect(again.skipped).toEqual([{ uid: friend.uid, reason: 'already_member' }]);
+    // Idempotent for real: no duplicate roster entry, and the existing invite
+    // was not reset.
+    expect(again.convoy.memberUids.filter((uid) => uid === friend.uid)).toHaveLength(1);
+    expect(again.convoy.members.find((m) => m.uid === friend.uid)!.inviteStatus).toBe('invited');
+
+    // A batch mixing an existing member with someone who cannot be added is
+    // still a success — `skipped` carries both reasons, in REQUEST order.
+    const mixed = (
+      await call('convoy-invite', { convoyId, inviteeUids: [friend.uid, stranger.uid] })
+    ).data as { invited: string[]; skipped: Array<{ uid: string; reason: string }> };
+    expect(mixed.invited).toEqual([]);
+    expect(mixed.skipped).toEqual([
+      { uid: friend.uid, reason: 'already_member' },
+      { uid: stranger.uid, reason: 'not_friend' },
+    ]);
+
+    // ...but a request naming NOBODY who is already in still fails: the caller
+    // asked for something that genuinely did not happen.
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [stranger.uid] })),
+    ).toBe('functions/failed-precondition');
+  }, 60_000);
+
   it('refuses a still-invited caller, an outsider, and an ended convoy', async () => {
     const owner = await newMember('InvGateOwnerC');
     const pending = await newMember('InvGatePendingC');
@@ -857,6 +902,47 @@ describe('convoy shared destination', () => {
       convoy: ConvoySummary;
     };
     expect(ownerCleared.convoy.destination).toBeNull();
+  }, 60_000);
+
+  it('stores a missing/blank label ABSENT and stamps setAt from the SERVER clock', async () => {
+    const { owner, convoyId } = await convoyWithAcceptedMember('LabelOwnerC', 'LabelMemberC');
+    await signInAs(owner);
+
+    const before = Date.now();
+    await call('convoy-setDestination', {
+      convoyId,
+      latitude: 57.4,
+      longitude: 12.0,
+      label: '   ', // blank AFTER TRIM
+    });
+    const stored = () =>
+      adminDb
+        .collection('convoys')
+        .doc(convoyId)
+        .get()
+        .then((snap) => snap.data()!.destination as Record<string, unknown>);
+
+    // TEETH: the field is ABSENT, as the schema and the field docs say — not
+    // stored as null. `Object.keys` is the assertion because reading
+    // `dest.label` is undefined either way.
+    expect(Object.keys(await stored())).not.toContain('label');
+
+    // setAt is a real server Timestamp, not the function instance's wall clock.
+    const setAt = (await stored()).setAt;
+    expect(setAt).toBeInstanceOf(Timestamp);
+    expect((setAt as Timestamp).toMillis()).toBeGreaterThanOrEqual(before - 60_000);
+
+    // A labelled pick REPLACED by an unlabelled one must not inherit the old
+    // label: the destination map is written whole, never merged field-by-field.
+    await call('convoy-setDestination', { convoyId, latitude: 57.5, longitude: 12.1, label: 'Torget' });
+    expect((await stored()).label).toBe('Torget');
+    const replaced = (
+      await call('convoy-setDestination', { convoyId, latitude: 57.6, longitude: 12.2 })
+    ).data as { convoy: ConvoySummary };
+    expect(Object.keys(await stored())).not.toContain('label');
+    // ...and the wire shape is unchanged either way: absent reads back as null.
+    expect(replaced.convoy.destination!.label).toBeNull();
+    expect(replaced.convoy.destination!.setAt).not.toBeNull();
   }, 60_000);
 
   it('SURVIVES convoy-end untouched (a record of where the convoy was headed)', async () => {

@@ -19,6 +19,12 @@ import {
   parseListConvoysInput,
   parseRespondConvoyInput,
   parseSetConvoyDestinationInput,
+  BLOCK_LOOKUP_CHUNK_SIZE,
+  MAX_CONVOY_SIZE,
+  blockPairKey,
+  chunkUids,
+  isBlockedAgainstAnyPeer,
+  resolvePeerBlockPairs,
   toConvoyDestination,
   toConvoySummary,
   toProfileProjection,
@@ -428,5 +434,110 @@ describe('convoy-core destination projection', () => {
     // An unattributable destination keeps setByUid '' — the client treats that
     // as "someone else's", so it never offers a clear the server would refuse.
     expect(toConvoyDestination({ latitude: 57, longitude: 12 }, iso)?.setByUid).toBe('');
+  });
+});
+
+
+describe('peer block resolution (convoy.invite fan-out cost)', () => {
+  /**
+   * A recording stand-in for the Firestore lookup. `reads` is the number of
+   * billed reads the real implementation would incur: a
+   * `documentId() in [...]` query bills per document RETURNED, and one read
+   * when it returns nothing.
+   */
+  function recorder(blocks: Array<[string, string]> = []) {
+    const edges = new Set(blocks.map(([a, b]) => blockPairKey(a, b)));
+    const calls: Array<{ blocker: string; ids: string[] }> = [];
+    const queryBlocked = async (blocker: string, ids: string[]) => {
+      calls.push({ blocker, ids });
+      return ids.filter((id) => edges.has(blockPairKey(blocker, id)));
+    };
+    return {
+      queryBlocked,
+      calls,
+      get reads() {
+        return calls.reduce((total, call) => {
+          const hits = call.ids.filter((id) => edges.has(blockPairKey(call.blocker, id))).length;
+          return total + Math.max(hits, 1);
+        }, 0);
+      },
+    };
+  }
+
+  const uids = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, i) => `${prefix}${i}`);
+
+  it('costs candidates + peers reads, not 2 x candidates x peers', async () => {
+    // The shipped worst case: a full invite batch into a convoy that is one
+    // seat short of full.
+    const candidates = uids('c', 25);
+    const peers = uids('p', MAX_CONVOY_SIZE - 1); // 24 accepted peers
+    const rec = recorder();
+
+    const pairs = await resolvePeerBlockPairs(candidates, peers, rec.queryBlocked);
+
+    expect(pairs.size).toBe(0);
+    // TEETH: the assertion is the READ COUNT, not the outcome. The per-pair
+    // point-read shape this replaced answered the same matrix in
+    // 2 * 25 * 24 = 1200 reads and would pass any outcome-only assertion here.
+    expect(rec.reads).toBe(candidates.length + peers.length); // 49
+    expect(rec.reads).toBeLessThan(2 * candidates.length * peers.length);
+    // ...and every lookup is a single chunk at these bounds.
+    expect(rec.calls).toHaveLength(candidates.length + peers.length);
+    expect(rec.calls.every((c) => c.ids.length <= BLOCK_LOOKUP_CHUNK_SIZE)).toBe(true);
+  });
+
+  it('finds a block made in EITHER direction', async () => {
+    const rec = recorder([
+      ['cand1', 'peerA'], // the candidate blocked a peer
+      ['peerB', 'cand2'], // a peer blocked the candidate
+    ]);
+    const pairs = await resolvePeerBlockPairs(
+      ['cand1', 'cand2', 'cand3'],
+      ['peerA', 'peerB'],
+      rec.queryBlocked,
+    );
+
+    expect(isBlockedAgainstAnyPeer('cand1', ['peerA', 'peerB'], pairs)).toBe(true);
+    expect(isBlockedAgainstAnyPeer('cand2', ['peerA', 'peerB'], pairs)).toBe(true);
+    expect(isBlockedAgainstAnyPeer('cand3', ['peerA', 'peerB'], pairs)).toBe(false);
+    // Direction is preserved in the key, so neither hit is mistaken for the other.
+    expect(pairs.has(blockPairKey('cand1', 'peerA'))).toBe(true);
+    expect(pairs.has(blockPairKey('peerA', 'cand1'))).toBe(false);
+  });
+
+  it('still peer-checks a uid that appears on BOTH sides', async () => {
+    // A requested uid who is already a member is also an existing PEER. If it
+    // were dropped from the peer list, everyone else in the batch would lose
+    // their block check against them.
+    const rec = recorder([['dup', 'cand']]);
+    const pairs = await resolvePeerBlockPairs(['cand', 'dup'], ['dup'], rec.queryBlocked);
+    expect(isBlockedAgainstAnyPeer('cand', ['dup'], pairs)).toBe(true);
+  });
+
+  it('chunks at the documentId() in [...] limit instead of failing', async () => {
+    // Raising MAX_CONVOY_SIZE must degrade into more queries, never into a
+    // runtime INVALID_ARGUMENT from an over-long disjunction.
+    const peers = uids('p', BLOCK_LOOKUP_CHUNK_SIZE + 5);
+    const rec = recorder();
+    await resolvePeerBlockPairs(['solo'], peers, rec.queryBlocked);
+
+    expect(rec.calls.every((c) => c.ids.length <= BLOCK_LOOKUP_CHUNK_SIZE)).toBe(true);
+    // one candidate x 2 chunks of peers, plus one lookup per peer
+    expect(rec.calls).toHaveLength(2 + peers.length);
+    expect(chunkUids(peers, BLOCK_LOOKUP_CHUNK_SIZE).map((c) => c.length)).toEqual([30, 5]);
+  });
+
+  it('reads NOTHING when there are no peers (the convoy.create path)', async () => {
+    const rec = recorder();
+    const pairs = await resolvePeerBlockPairs(uids('c', 25), [], rec.queryBlocked);
+    expect(pairs.size).toBe(0);
+    expect(rec.calls).toHaveLength(0);
+  });
+
+  it('de-duplicates repeated uids so a padded request cannot multiply the cost', async () => {
+    const rec = recorder();
+    await resolvePeerBlockPairs(['a', 'a', 'a', 'b'], ['p', 'p'], rec.queryBlocked);
+    expect(rec.calls).toHaveLength(3); // a, b, p
   });
 });

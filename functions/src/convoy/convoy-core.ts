@@ -27,7 +27,8 @@
  *      endedAt: Timestamp | null             (set on convoy.end)
  *      destination: {                        (the SHARED destination — absent
  *        latitude, longitude,                 until a member sets one; SURVIVES
- *        label: string | null,                convoy.end untouched as a record
+ *        label: string (ABSENT when the        convoy.end untouched as a record
+ *          pick had none, never null),
  *        setByUid, setByDisplayName,          of where the convoy was headed)
  *        setAt: Timestamp } | absent
  *      summary: ConvoySummaryStats | null    (computed + stored on convoy.end,
@@ -291,7 +292,11 @@ export function parseListConvoysInput(data: unknown): ParseResult<Record<string,
 }
 
 export const INVITE_TO_CONVOY_EXPECTED = `Expected { convoyId, inviteeUids: [uid] (1..${MAX_CONVOY_INVITE_BATCH}) }.`;
-export const SET_CONVOY_DESTINATION_EXPECTED = `Expected { convoyId, latitude (-90..90), longitude (-180..180), label? (1..${CONVOY_DESTINATION_LABEL_MAX_LENGTH}) }.`;
+// `label` is described as the schema actually behaves: trimmed, bounded above,
+// and blank-after-trim ACCEPTED (stored absent) rather than rejected. Saying
+// "1..max" would send a caller hunting for a length problem they don't have
+// when the invalid-argument came from a coordinate.
+export const SET_CONVOY_DESTINATION_EXPECTED = `Expected { convoyId, latitude (-90..90), longitude (-180..180), label? (trimmed, max ${CONVOY_DESTINATION_LABEL_MAX_LENGTH}; blank is accepted and stored as no label) }.`;
 
 export function parseInviteToConvoyInput(data: unknown): ParseResult<InviteToConvoyInput> {
   return parse(inviteToConvoySchema, data, INVITE_TO_CONVOY_EXPECTED);
@@ -340,6 +345,113 @@ export type InviteeSkipReason =
 export interface SkippedInvitee {
   uid: string;
   reason: InviteeSkipReason;
+}
+
+// ---------------------------------------------------------------------------
+// Peer block resolution (convoy.invite fan-out)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many uids may be asked for in ONE blocked-subcollection lookup.
+ *
+ * 30 is not a taste call: it is Firestore's hard limit on the number of
+ * disjunction values in a `documentId() in [...]` query. It is the largest
+ * chunk the query API will accept, so it is the smallest number of queries the
+ * matrix can be answered in.
+ *
+ * Both convoy bounds already sit under it — MAX_CONVOY_INVITE_BATCH is 25 and a
+ * convoy holds at most MAX_CONVOY_SIZE (25) members, so at most 24 accepted
+ * peers — which means today every lookup is exactly one chunk. The chunking is
+ * kept anyway so that raising either constant degrades into more queries rather
+ * than into an INVALID_ARGUMENT at runtime.
+ */
+export const BLOCK_LOOKUP_CHUNK_SIZE = 30;
+
+/** Splits into chunks of at most `size` (never emits an empty chunk). */
+export function chunkUids(uids: string[], size: number): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < uids.length; i += size) {
+    chunks.push(uids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/** Directed block-edge key: `blocker|blocked`. */
+export function blockPairKey(blockerUid: string, blockedUid: string): string {
+  return `${blockerUid}|${blockedUid}`;
+}
+
+/**
+ * Resolves which of the candidate × peer pairs have a block edge in EITHER
+ * direction, in a number of reads that grows with candidates + peers rather
+ * than with candidates × peers.
+ *
+ * The naive shape — a point read of `userBlocks/{a}/blocked/{b}` for both
+ * directions of every pair — costs 2·C·P reads: at the shipped bounds (25
+ * invitees, 24 accepted peers) that is 1200 document reads inside a single
+ * callable, on top of the per-invitee friend/profile reads. Firestore bills a
+ * `documentId() in [...]` query by the documents it RETURNS (an empty result
+ * still bills one read), so asking one blocker for all the uids it might have
+ * blocked collapses a whole row (or column) of the matrix into one read in the
+ * common case where nobody has blocked anyone. That makes the cost
+ * C + P (≈49 here) instead of 2·C·P.
+ *
+ * The Firestore access is injected (`queryBlocked`) rather than imported, so
+ * the read COUNT is observable in a unit test — an outcome-only assertion would
+ * pass just as happily against the 1200-read version.
+ *
+ * @param queryBlocked given a blocker uid and up to BLOCK_LOOKUP_CHUNK_SIZE
+ *   candidate uids, returns the subset that blocker has blocked.
+ */
+export async function resolvePeerBlockPairs(
+  candidateUids: string[],
+  peerUids: string[],
+  queryBlocked: (blockerUid: string, blockedUids: string[]) => Promise<string[]>,
+): Promise<Set<string>> {
+  const candidates = [...new Set(candidateUids)];
+  // Deliberately NOT filtered against `candidates`: a requested uid that is
+  // also an existing member must still be block-checked as a PEER of the other
+  // candidates, or a uid appearing on both sides would silently disable the
+  // peer check for everyone else in the batch.
+  const peers = [...new Set(peerUids)];
+  if (candidates.length === 0 || peers.length === 0) {
+    return new Set<string>();
+  }
+
+  const lookups: Array<Promise<Array<[string, string]>>> = [];
+  const enqueue = (blockerUid: string, blocked: string[]) => {
+    for (const ids of chunkUids(blocked, BLOCK_LOOKUP_CHUNK_SIZE)) {
+      lookups.push(
+        queryBlocked(blockerUid, ids).then((hits) =>
+          hits.map((hit): [string, string] => [blockerUid, hit]),
+        ),
+      );
+    }
+  };
+  // Direction 1: did the candidate block any peer?  Direction 2: did any peer
+  // block the candidate?  Both are needed — a block is honoured whichever way
+  // round it was made.
+  for (const candidate of candidates) enqueue(candidate, peers);
+  for (const peer of peers) enqueue(peer, candidates);
+
+  const pairs = new Set<string>();
+  for (const found of await Promise.all(lookups)) {
+    for (const [blocker, blocked] of found) {
+      pairs.add(blockPairKey(blocker, blocked));
+    }
+  }
+  return pairs;
+}
+
+/** True when a block edge exists in either direction between `uid` and any peer. */
+export function isBlockedAgainstAnyPeer(
+  uid: string,
+  peerUids: string[],
+  pairs: Set<string>,
+): boolean {
+  return peerUids.some(
+    (peerUid) => pairs.has(blockPairKey(uid, peerUid)) || pairs.has(blockPairKey(peerUid, uid)),
+  );
 }
 
 /** Reads a profile doc into the minimal safe projection (missing → null). */
