@@ -118,9 +118,27 @@ jobs:
     # while covering nothing, so it is skipped outright on fork PRs rather than
     # claiming coverage it does not have. Fork changes to `src/nav` are covered
     # only once merged (the `push: main` run of this workflow).
+    #
+    # The same hole exists for DEPENDABOT PRs, for a different reason. Dependabot
+    # branches live in this repo (so the fork check above passes), but workflows
+    # triggered by Dependabot read secrets from the separate *Dependabot secrets*
+    # store — repository AND environment Actions secrets are not exposed to them.
+    # `environment: production` therefore resolves MAPBOX_DOWNLOADS_TOKEN to an
+    # empty string and the token gate below fails every time, so this job could
+    # never pass on a dependency bump no matter how good the bump was (see the
+    # actions/setup-node v5 -> v7 PR, where this job failed in 14s while the
+    # `validate-android` job that actually uses setup-node passed). That is a red
+    # check carrying no signal, on PRs that by definition cannot touch src/nav.
+    # Skip it here for the same reason as forks — no token means no coverage, and
+    # claiming coverage we do not have is worse than skipping. Dependabot PRs
+    # cannot modify `apps/android/**` anyway; nav changes stay covered by the
+    # `push: main` run. To restore coverage on bumps instead of skipping, add
+    # MAPBOX_DOWNLOADS_TOKEN to the repo's Dependabot secrets and drop this
+    # clause — nothing else here needs to change.
     if: >-
       github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]')
     steps:
       - name: Checkout
         uses: actions/checkout@v5
