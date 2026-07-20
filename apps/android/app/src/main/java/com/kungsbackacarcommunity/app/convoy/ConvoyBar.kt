@@ -132,6 +132,15 @@ data class ConvoyBarState(
     val busy: Boolean,
     val inviteAvailability: ConvoyBarActionAvailability,
     val leaveAvailability: ConvoyBarActionAvailability,
+    /**
+     * The SHARED-destination row's state (none / set by me / set by someone
+     * else). Its availability is gated separately in [ConvoyDestinations],
+     * because it waits on a different pair of callables — see the
+     * [ConvoyDestination] file KDoc for that contract.
+     */
+    val destinationState: ConvoyDestinationState = ConvoyDestinationState.None,
+    /** Whether the viewer may clear the current destination (setter or owner). */
+    val canClearDestination: Boolean = false,
 ) {
     /**
      * The explanation line, derived from BOTH availabilities independently.
@@ -209,7 +218,11 @@ object ConvoyBar {
      * [busyConvoys] is the coordinator's in-flight set, so the End action greys
      * out while its callable runs instead of being tappable twice.
      */
-    fun stateFor(status: ConvoyListStatus, busyConvoys: Set<String> = emptySet()): ConvoyBarState? {
+    fun stateFor(
+        status: ConvoyListStatus,
+        busyConvoys: Set<String> = emptySet(),
+        viewerUid: String? = null,
+    ): ConvoyBarState? {
         val convoy = activeConvoy(status) ?: return null
         return ConvoyBarState(
             convoyId = convoy.convoyId,
@@ -218,6 +231,13 @@ object ConvoyBar {
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,
             leaveAvailability = leaveAvailability(convoy.viewerIsOwner),
+            destinationState = ConvoyDestinations.stateFor(convoy.destination, viewerUid),
+            canClearDestination =
+                ConvoyDestinations.canClear(
+                    destination = convoy.destination,
+                    viewerUid = viewerUid,
+                    viewerIsOwner = convoy.viewerIsOwner,
+                ),
         )
     }
 }

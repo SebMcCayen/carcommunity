@@ -103,10 +103,16 @@ import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.config.MemberGating
 import com.kungsbackacarcommunity.app.convoy.ConvoyBar
 import com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestination
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationNavigationEvent
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
+import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
@@ -1238,6 +1244,36 @@ fun AuthenticatedApp(
                     mapSurface.setActive(mapCover != MapCover.Opaque)
                 }
 
+                // The ONE way this app starts turn-by-turn navigation to a
+                // coordinate. Hoisted out of the search overlay's Start button so
+                // the convoy bar's "start navigation to the shared destination"
+                // goes through exactly the same path — same SDK-vs-handoff
+                // decision, same missing-maps-app fallback — instead of growing a
+                // second, subtly different navigation launcher.
+                val startNavigationTo: (LatLng, String) -> Unit = { dest, label ->
+                    // Real in-app Mapbox turn-by-turn only exists in a build that
+                    // bundles the Navigation SDK (NAV_SDK_ENABLED). The token-less
+                    // noNav build (incl. the current Play release — its CI provides
+                    // no MAPBOX_DOWNLOADS_TOKEN) would only show the "unavailable"
+                    // stub, so there we hand off to the device's maps app for
+                    // genuine turn-by-turn instead.
+                    if (BuildConfig.NAV_SDK_ENABLED) {
+                        navDestinationLabel = label
+                        navDestination = dest
+                    } else {
+                        ExternalNavigation.launch(
+                            context = context,
+                            destination = dest,
+                            label = label,
+                            onUnavailable = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(navAppMissingText)
+                                }
+                            },
+                        )
+                    }
+                }
+
                 // Convoy status bar, hoisted here so the map home and turn-by-turn
                 // navigation share ONE coordinator and therefore one source of
                 // convoy truth — the same snapshot, the same member count, the same
@@ -1249,15 +1285,117 @@ fun AuthenticatedApp(
                 // loads once. Someone joining or leaving elsewhere therefore shows
                 // up on the next refresh rather than instantly; acceptable for a
                 // head-count, and the alternative is a second source of truth.
+
+                // The SHARED-destination repository. Deliberately the "no backend"
+                // one: `convoy-setDestination` / `convoy-clearDestination` are not
+                // deployed (see the ConvoyDestination file KDoc for the contract
+                // they are waiting on), so it refuses every call without touching
+                // the network and the bar's destination controls render disabled.
+                //
+                // WHEN THE BACKEND LANDS the body of this remember becomes
+                // `FirebaseConvoyDestinationRepository.createIfAvailable(context)
+                //     ?: UnavailableConvoyDestinationRepository`
+                // and ConvoyDestinations.availability is flipped to Wired. That is
+                // the whole client change — everything below already works.
+                //
+                // It is wrapped in `remember` now, while the value is still a
+                // stable object and the wrapper looks redundant, precisely so that
+                // swap stays a one-line edit. `createIfAvailable` builds a NEW
+                // instance per call; assigned directly it would produce a
+                // different repository on every recomposition, which changes a key
+                // of the remember below and would rebuild ConvoyCoordinator each
+                // time — re-running load() and resetting convoy state in a loop.
+                val convoyDestinationRepository: ConvoyDestinationRepository =
+                    remember { UnavailableConvoyDestinationRepository }
                 val convoyBarCoordinator =
-                    remember(convoyRepository) { convoyRepository?.let { ConvoyCoordinator(it) } }
+                    remember(convoyRepository, convoyDestinationRepository) {
+                        convoyRepository?.let {
+                            ConvoyCoordinator(it, convoyDestinationRepository)
+                        }
+                    }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
                 val convoyBarStatus: ConvoyListStatus =
                     convoyBarCoordinator?.status?.collectAsState()?.value
                         ?: ConvoyListStatus.Loading
                 val convoyBarBusy =
                     convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
-                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy)
+                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid)
+
+                // Track what happened to the destination the user is CURRENTLY
+                // navigating to. The comparison is against the previous snapshot,
+                // so a destination cleared or replaced by someone else is noticed
+                // on the next convoy refresh — and never cancels the running
+                // turn-by-turn (see ConvoyDestinationNavigationEvent).
+                val currentConvoyDestination =
+                    when (val d = convoyBarState?.destinationState) {
+                        is ConvoyDestinationState.SetByMe -> d.destination
+                        is ConvoyDestinationState.SetByOther -> d.destination
+                        else -> null
+                    }
+                var previousConvoyDestination by
+                    remember { mutableStateOf<ConvoyDestination?>(null) }
+                var convoyDestinationEvent by
+                    remember {
+                        mutableStateOf<ConvoyDestinationNavigationEvent>(
+                            ConvoyDestinationNavigationEvent.Unchanged,
+                        )
+                    }
+                // Both of the above are session-scoped, so they must be cleared
+                // when the ACTIVE CONVOY changes identity — including to null,
+                // which is "left it / it ended".
+                //
+                // Without this they leak across convoys: leave a convoy while
+                // navigating to its destination and the banner ("the shared
+                // destination was removed") is still on screen when you join the
+                // next one, now describing a convoy you are no longer in. Worse,
+                // `previousConvoyDestination` would still hold the OLD convoy's
+                // destination, so the first comparison inside the new convoy is
+                // against a place from the previous one and can fabricate a
+                // "destination changed" event that never happened.
+                //
+                // Declared BEFORE the event effect so that on a convoy switch the
+                // reset runs first and the comparison below starts from a clean
+                // slate. (#487 does the same thing for camera focus via
+                // ConvoyFocusStore.onActiveConvoyChanged.)
+                LaunchedEffect(convoyBarState?.convoyId) {
+                    previousConvoyDestination = null
+                    convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                }
+                LaunchedEffect(currentConvoyDestination, navDestination) {
+                    if (navDestination == null) {
+                        // Navigation ended (arrived, or the user stopped it). The
+                        // banner exists solely to say what happened to the
+                        // destination they were DRIVING TO, and every one of its
+                        // messages is phrased that way — "…while you were
+                        // navigating", plus an offer to re-route to the
+                        // replacement. Left up after navigation ends it is not
+                        // merely stale, it asserts something false.
+                        //
+                        // It cannot clear itself below: navigationEvent() returns
+                        // Unchanged as soon as navigatingTo is null, and the guard
+                        // there only ever WRITES a non-Unchanged event, so nothing
+                        // would ever take it down.
+                        convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                        previousConvoyDestination = currentConvoyDestination
+                        return@LaunchedEffect
+                    }
+                    val event =
+                        ConvoyDestinations.navigationEvent(
+                            previous = previousConvoyDestination,
+                            current = currentConvoyDestination,
+                            navigatingTo = navDestination,
+                        )
+                    if (event != ConvoyDestinationNavigationEvent.Unchanged) {
+                        convoyDestinationEvent = event
+                    }
+                    previousConvoyDestination = currentConvoyDestination
+                }
+
+                // Opening the search overlay AS THE CONVOY'S PLACE PICKER rather
+                // than as a plain navigate-somewhere search. One overlay, one set
+                // of recents/saved places/long-press handling — the only
+                // difference is the extra action in the route preview.
+                var navSearchConvoyPick by rememberSaveable { mutableStateOf(false) }
                 // null (rather than a bar that draws nothing) is what makes "not in
                 // a convoy" compose literally nothing at all — no empty bar, no
                 // placeholder, and no space reserved in the top chrome column.
@@ -1272,6 +1410,28 @@ fun AuthenticatedApp(
                                 // confirms before this fires.
                                 onEndConvoy = { convoyId ->
                                     scope.launch { convoyBarCoordinator.end(convoyId) }
+                                },
+                                // Reuse the map's own search / saved-places /
+                                // long-press picker instead of a second one; it
+                                // comes back through onSetAsConvoyDestination.
+                                onSetDestination = {
+                                    navSearchConvoyPick = true
+                                    navSearchOpen = true
+                                },
+                                onClearDestination = { convoyId ->
+                                    scope.launch {
+                                        convoyBarCoordinator.clearDestination(convoyId)
+                                    }
+                                },
+                                // The SAME navigation entry point the search
+                                // flow's Start button uses — no parallel path.
+                                onNavigateToDestination = { dest, label ->
+                                    startNavigationTo(dest, label)
+                                },
+                                navigationEvent = convoyDestinationEvent,
+                                onDismissNavigationEvent = {
+                                    convoyDestinationEvent =
+                                        ConvoyDestinationNavigationEvent.Unchanged
                                 },
                             )
                         }
@@ -1342,30 +1502,38 @@ fun AuthenticatedApp(
                             // state rather than re-previewing the last place.
                             navSearchTarget = null
                             navSearchTargetName = null
+                            // Backing out of the picker must not leave the next
+                            // plain search offering to set a convoy destination.
+                            navSearchConvoyPick = false
                         },
-                        onStartNavigation = { dest, label ->
-                            // Real in-app Mapbox turn-by-turn only exists in a build
-                            // that bundles the Navigation SDK (NAV_SDK_ENABLED). The
-                            // token-less noNav build (incl. the current Play release —
-                            // its CI provides no MAPBOX_DOWNLOADS_TOKEN) would only
-                            // show the "unavailable" stub, so there we hand off to the
-                            // device's maps app for genuine turn-by-turn instead.
-                            if (BuildConfig.NAV_SDK_ENABLED) {
-                                navDestinationLabel = label
-                                navDestination = dest
-                            } else {
-                                ExternalNavigation.launch(
-                                    context = context,
-                                    destination = dest,
-                                    label = label,
-                                    onUnavailable = {
+                        onStartNavigation = startNavigationTo,
+                        // Only offered when this overlay was opened AS the convoy
+                        // bar's place picker, and only enabled once
+                        // `convoy-setDestination` exists.
+                        onSetAsConvoyDestination =
+                            if (navSearchConvoyPick && convoyBarState != null) {
+                                { dest, label ->
+                                    val coordinator = convoyBarCoordinator
+                                    if (coordinator != null) {
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(navAppMissingText)
+                                            coordinator.setDestination(
+                                                convoyId = convoyBarState.convoyId,
+                                                latitude = dest.latitude,
+                                                longitude = dest.longitude,
+                                                label = label,
+                                            )
                                         }
-                                    },
-                                )
-                            }
-                        },
+                                    }
+                                    mapSurface.setRouteOverlay(null)
+                                    navSearchOpen = false
+                                    navSearchConvoyPick = false
+                                    navSearchTarget = null
+                                    navSearchTargetName = null
+                                }
+                            } else {
+                                null
+                            },
+                        convoyDestinationEnabled = ConvoyDestinations.isWired,
                         recentStore = recentSearchesStore,
                         savedStore = savedPlacesStore,
                         initialTarget = navSearchTarget,
