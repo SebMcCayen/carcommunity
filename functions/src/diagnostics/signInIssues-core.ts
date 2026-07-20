@@ -107,11 +107,35 @@ export const KNOWN_SIGN_IN_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
   'SignInUnavailableException',
   // AndroidX Credential Manager.
   'GetCredentialException',
+  // RETAINED DELIBERATELY, even though a current client never sends it.
+  // GetCredentialCancellationException is a USER CANCELLATION (the sheet was
+  // dismissed), and since the fix for issue #457 the Android client drops it at
+  // the source — no diagnostics report is written at all (see
+  // GoogleCredentialTokenProvider.toSignInException). The entry stays because
+  // OLDER installs still in the closed test group DO send it: keeping it
+  // allowlisted contains those legacy reports in their existing single
+  // fingerprint/issue, whereas removing it would collapse them into the shared
+  // `Unknown` bucket — the very bucket that exists to surface genuinely NEW,
+  // unrecognised failures. Polluting `Unknown` with a known-benign, formerly
+  // high-volume type costs more debugging signal than it saves. Remove this
+  // entry once no pre-fix client version is in the wild.
   'GetCredentialCancellationException',
   'GetCredentialInterruptedException',
   'GetCredentialProviderConfigurationException',
   'GetCredentialUnknownException',
   'GetCredentialUnsupportedException',
+  // RETAINED DELIBERATELY, for the same reason as the cancellation entry above
+  // and on the same terms. NoCredentialException means there is no Google
+  // account on the device; the Android client now drops it at the source (see
+  // GoogleCredentialTokenProvider.toSignInException) because the sign-in screen
+  // names the problem and offers a route to the add-account settings, making it
+  // an expected, user-fixable state rather than a fault. Note this REVERSES the
+  // call made when #457 was fixed, which kept it reportable precisely because it
+  // was then a dead end — making it actionable is what changed the answer.
+  // Pre-fix installs in the closed test group still send it, so the entry stays:
+  // removing it would collapse those legacy reports into the shared `Unknown`
+  // bucket that exists to surface genuinely NEW failures. Remove this entry once
+  // no pre-fix client version is in the wild.
   'NoCredentialException',
   // Firebase Auth hierarchy.
   'FirebaseAuthException',

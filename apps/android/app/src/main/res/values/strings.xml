@@ -308,6 +308,8 @@
     <string name="auth_deleteAccountNote">Du kan radera ditt konto via vår hemsida enligt våra villkor.</string>
     <string name="auth_loading">Laddar...</string>
     <string name="auth_errorGeneric">Inloggningen misslyckades. Försök igen.</string>
+    <string name="auth_errorNoGoogleAccount">Det finns inget Google-konto på telefonen. Lägg till ett under Inställningar &gt; Konton och logga in igen.</string>
+    <string name="auth_addGoogleAccountButton">Lägg till Google-konto</string>
     <string name="auth_loggedInAs">Inloggad</string>
     <string name="auth_signOut">Logga ut</string>
     <string name="auth_devLoginLabel">[DEV] Platshållar-inloggning (ej produktion)</string>
@@ -580,6 +582,9 @@
     <string name="garage_photoUploading">Laddar upp…</string>
     <string name="garage_photoUploadError">Kunde inte ladda upp bilden. Försök igen.</string>
     <string name="garage_photoTooLarge">Bilden är för stor.</string>
+    <string name="garage_photoCropTitle">Beskär bild</string>
+    <string name="garage_photoCropHint">Dra för att placera och nyp för att zooma. Det som syns i rutan är det andra ser.</string>
+    <string name="garage_photoCropConfirm">Använd bilden</string>
     <string name="badges_screenTitle">Utmärkelser</string>
     <string name="badges_loading">Laddar utmärkelser...</string>
     <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>
