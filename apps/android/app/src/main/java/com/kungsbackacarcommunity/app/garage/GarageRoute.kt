@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.garage
 
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -16,6 +18,7 @@ import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.NormalizedCropRect
 import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
@@ -78,11 +81,30 @@ fun GarageRoute(
     // vehicle itself is unaffected because it is not created until Save.
     var pendingPhoto by remember { mutableStateOf<PickedImage?>(null) }
 
+    // The pick currently being CROPPED, and its display-only preview decode.
+    // Both are raw, unsanitised and deliberately inert: `cropCandidate` is the
+    // ORIGINAL pick (it only ever reaches Storage by way of
+    // compressForPublicUpload below) and `cropPreview` is a Bitmap, which has no
+    // encoded form to upload at all. Plain `remember` for the same reason as
+    // pendingPhoto — far too large for the saved-instance Bundle.
+    var cropCandidate by remember { mutableStateOf<PickedImage?>(null) }
+    var cropPreview by remember { mutableStateOf<Bitmap?>(null) }
+
+    // Abandons an in-progress crop. Safe by construction at any point before
+    // Use photo: nothing has been uploaded and no vehicle document has been
+    // touched, so there is no half-uploaded image and no vehicle left pointing
+    // at a path that does not exist — the pick is simply dropped.
+    val cancelCrop = {
+        cropCandidate = null
+        cropPreview = null
+    }
+
     // Clears the form's transient photo state. Called on every path that leaves
     // the form WITHOUT saving, so a pick abandoned in the add form can never
     // attach itself to the next vehicle the user starts adding.
     val resetPhoto = {
         pendingPhoto = null
+        cancelCrop()
         photoCoordinator?.reset()
     }
 
@@ -95,11 +117,18 @@ fun GarageRoute(
     // returns to Home. The photo coordinator now outlives the form branch (an
     // add-mode upload starts as the form closes), so backing out must reset it
     // explicitly rather than relying on it being discarded from composition.
+    // While cropping, Back cancels the CROP and returns to the form — losing a
+    // half-filled vehicle form because the user changed their mind about a photo
+    // would be a nasty surprise.
     BackHandler(enabled = showForm) {
-        showForm = false
-        editingVehicleId = null
-        coordinator?.reset()
-        resetPhoto()
+        if (cropPreview != null) {
+            cancelCrop()
+        } else {
+            showForm = false
+            editingVehicleId = null
+            coordinator?.reset()
+            resetPhoto()
+        }
     }
 
     if (showForm) {
@@ -122,30 +151,31 @@ fun GarageRoute(
         // mirrors the storage rules. Wired only when the uploader is present
         // (config-less builds hide the button).
         val photoUrl = rememberStorageImageUrl(photoContext, vehicle?.imagePath)
-        val photoPicker =
-            rememberImagePickLauncher(
-                // Read above the upload cap so the raw pick reaches the compressor
-                // (which downscales + re-encodes it below the cap). Still bounded;
-                // the upload precheck on the sanitised result enforces
-                // VEHICLE_IMAGE_MAX_BYTES.
-                maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
-            ) { picked ->
-                if (picked != null && photoCoordinator != null) {
-                    // Strip GPS + identifying metadata BEFORE upload: car profiles
-                    // are PUBLICLY visible to other members, so a photo taken at the
-                    // owner's home must never leak their coordinates or device
-                    // fingerprint. compressForPublicUpload GUARANTEES the returned
-                    // bytes are free of every STRIP_TAG (all GPS + identifying EXIF):
-                    // the happy path re-encodes to JPEG (dropping all metadata), and
-                    // if a pick can't be re-encoded it physically strips those tags
-                    // or returns the original only when proven free of them — else it
-                    // returns null and we fail closed / skip the upload rather than
-                    // risk leaking source metadata. Vehicle photos keep a larger
-                    // longest-side cap than avatars so detail shots stay crisp.
+
+        // THE one route from a picked image to Storage. Called after the user
+        // confirms their crop; [crop] is a window, not pixels, so the ONLY thing
+        // that ever turns a pick into uploadable bytes is
+        // compressForPublicUpload below.
+        //
+        // Strip GPS + identifying metadata BEFORE upload: car profiles are
+        // PUBLICLY visible to other members, so a photo taken at the owner's home
+        // must never leak their coordinates or device fingerprint.
+        // compressForPublicUpload GUARANTEES the returned bytes are free of every
+        // STRIP_TAG (all GPS + identifying EXIF): the happy path re-encodes to
+        // JPEG (dropping all metadata) — cutting the crop out of that same decode
+        // — and if a pick can't be re-encoded it physically strips those tags or
+        // returns the original only when proven free of them AND no crop was
+        // asked for; else it returns null and we fail closed / skip the upload
+        // rather than risk leaking source metadata. Vehicle photos keep a larger
+        // longest-side cap than avatars so detail shots stay crisp.
+        val sanitizeAndUpload: suspend (PickedImage, NormalizedCropRect) -> Unit =
+            { picked, crop ->
+                if (photoCoordinator != null) {
                     val sanitized =
                         ImageCompressor.compressForPublicUpload(
                             picked,
                             maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                            crop = crop,
                         )
                     if (sanitized != null) {
                         if (editingId != null) {
@@ -159,9 +189,9 @@ fun GarageRoute(
                         } else {
                             // Add: no vehicle id exists yet to key
                             // vehicleImages/{uid}/{vehicleId}/, so hold the ALREADY
-                            // SANITISED bytes and upload them once Save mints the id.
-                            // Sanitising here (not at upload time) means the raw pick
-                            // never outlives this callback.
+                            // SANITISED, ALREADY CROPPED bytes and upload them once
+                            // Save mints the id. Sanitising here (not at upload
+                            // time) means the raw pick never outlives this call.
                             pendingPhoto = sanitized
                         }
                     } else {
@@ -173,6 +203,70 @@ fun GarageRoute(
                 }
             }
 
+        val photoPicker =
+            rememberImagePickLauncher(
+                // Read above the upload cap so the raw pick reaches the compressor
+                // (which downscales + re-encodes it below the cap). Still bounded;
+                // the upload precheck on the sanitised result enforces
+                // VEHICLE_IMAGE_MAX_BYTES.
+                maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
+            ) { picked ->
+                if (picked != null && photoCoordinator != null) {
+                    // Straight to the crop step — NOTHING is uploaded on picking
+                    // any more. decodeForCrop hands back a display-only Bitmap;
+                    // the pick's bytes are held untouched until the user confirms
+                    // a crop, and then only sanitizeAndUpload consumes them.
+                    val preview =
+                        ImageCompressor.decodeForCrop(
+                            picked,
+                            maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                        )
+                    if (preview != null) {
+                        cropCandidate = picked
+                        cropPreview = preview
+                    } else {
+                        // Undecodable pick: it could not be shown, and it could
+                        // not have been sanitised either. Fail visibly.
+                        photoCoordinator.markFailed()
+                    }
+                }
+            }
+
+        val cropping = cropPreview
+        val candidate = cropCandidate
+        if (cropping != null && candidate != null) {
+            // Release the preview's pixels as soon as it can no longer be drawn.
+            // A VEHICLE_MAX_DIMENSION decode is several megabytes, and picking
+            // photo after photo would otherwise leave a string of them alive
+            // until the collector got round to them.
+            //
+            // onDispose, NOT the cancel/confirm handlers: recycle() on a bitmap
+            // Compose is still drawing throws "Canvas: trying to use a recycled
+            // bitmap". Clearing the state only SCHEDULES the screen's removal,
+            // so recycling there races the outgoing frame. onDispose runs after
+            // the subtree is gone, which is the first moment no draw can
+            // reference it. Keyed on the bitmap so swapping previews releases
+            // the outgoing one too.
+            DisposableEffect(cropping) {
+                onDispose { cropping.recycle() }
+            }
+            // The crop step REPLACES the form for as long as it is open rather
+            // than stacking on top of it: the form's own fields keep their state
+            // (they are rememberSaveable, and the `key(editingId)` below is
+            // unchanged), so returning from the crop lands the user back on the
+            // vehicle they were filling in.
+            VehiclePhotoCropScreen(
+                bitmap = cropping,
+                onConfirm = { crop ->
+                    cancelCrop()
+                    // Route scope, not the crop screen's: the screen leaves
+                    // composition on the line above, and a screen-scoped
+                    // coroutine would be cancelled mid-sanitise.
+                    scope.launch { sanitizeAndUpload(candidate, crop) }
+                },
+                onCancel = cancelCrop,
+            )
+        } else {
         key(editingId) {
             VehicleFormScreen(
                 initial = initial,
@@ -189,7 +283,8 @@ fun GarageRoute(
                             val photo = pendingPhoto
                             val vehicleId = c.save(input, editingId)
                             // Add-mode photo: the id exists only now. Nothing to do
-                            // when editing (that photo uploaded at pick time) or
+                            // when editing (that photo uploaded when its crop was
+                            // confirmed) or
                             // when the save failed (vehicleId null) — an upload
                             // under a nonexistent vehicle's prefix would be
                             // rejected by the callable's ownership check anyway.
@@ -225,6 +320,7 @@ fun GarageRoute(
                         null
                     },
             )
+        }
         }
     } else {
         GarageScreen(
