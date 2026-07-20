@@ -609,27 +609,32 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
-    override fun recenter() {
-        // Tapping my-location is the shared re-centre affordance: resume follow,
-        // cancel any pending idle-return timer, and glide to the user. The
-        // idle-return path reuses [easeToUser] so the two never diverge.
-        followController.onRecenterRequested()
-        idleReturnJob?.cancel()
-        idleReturnJob = null
-        easeToUser()
-    }
+    override fun recenter() = userRequestedRecentre(resetBearingToNorth = false)
 
-    override fun recenterNorthUp() {
-        // The compass: exactly [recenter], plus north-up folded into the SAME
-        // camera update. Calling recenter() and resetNorth() back-to-back would
-        // issue two easeTo animations on one camera a frame apart — the second
-        // cancels the first, so the user sees a stutter and loses whichever
-        // property the cancelled animation carried. One cameraOptions carrying
-        // centre + zoom + pitch + bearing(0) cannot fight itself.
+    /**
+     * The compass: exactly [recenter], plus north-up folded into the SAME camera
+     * update. Calling `recenter()` and `resetNorth()` back-to-back would issue
+     * two easeTo animations on one camera a frame apart — the second cancels the
+     * first, so the user sees a stutter and loses whichever property the
+     * cancelled animation carried. One cameraOptions carrying centre + zoom +
+     * pitch + bearing(0) cannot fight itself.
+     */
+    override fun recenterNorthUp() = userRequestedRecentre(resetBearingToNorth = true)
+
+    /**
+     * A re-centre the USER asked for, by the my-location control or the compass:
+     * resume follow, cancel any pending idle-return timer, and glide to them.
+     * The idle-return path reuses [easeToUser] so the three never diverge.
+     *
+     * Both entry points share this body rather than repeating it, so the
+     * follow/timer handling cannot drift between the two controls — only the
+     * bearing differs, and that difference is the single parameter.
+     */
+    private fun userRequestedRecentre(resetBearingToNorth: Boolean) {
         followController.onRecenterRequested()
         idleReturnJob?.cancel()
         idleReturnJob = null
-        easeToUser(resetBearingToNorth = true)
+        easeToUser(resetBearingToNorth = resetBearingToNorth)
     }
 
     /**
