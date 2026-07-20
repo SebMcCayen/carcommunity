@@ -18,7 +18,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
@@ -27,11 +28,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.media.ImageCrop
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
@@ -221,9 +222,12 @@ private fun VehiclePhotoSection(
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     val model: Any? = photoPreview ?: photoUrl
     Box(
+        // 16:9, matching the crop step AND the garage / member-profile cards.
+        // A fixed 180dp box would re-crop the user's 16:9 crop at a different
+        // ratio, so the tile they confirm would not be the tile they get.
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .aspectRatio(ImageCrop.VEHICLE_ASPECT_RATIO)
             .clip(RoundedCornerShape(KccRadius.md))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
@@ -235,7 +239,7 @@ private fun VehiclePhotoSection(
                 model = model,
                 contentDescription = stringResource(R.string.garage_photoAlt),
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().height(180.dp),
+                modifier = Modifier.fillMaxSize(),
             )
         }
         if (uploading) {
