@@ -1,7 +1,8 @@
 /**
  * Convoy domain core (pure logic): input parsing, document builders, summary
  * computation, and client-summary mappers for the convoy callables
- * (convoy.create / convoy.respond / convoy.start / convoy.end / convoy.list).
+ * (convoy.create / convoy.respond / convoy.start / convoy.end / convoy.list /
+ * convoy.leave / convoy.invite / convoy.setDestination / convoy.clearDestination).
  *
  * This is the FOUNDATION for the larger convoy + 3-channel-chat epic — chat
  * channels are a SEPARATE follow-up and are intentionally NOT modelled here.
@@ -24,6 +25,12 @@
  *      createdAt: Timestamp
  *      startedAt: Timestamp | null           (set on convoy.start)
  *      endedAt: Timestamp | null             (set on convoy.end)
+ *      destination: {                        (the SHARED destination — absent
+ *        latitude, longitude,                 until a member sets one; SURVIVES
+ *        label: string (ABSENT when the        convoy.end untouched as a record
+ *          pick had none, never null),
+ *        setByUid, setByDisplayName,          of where the convoy was headed)
+ *        setAt: Timestamp } | absent
  *      summary: ConvoySummaryStats | null    (computed + stored on convoy.end,
  *                                            readable by ALL members)
  *
@@ -61,6 +68,42 @@ export const CONVOY_TITLE_MAX_LENGTH = 80;
 /** Upper bound on invitees per convoy.create call (guards fan-out cost). */
 export const MAX_CONVOY_INVITEES = 50;
 
+/**
+ * Hard ceiling on TOTAL convoy membership (memberUids length — owner + every
+ * invited/accepted member), enforced by convoy.invite.
+ *
+ * 25 is chosen from the physical thing being modelled rather than from a
+ * database limit: a convoy is a line of cars driving together, and 25 cars is
+ * already an unusually large local meet — beyond that the group stops behaving
+ * like one convoy on the road. It also bounds the two costs that grow with
+ * membership: the live-position fan-out is one subscription per member PER
+ * member (each member's map subscribes to every other accepted member's RTDB
+ * node — 25 members is 600 edges, 50 would be 2450), and the invite
+ * notification fan-out is one write per invitee.
+ *
+ * convoy.create is deliberately NOT retro-capped by this: its own
+ * MAX_CONVOY_INVITEES bound is the shipped contract, and tightening it would
+ * break calls that work today. This cap governs GROWTH, which is what invite
+ * does.
+ */
+export const MAX_CONVOY_SIZE = 25;
+
+/**
+ * Upper bound on invitees per convoy.invite call. Equal to MAX_CONVOY_SIZE
+ * because a single call can never usefully add more than a whole convoy's worth
+ * of people — anything larger is a client bug, and rejecting it at the schema
+ * costs nothing.
+ */
+export const MAX_CONVOY_INVITE_BATCH = 25;
+
+/**
+ * Max length of the optional shared-destination label. 120 chars is long enough
+ * for a full formatted street address and short enough that the field cannot
+ * become a second chat channel. Over-length is REJECTED, never truncated (a
+ * silently shortened address is a wrong address).
+ */
+export const CONVOY_DESTINATION_LABEL_MAX_LENGTH = 120;
+
 /** Upper bound on convoys returned by convoy.list (bounded read safety). */
 export const MAX_CONVOYS_RETURNED = 200;
 
@@ -97,6 +140,28 @@ export interface ConvoySummaryStats {
   distanceMeters: number | null;
 }
 
+/**
+ * The convoy's SHARED DESTINATION as carried on the convoy document and
+ * serialized into every ConvoySummary.
+ *
+ * Hung off the summary rather than exposed as a separate read: members already
+ * receive the summary through the one convoy read path, so the destination
+ * arrives with everything else and no client grows a second source of truth.
+ * `setByUid`/`setAt` are SERVER-stamped (a client-chosen setter uid would let
+ * someone attribute a destination to another member) and `setByDisplayName` is
+ * denormalized exactly like `members[].displayName`, so the UI can attribute it
+ * without a profile fetch per render.
+ */
+export interface ConvoyDestination {
+  latitude: number;
+  longitude: number;
+  /** Human-readable place name; null when the pick had none (map long-press). */
+  label: string | null;
+  setByUid: string;
+  setByDisplayName: string | null;
+  setAt: string | null;
+}
+
 /** One convoy as returned by convoy.list / convoy.create (the wire contract). */
 export interface ConvoySummary {
   convoyId: string;
@@ -112,6 +177,13 @@ export interface ConvoySummary {
    * subscribe to at RTDB liveLocation/{uid}/latest (liveLocationLatestPath).
    */
   livePositionUids: string[];
+  /**
+   * The shared destination every member navigates to, or null when none is set.
+   * SURVIVES convoy.end untouched — it is part of the record of where the
+   * convoy was headed, and the UI simply stops rendering destination controls
+   * for an ended convoy.
+   */
+  destination: ConvoyDestination | null;
   summary: ConvoySummaryStats | null;
   createdAt: string | null;
   startedAt: string | null;
@@ -154,6 +226,41 @@ const convoyIdInputSchema = z.object({ convoyId: convoyIdSchema }).strict();
 
 export type ConvoyIdInput = z.infer<typeof convoyIdInputSchema>;
 
+const inviteToConvoySchema = z
+  .object({
+    convoyId: convoyIdSchema,
+    inviteeUids: z.array(uidSchema).min(1).max(MAX_CONVOY_INVITE_BATCH),
+  })
+  .strict();
+
+export type InviteToConvoyInput = z.infer<typeof inviteToConvoySchema>;
+
+/**
+ * z.number() already rejects NaN, but NOT Infinity — and both survive a JSON
+ * round-trip in some clients. An infinite coordinate would poison every
+ * downstream distance computation, so finiteness is checked explicitly before
+ * the range check.
+ */
+const finiteNumber = z.number().refine((n) => Number.isFinite(n));
+
+const setConvoyDestinationSchema = z
+  .object({
+    convoyId: convoyIdSchema,
+    latitude: finiteNumber.pipe(z.number().min(-90).max(90)),
+    longitude: finiteNumber.pipe(z.number().min(-180).max(180)),
+    // Trimmed, bounded, and blank-after-trim collapses to undefined so a blank
+    // label is stored as ABSENT rather than as an empty string.
+    label: z
+      .string()
+      .trim()
+      .max(CONVOY_DESTINATION_LABEL_MAX_LENGTH)
+      .transform((value) => (value.length === 0 ? undefined : value))
+      .optional(),
+  })
+  .strict();
+
+export type SetConvoyDestinationInput = z.infer<typeof setConvoyDestinationSchema>;
+
 const listConvoysSchema = z.object({}).strict();
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
@@ -184,6 +291,23 @@ export function parseListConvoysInput(data: unknown): ParseResult<Record<string,
   return parse(listConvoysSchema, data, 'Expected an empty object.');
 }
 
+export const INVITE_TO_CONVOY_EXPECTED = `Expected { convoyId, inviteeUids: [uid] (1..${MAX_CONVOY_INVITE_BATCH}) }.`;
+// `label` is described as the schema actually behaves: trimmed, bounded above,
+// and blank-after-trim ACCEPTED (stored absent) rather than rejected. Saying
+// "1..max" would send a caller hunting for a length problem they don't have
+// when the invalid-argument came from a coordinate.
+export const SET_CONVOY_DESTINATION_EXPECTED = `Expected { convoyId, latitude (-90..90), longitude (-180..180), label? (trimmed, max ${CONVOY_DESTINATION_LABEL_MAX_LENGTH}; blank is accepted and stored as no label) }.`;
+
+export function parseInviteToConvoyInput(data: unknown): ParseResult<InviteToConvoyInput> {
+  return parse(inviteToConvoySchema, data, INVITE_TO_CONVOY_EXPECTED);
+}
+
+export function parseSetConvoyDestinationInput(
+  data: unknown,
+): ParseResult<SetConvoyDestinationInput> {
+  return parse(setConvoyDestinationSchema, data, SET_CONVOY_DESTINATION_EXPECTED);
+}
+
 /** User-facing messages (clients branch on the HttpsError code, never text). */
 export const CONVOY_NOT_FOUND_MESSAGE = 'Convoy not found.';
 export const NOT_INVITED_MESSAGE = 'You have no pending invite for this convoy.';
@@ -192,18 +316,142 @@ export const CONVOY_ENDED_MESSAGE = 'This convoy has ended.';
 export const CONVOY_NOT_FORMING_MESSAGE = 'This convoy can no longer be started.';
 export const CONVOY_ALREADY_ENDED_MESSAGE = 'This convoy has already ended.';
 export const NO_VALID_INVITEES_MESSAGE = 'No one could be added to the convoy.';
+export const OWNER_CANNOT_LEAVE_MESSAGE =
+  'The convoy owner cannot leave — end the convoy instead.';
+export const NOT_ACCEPTED_MEMBER_MESSAGE = 'You have not joined this convoy.';
+export const CONVOY_FULL_MESSAGE = `A convoy can hold at most ${MAX_CONVOY_SIZE} people.`;
+export const DESTINATION_CLEAR_FORBIDDEN_MESSAGE =
+  'Only the member who set the destination, or the convoy owner, can clear it.';
 
 /**
  * Why a requested invitee was skipped by convoy.create. There is deliberately NO
  * `blocked` reason: a block edge (in either direction) is surfaced as the neutral
  * `not_found`, identical to a missing/non-member invitee, so the inviter can't
  * infer who blocked whom (privacy parity with friends/dm).
+ *
+ * `already_member` is only ever produced by convoy.invite (the invitee is
+ * already in this convoy's memberUids — invited, accepted, or declined). It is
+ * NOT a privacy leak: the inviter is themselves a member and can already see
+ * the roster. It is kept distinct from `duplicate` (which means "listed twice
+ * in THIS request") so the client can say the honest thing.
  */
-export type InviteeSkipReason = 'self' | 'not_friend' | 'not_found' | 'duplicate';
+export type InviteeSkipReason =
+  | 'self'
+  | 'not_friend'
+  | 'not_found'
+  | 'duplicate'
+  | 'already_member';
 
 export interface SkippedInvitee {
   uid: string;
   reason: InviteeSkipReason;
+}
+
+// ---------------------------------------------------------------------------
+// Peer block resolution (convoy.invite fan-out)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many uids may be asked for in ONE blocked-subcollection lookup.
+ *
+ * 30 is not a taste call: it is Firestore's hard limit on the number of
+ * disjunction values in a `documentId() in [...]` query. It is the largest
+ * chunk the query API will accept, so it is the smallest number of queries the
+ * matrix can be answered in.
+ *
+ * Both convoy bounds already sit under it — MAX_CONVOY_INVITE_BATCH is 25 and a
+ * convoy holds at most MAX_CONVOY_SIZE (25) members, so at most 24 accepted
+ * peers — which means today every lookup is exactly one chunk. The chunking is
+ * kept anyway so that raising either constant degrades into more queries rather
+ * than into an INVALID_ARGUMENT at runtime.
+ */
+export const BLOCK_LOOKUP_CHUNK_SIZE = 30;
+
+/** Splits into chunks of at most `size` (never emits an empty chunk). */
+export function chunkUids(uids: string[], size: number): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < uids.length; i += size) {
+    chunks.push(uids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/** Directed block-edge key: `blocker|blocked`. */
+export function blockPairKey(blockerUid: string, blockedUid: string): string {
+  return `${blockerUid}|${blockedUid}`;
+}
+
+/**
+ * Resolves which of the candidate × peer pairs have a block edge in EITHER
+ * direction, in a number of reads that grows with candidates + peers rather
+ * than with candidates × peers.
+ *
+ * The naive shape — a point read of `userBlocks/{a}/blocked/{b}` for both
+ * directions of every pair — costs 2·C·P reads: at the shipped bounds (25
+ * invitees, 24 accepted peers) that is 1200 document reads inside a single
+ * callable, on top of the per-invitee friend/profile reads. Firestore bills a
+ * `documentId() in [...]` query by the documents it RETURNS (an empty result
+ * still bills one read), so asking one blocker for all the uids it might have
+ * blocked collapses a whole row (or column) of the matrix into one read in the
+ * common case where nobody has blocked anyone. That makes the cost
+ * C + P (≈49 here) instead of 2·C·P.
+ *
+ * The Firestore access is injected (`queryBlocked`) rather than imported, so
+ * the read COUNT is observable in a unit test — an outcome-only assertion would
+ * pass just as happily against the 1200-read version.
+ *
+ * @param queryBlocked given a blocker uid and up to BLOCK_LOOKUP_CHUNK_SIZE
+ *   candidate uids, returns the subset that blocker has blocked.
+ */
+export async function resolvePeerBlockPairs(
+  candidateUids: string[],
+  peerUids: string[],
+  queryBlocked: (blockerUid: string, blockedUids: string[]) => Promise<string[]>,
+): Promise<Set<string>> {
+  const candidates = [...new Set(candidateUids)];
+  // Deliberately NOT filtered against `candidates`: a requested uid that is
+  // also an existing member must still be block-checked as a PEER of the other
+  // candidates, or a uid appearing on both sides would silently disable the
+  // peer check for everyone else in the batch.
+  const peers = [...new Set(peerUids)];
+  if (candidates.length === 0 || peers.length === 0) {
+    return new Set<string>();
+  }
+
+  const lookups: Array<Promise<Array<[string, string]>>> = [];
+  const enqueue = (blockerUid: string, blocked: string[]) => {
+    for (const ids of chunkUids(blocked, BLOCK_LOOKUP_CHUNK_SIZE)) {
+      lookups.push(
+        queryBlocked(blockerUid, ids).then((hits) =>
+          hits.map((hit): [string, string] => [blockerUid, hit]),
+        ),
+      );
+    }
+  };
+  // Direction 1: did the candidate block any peer?  Direction 2: did any peer
+  // block the candidate?  Both are needed — a block is honoured whichever way
+  // round it was made.
+  for (const candidate of candidates) enqueue(candidate, peers);
+  for (const peer of peers) enqueue(peer, candidates);
+
+  const pairs = new Set<string>();
+  for (const found of await Promise.all(lookups)) {
+    for (const [blocker, blocked] of found) {
+      pairs.add(blockPairKey(blocker, blocked));
+    }
+  }
+  return pairs;
+}
+
+/** True when a block edge exists in either direction between `uid` and any peer. */
+export function isBlockedAgainstAnyPeer(
+  uid: string,
+  peerUids: string[],
+  pairs: Set<string>,
+): boolean {
+  return peerUids.some(
+    (peerUid) => pairs.has(blockPairKey(uid, peerUid)) || pairs.has(blockPairKey(peerUid, uid)),
+  );
 }
 
 /** Reads a profile doc into the minimal safe projection (missing → null). */
@@ -307,6 +555,58 @@ export function memberEntry(
   return members[uid];
 }
 
+/**
+ * True when `uid` is a member whose invite is ACCEPTED (the owner is seeded
+ * accepted). This — not bare membership — is the gate for the actions that act
+ * on the group: invite, setDestination, leave.
+ */
+export function isAcceptedConvoyMember(
+  data: Record<string, unknown> | undefined,
+  uid: string,
+): boolean {
+  return memberEntry(data, uid)?.inviteStatus === 'accepted';
+}
+
+/**
+ * The document patch that removes `uid` from a convoy (convoy.leave).
+ *
+ * The member is removed OUTRIGHT rather than flagged `left`: dropping out of
+ * `memberUids` is what actually revokes their Firestore read on the convoy doc
+ * AND their convoy-chat access (both rules gate on memberUids), and it takes
+ * them out of `livePositionUids` so the rest of the group stops subscribing to
+ * a car that is no longer there. A tombstoned `left` entry would keep all three.
+ *
+ * The three collections are rewritten WHOLE (not patched key-by-key) so the
+ * caller can write them in one atomic update — a convoy whose memberUids and
+ * members map disagree is exactly the state every gate in this domain reads.
+ *
+ * Returns the remaining ACCEPTED member count so the callable can report it
+ * without re-deriving membership.
+ */
+export function buildLeaveConvoyUpdate(
+  data: Record<string, unknown>,
+  uid: string,
+): {
+  memberUids: string[];
+  members: Record<string, unknown>;
+  memberProfiles: Record<string, unknown>;
+  remainingAcceptedCount: number;
+} {
+  const memberUids = (Array.isArray(data.memberUids) ? (data.memberUids as string[]) : []).filter(
+    (candidate) => candidate !== uid,
+  );
+  const members = { ...((data.members ?? {}) as Record<string, unknown>) };
+  delete members[uid];
+  const memberProfiles = { ...((data.memberProfiles ?? {}) as Record<string, unknown>) };
+  delete memberProfiles[uid];
+
+  const remainingAcceptedCount = Object.values(members).filter(
+    (entry) => !!entry && (entry as Record<string, unknown>).inviteStatus === 'accepted',
+  ).length;
+
+  return { memberUids, members, memberProfiles, remainingAcceptedCount };
+}
+
 /** Uids of accepted members (owner included) — the live-position subscription set. */
 export function acceptedMemberUids(data: Record<string, unknown> | undefined): string[] {
   const members = (data?.members ?? {}) as Record<string, Record<string, unknown> | undefined>;
@@ -334,6 +634,34 @@ export function computeConvoySummary(
     participantUids,
     participantCount: participantUids.length,
     distanceMeters: null,
+  };
+}
+
+/**
+ * Maps the stored `destination` field into the wire shape, or null when absent
+ * or structurally unusable.
+ *
+ * A stored destination missing a finite lat/lng is treated as ABSENT rather
+ * than surfaced with a coerced 0/0 coordinate — silently handing a driver the
+ * Gulf of Guinea is worse than showing no destination at all.
+ */
+export function toConvoyDestination(
+  value: unknown,
+  toIso: (value: unknown) => string | null,
+): ConvoyDestination | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const latitude = raw.latitude;
+  const longitude = raw.longitude;
+  if (typeof latitude !== 'number' || !Number.isFinite(latitude)) return null;
+  if (typeof longitude !== 'number' || !Number.isFinite(longitude)) return null;
+  return {
+    latitude,
+    longitude,
+    label: typeof raw.label === 'string' && raw.label.length > 0 ? raw.label : null,
+    setByUid: typeof raw.setByUid === 'string' ? raw.setByUid : '',
+    setByDisplayName: typeof raw.setByDisplayName === 'string' ? raw.setByDisplayName : null,
+    setAt: toIso(raw.setAt),
   };
 }
 
@@ -418,6 +746,7 @@ export function toConvoySummary(
     memberUids,
     viewer,
     livePositionUids: members.filter((m) => m.inviteStatus === 'accepted').map((m) => m.uid),
+    destination: toConvoyDestination(data.destination, toIso),
     summary,
     createdAt: toIso(data.createdAt),
     startedAt: toIso(data.startedAt),

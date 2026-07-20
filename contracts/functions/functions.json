@@ -732,7 +732,43 @@
     {
       "name": "convoy.list",
       "domain": "convoy",
-      "description": "Lists the caller's convoys ({} input): { convoys:[ConvoySummary], pendingInvites:[ConvoySummary] } newest-first (bounded at 200 via the [memberUids CONTAINS, createdAt DESC] index). pendingInvites is the subset the caller still has a pending invite for (non-ended + viewer.inviteStatus=='invited'). ConvoySummary = { convoyId, ownerUid, title, status, members:[{uid,role,inviteStatus,joinedAt,displayName,avatarPath}] (inviteStatus is the green dot), memberUids, viewer:{role,inviteStatus}|null, livePositionUids:[uid] (accepted members — the uids the map subscribes to at RTDB liveLocation/{uid}/latest for live positions), summary:{durationSeconds,participantUids,participantCount,distanceMeters}|null, createdAt, startedAt, endedAt }. Deployed via grouped export as convoy-list (functions/src/convoy/manageConvoy.ts).",
+      "description": "Lists the caller's convoys ({} input): { convoys:[ConvoySummary], pendingInvites:[ConvoySummary] } newest-first (bounded at 200 via the [memberUids CONTAINS, createdAt DESC] index). pendingInvites is the subset the caller still has a pending invite for (non-ended + viewer.inviteStatus=='invited'). ConvoySummary = { convoyId, ownerUid, title, status, members:[{uid,role,inviteStatus,joinedAt,displayName,avatarPath}] (inviteStatus is the green dot), memberUids, viewer:{role,inviteStatus}|null, livePositionUids:[uid] (accepted members — the uids the map subscribes to at RTDB liveLocation/{uid}/latest for live positions), destination:{latitude,longitude,label,setByUid,setByDisplayName,setAt}|null (the shared destination — see convoy.setDestination; survives end), summary:{durationSeconds,participantUids,participantCount,distanceMeters}|null, createdAt, startedAt, endedAt }. Deployed via grouped export as convoy-list (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.leave",
+      "domain": "convoy",
+      "description": "An ACCEPTED non-owner member removes THEMSELVES from a convoy ({ convoyId }). Fills the gap convoy.respond cannot: respond hard-requires members[caller].inviteStatus=='invited' and throws failed-precondition once you have accepted. The caller's entry is deleted from members + memberProfiles and their uid removed from memberUids (all three written whole in one transaction), so their convoy read (rules gate on memberUids), their convoy chat access and their livePositionUids slot all drop together. The OWNER is refused with failed-precondition and must use convoy.end — an owner leaving would orphan every owner-gated transition (start/end/summary) with no succession rule. A still-invited or declined member is also failed-precondition (nothing to leave; respond is their path); an ended convoy is failed-precondition; a non-member / unknown convoy is not-found (never permission-denied, so a convoy can't be probed). The LAST non-owner leaving does NOT auto-end the convoy — it is left alive with the owner alone, because ending writes the permanent shared summary and is the owner's deliberate act. Returns { convoy: ConvoySummary (built from the post-transaction state; viewer is null — the caller is no longer a member), remainingMemberCount }. Deployed via grouped export as convoy-leave (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.invite",
+      "domain": "convoy",
+      "description": "Adds invitees to an EXISTING convoy ({ convoyId, inviteeUids: [uid] (1..25) }) as members[uid]={role:'member',inviteStatus:'invited'} — convoy.create takes invitees only at creation, so without this a convoy can never grow. ANY ACCEPTED member may invite, not the owner alone: a convoy is a peer group and the owner is frequently the one driving, so owner-only would make the common case (adding the friend who just phoned) impossible; every candidate must still be an established FRIEND of the INVITER (users/{inviter}/friends/{uid}), which is what keeps 'any member' from meaning 'any stranger'. Blocking is honoured both ways against the inviter AND against every other ACCEPTED member, so nobody can be pulled into a convoy with someone who blocked them. Skip reasons are the same neutral set as convoy.create plus already_member (uid already in memberUids); a block edge is surfaced as the neutral not_found. Bounded: max 25 invitees per call and a hard cap of 25 TOTAL members (MAX_CONVOY_SIZE) — an over-cap batch is refused WHOLE (failed-precondition) rather than partially applied. Membership + cap are re-asserted inside the transaction and memberUids grows via arrayUnion, so concurrent invites/leaves cannot clobber each other. IDEMPOTENT: if every requested uid is already in the convoy — including when a CONCURRENT invite added them mid-call — the call SUCCEEDS with invited:[] and reason already_member, because the post-state asked for is the post-state that exists. Ended convoy / caller not accepted / no requested uid addable AND none already a member → failed-precondition; non-member or unknown convoy → not-found. Writes the same best-effort in-app 'convoy_invite' notification per added invitee as convoy.create (one shared path, so an invitee's opt-out works identically). Returns { convoy: ConvoySummary, invited:[uid], skipped:[{uid,reason}] }. Deployed via grouped export as convoy-invite (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.setDestination",
+      "domain": "convoy",
+      "description": "Sets or REPLACES the convoy's SHARED DESTINATION ({ convoyId, latitude, longitude, label? }) — the one place every member can start navigation to. Any ACCEPTED member may set it (not owner-only: the owner is frequently driving and the person who knows where the meet is often isn't whoever pressed create); last write wins, with the whole destination object written atomically so a new coordinate is never observable paired with the previous label. Server-validated: latitude finite in [-90,90], longitude finite in [-180,180] (NaN/Infinity explicitly rejected — they survive JSON round-trips and would poison downstream distance math), label trimmed and max 120 chars (over-length is invalid-argument, never silent truncation; blank-after-trim stored as ABSENT, not ''). setByUid comes from the verified auth context and setAt from the server clock — never client-supplied, or a member could attribute a destination to someone else; setByDisplayName is denormalized from memberProfiles like members[].displayName. A 'forming' convoy MAY have a destination (agreeing where to go is what happens before rolling); 'ended' → failed-precondition; caller not accepted → failed-precondition; non-member / unknown convoy → not-found (never permission-denied). Members READ it as ConvoySummary.destination on the convoy read path they already use — no new listener, no second source of truth. ARRIVAL is deliberately NOT tracked and NEVER auto-ends the convoy. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-setDestination (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.clearDestination",
+      "domain": "convoy",
+      "description": "Clears the convoy's shared destination ({ convoyId }), deleting the `destination` field. Permitted to the member who SET it or the convoy OWNER — clearing is strictly more destructive than replacing (it can leave members mid-drive with nothing to navigate to and leaves no replacement to explain itself), so setter-or-owner lets the person who made the mess undo it and gives the owner a moderation path without letting any member wipe a plan the group is following. Any other accepted member → permission-denied (they already know the convoy exists, so not-found would mislead). Clearing when nothing is set is an idempotent NO-OP, not an error (two people tapping at once is normal). Ended convoy → failed-precondition: the destination SURVIVES convoy.end untouched as a record of where the group was headed, so there is nothing live to clear. Caller not accepted → failed-precondition; non-member / unknown convoy → not-found. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-clearDestination (functions/src/convoy/manageConvoy.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
