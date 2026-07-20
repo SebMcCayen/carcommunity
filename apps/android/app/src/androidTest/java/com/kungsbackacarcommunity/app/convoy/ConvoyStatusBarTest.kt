@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -197,6 +198,35 @@ class ConvoyStatusBarTest {
         composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
         composeTestRule.waitForIdle()
         assertEquals("c1", invited)
+    }
+
+    /**
+     * A flag flipped ahead of its handler leaves the controls disabled — so the
+     * accessibility labels and the explanation line must keep saying the actions
+     * are unavailable, because they still are. A disabled button that announces
+     * itself as "Invite more" / "Leave convoy" tells a screen-reader user, who
+     * has no visual disabled cue to fall back on, that something is available
+     * when it does nothing.
+     */
+    @Test
+    fun aWiredFlagWithoutItsHandler_stillAnnouncesAndExplainsAsUnavailable() {
+        val wired = ConvoyBarActionAvailability.Wired
+        // Both flags flipped, neither handler supplied — the mid-refactor state.
+        val state =
+            memberState("c1").copy(inviteAvailability = wired, leaveAvailability = wired)
+        composeTestRule.setContent {
+            KccTheme { ConvoyStatusBar(state = state, onEndConvoy = {}) }
+        }
+
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barInviteUnavailable))
+            .assertExists()
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barLeaveUnavailable))
+            .assertExists()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barNoticeInviteAndLeave))
+            .assertIsDisplayed()
     }
 
     /**

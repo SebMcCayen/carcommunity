@@ -34,6 +34,18 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
+/**
+ * A usable/not-usable boolean as the availability it corresponds to, so the
+ * bar's explanation line can be derived from the same booleans that decide
+ * enablement and the accessibility labels instead of a parallel rule.
+ */
+private fun availability(usable: Boolean): ConvoyBarActionAvailability =
+    if (usable) {
+        ConvoyBarActionAvailability.Wired
+    } else {
+        ConvoyBarActionAvailability.BackendMissing
+    }
+
 /** Test tag on the whole convoy status bar. */
 const val CONVOY_BAR_TEST_TAG = "convoy_bar"
 
@@ -117,6 +129,34 @@ fun ConvoyStatusBar(
     // up and keeps its meaning fixed — it still ends exactly the convoy it named.
     var pendingEndConvoyId by remember { mutableStateOf<String?>(null) }
 
+    // Whether each action is actually USABLE, which needs both halves: the state
+    // flag says a callable exists, the handler says this host has wired it up.
+    // Every downstream decision — enablement, the accessibility label, and the
+    // explanation line — reads these two booleans and nothing else, so the
+    // control cannot end up disabled while announcing itself as available, or
+    // enabled while the line underneath still says the feature is missing.
+    //
+    // `state.busy` is deliberately NOT part of them: it is a transient in-flight
+    // state, so it must disable the buttons without rewriting their labels into
+    // "not available yet", which would tell a screen-reader user the feature is
+    // gone when it is merely mid-request.
+    val inviteUsable =
+        state.inviteAvailability == ConvoyBarActionAvailability.Wired && onInvite != null
+    val leaveUsable =
+        state.leaveAvailability == ConvoyBarActionAvailability.Wired &&
+            // The owner's control is `convoy-end`, whose handler is non-null by
+            // signature; only a member's leave depends on the optional handler.
+            (state.viewerIsOwner || onLeaveConvoy != null)
+
+    // The explanation line is recomputed from usability rather than read off
+    // `state.notice`, for the same reason: a flag flipped ahead of its handler
+    // must keep saying the action is unavailable, because it still is.
+    val effectiveNotice =
+        state.copy(
+            inviteAvailability = availability(inviteUsable),
+            leaveAvailability = availability(leaveUsable),
+        ).notice
+
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
         shape = RoundedCornerShape(KccRadius.full),
@@ -163,17 +203,16 @@ fun ConvoyStatusBar(
                 // stopped saying why. Requiring [onInvite] as well means flipping
                 // the flag alone cannot produce an ENABLED button that does
                 // nothing either; both halves have to be done deliberately.
-                val inviteWired = state.inviteAvailability == ConvoyBarActionAvailability.Wired
                 IconButton(
                     onClick = { onInvite?.invoke(state.convoyId) },
-                    enabled = inviteWired && onInvite != null && !state.busy,
+                    enabled = inviteUsable && !state.busy,
                     modifier = Modifier.testTag(CONVOY_BAR_INVITE_TAG),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PersonAdd,
                         contentDescription =
                             stringResource(
-                                if (inviteWired) {
+                                if (inviteUsable) {
                                     R.string.convoy_barInvite
                                 } else {
                                     R.string.convoy_barInviteUnavailable
@@ -193,11 +232,7 @@ fun ConvoyStatusBar(
                 // reaches [onLeaveConvoy] or, while that is still null, nothing at
                 // all — the control simply stays disabled until the handler is
                 // supplied, exactly like the invite control above.
-                val leaveWired = state.leaveAvailability == ConvoyBarActionAvailability.Wired
-                val leaveEnabled =
-                    leaveWired &&
-                        !state.busy &&
-                        (state.viewerIsOwner || onLeaveConvoy != null)
+                val leaveEnabled = leaveUsable && !state.busy
                 IconButton(
                     onClick = {
                         if (state.viewerIsOwner) {
@@ -232,7 +267,7 @@ fun ConvoyStatusBar(
                             stringResource(
                                 when {
                                     state.viewerIsOwner -> R.string.convoy_barEnd
-                                    leaveWired -> R.string.convoy_barLeave
+                                    leaveUsable -> R.string.convoy_barLeave
                                     else -> R.string.convoy_barLeaveUnavailable
                                 },
                             ),
@@ -246,7 +281,7 @@ fun ConvoyStatusBar(
             // navigation variant, where the top of the screen belongs to the
             // maneuver instructions.
             val noticeRes =
-                when (state.notice) {
+                when (effectiveNotice) {
                     ConvoyBarNotice.None -> null
                     ConvoyBarNotice.InviteMissing -> R.string.convoy_barNoticeInvite
                     ConvoyBarNotice.LeaveMissing -> R.string.convoy_barNoticeLeave
