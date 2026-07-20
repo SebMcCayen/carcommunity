@@ -85,6 +85,13 @@ const val CONVOY_BAR_LEAVE_TAG = "convoy_bar_leave"
  *   [ConvoyBarState.inviteAvailability] `== Wired` before it enables, so neither
  *   half can be added on its own and quietly produce a button that looks live and
  *   does nothing, or a flag that claims a capability the UI never exposes.
+ * @param onLeaveConvoy removes the CALLER from this convoy — a member's action,
+ *   never an owner's. Null today, because the `convoy.leave` callable does not
+ *   exist either. A member's tap is routed here on `viewerIsOwner`, so it can
+ *   never reach the end-convoy confirmation no matter what
+ *   [ConvoyBarState.leaveAvailability] says: "leave" ending everyone's drive is
+ *   the one failure in this component that would actually hurt people, so it is
+ *   prevented structurally rather than by the availability flag being correct.
  */
 @Composable
 fun ConvoyStatusBar(
@@ -93,6 +100,7 @@ fun ConvoyStatusBar(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     onInvite: ((String) -> Unit)? = null,
+    onLeaveConvoy: ((String) -> Unit)? = null,
 ) {
     // The convoy the open confirm dialog is ABOUT, captured when the user opened
     // it — not a bare boolean. [state] is hoisted and refreshes underneath this
@@ -174,12 +182,30 @@ fun ConvoyStatusBar(
                     )
                 }
 
-                // Leave (member) / End (owner). Only the owner's variant is wired,
-                // and it confirms first because it ends the drive for everyone.
+                // Leave (member) / End (owner). Two genuinely different actions
+                // sharing a slot, so ownership — not availability — decides which
+                // one a tap runs. Routing on `viewerIsOwner` explicitly, rather
+                // than letting a Wired `leaveAvailability` imply "open the end
+                // dialog", is what keeps the footgun in this file's KDoc closed:
+                // the day `convoy.leave` lands and someone flips
+                // [ConvoyBar.leaveAvailability] to Wired for members, a member's
+                // tap CANNOT fall through into "end the convoy for everyone". It
+                // reaches [onLeaveConvoy] or, while that is still null, nothing at
+                // all — the control simply stays disabled until the handler is
+                // supplied, exactly like the invite control above.
                 val leaveWired = state.leaveAvailability == ConvoyBarActionAvailability.Wired
-                val leaveEnabled = leaveWired && !state.busy
+                val leaveEnabled =
+                    leaveWired &&
+                        !state.busy &&
+                        (state.viewerIsOwner || onLeaveConvoy != null)
                 IconButton(
-                    onClick = { pendingEndConvoyId = state.convoyId },
+                    onClick = {
+                        if (state.viewerIsOwner) {
+                            pendingEndConvoyId = state.convoyId
+                        } else {
+                            onLeaveConvoy?.invoke(state.convoyId)
+                        }
+                    },
                     enabled = leaveEnabled,
                     modifier = Modifier.testTag(CONVOY_BAR_LEAVE_TAG),
                     // Destructive red, but only while the control can actually do

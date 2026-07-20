@@ -62,8 +62,19 @@ package com.kungsbackacarcommunity.app.convoy
  *    decision; the client is happy either way (owner-only would simply gate the
  *    button on [ConvoyBarState.viewerIsOwner]).
  *
- * When either lands, the only client change is flipping the corresponding
- * [ConvoyBarActionAvailability] here and handing the bar a lambda.
+ * When either lands, the client change is exactly two halves, and BOTH are
+ * required — the controls gate on the availability flag *and* on the presence of
+ * a handler, so neither half alone can produce a live button that does nothing or
+ * a flag claiming a capability the UI never exposes:
+ *
+ *  - `convoy.invite`: flip [ConvoyBar.inviteAvailability] to [Wired] and pass
+ *    `ConvoyStatusBar(onInvite = ...)`.
+ *  - `convoy.leave`: return [Wired] from [ConvoyBar.leaveAvailability] for
+ *    non-owners too, and pass `ConvoyStatusBar(onLeaveConvoy = ...)`. The bar
+ *    routes the trailing control on `viewerIsOwner`, NOT on this flag, so a
+ *    member's tap goes to that handler and cannot reach the owner's end-convoy
+ *    confirmation even if only the flag is flipped — the leave→end footgun above
+ *    is closed structurally, not by remembering to update the click path.
  */
 
 /** Whether a convoy-bar action can actually reach a backend today. */

@@ -123,6 +123,42 @@ class ConvoyStatusBarTest {
     }
 
     /**
+     * The one failure in this component that would actually hurt people: a
+     * member tapping "leave" and silently ending everyone's drive. The trailing
+     * control routes on `viewerIsOwner`, not on `leaveAvailability`, so this
+     * holds even in the future state where `convoy.leave` has landed and the
+     * availability flag has been flipped for members — the case a click path
+     * keyed on availability alone would get wrong.
+     */
+    @Test
+    fun aMembersLeaveNeverReachesTheEndConvoyPath_evenOnceLeaveIsWired() {
+        var ended: String? = null
+        var left: String? = null
+        // The post-`convoy.leave` world: member, leave wired, handler supplied.
+        val state =
+            memberState("c1").copy(leaveAvailability = ConvoyBarActionAvailability.Wired)
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = state,
+                    onEndConvoy = { ended = it },
+                    onLeaveConvoy = { left = it },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // No confirmation dialog: that belongs to "end", which is not this action.
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
+            .assertDoesNotExist()
+        assertEquals("a member's leave must reach the leave handler", "c1", left)
+        assertNull("a member's leave must never end the convoy for everyone", ended)
+    }
+
+    /**
      * The invite control's enablement is derived, not hard-coded: flipping
      * `inviteAvailability` to `Wired` when the `convoy.invite` callable ships
      * must actually make the button live, and must do so only alongside a
@@ -186,16 +222,33 @@ class ConvoyStatusBarTest {
         }
         composeTestRule.waitForIdle()
 
-        fun exactErrorPixels(): Int {
+        // Matched with a small per-channel tolerance rather than by exact Color
+        // equality: the icon is a tinted vector, so its interior really is the
+        // flat tint, but 8-bit quantisation and renderer differences across
+        // devices can shift a channel by a step or two. The tolerance is far
+        // below the effect being measured — a properly disabled icon is the error
+        // colour at ~38% opacity composited over the surface, tens of steps away
+        // per channel, not one or two — so it removes the flake without blunting
+        // the assertion.
+        fun undimmedErrorPixels(): Int {
             val pixels =
                 composeTestRule
                     .onNodeWithTag(CONVOY_BAR_LEAVE_TAG)
                     .captureToImage()
                     .toPixelMap()
+            val tolerance = 4f / 255f
+            fun near(a: Float, b: Float) = kotlin.math.abs(a - b) <= tolerance
             var count = 0
             for (y in 0 until pixels.height) {
                 for (x in 0 until pixels.width) {
-                    if (pixels[x, y] == errorColor) count++
+                    val p = pixels[x, y]
+                    if (near(p.red, errorColor.red) &&
+                        near(p.green, errorColor.green) &&
+                        near(p.blue, errorColor.blue) &&
+                        near(p.alpha, errorColor.alpha)
+                    ) {
+                        count++
+                    }
                 }
             }
             return count
@@ -205,7 +258,7 @@ class ConvoyStatusBarTest {
         assertEquals(
             "a disabled leave icon must not render in undimmed destructive red",
             0,
-            exactErrorPixels(),
+            undimmedErrorPixels(),
         )
 
         // Enabled (owner: `convoy-end` is wired) — the destructive colour IS used,
@@ -215,7 +268,7 @@ class ConvoyStatusBarTest {
         composeTestRule.waitForIdle()
         assertTrue(
             "an enabled end-convoy icon should still read as destructive",
-            exactErrorPixels() > 0,
+            undimmedErrorPixels() > 0,
         )
     }
 }
