@@ -208,11 +208,11 @@ class ConvoyFocusTest {
         assertEquals(ConvoyCameraPlan.FollowSelf, off)
         assertEquals(gap, off)
 
-        // The mode is what separates them, and it is available at the call site
-        // that has to choose — so the surface is given it directly.
-        assertTrue(
-            "focus stays ON during a data gap; only the user's choice turns it off",
-            ConvoyFocusMode.Convoy != ConvoyFocusMode.Me,
-        )
+        // What separates the two cases is therefore the MODE, not the plan —
+        // focus stays ON through a data gap, and only the user's choice turns it
+        // off. That is why `setConvoyFit` takes the mode as its own argument
+        // instead of inferring intent from null points; the assertions above are
+        // what pins the property down, so there is deliberately no further
+        // assertion here comparing two enum constants (which could never fail).
     }
 }
