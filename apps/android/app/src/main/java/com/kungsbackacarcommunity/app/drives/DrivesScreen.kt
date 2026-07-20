@@ -143,7 +143,7 @@ private fun DriveCard(
     // The History read model carries no route points (they live in member-gated
     // Cloud Storage and are never fetched here), so top speed is unavailable and
     // its sentence is omitted — never rendered as "0 km/h".
-    val shareText = rememberDriveShareText(drive, topSpeedMetersPerSecond = null)
+    val shareText = driveShareText(drive, topSpeedMetersPerSecond = null)
     val shareUnavailable = stringResource(R.string.savedDrives_shareUnavailable)
     var showConfirm by remember { mutableStateOf(false) }
 
@@ -214,7 +214,7 @@ fun SavedDriveDetailScreen(
 
     // No loaded route points on the detail read model either, so the top-speed
     // sentence degrades away rather than showing a bogus figure.
-    val shareSummary = rememberDriveShareText(drive, topSpeedMetersPerSecond = null)
+    val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = null)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -304,8 +304,8 @@ fun SavedDriveDetailScreen(
 }
 
 /**
- * The share text for a saved drive, matching Seb's natural-language structure in
- * both locales (savedDrives_shareSummary + optional savedDrives_shareTopSpeed).
+ * Builds a shareable, natural-language summary of a recorded drive, composed from
+ * both locale strings (savedDrives_shareSummary + optional savedDrives_shareTopSpeed).
  *
  * @param topSpeedMetersPerSecond a client-side, GPS-glitch-filtered top speed
  *   ([DriveSummary.topSpeedMetersPerSecond]) when route points are loaded, else
@@ -313,7 +313,7 @@ fun SavedDriveDetailScreen(
  *   so a route-less or summary-only drive omits it rather than claiming 0 km/h.
  */
 @Composable
-private fun rememberDriveShareText(
+private fun driveShareText(
     drive: SavedDrive,
     topSpeedMetersPerSecond: Double?,
 ): String {
