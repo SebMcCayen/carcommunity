@@ -555,8 +555,11 @@
     <string name="savedDrives_startArea">Startområde</string>
     <string name="savedDrives_endArea">Slutområde</string>
     <string name="savedDrives_routeOverview">Ruttöversikt</string>
-    <string name="savedDrives_routeOverviewPlaceholder">Ruttkarta kommer snart — den inspelade rutten lagras privat och är inte tillgänglig i appen ännu.</string>
+    <string name="savedDrives_routeOverviewPlaceholder">Ruttkartan är inte tillgänglig i den här versionen av appen.</string>
     <string name="savedDrives_routeOverviewMemberOnly">Ruttöversikt kräver aktivt medlemskap.</string>
+    <string name="savedDrives_routeLoading">Laddar rutt...</string>
+    <string name="savedDrives_routeUnavailable">Ruttkartan är inte tillgänglig för den här körningen.</string>
+    <string name="savedDrives_routeEmpty">Den här körningen har ingen inspelad rutt att visa.</string>
     <string name="savedDrives_deleteAction">Radera körning</string>
     <string name="savedDrives_deleteConfirmTitle">Radera körning?</string>
     <string name="savedDrives_deleteConfirmBody">Körningen raderas permanent.</string>

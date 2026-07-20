@@ -555,8 +555,11 @@
     <string name="savedDrives_startArea">Start area</string>
     <string name="savedDrives_endArea">End area</string>
     <string name="savedDrives_routeOverview">Route overview</string>
-    <string name="savedDrives_routeOverviewPlaceholder">Route map coming soon — the recorded route is stored privately and isn\'t available in the app yet.</string>
+    <string name="savedDrives_routeOverviewPlaceholder">The route map isn\'t available in this version of the app.</string>
     <string name="savedDrives_routeOverviewMemberOnly">Route overview requires an active membership.</string>
+    <string name="savedDrives_routeLoading">Loading route...</string>
+    <string name="savedDrives_routeUnavailable">The route map isn\'t available for this drive.</string>
+    <string name="savedDrives_routeEmpty">This drive has no recorded route to show.</string>
     <string name="savedDrives_deleteAction">Delete drive</string>
     <string name="savedDrives_deleteConfirmTitle">Delete drive?</string>
     <string name="savedDrives_deleteConfirmBody">The drive will be permanently deleted.</string>

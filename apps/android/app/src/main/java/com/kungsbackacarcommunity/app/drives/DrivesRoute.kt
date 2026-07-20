@@ -10,9 +10,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import kotlinx.coroutines.launch
+
+/**
+ * Remembers the Firebase-backed route reader for the replay map, or null in a
+ * config-less / CI build (no Firebase). Mirrors [rememberClientErrorReporter] so
+ * the default can be overridden in tests.
+ */
+@Composable
+private fun rememberRouteReplayRepository(): RouteReplayRepository? {
+    val context = LocalContext.current
+    return remember(context) { FirebaseRouteReplayRepository.createIfAvailable(context) }
+}
 
 /**
  * Saved-drives integration route (Phase 12 slice 12): observe the owner's
@@ -26,6 +38,9 @@ fun DrivesRoute(
     repository: DrivesRepository,
     uid: String,
     errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
+    // Reader for the driven-route replay map. Defaulted from Firebase (null in a
+    // config-less / CI build) so callers and tests need not supply it.
+    routeRepository: RouteReplayRepository? = rememberRouteReplayRepository(),
 ) {
     // Bumped by the "try again" affordance to re-subscribe the observe flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -82,6 +97,8 @@ fun DrivesRoute(
                     selectedRideId = null
                     coordinator.reset()
                 },
+                routeRepository = routeRepository,
+                uid = uid,
             )
 
         else ->
