@@ -34,6 +34,8 @@ import com.mapbox.android.gestures.StandardScaleGestureDetector
 import com.mapbox.bindgen.Value
 import com.mapbox.common.Cancelable
 import com.mapbox.common.MapboxOptions
+import com.mapbox.geojson.FeatureCollection
+import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.EdgeInsets
@@ -50,8 +52,13 @@ import com.mapbox.maps.extension.style.layers.addLayer
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.layers.getLayerAs
 import com.mapbox.maps.extension.style.layers.generated.LineLayer
+import com.mapbox.maps.extension.style.layers.properties.generated.LineCap
+import com.mapbox.maps.extension.style.layers.properties.generated.LineJoin
 import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
+import com.mapbox.maps.extension.style.sources.generated.GeoJsonSource
+import com.mapbox.maps.extension.style.sources.generated.geoJsonSource
+import com.mapbox.maps.extension.style.sources.getSourceAs
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
@@ -208,6 +215,17 @@ class MapboxMapSurface : MapSurface {
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+
+    // The private "past ~1 km" breadcrumb tail of the user's OWN travel, drawn
+    // only while THIS user is live-sharing (see [BreadcrumbTrail] for the rolling
+    // window / jitter / jump rules). Fed from the device puck's position fixes
+    // and rendered client-side ONLY — it is never written to RTDB/Firestore nor
+    // pushed across the [MapSurface] seam, so no other convoy member ever sees
+    // it. Held on the surface (which outlives individual MapViews) so the tail
+    // survives a MapView recreate mid-session and can be redrawn against the new
+    // style. Touched only on the main-thread position callback.
+    private val breadcrumbTrail = BreadcrumbTrail()
+
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
     // Incidents are POINT annotations (an icon), not circles: the categories have
@@ -832,6 +850,21 @@ class MapboxMapSurface : MapSurface {
             remember {
                 OnIndicatorPositionChangedListener { point ->
                     lastPoint = point
+                    // Private breadcrumb tail: record the user's OWN path while —
+                    // and only while — they are live-sharing. Done BEFORE the
+                    // camera-follow gate below so the tail keeps growing even when
+                    // the user has panned away and follow is suppressed. The buffer
+                    // drops jitter/duplicate fixes itself and only reports a change
+                    // when the tail actually moved, so a stationary puck emitting a
+                    // fix every frame triggers no redraw. Local-only: nothing here
+                    // crosses the seam or is written anywhere shared.
+                    if (userMarkerFlow.value?.isLiveSharing == true) {
+                        val changed =
+                            breadcrumbTrail.add(
+                                MapPoint(longitude = point.longitude(), latitude = point.latitude()),
+                            )
+                        if (changed) runCatching { redrawBreadcrumb() }
+                    }
                     // "Camera follows me": while following (and no route overlay
                     // owns the camera), keep the camera centred on the puck as the
                     // user moves. Suppressed once the user pans/zooms/rotates —
@@ -1156,6 +1189,20 @@ class MapboxMapSurface : MapSurface {
                             registeredIncidentImages.clear()
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
                         }
+                        // Private breadcrumb tail: a GeoJSON line source + a
+                        // line-gradient layer (both hidden until there is a tail to
+                        // draw), created once the style is ready. Idempotent. If a
+                        // live-sharing session is already running (e.g. the MapView
+                        // was recreated on a tab round-trip mid-session), redraw the
+                        // retained tail against the fresh style so it is not lost.
+                        runCatching {
+                            addBreadcrumbLayer(style)
+                            if (userMarkerFlow.value?.isLiveSharing == true) {
+                                redrawBreadcrumb()
+                            } else {
+                                clearBreadcrumbRender()
+                            }
+                        }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
                         // hidden without error.
@@ -1205,6 +1252,17 @@ class MapboxMapSurface : MapSurface {
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
+                }
+                // Breadcrumb tail lifecycle: it starts when a live session starts
+                // (built up by the position listener) and CLEARS when the session
+                // ends. When not sharing, drop the retained tail and wipe it off
+                // the map so a finished drive leaves no trail behind. Cheap and
+                // idempotent, so running it on unrelated recompositions is fine.
+                runCatching {
+                    if (marker?.isLiveSharing != true) {
+                        breadcrumbTrail.clear()
+                        clearBreadcrumbRender()
+                    }
                 }
             },
             onRelease = { mapView ->
@@ -1539,6 +1597,43 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
+    /**
+     * Redraw the private breadcrumb tail from the current [breadcrumbTrail]. Sets
+     * the GeoJSON line geometry (oldest→newest) and shows the layer when there
+     * are at least two points to draw; otherwise clears it. A no-op until the
+     * style + source exist (style loaded). Native calls are wrapped so a partial
+     * draw degrades to no tail rather than crashing.
+     *
+     * On-device only: the annotation/GL render runs on a token-provisioned map,
+     * so the actual line + gradient are verified on device, not in CI.
+     */
+    private fun redrawBreadcrumb() {
+        val style = mapViewRef?.mapboxMap?.style ?: return
+        val source = style.getSourceAs<GeoJsonSource>(BREADCRUMB_SOURCE_ID) ?: return
+        val pts = breadcrumbTrail.points()
+        if (pts.size < 2) {
+            runCatching { source.featureCollection(FeatureCollection.fromFeatures(emptyList())) }
+            runCatching { setBreadcrumbVisible(style, false) }
+            return
+        }
+        runCatching {
+            source.geometry(
+                LineString.fromLngLats(pts.map { Point.fromLngLat(it.longitude, it.latitude) }),
+            )
+        }
+        runCatching { setBreadcrumbVisible(style, true) }
+    }
+
+    /** Wipe the breadcrumb line off the map (empty geometry + hidden layer). */
+    private fun clearBreadcrumbRender() {
+        val style = mapViewRef?.mapboxMap?.style ?: return
+        runCatching {
+            style.getSourceAs<GeoJsonSource>(BREADCRUMB_SOURCE_ID)
+                ?.featureCollection(FeatureCollection.fromFeatures(emptyList()))
+        }
+        runCatching { setBreadcrumbVisible(style, false) }
+    }
+
     private companion object {
         /**
          * How often the render watchdog samples its eligibility conditions.
@@ -1752,6 +1847,78 @@ class MapboxMapSurface : MapSurface {
         /** Toggles the traffic layer's visibility; a no-op until it is added. */
         fun applyTrafficVisibility(style: Style, visible: Boolean) {
             val layer = style.getLayerAs<LineLayer>(TRAFFIC_LAYER_ID) ?: return
+            layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+        }
+
+        // ---- Private breadcrumb tail ------------------------------------
+        // Own ids (never shared with the route line, traffic, or incident
+        // layers) so the tail can never fight them for a source/layer.
+        const val BREADCRUMB_SOURCE_ID = "kcc-breadcrumb-source"
+        const val BREADCRUMB_LAYER_ID = "kcc-breadcrumb-layer"
+        const val BREADCRUMB_LINE_WIDTH = 5.0
+
+        // Drawn in the live-share green (matches the sharing puck) so the tail
+        // reads as "your own live path". Split into RGB components (0x1E8E3E =
+        // KccPalette.successGreen) so the fade gradient can vary only the alpha.
+        private const val BREADCRUMB_R = 30.0 // 0x1E
+        private const val BREADCRUMB_G = 142.0 // 0x8E
+        private const val BREADCRUMB_B = 62.0 // 0x3E
+        // Alpha at the NEWEST end; the oldest end fades to fully transparent.
+        private const val BREADCRUMB_HEAD_ALPHA = 0.85
+
+        /**
+         * A line-progress gradient fading the tail from fully transparent at the
+         * OLDEST end (line-progress 0) to [BREADCRUMB_HEAD_ALPHA] at the NEWEST
+         * end (line-progress 1) — "older = more transparent". Requires the source
+         * to carry line metrics (see [addBreadcrumbLayer]).
+         */
+        fun breadcrumbGradientExpression(): Expression =
+            Expression.interpolate {
+                linear()
+                lineProgress()
+                stop(0.0) { rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, 0.0) }
+                stop(1.0) { rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_HEAD_ALPHA) }
+            }
+
+        /**
+         * Adds the breadcrumb GeoJSON source (line metrics ON, so the gradient
+         * can be computed) + a hidden, round-capped line layer, in the "middle"
+         * slot so the tail sits under labels and under the route line. Idempotent:
+         * a no-op if the source already exists (e.g. after a style reload).
+         *
+         * The per-vertex fade is a best-effort enhancement layered on a SOLID
+         * green fallback: the layer is created with a solid [lineColor] first,
+         * then [lineGradient] is applied separately. If the gradient is rejected
+         * on the pinned SDK the line still draws solid — which the feature
+         * explicitly permits — rather than the whole layer being dropped.
+         */
+        fun addBreadcrumbLayer(style: Style) {
+            if (style.styleSourceExists(BREADCRUMB_SOURCE_ID)) return
+            style.addSource(
+                geoJsonSource(BREADCRUMB_SOURCE_ID) {
+                    lineMetrics(true)
+                    featureCollection(FeatureCollection.fromFeatures(emptyList()))
+                },
+            )
+            style.addLayer(
+                lineLayer(BREADCRUMB_LAYER_ID, BREADCRUMB_SOURCE_ID) {
+                    slot("middle")
+                    lineCap(LineCap.ROUND)
+                    lineJoin(LineJoin.ROUND)
+                    lineWidth(BREADCRUMB_LINE_WIDTH)
+                    lineColor(Expression.rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_HEAD_ALPHA))
+                    visibility(Visibility.NONE)
+                },
+            )
+            runCatching {
+                style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID)
+                    ?.lineGradient(breadcrumbGradientExpression())
+            }
+        }
+
+        /** Show/hide the breadcrumb layer; a no-op until it is added. */
+        fun setBreadcrumbVisible(style: Style, visible: Boolean) {
+            val layer = style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID) ?: return
             layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
         }
     }
