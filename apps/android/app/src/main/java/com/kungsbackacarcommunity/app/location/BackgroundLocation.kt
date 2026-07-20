@@ -23,7 +23,7 @@ object BackgroundLocation {
     const val MIN_UPDATE_INTERVAL_MS = 2_000L
 
     /**
-     * How far the device must have moved since the last PUBLISHED fix before a
+     * How far the device must have moved since the last SUBMITTED fix before a
      * new one is worth a network round-trip. At 50 km/h this is reached in
      * roughly a second, so on a moving convoy every fix at [UPDATE_INTERVAL_MS]
      * publishes and the convoy arrows/focus stay live; parked at a meet, GPS
@@ -44,29 +44,34 @@ object BackgroundLocation {
 
     /**
      * Whether a freshly received fix is worth publishing, given the last one we
-     * actually published. Movement OR the stationary heartbeat qualifies; the
-     * first fix of a session always does.
+     * submitted. Movement OR the stationary heartbeat qualifies; the first fix
+     * of a session always does.
+     *
+     * "Submitted", not "published": the caller records a sample when it
+     * dispatches the publish, not when the backend confirms it. Gating on
+     * confirmation would make a failing backend retry at the full fix cadence
+     * for as long as the failure lasted — the opposite of a throttle.
      *
      * Pure so the battery/traffic policy is unit-testable — the fused-location
      * callback itself cannot be exercised without a device.
      */
     fun shouldPublish(
-        lastPublishedAtMillis: Long?,
-        lastPublishedLatitude: Double?,
-        lastPublishedLongitude: Double?,
+        lastSubmittedAtMillis: Long?,
+        lastSubmittedLatitude: Double?,
+        lastSubmittedLongitude: Double?,
         latitude: Double,
         longitude: Double,
         nowMillis: Long,
     ): Boolean {
-        if (lastPublishedAtMillis == null ||
-            lastPublishedLatitude == null ||
-            lastPublishedLongitude == null
+        if (lastSubmittedAtMillis == null ||
+            lastSubmittedLatitude == null ||
+            lastSubmittedLongitude == null
         ) {
             return true
         }
-        if (nowMillis - lastPublishedAtMillis >= STATIONARY_HEARTBEAT_MS) return true
+        if (nowMillis - lastSubmittedAtMillis >= STATIONARY_HEARTBEAT_MS) return true
         val moved =
-            distanceMeters(lastPublishedLatitude, lastPublishedLongitude, latitude, longitude)
+            distanceMeters(lastSubmittedLatitude, lastSubmittedLongitude, latitude, longitude)
         return moved >= MOVEMENT_THRESHOLD_METERS
     }
 

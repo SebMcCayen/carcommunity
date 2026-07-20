@@ -103,10 +103,18 @@ class LocationSharingService : Service() {
         LiveSharingLifecycle(anchorStore = PersistedSharingAnchorStore(applicationContext))
     }
 
-    /** Last PUBLISHED sample, for the movement/heartbeat throttle. */
-    private var lastPublishedAtMillis: Long? = null
-    private var lastPublishedLatitude: Double? = null
-    private var lastPublishedLongitude: Double? = null
+    /**
+     * Last sample SUBMITTED for publication, for the movement/heartbeat throttle.
+     *
+     * Recorded when the publish is dispatched, not when it succeeds — `false`
+     * here would mean a failing backend retried at the full fix cadence
+     * (every 5 s) for as long as the failure lasted, which is the opposite of
+     * what a throttle is for. A lost publish costs at most one heartbeat before
+     * the next sample goes out anyway.
+     */
+    private var lastSubmittedAtMillis: Long? = null
+    private var lastSubmittedLatitude: Double? = null
+    private var lastSubmittedLongitude: Double? = null
 
     /** Minutes currently rendered in the notification; -1 = nothing posted yet. */
     private var shownRemainingMinutes: Long = -1L
@@ -118,9 +126,9 @@ class LocationSharingService : Service() {
                 val fix = result.lastLocation ?: return
                 val now = System.currentTimeMillis()
                 if (!BackgroundLocation.shouldPublish(
-                        lastPublishedAtMillis = lastPublishedAtMillis,
-                        lastPublishedLatitude = lastPublishedLatitude,
-                        lastPublishedLongitude = lastPublishedLongitude,
+                        lastSubmittedAtMillis = lastSubmittedAtMillis,
+                        lastSubmittedLatitude = lastSubmittedLatitude,
+                        lastSubmittedLongitude = lastSubmittedLongitude,
                         latitude = fix.latitude,
                         longitude = fix.longitude,
                         nowMillis = now,
@@ -130,9 +138,9 @@ class LocationSharingService : Service() {
                     // trip. The heartbeat still publishes every 30 s.
                     return
                 }
-                lastPublishedAtMillis = now
-                lastPublishedLatitude = fix.latitude
-                lastPublishedLongitude = fix.longitude
+                lastSubmittedAtMillis = now
+                lastSubmittedLatitude = fix.latitude
+                lastSubmittedLongitude = fix.longitude
 
                 val coordinate =
                     BackgroundLocation.buildCoordinate(
@@ -204,9 +212,9 @@ class LocationSharingService : Service() {
         // breaking its documented "the first fix of a session always publishes"
         // contract and leaving the user invisible to viewers for up to a
         // heartbeat while they believe they are sharing.
-        lastPublishedAtMillis = null
-        lastPublishedLatitude = null
-        lastPublishedLongitude = null
+        lastSubmittedAtMillis = null
+        lastSubmittedLatitude = null
+        lastSubmittedLongitude = null
         shownRemainingMinutes = -1L
 
         // Post the notification and enter the foreground FIRST: the platform

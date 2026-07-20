@@ -78,9 +78,9 @@ class BackgroundLocationTest {
     fun `the first fix of a session always publishes`() {
         assertTrue(
             BackgroundLocation.shouldPublish(
-                lastPublishedAtMillis = null,
-                lastPublishedLatitude = null,
-                lastPublishedLongitude = null,
+                lastSubmittedAtMillis = null,
+                lastSubmittedLatitude = null,
+                lastSubmittedLongitude = null,
                 latitude = kungsbacka.first,
                 longitude = kungsbacka.second,
                 nowMillis = 1_000L,
@@ -94,9 +94,9 @@ class BackgroundLocationTest {
         // threshold and well inside the heartbeat.
         assertFalse(
             BackgroundLocation.shouldPublish(
-                lastPublishedAtMillis = 1_000L,
-                lastPublishedLatitude = kungsbacka.first,
-                lastPublishedLongitude = kungsbacka.second,
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
                 latitude = kungsbacka.first + 0.000018,
                 longitude = kungsbacka.second,
                 nowMillis = 2_000L,
@@ -108,9 +108,9 @@ class BackgroundLocationTest {
     fun `a stationary car still publishes a heartbeat`() {
         assertTrue(
             BackgroundLocation.shouldPublish(
-                lastPublishedAtMillis = 1_000L,
-                lastPublishedLatitude = kungsbacka.first,
-                lastPublishedLongitude = kungsbacka.second,
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
                 latitude = kungsbacka.first,
                 longitude = kungsbacka.second,
                 nowMillis = 1_000L + BackgroundLocation.STATIONARY_HEARTBEAT_MS,
@@ -124,9 +124,9 @@ class BackgroundLocationTest {
         // so convoy arrows and focus mode keep getting fresh positions.
         assertTrue(
             BackgroundLocation.shouldPublish(
-                lastPublishedAtMillis = 1_000L,
-                lastPublishedLatitude = kungsbacka.first,
-                lastPublishedLongitude = kungsbacka.second,
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
                 latitude = kungsbacka.first + 0.000625,
                 longitude = kungsbacka.second,
                 nowMillis = 1_000L + BackgroundLocation.UPDATE_INTERVAL_MS,
