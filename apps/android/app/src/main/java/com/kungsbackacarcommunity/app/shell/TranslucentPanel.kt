@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 
@@ -267,10 +268,28 @@ fun TranslucentShellPanel(
     val nestedScrollConnection =
         remember {
             object : NestedScrollConnection {
+                // UNDISPATCHED on purpose, here and in onPostScroll below. These
+                // callbacks READ offset.value synchronously (to clamp) and WRITE
+                // it from a coroutine, so the write has to land before the
+                // callback returns or the next scroll event in the same frame
+                // clamps against a stale offset.
+                //
+                // That is not cosmetic: preScrollConsumption clamps with
+                // `maxOf(availableY, -offsetPx)`, which is what stops an upward
+                // scroll pulling the card ABOVE rest. Given a stale (larger)
+                // offsetPx it would allow more upward travel than actually
+                // remains and drive offset negative — breaking the ">= 0 only"
+                // invariant documented on `offset`.
+                //
+                // UNDISPATCHED runs the body eagerly on the calling thread up to
+                // the first real suspension; snapTo's MutatorMutex is
+                // uncontended on this path, so it completes synchronously.
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                     val taken = PanelDrag.preScrollConsumption(available.y, offset.value)
                     if (taken == 0f) return Offset.Zero
-                    scope.launch { offset.snapTo(offset.value + taken) }
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        offset.snapTo(offset.value + taken)
+                    }
                     return Offset(0f, taken)
                 }
 
@@ -281,7 +300,9 @@ fun TranslucentShellPanel(
                 ): Offset {
                     val taken = PanelDrag.postScrollConsumption(available.y)
                     if (taken == 0f) return Offset.Zero
-                    scope.launch { offset.snapTo(offset.value + taken) }
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        offset.snapTo(offset.value + taken)
+                    }
                     return Offset(0f, taken)
                 }
 
