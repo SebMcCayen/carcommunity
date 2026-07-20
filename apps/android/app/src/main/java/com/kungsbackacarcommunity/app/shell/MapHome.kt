@@ -255,20 +255,24 @@ fun MapHome(
         mapSurface.setUserMarker(MapUserMarker(label = userLabel, isLiveSharing = isLiveSharing))
     }
 
-    // Day/night follows the Android system Dark theme by default: on open the map
-    // matches the device theme, and it live-updates if the system flips while the
-    // app is open (e.g. Android's scheduled sunset->sunrise dark theme). Once the
-    // user flips day/night manually in the layers popup, [desiredMapMode] holds
-    // their explicit choice (non-null) and this effect applies it instead of the
-    // system theme for the rest of the session. While [desiredMapMode] is null the
-    // map follows the system default ([systemDefaultMode]).
+    // Day/night follows the APP theme by default: on open the map matches the
+    // theme the app is rendering, and it live-updates if that theme changes while
+    // the app is open — either because the user picked a different Appearance
+    // setting, or, on the Automatic setting, because the system flipped (e.g.
+    // Android's scheduled sunset->sunrise dark theme). Once the user flips
+    // day/night manually in the layers popup, [desiredMapMode] holds their
+    // explicit choice (non-null) and this effect applies it instead of the theme
+    // default for the rest of the session. While [desiredMapMode] is null the map
+    // follows [systemDefaultMode] — named for the pre-preference behaviour it
+    // originally had, but now derived from the resolved app theme.
     // Keyed on mapSurface too (mirrors the setUserMarker effect above) so the
     // *effective* mode is re-applied if the surface instance is swapped (e.g.
     // StubMapSurface -> a real Mapbox-backed surface); a fresh surface starts at
     // its default MapMode, so without this key it would keep that default —
-    // dropping the user's manual override — until the system theme flipped or the
-    // user toggled manually again. Applying the effective mode here means the
-    // manual choice survives a surface swap.
+    // dropping the user's manual override — until the theme changed or the user
+    // toggled manually again. Applying the effective mode here means the manual
+    // choice survives a surface swap.
+    //
     // The user's manual day/night override, or null while the map follows the
     // app theme.
     //
@@ -281,9 +285,10 @@ fun MapHome(
     // survives recreation of the SAME composition slot — it is discarded on
     // disposal, with no SaveableStateHolder here to retain it — so coming back
     // from a route reset the override to null and the effect below immediately
-    // snapped the map to [systemDefaultMode]. With the system on dark that read
-    // as "the map keeps switching itself back to Night mode as I navigate
-    // around the app", which is exactly the reported bug. Owned by the shell
+    // snapped the map to [systemDefaultMode]. Whenever the resolved theme is dark
+    // — which, before the Appearance setting existed, simply meant the device was
+    // on dark — that read as "the map keeps switching itself back to Night mode as
+    // I navigate around the app", which is exactly the reported bug. Owned by the shell
     // (which outlives the route switch), the choice now sticks.
     //
     // Callers that don't hoist (previews, UI tests) fall back to local state and
@@ -300,7 +305,7 @@ fun MapHome(
                     // e.g. after an app update that renames/removes an enum value, or
                     // corrupted saved state — which would crash activity recreation.
                     // entries.find returns null for an unknown name (falls back to
-                    // "follow system") instead of throwing.
+                    // "follow the app theme") instead of throwing.
                     restore = { saved -> (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } } },
                 ),
             ) { mutableStateOf<MapMode?>(null) }
