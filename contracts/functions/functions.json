@@ -694,6 +694,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "dm.reportMessage",
+      "domain": "dm",
+      "description": "Reports a message in a 1:1 DM conversation ({ conversationId, messageId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }). Caller must be one of the conversation's two members; a missing conversation and a conversation the caller isn't in both return not-found (parity with dm.getMessages, so the endpoint can't probe whether two people talk). Reporting your own message is invalid-argument. Ids are constrained to a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) so a hostile id is invalid-argument rather than a traversal into another document. BLOCKING does NOT gate reporting either way. SNAPSHOTS the reported message (text + author uid/displayName + createdAt) into the report because DM messages are readable only by the two participants — rules give admins no read path into conversations, so a report holding only ids would be unactionable; exactly one message is copied, never the thread. Deduplicates per conversation+message+reporter+reason (repeat silently refreshes details only; never resets a report a moderator already actioned, and the response never reveals a prior report existed). Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as dm-reportMessage (functions/src/dm/reportMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "convoy.create",
       "domain": "convoy",
       "description": "Creates a convoy and invites a list of the owner's FRIENDS ({ inviteeUids:[uid] (1..50), title? (1..80) }). Each invitee is validated: must be an established friend (users/{owner}/friends/{uid}), not blocked either way, and a non-restricted existing account — non-friend/blocked/missing/self/duplicate invitees are silently SKIPPED (never an error that would reveal a block). Writes convoys/{convoyId} (status 'forming') with the owner seeded as members[owner]={role:'owner',inviteStatus:'accepted'} and each accepted invitee as {role:'member',inviteStatus:'invited'}; memberUids=[owner,...invitees] drives the list read + rules gate; memberProfiles denormalized. Writes a best-effort in-app notification per invitee (system_notice category). Returns { convoy: ConvoySummary, invited:[uid], skipped:[{uid,reason}] } where reason is self|not_friend|not_found|duplicate (a block edge either way is surfaced as the neutral not_found, so the inviter can't infer who blocked whom). failed-precondition if no invitee is valid. Deployed via grouped export as convoy-create (functions/src/convoy/manageConvoy.ts).",
@@ -815,6 +824,24 @@
       "domain": "convoyChat",
       "description": "Paginated newest-first convoy chat messages ({ convoyId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only an accepted member of the convoy may read (same gate as convoyChat.post; missing convoy/outsider not-found, still-invited/declined failed-precondition). Returns { convoyId, messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore } (page size 30). mentionedUids is always [] here — convoyChat.post accepts no @mentions (the chat already notifies every accepted member, so a mention notice would duplicate one they get anyway); the field is present only so both channels share one message shape. Deployed via grouped export as convoyChat-list (functions/src/chatchannels/convoyChat.ts).",
       "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "chatchannels.reportMessage",
+      "domain": "chatchannels",
+      "description": "Reports a message in either CHANNEL chat ({ channel: 'community'|'convoy', convoyId (required for and only for convoy), messageId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }). One callable for both channels because only the eligibility check differs. Eligibility mirrors each channel's read rule: community = any active member; convoy = an ACCEPTED member of that convoy (same gate as convoyChat.post/list — missing convoy/outsider not-found, still-invited failed-precondition). Passing convoyId with channel 'community' (or omitting it for convoy) is invalid-argument, never silently ignored. Reporting your own message is invalid-argument. Ids are constrained to a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) so a hostile id is invalid-argument rather than a traversal into another document. BLOCKING does NOT gate reporting either way. SNAPSHOTS the reported message (text + author uid/displayName + createdAt) because channel messages are TTL-deleted (community 120d / convoy 30d) and a report holding only ids would go blank. Deduplicates per channel+scope+message+reporter+reason (repeat silently refreshes details only; never resets a report a moderator already actioned). Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as chatchannels-reportMessage (functions/src/chatchannels/reportMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "moderation.reportUser",
+      "domain": "moderation",
+      "description": "Reports a PERSON rather than a message ({ reportedUserId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }) — the escalation for behaviour that doesn't reduce to one line of chat. AUTHENTICATED-active gate (requireActiveActor, matching blocking.block/unblock rather than the member-gated chat callables: reporting harassment must not require a live subscription; suspended/deleted still rejected). Self-report invalid-argument; a reportedUserId that is not a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) is invalid-argument; missing or soft-deleted target not-found. BLOCKING does NOT gate reporting either way. Deduplicates per (reporter, reportedUser) WITHOUT the reason, so a single reporter cannot fill the queue by cycling the reason enum — a repeat updates reason+details and increments `occurrences` on the one document, which also makes the row count for a target equal the number of DISTINCT reporters. Captures ONLY the target's public profile projection (displayName+avatarPath, snapshotted so a rename doesn't orphan the row) plus the tally — never their message history, drives or garage. A per-target aggregate at moderationUserSummaries/{uid} ({reporterCount, totalSubmissions, lastReportedAt}) is maintained in the same transaction for O(1) 'how many prior reports' triage. Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as moderation-reportUser (functions/src/moderation/reportUser.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"

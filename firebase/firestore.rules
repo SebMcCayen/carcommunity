@@ -780,31 +780,43 @@ service cloud.firestore {
     // above — the old communityMessages scaffold collection is retired.)
 
     // -------------------------------------------------------------------------
-    // moderationReports – abuse and content reports
-    // Any authenticated user may submit a report (Phase 9o: field-level
-    // validation — reporter identity pinned, whitelisted shape, status
-    // always starts pending); only admins may read and update them.
-    // Deliberately NOT suspension-gated: reporting abuse is a support path.
+    // moderationReports – the ONE abuse/content moderation queue. Admin-only
+    // read; admin status-only update; NO client writes at all.
+    //
+    // The Phase 9o `allow create` (any authenticated user could write a report
+    // document directly, with the rules doing field validation) is REMOVED: the
+    // three report callables — chatchannels.reportMessage (community + convoy
+    // channel messages), dm.reportMessage (1:1 DMs) and moderation.reportUser
+    // (a person, not a message) — are now the only write path, alongside the
+    // pre-existing events.reportChatMessage for event chat. A direct client
+    // create bypassed every guarantee those callables provide: it checked no
+    // eligibility on the surface being reported (you could report a message in
+    // a convoy you were never in, or a DM you are not party to), enforced no
+    // per-reporter rate limit, deduplicated nothing, snapshotted nothing, and
+    // let a client aim an arbitrary targetId at anyone. Nothing in the app used
+    // it — the admin module only reads and resolves.
+    //
+    // Documents keep the legacy field names and status vocabulary
+    // (reportedBy / targetType / targetId / reason / details /
+    // status pending|reviewed|dismissed / createdAt) so the existing admin
+    // queue renders and resolves them unchanged, and carry added fields the
+    // scaffold had no room for: surface + scopeId (which chat, which convoy or
+    // conversation), reportedUserId (pivot "every report against this person"),
+    // occurrences (this reporter's tally), and `snapshot` — a copy of the
+    // reported message's text + author + createdAt taken at report time.
+    //
+    // The snapshot is why reads stay admin-only. It is necessary: DM messages
+    // are readable only by the two participants (the rules give admins no read
+    // path into conversations, by design) and channel messages are TTL-deleted
+    // after 30/120 days, so a report holding only ids would be unactionable or
+    // blank. It is exactly ONE message — the one the reporter escalated —
+    // never a thread and never a history. Reporter identities are likewise
+    // never client-readable (mirrors events/{eventId}/messageReports).
     // -------------------------------------------------------------------------
-    function validModerationReport() {
-      let data = request.resource.data;
-      return data.keys().hasOnly(['reportedBy', 'targetType', 'targetId', 'reason',
-                                  'details', 'status', 'createdAt'])
-        && data.keys().hasAll(['reportedBy', 'targetType', 'targetId', 'reason',
-                               'status', 'createdAt'])
-        && data.reportedBy == request.auth.uid
-        && data.targetType in ['user', 'message', 'event']
-        && data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 300
-        && data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 100
-        && (!data.keys().hasAny(['details'])
-            || (data.details is string && data.details.size() <= 2000))
-        && data.status == 'pending'
-        && isServerTimestamp(data.createdAt);
-    }
-
     match /moderationReports/{reportId} {
-      allow create: if isAuthenticated() && validModerationReport();
       allow read: if isAdmin();
+      // No client writes: chatchannels.reportMessage / dm.reportMessage /
+      // moderation.reportUser only.
       // Admin review updates may ONLY move the status through the review
       // vocabulary — reporter identity, target, and reason are immutable.
       allow update: if isAdmin()
@@ -825,6 +837,19 @@ service cloud.firestore {
     match /diagnosticsReports/{reportId} {
       allow read: if isAdmin();
       // No client writes: diagnostics.submitReport only.
+    }
+
+    // moderationUserSummaries – per-reported-user aggregate
+    // ({reporterCount, totalSubmissions, lastReportedAt}), maintained in the same
+    // transaction as a moderation.reportUser write. Exists so the admin queue
+    // can answer "how many DIFFERENT people have reported this person" in one
+    // document read instead of a scan. Admin-only read: the counts are a
+    // moderation signal about a member, and exposing "you have been reported by
+    // N people" to anyone (least of all the reported user) would be both a
+    // harassment vector and a way to probe who reported whom.
+    match /moderationUserSummaries/{userId} {
+      allow read: if isAdmin();
+      // No client writes: moderation.reportUser only.
     }
 
     // feedbackReports – "Report a problem" record of record (Android)
