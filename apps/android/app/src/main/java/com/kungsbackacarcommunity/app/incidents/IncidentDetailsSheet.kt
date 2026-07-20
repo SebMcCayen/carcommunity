@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -206,5 +205,13 @@ private fun incidentAgeLabel(age: IncidentAge): String =
         IncidentAge.Unknown -> stringResource(R.string.incidents_ageUnknown)
     }
 
-private val BADGE_SIZE = 32.dp
-private val BADGE_GLYPH_SIZE = 18.dp
+/** Dialog-sized badge, on the app's spacing scale like every other sized box. */
+private val BADGE_SIZE = KccSpacing.s8
+
+/**
+ * The glyph inside it, at the SAME proportion of the badge the map marker uses
+ * ([IncidentMarkerStyle.GLYPH_SCALE]). Derived rather than written as a literal
+ * so the sheet's badge and the marker it was tapped from cannot drift into
+ * looking like two different objects if that proportion is ever retuned.
+ */
+private val BADGE_GLYPH_SIZE = BADGE_SIZE * IncidentMarkerStyle.GLYPH_SCALE
