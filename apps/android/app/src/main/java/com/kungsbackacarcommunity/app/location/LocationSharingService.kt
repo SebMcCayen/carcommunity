@@ -89,7 +89,14 @@ class LocationSharingService : Service() {
     private var sessionJob: Job? = null
     private var ownerUid: String? = null
 
-    private val lifecycle = LiveSharingLifecycle()
+    /**
+     * The ceiling anchor is persisted, so a process kill plus the
+     * START_REDELIVER_INTENT restart cannot hand a restarted service a fresh
+     * 4h05m budget. See [SharingAnchorStore].
+     */
+    private val lifecycle by lazy {
+        LiveSharingLifecycle(anchorStore = PersistedSharingAnchorStore(applicationContext))
+    }
 
     /** Last PUBLISHED sample, for the movement/heartbeat throttle. */
     private var lastPublishedAtMillis: Long? = null
@@ -312,7 +319,14 @@ class LocationSharingService : Service() {
      * expiry — see [LiveSharingStop] for the measurement.
      */
     private fun stopSharingAndSelf() {
-        val repo = repository
+        // The PendingIntent outlives this process, so the stop action can reach a
+        // FRESH service instance whose [repository] was never set — a stale
+        // notification tapped after a kill, or a restart racing the tap. Building
+        // one on demand keeps that path a real stop instead of silently walking
+        // away from a session that stays ACTIVE server-side until expiry.
+        // live.stopSession carries no client state, so a fresh repository is
+        // equivalent to the running one.
+        val repo = repository ?: FirebaseLiveLocationRepository.createIfAvailable(applicationContext)
         if (repo == null) {
             stopSharingLocally()
             return

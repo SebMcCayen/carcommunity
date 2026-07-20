@@ -172,4 +172,75 @@ class LiveSharingLifecycleTest {
     private companion object {
         const val ONE_HOUR = 3_600_000L
     }
+
+    /**
+     * Regression: the hard ceiling must be anchored to the SESSION, not to the
+     * service instance. A process kill plus the START_REDELIVER_INTENT restart
+     * builds a NEW LiveSharingLifecycle; if the anchor lived on that instance,
+     * each restart would hand a session with an unparseable expiry (which
+     * isSharing treats as still sharing) another full 4h05m, so repeated kills
+     * could extend background location sharing without limit.
+     */
+    @Test
+    fun `hard ceiling survives a service restart within the same session`() {
+        val store = InMemorySharingAnchorStore()
+        val noExpiry = session(expiresAtMillis = null)
+
+        // First run: starts the clock, still well inside the ceiling.
+        val first = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(first.onObservation(true, noExpiry, now))
+        assertContinue(
+            first.onObservation(true, noExpiry, now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS / 2),
+        )
+
+        // Process killed; the service is restarted with the same session, most
+        // of the budget already spent. The restarted instance must inherit it.
+        val restarted = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(
+            restarted.onObservation(
+                true,
+                noExpiry,
+                now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS - 1,
+            ),
+        )
+        assertStopped(
+            LiveSharingStopReason.EXPIRED,
+            restarted.onObservation(true, noExpiry, now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS),
+        )
+    }
+
+    /** A genuinely new session gets its own budget rather than inheriting one. */
+    @Test
+    fun `a new session id resets the ceiling`() {
+        val store = InMemorySharingAnchorStore()
+        val old = session(expiresAtMillis = null)
+        val first = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(first.onObservation(true, old, now))
+
+        val fresh =
+            LiveSessionInfo(
+                sessionId = "s2",
+                status = LiveSessionStatus.ACTIVE,
+                duration = LiveSessionDuration.ONE_HOUR,
+                expiresAtMillis = null,
+            )
+        val later = LiveSharingLifecycle(anchorStore = store)
+        val wellPastTheOldCeiling = now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS + 1
+        assertContinue(later.onObservation(true, fresh, wellPastTheOldCeiling))
+    }
+
+    /** Once sharing ends the anchor is dropped, not left for a later session. */
+    @Test
+    fun `stopping clears the anchor`() {
+        val store = InMemorySharingAnchorStore()
+        val lifecycle = LiveSharingLifecycle(anchorStore = store)
+        assertContinue(lifecycle.onObservation(true, session(expiresAtMillis = null), now))
+        assertStopped(
+            LiveSharingStopReason.SESSION_ENDED,
+            lifecycle.onObservation(true, session(status = LiveSessionStatus.STOPPED), now),
+        )
+        // Cleared, so the same id observed later starts a fresh budget.
+        assertEquals(now + 5_000L, store.anchorFor("s1", now + 5_000L))
+    }
+
 }

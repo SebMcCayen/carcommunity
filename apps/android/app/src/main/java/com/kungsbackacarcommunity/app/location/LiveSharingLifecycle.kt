@@ -37,6 +37,51 @@ enum class LiveSharingStopReason {
 }
 
 /**
+ * Where the hard-ceiling anchor lives.
+ *
+ * The ceiling has to be anchored to the SESSION, not to the service instance:
+ * anchoring it to the instance means a process kill (LMK, OEM task killer, a
+ * crash) resets it, and `START_REDELIVER_INTENT` then restarts the service with
+ * a fresh 4h05m budget. With an unparseable expiry — the one case the ceiling
+ * exists for, since [LiveLocation.isSharing] treats a null expiry as still
+ * sharing — repeated restarts would let background location sharing run
+ * unbounded, which is exactly the outcome the ceiling was written to prevent.
+ *
+ * Keyed by `sessionId`, so a genuinely new session always gets a fresh anchor
+ * while a restart within the same session keeps the original one.
+ */
+interface SharingAnchorStore {
+    /**
+     * The first time [sessionId] was ever observed, recording [nowMillis] as
+     * that time if it has not been seen before. Only the most recent session is
+     * retained — a new id supersedes the previous one, so this never grows.
+     */
+    fun anchorFor(sessionId: String, nowMillis: Long): Long
+
+    /** Forgets the stored anchor; called once sharing has actually ended. */
+    fun clear()
+}
+
+/** Non-persistent [SharingAnchorStore] — the default, and what tests use. */
+class InMemorySharingAnchorStore : SharingAnchorStore {
+    private var sessionId: String? = null
+    private var anchorMillis: Long = 0L
+
+    override fun anchorFor(sessionId: String, nowMillis: Long): Long {
+        if (this.sessionId != sessionId) {
+            this.sessionId = sessionId
+            anchorMillis = nowMillis
+        }
+        return anchorMillis
+    }
+
+    override fun clear() {
+        sessionId = null
+        anchorMillis = 0L
+    }
+}
+
+/**
  * The foreground service's session state machine, as pure Kotlin so every
  * transition (start, expiry, manual stop, sign-out, remote end) is
  * JVM-unit-testable without a device, Firebase or the Android framework.
@@ -64,6 +109,7 @@ enum class LiveSharingStopReason {
 class LiveSharingLifecycle(
     private val absentGraceMillis: Long = ABSENT_GRACE_MILLIS,
     private val maxRuntimeMillis: Long = MAX_RUNTIME_MILLIS,
+    private val anchorStore: SharingAnchorStore = InMemorySharingAnchorStore(),
 ) {
     private var lastSession: LiveSessionInfo? = null
     private var firstAbsentAtMillis: Long? = null
@@ -102,38 +148,58 @@ class LiveSharingLifecycle(
         evaluate(signedIn, nowMillis)
 
     private fun evaluate(signedIn: Boolean, nowMillis: Long): LiveSharingDecision {
-        if (!signedIn) return LiveSharingDecision.Stop(LiveSharingStopReason.SIGNED_OUT)
+        if (!signedIn) return stop(LiveSharingStopReason.SIGNED_OUT)
+
+        // Expiry and an ended session are evaluated against the LAST KNOWN
+        // session even while the node is momentarily unreadable, so a dropped
+        // connection can never extend the user's chosen window.
+        val known = lastSession
 
         // Hard ceiling. The longest session a user can pick is 4 hours, so a
         // service that has been publishing for longer than that plus slack is
         // running on state it should not trust — most plausibly a session whose
         // expiry could not be parsed, which would otherwise share forever. Ending
         // sharing that the user did not ask to continue is always the safe error.
-        val startedAt = startedAtMillis ?: nowMillis.also { startedAtMillis = it }
+        //
+        // Anchored to the SESSION via [anchorStore], not to this service
+        // instance: an instance-local anchor resets on process death, and
+        // START_REDELIVER_INTENT would then hand a restarted service a fresh
+        // budget — so repeated kills could extend sharing without limit. Before
+        // any session has been read there is no id to key on, so fall back to
+        // the instance clock.
+        val startedAt =
+            known?.let { anchorStore.anchorFor(it.sessionId, nowMillis) }
+                ?: startedAtMillis
+                ?: nowMillis.also { startedAtMillis = it }
         if (nowMillis - startedAt >= maxRuntimeMillis) {
-            return LiveSharingDecision.Stop(LiveSharingStopReason.EXPIRED)
+            return stop(LiveSharingStopReason.EXPIRED)
         }
 
-        // Expiry and an ended session are evaluated against the LAST KNOWN
-        // session even while the node is momentarily unreadable, so a dropped
-        // connection can never extend the user's chosen window.
-        val known = lastSession
         if (known != null) {
             if (known.status != LiveSessionStatus.ACTIVE) {
-                return LiveSharingDecision.Stop(LiveSharingStopReason.SESSION_ENDED)
+                return stop(LiveSharingStopReason.SESSION_ENDED)
             }
             if (!LiveLocation.isSharing(known, nowMillis)) {
                 // ACTIVE but past its expiry: the backend has not swept it yet,
                 // so the client enforces its own 1h/2h/4h window.
-                return LiveSharingDecision.Stop(LiveSharingStopReason.EXPIRED)
+                return stop(LiveSharingStopReason.EXPIRED)
             }
         }
 
         val absentSince = firstAbsentAtMillis
         if (absentSince != null && nowMillis - absentSince >= absentGraceMillis) {
-            return LiveSharingDecision.Stop(LiveSharingStopReason.SESSION_ABSENT)
+            return stop(LiveSharingStopReason.SESSION_ABSENT)
         }
         return LiveSharingDecision.Continue(LiveLocation.remainingSeconds(known, nowMillis))
+    }
+
+    /**
+     * Sharing has ended for good, so the persisted anchor is dead weight — drop
+     * it rather than leave it to be re-read by a later, unrelated session.
+     */
+    private fun stop(reason: LiveSharingStopReason): LiveSharingDecision {
+        anchorStore.clear()
+        return LiveSharingDecision.Stop(reason)
     }
 
     companion object {
