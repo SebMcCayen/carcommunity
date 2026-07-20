@@ -168,7 +168,7 @@ fun IncidentDetailsSheet(
 /**
  * The same badge the map draws, at dialog size: category colour disc with the
  * white category glyph on it. Rendered from the SAME drawable table
- * ([IncidentIcons]) as the marker, so the thing you tapped and the thing you are
+ * ([incidentGlyphRes]) as the marker, so the thing you tapped and the thing you are
  * now reading about are visibly the same object.
  */
 @Composable
@@ -182,12 +182,14 @@ private fun IncidentBadge(type: IncidentType) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            painter = painterResource(IncidentIcons.iconRes(type)),
+            painter = painterResource(incidentGlyphRes(type)),
             // The category is already announced by the adjacent title text, so
             // the badge is decorative — a second reading of the same word is
             // noise to a screen-reader user.
             contentDescription = null,
-            tint = Color.White,
+            // The SAME contrast-chosen tint the map marker uses: a fixed white
+            // glyph is unreadable on the amber and orange discs.
+            tint = Color(IncidentMarkerStyle.glyphColorArgb(type)),
             modifier = Modifier.size(BADGE_GLYPH_SIZE),
         )
     }

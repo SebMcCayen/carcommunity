@@ -1,24 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ACCIDENT glyph: an impact starburst above a car body.
+  Incident glyph: ACCIDENT — a car front-on with an impact burst.
 
-  Silhouette-first: the eight-point burst is unlike any other incident glyph in
-  the set, so the category is readable with colour stripped out entirely (a
-  colour-blind user, or a glance at a sun-washed screen). Drawn in solid white
-  on the category badge; no gradients or hairlines, which vanish at the ~24dp
-  the marker actually renders at on a moving map.
+  Tinted at runtime (see IncidentMarkerStyle.glyphColorArgb), so every path here
+  is white and the colour is applied by the rasteriser. Sized 24x24 like the
+  Material set the rest of the app's icons come from.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- Impact burst. -->
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M12.00,2.60 L12.96,5.89 L15.96,4.24 L14.31,7.24 L17.60,8.20 L14.31,9.16 L15.96,12.16 L12.96,10.51 L12.00,13.80 L11.04,10.51 L8.04,12.16 L9.69,9.16 L6.40,8.20 L9.69,7.24 L8.04,4.24 L11.04,5.89 Z" />
-    <!-- Car body (roof + bonnet) below the impact. -->
+        android:fillColor="@android:color/white"
+        android:pathData="M18.9,10.5C18.7,9.9 18.2,9.5 17.5,9.5H14.2L15.6,6.7L13.8,5.8L11.8,9.5H6.5C5.8,9.5 5.3,9.9 5.1,10.5L3,16.5V24H5.5V22H18.5V24H21V16.5L18.9,10.5ZM6.9,11.5H17.1L18.2,15H5.8L6.9,11.5ZM6.5,19.5C5.7,19.5 5,18.8 5,18S5.7,16.5 6.5,16.5 8,17.2 8,18 7.3,19.5 6.5,19.5ZM17.5,19.5C16.7,19.5 16,18.8 16,18S16.7,16.5 17.5,16.5 19,17.2 19,18 18.3,19.5 17.5,19.5Z" />
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M6.30,15.20 L7.60,15.20 L8.60,13.60 L15.40,13.60 L16.40,15.20 L17.70,15.20 A1.30,1.30 0 0 1 19.00,16.50 L19.00,19.10 L16.60,19.10 L16.60,17.90 L7.40,17.90 L7.40,19.10 L5.00,19.10 L5.00,16.50 A1.30,1.30 0 0 1 6.30,15.20 Z" />
+        android:fillColor="@android:color/white"
+        android:pathData="M9.5,0L5.5,7L9,5.8L8,10L12,3L8.5,4.2Z" />
 </vector>

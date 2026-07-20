@@ -1,29 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  POLICE glyph: a police cap (peaked cap with a badge on the crown).
+  Incident glyph: POLICE — a shield (speed check / checkpoint).
 
-  Seb asked for "a policeman in blue clothes". A whole figure is unreadable at
-  marker size, so the category is carried by the single most-recognisable part of
-  the uniform — the peaked cap — which is a distinct silhouette at 24dp where a
-  full body would just be a smudge. The blue is the badge behind it; the shield
-  is punched OUT of the crown (evenOdd) so that blue shows through it.
+  Deliberately a shield rather than a speed-camera or a gauge: this app takes an
+  explicit product position against gamifying or alerting on speed, and a
+  checkpoint marker must read as "police presence", not "slow down, camera".
+
+  Tinted at runtime (see IncidentMarkerStyle.glyphColorArgb).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- Crown of the cap, with the badge shield punched out of it. -->
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M12.00,3.20 A8.00,8.00 0 0 1 20.00,11.20 L20.00,12.60 L4.00,12.60 L4.00,11.20 A8.00,8.00 0 0 1 12.00,3.20 Z M12.00,5.40 L15.00,6.60 L15.00,9.20 A3.40,3.40 0 0 1 12.00,11.80 A3.40,3.40 0 0 1 9.00,9.20 L9.00,6.60 Z" />
-    <!-- Cap band. -->
+        android:fillColor="@android:color/white"
+        android:pathData="M12,1L3,5V11C3,16.6 6.8,21.7 12,23C17.2,21.7 21,16.6 21,11V5L12,1ZM12,3.2L19,6.3V11C19,15.5 16,19.8 12,21C8,19.8 5,15.5 5,11V6.3L12,3.2Z" />
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M4.00,13.60 L20.00,13.60 L20.00,16.20 L4.00,16.20 Z" />
-    <!-- Peak / brim. -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M2.20,17.20 L21.80,17.20 A1.00,1.00 0 0 1 21.80,19.60 L2.20,19.60 A1.00,1.00 0 0 1 2.20,17.20 Z" />
+        android:fillColor="@android:color/white"
+        android:pathData="M12,6.5L13.5,10H17L14.2,12.2L15.3,15.7L12,13.6L8.7,15.7L9.8,12.2L7,10H10.5Z" />
 </vector>

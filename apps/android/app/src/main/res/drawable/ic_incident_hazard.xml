@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  HAZARD glyph: the warning triangle with an exclamation mark.
+  Incident glyph: HAZARD — exclamation mark in a triangle.
 
-  The triangle is the only glyph in the set with a hard apex, so it separates
-  from the others on outline alone. Note the badge behind it carries the amber
-  category colour: the mark is punched OUT of the triangle (evenOdd) so it shows
-  the badge through, rather than being drawn amber-on-white — an amber sign on
-  the light day basemap is exactly the low-contrast case this change fixes.
+  This is the CATCH-ALL category: the Trafikverket importer falls back to
+  'hazard' for any message code it does not recognise, so this is the most
+  frequently drawn glyph and has to read as a generic "something on the road"
+  rather than any specific event.
+
+  Tinted at runtime (see IncidentMarkerStyle.glyphColorArgb).
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
     <path
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M12.00,2.40 L22.60,20.80 L1.40,20.80 Z M11.00,9.00 L11.00,15.00 L13.00,15.00 L13.00,9.00 Z M11.00,16.50 L11.00,18.60 L13.00,18.60 L13.00,16.50 Z" />
+        android:fillColor="@android:color/white"
+        android:pathData="M12,2L1,21H23L12,2ZM12,6.5L19.5,19H4.5L12,6.5ZM11,10V14.5H13V10H11ZM11,16V18H13V16H11Z" />
 </vector>

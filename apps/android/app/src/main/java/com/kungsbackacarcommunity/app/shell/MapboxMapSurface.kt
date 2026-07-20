@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -22,7 +23,6 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
-import com.kungsbackacarcommunity.app.map.IncidentMarkerBitmaps
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -52,6 +52,7 @@ import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
@@ -202,6 +203,19 @@ class MapboxMapSurface : MapSurface {
     // The incident annotation click listener, held so it can be detached in
     // onRelease alongside the map's other listeners.
     private var incidentClickListener: OnPointAnnotationClickListener? = null
+
+    // Application context, kept only to rasterise the incident marker images
+    // (which needs resources + display density). The APPLICATION context
+    // specifically: this surface outlives individual MapViews, and holding an
+    // Activity here would leak it.
+    private var appContext: Context? = null
+
+    // Style-image names already registered on the CURRENT style, so each
+    // category's marker image is rasterised and uploaded once rather than on
+    // every redraw. Cleared whenever the style is (re)loaded or the surface is
+    // released: style images do NOT survive a style reload, so a stale "already
+    // registered" entry would leave an icon-less marker behind.
+    private val registeredIncidentImages = mutableSetOf<String>()
     // The incident markers currently drawn, so a recomposition only clears and
     // redraws them when the set ACTUALLY changes (unrelated recompositions must
     // not flicker the layer). Reset to null whenever the manager is (re)created
@@ -685,6 +699,7 @@ class MapboxMapSurface : MapSurface {
                 if (token.isNotBlank()) {
                     MapboxOptions.accessToken = token
                 }
+                appContext = context.applicationContext
                 MapView(context).apply {
                     mapViewRef = this
                     // The surface now genuinely exists and is on screen — from
@@ -919,6 +934,13 @@ class MapboxMapSurface : MapSurface {
                             incidentManager.addClickListener(incidentClick)
                             incidentMarkerManager = incidentManager
                             lastAppliedIncidents = null
+                            // Style images are owned by the style that was just
+                            // (re)loaded, so anything registered against the
+                            // PREVIOUS one is gone. Forgetting them here is what
+                            // makes the icons survive a style reload: the next
+                            // draw re-uploads them instead of assuming they are
+                            // still present.
+                            registeredIncidentImages.clear()
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
                         }
                         // Device-location puck (blue dot). Shows only when the
@@ -1033,6 +1055,11 @@ class MapboxMapSurface : MapSurface {
                 // and the incident markers.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
+                // The style (and every image registered on it) dies with this
+                // MapView, so a later map must re-upload the marker images
+                // rather than believe these are still present.
+                registeredIncidentImages.clear()
+                appContext = null
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
@@ -1107,51 +1134,113 @@ class MapboxMapSurface : MapSurface {
      */
     private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
         if (markers == lastAppliedIncidents) return
-        applyIncidentMarkers(markers)
-        lastAppliedIncidents = markers
+        // Cache ONLY a complete draw. An incomplete one (the style handle not
+        // available yet, so a marker image could not be uploaded) would
+        // otherwise be remembered as applied, and every later update carrying
+        // the same markers would short-circuit here — leaving those incidents
+        // drawn as blank, icon-less annotations for as long as the set did not
+        // change. Declining to cache costs one redundant redraw and makes the
+        // next update repair it.
+        if (applyIncidentMarkers(markers)) {
+            lastAppliedIncidents = markers
+        }
     }
 
     /**
-     * Clears and redraws the incident badges — one category-icon point annotation
-     * per marker — and rebuilds the annotation-id → incident-id lookup the click
-     * listener resolves taps through. A no-op until the manager exists (style
-     * loaded). Every native call is wrapped defensively so a partial/failed draw
-     * degrades rather than crashing.
+     * Clears and redraws the incident markers — one CATEGORY ICON per marker —
+     * and rebuilds the annotation-id → incident-id lookup the click listener
+     * resolves taps through. A no-op until the manager exists (style loaded).
+     * Every native call is wrapped defensively so a partial/failed draw degrades
+     * rather than crashing.
+     *
+     * These were plain coloured circles, which made colour the only thing
+     * distinguishing an accident from roadworks — unreadable for a colour-blind
+     * user, and hard for anyone at a glance while driving. Each marker now
+     * carries its category's glyph (see
+     * `com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle`), so the
+     * shape carries the meaning and the colour reinforces it.
+     *
+     * Each distinct marker image is rasterised and registered on the style once
+     * (see [registeredIncidentImages]); the annotations themselves then only
+     * reference it by name, so redrawing the layer does not re-upload bitmaps.
      *
      * The lookup is cleared FIRST and repopulated as annotations are created, so
      * it can never outlive the annotations it describes and hand the click
      * listener a stale incident id after a redraw.
      *
-     * A marker whose badge bitmap cannot be built is skipped rather than drawn
-     * plain: an un-iconed dot is exactly the indistinguishable marker this change
-     * exists to remove, and a silently-wrong category is worse than one absent
-     * pin.
+     * ACCESSIBILITY, stated here so its absence is not read as an oversight:
+     * these markers carry no content description, because there is nowhere to
+     * put one. They are Mapbox `PointAnnotation`s — style images inside the GL
+     * surface — not Views and not composables, so no node exists in the
+     * semantics tree to label, and `PointAnnotationOptions` exposes no
+     * accessibility surface of its own (maps-annotation 11.26.0). A screen
+     * reader cannot reach an individual badge at all, which is a real gap but an
+     * ARCHITECTURAL one: closing it needs a different affordance (an accessible
+     * list of nearby incidents), not a string on the annotation. The incident
+     * content itself IS accessible once a sheet is open — `IncidentDetailsSheet`
+     * announces category, age and source as ordinary text.
      *
      * On-device verification note: annotation rendering and hit-testing run only
      * on a token-provisioned device, so they are verified on device.
      */
-    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>) {
-        val manager = incidentMarkerManager ?: return
+    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>): Boolean {
+        val manager = incidentMarkerManager ?: return false
+        val style = mapViewRef?.mapboxMap?.style
+        val context = appContext
+        // Every image this draw needs must be on the style, or the annotations
+        // below would reference a name the style does not know and render as
+        // nothing. Tracked so the CALLER can decline to cache an incomplete draw
+        // and simply try again on the next update.
+        var complete = true
         runCatching { manager.deleteAll() }
         incidentIdsByAnnotation.clear()
-        val context = mapViewRef?.context ?: return
         for (marker in markers) {
-            runCatching {
+            val imageId =
+                IncidentMarkerBitmaps.imageId(
+                    iconRes = marker.iconRes,
+                    discColorArgb = marker.colorArgb,
+                    glyphColorArgb = marker.glyphColorArgb,
+                )
+            // Register this category's image on first use against the current
+            // style. If the style handle or context is unavailable the image
+            // cannot be uploaded, so this draw is incomplete — never a crash.
+            if (imageId !in registeredIncidentImages) {
                 val bitmap =
-                    IncidentMarkerBitmaps.marker(
-                        context = context,
-                        iconRes = marker.iconRes,
-                        colorArgb = marker.colorArgb,
-                    ) ?: return@runCatching
+                    if (style != null && context != null) {
+                        IncidentMarkerBitmaps.create(
+                            context = context,
+                            iconRes = marker.iconRes,
+                            discColorArgb = marker.colorArgb,
+                            glyphColorArgb = marker.glyphColorArgb,
+                        )
+                    } else {
+                        null
+                    }
+                // Only remember it as registered once the upload actually
+                // succeeded, so a transient failure retries on the next redraw
+                // rather than permanently marking the icon as present.
+                val added =
+                    bitmap != null &&
+                        style != null &&
+                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
+                if (added) registeredIncidentImages.add(imageId) else complete = false
+            }
+            runCatching {
                 val annotation =
                     manager.create(
                         PointAnnotationOptions()
                             .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(bitmap),
+                            .withIconImage(imageId)
+                            // Anchored at the centre: this is a disc badge marking a
+                            // point, not a pin whose tip is the location.
+                            .withIconAnchor(IconAnchor.CENTER),
                     )
+                // Record the drawn annotation so a tap on it resolves back to the
+                // incident it represents.
                 incidentIdsByAnnotation[annotation.id] = marker.id
             }
         }
+        return complete
     }
 
     /**
@@ -1250,10 +1339,9 @@ class MapboxMapSurface : MapSurface {
         const val DEST_MARKER_STROKE = MapMarkerStyle.DEST_MARKER_STROKE
         const val DEST_MARKER_STROKE_COLOR = MapMarkerStyle.DEST_MARKER_STROKE_COLOR
 
-        // Incident markers are no longer circles — they are category-icon badges
-        // built by [IncidentMarkerBitmaps] from the geometry in
-        // [com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle], so the
-        // old radius/stroke constants live there now rather than here.
+        // (Incident markers are icon images, not circles — their geometry and
+        // colours live in `incidents/IncidentMarkerStyle.kt`, which is pure and
+        // unit-tested for light/dark legibility.)
 
         // Camera-fit padding (dp; multiplied by display density → px before use):
         // extra room at the bottom for the summary sheet.
