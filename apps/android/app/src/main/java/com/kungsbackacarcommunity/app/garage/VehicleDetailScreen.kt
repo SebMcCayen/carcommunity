@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -197,6 +198,11 @@ private fun VehicleGalleryPager(photoPaths: List<String>) {
                 val selected = index == current
                 GalleryPhoto(
                     path = path,
+                    // Each thumbnail is a navigation control, so it carries an
+                    // action label ("Show photo N") rather than the generic photo
+                    // alt, and role = Role.Button so it is announced as a button —
+                    // matching AeroPageTitle and the other clickable sites.
+                    contentDescription = stringResource(R.string.garage_photoThumbnail, index + 1),
                     modifier = Modifier
                         .size(KccSpacing.s12)
                         .clip(RoundedCornerShape(KccRadius.sm))
@@ -211,7 +217,9 @@ private fun VehicleGalleryPager(photoPaths: List<String>) {
                                 Modifier
                             },
                         )
-                        .clickable { scope.launch { pagerState.animateScrollToPage(index) } },
+                        .clickable(role = Role.Button) {
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
                 )
             }
         }
@@ -220,7 +228,11 @@ private fun VehicleGalleryPager(photoPaths: List<String>) {
 
 /** One resolved gallery image (full page or thumbnail), cropped to fill. */
 @Composable
-private fun GalleryPhoto(path: String, modifier: Modifier = Modifier) {
+private fun GalleryPhoto(
+    path: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String = stringResource(R.string.garage_photoAlt),
+) {
     val context = LocalContext.current
     val url = rememberStorageImageUrl(context, path)
     Box(
@@ -230,7 +242,7 @@ private fun GalleryPhoto(path: String, modifier: Modifier = Modifier) {
         if (url != null) {
             AsyncImage(
                 model = url,
-                contentDescription = stringResource(R.string.garage_photoAlt),
+                contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )

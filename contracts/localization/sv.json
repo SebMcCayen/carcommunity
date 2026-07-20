@@ -692,6 +692,7 @@
     "photoCropConfirm": "Använd bilden",
     "photoNone": "Inga bilder ännu",
     "photoCounter": "%1$d / %2$d",
+    "photoThumbnail": "Visa bild %1$d",
     "photoAddMore": "Lägg till fler bilder",
     "photoAddMoreUnavailable": "Du kan lägga till en bild per bil för tillfället. Ett komplett bildgalleri är på väg."
   },
