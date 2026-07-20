@@ -36,7 +36,39 @@ enum class NotificationCategory(val wire: String) {
     }
 }
 
-/** A durable inbox item. */
+/**
+ * What the backend says this item is FOR (notifications-core `actionType`).
+ * Only the values the inbox actually branches on are modelled; everything else
+ * (including a missing field) collapses to [NONE], which renders as a plain,
+ * non-actionable row.
+ *
+ * This matters for FRIEND_REQUEST specifically, because that ONE category
+ * carries two opposite meanings: "someone wants to be your friend" (actionable,
+ * written with `open_notifications`) and "someone accepted you" (a receipt,
+ * written with `open_profile`). Without this discriminator the inbox cannot
+ * tell them apart — see [pendingFriendRequestId].
+ */
+enum class NotificationActionType(val wire: String) {
+    NONE("none"),
+    OPEN_NOTIFICATIONS("open_notifications"),
+    OPEN_PROFILE("open_profile"),
+    ;
+
+    companion object {
+        fun fromWire(value: String?): NotificationActionType =
+            values().firstOrNull { it.wire == value } ?: NONE
+    }
+}
+
+/**
+ * A durable inbox item.
+ *
+ * [relatedEntityId] is the backend's "who/what is this about" pointer. For a
+ * friend-request notice it is the OTHER member's uid (the requester) — NOT the
+ * friendRequests document id, which is a SHA-256 over the ordered uid pair and
+ * therefore cannot be reconstructed on the client. Acting on the request means
+ * resolving that uid against the live pending list; see [pendingFriendRequestId].
+ */
 data class AppNotification(
     val id: String,
     val category: NotificationCategory,
@@ -45,6 +77,8 @@ data class AppNotification(
     val body: String?,
     val isRead: Boolean,
     val createdAtMillis: Long?,
+    val actionType: NotificationActionType = NotificationActionType.NONE,
+    val relatedEntityId: String? = null,
 )
 
 object Notifications {
@@ -65,4 +99,41 @@ object Notifications {
     /** Newest first; items without a timestamp sort last. */
     fun sortedForInbox(items: List<AppNotification>): List<AppNotification> =
         items.sortedWith(compareByDescending { it.createdAtMillis ?: Long.MIN_VALUE })
+
+    /**
+     * The friendRequests id this inbox row can be accepted/declined against, or
+     * null when the row carries no answerable request.
+     *
+     * [pendingRequestIdsByRequester] maps a REQUESTER uid to the id of their
+     * still-pending incoming request, built from the live `friend-list`
+     * snapshot. Deriving the actionability from that snapshot — rather than
+     * from the notification alone — is the whole point: the notification is an
+     * immutable historical record that is never rewritten when the request is
+     * answered, so it is not, and cannot be, evidence that the request is still
+     * open. Three cases fall out of this for free:
+     *
+     *  - ANSWERED ELSEWHERE (the profile screen, another device, or this
+     *    screen a moment ago): the request has left the pending list, the
+     *    lookup misses, and the row simply stops offering buttons. Tapping a
+     *    button that no longer means anything is not possible, which is the
+     *    stale case Seb's report is really about.
+     *  - The "X accepted your request" RECEIPT: same category, but written with
+     *    `open_profile`, so the actionType gate rejects it before the lookup.
+     *    Without that gate an un-friend followed by a fresh request from the
+     *    same member would grow Accept/Decline buttons on the old receipt.
+     *  - A request the viewer SENT (outgoing): never in this map, which only
+     *    ever holds incoming requests.
+     *
+     * Pure and total — no I/O, no exceptions — so the stale/fresh distinction
+     * is unit-testable without Firestore or the emulator.
+     */
+    fun pendingFriendRequestId(
+        item: AppNotification,
+        pendingRequestIdsByRequester: Map<String, String>,
+    ): String? {
+        if (item.category != NotificationCategory.FRIEND_REQUEST) return null
+        if (item.actionType != NotificationActionType.OPEN_NOTIFICATIONS) return null
+        val requesterUid = item.relatedEntityId?.takeIf { it.isNotBlank() } ?: return null
+        return pendingRequestIdsByRequester[requesterUid]
+    }
 }

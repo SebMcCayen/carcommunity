@@ -86,5 +86,11 @@ private fun DocumentSnapshot.toNotification(): AppNotification? {
         body = getString("body"),
         isRead = getBoolean("read") ?: false,
         createdAtMillis = getTimestamp("createdAt")?.toDate()?.time,
+        // Both are written by every producer (notifications-core defaults them
+        // to 'none'/null), but older inbox rows predate nothing here — the
+        // fields have always been persisted. An unknown/absent actionType
+        // degrades to NONE, i.e. a plain non-actionable row.
+        actionType = NotificationActionType.fromWire(getString("actionType")),
+        relatedEntityId = getString("relatedEntityId"),
     )
 }

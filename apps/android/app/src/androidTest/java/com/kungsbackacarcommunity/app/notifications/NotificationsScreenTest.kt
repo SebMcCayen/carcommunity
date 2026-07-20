@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.notifications
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -9,7 +10,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.friends.FriendActionError
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -86,5 +89,177 @@ class NotificationsScreenTest {
         }
         composeTestRule.onNodeWithText(str(R.string.notifications_markAllRead)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.notifications_unreadLabel)).assertDoesNotExist()
+    }
+
+    // ── Friend-request accept/decline in the inbox ──────────────────────────
+
+    private val requesterUid = "uid-requester"
+    private val requestId = "req-abc123"
+
+    /** The row the backend writes for a NEW incoming friend request. */
+    private fun friendRequestItem(
+        actionType: NotificationActionType = NotificationActionType.OPEN_NOTIFICATIONS,
+    ) = AppNotification(
+        id = "fr1",
+        category = NotificationCategory.FRIEND_REQUEST,
+        title = "Ny vanforfragan",
+        previewText = "Someone wants to be your friend",
+        body = null,
+        isRead = true,
+        createdAtMillis = 0L,
+        actionType = actionType,
+        relatedEntityId = requesterUid,
+    )
+
+    @Test
+    fun pendingFriendRequest_acceptPassesTheRequestId() {
+        var accepted: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = mapOf(requesterUid to requestId),
+                    onAcceptFriendRequest = { accepted = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_accept)).performScrollTo().performClick()
+        // The REQUEST id, not the notification id and not the requester uid:
+        // friend-respondRequest takes the friendRequests document id, and the
+        // other two would fail not-found for every request.
+        assertEquals(requestId, accepted)
+    }
+
+    @Test
+    fun pendingFriendRequest_declinePassesTheRequestId() {
+        var declined: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = mapOf(requesterUid to requestId),
+                    onDeclineFriendRequest = { declined = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_decline)).performScrollTo().performClick()
+        assertEquals(requestId, declined)
+    }
+
+    @Test
+    fun alreadyAnsweredFriendRequest_showsNoActionsAtAll() {
+        // Accepted/declined elsewhere (profile screen, another device): the
+        // notification itself is unchanged — it is never rewritten — so the
+        // ONLY signal is that it is gone from the pending list. The row must
+        // not keep offering buttons that no longer do anything.
+        var accepted: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = emptyMap(),
+                    onAcceptFriendRequest = { accepted = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_accept)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.friends_decline)).assertDoesNotExist()
+        assertNull(accepted)
+        // The row itself still renders — the news doesn't vanish, only the actions.
+        composeTestRule.onNodeWithText("Ny vanforfragan").assertIsDisplayed()
+    }
+
+    @Test
+    fun friendRequestAcceptedReceipt_showsNoActions() {
+        // Same category, opposite meaning ("X accepted your request"), written
+        // with open_profile. The pending map deliberately DOES contain this
+        // member — the unfriend-then-re-request state — so only the actionType
+        // gate keeps the old receipt from growing buttons.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state =
+                        NotificationsState.Loaded(
+                            listOf(friendRequestItem(NotificationActionType.OPEN_PROFILE)),
+                        ),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = mapOf(requesterUid to requestId),
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_accept)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.friends_decline)).assertDoesNotExist()
+    }
+
+    @Test
+    fun inFlightFriendRequest_disablesBothActions() {
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = mapOf(requesterUid to requestId),
+                    busyFriendRequestIds = setOf(requestId),
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_accept)).performScrollTo()
+            .assertIsNotEnabled()
+        composeTestRule.onNodeWithText(str(R.string.friends_decline)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun failedResponse_surfacesTheServerAnswerAndIsDismissible() {
+        // A stale accept comes back as RequestGone (friend-respondRequest maps
+        // both not-found and failed-precondition there). It must read as an
+        // honest sentence, never a raw error, and the row must NOT be left
+        // claiming a friendship the server refused to create.
+        var dismissed = 0
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    pendingFriendRequestIds = emptyMap(),
+                    friendActionError = FriendActionError.RequestGone,
+                    onDismissFriendActionError = { dismissed++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_errorRequestGone)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.friends_close)).performScrollTo().performClick()
+        assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun noFriendState_leavesTheInboxExactlyAsItWas() {
+        // The config-less build passes no friend data at all.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(friendRequestItem())),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.friends_accept)).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Ny vanforfragan").assertIsDisplayed()
     }
 }
