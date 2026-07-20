@@ -308,6 +308,8 @@
     <string name="auth_deleteAccountNote">You can delete your account via our website according to our terms.</string>
     <string name="auth_loading">Loading...</string>
     <string name="auth_errorGeneric">Sign-in failed. Please try again.</string>
+    <string name="auth_errorNoGoogleAccount">There is no Google account on this phone. Add one under Settings &gt; Accounts, then sign in again.</string>
+    <string name="auth_addGoogleAccountButton">Add a Google account</string>
     <string name="auth_loggedInAs">Signed in</string>
     <string name="auth_signOut">Sign out</string>
     <string name="auth_devLoginLabel">[DEV] Placeholder login (not production)</string>
@@ -444,6 +446,7 @@
     <string name="convoy_barEnd">End convoy</string>
     <string name="convoy_barNoticeInvite">Inviting more people to an ongoing convoy isn\'t available yet.</string>
     <string name="convoy_barNoticeInviteAndLeave">Inviting more people, and leaving an ongoing convoy, aren\'t available yet.</string>
+    <string name="convoy_barNoticeLeave">Leaving an ongoing convoy isn\'t available yet.</string>
     <string name="convoy_barLeaveUnavailable">Leave convoy (not available yet)</string>
     <string name="convoy_barInviteUnavailable">Invite more (not available yet)</string>
     <string name="convoy_barEndConfirmTitle">End convoy?</string>
@@ -616,6 +619,9 @@
     <string name="garage_photoUploading">Uploading…</string>
     <string name="garage_photoUploadError">Couldn’t upload the image. Please try again.</string>
     <string name="garage_photoTooLarge">The image is too large.</string>
+    <string name="garage_photoCropTitle">Crop photo</string>
+    <string name="garage_photoCropHint">Drag to position and pinch to zoom. The area inside the frame is what others will see.</string>
+    <string name="garage_photoCropConfirm">Use photo</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>

@@ -62,8 +62,19 @@ package com.kungsbackacarcommunity.app.convoy
  *    decision; the client is happy either way (owner-only would simply gate the
  *    button on [ConvoyBarState.viewerIsOwner]).
  *
- * When either lands, the only client change is flipping the corresponding
- * [ConvoyBarActionAvailability] here and handing the bar a lambda.
+ * When either lands, the client change is exactly two halves, and BOTH are
+ * required — the controls gate on the availability flag *and* on the presence of
+ * a handler, so neither half alone can produce a live button that does nothing or
+ * a flag claiming a capability the UI never exposes:
+ *
+ *  - `convoy.invite`: flip [ConvoyBar.inviteAvailability] to [Wired] and pass
+ *    `ConvoyStatusBar(onInvite = ...)`.
+ *  - `convoy.leave`: return [Wired] from [ConvoyBar.leaveAvailability] for
+ *    non-owners too, and pass `ConvoyStatusBar(onLeaveConvoy = ...)`. The bar
+ *    routes the trailing control on `viewerIsOwner`, NOT on this flag, so a
+ *    member's tap goes to that handler and cannot reach the owner's end-convoy
+ *    confirmation even if only the flag is flipped — the leave→end footgun above
+ *    is closed structurally, not by remembering to update the click path.
  */
 
 /** Whether a convoy-bar action can actually reach a backend today. */
@@ -86,10 +97,18 @@ enum class ConvoyBarNotice {
     /** Every rendered action is wired — no explanation needed. */
     None,
 
-    /** Only inviting is missing (the owner, whose End action IS wired). */
+    /** Only inviting is missing (today's owner, whose End action IS wired). */
     InviteMissing,
 
-    /** Both inviting and leaving are missing (a non-owner member). */
+    /**
+     * Only leaving is missing — the state a non-owner member lands in once
+     * `convoy.invite` ships but `convoy.leave` has not yet. Unreachable today,
+     * and deliberately present anyway: without it the derivation has no way to
+     * say "leave is missing" and would have to overclaim.
+     */
+    LeaveMissing,
+
+    /** Both inviting and leaving are missing (today's non-owner member). */
     InviteAndLeaveMissing,
 }
 
@@ -123,16 +142,27 @@ data class ConvoyBarState(
     /** Whether the viewer may clear the current destination (setter or owner). */
     val canClearDestination: Boolean = false,
 ) {
-    /** The explanation line, derived from the two availabilities. */
+    /**
+     * The explanation line, derived from BOTH availabilities independently.
+     *
+     * The two callables (`convoy.invite`, `convoy.leave`) are separate pieces of
+     * backend work and will very likely land in separate PRs, so every one of the
+     * four combinations has to name exactly what is missing. A derivation that
+     * inferred "invite is missing too" from leave alone would, the moment invite
+     * shipped first, tell users that inviting doesn't work while an enabled
+     * invite button sat directly above the sentence.
+     */
     val notice: ConvoyBarNotice
-        get() =
-            when {
-                inviteAvailability == ConvoyBarActionAvailability.Wired &&
-                    leaveAvailability == ConvoyBarActionAvailability.Wired -> ConvoyBarNotice.None
-                leaveAvailability == ConvoyBarActionAvailability.BackendMissing ->
-                    ConvoyBarNotice.InviteAndLeaveMissing
-                else -> ConvoyBarNotice.InviteMissing
+        get() {
+            val inviteMissing = inviteAvailability == ConvoyBarActionAvailability.BackendMissing
+            val leaveMissing = leaveAvailability == ConvoyBarActionAvailability.BackendMissing
+            return when {
+                inviteMissing && leaveMissing -> ConvoyBarNotice.InviteAndLeaveMissing
+                inviteMissing -> ConvoyBarNotice.InviteMissing
+                leaveMissing -> ConvoyBarNotice.LeaveMissing
+                else -> ConvoyBarNotice.None
             }
+        }
 }
 
 object ConvoyBar {

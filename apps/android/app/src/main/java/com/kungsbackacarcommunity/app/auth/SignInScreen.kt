@@ -15,16 +15,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import kotlin.random.Random
 
@@ -58,6 +60,23 @@ internal val signInCarQuoteResIds = listOf(
 )
 
 /**
+ * The message shown for a failed sign-in attempt. Extracted from the composable
+ * so the choice of copy is directly unit-testable — in particular that
+ * [SignInFailure.NO_GOOGLE_ACCOUNT] gets its own actionable guidance and does
+ * NOT fall back to the generic "sign-in failed, try again".
+ *
+ * Exhaustive `when` with no `else` on purpose: a new [SignInFailure] must fail
+ * to compile here rather than silently inheriting the generic message, which is
+ * how the missing-account case went unnoticed in the first place.
+ */
+internal fun signInFailureMessageRes(reason: SignInFailure): Int =
+    when (reason) {
+        SignInFailure.UNAVAILABLE -> R.string.auth_platformUnsupported
+        SignInFailure.NO_GOOGLE_ACCOUNT -> R.string.auth_errorNoGoogleAccount
+        SignInFailure.GENERIC -> R.string.auth_errorGeneric
+    }
+
+/**
  * Minimal sign-in scaffold (migration plan Phase 7, PR 7c).
  *
  * Google Sign-In per docs/auth-mobile-requirements.md. All copy comes from
@@ -76,6 +95,17 @@ fun SignInScreen(
     // null (production) = random pick per screen display, stable across
     // recomposition and rotation via rememberSaveable.
     quoteIndex: Int? = null,
+    // Whether this device can open the system add-account screen. Production
+    // resolves it once per context; previews/tests pin it to render both the
+    // "button offered" and "text-only fallback" shapes deterministically.
+    canAddAccount: Boolean = LocalContext.current.let { context ->
+        remember(context) { canAddGoogleAccount(context) }
+    },
+    // Opens the system add-account screen. Injectable so tests can observe the
+    // tap without launching a real activity.
+    onAddGoogleAccountClick: () -> Unit = LocalContext.current.let { context ->
+        { openAddGoogleAccount(context) }
+    },
 ) {
     // The sign-in screen is a brand moment shown over Ink Black art, so it
     // always renders light-on-dark (light content over the dark background)
@@ -97,7 +127,7 @@ fun SignInScreen(
                     contentScale = ContentScale.Crop,
                 )
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = KccSpacing.s6),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -106,26 +136,26 @@ fun SignInScreen(
                         contentDescription = stringResource(R.string.app_name),
                         modifier = Modifier.fillMaxWidth(0.7f),
                     )
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(KccSpacing.s8))
                     Text(
                         text = stringResource(R.string.auth_loginTitle),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(KccSpacing.s2))
                     Text(
                         text = stringResource(R.string.auth_loginSubtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(KccSpacing.s6))
 
                     when (status) {
                         SignInStatus.InProgress -> {
                             CircularProgressIndicator()
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(KccSpacing.s2))
                             Text(
                                 text = stringResource(R.string.auth_loading),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -136,24 +166,30 @@ fun SignInScreen(
                         is SignInStatus.Failed -> {
                             Text(
                                 text =
-                                    stringResource(
-                                        when (status.reason) {
-                                            SignInFailure.UNAVAILABLE -> R.string.auth_platformUnsupported
-                                            SignInFailure.GENERIC -> R.string.auth_errorGeneric
-                                        },
-                                    ),
+                                    stringResource(signInFailureMessageRes(status.reason)),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                                 textAlign = TextAlign.Center,
                             )
-                            Spacer(Modifier.height(16.dp))
+                            // Missing-account is the one failure the user can fix
+                            // from here, so it gets a route to the fix. The button
+                            // is omitted when the device can't resolve the
+                            // add-account activity (managed profiles, some ROMs):
+                            // the message alone still names Settings > Accounts.
+                            if (status.reason == SignInFailure.NO_GOOGLE_ACCOUNT && canAddAccount) {
+                                Spacer(Modifier.height(KccSpacing.s4))
+                                Button(onClick = onAddGoogleAccountClick) {
+                                    Text(stringResource(R.string.auth_addGoogleAccountButton))
+                                }
+                            }
+                            Spacer(Modifier.height(KccSpacing.s4))
                             GoogleSignInButton(onSignInClick)
                         }
 
                         SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
                     }
 
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(KccSpacing.s6))
                     // Random car quote in place of the old privacy note.
                     // In production (quoteIndex == null) a random index is
                     // drawn and remembered so the pick stays stable across
