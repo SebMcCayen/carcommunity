@@ -1,7 +1,11 @@
 version: 2
 
 updates:
-  # All npm workspaces: root, packages/shared, apps/mobile, apps/admin, services/api.
+  # All npm workspaces: root, packages/shared, apps/admin, services/api.
+  # apps/mobile is NOT in this list: the legacy Expo/React Native app is parked
+  # (descoped from the MVP) and was removed from the root package.json
+  # "workspaces" array, so Dependabot no longer discovers or bumps its deps.
+  # The code remains on disk — re-adding the workspace entry restores both.
   # These share the single root package-lock.json, so they MUST be one update entry:
   # separate per-workspace entries each regenerate the shared lockfile and their PRs
   # race each other on merge (see the vite ^8.1.2/^8.1.3 lockfile breakage fixed in #198).
@@ -45,7 +49,14 @@ updates:
       - dependency-name: '@prisma/adapter-pg'
         versions:
           - '7.x'
-      # apps/mobile: Expo SDK majors are upgraded manually as a set
+      # apps/mobile: Expo SDK majors are upgraded manually as a set.
+      # apps/mobile is no longer a workspace, so the Expo/React Native entries
+      # below are currently inert — they are RETAINED deliberately so that
+      # re-adding the workspace does not silently re-open Expo SDK majors.
+      #
+      # EXCEPTION: 'react' is NOT mobile-only — it is a direct dependency of
+      # apps/admin, which is active. That ignore is load-bearing today; do not
+      # remove it with the Expo block.
       - dependency-name: 'expo'
         update-types:
           - 'version-update:semver-major'
