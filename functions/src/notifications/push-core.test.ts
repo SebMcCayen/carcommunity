@@ -328,3 +328,59 @@ describe('selectEvictableTokenIds — the per-user registration cap', () => {
     expect(() => selectEvictableTokenIds([], 0)).toThrow(/limit must be >= 1/);
   });
 });
+
+describe('buildPushDeepLink — direct_message pairId parsing is strict', () => {
+  const me = 'uidRecipient';
+
+  it('resolves the counterpart from a well-formed pairId, either side', () => {
+    expect(buildPushDeepLink('direct_message', `${me}__uidOther`, me)).toEqual({
+      target: 'dm',
+      entityId: 'uidOther',
+    });
+    expect(buildPushDeepLink('direct_message', `uidOther__${me}`, me)).toEqual({
+      target: 'dm',
+      entityId: 'uidOther',
+    });
+  });
+
+  it('falls back to the conversation list when the recipient is not in the pair', () => {
+    // A loose "first segment that isn't me" search would return 'uidA' here and
+    // deep-link the member into a thread that is not theirs.
+    expect(buildPushDeepLink('direct_message', 'uidA__uidB', me)).toEqual({
+      target: 'dm',
+      entityId: null,
+    });
+  });
+
+  it('falls back when the id does not split into exactly two parts', () => {
+    for (const malformed of [
+      me, // no separator at all
+      `${me}__uidOther__uidThird`, // three parts
+      `${me}____uidOther`, // empty middle segment
+      '',
+    ]) {
+      expect(buildPushDeepLink('direct_message', malformed, me)).toEqual({
+        target: 'dm',
+        entityId: null,
+      });
+    }
+  });
+
+  it('falls back for a self-pair rather than opening a thread with yourself', () => {
+    expect(buildPushDeepLink('direct_message', `${me}__${me}`, me)).toEqual({
+      target: 'dm',
+      entityId: null,
+    });
+  });
+
+  it('handles a missing relatedEntityId', () => {
+    expect(buildPushDeepLink('direct_message', null, me)).toEqual({
+      target: 'dm',
+      entityId: null,
+    });
+    expect(buildPushDeepLink('direct_message', undefined, me)).toEqual({
+      target: 'dm',
+      entityId: null,
+    });
+  });
+});

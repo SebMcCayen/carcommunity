@@ -95,6 +95,7 @@ export const registerPushToken = onCall(
 
     // Idempotent: first registration writes the full document; re-registers
     // keep createdAt and bump lastSeenAt (and platform/app metadata).
+    let evictedCount = 0;
     await db.runTransaction(async (tx) => {
       const existing = await tx.get(ref);
       if (existing.exists) {
@@ -129,17 +130,22 @@ export const registerPushToken = onCall(
         tx.delete(collection.doc(staleId));
       }
       tx.set(ref, buildPushTokenDocument(parsed.input, () => FieldValue.serverTimestamp()));
-
-      if (evictable.length > 0) {
-        // Not an error: the member simply has more devices/reinstalls than the
-        // cap, and the least-recently-seen registration makes way. Logged
-        // without the ids, which are token hashes.
-        logger.info('Evicted least-recently-seen push tokens to stay within cap', {
-          evicted: evictable.length,
-          cap: MAX_PUSH_TOKENS_PER_USER,
-        });
-      }
+      // Recorded, not logged, here: Firestore re-runs this callback on
+      // contention, so logging inside it would emit once per ATTEMPT. The
+      // assignment is idempotent, so the value that survives is the one from
+      // the attempt that actually committed.
+      evictedCount = evictable.length;
     });
+
+    if (evictedCount > 0) {
+      // Not an error: the member simply has more devices/reinstalls than the
+      // cap, and the least-recently-seen registration makes way. Logged
+      // without the ids, which are token hashes.
+      logger.info('Evicted least-recently-seen push tokens to stay within cap', {
+        evicted: evictedCount,
+        cap: MAX_PUSH_TOKENS_PER_USER,
+      });
+    }
 
     return { tokenId, platform: parsed.input.platform };
   },

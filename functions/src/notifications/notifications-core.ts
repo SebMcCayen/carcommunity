@@ -398,9 +398,23 @@ export function buildPushDeepLink(
 ): PushDeepLink {
   switch (category) {
     case 'direct_message': {
-      const otherUid = relatedEntityId
-        ? (relatedEntityId.split('__').find((part) => part && part !== recipientUid) ?? null)
-        : null;
+      // Strict: the pairId must split into EXACTLY two parts, one of which is
+      // the recipient — then the other is the counterpart. A loose
+      // "first segment that isn't me" search would, given anything that is not
+      // a well-formed pairId, hand back an arbitrary segment as a uid and
+      // deep-link the member into a stranger's thread.
+      //
+      // dm-core.ts states UIDs are alphanumeric so `__` is unambiguous, and
+      // today that holds (Firebase auto-generates 28-char alphanumeric ids and
+      // nothing here mints custom uids) — but its own uidSchema is
+      // `z.string().max(128)` with no character class, so the property is
+      // asserted rather than enforced. This parse does not depend on it: an
+      // ambiguous split yields the wrong PART COUNT and falls back safely.
+      const parts = relatedEntityId ? relatedEntityId.split('__') : [];
+      const otherUid =
+        parts.length === 2 && parts.includes(recipientUid)
+          ? (parts.find((part) => part !== recipientUid) ?? null)
+          : null;
       // Without a resolvable counterpart the thread cannot be opened; the
       // conversation list is the closest correct destination.
       return otherUid ? { target: 'dm', entityId: otherUid } : { target: 'dm', entityId: null };
