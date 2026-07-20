@@ -209,6 +209,38 @@ class ConvoyBarTest {
         assertEquals(ConvoyBarNotice.None, state.notice)
     }
 
+    /**
+     * The notice must be derived from BOTH availabilities, not inferred from
+     * leave alone. `convoy.invite` and `convoy.leave` are separate backend work
+     * and will land in separate PRs, so the half-shipped combinations are the
+     * ones that actually get shown to users — and the "invite shipped, leave has
+     * not" row is exactly the one a leave-only derivation gets wrong, telling
+     * people inviting is unavailable while an enabled invite button sits above
+     * the sentence.
+     */
+    @Test
+    fun `the explanation names exactly which actions are missing, for all four combinations`() {
+        fun noticeFor(
+            invite: ConvoyBarActionAvailability,
+            leave: ConvoyBarActionAvailability,
+        ) = ConvoyBarState(
+            convoyId = "c1",
+            memberCount = 2,
+            viewerIsOwner = false,
+            busy = false,
+            inviteAvailability = invite,
+            leaveAvailability = leave,
+        ).notice
+
+        val wired = ConvoyBarActionAvailability.Wired
+        val missing = ConvoyBarActionAvailability.BackendMissing
+
+        assertEquals(ConvoyBarNotice.None, noticeFor(wired, wired))
+        assertEquals(ConvoyBarNotice.InviteMissing, noticeFor(missing, wired))
+        assertEquals(ConvoyBarNotice.LeaveMissing, noticeFor(wired, missing))
+        assertEquals(ConvoyBarNotice.InviteAndLeaveMissing, noticeFor(missing, missing))
+    }
+
     // --- in-flight guard --------------------------------------------------
 
     @Test

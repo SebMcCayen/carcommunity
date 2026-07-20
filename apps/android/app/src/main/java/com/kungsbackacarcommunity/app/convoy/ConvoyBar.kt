@@ -86,10 +86,18 @@ enum class ConvoyBarNotice {
     /** Every rendered action is wired — no explanation needed. */
     None,
 
-    /** Only inviting is missing (the owner, whose End action IS wired). */
+    /** Only inviting is missing (today's owner, whose End action IS wired). */
     InviteMissing,
 
-    /** Both inviting and leaving are missing (a non-owner member). */
+    /**
+     * Only leaving is missing — the state a non-owner member lands in once
+     * `convoy.invite` ships but `convoy.leave` has not yet. Unreachable today,
+     * and deliberately present anyway: without it the derivation has no way to
+     * say "leave is missing" and would have to overclaim.
+     */
+    LeaveMissing,
+
+    /** Both inviting and leaving are missing (today's non-owner member). */
     InviteAndLeaveMissing,
 }
 
@@ -114,16 +122,27 @@ data class ConvoyBarState(
     val inviteAvailability: ConvoyBarActionAvailability,
     val leaveAvailability: ConvoyBarActionAvailability,
 ) {
-    /** The explanation line, derived from the two availabilities. */
+    /**
+     * The explanation line, derived from BOTH availabilities independently.
+     *
+     * The two callables (`convoy.invite`, `convoy.leave`) are separate pieces of
+     * backend work and will very likely land in separate PRs, so every one of the
+     * four combinations has to name exactly what is missing. A derivation that
+     * inferred "invite is missing too" from leave alone would, the moment invite
+     * shipped first, tell users that inviting doesn't work while an enabled
+     * invite button sat directly above the sentence.
+     */
     val notice: ConvoyBarNotice
-        get() =
-            when {
-                inviteAvailability == ConvoyBarActionAvailability.Wired &&
-                    leaveAvailability == ConvoyBarActionAvailability.Wired -> ConvoyBarNotice.None
-                leaveAvailability == ConvoyBarActionAvailability.BackendMissing ->
-                    ConvoyBarNotice.InviteAndLeaveMissing
-                else -> ConvoyBarNotice.InviteMissing
+        get() {
+            val inviteMissing = inviteAvailability == ConvoyBarActionAvailability.BackendMissing
+            val leaveMissing = leaveAvailability == ConvoyBarActionAvailability.BackendMissing
+            return when {
+                inviteMissing && leaveMissing -> ConvoyBarNotice.InviteAndLeaveMissing
+                inviteMissing -> ConvoyBarNotice.InviteMissing
+                leaveMissing -> ConvoyBarNotice.LeaveMissing
+                else -> ConvoyBarNotice.None
             }
+        }
 }
 
 object ConvoyBar {

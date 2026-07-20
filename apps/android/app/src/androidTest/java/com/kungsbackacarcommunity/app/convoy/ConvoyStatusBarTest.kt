@@ -123,6 +123,47 @@ class ConvoyStatusBarTest {
     }
 
     /**
+     * The invite control's enablement is derived, not hard-coded: flipping
+     * `inviteAvailability` to `Wired` when the `convoy.invite` callable ships
+     * must actually make the button live, and must do so only alongside a
+     * handler. Asserted through the observable — whether a tap reaches
+     * `onInvite` — rather than by reading the `enabled` argument back.
+     */
+    @Test
+    fun inviteControl_goesLiveOnlyWithBothAWiredFlagAndAHandler() {
+        var invited: String? = null
+        val wired = ConvoyBarActionAvailability.Wired
+        var current by
+            mutableStateOf(ownerState("c1").copy(inviteAvailability = wired))
+        var handler: ((String) -> Unit)? by mutableStateOf(null)
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(state = current, onEndConvoy = {}, onInvite = handler)
+            }
+        }
+
+        // Wired flag, but no handler → still inert.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        assertNull("a wired flag alone must not make the control act", invited)
+
+        // Handler, but the flag back to today's BackendMissing → still inert.
+        handler = { invited = it }
+        current = ownerState("c1")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        assertNull("a handler alone must not make the control act", invited)
+
+        // Both → live, and it invites THIS convoy.
+        current = ownerState("c1").copy(inviteAvailability = wired)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("c1", invited)
+    }
+
+    /**
      * A member's leave control has no callable and is disabled — and must not
      * still be painted in full-strength destructive red, which reads as tappable.
      *

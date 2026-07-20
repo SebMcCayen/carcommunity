@@ -486,6 +486,7 @@
     "barEnd": "Avsluta konvojen",
     "barNoticeInvite": "Att bjuda in fler till en pågående konvoj går inte än.",
     "barNoticeInviteAndLeave": "Att bjuda in fler, och att lämna en pågående konvoj, går inte än.",
+    "barNoticeLeave": "Att lämna en pågående konvoj går inte än.",
     "barLeaveUnavailable": "Lämna konvojen (går inte än)",
     "barInviteUnavailable": "Bjud in fler (går inte än)",
     "barEndConfirmTitle": "Avsluta konvojen?",

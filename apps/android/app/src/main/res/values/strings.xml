@@ -445,6 +445,7 @@
     <string name="convoy_barEnd">Avsluta konvojen</string>
     <string name="convoy_barNoticeInvite">Att bjuda in fler till en pågående konvoj går inte än.</string>
     <string name="convoy_barNoticeInviteAndLeave">Att bjuda in fler, och att lämna en pågående konvoj, går inte än.</string>
+    <string name="convoy_barNoticeLeave">Att lämna en pågående konvoj går inte än.</string>
     <string name="convoy_barLeaveUnavailable">Lämna konvojen (går inte än)</string>
     <string name="convoy_barInviteUnavailable">Bjud in fler (går inte än)</string>
     <string name="convoy_barEndConfirmTitle">Avsluta konvojen?</string>

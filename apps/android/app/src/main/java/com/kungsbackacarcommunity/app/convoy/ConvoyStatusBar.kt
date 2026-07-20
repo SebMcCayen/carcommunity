@@ -79,6 +79,12 @@ const val CONVOY_BAR_LEAVE_TAG = "convoy_bar_leave"
  *   their explanatory content descriptions here for accessibility.
  * @param onEndConvoy invoked (after the user confirms) when the OWNER ends the
  *   convoy. Never invoked for a member.
+ * @param onInvite invites people into THIS convoy (by id). Null today, because
+ *   the `convoy.invite` callable does not exist — see [ConvoyBar]. The invite
+ *   control needs both this handler AND
+ *   [ConvoyBarState.inviteAvailability] `== Wired` before it enables, so neither
+ *   half can be added on its own and quietly produce a button that looks live and
+ *   does nothing, or a flag that claims a capability the UI never exposes.
  */
 @Composable
 fun ConvoyStatusBar(
@@ -86,6 +92,7 @@ fun ConvoyStatusBar(
     onEndConvoy: (String) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    onInvite: ((String) -> Unit)? = null,
 ) {
     // The convoy the open confirm dialog is ABOUT, captured when the user opened
     // it — not a bare boolean. [state] is hoisted and refreshes underneath this
@@ -139,10 +146,19 @@ fun ConvoyStatusBar(
                 // Invite ("person +"). No `convoy.invite` callable exists, so this
                 // is disabled rather than pointed at the create-convoy picker,
                 // which would spawn a SECOND convoy instead of growing this one.
+                //
+                // Enablement is DERIVED from the state and the presence of a
+                // handler, never hard-coded: `enabled = false` with an empty
+                // `onClick` would let `inviteAvailability` be flipped to `Wired`
+                // — the one-line change this is all waiting on — while the button
+                // stayed silently dead, and the explanation line underneath
+                // stopped saying why. Requiring [onInvite] as well means flipping
+                // the flag alone cannot produce an ENABLED button that does
+                // nothing either; both halves have to be done deliberately.
                 val inviteWired = state.inviteAvailability == ConvoyBarActionAvailability.Wired
                 IconButton(
-                    onClick = {},
-                    enabled = false,
+                    onClick = { onInvite?.invoke(state.convoyId) },
+                    enabled = inviteWired && onInvite != null && !state.busy,
                     modifier = Modifier.testTag(CONVOY_BAR_INVITE_TAG),
                 ) {
                     Icon(
@@ -207,6 +223,7 @@ fun ConvoyStatusBar(
                 when (state.notice) {
                     ConvoyBarNotice.None -> null
                     ConvoyBarNotice.InviteMissing -> R.string.convoy_barNoticeInvite
+                    ConvoyBarNotice.LeaveMissing -> R.string.convoy_barNoticeLeave
                     ConvoyBarNotice.InviteAndLeaveMissing ->
                         R.string.convoy_barNoticeInviteAndLeave
                 }
