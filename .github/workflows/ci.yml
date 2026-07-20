@@ -69,17 +69,11 @@ jobs:
       - name: API build
         run: npm --workspace services/api run build
 
-      - name: Mobile lint
-        run: npm --workspace apps/mobile run lint
-
-      - name: Mobile typecheck
-        run: npm --workspace apps/mobile run typecheck
-
-      - name: Mobile test
-        run: npm --workspace apps/mobile test
-
-      - name: Mobile build
-        run: npm --workspace apps/mobile run build
+      # NOTE: apps/mobile (legacy Expo/React Native app) is deliberately not built
+      # here. It is descoped from the MVP and parked: the code stays on disk but is
+      # no longer a root npm workspace, so the "Root *" steps above skip it too.
+      # To bring it back into CI, re-add "apps/mobile" to the "workspaces" array in
+      # the root package.json and run `npm install`.
 
       - name: Admin lint
         run: npm --workspace apps/admin run lint
