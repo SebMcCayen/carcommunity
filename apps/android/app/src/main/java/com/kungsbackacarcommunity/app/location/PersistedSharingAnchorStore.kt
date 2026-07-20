@@ -22,13 +22,22 @@ class PersistedSharingAnchorStore(context: Context) : SharingAnchorStore {
             if (stored != NO_ANCHOR) return stored
         }
         // A different (or first) session, or a half-written pair: start fresh.
+        //
+        // commit(), not apply(): apply() only guarantees the in-memory value and
+        // flushes to disk asynchronously, and while the platform drains pending
+        // apply() writes on orderly component transitions it cannot on an abrupt
+        // SIGKILL — which is exactly the scenario this anchor defends against.
+        // Losing the write there would reset the ceiling on restart. The cost is
+        // acceptable: this writes once per session, and every caller reaches it
+        // from the service's Dispatchers.IO scope, never the main thread.
         prefs.edit()
             .putString(KEY_SESSION_ID, sessionId)
             .putLong(KEY_ANCHOR_MILLIS, nowMillis)
-            .apply()
+            .commit()
         return nowMillis
     }
 
+    /** apply() is fine here — losing a clear only costs one stale, keyed entry. */
     override fun clear() {
         prefs.edit().remove(KEY_SESSION_ID).remove(KEY_ANCHOR_MILLIS).apply()
     }

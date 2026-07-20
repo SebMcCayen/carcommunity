@@ -331,6 +331,14 @@ class LocationSharingService : Service() {
             stopSharingLocally()
             return
         }
+        // Silence the session observer and the expiry ticker FIRST. They run
+        // until onDestroy(), which is now deferred for the length of the
+        // stopSession round trip; a Continue decision landing in that window
+        // would re-post the very notification the user just dismissed, visually
+        // undoing their tap.
+        sessionJob?.cancel()
+        sessionJob = null
+
         // Stop publishing and drop the notification immediately: the user's tap
         // gets instant feedback while the callable finishes behind it.
         fusedClient?.removeLocationUpdates(locationCallback)
@@ -429,6 +437,22 @@ class LocationSharingService : Service() {
         )
     }
 
+    /**
+     * The notification's "Stop sharing" action.
+     *
+     * Deliberately [PendingIntent.getService], NOT `getForegroundService()`.
+     * Tapping a notification action puts the app on the system's temporary
+     * background-start allowlist, so the plain `startService` this fires is
+     * permitted even from a dead/background process — the Android 8+ background
+     * service restriction does not apply to a user-initiated notification action.
+     *
+     * `getForegroundService()` would be strictly worse here: it obliges the
+     * service to call `startForeground()` within the platform deadline, and this
+     * entry point's whole job is to fire one callable and stop. Entering the
+     * foreground to immediately leave it would post a notification the user just
+     * dismissed, and missing the deadline is a `ForegroundServiceDidNotStartInTime`
+     * crash on Android 12+. A stop path must not be able to crash the app.
+     */
     private fun stopSharingIntent(): PendingIntent {
         val intent =
             Intent(this, LocationSharingService::class.java).apply {
