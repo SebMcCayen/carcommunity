@@ -193,6 +193,7 @@ import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
+import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -553,6 +554,12 @@ fun AuthenticatedApp(
                 remember(tappedIncidentId, nearbyIncidents) {
                     tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
                 }
+            // True while a removal is in flight, so the sheet can disable its
+            // remove button. Keyed to the open incident: the sheet now survives
+            // the round-trip, and a flag left set by a previous sheet would
+            // arrive disabled.
+            var incidentRemoveInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -1553,12 +1560,31 @@ fun AuthenticatedApp(
                                                 )
                                             }
                                         },
+                                        // The sheet is NOT dismissed up front: see
+                                        // [runIncidentRemoval], which closes it only once
+                                        // the backend has accepted. Dismissing before the
+                                        // outcome was known closed the sheet for FAILED
+                                        // removals too, so a removal that never happened
+                                        // looked exactly like one that did, and took the
+                                        // incident away before the user could retry.
                                         onRemove = {
                                             val controller = incidentController
-                                            mapSurface.consumeIncidentTap()
-                                            if (controller != null) {
+                                            if (controller != null && !incidentRemoveInFlight) {
+                                                incidentRemoveInFlight = true
                                                 scope.launch {
-                                                    val removed = controller.remove(openIncident.id)
+                                                    val removed =
+                                                        try {
+                                                            runIncidentRemoval(
+                                                                controller = controller,
+                                                                mapSurface = mapSurface,
+                                                                incidentId = openIncident.id,
+                                                            )
+                                                        } finally {
+                                                            // Cleared even if the coroutine is
+                                                            // cancelled, so a cancelled removal
+                                                            // cannot wedge the button disabled.
+                                                            incidentRemoveInFlight = false
+                                                        }
                                                     snackbarHostState.showSnackbar(
                                                         if (removed) {
                                                             incidentRemoveSuccessText
@@ -1569,6 +1595,7 @@ fun AuthenticatedApp(
                                                 }
                                             }
                                         },
+                                        removeInProgress = incidentRemoveInFlight,
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }

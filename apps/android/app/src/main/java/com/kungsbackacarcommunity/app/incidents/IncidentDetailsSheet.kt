@@ -69,6 +69,11 @@ fun IncidentDetailsSheet(
     onConfirm: () -> Unit,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
+    // True while a removal is in flight. The sheet now stays open across the
+    // round-trip (it closes when the incident leaves the map, not when the
+    // button is pressed), which would otherwise leave the button live long
+    // enough to fire a second delete for the same incident.
+    removeInProgress: Boolean = false,
 ) {
     val action = IncidentDetails.actionFor(incident, viewerUid)
     val confirmWired = IncidentDetails.confirmAvailability == ConfirmAvailability.Wired
@@ -141,6 +146,10 @@ fun IncidentDetailsSheet(
                 IncidentAction.Remove ->
                     TextButton(
                         onClick = onRemove,
+                        // One delete per press: the sheet outlives the press now,
+                        // so without this a second tap during the round-trip would
+                        // fire a second removal for the same incident.
+                        enabled = !removeInProgress,
                         modifier = Modifier.testTag(INCIDENT_DETAILS_REMOVE_TAG),
                     ) {
                         Text(stringResource(R.string.incidents_removeAction))
