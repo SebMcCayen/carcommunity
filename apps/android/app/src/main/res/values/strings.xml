@@ -950,12 +950,10 @@
     <string name="turnByTurn_start">Starta</string>
     <string name="turnByTurn_exit">Avsluta navigering</string>
     <string name="turnByTurn_recenter">Centrera</string>
-    <string name="turnByTurn_reportIncident">Rapportera</string>
     <string name="turnByTurn_arrive">Framme %1$s</string>
     <string name="turnByTurn_remaining">%1$s · %2$s</string>
     <string name="turnByTurn_unavailable">Navigering är inte tillgänglig här.</string>
     <string name="turnByTurn_permissionNeeded">Platsåtkomst krävs för att navigera.</string>
-    <string name="turnByTurn_reportComingSoon">Rapportering av händelser och vägarbeten kommer snart.</string>
     <string name="turnByTurn_rerouting">Söker ny väg…</string>
     <string name="turnByTurn_speedLimit">Hastighetsgräns %1$d km/h</string>
     <string name="turnByTurn_currentSpeed">Aktuell hastighet %1$d km/h</string>

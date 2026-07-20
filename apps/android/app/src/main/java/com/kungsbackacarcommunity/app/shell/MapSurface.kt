@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -77,14 +78,30 @@ data class MapRouteOverlay(
 /**
  * A crowd-sourced incident marker to draw on the map (the Waze-style layer,
  * shared by all users). Shell-owned and self-contained so the [MapSurface] seam
- * stays free of the incidents package's types: [colorArgb] is the category
- * colour resolved by the host, [id] identifies the marker for de-duplication.
+ * stays free of the incidents package's types: the host resolves the category
+ * into the primitives below, and [id] identifies the marker for de-duplication.
+ *
+ * The marker is an ICON on a coloured disc, not a bare coloured dot — colour
+ * alone could not tell one category from another for a colour-blind user, so
+ * the glyph carries the meaning. See
+ * `com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle` for the
+ * legibility rules these three values come from.
+ *
+ * @property colorArgb the category disc colour, resolved by the host.
+ * @property iconRes drawable resource for the category glyph. A plain resource
+ *   id (an `Int`) rather than a category type, which is what keeps this seam
+ *   free of the incidents package while still carrying the shape.
+ * @property glyphColorArgb the colour to tint [iconRes] with — chosen by the
+ *   host per category for contrast against [colorArgb], since a single fixed
+ *   glyph colour is unreadable on some discs.
  */
 data class MapIncidentMarker(
     val id: String,
     val longitude: Double,
     val latitude: Double,
     val colorArgb: Int,
+    @DrawableRes val iconRes: Int,
+    val glyphColorArgb: Int,
 )
 
 /**

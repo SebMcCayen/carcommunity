@@ -201,10 +201,13 @@ import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
+import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
+import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -522,11 +525,18 @@ fun AuthenticatedApp(
             val incidentMarkers =
                 remember(nearbyIncidents) {
                     nearbyIncidents.map { incident ->
+                        // The host is where an IncidentType becomes the drawing
+                        // primitives the map seam takes — the disc colour, the
+                        // category glyph, and the glyph tint that keeps it
+                        // readable on that particular disc.
                         MapIncidentMarker(
                             id = incident.id,
                             longitude = incident.longitude,
                             latitude = incident.latitude,
                             colorArgb = IncidentPalette.colorArgb(incident.type),
+                            iconRes = incidentGlyphRes(incident.type),
+                            glyphColorArgb =
+                                IncidentMarkerStyle.glyphColorArgb(incident.type),
                         )
                     }
                 }
@@ -696,13 +706,45 @@ fun AuthenticatedApp(
             // LIVE_LOCATION feature flag is off (not a membership issue) — so an active
             // member with the flag disabled doesn't see a misleading subscription upsell.
             val featureUnavailableText = stringResource(R.string.shell_unavailable)
-            // Shown when the nav view's "Report incident/roadwork" is tapped while
-            // the incidents feature (a sibling PR) is not yet present in this build.
-            val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
             val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
             val incidentReportErrorText = stringResource(R.string.incidents_reportError)
             val incidentLocationUnavailableText =
                 stringResource(R.string.incidents_locationUnavailable)
+
+            // ── The ONE incident-reporting path ─────────────────────────────
+            //
+            // Hoisted here because there are now two entry points into it — the
+            // map home's report control and the navigation view's — and they must
+            // be the same report. Reporting from behind the wheel is exactly when
+            // it matters most, so the nav view raises the same category picker and
+            // files through the same `incidents-report` callable rather than
+            // owning a second, drifting copy (it previously showed a "coming soon"
+            // snackbar, which is now gone: the feature is live).
+            //
+            // The controller resolves the location itself, so neither call site
+            // passes one, and the callable reads the caller's identity from the
+            // Firebase Auth token rather than any threaded-through auth context —
+            // which is why this works unchanged from inside the nav view.
+            //
+            // The snackbar is readable from navigation: SnackbarHost is the LAST
+            // child of the shell's outer Box, so it draws OVER the full-screen nav
+            // view rather than under it.
+            val incidentReportingEnabled =
+                incidentController != null &&
+                    MemberGating.allows(profile?.activeMember == true)
+            val reportIncident: (IncidentType) -> Unit = { type ->
+                incidentController?.let { controller ->
+                    scope.launch {
+                        val text =
+                            when (controller.report(type)) {
+                                is ReportOutcome.Success -> incidentReportSuccessText
+                                ReportOutcome.NoLocation -> incidentLocationUnavailableText
+                                is ReportOutcome.Failed -> incidentReportErrorText
+                            }
+                        snackbarHostState.showSnackbar(text)
+                    }
+                }
+            }
 
             // Refresh the nearby-incidents layer around the user whenever the Map
             // tab is shown AND the "Traffic alerts" layer is enabled. A single
@@ -1211,9 +1253,9 @@ fun AuthenticatedApp(
                     // an OPAQUE cover and stands the shell's map down. On the
                     // config-less / CI build this is the no-SDK stub (see the
                     // src/noNav TurnByTurnNavScreen). The report affordance is wired
-                    // to a "coming soon" snackbar until the incidents feature (a
-                    // sibling PR) lands — swap `onReportIncident` to that feature's
-                    // entry point once it is present in this branch.
+                    // to the SAME reporting path as the map home's control (see
+                    // `reportIncident` above) — one callable, one picker, one set of
+                    // result messages.
                     TurnByTurnNavScreen(
                         origin = null,
                         destination = navDestination!!,
@@ -1223,12 +1265,9 @@ fun AuthenticatedApp(
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
                         },
-                        onReportIncident = {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(reportComingSoonText)
-                            }
-                        },
+                        onReportIncident = reportIncident,
                         modifier = Modifier.fillMaxSize(),
+                        incidentReportingEnabled = incidentReportingEnabled,
                         // Live location keeps running while the user navigates, so
                         // its control has to come WITH them into the navigation
                         // screen — wired to the same coordinator and the same
@@ -1585,25 +1624,11 @@ fun AuthenticatedApp(
                                     trafikverketDataShown = trafikverketDataShown,
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
-                                    incidentReportingEnabled =
-                                        incidentController != null &&
-                                            MemberGating.allows(profile?.activeMember == true),
-                                    onReportIncident = { type ->
-                                        incidentController?.let { controller ->
-                                            scope.launch {
-                                                val text =
-                                                    when (controller.report(type)) {
-                                                        is ReportOutcome.Success ->
-                                                            incidentReportSuccessText
-                                                        ReportOutcome.NoLocation ->
-                                                            incidentLocationUnavailableText
-                                                        is ReportOutcome.Failed ->
-                                                            incidentReportErrorText
-                                                    }
-                                                snackbarHostState.showSnackbar(text)
-                                            }
-                                        }
-                                    },
+                                    // Hoisted above (shared with the turn-by-turn
+                                    // report button) rather than inlined here, so
+                                    // both call sites go through one lambda.
+                                    incidentReportingEnabled = incidentReportingEnabled,
+                                    onReportIncident = reportIncident,
                                     // Convoy status bar above the search row (full
                                     // variant, with the explanation line).
                                     convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
