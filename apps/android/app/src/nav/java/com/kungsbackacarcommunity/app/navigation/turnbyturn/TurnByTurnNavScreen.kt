@@ -163,10 +163,23 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * - keeps the map's compass and live-location controls reachable while driving.
  *
  * ## Chrome parity with the map home
- * The bottom-right control stack is deliberately the map home's stack
- * ([CircleControl], same order, same glyphs): navigation is a MODE of the map,
- * not a different app, so the compass and live-location buttons must not move or
- * change icon when the user presses "Start". The Mapbox SDK's own scale bar
+ * The bottom-right control stack is deliberately built from the map home's
+ * controls ([CircleControl], same glyphs, same shape and colour rules):
+ * navigation is a MODE of the map, not a different app, so the compass and
+ * live-location buttons must not change icon or treatment when the user presses
+ * "Start".
+ *
+ * The parity is of control LANGUAGE, not of stack order or tap behaviour, and
+ * the two diverge on purpose. This screen's camera is a FOLLOW camera: the
+ * my-location control only exists once follow has detached, and re-centring
+ * means resuming follow rather than a one-off camera move. So the compass here
+ * resets bearing only (the engine's `resetNorth`), while the map home's compass
+ * also re-centres — folding a re-centre in here would silently re-arm follow
+ * from a control that does not say so. The map home's stack likewise leads with
+ * its report control; this one keeps the compass on top, where a driver's thumb
+ * expects it. Neither is required to track the other.
+ *
+ * The Mapbox SDK's own scale bar
  * (upper-left) and compass (upper-right) are switched OFF here for the same
  * reason [com.kungsbackacarcommunity.app.shell.MapboxMapSurface] switches them
  * off: they are a second, differently-styled set of the same affordances.
@@ -574,16 +587,20 @@ fun TurnByTurnNavScreen(
                 // Bottom-LEFT: current speed, and the posted limit when known.
                 SpeedReadout(speed = speed)
                 Spacer(modifier = Modifier.weight(1f))
-                // Bottom-RIGHT: the map home's control stack, same order and same
-                // glyphs — compass on top, live-location under it.
+                // Bottom-RIGHT: the map home's controls and glyphs, in this
+                // screen's own driving order — compass on top, live-location
+                // under it. See the file KDoc on why the order and the compass's
+                // tap behaviour deliberately do NOT track the map home's.
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                 ) {
-                    // Compass — identical control, glyph and place as the map
-                    // home's (Icons.Filled.Navigation rotated by the live map
-                    // bearing). The SDK's own top-right compass is disabled so
-                    // this is the only one on screen.
+                    // Compass — identical control and glyph to the map home's
+                    // (Icons.Filled.Navigation rotated by the live map bearing).
+                    // Bearing reset ONLY here: re-centring is the follow camera's
+                    // job and belongs to the re-centre button below. The SDK's own
+                    // top-right compass is disabled so this is the only one on
+                    // screen.
                     CircleControl(
                         icon = Icons.Filled.Navigation,
                         contentDescription = stringResource(R.string.shell_compass),
