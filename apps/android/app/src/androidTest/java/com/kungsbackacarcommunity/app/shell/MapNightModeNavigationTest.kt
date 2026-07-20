@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -10,11 +14,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -70,32 +78,52 @@ class MapNightModeNavigationTest {
             val override: MutableState<MapMode?> =
                 rememberSaveable(stateSaver = mapModeSaver()) { mutableStateOf(null) }
 
-            if (routeOpen) {
-                TextButton(onClick = { routeOpen = false }) { Text(CLOSE_ROUTE) }
-            } else {
-                TextButton(onClick = { routeOpen = true }) { Text(OPEN_ROUTE) }
-                MapHome(
-                    mapSurface = surface,
-                    nightModeOverrideState = if (hoisted) override else null,
-                    isLiveSharing = false,
-                    canShareLive = false,
-                    participantCount = 0,
-                    userLabel = "Tester",
-                    onSearch = {},
-                    onStartLiveShare = {},
-                    onHideMeNow = {},
-                    onOpenLiveShareDetails = {},
-                    onRecenter = {},
-                    moreMenuEntries = emptyList(),
-                )
+            // Framed the way the shell frames it. MapHome's floating controls are
+            // positioned against its own bounds, so without a fillMaxSize parent
+            // and the shell's bottom inset they land outside the injectable area
+            // and clicks fail with "Failed to inject touch input".
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (routeOpen) {
+                    TextButton(onClick = { routeOpen = false }) { Text(CLOSE_ROUTE) }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                            .padding(bottom = ShellBottomBarHeight),
+                    ) {
+                        MapHome(
+                            mapSurface = surface,
+                            nightModeOverrideState = if (hoisted) override else null,
+                            isLiveSharing = false,
+                            canShareLive = false,
+                            participantCount = 0,
+                            userLabel = "Tester",
+                            onSearch = {},
+                            onStartLiveShare = {},
+                            onHideMeNow = {},
+                            onOpenLiveShareDetails = {},
+                            onRecenter = {},
+                            moreMenuEntries = emptyList(),
+                        )
+                    }
+                    // Stands in for the shell's route switch. Emitted LAST and
+                    // aligned bottom-start so it draws above the map chrome and
+                    // clear of the right-hand floating control stack.
+                    TextButton(
+                        onClick = { routeOpen = true },
+                        modifier = Modifier.align(Alignment.BottomStart),
+                    ) { Text(OPEN_ROUTE) }
+                }
             }
         }
     }
 
     /** Opens the layers popup and switches "Night mode" off, leaving Day. */
     private fun turnNightModeOff() {
-        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).performClick()
-        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_NIGHT_TAG).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_TAG).assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_NIGHT_TAG).assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
     }
 
