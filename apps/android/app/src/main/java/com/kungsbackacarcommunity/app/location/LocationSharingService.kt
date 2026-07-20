@@ -33,6 +33,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Foreground service that keeps a live-location session publishing while the app
@@ -88,6 +90,9 @@ class LocationSharingService : Service() {
     private var fusedClient: FusedLocationProviderClient? = null
     private var sessionJob: Job? = null
     private var ownerUid: String? = null
+
+    /** Serialises the ticker and the session observer; see [decideAndApply]. */
+    private val lifecycleMutex = Mutex()
 
     /**
      * The ceiling anchor is persisted, so a process kill plus the
@@ -277,18 +282,20 @@ class LocationSharingService : Service() {
                 launch {
                     while (isActive) {
                         delay(BackgroundLocation.EXPIRY_TICK_MS)
-                        apply(lifecycle.onTick(isStillSignedIn(uid), System.currentTimeMillis()))
+                        decideAndApply {
+                            lifecycle.onTick(isStillSignedIn(uid), System.currentTimeMillis())
+                        }
                     }
                 }
                 try {
                     repo.observeOwnSession(uid).collectLatest { session ->
-                        apply(
+                        decideAndApply {
                             lifecycle.onObservation(
                                 signedIn = isStillSignedIn(uid),
                                 session = session,
                                 nowMillis = System.currentTimeMillis(),
-                            ),
-                        )
+                            )
+                        }
                     }
                 } catch (c: CancellationException) {
                     throw c
@@ -309,6 +316,25 @@ class LocationSharingService : Service() {
     private fun isStillSignedIn(uid: String): Boolean =
         FirebaseApp.getApps(applicationContext).isNotEmpty() &&
             FirebaseAuth.getInstance().currentUser?.uid == uid
+
+    /**
+     * Computes a decision and applies it under [lifecycleMutex].
+     *
+     * The ticker and the session observer are separate coroutines on
+     * `Dispatchers.IO`, which is multi-threaded, so without this they run
+     * genuinely concurrently against the same mutable [LiveSharingLifecycle]
+     * (`lastSession`, `firstAbsentAtMillis`, the anchor) and the same
+     * notification state (`shownRemainingMinutes`). Neither is thread-safe, and
+     * the fields are not volatile, so a tick could evaluate expiry against a
+     * session the observer had already replaced — deciding stop-or-continue for
+     * background location sharing on a stale read.
+     *
+     * The lock spans the decision AND its application, so a decision cannot be
+     * computed from one state and applied against another.
+     */
+    private suspend fun decideAndApply(decide: () -> LiveSharingDecision) {
+        lifecycleMutex.withLock { apply(decide()) }
+    }
 
     private fun apply(decision: LiveSharingDecision) {
         when (decision) {
