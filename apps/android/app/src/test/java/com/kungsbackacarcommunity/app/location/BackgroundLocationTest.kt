@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.location
 
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -67,5 +68,82 @@ class BackgroundLocationTest {
         assertTrue(
             BackgroundLocation.MIN_UPDATE_INTERVAL_MS <= BackgroundLocation.UPDATE_INTERVAL_MS,
         )
+    }
+
+    // --- Publish throttle (battery / callable traffic) -----------------------
+
+    private val kungsbacka = 57.4874 to 12.0761
+
+    @Test
+    fun `the first fix of a session always publishes`() {
+        assertTrue(
+            BackgroundLocation.shouldPublish(
+                lastSubmittedAtMillis = null,
+                lastSubmittedLatitude = null,
+                lastSubmittedLongitude = null,
+                latitude = kungsbacka.first,
+                longitude = kungsbacka.second,
+                nowMillis = 1_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `GPS jitter while parked does not publish`() {
+        // ~2 m north of the last published fix, 1 s later: below the movement
+        // threshold and well inside the heartbeat.
+        assertFalse(
+            BackgroundLocation.shouldPublish(
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
+                latitude = kungsbacka.first + 0.000018,
+                longitude = kungsbacka.second,
+                nowMillis = 2_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a stationary car still publishes a heartbeat`() {
+        assertTrue(
+            BackgroundLocation.shouldPublish(
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
+                latitude = kungsbacka.first,
+                longitude = kungsbacka.second,
+                nowMillis = 1_000L + BackgroundLocation.STATIONARY_HEARTBEAT_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `a moving car publishes every fix`() {
+        // 50 km/h for the 5 s nominal interval is ~69 m — far past the threshold,
+        // so convoy arrows and focus mode keep getting fresh positions.
+        assertTrue(
+            BackgroundLocation.shouldPublish(
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
+                latitude = kungsbacka.first + 0.000625,
+                longitude = kungsbacka.second,
+                nowMillis = 1_000L + BackgroundLocation.UPDATE_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `distanceMeters measures a known north-south offset`() {
+        // 0.001 deg of latitude is ~111 m anywhere on Earth.
+        val metres =
+            BackgroundLocation.distanceMeters(
+                kungsbacka.first,
+                kungsbacka.second,
+                kungsbacka.first + 0.001,
+                kungsbacka.second,
+            )
+        assertTrue("expected ~111 m, was $metres", metres in 110.0..113.0)
     }
 }

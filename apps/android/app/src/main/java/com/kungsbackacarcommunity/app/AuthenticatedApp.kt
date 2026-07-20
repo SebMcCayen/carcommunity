@@ -1062,7 +1062,7 @@ fun AuthenticatedApp(
                 showSingleSessionStart = false
                 liveLocationCoordinator?.let { c ->
                     scope.launch { c.start(duration) }
-                    BackgroundLocationController.start(context)
+                    BackgroundLocationController.start(context, uid)
                 }
             }
 
@@ -1119,17 +1119,21 @@ fun AuthenticatedApp(
 
                 // Single close path for the currently-open route, shared by
                 // system-Back and each route's in-screen close so their teardown
-                // can't drift. Closing the LiveLocation overlay tears down the
-                // live session; closing the Map overlay also drops the stashed
+                // can't drift. Closing the Map overlay drops the stashed
                 // group-drive roster so MapHome's participant chip doesn't linger
-                // after the overlay is dismissed. reset()/stop() are idempotent,
-                // so routing every close through here is safe.
+                // after the overlay is dismissed.
+                //
+                // Closing the LiveLocation overlay clears any failed-command
+                // status and NOTHING ELSE. It deliberately does NOT stop the
+                // background service: navigating away from the live screen is not
+                // "stop sharing", and tearing the service down here was exactly
+                // what made live sharing die the moment the driver left the
+                // screen. Sharing ends only via stopLiveShare/hideMeNow, the
+                // session's own expiry, or sign-out — all of which the service
+                // observes for itself.
                 val closeRoute = {
                     when (route) {
-                        ShellRoute.LiveLocation -> {
-                            liveLocationCoordinator?.reset()
-                            BackgroundLocationController.stop(context)
-                        }
+                        ShellRoute.LiveLocation -> liveLocationCoordinator?.reset()
                         ShellRoute.Map -> mapParticipantUids = ArrayList()
                         else -> Unit
                     }
@@ -2855,7 +2859,7 @@ private fun RouteHost(
                 onStart = { d ->
                     liveLocationCoordinator?.let { c ->
                         scope.launch { c.start(d) }
-                        BackgroundLocationController.start(context)
+                        BackgroundLocationController.start(context, uid)
                     }
                 },
                 onStop = {
