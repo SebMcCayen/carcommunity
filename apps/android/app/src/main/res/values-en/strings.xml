@@ -887,6 +887,8 @@
     <string name="shell_liveShareOff">Live location</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_menu">Menu</string>
+    <string name="shell_panelDragHandle">Drag down to close</string>
+    <string name="shell_panelDismiss">Close</string>
     <string name="shell_tabMap">Map</string>
     <string name="shell_tabHistory">History</string>
     <string name="shell_tabCreate">Create</string>

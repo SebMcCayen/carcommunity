@@ -105,6 +105,46 @@ sealed interface ShellBackResult {
     data object Exit : ShellBackResult
 }
 
+/**
+ * What is drawn over the shell's single map surface.
+ *
+ * The map is composed once for the whole signed-in shell and never disposed, so
+ * "which page is the user on" is, from the map's point of view, only ever this
+ * question: can they see it, and can they touch it? Two different answers hang
+ * off that — whether the surface stays live (`MapSurface.setActive`) and whether
+ * the map home's chrome stands down — and they are NOT the same answer, which is
+ * exactly why this is one enum and not a pair of booleans that can drift.
+ */
+enum class MapCover {
+    /** Nothing over it: the map home. Visible, live, interactive. */
+    None,
+
+    /**
+     * Chrome over a map the user can still see — the address search, and the
+     * translucent History / Social / Garage panels. The surface stays LIVE
+     * (they are all looking at the map through it) but the map home's own chrome
+     * stands down, because it is not the page in front any more.
+     */
+    Transparent,
+
+    /**
+     * The map is hidden entirely (a full-screen route, turn-by-turn). Nothing to
+     * see, so the surface is stood down.
+     */
+    Opaque,
+}
+
+/**
+ * The tabs whose page renders as a TRANSLUCENT panel over the live map
+ * ([MapCover.Transparent]) rather than as an opaque page that hides it.
+ *
+ * History, Social and Garage are overlays now — a bottom-anchored card with a
+ * strip of live map above it and a drag handle to pull it away — so the map
+ * behind them is genuinely on screen and must keep rendering.
+ */
+val TRANSLUCENT_PANEL_TABS: Set<ShellTab> =
+    setOf(ShellTab.History, ShellTab.Social, ShellTab.Garage)
+
 object ShellNavigation {
     /**
      * Resolves a system-Back press given the current [tab] and open [route].
@@ -116,6 +156,43 @@ object ShellNavigation {
             route != null -> ShellBackResult.CloseRoute
             tab != ShellTab.Map -> ShellBackResult.GoToMapTab
             else -> ShellBackResult.Exit
+        }
+
+    /**
+     * Resolves what is currently drawn over the map — the SINGLE source of truth
+     * for every "the map isn't the thing on screen" decision in the shell
+     * (standing the surface down, clearing its semantics, standing the map
+     * home's chrome down, gating the chat hub). Everything downstream derives
+     * from this one value rather than re-deriving its own condition, so they
+     * cannot drift apart as pages are added.
+     *
+     * Pure and here rather than inline in the shell composable precisely so the
+     * "a translucent panel must NOT stand the map down" rule is assertable in a
+     * JVM unit test.
+     *
+     * @param navigating true while full-screen turn-by-turn is running; it
+     *   brings its own map, so the shell's is hidden outright.
+     * @param navSearchOpen true while the address search draws its chrome over a
+     *   map the user is still looking at (it shows the route it just drew, and
+     *   the puck).
+     */
+    fun mapCover(
+        tab: ShellTab,
+        route: ShellRoute?,
+        navigating: Boolean,
+        navSearchOpen: Boolean,
+    ): MapCover =
+        when {
+            navigating -> MapCover.Opaque
+            navSearchOpen -> MapCover.Transparent
+            route != null -> MapCover.Opaque
+            // History / Social / Garage are translucent PANELS over the map: the
+            // map behind them is visible, so it has to keep rendering its puck
+            // and its GPS fixes. Standing it down here would leave a puck-less
+            // map showing through the card and in the uncovered strip above it.
+            tab in TRANSLUCENT_PANEL_TABS -> MapCover.Transparent
+            tab != ShellTab.Map -> MapCover.Opaque
+            else -> MapCover.None
         }
 }
 

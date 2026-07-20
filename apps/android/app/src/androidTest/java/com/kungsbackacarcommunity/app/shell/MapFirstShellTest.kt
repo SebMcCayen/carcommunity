@@ -18,6 +18,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -158,7 +161,11 @@ class MapFirstShellTest {
     /**
      * The flip side of keeping the map alive: a map nobody can see must not keep
      * pulsing its puck and drawing GPS fixes, so the shell stands it down while
-     * another tab covers it and brings it back on return.
+     * something OPAQUE covers it and brings it back when it is visible again.
+     *
+     * The opaque cover here is a full-screen ROUTE, not a tab: History, Social
+     * and Garage are translucent panels now and deliberately keep the map live
+     * (see [translucentPanelTab_keepsTheMapLive]).
      */
     @Test
     fun coveringTheMap_deactivatesIt_andReturningReactivatesIt() {
@@ -166,10 +173,14 @@ class MapFirstShellTest {
         setShell(mapSurface = surface)
         composeTestRule.runOnIdle { assertTrue(surface.isActive) }
 
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).performClick()
         composeTestRule.runOnIdle { assertFalse(surface.isActive) }
 
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
         composeTestRule.runOnIdle { assertTrue(surface.isActive) }
     }
 
@@ -281,12 +292,15 @@ class MapFirstShellTest {
             assertTrue("the search shows the live map behind it", surface.isActive)
         }
 
-        // A tab, by contrast, hides it entirely — so that one does stand it down.
+        // A full-screen route, by contrast, hides it entirely — so that one does
+        // stand it down. (A non-Map TAB no longer does: all three are translucent
+        // panels the map shows through.)
         composeTestRule.runOnUiThread {
             composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
         }
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabSocial)).performClick()
+        composeTestRule.onNodeWithTag(MAP_HOME_MORE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.shell_moreSettings)).performClick()
         composeTestRule.runOnIdle { assertFalse(surface.isActive) }
     }
 
@@ -809,5 +823,241 @@ class MapFirstShellTest {
             .onNodeWithText(str(R.string.shell_createChooserSingle))
             .assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    // ── Translucent shell panels (History / Social / Garage) ────────────────
+
+    /** Opens a tab by its bottom-bar content description. */
+    private fun openTab(tabTitleRes: Int) {
+        composeTestRule.onNodeWithContentDescription(str(tabTitleRes)).performClick()
+        composeTestRule.waitForIdle()
+    }
+
+    /**
+     * The geometric contract every panel shares, asserted on MEASURED bounds
+     * rather than mere existence: the card is bottom-anchored and strictly
+     * shorter than the safe area, so a real strip of live map is left uncovered
+     * above it. A full-height page (which is what all three of these tabs used to
+     * be) reports top = 0 and fails here — that is where this gets its teeth.
+     */
+    private fun assertPanelLeavesUncoveredMapStrip(tag: String) {
+        val cardTop = composeTestRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().top
+        assertTrue(
+            "panel '$tag' card top was $cardTop — expected a strip of live map above it",
+            cardTop > 16.dp,
+        )
+        // ...and the strip must CLEAR system UI, not merely be non-zero: the
+        // fraction is taken against the safe area, so on a short window
+        // (landscape / split-screen) the card's top can never slide under the
+        // status bar and hide the page's own title.
+        val statusBarTop = with(composeTestRule.density) { statusBarHeightPx().toDp() }
+        assertTrue(
+            "panel '$tag' card top was $cardTop — expected it to clear the " +
+                "$statusBarTop status bar",
+            cardTop >= statusBarTop,
+        )
+        // Deliberately NOT asserted here: that the map home is findable behind the
+        // card. The shell wraps that subtree in `clearAndSetSemantics {}` while
+        // anything covers the map, so TalkBack cannot reach the map's controls
+        // through the page on top of them — which also takes MAP_HOME_TEST_TAG out
+        // of the semantics tree. "The map behind a panel is still live" is asserted
+        // against the surface itself in [translucentPanelTab_keepsTheMapLive], and
+        // "the strip is really uncovered and tappable" in
+        // [tappingTheUncoveredMapStrip_dismissesThePanel].
+    }
+
+    @Test
+    fun historyPanel_leavesUncoveredMapStripAboveCard() {
+        setShell()
+        openTab(R.string.shell_tabHistory)
+        assertPanelLeavesUncoveredMapStrip(HISTORY_PANEL_TEST_TAG)
+    }
+
+    @Test
+    fun socialPanel_leavesUncoveredMapStripAboveCard() {
+        setShell()
+        openTab(R.string.shell_tabSocial)
+        assertPanelLeavesUncoveredMapStrip(SOCIAL_PANEL_TEST_TAG)
+    }
+
+    @Test
+    fun garagePanel_leavesUncoveredMapStripAboveCard() {
+        setShell()
+        openTab(R.string.shell_tabGarage)
+        assertPanelLeavesUncoveredMapStrip(GARAGE_PANEL_TEST_TAG)
+    }
+
+    /**
+     * All three tabs use the ONE shared panel component, so all three must expose
+     * the same drag handle with the same label. Three bespoke implementations is
+     * exactly how that stops being true.
+     */
+    @Test
+    fun everyPanelTab_showsALabelledDragHandle() {
+        setShell()
+        for (tab in listOf(R.string.shell_tabHistory, R.string.shell_tabSocial, R.string.shell_tabGarage)) {
+            openTab(tab)
+            // Labelled, not `contentDescription = null`: the handle is the only
+            // visible sign the page can be pulled away, so a screen reader has to
+            // be able to say so.
+            composeTestRule
+                .onNodeWithContentDescription(str(R.string.shell_panelDragHandle))
+                .assertExists()
+        }
+    }
+
+    /**
+     * The accessibility escape hatch. A drag is unusable for a lot of people, so
+     * the card carries a semantics `dismiss` action that closes the panel with no
+     * gesture at all — this asserts the action is really wired to the dismissal,
+     * not merely declared.
+     */
+    @Test
+    fun panelDismissAction_closesThePanel_withoutAnyDrag() {
+        setShell()
+        openTab(R.string.shell_tabGarage)
+        composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).assertIsDisplayed()
+
+        composeTestRule
+            .onNodeWithTag(GARAGE_PANEL_TEST_TAG)
+            .performSemanticsAction(SemanticsActions.Dismiss)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * Back is the other non-drag dismissal (and the one most users reach for).
+     * The shell's own handler returns to the Map tab from any panel tab.
+     */
+    @Test
+    fun back_closesThePanel_withoutAnyDrag() {
+        setShell()
+        openTab(R.string.shell_tabSocial)
+        composeTestRule.onNodeWithTag(SOCIAL_PANEL_TEST_TAG).assertIsDisplayed()
+
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(SOCIAL_PANEL_TEST_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * Tapping the uncovered strip of map above the card dismisses the panel, the
+     * same way it does for the chat hub. The tap point is DERIVED from the
+     * measured card top and the device density rather than a magic pixel offset —
+     * bounds are in dp and touch input is in px, so a fixed offset could land
+     * outside the strip on a low-density device. Midway between the window top
+     * and the card's top edge is provably inside the strip at any density; y is
+     * negative because it is node-relative and the strip sits above the card.
+     */
+    @Test
+    fun tappingTheUncoveredMapStrip_dismissesThePanel() {
+        setShell()
+        openTab(R.string.shell_tabHistory)
+        val cardTop =
+            composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).getUnclippedBoundsInRoot().top
+        assertTrue("no uncovered strip to tap", cardTop > 16.dp)
+
+        val stripMidYPx = with(composeTestRule.density) { cardTop.toPx() } / 2f
+        composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).performTouchInput {
+            click(Offset(width / 2f, -stripMidYPx))
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(HISTORY_PANEL_TEST_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * The gesture Seb asked for: pull the handle at the top of the panel DOWNWARDS
+     * and the panel goes away.
+     *
+     * Swiped on the HANDLE specifically — it sits outside the page's scroll
+     * container, so this exercises the `draggable` path rather than the
+     * nested-scroll one, and covers a distance well past the dismiss threshold
+     * (0.35 of the card height).
+     */
+    @Test
+    fun pullingTheHandleDown_dismissesThePanel() {
+        setShell()
+        openTab(R.string.shell_tabGarage)
+        val cardBounds =
+            composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).getUnclippedBoundsInRoot()
+        val cardHeightPx =
+            with(composeTestRule.density) { (cardBounds.bottom - cardBounds.top).toPx() }
+
+        composeTestRule.onNodeWithTag(PANEL_DRAG_HANDLE_TEST_TAG).performTouchInput {
+            // Comfortably past the threshold, and slowly enough (a long
+            // durationMillis) that it is the DISTANCE deciding this, not a fling.
+            swipeDown(
+                startY = center.y,
+                endY = center.y + cardHeightPx * 0.8f,
+                durationMillis = 600L,
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * The other half of the threshold, and the reason it exists: a SHORT pull is
+     * an accident, and the panel must spring back rather than throwing away the
+     * page the user was reading. An implementation that dismisses on any downward
+     * movement passes the test above and fails this one.
+     */
+    @Test
+    fun aShortPullOnTheHandle_leavesThePanelOpen() {
+        setShell()
+        openTab(R.string.shell_tabGarage)
+        val cardBounds =
+            composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).getUnclippedBoundsInRoot()
+        val cardHeightPx =
+            with(composeTestRule.density) { (cardBounds.bottom - cardBounds.top).toPx() }
+
+        composeTestRule.onNodeWithTag(PANEL_DRAG_HANDLE_TEST_TAG).performTouchInput {
+            // A tenth of the card, well under the 0.35 threshold, and slow
+            // enough not to register as a flick.
+            swipeDown(
+                startY = center.y,
+                endY = center.y + cardHeightPx * 0.1f,
+                durationMillis = 600L,
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(GARAGE_PANEL_TEST_TAG).assertIsDisplayed()
+    }
+
+    /**
+     * The map-behind contract, asserted through the real shell wiring rather than
+     * only against the pure `ShellNavigation.mapCover` rule.
+     *
+     * A translucent panel leaves the map genuinely visible — in the uncovered
+     * strip above the card, and faintly through the card itself — so standing the
+     * surface down would show the user a map with no puck on it. All three tabs
+     * used to stand it down; this is the behaviour change.
+     */
+    @Test
+    fun translucentPanelTab_keepsTheMapLive() {
+        val surface = StubMapSurface()
+        setShell(mapSurface = surface)
+        composeTestRule.runOnIdle { assertTrue(surface.isActive) }
+
+        for (tab in listOf(R.string.shell_tabHistory, R.string.shell_tabSocial, R.string.shell_tabGarage)) {
+            openTab(tab)
+            composeTestRule.runOnIdle {
+                assertTrue(
+                    "a translucent panel shows the live map: it must not be stood down",
+                    surface.isActive,
+                )
+            }
+            // ...and the map is still the SAME one, never rebuilt.
+            composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+        }
     }
 }

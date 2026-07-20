@@ -131,4 +131,114 @@ class ShellNavTest {
         surface.set3dEnabled(true)
         assertEquals(true, surface.is3d.value)
     }
+
+    // ── Map cover: is the map visible, and must it stay live? ───────────────
+    //
+    // The ONE decision the shell derives everything else from — standing the
+    // surface down (which kills the pulsing puck and the GPS fixes), painting an
+    // opaque page background, clearing the map's semantics, gating the chat hub.
+    // Tested here rather than through the composable so the rules cannot be
+    // restated (and drift) at any of those call sites.
+
+    @Test
+    fun `map tab with nothing over it is uncovered`() {
+        assertEquals(
+            MapCover.None,
+            ShellNavigation.mapCover(
+                tab = ShellTab.Map,
+                route = null,
+                navigating = false,
+                navSearchOpen = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `translucent panel tabs do NOT stand the map down`() {
+        // The regression this whole change turns on. History, Social and Garage
+        // are now translucent panels with a strip of live map above them, so the
+        // map behind them is genuinely on screen. Returning Opaque here — which
+        // is what these three used to do — makes the shell call
+        // setActive(false) and shows the user a puck-less map through the card.
+        for (tab in listOf(ShellTab.History, ShellTab.Social, ShellTab.Garage)) {
+            assertEquals(
+                "$tab is a translucent panel: the map behind it must stay live",
+                MapCover.Transparent,
+                ShellNavigation.mapCover(
+                    tab = tab,
+                    route = null,
+                    navigating = false,
+                    navSearchOpen = false,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `every translucent panel tab is declared as one`() {
+        // Pins the set and its consumer together: adding a tab to
+        // TRANSLUCENT_PANEL_TABS without giving it a panel (or the reverse) is
+        // the drift this asserts against.
+        assertEquals(
+            setOf(ShellTab.History, ShellTab.Social, ShellTab.Garage),
+            TRANSLUCENT_PANEL_TABS,
+        )
+        for (tab in TRANSLUCENT_PANEL_TABS) {
+            assertEquals(
+                MapCover.Transparent,
+                ShellNavigation.mapCover(
+                    tab = tab,
+                    route = null,
+                    navigating = false,
+                    navSearchOpen = false,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `a full-screen route over a panel tab hides the map outright`() {
+        // A route opened FROM a panel (Social to Events, say) is a full-screen
+        // opaque page: the panel is gone, nothing shows the map, so it is stood
+        // down. Route beats tab.
+        assertEquals(
+            MapCover.Opaque,
+            ShellNavigation.mapCover(
+                tab = ShellTab.Social,
+                route = ShellRoute.Events,
+                navigating = false,
+                navSearchOpen = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `turn-by-turn hides the map even over a panel tab`() {
+        // Navigation brings its own full-screen map, so the shell's must stand
+        // down no matter what is behind it.
+        assertEquals(
+            MapCover.Opaque,
+            ShellNavigation.mapCover(
+                tab = ShellTab.Garage,
+                route = null,
+                navigating = true,
+                navSearchOpen = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `the address search keeps the map live`() {
+        // Unchanged by this feature, asserted so the panel rules cannot quietly
+        // take the search's Transparent case with them.
+        assertEquals(
+            MapCover.Transparent,
+            ShellNavigation.mapCover(
+                tab = ShellTab.Map,
+                route = null,
+                navigating = false,
+                navSearchOpen = true,
+            ),
+        )
+    }
 }

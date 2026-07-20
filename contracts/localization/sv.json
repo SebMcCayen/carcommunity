@@ -964,6 +964,8 @@
     "liveShareOff": "Liveplats",
     "recenter": "Centrera",
     "menu": "Meny",
+    "panelDragHandle": "Dra nedåt för att stänga",
+    "panelDismiss": "Stäng",
     "tabMap": "Karta",
     "tabHistory": "Historik",
     "tabCreate": "Skapa",
