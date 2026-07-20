@@ -29,6 +29,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
@@ -126,10 +127,49 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     }
 
     const now = new Date();
-    const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : now;
-    const type = (INCIDENT_TYPES as readonly string[]).includes(data.type as string)
-      ? (data.type as IncidentType)
-      : 'hazard';
+
+    // FAIL FAST on a malformed document rather than substituting defaults.
+    //
+    // Both inputs below decide how long this incident lives, so a wrong value
+    // is not cosmetic: `createdAt` anchors the lifetime cap (defaulting it to
+    // `now` would silently RE-ANCHOR the cap on every confirmation, which is
+    // exactly the immortality the cap exists to prevent), and `type` selects
+    // the TTL (defaulting a corrupt type to 'hazard' would write an expiry
+    // computed under the wrong rules). Extending the wrong incident's life is
+    // strictly worse than refusing, so we refuse.
+    //
+    // REACHABILITY: this is defensive-only under the current schema. The only
+    // writers of `incidents/{id}` are incidents/report.ts (validated enum type,
+    // server-timestamp createdAt) and the Trafikverket importer (rejected above
+    // by the `source !== 'user'` guard); firebase/firestore.rules denies ALL
+    // client writes to the collection. So no code path produces a malformed
+    // user incident today — this guards a hand-edit in the console, a restore
+    // from a stale export, or a future schema change, and turns any of them
+    // into a loud, findable error instead of quiet mis-expiry.
+    //
+    // `internal`, not `failed-precondition`: failed-precondition is this
+    // callable's vocabulary for NORMAL states the user can understand (expired,
+    // imported). A corrupt document is a server-side defect the user can do
+    // nothing about, and the message stays opaque rather than leaking schema
+    // detail. The logger.error below carries the incidentId so the offending
+    // document can actually be found.
+    if (!(data.createdAt instanceof Timestamp)) {
+      logger.error('incidents.confirm: incident has a missing/invalid createdAt', {
+        incidentId,
+        createdAtType: typeof data.createdAt,
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    if (!(INCIDENT_TYPES as readonly string[]).includes(data.type as string)) {
+      logger.error('incidents.confirm: incident has an unrecognised type', {
+        incidentId,
+        type: String(data.type),
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    const createdAt = data.createdAt.toDate();
+    const type = data.type as IncidentType;
+
     const { expiresAt } = extendedExpiryFor({
       type,
       createdAt,

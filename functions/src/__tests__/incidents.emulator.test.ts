@@ -238,7 +238,11 @@ describe('incidents.report + listNearby', () => {
     await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
     await signInAs(suspended);
     const code = await callableErrorCode(
-      call('incidents-report', { type: 'hazard', latitude: KBA.latitude, longitude: KBA.longitude }),
+      call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      }),
     );
     expect(code).toBe('functions/permission-denied');
   });
@@ -440,9 +444,9 @@ describe('incidents.confirm', () => {
     // Persisted: counter on the doc, ledger doc keyed by the confirming uid.
     const stored = await adminDb.collection('incidents').doc(reported.id).get();
     expect(stored.data()?.confirmationCount).toBe(1);
-    expect(
-      (stored.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis(),
-    ).toBe(Date.parse(first.expiresAt));
+    expect((stored.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis()).toBe(
+      Date.parse(first.expiresAt),
+    );
     const ledger = await adminDb
       .collection('incidents')
       .doc(reported.id)
@@ -569,7 +573,14 @@ describe('incidents.confirm', () => {
     expect((await tvRef.get()).data()?.confirmationCount).toBeUndefined();
   });
 
-  it('is member-gated — a signed-in non-member cannot confirm', async () => {
+  it('ADMITS a non-member confirmer while member gating is disabled', async () => {
+    // confirm uses requireMemberActor, the SAME gate as incidents.report — but
+    // shared/memberGating.ts currently has MEMBER_GATING_ENABLED = false, so
+    // the entitlement half of that gate is bypassed repo-wide and a signed-in,
+    // non-suspended account passes. This mirrors the incidents.report pair
+    // above ("ADMITS a non-member reporter" / "STILL rejects a suspended
+    // reporter"); when the switch is flipped back to true BOTH pairs flip
+    // together and this expectation becomes permission-denied.
     await signInAs(member);
     const reported = (
       await call('incidents-report', {
@@ -579,12 +590,99 @@ describe('incidents.confirm', () => {
       })
     ).data as { id: string };
 
-    const nonMember = await createProvisionedUser('inc-nonmember');
+    const nonMember = await createProvisionedUser('inc-confirm-nonmember');
     await signInAs(nonMember);
-    // Matches incidents.report's gate, not listNearby's open read.
+    const confirmed = (await call('incidents-confirm', { incidentId: reported.id })).data as {
+      confirmationCount: number;
+      alreadyConfirmed: boolean;
+    };
+    expect(confirmed.alreadyConfirmed).toBe(false);
+    expect(confirmed.confirmationCount).toBe(1);
+  });
+
+  it('STILL rejects a suspended confirmer with permission-denied', async () => {
+    // Suspension is NOT bypassed by the gating switch (memberGateAllows
+    // re-checks isRestricted first), so this door stays shut either way.
+    await signInAs(member);
+    const reported = (
+      await call('incidents-report', {
+        type: 'hazard',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+      })
+    ).data as { id: string };
+
+    const suspended = await createProvisionedUser('inc-confirm-suspended');
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
     expect(await callableErrorCode(call('incidents-confirm', { incidentId: reported.id }))).toBe(
       'functions/permission-denied',
     );
+    expect(
+      (await adminDb.collection('incidents').doc(reported.id).get()).data()?.confirmationCount,
+    ).toBeUndefined();
+  });
+
+  /**
+   * A malformed incident is unreachable through any writer today (report.ts
+   * validates the type and stamps a server createdAt; the importer is rejected
+   * by the source guard; rules deny all client writes), so these seed one with
+   * the Admin SDK. The point is the REFUSAL: substituting `now` for a missing
+   * createdAt would re-anchor the lifetime cap on every confirmation, and
+   * substituting 'hazard' for a corrupt type would compute the expiry under the
+   * wrong TTL. Both must fail loudly instead of writing a wrong expiry.
+   */
+  const seedMalformed = async (id: string, overrides: Record<string, unknown>) => {
+    const ref = adminDb.collection('incidents').doc(id);
+    await ref.set({
+      type: 'hazard',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'user',
+      reporterUid: member.uid,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(Date.now() - 60_000)),
+      expiresAt: Timestamp.fromDate(new Date(Date.now() + 60 * 60 * 1000)),
+      ...overrides,
+    });
+    return ref;
+  };
+
+  it('REFUSES to confirm an incident whose createdAt is missing', async () => {
+    const ref = await seedMalformed('malformed-created-at', { createdAt: null });
+    const before = (await ref.get()).data()!.expiresAt as InstanceType<typeof Timestamp>;
+
+    await signInAs(otherMember);
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: ref.id }))).toBe(
+      'functions/internal',
+    );
+
+    // The refusal is real: nothing counted, nothing extended, no ledger claim.
+    const after = await ref.get();
+    expect(after.data()?.confirmationCount).toBeUndefined();
+    expect((after.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis()).toBe(
+      before.toMillis(),
+    );
+    expect((await ref.collection('confirmations').doc(otherMember.uid).get()).exists).toBe(false);
+  });
+
+  it('REFUSES to confirm an incident whose type is not a known incident type', async () => {
+    const ref = await seedMalformed('malformed-type', { type: 'meteor-strike' });
+    const before = (await ref.get()).data()!.expiresAt as InstanceType<typeof Timestamp>;
+
+    await signInAs(otherMember);
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: ref.id }))).toBe(
+      'functions/internal',
+    );
+
+    const after = await ref.get();
+    expect(after.data()?.confirmationCount).toBeUndefined();
+    expect((after.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis()).toBe(
+      before.toMillis(),
+    );
+    expect((await ref.collection('confirmations').doc(otherMember.uid).get()).exists).toBe(false);
   });
 
   it('denies direct client reads and writes of the confirmations ledger', async () => {
@@ -659,6 +757,79 @@ describe('incidents cleanup sweep', () => {
     expect((await expiredRef.get()).exists).toBe(false);
     expect((await activeRef.get()).exists).toBe(true);
     expect((await orphanRef.get()).exists).toBe(false);
+  });
+
+  /**
+   * These two seed their expired incidents in a FAR-PAST window and sweep with
+   * a `now` inside it, so they see only their own docs — the emulator Firestore
+   * is shared with ~30 other test files whose incidents all expire around real
+   * "now".
+   */
+  const seedExpired = async (prefix: string, count: number, baseMs: number) => {
+    const refs: FirebaseFirestore.DocumentReference[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const ref = adminDb.collection('incidents').doc(`${prefix}-${i}`);
+      await ref.set({
+        type: 'roadwork',
+        latitude: 0,
+        longitude: 0,
+        geoCell: '0_0',
+        status: 'active',
+        source: 'user',
+        reporterUid: 'x',
+        note: null,
+        createdAt: Timestamp.fromDate(new Date(baseMs - 60_000)),
+        // Distinct, increasing expiries so "oldest first" is observable.
+        expiresAt: Timestamp.fromDate(new Date(baseMs + i * 1000)),
+      });
+      refs.push(ref);
+    }
+    return refs;
+  };
+
+  it('bounds recursiveDelete concurrency instead of firing the whole page at once', async () => {
+    const base = Date.parse('2019-01-01T00:00:00.000Z');
+    const refs = await seedExpired('sweep-conc', 25, base);
+
+    const result = await runIncidentsCleanup(new Date(base + 60 * 60 * 1000), {
+      maxDeletions: 100,
+      concurrency: 4,
+    });
+
+    expect(result.deletedCount).toBe(25);
+    // THE ASSERTION WITH TEETH: peak in-flight deletes never exceeds the bound.
+    // Against the pre-fix `Promise.all(expired.docs.map(...))` this reads 25.
+    expect(result.peakConcurrency).toBeLessThanOrEqual(4);
+    // ...and the sweep is still genuinely parallel, not accidentally serial —
+    // a bound of 4 that actually runs one-at-a-time would also pass the line
+    // above, so it must be pinned from below too.
+    expect(result.peakConcurrency).toBeGreaterThan(1);
+    for (const ref of refs) {
+      expect((await ref.get()).exists).toBe(false);
+    }
+  });
+
+  it('caps deletions per run and drains the rest oldest-first on the next run', async () => {
+    const base = Date.parse('2018-06-01T00:00:00.000Z');
+    const refs = await seedExpired('sweep-cap', 6, base);
+    const sweepNow = new Date(base + 60 * 60 * 1000);
+
+    const first = await runIncidentsCleanup(sweepNow, { maxDeletions: 2, concurrency: 4 });
+    expect(first.deletedCount).toBe(2);
+    expect(first.capped).toBe(true);
+    // Oldest expiries go first (the query orders by expiresAt ASC), which is
+    // what makes the cap unable to starve an old incident.
+    expect((await refs[0].get()).exists).toBe(false);
+    expect((await refs[1].get()).exists).toBe(false);
+    expect((await refs[2].get()).exists).toBe(true);
+    expect((await refs[5].get()).exists).toBe(true);
+
+    const second = await runIncidentsCleanup(sweepNow, { maxDeletions: 100, concurrency: 4 });
+    expect(second.deletedCount).toBe(4);
+    expect(second.capped).toBe(false);
+    for (const ref of refs) {
+      expect((await ref.get()).exists).toBe(false);
+    }
   });
 });
 
