@@ -10,8 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AddLocationAlt
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Place
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /**
@@ -54,6 +57,9 @@ private fun availability(usable: Boolean): ConvoyBarActionAvailability =
 
 /** Test tag on the whole convoy status bar. */
 const val CONVOY_BAR_TEST_TAG = "convoy_bar"
+
+/** Test tag on the bar's map-focus toggle (me vs the whole convoy). */
+const val CONVOY_BAR_FOCUS_TAG = "convoy_bar_focus"
 
 /** Test tag on the bar's invite ("person +") control. */
 const val CONVOY_BAR_INVITE_TAG = "convoy_bar_invite"
@@ -119,6 +125,10 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  *   [ConvoyBarState.leaveAvailability] says: "leave" ending everyone's drive is
  *   the one failure in this component that would actually hurt people, so it is
  *   prevented structurally rather than by the availability flag being correct.
+ * @param focusMode what the map camera is currently framing. Defaults to
+ *   [ConvoyFocusMode.Me] — the behaviour that existed before this control — so a
+ *   host that does not wire the toggle is unchanged.
+ * @param onFocusModeChange invoked with the mode the user just picked.
  * @param onSetDestination open the place picker to set (or replace) the convoy's
  *   SHARED destination. Invoked only after the overwrite confirmation, when the
  *   current destination was set by somebody else. No-op today: the control is
@@ -143,6 +153,8 @@ fun ConvoyStatusBar(
     compact: Boolean = false,
     onInvite: ((String) -> Unit)? = null,
     onLeaveConvoy: ((String) -> Unit)? = null,
+    focusMode: ConvoyFocusMode = ConvoyFocusMode.Me,
+    onFocusModeChange: (ConvoyFocusMode) -> Unit = {},
     onSetDestination: (() -> Unit)? = null,
     onClearDestination: ((String) -> Unit)? = null,
     onNavigateToDestination: ((LatLng, String) -> Unit)? = null,
@@ -231,6 +243,53 @@ fun ConvoyStatusBar(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+
+                // Map focus: follow ME (the default, and exactly the camera
+                // behaviour that existed before convoys) or keep the WHOLE
+                // convoy framed. One button rather than a segmented control —
+                // it is a two-state choice in a bar that has to survive being
+                // squeezed into the navigation chrome. The icon shows the mode
+                // currently in effect, and it is tinted when convoy framing is
+                // on so an unusual camera state is never silent.
+                //
+                // Hidden in the [compact] (turn-by-turn) variant on purpose: the
+                // navigation map's camera is owned by the Navigation SDK, so the
+                // choice would have nothing to act on there. A control that
+                // silently does nothing is worse than one that isn't offered.
+                val convoyFocused = focusMode == ConvoyFocusMode.Convoy
+                if (!compact) {
+                    IconButton(
+                        onClick = {
+                            onFocusModeChange(
+                                if (convoyFocused) ConvoyFocusMode.Me else ConvoyFocusMode.Convoy,
+                            )
+                        },
+                        modifier = Modifier.testTag(CONVOY_BAR_FOCUS_TAG),
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (convoyFocused) {
+                                    Icons.Filled.Groups
+                                } else {
+                                    Icons.Filled.CenterFocusStrong
+                                },
+                            contentDescription =
+                                stringResource(
+                                    if (convoyFocused) {
+                                        R.string.convoy_barFocusConvoy
+                                    } else {
+                                        R.string.convoy_barFocusMe
+                                    },
+                                ),
+                            tint =
+                                if (convoyFocused) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                }
 
                 // Invite ("person +"). No `convoy.invite` callable exists, so this
                 // is disabled rather than pointed at the create-convoy picker,

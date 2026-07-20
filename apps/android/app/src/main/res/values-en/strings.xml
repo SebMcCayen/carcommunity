@@ -461,6 +461,13 @@
     <string name="convoy_barEndConfirmBody">This ends the convoy for everyone, not just for you. The drive summary is saved.</string>
     <string name="convoy_barEndConfirmAction">End convoy</string>
     <string name="convoy_barConfirmCancel">Cancel</string>
+    <string name="convoy_barFocusMe">Map follows you. Tap to keep the whole convoy in view</string>
+    <string name="convoy_barFocusConvoy">Map keeps the whole convoy in view. Tap to follow you again</string>
+    <string name="convoy_awarenessMemberOnMap">%1$s in the convoy</string>
+    <string name="convoy_awarenessArrowSingle">%1$s is off the map, at %2$d o’clock, %3$s away</string>
+    <string name="convoy_awarenessArrowGroup">%1$s and %2$d others are off the map, at %3$d o’clock, %4$s away</string>
+    <string name="convoy_awarenessDistanceMeters">%1$d m</string>
+    <string name="convoy_awarenessDistanceKm">%1$s km</string>
     <string name="convoy_barDestinationNone">No shared destination</string>
     <string name="convoy_barDestinationSet">Set shared destination</string>
     <string name="convoy_barDestinationSetUnavailable">Set shared destination (not available yet)</string>
