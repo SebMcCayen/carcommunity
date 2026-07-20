@@ -302,28 +302,32 @@ class LocationSharingService : Service() {
         stopSelf()
     }
 
-    /** Notification "Stop sharing": ends the session server-side, then stops. */
+    /**
+     * Notification "Stop sharing": ends the session server-side, then stops.
+     *
+     * The callable runs on the process-lifetime [stopScope], NOT on the service
+     * [scope], and `stopSelf()` is deferred until it settles. Launching it on
+     * [scope] and stopping immediately would let `onDestroy()`'s `scope.cancel()`
+     * kill the call before dispatch, leaving the session live server-side until
+     * expiry — see [LiveSharingStop] for the measurement.
+     */
     private fun stopSharingAndSelf() {
         val repo = repository
         if (repo == null) {
             stopSharingLocally()
             return
         }
-        // Stop publishing immediately; the callable is best-effort after that.
+        // Stop publishing and drop the notification immediately: the user's tap
+        // gets instant feedback while the callable finishes behind it.
         fusedClient?.removeLocationUpdates(locationCallback)
         fusedClient = null
-        scope.launch {
-            try {
-                repo.stopSession()
-            } catch (c: CancellationException) {
-                throw c
-            } catch (_: Exception) {
-                // The session expires on its own regardless; the local stop below
-                // has already ended publishing.
-            }
-        }
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopScope.launch {
+            LiveSharingStop.run(
+                stopSession = { repo.stopSession() },
+                finish = { stopSelf() },
+            )
+        }
     }
 
     /**
@@ -441,6 +445,16 @@ class LocationSharingService : Service() {
     companion object {
         const val ACTION_STOP_SHARING = "com.kungsbackacarcommunity.app.action.STOP_LIVE_SHARING"
         const val EXTRA_UID = "uid"
+
+        /**
+         * Process-lifetime scope for the one operation that must outlive the
+         * service: the `live.stopSession` callable behind the notification's
+         * "Stop sharing" action. Deliberately never cancelled — `onDestroy()`
+         * cancels the per-instance [scope], which is exactly what would abort
+         * that call. Nothing long-running is ever launched here; the single
+         * user of it is bounded by [LiveSharingStop.STOP_SESSION_TIMEOUT_MS].
+         */
+        private val stopScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         private const val CHANNEL_ID = "live_location_sharing"
         private const val NOTIFICATION_ID = 4201
