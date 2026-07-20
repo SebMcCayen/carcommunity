@@ -444,6 +444,35 @@ class MapFirstShellTest {
     private fun topOf(tag: String): Float =
         composeTestRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().top.value
 
+    /**
+     * Querying a [CircleControl] by test tag and by contentDescription must land
+     * on the SAME node, so the order assertions below can mix the two freely.
+     *
+     * They can because `CircleControl` is a clickable `Surface`, which sets
+     * `mergeDescendants = true`: the `Icon`'s contentDescription merges UP into
+     * the clickable Surface node, and `onNodeWithContentDescription` reads the
+     * merged tree by default. So both queries resolve to the Surface — the tag
+     * does not select a container while the description selects an inner Icon.
+     *
+     * This is asserted rather than assumed because it is the one property that
+     * would silently corrupt every position comparison in this file if it ever
+     * changed (say, someone moves the description onto the Icon with
+     * `clearAndSetSemantics`, or drops the merging). The compass is the probe: it
+     * is the only control carrying BOTH a tag and a description.
+     */
+    @Test
+    fun circleControl_tagAndContentDescriptionResolveToTheSameNode() {
+        setMapHome(trafikverketDataShown = false)
+        val byTag = composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).getUnclippedBoundsInRoot()
+        val byDescription =
+            composeTestRule
+                .onNodeWithContentDescription(str(R.string.shell_compass))
+                .getUnclippedBoundsInRoot()
+        assertEquals(byTag.top.value.toDouble(), byDescription.top.value.toDouble(), 0.01)
+        assertEquals(byTag.left.value.toDouble(), byDescription.left.value.toDouble(), 0.01)
+        assertEquals(byTag.bottom.value.toDouble(), byDescription.bottom.value.toDouble(), 0.01)
+    }
+
     private fun topOfDescribed(description: String): Float =
         composeTestRule
             .onNodeWithContentDescription(description)

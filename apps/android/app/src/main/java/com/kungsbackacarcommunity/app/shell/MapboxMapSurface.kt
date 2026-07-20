@@ -609,7 +609,7 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
-    override fun recenter() = userRequestedRecentre(resetBearingToNorth = false)
+    override fun recenter() = userRequestedRecenter(resetBearingToNorth = false)
 
     /**
      * The compass: exactly [recenter], plus north-up folded into the SAME camera
@@ -619,7 +619,7 @@ class MapboxMapSurface : MapSurface {
      * cancelled animation carried. One cameraOptions carrying centre + zoom +
      * pitch + bearing(0) cannot fight itself.
      */
-    override fun recenterNorthUp() = userRequestedRecentre(resetBearingToNorth = true)
+    override fun recenterNorthUp() = userRequestedRecenter(resetBearingToNorth = true)
 
     /**
      * A re-centre the USER asked for, by the my-location control or the compass:
@@ -630,7 +630,7 @@ class MapboxMapSurface : MapSurface {
      * follow/timer handling cannot drift between the two controls — only the
      * bearing differs, and that difference is the single parameter.
      */
-    private fun userRequestedRecentre(resetBearingToNorth: Boolean) {
+    private fun userRequestedRecenter(resetBearingToNorth: Boolean) {
         followController.onRecenterRequested()
         idleReturnJob?.cancel()
         idleReturnJob = null
