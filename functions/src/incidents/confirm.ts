@@ -37,7 +37,9 @@ import {
   INCIDENT_ACTIVE_STATUS,
   INCIDENT_TYPES,
   extendedExpiryFor,
+  isValidConfirmationCount,
   parseConfirmInput,
+  readConfirmationCount,
   type IncidentType,
 } from './incidents-core';
 
@@ -136,7 +138,25 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
       throw new HttpsError('permission-denied', 'You cannot confirm your own report.');
     }
 
-    const storedCount = typeof data.confirmationCount === 'number' ? data.confirmationCount : 0;
+    // Absent is the normal pre-first-confirmation state → 0. PRESENT but not a
+    // non-negative integer is corruption, and this is a write path: the reply
+    // and the next confirmation both build on this number, and NaN survives
+    // `FieldValue.increment` (NaN + 1 is NaN) so a single corrupt value would
+    // be permanent. It is not even reportable — the callable framework
+    // serialises NaN/Infinity to JSON `null`, so a client typed against
+    // `confirmationCount: number` would silently receive `null`. Refuse, as
+    // with the other malformed fields. (listNearby takes the opposite branch on
+    // purpose: it is a bulk read of a shared map layer, so it degrades the one
+    // marker to 0 rather than failing everyone's batch — see
+    // readConfirmationCount.)
+    if (data.confirmationCount !== undefined && !isValidConfirmationCount(data.confirmationCount)) {
+      logger.error('incidents.confirm: incident has a corrupt confirmationCount', {
+        incidentId,
+        confirmationCount: String(data.confirmationCount),
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    const storedCount = readConfirmationCount(data.confirmationCount);
 
     // Already confirmed → idempotent success, nothing written. The expiry is NOT
     // extended again: otherwise one member could hold an incident open forever

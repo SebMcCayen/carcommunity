@@ -668,6 +668,33 @@ describe('incidents.confirm', () => {
     expect((await ref.collection('confirmations').doc(otherMember.uid).get()).exists).toBe(false);
   });
 
+  it('REFUSES to confirm on a corrupt confirmationCount, but listNearby still renders the map', async () => {
+    // NaN is storable in Firestore (doubles) and survives FieldValue.increment
+    // (NaN + 1 is NaN), so one corrupt value would be permanent. The write path
+    // refuses; the read path must NOT, or a single bad document would take the
+    // whole shared map layer down with it.
+    const ref = await seedMalformed('malformed-count', { confirmationCount: Number.NaN });
+
+    await signInAs(otherMember);
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: ref.id }))).toBe(
+      'functions/internal',
+    );
+    expect((await ref.collection('confirmations').doc(otherMember.uid).get()).exists).toBe(false);
+
+    // Same document through listNearby: present, degraded to 0, and JSON-safe
+    // (an unsanitised NaN would arrive as null and break the typed contract).
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string; confirmationCount: number }> };
+    const seen = nearby.incidents.find((i) => i.id === ref.id);
+    expect(seen).toBeDefined();
+    expect(seen?.confirmationCount).toBe(0);
+  });
+
   it('REFUSES to confirm a user incident whose reporterUid is missing', async () => {
     // Sharper than the two below: a null reporterUid does not make the
     // self-confirmation check REJECT, it makes it never fire — so without this

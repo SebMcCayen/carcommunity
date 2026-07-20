@@ -200,6 +200,40 @@ export function isWithinRadius(
 // Expiry
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether a stored `confirmationCount` is a value the contract can honour.
+ *
+ * `typeof x === 'number'` is not enough: Firestore stores doubles, so NaN and
+ * ±Infinity are storable, and both survive a `FieldValue.increment` unchanged
+ * (NaN + 1 is NaN). Neither is JSON-representable either — the callable
+ * framework serialises them to `null`, so a client typed against
+ * `confirmationCount: number` would receive `null` and violate its own contract
+ * without ever seeing an error.
+ *
+ * ABSENT is not invalid: the field is unwritten until the first confirmation,
+ * which is the normal state of every fresh report. Callers treat `undefined` as
+ * 0 and use this only to judge a value that IS present.
+ */
+export function isValidConfirmationCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * A stored `confirmationCount` normalised for a READ path: absent or corrupt
+ * becomes 0.
+ *
+ * Deliberately more forgiving than the write path. `incidents.confirm` refuses
+ * outright on a corrupt count, because it is about to write a derived value
+ * back and must not build on a number it cannot trust. `listNearby` renders a
+ * shared map layer in bulk, where one corrupt document must not blank out
+ * everyone's map or fail the whole batch — so it degrades that single marker to
+ * "0 confirmations", exactly as it already skips documents with a malformed
+ * `expiresAt` or coordinates rather than aborting.
+ */
+export function readConfirmationCount(value: unknown): number {
+  return isValidConfirmationCount(value) ? value : 0;
+}
+
 /** Expiry instant for a freshly-reported incident of `type`. */
 export function expiryFor(type: IncidentType, now: Date): Date {
   return new Date(now.getTime() + INCIDENT_TTL_MS[type]);

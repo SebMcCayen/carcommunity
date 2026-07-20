@@ -18,6 +18,8 @@ import {
   parseReportInput,
   parseConfirmInput,
   extendedExpiryFor,
+  isValidConfirmationCount,
+  readConfirmationCount,
   INCIDENT_TTL_MS,
   INCIDENT_TYPES,
   LIFETIME_CAP_MULTIPLIER,
@@ -334,6 +336,37 @@ describe('trafikverket-core', () => {
     expect(importedIncidentDocId('D1')).toBe('tv_D1');
     // Same input → same id (idempotent upsert).
     expect(importedIncidentDocId('X')).toBe(importedIncidentDocId('X'));
+  });
+});
+
+describe('incidents-core confirmationCount validation', () => {
+  it('accepts only non-negative integers', () => {
+    expect(isValidConfirmationCount(0)).toBe(true);
+    expect(isValidConfirmationCount(7)).toBe(true);
+    // The cases `typeof x === 'number'` waves through. Firestore stores
+    // doubles, so all of these are storable, and none is JSON-representable
+    // (the callable framework serialises them to null).
+    expect(isValidConfirmationCount(Number.NaN)).toBe(false);
+    expect(isValidConfirmationCount(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isValidConfirmationCount(Number.NEGATIVE_INFINITY)).toBe(false);
+    expect(isValidConfirmationCount(-1)).toBe(false);
+    expect(isValidConfirmationCount(1.5)).toBe(false);
+    // Non-numbers, including the absent case.
+    expect(isValidConfirmationCount(undefined)).toBe(false);
+    expect(isValidConfirmationCount(null)).toBe(false);
+    expect(isValidConfirmationCount('3')).toBe(false);
+  });
+
+  it('normalises every invalid value to 0 on the read path', () => {
+    expect(readConfirmationCount(4)).toBe(4);
+    expect(readConfirmationCount(0)).toBe(0);
+    for (const bad of [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, -2, 0.5, '3', {}]) {
+      const result = readConfirmationCount(bad);
+      expect(result).toBe(0);
+      // Whatever went in, what comes out must be JSON-safe — that is the whole
+      // point of the normalisation.
+      expect(JSON.parse(JSON.stringify({ n: result })).n).toBe(0);
+    }
   });
 });
 
