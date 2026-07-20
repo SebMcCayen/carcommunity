@@ -74,6 +74,7 @@ import { onClientErrorReport } from './errors/onClientErrorReport';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
+import { confirm as confirmIncident } from './incidents/confirm';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
@@ -441,7 +442,8 @@ export const errors = {
 
 /**
  * Crowd-sourced incidents / roadwork domain (grouped export → deployed as
- * `incidents-report`, `incidents-listNearby`, `incidents-remove`, the
+ * `incidents-report`, `incidents-listNearby`, `incidents-remove`,
+ * `incidents-confirm`, the
  * scheduled `incidents-cleanupExpired`, and the scheduled
  * `incidents-syncTrafikverket`) — the navigation feature's Waze-style map
  * layer. NEW additive domain.
@@ -452,7 +454,11 @@ export const errors = {
  * reads ACTIVE, unexpired incidents — directly via security rules and, for the
  * map's bounded batch, via `incidents.listNearby` (chunked `geoCell in`
  * queries + server-side Haversine radius filter, never a full scan). Reporters
- * (or admins) clear their own via `incidents.remove`. `incidents-cleanupExpired`
+ * (or admins) clear their own via `incidents.remove`. Any OTHER member confirms a
+ * report is still there via `incidents.confirm`, which counts one confirmation
+ * per user (sub-collection doc keyed by uid) and pushes `expiresAt` out up to a
+ * hard lifetime cap — confirmed incidents persist, stale ones fade.
+ * `incidents-cleanupExpired`
  * sweeps expired docs every 15 min. `incidents-syncTrafikverket` imports Swedish
  * roadwork/traffic situations from the Trafikverket open API — GUARDED on the
  * `TRAFIKVERKET_API_KEY` secret, so it no-ops safely until the free key is set.
@@ -461,6 +467,7 @@ export const incidents = {
   report: reportIncident,
   listNearby: listNearbyIncidents,
   remove: removeIncident,
+  confirm: confirmIncident,
   cleanupExpired: cleanupExpiredIncidents,
   syncTrafikverket,
 };
