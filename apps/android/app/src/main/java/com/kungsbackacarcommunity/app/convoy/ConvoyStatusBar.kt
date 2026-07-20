@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -453,6 +454,20 @@ private fun ConvoyDestinationRow(
                 onClick = onClearDestination,
                 enabled = wired && !state.busy,
                 modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_CLEAR_TAG),
+                // Destructive red, but only while the control can actually do
+                // something. Handing the colour to `iconButtonColors` rather than
+                // hard-tinting the Icon is what lets Material apply its own
+                // disabled treatment (the derived low-opacity
+                // `disabledContentColor`, published through LocalContentColor) — a
+                // hard `tint = error` bypasses that and paints a DISABLED clear
+                // icon in full strength destructive red. That is not hypothetical
+                // here: [ConvoyDestinations.availability] is BackendMissing, so
+                // `wired` is false on every build today and this button ships
+                // permanently disabled. It must not look tappable.
+                colors =
+                    IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Clear,
@@ -464,7 +479,8 @@ private fun ConvoyDestinationRow(
                                 R.string.convoy_barDestinationClearUnavailable
                             },
                         ),
-                    tint = MaterialTheme.colorScheme.error,
+                    // No explicit tint: LocalContentColor carries whichever of the
+                    // IconButton's enabled/disabled content colours applies.
                 )
             }
         }

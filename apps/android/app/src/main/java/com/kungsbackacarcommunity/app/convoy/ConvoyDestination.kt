@@ -67,8 +67,16 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  *  - `label` optional, trimmed, max 120 characters (see
  *    [ConvoyDestinations.MAX_LABEL_LENGTH]) — long enough for a full formatted
  *    street address, short enough not to become a chat channel. Over-length →
- *    `invalid-argument` rather than silent truncation. Blank after trim is stored
- *    as absent, not as an empty string.
+ *    `invalid-argument`. Blank after trim is stored as absent, not as an empty
+ *    string.
+ *
+ *    Note the client and the server deliberately differ here: the CLIENT
+ *    truncates an over-long label to 120 characters before it reaches the wire
+ *    (see [ConvoyDestinations.normalizeLabel]), so in practice this server check
+ *    only fires for a caller that is not this picker. That split is intentional
+ *    — truncation needs the user's intent to be the right answer, and only the
+ *    client has it; the server, facing an unknown caller, rejects rather than
+ *    silently reshaping data it cannot interpret.
  *  - status: a convoy with `status === 'ended'` → `failed-precondition`. A
  *    `forming` convoy MAY have a destination set — agreeing where to go is
  *    exactly what happens before a convoy starts rolling.
@@ -385,10 +393,22 @@ object ConvoyDestinations {
     }
 
     /**
-     * Trims [label] and rejects an over-long one. Returns null for blank (stored
-     * as absent, not as an empty string) and throws nothing — an over-length
-     * label comes back as null so the destination is still settable without its
-     * label rather than failing the whole action.
+     * Trims [label] and TRUNCATES an over-long one to [MAX_LABEL_LENGTH].
+     *
+     * Blank (or null) comes back as null, so it is stored as absent rather than
+     * as an empty string. An over-length label is deliberately truncated rather
+     * than rejected: the label is a convenience on top of the coordinate, and
+     * failing the whole set-destination action — or silently dropping the label
+     * entirely — over a long formatted address would cost the user the thing they
+     * actually asked for. Truncating keeps the action working and keeps most of
+     * the address.
+     *
+     * This is why the client never sends an over-length label, and so never
+     * provokes the server's `invalid-argument` for one (see the file KDoc). The
+     * server keeps rejecting rather than truncating because it cannot know
+     * whether an over-length label came from this client's picker or from
+     * something malformed; the trimming decision belongs to whoever has the
+     * user's intent, which is here.
      */
     fun normalizeLabel(label: String?): String? {
         val trimmed = label?.trim().orEmpty()
