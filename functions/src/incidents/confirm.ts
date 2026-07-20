@@ -95,6 +95,14 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
       );
     }
 
+    // ONE clock reading for the whole decision: the liveness check below and the
+    // extended expiry computed further down must agree on what "now" is.
+    // Re-reading the clock would not make anything safer — a deadline compared
+    // against a wall clock is racy by construction, and any number of re-checks
+    // only moves the window rather than closing it — but a single reading makes
+    // the handler internally consistent and removes the question entirely.
+    const now = new Date();
+
     // A dead incident cannot be confirmed back to life — the sweep may not have
     // reached it yet, but it is already invisible to every reader (the read rule
     // gates on status + expiresAt). Report it fresh instead.
@@ -102,7 +110,7 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     if (
       data.status !== INCIDENT_ACTIVE_STATUS ||
       !(currentExpiresAt instanceof Timestamp) ||
-      currentExpiresAt.toMillis() <= Date.now()
+      currentExpiresAt.toMillis() <= now.getTime()
     ) {
       throw new HttpsError('failed-precondition', 'This incident is no longer active.');
     }
@@ -125,8 +133,6 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
         alreadyConfirmed: true,
       };
     }
-
-    const now = new Date();
 
     // FAIL FAST on a malformed document rather than substituting defaults.
     //
