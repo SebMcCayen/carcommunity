@@ -226,7 +226,15 @@
     "noOtherMarkersSubtitle": "Live locations are only shown during active, time-limited sessions.",
     "memberRequiredTitle": "Membership is required to see other members' live locations.",
     "shareOwnFreeHint": "You can share your own position for free.",
-    "liveMarkerFallbackName": "Sharing live"
+    "liveMarkerFallbackName": "Sharing live",
+    "locationNeededTitle": "The map needs your location",
+    "locationPermissionBody": "Without location access the map can't show where you are, and directions and live sharing won't work.",
+    "locationServicesOffBody": "Location is switched off on your device, so the map can't show where you are. Turn it on to use the map fully.",
+    "locationAllow": "Allow location",
+    "locationOpenSettings": "Open settings",
+    "locationSettingsUnavailable": "Settings couldn't be opened on this device. Grant location access to the app manually.",
+    "locationServicesSettingsUnavailable": "Settings couldn't be opened on this device. Turn on location in your device settings.",
+    "locationDismiss": "Not now"
   },
   "events": {
     "title": "Events",
@@ -479,7 +487,20 @@
     "errorInviteGone": "That invite is no longer available.",
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
-    "errorGeneric": "Something went wrong. Please try again."
+    "errorGeneric": "Something went wrong. Please try again.",
+    "barMembers": "%1$d in convoy",
+    "barInvite": "Invite more",
+    "barLeave": "Leave convoy",
+    "barEnd": "End convoy",
+    "barNoticeInvite": "Inviting more people to an ongoing convoy isn't available yet.",
+    "barNoticeInviteAndLeave": "Inviting more people, and leaving an ongoing convoy, aren't available yet.",
+    "barNoticeLeave": "Leaving an ongoing convoy isn't available yet.",
+    "barLeaveUnavailable": "Leave convoy (not available yet)",
+    "barInviteUnavailable": "Invite more (not available yet)",
+    "barEndConfirmTitle": "End convoy?",
+    "barEndConfirmBody": "This ends the convoy for everyone, not just for you. The drive summary is saved.",
+    "barEndConfirmAction": "End convoy",
+    "barConfirmCancel": "Cancel"
   },
   "memberProfile": {
     "title": "Profile",
@@ -630,7 +651,10 @@
     "photoChange": "Change photo",
     "photoUploading": "Uploading…",
     "photoUploadError": "Couldn’t upload the image. Please try again.",
-    "photoTooLarge": "The image is too large."
+    "photoTooLarge": "The image is too large.",
+    "photoCropTitle": "Crop photo",
+    "photoCropHint": "Drag to position and pinch to zoom. The area inside the frame is what others will see.",
+    "photoCropConfirm": "Use photo"
   },
   "badges": {
     "screenTitle": "Awards",
@@ -1007,12 +1031,10 @@
     "start": "Start",
     "exit": "Exit navigation",
     "recenter": "Recenter",
-    "reportIncident": "Report",
     "arrive": "Arrive at %1$s",
     "remaining": "%1$s · %2$s",
     "unavailable": "Navigation isn't available here.",
     "permissionNeeded": "Location access is required to navigate.",
-    "reportComingSoon": "Incident and roadwork reporting is coming soon.",
     "rerouting": "Rerouting…",
     "speedLimit": "Speed limit %1$d km/h",
     "currentSpeed": "Current speed %1$d km/h"

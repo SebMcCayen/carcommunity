@@ -43,6 +43,16 @@ import kotlinx.coroutines.withContext
  * pre-check and uploads; it does NOT compress or strip. Any NEW upload path for
  * a publicly visible image MUST therefore call [compressForPublicUpload] itself
  * — nothing downstream will strip metadata for it.
+ *
+ * USER CROPPING is expressed as the `crop` PARAMETER of
+ * [compressForPublicUpload] ([NormalizedCropRect]), never as a separate
+ * crop-then-upload stage. That is deliberate and load-bearing: a crop step that
+ * produced its own image (a bitmap, a temp file, a `Uri` from a crop library)
+ * would be a second, unsanitised route to Storage — exactly the bypass this
+ * class exists to prevent. Because the crop is applied INSIDE [reencodeToJpeg],
+ * cropped bytes can only ever come out of the sanitiser, and [decodeForCrop]
+ * (which the crop UI uses to draw a preview) returns a [android.graphics.Bitmap]
+ * that has no encoded form and therefore nothing to upload.
  */
 object ImageCompressor {
 
@@ -58,6 +68,19 @@ object ImageCompressor {
 
     /** JPEG quality for re-encode — a good size/quality trade-off for photos. */
     const val DEFAULT_JPEG_QUALITY: Int = 80
+
+    /**
+     * Ceiling on the pixels a single decode may allocate, before the crop is cut
+     * out of it. Sizing the decode so the CROPPED REGION reaches [maxDimension]
+     * necessarily decodes the whole frame larger than the region; on a very
+     * large source at a deep zoom that could run to hundreds of megabytes.
+     *
+     * 32 Mpx is ~128 MB at ARGB_8888 — comfortably above any decode a real pick
+     * needs (a 108 MP phone photo at maximum zoom lands around 27 Mpx, and picks
+     * are already capped at [MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES] anyway),
+     * so this only ever bites the pathological case.
+     */
+    private const val MAX_DECODE_PIXELS: Long = 32_000_000L
 
     /**
      * Downscales + re-encodes [picked] to JPEG off the main thread. Returns a
@@ -109,23 +132,68 @@ object ImageCompressor {
      * may still contain benign EXIF that is NOT in [STRIP_TAGS] (e.g. orientation)
      * — the guarantee is precisely "free of [STRIP_TAGS]", not "zero EXIF". The
      * common (re-encode) path strips everything.
+     *
+     * @param crop the user's crop window in normalized source coordinates, or
+     *   null / [NormalizedCropRect.FULL] for the whole image. Applying the crop
+     *   HERE rather than in the UI is what keeps a single sanitised route to
+     *   Storage (see this class's KDoc). When a crop is requested but the image
+     *   cannot be re-encoded, this FAILS CLOSED rather than falling back to the
+     *   physical strip: that fallback returns the WHOLE frame, so it would
+     *   upload the very region the user cropped away — which is a privacy
+     *   decision (the neighbour's plate, the house number) and not ours to undo.
      */
     suspend fun compressForPublicUpload(
         picked: PickedImage,
         maxDimension: Int = AVATAR_MAX_DIMENSION,
         quality: Int = DEFAULT_JPEG_QUALITY,
+        crop: NormalizedCropRect? = null,
     ): PickedImage? = withContext(Dispatchers.Default) {
+        // A full-frame crop is indistinguishable from no crop, so it must not
+        // opt out of the strip fallback.
+        val cropsAway = crop != null && !crop.isFullFrame()
         try {
             // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
             // original's STRIP_TAGS or fail closed — we NEVER return raw picked
             // bytes that might still carry GPS or identifying metadata.
-            reencodeToJpeg(picked, maxDimension, quality) ?: stripOrFail(picked)
+            reencodeToJpeg(picked, maxDimension, quality, crop)
+                ?: if (cropsAway) null else stripOrFail(picked)
         } catch (e: CancellationException) {
             throw e // never swallow cancellation — keep structured concurrency intact
         } catch (_: Exception) {
             // Re-encode blew up unexpectedly; still try the physical-strip
-            // fallback (it never throws) before failing closed.
-            stripOrFail(picked)
+            // fallback (it never throws) before failing closed — unless a crop
+            // was requested, which that fallback cannot honour.
+            if (cropsAway) null else stripOrFail(picked)
+        }
+    }
+
+    /**
+     * Decodes [picked] for the crop UI to DISPLAY: EXIF-oriented (so the user
+     * arranges the photo the right way up) and downscaled to at most
+     * [maxDimension] on the longest side, since a full-resolution phone photo is
+     * far larger than any screen and would spike memory for no visible gain.
+     *
+     * Returns null when the image cannot be decoded — the caller must then treat
+     * the pick as unusable and skip it, exactly as it would a null from
+     * [compressForPublicUpload].
+     *
+     * Deliberately returns a [Bitmap] and NOT bytes: an in-memory bitmap has no
+     * encoded form, so this preview cannot become an upload payload. The crop UI
+     * therefore has nothing to hand to Storage but a [NormalizedCropRect], and
+     * the actual pixels are re-derived from [picked] inside
+     * [compressForPublicUpload]. A decoded bitmap also carries no EXIF of its
+     * own, so the preview cannot leak metadata either.
+     */
+    suspend fun decodeForCrop(
+        picked: PickedImage,
+        maxDimension: Int = VEHICLE_MAX_DIMENSION,
+    ): Bitmap? = withContext(Dispatchers.Default) {
+        try {
+            decodeOriented(picked.bytes, maxDimension)
+        } catch (e: CancellationException) {
+            throw e // never swallow cancellation — keep structured concurrency intact
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -141,6 +209,7 @@ object ImageCompressor {
         picked: PickedImage,
         maxDimension: Int,
         quality: Int,
+        crop: NormalizedCropRect? = null,
     ): PickedImage? {
         // Guard against invalid tuning params before touching any pixels: a
         // non-positive maxDimension would make sampleSizeFor() loop forever, and
@@ -148,25 +217,14 @@ object ImageCompressor {
         // there is nothing sensible to re-encode.
         if (maxDimension <= 0 || quality !in 0..100) return null
 
-        val source = picked.bytes
+        // 1-2. Decode at the nearest power-of-two down-sample, oriented per EXIF.
+        // The crop is passed in so the sample size is chosen for the REGION that
+        // survives the crop, not the whole frame (see [sampleSizeForCrop]).
+        var bitmap = decodeOriented(picked.bytes, maxDimension, crop) ?: return null
 
-        // 1. Read bounds only (no pixels) to compute an efficient sample size.
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-
-        // 2. Decode at the nearest power-of-two down-sample to save memory.
-        val decodeOptions =
-            BitmapFactory.Options().apply {
-                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxDimension)
-            }
-        val decoded =
-            BitmapFactory.decodeByteArray(source, 0, source.size, decodeOptions) ?: return null
-
-        // 3. Orient per EXIF, then scale exactly so the longest side fits.
-        var bitmap = decoded
+        // 3. Apply the user's crop, then scale so the longest side fits.
         try {
-            bitmap = applyExifOrientation(bitmap, source)
+            bitmap = applyCrop(bitmap, crop) ?: return null
             bitmap = scaleToMax(bitmap, maxDimension)
 
             val out = ByteArrayOutputStream()
@@ -185,6 +243,98 @@ object ImageCompressor {
         } finally {
             bitmap.recycle()
         }
+    }
+
+    /**
+     * Decodes [bytes] to a [Bitmap] that is EXIF-oriented and whose longest side
+     * is at most about [maxDimension] (power-of-two sub-sampling only, so it can
+     * land above [maxDimension] — [scaleToMax] does the exact fit when the caller
+     * needs one). Returns null when the bytes cannot be decoded.
+     *
+     * Shared by [reencodeToJpeg] and [decodeForCrop] so the crop UI previews the
+     * SAME orientation the re-encode will produce: if only one of them honoured
+     * EXIF orientation, the user would frame a sideways photo and get an
+     * upright, wrongly-cropped one (or the reverse).
+     */
+    private fun decodeOriented(
+        bytes: ByteArray,
+        maxDimension: Int,
+        crop: NormalizedCropRect? = null,
+    ): Bitmap? {
+        if (maxDimension <= 0) return null
+
+        // Read bounds only (no pixels) to compute an efficient sample size.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        // A [crop]'s fractions are measured against the ORIENTED image — that is
+        // what the crop UI showed — while these bounds describe the image as
+        // STORED. For a 90°/270°/transpose/transverse orientation the two have
+        // their axes swapped, so sizing the decode from the stored bounds
+        // measures the retained region along the wrong axis. On the ordinary
+        // portrait phone photo (stored 4000x3000 + ROTATE_90) a 16:9 crop then
+        // decodes at 1/4 instead of 1/2 and the upload lands 750px on its
+        // longest side — under the maxDimension/2 bar. Swap first.
+        val orientation = readExifOrientation(bytes)
+        val swapsAxes = orientationSwapsAxes(orientation)
+        val orientedWidth = if (swapsAxes) bounds.outHeight else bounds.outWidth
+        val orientedHeight = if (swapsAxes) bounds.outWidth else bounds.outHeight
+
+        val decodeOptions =
+            BitmapFactory.Options().apply {
+                inSampleSize =
+                    sampleSizeForCrop(orientedWidth, orientedHeight, crop, maxDimension)
+            }
+        val decoded =
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions) ?: return null
+        return applyExifOrientation(decoded, orientation)
+    }
+
+    /**
+     * True when [orientation] exchanges the image's width and height — the
+     * quarter-turn orientations plus the two that combine a quarter turn with a
+     * flip. Anything else (normal, 180°, pure mirrors) preserves the axes.
+     *
+     * Internal (not private) purely so it is unit-testable.
+     */
+    internal fun orientationSwapsAxes(orientation: Int): Boolean =
+        orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+            orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+            orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+            orientation == ExifInterface.ORIENTATION_TRANSVERSE
+
+    /**
+     * The EXIF orientation tag of [bytes], or [ExifInterface.ORIENTATION_NORMAL]
+     * when it is absent or unreadable. Read once per decode and threaded through
+     * so the sample-size decision and the rotation cannot disagree.
+     */
+    private fun readExifOrientation(bytes: ByteArray): Int =
+        runCatching {
+            ByteArrayInputStream(bytes).use { input ->
+                ExifInterface(input).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL,
+                )
+            }
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+
+    /**
+     * Cuts [crop] out of [bitmap], recycling the source once the cropped copy
+     * exists. Returns [bitmap] unchanged for a null or full-frame crop, and null
+     * when the rect cannot be resolved to a valid pixel window — in which case
+     * the caller must fail closed rather than upload the uncropped frame, since
+     * the crop may have been the user removing something identifying.
+     *
+     * [bitmap] is NOT recycled on the null path: the caller still owns it.
+     */
+    private fun applyCrop(bitmap: Bitmap, crop: NormalizedCropRect?): Bitmap? {
+        if (crop == null || crop.isFullFrame()) return bitmap
+        val pixels = crop.toPixels(bitmap.width, bitmap.height) ?: return null
+        val cropped =
+            Bitmap.createBitmap(bitmap, pixels.x, pixels.y, pixels.width, pixels.height)
+        if (cropped !== bitmap) bitmap.recycle()
+        return cropped
     }
 
     /**
@@ -332,6 +482,50 @@ object ImageCompressor {
         return sample
     }
 
+    /**
+     * [sampleSizeFor], but measured against the region that SURVIVES [crop]
+     * rather than the whole frame — because only that region is uploaded.
+     *
+     * Sizing the decode by the frame is the bug this exists to avoid: sampling
+     * is a property of the pixels you KEEP. A 8000x1000 panorama cropped to
+     * 16:9 keeps a 1778x1000 region; sampled by the frame (longest side 8000)
+     * that decodes at 1/8 and the crop yields a 222px-wide upload — soft and
+     * tiny — even though the source held 1778px of it. Sampled by the region it
+     * decodes at 1/2 and yields 889px, the same "at least half of
+     * [maxDimension]" bar the uncropped path has always met.
+     *
+     * Deliberately NOT `maxDimension / min(crop.width, crop.height)`: the needed
+     * decode depends on the SOURCE's aspect too, and that form ignores it — on a
+     * 12000x9000 source at maximum zoom it asks for a full-resolution 108 Mpx
+     * decode (~411 MB at ARGB_8888, a near-certain OOM) where sizing by the
+     * region asks for 27 Mpx.
+     *
+     * The result is then floored by [MAX_DECODE_PIXELS], since a decode sized
+     * for the region still materialises the whole frame.
+     *
+     * Internal (not private) purely so it is JVM-unit-testable without a device.
+     */
+    internal fun sampleSizeForCrop(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        crop: NormalizedCropRect?,
+        maxDimension: Int,
+    ): Int {
+        if (sourceWidth <= 0 || sourceHeight <= 0 || maxDimension <= 0) return 1
+        val window = crop?.takeIf { it.isValid() } ?: NormalizedCropRect.FULL
+        val regionWidth = (window.width * sourceWidth).toInt().coerceAtLeast(1)
+        val regionHeight = (window.height * sourceHeight).toInt().coerceAtLeast(1)
+
+        var sample = sampleSizeFor(regionWidth, regionHeight, maxDimension)
+        // The decode covers the FULL frame even though the sample size was
+        // chosen for the region, so bound what that can allocate.
+        val totalPixels = sourceWidth.toLong() * sourceHeight.toLong()
+        while (totalPixels / (sample.toLong() * sample.toLong()) > MAX_DECODE_PIXELS) {
+            sample *= 2
+        }
+        return sample
+    }
+
     /** Downscales [bitmap] so its longest side is at most [maxDimension] (returns it
      * unchanged when already smaller; never scales up). */
     private fun scaleToMax(bitmap: Bitmap, maxDimension: Int): Bitmap {
@@ -349,18 +543,15 @@ object ImageCompressor {
         return scaled
     }
 
-    /** Rotates/flips [bitmap] to match the source [bytes] EXIF orientation. */
-    private fun applyExifOrientation(bitmap: Bitmap, bytes: ByteArray): Bitmap {
-        val orientation =
-            runCatching {
-                ByteArrayInputStream(bytes).use { input ->
-                    ExifInterface(input).getAttributeInt(
-                        ExifInterface.TAG_ORIENTATION,
-                        ExifInterface.ORIENTATION_NORMAL,
-                    )
-                }
-            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-
+    /**
+     * Rotates/flips [bitmap] to match [orientation] (from [readExifOrientation]).
+     *
+     * Takes the already-read tag rather than re-parsing the bytes so this and
+     * [orientationSwapsAxes] can never disagree about which orientation is in
+     * play — the sample size is chosen from the same value that decides the
+     * rotation.
+     */
+    private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix()
         when (orientation) {
             ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
