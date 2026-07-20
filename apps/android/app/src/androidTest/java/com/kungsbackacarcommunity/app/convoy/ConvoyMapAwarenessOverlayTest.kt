@@ -146,11 +146,6 @@ class ConvoyMapAwarenessOverlayTest {
     }
 
     /**
-     * The tick must be derived from the staleness window, not written twice.
-     * A tick longer than the window would let an arrow outlive its own bound by
-     * more than the window itself.
-     */
-    /**
      * A live position can arrive with no display name. The spoken description
      * must still have a subject — never open with an empty string (" is off the
      * map, at 12 o'clock, 55 km away").
@@ -193,6 +188,11 @@ class ConvoyMapAwarenessOverlayTest {
         )
     }
 
+    /**
+     * The tick must be derived from the staleness window, not written twice.
+     * A tick longer than the window would let an arrow outlive its own bound by
+     * more than the window itself.
+     */
     @Test
     fun theStaleTickIsShorterThanTheStalenessWindow() {
         // JUnit's assertTrue, NOT Kotlin's `assert`: the latter is gated on the

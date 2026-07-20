@@ -191,11 +191,6 @@ fun ConvoyMapAwarenessOverlay(
 }
 
 /**
- * The spoken description of an off-screen member: who, roughly how far, and —
- * because an arrow means nothing to a screen reader — which way as a clock
- * direction relative to the way the map is facing.
- */
-/**
  * The member's name as a screen reader should say it.
  *
  * A live position can arrive without a display name, and `orEmpty()` would then
@@ -208,6 +203,11 @@ fun ConvoyMapAwarenessOverlay(
 private fun ConvoyMemberPosition.spokenName(): String =
     displayName?.takeIf { it.isNotBlank() } ?: stringResource(R.string.convoy_unknownMember)
 
+/**
+ * The spoken description of an off-screen member: who, roughly how far, and —
+ * because an arrow means nothing to a screen reader — which way as a clock
+ * direction relative to the way the map is facing.
+ */
 @Composable
 private fun directionDescription(placement: ConvoyMemberPlacement.OffScreen): String {
     val name = placement.member.spokenName()
