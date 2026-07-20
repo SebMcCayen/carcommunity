@@ -44,7 +44,11 @@ import {
 } from 'firebase/firestore';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { Timestamp, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import {
+  FieldValue,
+  Timestamp,
+  getFirestore as getAdminFirestore,
+} from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PROJECT_ID = 'demo-test';
@@ -730,6 +734,38 @@ describe('convoy-invite', () => {
     expect(
       await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [stranger.uid] })),
     ).toBe('functions/failed-precondition');
+
+    // ...and it stays idempotent on a FULL convoy. The cap rejects GROWTH, so
+    // a re-invite of someone already aboard must not be answered with "convoy
+    // is full". Padded with synthetic uids rather than 23 real accounts: the
+    // cap is read off memberUids.length, which is what the pre-check gates on.
+    const current = await adminDb.collection('convoys').doc(convoyId).get();
+    const padding = Array.from(
+      { length: 25 - (current.data()!.memberUids as string[]).length },
+      (_, i) => `filler-uid-${i}`,
+    );
+    await adminDb
+      .collection('convoys')
+      .doc(convoyId)
+      .update({ memberUids: FieldValue.arrayUnion(...padding) });
+    const full = await adminDb.collection('convoys').doc(convoyId).get();
+    expect((full.data()!.memberUids as string[]).length).toBe(25); // MAX_CONVOY_SIZE
+
+    const onFull = (await call('convoy-invite', { convoyId, inviteeUids: [friend.uid] }))
+      .data as { invited: string[]; skipped: Array<{ uid: string; reason: string }> };
+    expect(onFull.invited).toEqual([]);
+    expect(onFull.skipped).toEqual([{ uid: friend.uid, reason: 'already_member' }]);
+
+    // The cap itself is NOT relaxed: real growth against a full convoy is
+    // still refused.
+    const newFriend = await newMember('IdemFullFriendC');
+    await makeFriends(owner, newFriend);
+    await signInAs(owner);
+    expect(
+      await callableErrorCode(call('convoy-invite', { convoyId, inviteeUids: [newFriend.uid] })),
+    ).toBe('functions/failed-precondition');
+    const after = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(after.data()!.memberUids).not.toContain(newFriend.uid);
   }, 60_000);
 
   it('refuses a still-invited caller, an outsider, and an ended convoy', async () => {

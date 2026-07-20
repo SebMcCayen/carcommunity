@@ -713,7 +713,19 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
   const existingMemberUids = Array.isArray(preData.memberUids)
     ? (preData.memberUids as string[])
     : [];
-  if (existingMemberUids.length >= MAX_CONVOY_SIZE) {
+  // The cap rejects GROWTH, so the early-out has to ask whether growth was
+  // actually requested — otherwise a full convoy answers an idempotent
+  // re-invite of an existing member with "convoy is full", contradicting the
+  // idempotence documented above. This is a pure set test on the pre-read: no
+  // extra reads, and it still short-circuits the expensive friend/block
+  // resolution for the case the cap is there to stop. Real growth is refused
+  // again INSIDE the transaction against a fresh read, which is the check that
+  // actually enforces the cap.
+  const preMemberSet = new Set(existingMemberUids);
+  const growthRequested = inviteeUids.some(
+    (uid) => uid !== actor.uid && !preMemberSet.has(uid),
+  );
+  if (growthRequested && existingMemberUids.length >= MAX_CONVOY_SIZE) {
     throw new HttpsError('failed-precondition', CONVOY_FULL_MESSAGE);
   }
 
@@ -743,9 +755,15 @@ export const invite = onCall(CALLABLE_OPTS, async (request): Promise<InviteToCon
     if (!alreadyMember) {
       throw new HttpsError('failed-precondition', NO_VALID_INVITEES_MESSAGE);
     }
-    const current = await ref.get();
+    // Served from preSnap — the snapshot that PASSED the member / accepted /
+    // not-ended gate above — rather than a second `ref.get()`. A re-fetch would
+    // return state nobody re-authorized: between the gate and the fetch the
+    // caller may have left on another device, or the owner may have ended the
+    // convoy, and this branch has no transaction to catch it. It is also the
+    // only self-consistent answer: `already_member` was decided from preData,
+    // so the roster reported here is the roster that decision was made on.
     return {
-      convoy: toConvoySummary(convoyId, current.data() ?? {}, actor.uid, toIso),
+      convoy: toConvoySummary(convoyId, preData, actor.uid, toIso),
       invited: [],
       skipped: partitionInviteeOutcomes(outcomes).skipped,
     };
