@@ -96,11 +96,15 @@
     "backgroundPermissionAllow": "Tillåt bakgrundsposition",
     "backgroundPermissionSkip": "Fortsätt utan bakgrundsposition",
     "backgroundSharingActive": "Delning i bakgrunden aktiv",
-    "foregroundOnlySharing": "Endast delning när appen är öppen",
+    "foregroundOnlySharing": "Delningen fortsätter när appen minimeras",
     "sessionAutoExpires": "Sessionen avslutas automatiskt",
     "backgroundPermissionDenied": "Bakgrundsposition nekad. Delning pausas när appen stängs.",
-    "backgroundNotificationTitle": "KCC liveposition är aktiv",
-    "backgroundNotificationBody": "Din position delas under den aktiva, tidsbegränsade sessionen.",
+    "backgroundNotificationChannel": "Delning av liveposition",
+    "backgroundNotificationChannelDescription": "Visas medan du delar din position, så att du alltid vet att delningen är på.",
+    "backgroundNotificationTitle": "Du delar din position",
+    "backgroundNotificationBody": "Livedelning pågår. Tryck för att öppna appen.",
+    "backgroundNotificationBodyRemaining": "Livedelning pågår · %1$d min kvar. Tryck för att öppna appen.",
+    "backgroundNotificationStop": "Stoppa delning",
     "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning."
   },
   "onboarding": {
