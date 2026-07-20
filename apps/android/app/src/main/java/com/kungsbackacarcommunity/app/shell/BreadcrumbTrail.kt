@@ -91,10 +91,12 @@ class BreadcrumbTrail(
     }
 
     /**
-     * Trim the oldest points so the retained tail is the shortest suffix whose
-     * length is still >= [windowMeters]. This keeps at least ~1 km on screen (a
-     * touch more, never less) and sheds the tail as the head advances. Always
-     * leaves at least two points so a drawable segment survives.
+     * Trim the oldest points as the head advances. When the total path is longer
+     * than [windowMeters], the retained tail is shed down to the shortest suffix
+     * whose length is still >= [windowMeters] (so a touch more than ~1 km stays on
+     * screen, never less). When the total path is shorter than the window, every
+     * point is kept — a short path is never padded up to the window. Always leaves
+     * at least two points so a drawable segment survives.
      */
     private fun trimToWindow() {
         var total = totalLength()

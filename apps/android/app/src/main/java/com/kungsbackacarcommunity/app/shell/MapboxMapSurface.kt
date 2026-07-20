@@ -1858,11 +1858,13 @@ class MapboxMapSurface : MapSurface {
         const val BREADCRUMB_LINE_WIDTH = 5.0
 
         // Drawn in the live-share green (matches the sharing puck) so the tail
-        // reads as "your own live path". Split into RGB components (0x1E8E3E =
-        // KccPalette.successGreen) so the fade gradient can vary only the alpha.
-        private const val BREADCRUMB_R = 30.0 // 0x1E
-        private const val BREADCRUMB_G = 142.0 // 0x8E
-        private const val BREADCRUMB_B = 62.0 // 0x3E
+        // reads as "your own live path". Derived by splitting the single-source
+        // [LIVE_SHARE_PULSE_COLOR] ARGB into its R/G/B components, so the tail and
+        // the puck stay in lock-step if the token changes; the fade gradient then
+        // varies only the alpha.
+        private val BREADCRUMB_R: Double = ((LIVE_SHARE_PULSE_COLOR shr 16) and 0xFF).toDouble()
+        private val BREADCRUMB_G: Double = ((LIVE_SHARE_PULSE_COLOR shr 8) and 0xFF).toDouble()
+        private val BREADCRUMB_B: Double = (LIVE_SHARE_PULSE_COLOR and 0xFF).toDouble()
         // Alpha at the NEWEST end; the oldest end fades to fully transparent.
         private const val BREADCRUMB_HEAD_ALPHA = 0.85
 
