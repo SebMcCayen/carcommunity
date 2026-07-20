@@ -549,8 +549,8 @@
     <string name="savedDrives_date">Date</string>
     <string name="savedDrives_timeRange">Time</string>
     <string name="savedDrives_shareAction">Share drive</string>
-    <string name="savedDrives_shareSummary">Drove %1$s in %2$s on %3$s — %4$s</string>
-    <string name="savedDrives_shareSummaryNoDate">Drove %1$s in %2$s — %3$s</string>
+    <string name="savedDrives_shareSummary">I\'ve been using the %1$s app and on my recorded drive I covered %2$s in %3$s.</string>
+    <string name="savedDrives_shareTopSpeed">My top speed was %1$s.</string>
     <string name="savedDrives_shareUnavailable">No app available to share with</string>
     <string name="savedDrives_startArea">Start area</string>
     <string name="savedDrives_endArea">End area</string>

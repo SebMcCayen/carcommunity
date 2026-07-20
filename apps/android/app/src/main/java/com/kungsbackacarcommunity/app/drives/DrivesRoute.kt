@@ -88,6 +88,8 @@ fun DrivesRoute(
             DrivesListScreen(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
+                onDelete = { rideId -> scope.launch { coordinator.delete(rideId) } },
+                deleteStatus = deleteStatus,
                 onRetry = { reloadKey++ },
             )
     }
