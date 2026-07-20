@@ -207,7 +207,13 @@ import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
+import com.kungsbackacarcommunity.app.push.ActiveChat
+import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
+import com.kungsbackacarcommunity.app.push.PushDeepLink
+import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
+import com.kungsbackacarcommunity.app.push.PushTarget
+import com.kungsbackacarcommunity.app.push.RequestPushPermissionEffect
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
@@ -491,6 +497,55 @@ fun AuthenticatedApp(
                 dmChatOtherUid = otherUid
                 dmChatOtherName = otherName
                 route = ShellRoute.Chat
+            }
+
+            // Notification taps. MainActivity decodes the Intent extras and parks
+            // the destination in PushNavigator (a process-level hand-off, because
+            // the Intent arrives outside this composition and may arrive before it
+            // exists on a cold start). Handling it here means a tap drives THIS
+            // shell's ordinary route + payload state — the same assignments the
+            // in-app affordances make — rather than a second navigation mechanism.
+            //
+            // Chat-hub destinations are forwarded whole to ChatHubRoute, which
+            // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
+            //
+            // INVARIANT — pendingChatHubLink is never read stale, and the reason
+            // is structural rather than a clear-on-exit: the assignment below is
+            // the ONLY `route = ShellRoute.ChatHub` in the shell, and it always
+            // writes a fresh link in the same frame. ChatHubRoute therefore
+            // cannot be entered carrying a previous tap's destination. The map
+            // bubble is not a counter-example — it opens ChatHubPopup, which
+            // takes no pushDeepLink parameter at all. Back-out is likewise safe:
+            // closeRoute() sets route = null and there is no back stack to
+            // return to ChatHub through.
+            //
+            // If you ever add a second way to reach ShellRoute.ChatHub, that
+            // invariant dies and this must become a consume-and-clear.
+            var pendingChatHubLink by remember { mutableStateOf<PushDeepLink?>(null) }
+            val pushLink by PushNavigator.pending.collectAsState()
+            LaunchedEffect(pushLink) {
+                val link = PushNavigator.consume() ?: return@LaunchedEffect
+                when (link.target) {
+                    PushTarget.DM ->
+                        // With the counterpart resolved, open the thread directly;
+                        // without it, the conversation list is the honest landing.
+                        if (link.entityId != null) {
+                            openChat(link.entityId, null)
+                        } else {
+                            route = ShellRoute.Conversations
+                        }
+                    PushTarget.COMMUNITY_CHAT,
+                    PushTarget.CONVOY_CHAT,
+                    -> {
+                        pendingChatHubLink = link
+                        route = ShellRoute.ChatHub
+                    }
+                    PushTarget.CONVOYS -> route = ShellRoute.Convoys
+                    PushTarget.FRIENDS -> route = ShellRoute.Friends
+                    PushTarget.EVENT -> route = ShellRoute.Events
+                    PushTarget.SUBSCRIPTION -> route = ShellRoute.Subscription
+                    PushTarget.NOTIFICATIONS -> route = ShellRoute.Notifications
+                }
             }
 
             // Target member whose read-only profile is open, carried alongside the
@@ -1736,6 +1791,7 @@ fun AuthenticatedApp(
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
                         convoyOpenCreate = convoyOpenCreate,
+                        chatHubPushLink = pendingChatHubLink,
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
@@ -2732,6 +2788,9 @@ private fun RouteHost(
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
     convoyOpenCreate: Boolean,
+    // Destination of the push tap that opened the chat hub, if that is why it is
+    // open. Forwarded to ChatHubRoute, which owns tab/channel sub-navigation.
+    chatHubPushLink: PushDeepLink?,
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
@@ -2936,6 +2995,11 @@ private fun RouteHost(
 
         ShellRoute.Notifications ->
             if (notificationsRepository != null) {
+                // The other moment the POST_NOTIFICATIONS ask is self-evident:
+                // the member opened their notification inbox. Asks at most once
+                // ever (shared gate with the chat hub); a denial leaves this
+                // screen fully functional.
+                RequestPushPermissionEffect()
                 NotificationsRoute(
                     repository = notificationsRepository,
                     coordinator = notificationsCoordinator,
@@ -3040,6 +3104,14 @@ private fun RouteHost(
 
         ShellRoute.Chat ->
             if (dmRepository != null && dmChatOtherUid != null) {
+                // Mirror of the chat hub's registration: while this thread is on
+                // screen, a push for THIS conversation is suppressed (the member
+                // is watching the messages arrive). Cleared on dispose.
+                DisposableEffect(dmChatOtherUid) {
+                    val chat = ActiveChat.Dm(dmChatOtherUid)
+                    ActiveChatRegistry.set(chat)
+                    onDispose { ActiveChatRegistry.clear(chat) }
+                }
                 ChatRoute(
                     repository = dmRepository,
                     uid = uid,
@@ -3070,6 +3142,7 @@ private fun RouteHost(
                 onViewProfile = openProfileIfWired,
                 // Backs the block action on the hub's long-press message sheet.
                 blockingRepository = blockingRepository,
+                pushDeepLink = chatHubPushLink,
             )
 
         ShellRoute.Badges ->

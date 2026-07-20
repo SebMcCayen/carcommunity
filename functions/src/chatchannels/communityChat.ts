@@ -260,8 +260,11 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   // per-(sender, window) notification id caps a repeat-mentioner at one notice
   // per window via the same idempotent create-if-absent the convoy chat uses.
   //
-  // NOTE: FCM push is intentionally deferred (end-of-MVP Firebase console setup),
-  // consistent with the DM + notifications domains.
+  // NOTE: push follows the in-app notification automatically (the
+  // notifications-onNotificationCreated trigger). That means MENTIONS PUSH BUT
+  // ORDINARY COMMUNITY MESSAGES DO NOT — there is deliberately no per-message
+  // producer, so pushing every community message stays impossible by
+  // construction rather than by policy.
   if (mentions.length > 0) {
     const senderName = senderProfile.displayName ?? 'En medlem';
     const notificationId = communityMentionNotificationId(actor.uid, new Date());

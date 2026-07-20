@@ -9,12 +9,15 @@
  *   writeInAppNotification writer, read-state via the notifications.markRead
  *   / markAllRead callables), so the backend stays the sole authority for
  *   notification eligibility and content (legacy design rule).
- * - `userPrivate/{uid}/pushTokens/{tokenId}` — push token registrations.
- *   Per the migration mapping, only the SHA-256 token hash is stored (the
- *   hash IS the document ID, making registration idempotent); the raw FCM
- *   token is never persisted, logged, or returned. Actual FCM delivery
- *   (`sendPushNotification`) ships with the Firebase console/FCM setup at
- *   the end of the MVP.
+ * - `userPrivate/{uid}/pushTokens/{tokenId}` — push token registrations, one
+ *   per device. The SHA-256 token hash IS the document ID (making
+ *   registration idempotent) and the raw FCM token is stored in the document,
+ *   because FCM addresses a device by the token itself. The raw token is never
+ *   logged or returned, and the collection is client-inaccessible.
+ * - Push delivery: the `notifications-onNotificationCreated` Firestore trigger
+ *   (notifications/sendPush.ts) pushes each inbox item to those devices. It
+ *   hangs off the inbox write so push INHERITS the eligibility decision below
+ *   rather than duplicating it — see decidePushDelivery.
  * - Delivery eligibility (legacy invariants): deleted users receive
  *   nothing; suspended users receive ONLY the essential account notices;
  *   users may opt out per category via
@@ -57,7 +60,9 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  * activating them as a delivery surface needs the product/security review
  * this domain mandates.
  *
- * Producers today (all IN-APP only — no push path is wired):
+ * Producers today. Each writes the in-app inbox item; the
+ * notifications-onNotificationCreated trigger turns that item into a push, so
+ * no producer sends push directly and none can bypass the opt-outs:
  *  - convoy_invite   — convoy/manageConvoy.ts (invite)
  *  - direct_message  — dm/manageDirectMessages.ts (sendMessage; first message
  *                      of an unread run only)
@@ -164,8 +169,16 @@ export const PUSH_NOTIFICATIONS_FLAG_DEFAULT = true;
 // ---------------------------------------------------------------------------
 
 /**
- * SHA-256 hex of the raw push token — the ONLY representation ever stored
- * (doubles as the pushTokens document ID for idempotent registration).
+ * SHA-256 hex of the raw push token — the pushTokens document ID, which makes
+ * registration idempotent (re-registering the same token hits the same doc).
+ *
+ * NOTE: this used to be the ONLY representation stored. It could not stay that
+ * way: FCM addresses a device BY the raw token, so a hash-only registry can
+ * never actually send. The raw token now lives in the document's `token` field
+ * (see buildPushTokenDocument) and the hash is demoted to what it is good at —
+ * a stable, collision-free document ID. The compensating controls are in the
+ * security rules (`pushTokens` is now fully client-inaccessible) rather than in
+ * the storage format.
  */
 export function hashPushToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
@@ -273,6 +286,291 @@ export function decideInAppDelivery(
   return { deliver: true };
 }
 
+export type PushDeliveryDecision =
+  | { deliver: true; includePreview: boolean }
+  | { deliver: false; reason: 'deleted' | 'suspended' | 'opted_out' | 'push_opted_out' };
+
+/**
+ * Whether a PUSH may be sent for a notification that is being written to the
+ * in-app inbox.
+ *
+ * This deliberately does NOT re-implement eligibility: it CALLS
+ * decideInAppDelivery first and inherits its answer verbatim. Push is strictly
+ * a subset of in-app — if a member does not get the inbox item (deleted,
+ * suspended, or `inApp: false` for the category) they can never get a push for
+ * it. Only after that passes is the push-specific `push: false` opt-out
+ * consulted. Keeping the two decisions nested rather than parallel is the whole
+ * point: a member who silenced `convoy_chat` silences it everywhere, and any
+ * future category or eligibility rule added to decideInAppDelivery governs push
+ * automatically without a second edit.
+ *
+ * `includePreview` carries the lock-screen content decision (see
+ * pushPreviewsEnabled).
+ */
+export function decidePushDelivery(
+  category: NotificationCategory,
+  recipientState: UserAccessState,
+  preferences: unknown,
+): PushDeliveryDecision {
+  const inApp = decideInAppDelivery(category, recipientState, preferences);
+  if (!inApp.deliver) {
+    return { deliver: false, reason: inApp.reason };
+  }
+  const entry =
+    preferences && typeof preferences === 'object'
+      ? (preferences as Record<string, unknown>)[category]
+      : undefined;
+  // Essential account notices ignore the push opt-out exactly as
+  // decideInAppDelivery ignores the in-app one.
+  if (
+    !isEssentialCategory(category) &&
+    entry &&
+    typeof entry === 'object' &&
+    (entry as Record<string, unknown>).push === false
+  ) {
+    return { deliver: false, reason: 'push_opted_out' };
+  }
+  return { deliver: true, includePreview: pushPreviewsEnabled(preferences) };
+}
+
+/**
+ * Whether message previews may appear in the push payload — i.e. on a LOCK
+ * SCREEN, where anyone holding the phone can read them.
+ *
+ * Decision for this slice: previews are ON by default. The content shown is the
+ * already-truncated `previewText` the inbox item carries (<=200 chars), and
+ * defaulting to silent "New message" notifications for a car-community social
+ * app makes the feature substantially less useful than the platform norm every
+ * member is used to.
+ *
+ * The READ side of the escape hatch ships now even though no UI writes it: an
+ * optional boolean `userPrivate/{uid}.notificationPreferences.pushPreviews`,
+ * absent === true. A member who wants titles-only on the lock screen therefore
+ * needs an Android toggle writing one boolean, not a server change — which is
+ * what keeps the eventual setting cheap instead of impossible.
+ */
+export function pushPreviewsEnabled(preferences: unknown): boolean {
+  if (!preferences || typeof preferences !== 'object') {
+    return true;
+  }
+  return (preferences as Record<string, unknown>).pushPreviews !== false;
+}
+
+// ---------------------------------------------------------------------------
+// Deep links
+// ---------------------------------------------------------------------------
+
+/**
+ * Where tapping a push should land. Values mirror screens the Android shell
+ * ALREADY has (ShellRoute / ChatHub tabs) — this is a naming of existing
+ * destinations, not a new navigation graph.
+ */
+export const PUSH_DEEP_LINK_TARGETS = [
+  'dm',
+  'community_chat',
+  'convoy_chat',
+  'convoys',
+  'friends',
+  'event',
+  'subscription',
+  'notifications',
+] as const;
+export type PushDeepLinkTarget = (typeof PUSH_DEEP_LINK_TARGETS)[number];
+
+export interface PushDeepLink {
+  target: PushDeepLinkTarget;
+  /** Entity the target needs (otherUid, convoyId, eventId); null when none. */
+  entityId: string | null;
+}
+
+/**
+ * Derives the tap destination from the category + the `relatedEntityId` that
+ * producers ALREADY write — no producer changes and no new wire field.
+ *
+ * The one non-obvious case is direct_message, whose relatedEntityId is the
+ * conversation pairId (`uidA__uidB`, sorted). The Android DM screen opens by
+ * the OTHER member's uid, so the recipient's own uid is subtracted out here.
+ */
+export function buildPushDeepLink(
+  category: NotificationCategory,
+  relatedEntityId: string | null | undefined,
+  recipientUid: string,
+): PushDeepLink {
+  switch (category) {
+    case 'direct_message': {
+      // Strict: the pairId must split into EXACTLY two parts, one of which is
+      // the recipient — then the other is the counterpart. A loose
+      // "first segment that isn't me" search would, given anything that is not
+      // a well-formed pairId, hand back an arbitrary segment as a uid and
+      // deep-link the member into a stranger's thread.
+      //
+      // dm-core.ts states UIDs are alphanumeric so `__` is unambiguous, and
+      // today that holds (Firebase auto-generates 28-char alphanumeric ids and
+      // nothing here mints custom uids) — but its own uidSchema is
+      // `z.string().max(128)` with no character class, so the property is
+      // asserted rather than enforced. This parse does not depend on it: an
+      // ambiguous split yields the wrong PART COUNT and falls back safely.
+      const parts = relatedEntityId ? relatedEntityId.split('__') : [];
+      const otherUid =
+        parts.length === 2 && parts.includes(recipientUid)
+          ? (parts.find((part) => part !== recipientUid) ?? null)
+          : null;
+      // Without a resolvable counterpart the thread cannot be opened; the
+      // conversation list is the closest correct destination.
+      return otherUid ? { target: 'dm', entityId: otherUid } : { target: 'dm', entityId: null };
+    }
+    case 'convoy_chat':
+      return { target: 'convoy_chat', entityId: relatedEntityId ?? null };
+    case 'community_chat':
+      // relatedEntityId is the message id; the community channel has no
+      // per-message anchor, so the channel itself is the destination.
+      return { target: 'community_chat', entityId: null };
+    case 'convoy_invite':
+      return { target: 'convoys', entityId: null };
+    case 'friend_request':
+      return { target: 'friends', entityId: relatedEntityId ?? null };
+    case 'event_reminder':
+    case 'event_updated':
+    case 'event_cancelled':
+      return { target: 'event', entityId: relatedEntityId ?? null };
+    case 'subscription_status':
+      return { target: 'subscription', entityId: null };
+    default:
+      return { target: 'notifications', entityId: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FCM payload
+// ---------------------------------------------------------------------------
+
+export interface PushPayloadInput {
+  category: NotificationCategory;
+  title: string;
+  previewText: string;
+  notificationId: string;
+  relatedEntityId?: string | null;
+  recipientUid: string;
+  includePreview: boolean;
+}
+
+/**
+ * The FCM `data` map for one notification.
+ *
+ * DATA-ONLY on purpose — no `notification` block. A `notification` block is
+ * rendered by the system while the app is backgrounded, which would defeat both
+ * per-category channel routing and the "don't notify me about the chat I am
+ * staring at" suppression: the client must own display in every state. All
+ * values are strings (an FCM data map cannot hold anything else).
+ */
+export function buildPushPayload(input: PushPayloadInput): Record<string, string> {
+  const link = buildPushDeepLink(input.category, input.relatedEntityId, input.recipientUid);
+  const payload: Record<string, string> = {
+    category: input.category,
+    title: input.title.slice(0, MAX_NOTIFICATION_TITLE_LENGTH),
+    notificationId: input.notificationId,
+    target: link.target,
+  };
+  if (input.includePreview && input.previewText) {
+    payload.previewText = input.previewText.slice(0, MAX_NOTIFICATION_PREVIEW_LENGTH);
+  }
+  if (link.entityId) {
+    payload.entityId = link.entityId;
+  }
+  return payload;
+}
+
+/**
+ * FCM send errors that mean the token is permanently dead and must be dropped
+ * from the registry. Anything else (quota, transient unavailability) is a
+ * retryable condition and must NOT delete a live registration.
+ */
+const DEAD_TOKEN_ERROR_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+  'messaging/invalid-argument',
+]);
+
+export function isDeadTokenError(code: string | undefined | null): boolean {
+  return code ? DEAD_TOKEN_ERROR_CODES.has(code) : false;
+}
+
+/** FCM caps a single multicast at 500 tokens. */
+export const FCM_MULTICAST_LIMIT = 500;
+
+export function chunkTokens<T>(items: readonly T[], size = FCM_MULTICAST_LIMIT): T[][] {
+  if (size < 1) {
+    throw new Error('chunk size must be >= 1');
+  }
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+/**
+ * How many device registrations one member may hold.
+ *
+ * WHY A CAP AT ALL
+ * ----------------
+ * The document ID is the token hash, so registration is idempotent per device
+ * — but the token is client-supplied, so the number of DISTINCT tokens a uid
+ * can create is bounded only by how many times the client calls the callable.
+ * Without a cap, `userPrivate/{uid}/pushTokens` grows without limit, and every
+ * inbox item for that uid then pays for it twice: the send trigger reads the
+ * whole collection, and the prune pass writes against it.
+ *
+ * The cap turns that unbounded fan-out into a constant. It also bounds the
+ * prune batch and the FCM multicast, so neither can grow into a request-size
+ * problem no matter what a client does.
+ *
+ * 12 is deliberately generous: a member with a phone, a tablet and a head unit
+ * uses three, and the rest is slack for reinstalls and OS-level token rotation
+ * (each of which mints a token that the old device never unregisters).
+ */
+export const MAX_PUSH_TOKENS_PER_USER = 12;
+
+/** A registry row considered for eviction: its id and when it last checked in. */
+export interface PushTokenEvictionCandidate {
+  tokenId: string;
+  /** Epoch millis of lastSeenAt, or null when the row predates that field. */
+  lastSeenAtMs: number | null;
+}
+
+/**
+ * Which existing registrations must go so that adding ONE new token leaves the
+ * member at or under `limit`.
+ *
+ * Least-recently-seen first: the token most likely to be dead is the one whose
+ * device has not checked in for longest. Rows with no `lastSeenAt` are legacy
+ * and sort oldest — they are also the unsendable hash-only rows, so evicting
+ * them first is doubly correct. Ties break on tokenId purely so the result is
+ * deterministic (and therefore testable).
+ */
+export function selectEvictableTokenIds(
+  existing: readonly PushTokenEvictionCandidate[],
+  limit = MAX_PUSH_TOKENS_PER_USER,
+): string[] {
+  if (limit < 1) {
+    throw new Error('limit must be >= 1');
+  }
+  // +1 for the token about to be written.
+  const overflow = existing.length + 1 - limit;
+  if (overflow <= 0) {
+    return [];
+  }
+  return [...existing]
+    .sort((a, b) => {
+      const aSeen = a.lastSeenAtMs ?? Number.NEGATIVE_INFINITY;
+      const bSeen = b.lastSeenAtMs ?? Number.NEGATIVE_INFINITY;
+      if (aSeen !== bSeen) return aSeen - bSeen;
+      return a.tokenId < b.tokenId ? -1 : a.tokenId > b.tokenId ? 1 : 0;
+    })
+    .slice(0, overflow)
+    .map((entry) => entry.tokenId);
+}
+
 // ---------------------------------------------------------------------------
 // Document builders
 // ---------------------------------------------------------------------------
@@ -309,12 +607,27 @@ export function buildNotificationDocument(
   };
 }
 
-/** userPrivate/{uid}/pushTokens/{tokenId} document — never the raw token. */
+/**
+ * userPrivate/{uid}/pushTokens/{tokenId} document.
+ *
+ * Stores the RAW FCM token in `token` — FCM has no way to address a device by
+ * a hash, so the previous hash-only registry made sending impossible. The
+ * token is treated as personal data (a device identifier):
+ *  - `pushTokens` denies ALL client access in firebase/firestore.rules (the
+ *    client already knows its own token from the FCM SDK and never needs to
+ *    read the registry back), so the raw token is reachable only by the Admin
+ *    SDK.
+ *  - It is never logged or returned by a callable — registerPushToken still
+ *    responds with the tokenId hash only.
+ *  - It is erased with the rest of `userPrivate/{uid}` on account deletion
+ *    (functions/src/account/scheduled.ts recursively deletes the subcollection).
+ */
 export function buildPushTokenDocument(
   input: RegisterPushTokenInput,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
   return {
+    token: input.token,
     platform: input.platform,
     appVersion: input.appVersion ?? null,
     buildNumber: input.buildNumber ?? null,

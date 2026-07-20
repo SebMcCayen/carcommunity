@@ -174,15 +174,21 @@
     },
     "pushTokenRegistration": {
       "type": "object",
-      "description": "Firestore `userPrivate/{uid}/pushTokens/{tokenId}` where tokenId is the SHA-256 hex of the raw FCM token. Owner-only read; all writes via the register/unregister callables.",
+      "description": "Firestore `userPrivate/{uid}/pushTokens/{tokenId}` where tokenId is the SHA-256 hex of the raw FCM token. One document per device, so a member may hold several. NO client access at all (read included) — the document carries the raw, send-addressable FCM token, which only the Admin SDK needs; the client learns its own token from the FCM SDK. All writes go through the register/unregister callables. Erased with userPrivate/{uid} on account deletion. Dead tokens (FCM UNREGISTERED / INVALID_ARGUMENT) are pruned by the notifications-onNotificationCreated send path.",
       "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Raw FCM registration token. Required to send — FCM addresses a device by the token itself. Never logged, never returned by a callable, never client-readable."
+        },
         "platform": { "$ref": "#/$defs/pushTokenPlatform" },
         "appVersion": { "type": ["string", "null"], "minLength": 1, "maxLength": 50 },
         "buildNumber": { "type": ["string", "null"], "minLength": 1, "maxLength": 50 },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "lastSeenAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
-      "required": ["platform", "appVersion", "buildNumber", "createdAt", "lastSeenAt"],
+      "required": ["token", "platform", "appVersion", "buildNumber", "createdAt", "lastSeenAt"],
       "additionalProperties": false
     }
   }

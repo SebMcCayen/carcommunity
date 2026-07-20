@@ -7,14 +7,21 @@ import com.kungsbackacarcommunity.app.notifications.NotificationCategory
  * JVM-testable, no Android/Firebase imports.
  *
  * Maps an incoming FCM message to what the system notification should show.
- * The expected `data` keys mirror the backend notification document built by
- * functions/src/notifications/notifications-core.ts `buildNotificationDocument`
- * (category, title, previewText, body, actionType, relatedEntityId) plus the
- * inbox `notificationId`. Actual FCM sends ship with the end-of-MVP Firebase
- * console setup (`sendPushNotification` is deliberately not implemented yet —
- * see functions/src/notifications/pushTokens.ts), so this mapping is the
- * client half of that contract: unknown or missing keys degrade gracefully to
- * a neutral system notice instead of crashing on a malformed message.
+ * The expected `data` keys are exactly those produced by `buildPushPayload` in
+ * functions/src/notifications/notifications-core.ts: category, title,
+ * notificationId, target, and the optional previewText + entityId.
+ *
+ * The backend sends DATA-ONLY messages (no `notification` block) so the client
+ * owns display in every app state — which is what makes per-category channels
+ * and the "don't notify me about the chat I'm reading" suppression possible.
+ * The notification-block fallbacks below therefore only matter for a malformed
+ * or legacy send. Unknown or missing keys degrade to a neutral system notice
+ * rather than crashing.
+ *
+ * `previewText` is ABSENT when the member has lock-screen previews off — the
+ * body simply becomes null and the notification shows the title alone. There is
+ * nothing to suppress client-side: content that must not appear on the lock
+ * screen is never sent.
  */
 
 /** Android notification channels, grouped from the backend categories. */
@@ -41,29 +48,29 @@ data class PushDisplayModel(
     val category: NotificationCategory,
     /** Inbox item id (notifications/{uid}/items/{id}) when the sender included one. */
     val notificationId: String?,
-    /** Deep-link hint (open_event, open_notifications, ...); navigation is a follow-up. */
-    val actionType: String?,
-    val relatedEntityId: String?,
+    /** Where tapping this notification should navigate. */
+    val deepLink: PushDeepLink,
 )
 
 object PushDisplay {
 
-    // Data keys — buildNotificationDocument field names (notifications-core.ts).
+    // Data keys — buildPushPayload field names (notifications-core.ts).
     private const val KEY_CATEGORY = "category"
     private const val KEY_TITLE = "title"
     private const val KEY_PREVIEW_TEXT = "previewText"
     private const val KEY_BODY = "body"
-    private const val KEY_ACTION_TYPE = "actionType"
-    private const val KEY_RELATED_ENTITY_ID = "relatedEntityId"
+    private const val KEY_TARGET = "target"
+    private const val KEY_ENTITY_ID = "entityId"
     private const val KEY_NOTIFICATION_ID = "notificationId"
 
     /**
-     * Whether a received push may be displayed at all. Tokens outlive
-     * sign-out (unregister-on-sign-out is deferred — there is no
-     * pre-sign-out hook yet), so on a shared device a signed-out shell can
-     * still receive the previous user's pushes; displaying them would leak
-     * that user's account/event details. Signed-in AND permission-granted
-     * are both required.
+     * Whether a received push may be displayed at all. Signed-in AND
+     * permission-granted are both required.
+     *
+     * The signed-in check is defence in depth for the shared-device case: the
+     * token IS now unregistered on sign-out, but that is a network call which
+     * can fail or race an in-flight send, so a signed-out shell must still
+     * refuse to display what would be the previous member's DMs.
      */
     fun shouldDisplay(signedIn: Boolean, permissionGranted: Boolean): Boolean =
         signedIn && permissionGranted
@@ -111,8 +118,10 @@ object PushDisplay {
             channelId = channelFor(category).id,
             category = category,
             notificationId = firstNonBlank(data[KEY_NOTIFICATION_ID]),
-            actionType = firstNonBlank(data[KEY_ACTION_TYPE]),
-            relatedEntityId = firstNonBlank(data[KEY_RELATED_ENTITY_ID]),
+            deepLink = PushDeepLink(
+                target = PushTarget.fromWire(firstNonBlank(data[KEY_TARGET])),
+                entityId = firstNonBlank(data[KEY_ENTITY_ID]),
+            ),
         )
     }
 

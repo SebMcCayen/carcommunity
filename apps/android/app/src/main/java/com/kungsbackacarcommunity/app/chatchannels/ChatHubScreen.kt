@@ -27,6 +27,8 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,6 +58,11 @@ import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
+import com.kungsbackacarcommunity.app.push.ActiveChat
+import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
+import com.kungsbackacarcommunity.app.push.PushDeepLink
+import com.kungsbackacarcommunity.app.push.PushTarget
+import com.kungsbackacarcommunity.app.push.RequestPushPermissionEffect
 
 /** Test tag on the chat-hub root, so UI tests can assert it renders. */
 const val CHAT_HUB_TEST_TAG = "chat_hub"
@@ -137,6 +144,10 @@ fun ChatHubRoute(
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    // Set when the hub was opened by tapping a push, so it lands on the tab (and
+    // convoy channel) the notification was about instead of the default
+    // Community tab. Consumed once — backing out must not re-apply it.
+    pushDeepLink: PushDeepLink? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
@@ -155,6 +166,7 @@ fun ChatHubRoute(
             applyStatusBarInset = true,
             onViewProfile = onViewProfile,
             blockingRepository = blockingRepository,
+            pushDeepLink = pushDeepLink,
         )
     }
 }
@@ -327,6 +339,7 @@ private fun ChatHubContent(
     applyStatusBarInset: Boolean,
     onViewProfile: ((String) -> Unit)?,
     blockingRepository: BlockingRepository?,
+    pushDeepLink: PushDeepLink? = null,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(ChatTab.Community) }
 
@@ -336,6 +349,45 @@ private fun ChatHubContent(
     // Convoys sub-nav: the open convoy, or null to show the convoy list.
     var openConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
     var openConvoyTitle by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // A push tap picks the landing tab. Keyed on the link and applied once, so
+    // navigating away inside the hub (or backing out of a channel) is not undone
+    // on the next recomposition. The convoy TITLE is deliberately left null —
+    // it is display-only and the channel resolves it itself.
+    LaunchedEffect(pushDeepLink) {
+        when (pushDeepLink?.target) {
+            PushTarget.COMMUNITY_CHAT -> selectedTab = ChatTab.Community
+            PushTarget.CONVOY_CHAT -> {
+                selectedTab = ChatTab.Convoys
+                openConvoyId = pushDeepLink.entityId
+            }
+            PushTarget.FRIENDS -> selectedTab = ChatTab.Friends
+            PushTarget.NOTIFICATIONS -> selectedTab = ChatTab.Notifications
+            else -> Unit
+        }
+    }
+
+    // Tell the messaging service which conversation is on screen so it does not
+    // post a banner for the messages the member is watching arrive. Cleared on
+    // dispose, so backgrounding the app re-enables notifications.
+    val activeChat: ActiveChat? =
+        when {
+            selectedTab == ChatTab.Friends && dmOtherUid != null -> ActiveChat.Dm(dmOtherUid!!)
+            selectedTab == ChatTab.Convoys && openConvoyId != null ->
+                ActiveChat.Convoy(openConvoyId!!)
+            selectedTab == ChatTab.Community -> ActiveChat.Community
+            else -> null
+        }
+    DisposableEffect(activeChat) {
+        activeChat?.let(ActiveChatRegistry::set)
+        onDispose { activeChat?.let(ActiveChatRegistry::clear) }
+    }
+
+    // The one place the POST_NOTIFICATIONS ask makes sense: the member is
+    // looking at their messages, so "tell me when new ones arrive" needs no
+    // explanation. Asks at most once ever, and a denial changes nothing here —
+    // the hub and the in-app inbox work exactly the same either way.
+    RequestPushPermissionEffect()
 
     val inFriendThread = selectedTab == ChatTab.Friends && dmOtherUid != null
     val inConvoyChannel = selectedTab == ChatTab.Convoys && openConvoyId != null

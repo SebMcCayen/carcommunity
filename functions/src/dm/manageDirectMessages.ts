@@ -249,11 +249,12 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
     }).catch(() => undefined);
   }
 
-  // NOTE: FCM push to the recipient is intentionally deferred — actual FCM
-  // delivery (sendPushNotification) ships with the end-of-MVP Firebase console
-  // setup (notifications/pushTokens.ts). The unread aggregate + conversation
-  // list already drive the in-app chat-bubble badge; the in-app notification
-  // above is the inbox surface, not a push.
+  // NOTE: push is NOT sent from here. The in-app notification written above is
+  // picked up by the notifications-onNotificationCreated trigger
+  // (notifications/sendPush.ts), which pushes it to the recipient's devices —
+  // so the direct_message opt-out honoured by writeInAppNotification governs
+  // push automatically. The unread aggregate + conversation list continue to
+  // drive the in-app chat-bubble badge.
 
   return { conversationId: pairId, messageId: messageRef.id };
 });

@@ -161,15 +161,24 @@ describe('notifications-core builders', () => {
     expect(docData.createdAt).toBe('SERVER_TS');
   });
 
-  it('builds token documents without the raw token', () => {
+  // The registry deliberately DOES store the raw token now. FCM addresses a
+  // device by the token itself, so the previous hash-only document could never
+  // be sent to. The protection moved from the storage format to the security
+  // rules: userPrivate/{uid}/pushTokens denies all client access (see
+  // firebase/firestore.rules), the callable still returns only the hash, and
+  // the subcollection is erased with userPrivate on account deletion.
+  it('builds token documents holding the raw token, keyed by its hash', () => {
     const docData = buildPushTokenDocument(
       { token: 'fcm-secret-token', platform: 'android', appVersion: '1.2.3' },
       () => 'SERVER_TS',
     );
-    expect(JSON.stringify(docData)).not.toContain('fcm-secret-token');
+    expect(docData.token).toBe('fcm-secret-token');
     expect(docData.platform).toBe('android');
     expect(docData.appVersion).toBe('1.2.3');
     expect(docData.buildNumber).toBeNull();
+    // The document ID stays the hash, which is what keeps re-registration
+    // idempotent.
+    expect(hashPushToken('fcm-secret-token')).toMatch(/^[a-f0-9]{64}$/);
   });
 });
 

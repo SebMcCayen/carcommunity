@@ -743,9 +743,12 @@ describe('Firestore – notifications (Phase 9l)', () => {
     await assertFails(deleteDoc(doc(ctx.firestore(), ITEM)));
   });
 
-  it('owner can read their own push token registrations, others cannot', async () => {
+  // Registrations hold the RAW FCM token (a hash-only registry cannot send),
+  // so the collection is closed to clients entirely — the owner included. The
+  // client gets its own token from the FCM SDK and never reads this back.
+  it('nobody can read push token registrations, not even the owner', async () => {
     const owner = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(getDoc(doc(owner.firestore(), TOKEN)));
+    await assertFails(getDoc(doc(owner.firestore(), TOKEN)));
     const other = testEnv.authenticatedContext(OTHER);
     await assertFails(getDoc(doc(other.firestore(), TOKEN)));
   });
