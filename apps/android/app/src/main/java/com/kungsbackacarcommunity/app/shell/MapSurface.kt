@@ -349,8 +349,9 @@ interface MapSurface {
     fun consumeIncidentTap()
 
     /**
-     * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
-     * the stub, which has no rotatable camera.
+     * Reset the map to north-up: ease the camera bearing back to 0. Moves no
+     * camera on the stub, which has no rotatable one — it only records the call
+     * in [StubMapSurface.resetNorthCount].
      */
     fun resetNorth()
 

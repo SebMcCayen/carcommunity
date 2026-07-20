@@ -25,6 +25,7 @@ import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
@@ -497,11 +498,18 @@ class MapFirstShellTest {
         val compass = topOf(MAP_HOME_COMPASS_TAG)
         assertTrue("live-location must lead the stack", live < layers)
         assertTrue("layers must be above the compass", layers < compass)
-        // The stack tightened up: live-location took the top slot, so it sits no
-        // further from layers than one control's spacing.
-        assertTrue(
+        // The stack tightened up rather than leaving a hole: live-location sits
+        // exactly ONE slot above layers — one control (KccSpacing.s12) plus the
+        // Column's spacing (KccSpacing.s3). Asserted against those tokens
+        // directly, rather than by comparing two inter-control distances, so the
+        // failure message points at the real invariant: a stray spacer or a
+        // reserved empty slot widens this gap and nothing else does.
+        val oneSlot = KccSpacing.s12.value + KccSpacing.s3.value
+        assertEquals(
             "no gap may be left where the report control would have been",
-            layers - live < compass - layers + 1f,
+            oneSlot.toDouble(),
+            (layers - live).toDouble(),
+            1.0,
         )
     }
 
