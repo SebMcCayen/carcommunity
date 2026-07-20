@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -86,7 +87,20 @@ fun ConvoyStatusBar(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    var confirmEnd by remember { mutableStateOf(false) }
+    // The convoy the open confirm dialog is ABOUT, captured when the user opened
+    // it — not a bare boolean. [state] is hoisted and refreshes underneath this
+    // composable (the coordinator re-fetches the convoy list after every
+    // mutation, and `activeConvoy` re-picks which convoy the bar describes), so a
+    // boolean flag plus a `state.convoyId` read at confirm time would end
+    // WHICHEVER convoy the bar happened to be showing at the moment of the tap —
+    // not the one named in the dialog the user was answering.
+    //
+    // Deliberately NOT `remember(state.convoyId)`: keying the flag would make the
+    // dialog silently disappear under a background refresh, cancelling a
+    // considered destructive decision without a word and leaving the user to
+    // wonder whether it went through. Capturing the id instead keeps the dialog
+    // up and keeps its meaning fixed — it still ends exactly the convoy it named.
+    var pendingEndConvoyId by remember { mutableStateOf<String?>(null) }
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
@@ -147,10 +161,23 @@ fun ConvoyStatusBar(
                 // Leave (member) / End (owner). Only the owner's variant is wired,
                 // and it confirms first because it ends the drive for everyone.
                 val leaveWired = state.leaveAvailability == ConvoyBarActionAvailability.Wired
+                val leaveEnabled = leaveWired && !state.busy
                 IconButton(
-                    onClick = { confirmEnd = true },
-                    enabled = leaveWired && !state.busy,
+                    onClick = { pendingEndConvoyId = state.convoyId },
+                    enabled = leaveEnabled,
                     modifier = Modifier.testTag(CONVOY_BAR_LEAVE_TAG),
+                    // Destructive red, but only while the control can actually do
+                    // something. Handing the colour to `iconButtonColors` rather
+                    // than hard-tinting the Icon is what lets Material apply its
+                    // own disabled treatment (the derived low-opacity
+                    // `disabledContentColor`, published through LocalContentColor)
+                    // — a hard `tint = error` bypasses that and paints a DISABLED
+                    // member-leave icon in full strength destructive red, which
+                    // reads as tappable and is especially noisy over a moving map.
+                    colors =
+                        IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
                 ) {
                     Icon(
                         imageVector =
@@ -167,7 +194,8 @@ fun ConvoyStatusBar(
                                     else -> R.string.convoy_barLeaveUnavailable
                                 },
                             ),
-                        tint = MaterialTheme.colorScheme.error,
+                        // No explicit tint: LocalContentColor carries whichever of
+                        // the IconButton's enabled/disabled content colours applies.
                     )
                 }
             }
@@ -196,23 +224,28 @@ fun ConvoyStatusBar(
     // Destructive and group-wide: ending is never one tap. The body says out loud
     // that this is not "leave", so an owner looking for a way out for THEMSELVES
     // finds out before they end everyone's drive.
-    if (confirmEnd) {
+    //
+    // The id is read out of the pending state, NOT out of [state], so the convoy
+    // the user is answering about cannot change between opening this dialog and
+    // confirming it.
+    val confirmingConvoyId = pendingEndConvoyId
+    if (confirmingConvoyId != null) {
         AlertDialog(
-            onDismissRequest = { confirmEnd = false },
+            onDismissRequest = { pendingEndConvoyId = null },
             title = { Text(stringResource(R.string.convoy_barEndConfirmTitle)) },
             text = { Text(stringResource(R.string.convoy_barEndConfirmBody)) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        confirmEnd = false
-                        onEndConvoy(state.convoyId)
+                        pendingEndConvoyId = null
+                        onEndConvoy(confirmingConvoyId)
                     },
                 ) {
                     Text(stringResource(R.string.convoy_barEndConfirmAction))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmEnd = false }) {
+                TextButton(onClick = { pendingEndConvoyId = null }) {
                     Text(stringResource(R.string.convoy_barConfirmCancel))
                 }
             },
