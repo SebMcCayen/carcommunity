@@ -9,8 +9,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,22 +35,24 @@ class LiveSharingStopTest {
      */
     @Test
     fun `launching on a scope that is then cancelled loses the call`() {
-        val reached = AtomicInteger(0)
-        val trials = 200
-        repeat(trials) {
-            val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // StandardTestDispatcher queues rather than running eagerly, which is
+        // exactly the real ordering: launch() only schedules, and onDestroy()'s
+        // cancel() lands before the dispatcher ever gets to the body. Making it
+        // explicit rather than sleeping on Dispatchers.IO keeps the assertion
+        // deterministic instead of a race the test hopes to win.
+        val scheduler = TestCoroutineScheduler()
+        val serviceScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
+        var reached = false
+
+        val job =
             serviceScope.launch {
-                delay(1) // any real network call suspends at least this long
-                reached.incrementAndGet()
+                reached = true
             }
-            serviceScope.cancel() // what onDestroy() does
-        }
-        Thread.sleep(200)
-        assertTrue(
-            "expected the cancelled-scope pattern to lose nearly every call, " +
-                "reached=${reached.get()} of $trials",
-            reached.get() < trials / 2,
-        )
+        serviceScope.cancel() // what onDestroy() does
+        scheduler.advanceUntilIdle()
+
+        assertTrue("the launched call should have been cancelled", job.isCancelled)
+        assertFalse("stopSession() must never have reached the backend", reached)
     }
 
     @Test

@@ -240,6 +240,14 @@ class LocationSharingService : Service() {
         } catch (_: SecurityException) {
             // Location permission not granted at runtime. Cannot share — stop
             // cleanly rather than hold a foreground service that publishes nothing.
+            //
+            // startForeground() has already run by this point (the platform
+            // requires it within seconds of the start request), so drop the
+            // notification explicitly instead of waiting for onDestroy: telling
+            // the user we are sharing their location, on the one path where we
+            // have just been refused permission to do so, is the most misleading
+            // thing this notification could say.
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             false
         }

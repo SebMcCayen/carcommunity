@@ -36,12 +36,12 @@ class NotificationChannelRenameTest {
     }
 
     @Test
-    fun recreatingAChannelIdUpdatesItsNameAndDescription() {
+    fun existingChannelId_recreated_updatesNameAndDescription() {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Old name", NotificationManager.IMPORTANCE_LOW)
                 .apply { description = "Old description" },
         )
-        assertEquals("Old name", manager.getNotificationChannel(CHANNEL_ID).name)
+        assertEquals("Old name", requireNotNull(manager.getNotificationChannel(CHANNEL_ID)).name)
 
         // Exactly what LocationSharingService.createNotificationChannel() does on
         // every onCreate, with strings that have since changed.
@@ -50,7 +50,10 @@ class NotificationChannelRenameTest {
                 .apply { description = "New description" },
         )
 
-        val updated = manager.getNotificationChannel(CHANNEL_ID)
+        val updated =
+            requireNotNull(manager.getNotificationChannel(CHANNEL_ID)) {
+                "channel $CHANNEL_ID was not created"
+            }
         assertEquals("New name", updated.name)
         assertEquals("New description", updated.description)
         // Importance is user-owned after creation and is NOT re-applied; the
