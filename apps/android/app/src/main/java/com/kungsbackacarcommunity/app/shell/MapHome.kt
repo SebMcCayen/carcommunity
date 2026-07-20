@@ -429,22 +429,30 @@ fun MapHome(
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             val statusColors = LocalKccStatusColors.current
-            // 0. Compass — a north-arrow rotated by the current map bearing so it
-            //    keeps pointing at true north as the map rotates; tapping it eases
-            //    the map back to north-up. Sits at the top of the stack, above the
-            //    live-location control. The built-in Mapbox compass is disabled in
-            //    MapboxMapSurface so this is the only compass shown.
-            CircleControl(
-                icon = Icons.Filled.Navigation,
-                contentDescription = stringResource(R.string.shell_compass),
-                onClick = { mapSurface.resetNorth() },
-                iconRotationDegrees = -bearing,
-                modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
-            )
-            // 1. Live-location broadcast control — GREEN when sharing. Opens the
+            // 1. Report-incident control — opens the type picker. Shown only
+            //    when incident reporting is available (a repository configured);
+            //    when it is not, the remaining controls close up by one slot and
+            //    live-location leads — no gap, no placeholder holding its place.
+            //    Their order relative to each other is what does not change.
+            //    Deliberately takes CircleControl's DEFAULT surface/onSurface
+            //    colours (like the compass and recenter controls) rather than
+            //    the amber warning colour: it is an "open the report picker"
+            //    affordance, not a live warning state, and an always-amber
+            //    button in a stack of neutral ones reads as a permanent alert.
+            //    Colour in this stack is reserved for ACTIVE state (the green
+            //    live-share control).
+            if (incidentReportingEnabled) {
+                CircleControl(
+                    icon = Icons.Filled.Warning,
+                    contentDescription = stringResource(R.string.incidents_reportButton),
+                    onClick = { reportOpen = true },
+                    modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
+                )
+            }
+            // 2. Live-location broadcast control — GREEN when sharing. Opens the
             //    transparent live-share popup (over the map, no scrim) with the
             //    session options rather than toggling sharing directly.
             CircleControl(
@@ -460,24 +468,7 @@ fun MapHome(
                 onClick = { liveOpen = true },
                 modifier = Modifier.testTag(MAP_HOME_LIVE_TAG),
             )
-            // 1b. Report-incident control — opens the type picker. Shown only
-            //     when incident reporting is available (a repository configured).
-            //     Deliberately takes CircleControl's DEFAULT surface/onSurface
-            //     colours (like the compass and recenter controls) rather than
-            //     the amber warning colour: it is an "open the report picker"
-            //     affordance, not a live warning state, and an always-amber
-            //     button in a stack of neutral ones reads as a permanent alert.
-            //     Colour in this stack is reserved for ACTIVE state (the green
-            //     live-share control).
-            if (incidentReportingEnabled) {
-                CircleControl(
-                    icon = Icons.Filled.Warning,
-                    contentDescription = stringResource(R.string.incidents_reportButton),
-                    onClick = { reportOpen = true },
-                    modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
-                )
-            }
-            // 2. Map-layers control — opens the transparent layers popup
+            // 3. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
             //    those non-default layers is active, so an enabled overlay is
             //    still discoverable from the collapsed control. Day/night counts
@@ -508,13 +499,32 @@ fun MapHome(
                 onClick = { layersOpen = true },
                 modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
             )
-            // 3. Recenter / my-location — calls MapSurface.recenter().
+            // 4. Compass — a north-arrow rotated by the current map bearing so it
+            //    keeps pointing at true north as the map rotates. Tapping it eases
+            //    the map back to north-up AND re-centres on the user in ONE camera
+            //    move (MapSurface.recenterNorthUp) — resetting bearing alone left
+            //    the user looking north at wherever they had panned to, which read
+            //    as the button half-working. Sits directly ABOVE the my-location
+            //    control because the two now do overlapping things and belong
+            //    together as a pair. The built-in Mapbox compass is disabled in
+            //    MapboxMapSurface so this is the only compass shown.
+            CircleControl(
+                icon = Icons.Filled.Navigation,
+                contentDescription = stringResource(R.string.shell_compass),
+                onClick = { mapSurface.recenterNorthUp() },
+                iconRotationDegrees = -bearing,
+                modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
+            )
+            // 5. Recenter / my-location — calls MapSurface.recenter(). Re-centres
+            //    WITHOUT touching bearing, which is what still separates it from
+            //    the compass above: it keeps the map rotated the way the user left
+            //    it.
             CircleControl(
                 icon = Icons.Filled.MyLocation,
                 contentDescription = stringResource(R.string.shell_recenter),
                 onClick = onRecenter,
             )
-            // 4. Chat bubble — opens the chat hub; shows a badge with
+            // 6. Chat bubble — opens the chat hub; shows a badge with
             //    the unread ("missed") message count when > 0.
             ChatCircleControl(
                 unreadCount = unreadChatCount,
@@ -593,7 +603,7 @@ fun MapHome(
 /** Test tag on the floating map-layers control. */
 const val MAP_HOME_LAYERS_TAG = "map_home_layers"
 
-/** Test tag on the floating compass control (top of the right-side stack). */
+/** Test tag on the floating compass control (directly above the my-location control). */
 const val MAP_HOME_COMPASS_TAG = "map_home_compass"
 
 /** Test tag on the collapsed round search button (upper-left). */
@@ -1238,13 +1248,20 @@ private fun ParticipantChip(count: Int) {
 
 /**
  * One floating round map control — the shared shape/size/elevation/haptics of
- * the map's right-side stack (compass, live-location, layers, recenter, chat).
+ * the map's right-side stack (report, live-location, layers, compass, recenter,
+ * chat, top-to-bottom).
  *
  * `internal`, not private, because the turn-by-turn navigation screen draws the
  * SAME controls (see `navigation/turnbyturn/TurnByTurnNavScreen.kt`): its
  * compass and live-location buttons must be the same control as the map home's,
  * not a look-alike, so a change to the map's control language reaches
  * navigation automatically instead of drifting from it.
+ *
+ * What is shared is the control LANGUAGE — shape, size, glyph, colour rules —
+ * not the stack ORDER or the tap behaviour. Those two deliberately diverge:
+ * navigation drives a follow-mode camera, where re-centring means resuming
+ * follow and the my-location control only appears once follow has detached, so
+ * its compass resets bearing only while the map home's compass also re-centres.
  */
 @Composable
 internal fun CircleControl(

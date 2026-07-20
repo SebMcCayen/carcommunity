@@ -609,24 +609,53 @@ class MapboxMapSurface : MapSurface {
         }
     }
 
-    override fun recenter() {
-        // Tapping my-location is the shared re-centre affordance: resume follow,
-        // cancel any pending idle-return timer, and glide to the user. The
-        // idle-return path reuses [easeToUser] so the two never diverge.
+    override fun recenter() = userRequestedRecenter(resetBearingToNorth = false)
+
+    /**
+     * The compass: exactly [recenter], plus north-up folded into the SAME camera
+     * update. Calling `recenter()` and `resetNorth()` back-to-back would issue
+     * two easeTo animations on one camera a frame apart — the second cancels the
+     * first, so the user sees a stutter and loses whichever property the
+     * cancelled animation carried. One cameraOptions carrying centre + zoom +
+     * pitch + bearing(0) cannot fight itself.
+     */
+    override fun recenterNorthUp() = userRequestedRecenter(resetBearingToNorth = true)
+
+    /**
+     * A re-centre the USER asked for, by the my-location control or the compass:
+     * resume follow, cancel any pending idle-return timer, and glide to them.
+     * The idle-return path reuses [easeToUser] so the three never diverge.
+     *
+     * Both entry points share this body rather than repeating it, so the
+     * follow/timer handling cannot drift between the two controls — only the
+     * bearing differs, and that difference is the single parameter.
+     */
+    private fun userRequestedRecenter(resetBearingToNorth: Boolean) {
         followController.onRecenterRequested()
         idleReturnJob?.cancel()
         idleReturnJob = null
-        easeToUser()
+        easeToUser(resetBearingToNorth = resetBearingToNorth)
     }
 
     /**
      * Smoothly glides the camera to the user's current position (or the default
-     * town camera when there is no fix yet), keeping the current 3D tilt. Shared
-     * by the my-location control ([recenter]) and the 10-second idle-return timer
-     * so the re-centre animation is identical for both. A no-op until the map is
-     * composed; wrapped defensively so a missing fix/permission never crashes.
+     * town camera when there is no fix yet), keeping the current 3D tilt, and —
+     * when [resetBearingToNorth] — rotating back to north-up in the same move.
+     * Shared by the my-location control ([recenter]), the compass
+     * ([recenterNorthUp]) and the 10-second idle-return timer: same target, same
+     * zoom, same pitch, same easing and duration for all three, so a re-centre
+     * never looks like a different gesture depending on what triggered it. The
+     * ONE thing that varies is [resetBearingToNorth] — the compass alone folds a
+     * rotation back to north into this same camera update. A no-op until the map
+     * is composed; wrapped defensively so a missing fix/permission never crashes.
+     *
+     * With no fix ([lastPoint] null — no location yet, or permission denied) the
+     * camera still moves, to the default town camera, which is the established
+     * behaviour of the my-location control. The bearing reset does not depend on
+     * having a fix: it rides on the same camera update either way, so the compass
+     * always at least delivers north-up.
      */
-    private fun easeToUser() {
+    private fun easeToUser(resetBearingToNorth: Boolean = false) {
         val map = mapViewRef ?: return
         val target = lastPoint
         runCatching {
@@ -646,6 +675,9 @@ class MapboxMapSurface : MapSurface {
                     }
                     // Keep the 3D tilt when the camera re-centres.
                     pitch(this@MapboxMapSurface.pitch)
+                    // North-up folded into the SAME options — see the KDoc: this
+                    // is why the compass does not issue its own second easeTo.
+                    if (resetBearingToNorth) bearing(0.0)
                 }
             // Smoothly glide to the target rather than jumping instantly, via the
             // camera-animations plugin. A pleasant ~1s ease reads as intentional

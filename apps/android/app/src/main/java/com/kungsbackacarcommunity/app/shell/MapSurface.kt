@@ -349,10 +349,29 @@ interface MapSurface {
     fun consumeIncidentTap()
 
     /**
-     * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
-     * the stub, which has no rotatable camera.
+     * Reset the map to north-up: ease the camera bearing back to 0. Moves no
+     * camera on the stub, which has no rotatable one — it only records the call
+     * in [StubMapSurface.resetNorthCount].
      */
     fun resetNorth()
+
+    /**
+     * Re-centre on the user AND reset the bearing to north-up, as ONE camera
+     * move — what the floating compass control does.
+     *
+     * Deliberately a single method rather than a [resetNorth] + [recenter] pair
+     * at the call site: those are two independent eased camera animations on the
+     * same camera, and the second one issued cancels the first mid-flight, so a
+     * caller firing both gets a visible stutter and, depending on ordering, a
+     * bearing or a centre that never arrives. Implementations MUST express this
+     * as one camera update.
+     *
+     * Recentring is best-effort in the same way [recenter] is — with no location
+     * fix (or no location permission) there is nothing to centre ON, so the
+     * implementation falls back to the same default camera [recenter] uses. The
+     * north-up reset is NOT best-effort: it applies either way.
+     */
+    fun recenterNorthUp()
 
     /**
      * Re-apply the device-location component after the runtime fine-location
@@ -589,8 +608,28 @@ class StubMapSurface(
         incidentTapFlow.value = null
     }
 
-    /** No rotatable camera on the stub, so resetting to north is a no-op. */
-    override fun resetNorth() = Unit
+    /**
+     * How many times a north-up reset was requested, by either [resetNorth] or
+     * [recenterNorthUp]. The stub has no rotatable camera, so the count is the
+     * only observable the reset leaves behind.
+     */
+    var resetNorthCount: Int = 0
+        private set
+
+    /** No rotatable camera on the stub, so resetting to north only counts. */
+    override fun resetNorth() {
+        resetNorthCount += 1
+    }
+
+    /**
+     * Counts as BOTH a re-centre and a north reset, which is what makes the
+     * compass's re-centre assertable: a compass wired to [resetNorth] alone
+     * leaves [recenterCount] at 0.
+     */
+    override fun recenterNorthUp() {
+        recenterCount += 1
+        resetNorthCount += 1
+    }
 
     /** No device/GPS on the stub, so there is no location component to refresh. */
     override fun refreshLocationComponent() = Unit

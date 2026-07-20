@@ -28,6 +28,7 @@ import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.config.FeatureFlags
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
@@ -370,13 +371,12 @@ class MapFirstShellTest {
         // the "Where to?" hint is hidden until the button is tapped.
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertExists()
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
-        // Floating controls: compass (top) + broadcast toggle off + layers +
-        // recenter.
+        // Floating controls: broadcast toggle off + layers + compass + recenter.
+        // (Order is pinned separately by rightSideControls_areOrderedReportFirst.)
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
-        // Exercise the compass's tap action (reset-north): it has no observable
-        // result in the no-Firebase stub (StubMapSurface.resetNorth is a no-op),
-        // so this just proves the control is clickable and its wiring doesn't
-        // crash the stubbed shell — matching how the other controls are driven.
+        // Exercise the compass's tap action and prove it doesn't crash the
+        // stubbed shell — matching how the other controls are driven. What the
+        // tap DOES is asserted by compassControl_recentresOnTheUserAndResetsNorth.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
@@ -418,7 +418,11 @@ class MapFirstShellTest {
      * wiring can be driven directly; the shell-level [setShell] build has no
      * Firebase and therefore never loads any incidents at all.
      */
-    private fun setMapHome(trafikverketDataShown: Boolean) {
+    private fun setMapHome(
+        trafikverketDataShown: Boolean,
+        surface: MapSurface = StubMapSurface(),
+        incidentReportingEnabled: Boolean = false,
+    ) {
         composeTestRule.setContent {
             KccTheme {
                 // The incidents-layer toggle is HOISTED out of MapHome (the real
@@ -432,7 +436,8 @@ class MapFirstShellTest {
                 MapHome(
                     incidentsLayerEnabled = incidentsLayerEnabled,
                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
-                    mapSurface = StubMapSurface(),
+                    mapSurface = surface,
+                    incidentReportingEnabled = incidentReportingEnabled,
                     isLiveSharing = false,
                     canShareLive = false,
                     participantCount = 0,
@@ -446,6 +451,130 @@ class MapFirstShellTest {
                     trafikverketDataShown = trafikverketDataShown,
                 )
             }
+        }
+    }
+
+    /** Vertical position of a control, for the stack-order assertions below. */
+    private fun topOf(tag: String): Float =
+        composeTestRule.onNodeWithTag(tag).getUnclippedBoundsInRoot().top.value
+
+    /**
+     * Querying a [CircleControl] by test tag and by contentDescription must land
+     * on the SAME node, so the order assertions below can mix the two freely.
+     *
+     * They can because `CircleControl` is a clickable `Surface`, which sets
+     * `mergeDescendants = true`: the `Icon`'s contentDescription merges UP into
+     * the clickable Surface node, and `onNodeWithContentDescription` reads the
+     * merged tree by default. So both queries resolve to the Surface — the tag
+     * does not select a container while the description selects an inner Icon.
+     *
+     * This is asserted rather than assumed because it is the one property that
+     * would silently corrupt every position comparison in this file if it ever
+     * changed (say, someone moves the description onto the Icon with
+     * `clearAndSetSemantics`, or drops the merging). The compass is the probe: it
+     * is the only control carrying BOTH a tag and a description.
+     */
+    @Test
+    fun circleControl_tagAndContentDescriptionResolveToTheSameNode() {
+        setMapHome(trafikverketDataShown = false)
+        val byTag = composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).getUnclippedBoundsInRoot()
+        val byDescription =
+            composeTestRule
+                .onNodeWithContentDescription(str(R.string.shell_compass))
+                .getUnclippedBoundsInRoot()
+        assertEquals(byTag.top.value.toDouble(), byDescription.top.value.toDouble(), 0.01)
+        assertEquals(byTag.left.value.toDouble(), byDescription.left.value.toDouble(), 0.01)
+        assertEquals(byTag.bottom.value.toDouble(), byDescription.bottom.value.toDouble(), 0.01)
+    }
+
+    private fun topOfDescribed(description: String): Float =
+        composeTestRule
+            .onNodeWithContentDescription(description)
+            .getUnclippedBoundsInRoot()
+            .top
+            .value
+
+    /**
+     * The right-side stack's ORDER, top-to-bottom:
+     * report → live-location → layers → compass → recenter → chat.
+     *
+     * Pinned by measured position rather than by declaration order, because the
+     * order is the whole user-visible point of the change and a reordering of
+     * the composables is exactly what would break it. Two facts carry weight
+     * here beyond "some order exists": the report control LEADS the stack, and
+     * the compass sits DIRECTLY above the my-location control (nothing between
+     * them) — they are a pair now that both re-centre.
+     */
+    @Test
+    fun rightSideControls_areOrderedReportFirst() {
+        setMapHome(trafikverketDataShown = false, incidentReportingEnabled = true)
+        val report = topOf(MAP_HOME_REPORT_TAG)
+        val live = topOf(MAP_HOME_LIVE_TAG)
+        val layers = topOf(MAP_HOME_LAYERS_TAG)
+        val compass = topOf(MAP_HOME_COMPASS_TAG)
+        val recenter = topOfDescribed(str(R.string.shell_recenter))
+        val chat = topOfDescribed(str(R.string.shell_chat))
+
+        assertTrue("report must be above live-location", report < live)
+        assertTrue("live-location must be above layers", live < layers)
+        assertTrue("layers must be above the compass", layers < compass)
+        assertTrue("the compass must be above recenter", compass < recenter)
+        assertTrue("recenter must be above chat", recenter < chat)
+        // Nothing sits between the compass and the my-location control.
+        listOf(report, live, layers, chat).forEach {
+            assertFalse("no control may sit between compass and recenter", it in compass..recenter)
+        }
+    }
+
+    /**
+     * With incident reporting unavailable the stack simply STARTS at
+     * live-location: no gap, no placeholder where the report control would be.
+     * Asserted as "live-location is now the topmost control", which a stray
+     * spacer or an empty reserved slot would break.
+     */
+    @Test
+    fun rightSideControls_leadWithLiveShare_whenReportingUnavailable() {
+        setMapHome(trafikverketDataShown = false, incidentReportingEnabled = false)
+        composeTestRule.onNodeWithTag(MAP_HOME_REPORT_TAG).assertDoesNotExist()
+        val live = topOf(MAP_HOME_LIVE_TAG)
+        val layers = topOf(MAP_HOME_LAYERS_TAG)
+        val compass = topOf(MAP_HOME_COMPASS_TAG)
+        assertTrue("live-location must lead the stack", live < layers)
+        assertTrue("layers must be above the compass", layers < compass)
+        // The stack tightened up rather than leaving a hole: live-location sits
+        // exactly ONE slot above layers — one control (KccSpacing.s12) plus the
+        // Column's spacing (KccSpacing.s3). Asserted against those tokens
+        // directly, rather than by comparing two inter-control distances, so the
+        // failure message points at the real invariant: a stray spacer or a
+        // reserved empty slot widens this gap and nothing else does.
+        val oneSlot = KccSpacing.s12.value + KccSpacing.s3.value
+        assertEquals(
+            "no gap may be left where the report control would have been",
+            oneSlot.toDouble(),
+            (layers - live).toDouble(),
+            1.0,
+        )
+    }
+
+    /**
+     * THE REGRESSION: tapping the compass must re-centre on the user as well as
+     * reset north. It used to call resetNorth() alone, which reset the bearing
+     * and left the camera wherever the user had panned to — "the north arrow
+     * points north but doesn't bring me back to me".
+     *
+     * [StubMapSurface.recenterCount] is the assertion that bites: a compass
+     * wired only to resetNorth leaves it at 0, so this test fails against the
+     * unfixed code. [StubMapSurface.resetNorthCount] guards the other half, so a
+     * compass "fixed" into a plain recenter that forgot north also fails.
+     */
+    @Test
+    fun compassControl_recentresOnTheUserAndResetsNorth() {
+        val surface = StubMapSurface()
+        setMapHome(trafikverketDataShown = false, surface = surface)
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals("compass must re-centre on the user", 1, surface.recenterCount)
+            assertEquals("compass must reset the map to north-up", 1, surface.resetNorthCount)
         }
     }
 
