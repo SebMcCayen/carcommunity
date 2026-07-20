@@ -432,6 +432,12 @@ class MapboxMapSurface : MapSurface {
         if (!ConvoyFocusPlanner.shouldRefit(appliedConvoyFit, asLatLng)) return
 
         runCatching {
+            // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
+            // display density exactly as the route-overlay fit does. Passing the
+            // dp numbers raw made the padding shrink with density: on a 3x phone
+            // 140 would have been ~47dp of real breathing room, gluing members to
+            // the edge under the very controls the padding exists to clear.
+            val density = map.resources.displayMetrics.density
             val fitted =
                 map.mapboxMap.cameraForCoordinates(
                     coordinates = points.map { Point.fromLngLat(it.longitude, it.latitude) },
@@ -445,10 +451,10 @@ class MapboxMapSurface : MapSurface {
                         },
                     coordinatesPadding =
                         EdgeInsets(
-                            CONVOY_FIT_PADDING_TOP_PX,
-                            CONVOY_FIT_PADDING_PX,
-                            CONVOY_FIT_PADDING_PX,
-                            CONVOY_FIT_PADDING_PX,
+                            CONVOY_FIT_PAD_TOP * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
                         ),
                     maxZoom = null,
                     offset = null,
@@ -1323,13 +1329,18 @@ class MapboxMapSurface : MapSurface {
         const val CONVOY_FIT_ANIMATION_MS = 900L
 
         /**
-         * Padding (device px) kept between the framed convoy members and the
-         * viewport edge, so nobody ends up glued to the side of the screen where
-         * the floating controls are. The top gets more because the convoy bar and
-         * the search row live there.
+         * Padding kept between the framed convoy members and the viewport edge,
+         * so nobody ends up glued to the side of the screen where the floating
+         * controls are. The top gets more because the convoy bar and the search
+         * row live there.
+         *
+         * In **dp**, like [ROUTE_PAD_TOP] and friends above — multiplied by
+         * display density at the call site, because `EdgeInsets` takes device
+         * pixels. Density-independent is the whole point: the controls these
+         * clear are themselves laid out in dp.
          */
-        const val CONVOY_FIT_PADDING_PX = 140.0
-        const val CONVOY_FIT_PADDING_TOP_PX = 260.0
+        const val CONVOY_FIT_PAD_SIDE = 140.0
+        const val CONVOY_FIT_PAD_TOP = 260.0
 
         /**
          * How far the convoy fit is allowed to zoom OUT. Beyond this the basemap
