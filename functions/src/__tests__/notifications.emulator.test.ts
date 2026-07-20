@@ -181,7 +181,8 @@ describe('writeInAppNotification eligibility and shape', () => {
     expect(essential.delivered).toBe(true);
     const snap = await itemsOf(suspended.uid).get();
     expect(snap.size).toBe(1);
-    expect(snap.docs[0].data().category).toBe('account_suspension');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(snap.docs[0]!.data().category).toBe('account_suspension');
   });
 
   it('honors opt-outs but never for essential categories; deleted users get nothing', async () => {
@@ -332,7 +333,8 @@ describe('notifications push token registration', () => {
     const survivingIds = new Set(remaining.docs.map((d) => d.id));
     const expectedSurvivors = ids.slice(-MAX_PUSH_TOKENS_PER_USER);
     expect([...survivingIds].sort()).toEqual([...expectedSurvivors].sort());
-    expect(survivingIds.has(ids[0])).toBe(false);
+    // ids has MAX_PUSH_TOKENS_PER_USER + 5 entries (loop above), so ids[0] exists.
+    expect(survivingIds.has(ids[0]!)).toBe(false);
   });
 
   it('honors the pushNotifications flag for registration', async () => {

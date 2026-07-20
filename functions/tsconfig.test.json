@@ -1,0 +1,12 @@
+{
+  // Typecheck-only config that COVERS the test files the build config
+  // (tsconfig.json) deliberately excludes from emit. Wired into the
+  // `typecheck` npm script so strict errors in tests surface at typecheck
+  // time instead of only as runtime failures in CI.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["lib", "node_modules"]
+}

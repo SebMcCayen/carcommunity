@@ -263,7 +263,8 @@ describe('crownHunt-submitClaim', () => {
       .where('pointId', '==', pointId)
       .get();
     expect(claims.size).toBe(1);
-    const claim = claims.docs[0].data();
+    // size asserted === 1 above, so docs[0] is present.
+    const claim = claims.docs[0]!.data();
     expect(claim.result).toBe('awarded');
     expect(typeof claim.pointsLedgerEntryId).toBe('string');
 
@@ -338,7 +339,8 @@ describe('crownHunt-submitClaim', () => {
       .where('pointId', '==', pointId)
       .get();
     expect(claims.size).toBe(1);
-    expect(claims.docs[0].data().result).toBe('awarded');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(claims.docs[0]!.data().result).toBe('awarded');
   });
 
   it('enforces the once repeat rule on a fresh key', async () => {
@@ -434,7 +436,8 @@ describe('crownHunt-submitClaim', () => {
       .where('userId', '==', capUser.uid)
       .get();
     expect(counters.size).toBe(1);
-    expect(counters.docs[0].data().count).toBe(4);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(counters.docs[0]!.data().count).toBe(4);
   });
 
   it('rejects claims outside the geofence, at speed, and with stale positions', async () => {
@@ -501,8 +504,9 @@ describe('crownHunt-submitClaim', () => {
       .where('pointId', '==', pointId)
       .get();
     expect(riskDocs.size).toBe(1);
-    expect(riskDocs.docs[0].data().riskScore).toBeGreaterThanOrEqual(60);
-    expect(riskDocs.docs[0].data().riskReasons).toContain('platform_integrity_failed');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(riskDocs.docs[0]!.data().riskScore).toBeGreaterThanOrEqual(60);
+    expect(riskDocs.docs[0]!.data().riskReasons).toContain('platform_integrity_failed');
   });
 
   it('honors the feature flag from config/featureFlags', async () => {

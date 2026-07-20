@@ -867,10 +867,11 @@ describe('incidents cleanup sweep', () => {
     expect(first.capped).toBe(true);
     // Oldest expiries go first (the query orders by expiresAt ASC), which is
     // what makes the cap unable to starve an old incident.
-    expect((await refs[0].get()).exists).toBe(false);
-    expect((await refs[1].get()).exists).toBe(false);
-    expect((await refs[2].get()).exists).toBe(true);
-    expect((await refs[5].get()).exists).toBe(true);
+    // seedExpired('sweep-cap', 6, …) above returns exactly 6 refs, so [0]-[5] exist.
+    expect((await refs[0]!.get()).exists).toBe(false);
+    expect((await refs[1]!.get()).exists).toBe(false);
+    expect((await refs[2]!.get()).exists).toBe(true);
+    expect((await refs[5]!.get()).exists).toBe(true);
 
     const second = await runIncidentsCleanup(sweepNow, { maxDeletions: 100, concurrency: 4 });
     expect(second.deletedCount).toBe(4);
