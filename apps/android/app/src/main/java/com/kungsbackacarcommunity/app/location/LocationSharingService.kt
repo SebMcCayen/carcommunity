@@ -192,6 +192,18 @@ class LocationSharingService : Service() {
         repository = repo
         ownerUid = uid
 
+        // Reset the per-run throttle and notification state. stopSelf() is
+        // asynchronous, so a fresh start can land on this SAME instance before
+        // onDestroy() has run. Carrying the previous run's last-published sample
+        // over would let shouldPublish() throttle the new session's first fix —
+        // breaking its documented "the first fix of a session always publishes"
+        // contract and leaving the user invisible to viewers for up to a
+        // heartbeat while they believe they are sharing.
+        lastPublishedAtMillis = null
+        lastPublishedLatitude = null
+        lastPublishedLongitude = null
+        shownRemainingMinutes = -1L
+
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
         postNotification(remainingSeconds = null, foreground = true)

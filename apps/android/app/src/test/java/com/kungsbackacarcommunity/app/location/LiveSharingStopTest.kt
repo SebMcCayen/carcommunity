@@ -116,7 +116,11 @@ class LiveSharingStopTest {
                 serviceScope.cancel() // onDestroy() again — must not matter now
                 job
             }
-        runBlocking { jobs.forEach { it.join() } }
-        assertEquals(trials, reached.get())
+        try {
+            runBlocking { jobs.forEach { it.join() } }
+            assertEquals(trials, reached.get())
+        } finally {
+            processScope.cancel()
+        }
     }
 }
