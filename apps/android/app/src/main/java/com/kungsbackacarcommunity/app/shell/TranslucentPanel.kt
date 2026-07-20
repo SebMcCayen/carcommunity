@@ -207,7 +207,18 @@ val LocalInTranslucentPanel = staticCompositionLocalOf { false }
  * - the accessibility `dismiss` action on the card, which TalkBack surfaces
  *   without any gesture at all.
  *
- * Must be composed inside a full-window [Box] (it fills its parent).
+ * **Hosting contract.** This fills its parent, and the PARENT defines the
+ * panel's bounds — it does not assume the whole window. What it requires is
+ * only that the parent lives in the activity's own window (see the `Popup`
+ * note above), and that the parent does NOT apply a top inset: the card takes
+ * the status-bar inset itself, so the height fraction is measured against the
+ * safe area rather than the raw window.
+ *
+ * The bottom is the parent's job. In the shell the host is the body container,
+ * which is already inset by `navigationBarsPadding()` and the bottom bar's
+ * height — so the card is bottom-anchored ABOVE the bottom bar and the bar
+ * stays visible and tappable while a panel is open, which is what makes
+ * switching tabs out of a panel work.
  *
  * @param onDismiss invoked once when the panel is dismissed by any route this
  *   composable owns (drag or outside tap). Back is handled by the shell.
