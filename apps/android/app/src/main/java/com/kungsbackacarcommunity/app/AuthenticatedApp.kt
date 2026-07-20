@@ -512,6 +512,19 @@ fun AuthenticatedApp(
             //
             // Chat-hub destinations are forwarded whole to ChatHubRoute, which
             // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
+            //
+            // INVARIANT — pendingChatHubLink is never read stale, and the reason
+            // is structural rather than a clear-on-exit: the assignment below is
+            // the ONLY `route = ShellRoute.ChatHub` in the shell, and it always
+            // writes a fresh link in the same frame. ChatHubRoute therefore
+            // cannot be entered carrying a previous tap's destination. The map
+            // bubble is not a counter-example — it opens ChatHubPopup, which
+            // takes no pushDeepLink parameter at all. Back-out is likewise safe:
+            // closeRoute() sets route = null and there is no back stack to
+            // return to ChatHub through.
+            //
+            // If you ever add a second way to reach ShellRoute.ChatHub, that
+            // invariant dies and this must become a consume-and-clear.
             var pendingChatHubLink by remember { mutableStateOf<PushDeepLink?>(null) }
             val pushLink by PushNavigator.pending.collectAsState()
             LaunchedEffect(pushLink) {

@@ -495,6 +495,68 @@ export function chunkTokens<T>(items: readonly T[], size = FCM_MULTICAST_LIMIT):
   return out;
 }
 
+/**
+ * How many device registrations one member may hold.
+ *
+ * WHY A CAP AT ALL
+ * ----------------
+ * The document ID is the token hash, so registration is idempotent per device
+ * — but the token is client-supplied, so the number of DISTINCT tokens a uid
+ * can create is bounded only by how many times the client calls the callable.
+ * Without a cap, `userPrivate/{uid}/pushTokens` grows without limit, and every
+ * inbox item for that uid then pays for it twice: the send trigger reads the
+ * whole collection, and the prune pass writes against it.
+ *
+ * The cap turns that unbounded fan-out into a constant. It also bounds the
+ * prune batch and the FCM multicast, so neither can grow into a request-size
+ * problem no matter what a client does.
+ *
+ * 12 is deliberately generous: a member with a phone, a tablet and a head unit
+ * uses three, and the rest is slack for reinstalls and OS-level token rotation
+ * (each of which mints a token that the old device never unregisters).
+ */
+export const MAX_PUSH_TOKENS_PER_USER = 12;
+
+/** A registry row considered for eviction: its id and when it last checked in. */
+export interface PushTokenEvictionCandidate {
+  tokenId: string;
+  /** Epoch millis of lastSeenAt, or null when the row predates that field. */
+  lastSeenAtMs: number | null;
+}
+
+/**
+ * Which existing registrations must go so that adding ONE new token leaves the
+ * member at or under `limit`.
+ *
+ * Least-recently-seen first: the token most likely to be dead is the one whose
+ * device has not checked in for longest. Rows with no `lastSeenAt` are legacy
+ * and sort oldest — they are also the unsendable hash-only rows, so evicting
+ * them first is doubly correct. Ties break on tokenId purely so the result is
+ * deterministic (and therefore testable).
+ */
+export function selectEvictableTokenIds(
+  existing: readonly PushTokenEvictionCandidate[],
+  limit = MAX_PUSH_TOKENS_PER_USER,
+): string[] {
+  if (limit < 1) {
+    throw new Error('limit must be >= 1');
+  }
+  // +1 for the token about to be written.
+  const overflow = existing.length + 1 - limit;
+  if (overflow <= 0) {
+    return [];
+  }
+  return [...existing]
+    .sort((a, b) => {
+      const aSeen = a.lastSeenAtMs ?? Number.NEGATIVE_INFINITY;
+      const bSeen = b.lastSeenAtMs ?? Number.NEGATIVE_INFINITY;
+      if (aSeen !== bSeen) return aSeen - bSeen;
+      return a.tokenId < b.tokenId ? -1 : a.tokenId > b.tokenId ? 1 : 0;
+    })
+    .slice(0, overflow)
+    .map((entry) => entry.tokenId);
+}
+
 // ---------------------------------------------------------------------------
 // Document builders
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FCM_MULTICAST_LIMIT,
+  MAX_PUSH_TOKENS_PER_USER,
   NOTIFICATION_CATEGORIES,
   SOCIAL_NOTIFICATION_CATEGORIES,
   buildPushDeepLink,
@@ -11,6 +12,7 @@ import {
   decidePushDelivery,
   isDeadTokenError,
   pushPreviewsEnabled,
+  selectEvictableTokenIds,
   type NotificationCategory,
 } from './notifications-core';
 import type { UserAccessState } from '../shared/access';
@@ -252,5 +254,77 @@ describe('token registry + send batching', () => {
     expect(isDeadTokenError('messaging/internal-error')).toBe(false);
     expect(isDeadTokenError('messaging/quota-exceeded')).toBe(false);
     expect(isDeadTokenError(undefined)).toBe(false);
+  });
+});
+
+describe('selectEvictableTokenIds — the per-user registration cap', () => {
+  const candidate = (tokenId: string, lastSeenAtMs: number | null) => ({
+    tokenId,
+    lastSeenAtMs,
+  });
+
+  it('evicts nothing while the new token still fits under the cap', () => {
+    const existing = Array.from({ length: MAX_PUSH_TOKENS_PER_USER - 1 }, (_, i) =>
+      candidate(`t${i}`, i),
+    );
+    expect(selectEvictableTokenIds(existing)).toEqual([]);
+  });
+
+  it('evicts exactly one when the new token would be one over', () => {
+    const existing = Array.from({ length: MAX_PUSH_TOKENS_PER_USER }, (_, i) =>
+      candidate(`t${i}`, 1000 + i),
+    );
+    // t0 is the least-recently-seen.
+    expect(selectEvictableTokenIds(existing)).toEqual(['t0']);
+  });
+
+  it('evicts least-recently-seen first, not insertion order', () => {
+    const existing = [
+      candidate('newest', 900),
+      candidate('oldest', 100),
+      candidate('middle', 500),
+    ];
+    expect(selectEvictableTokenIds(existing, 2)).toEqual(['oldest', 'middle']);
+  });
+
+  it('evicts legacy rows with no lastSeenAt before any timestamped row', () => {
+    const existing = [
+      candidate('stamped-old', 1),
+      candidate('legacy-a', null),
+      candidate('legacy-b', null),
+    ];
+    // Both legacy rows sort ahead of the oldest timestamped one. They are also
+    // the hash-only unsendable rows, so this is the right eviction order.
+    expect(selectEvictableTokenIds(existing, 2)).toEqual(['legacy-a', 'legacy-b']);
+  });
+
+  it('caps an unbounded registry back to the limit in a single pass', () => {
+    // The abuse case: a client that hammered registerPushToken with fabricated
+    // tokens. One further registration must bring the collection to the cap,
+    // not merely trim one row.
+    const existing = Array.from({ length: 5000 }, (_, i) => candidate(`t${i}`, i));
+    const evict = selectEvictableTokenIds(existing);
+    expect(evict).toHaveLength(5000 + 1 - MAX_PUSH_TOKENS_PER_USER);
+    expect(existing.length - evict.length + 1).toBe(MAX_PUSH_TOKENS_PER_USER);
+    // Least-recently-seen went first; the freshest survive.
+    expect(evict).toContain('t0');
+    expect(evict).not.toContain('t4999');
+  });
+
+  it('bounds the send fan-out and the prune batch by construction', () => {
+    // WHY THIS TEST EXISTS: Copilot flagged the prune path as able to exceed a
+    // 500-op Firestore batch. Firestore no longer imposes a per-commit write
+    // count limit (only a 10 MiB request size), so that specific failure was
+    // not real — but the underlying worry, an unbounded prune, is answered
+    // here: the cap means loadTokens can never return more than the cap, so
+    // both the FCM multicast and the delete batch are bounded well under any
+    // limit that does exist.
+    expect(MAX_PUSH_TOKENS_PER_USER).toBeLessThan(FCM_MULTICAST_LIMIT);
+    const atCap = Array.from({ length: MAX_PUSH_TOKENS_PER_USER }, (_, i) => i);
+    expect(chunkTokens(atCap)).toHaveLength(1);
+  });
+
+  it('rejects a nonsensical limit rather than evicting everything', () => {
+    expect(() => selectEvictableTokenIds([], 0)).toThrow(/limit must be >= 1/);
   });
 });

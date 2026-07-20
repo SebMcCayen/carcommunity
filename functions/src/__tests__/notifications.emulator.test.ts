@@ -39,7 +39,10 @@ import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/fir
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { writeInAppNotification } from '../notifications/deliver';
 import { runNotificationsCleanup } from '../notifications/scheduled';
-import { hashPushToken } from '../notifications/notifications-core';
+import {
+  MAX_PUSH_TOKENS_PER_USER,
+  hashPushToken,
+} from '../notifications/notifications-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -300,6 +303,36 @@ describe('notifications push token registration', () => {
       await call('notifications-unregisterPushToken', { tokenId: result.tokenId })
     ).data as { removed: boolean };
     expect(replay.removed).toBe(false);
+  });
+
+  it('caps the registry at MAX_PUSH_TOKENS_PER_USER, evicting least-recently-seen', async () => {
+    // The abuse shape Copilot flagged: a client registering many distinct
+    // tokens under its own uid. Each call is a real, legitimate-looking
+    // registration — only the COUNT is the problem — so the cap has to hold at
+    // the callable, which is what this exercises end to end.
+    const spammer = await createProvisionedUser('notif-cap');
+    await signInAs(spammer);
+
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_PUSH_TOKENS_PER_USER + 5; i++) {
+      const res = (
+        await call('notifications-registerPushToken', {
+          token: `fcm-cap-token-${i}`,
+          platform: 'android',
+        })
+      ).data as { tokenId: string };
+      ids.push(res.tokenId);
+    }
+
+    const remaining = await tokensOf(spammer.uid).get();
+    expect(remaining.size).toBe(MAX_PUSH_TOKENS_PER_USER);
+
+    // The survivors are the most recently registered, and the earliest
+    // registrations were the ones evicted.
+    const survivingIds = new Set(remaining.docs.map((d) => d.id));
+    const expectedSurvivors = ids.slice(-MAX_PUSH_TOKENS_PER_USER);
+    expect([...survivingIds].sort()).toEqual([...expectedSurvivors].sort());
+    expect(survivingIds.has(ids[0])).toBe(false);
   });
 
   it('honors the pushNotifications flag for registration', async () => {

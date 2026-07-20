@@ -94,7 +94,17 @@ async function loadTokens(uid: string): Promise<RegisteredToken[]> {
   return tokens;
 }
 
-/** Deletes registrations FCM rejected as permanently dead. Never throws. */
+/**
+ * Deletes registrations FCM rejected as permanently dead. Never throws.
+ *
+ * One batch is deliberate and safe. `tokenIds` is a subset of what loadTokens
+ * returned, and registerPushToken caps a member at MAX_PUSH_TOKENS_PER_USER
+ * (12) — so this commits at most 12 deletes. Firestore no longer imposes a
+ * per-commit write COUNT limit (the once-quoted 500 applies to field
+ * transformations on a single document); the live constraint is the 10 MiB
+ * request size, which a dozen document-path deletes cannot approach. The cap,
+ * not chunking here, is what keeps that true.
+ */
 async function pruneDeadTokens(uid: string, tokenIds: readonly string[]): Promise<void> {
   if (tokenIds.length === 0) return;
   try {
