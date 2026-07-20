@@ -178,7 +178,9 @@ class LocationSharingService : Service() {
             // The notification's "Stop sharing" action: end the session on the
             // backend too, so stopping from the shade is a real stop and not
             // just a service that quietly walked away from an open session.
-            stopSharingAndSelf()
+            // The uid it was built for comes along so we can verify the callable
+            // would act on the right account — see stopSharingAndSelf.
+            stopSharingAndSelf(expectedUid = intent.getStringExtra(EXTRA_UID))
             return START_NOT_STICKY
         }
 
@@ -385,7 +387,23 @@ class LocationSharingService : Service() {
      * kill the call before dispatch, leaving the session live server-side until
      * expiry — see [LiveSharingStop] for the measurement.
      */
-    private fun stopSharingAndSelf() {
+    private fun stopSharingAndSelf(expectedUid: String?) {
+        // `live.stopSession` is scoped to the CURRENTLY signed-in FirebaseAuth
+        // user, not to whoever this notification was posted for. Those can differ:
+        // the SIGNED_OUT teardown is driven by the 15 s tick, so after a sign-out
+        // or an account switch the notification can still be on screen for a
+        // moment. Tapping it then would end the NEW account's session while
+        // leaving the original one ACTIVE until expiry — the tapping user gets
+        // stopped without asking, and the user who asked to stop keeps sharing.
+        //
+        // A missing uid means we cannot verify, and an unverifiable stop is not
+        // worth ending the wrong person's sharing over: tear down locally and let
+        // the session expire on its own.
+        if (expectedUid.isNullOrBlank() || !isStillSignedIn(expectedUid)) {
+            stopSharingLocally()
+            return
+        }
+
         // The PendingIntent outlives this process, so the stop action can reach a
         // FRESH service instance whose [repository] was never set — a stale
         // notification tapped after a kill, or a restart racing the tap. Building
@@ -519,11 +537,17 @@ class LocationSharingService : Service() {
      * foreground to immediately leave it would post a notification the user just
      * dismissed, and missing the deadline is a `ForegroundServiceDidNotStartInTime`
      * crash on Android 12+. A stop path must not be able to crash the app.
+     *
+     * Carries [EXTRA_UID] so the handler can confirm the account this
+     * notification was posted for is still the signed-in one before invoking the
+     * auth-scoped `live.stopSession`. FLAG_UPDATE_CURRENT keeps that extra in
+     * step with [ownerUid] as the notification is rebuilt.
      */
     private fun stopSharingIntent(): PendingIntent {
         val intent =
             Intent(this, LocationSharingService::class.java).apply {
                 action = ACTION_STOP_SHARING
+                putExtra(EXTRA_UID, ownerUid)
             }
         return PendingIntent.getService(
             this,
