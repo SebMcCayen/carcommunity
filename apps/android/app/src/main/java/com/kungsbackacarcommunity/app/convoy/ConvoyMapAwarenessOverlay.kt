@@ -49,6 +49,7 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapSurface
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** Test tag on the whole convoy awareness overlay. */
@@ -203,7 +204,14 @@ private fun directionDescription(placement: ConvoyMemberPlacement.OffScreen): St
         if (km < 1.0) {
             stringResource(R.string.convoy_awarenessDistanceMeters, placement.distanceMeters.roundToInt())
         } else {
-            stringResource(R.string.convoy_awarenessDistanceKm, ((km * 10).roundToInt() / 10.0).toString())
+            // Locale-aware: `Double.toString()` always emits a '.' decimal
+            // separator, so a Swedish screen reader would announce "1.2 km"
+            // instead of "1,2 km". This value is spoken, not parsed, so it
+            // formats for the USER's locale.
+            stringResource(
+                R.string.convoy_awarenessDistanceKm,
+                String.format(Locale.getDefault(), "%.1f", km),
+            )
         }
     return if (placement.extraCount > 0) {
         stringResource(

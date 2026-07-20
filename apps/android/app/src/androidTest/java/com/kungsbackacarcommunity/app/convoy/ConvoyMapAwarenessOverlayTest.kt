@@ -9,6 +9,7 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -149,9 +150,14 @@ class ConvoyMapAwarenessOverlayTest {
      */
     @Test
     fun theStaleTickIsShorterThanTheStalenessWindow() {
-        assert(STALE_TICK_MS in 1 until ConvoyArrowPlanner.STALE_AFTER_MS) {
+        // JUnit's assertTrue, NOT Kotlin's `assert`: the latter is gated on the
+        // JVM's desiredAssertionStatus(), which is false on Android unless -ea is
+        // passed, so `assert` here would never actually check anything and this
+        // test would pass no matter what the constant said.
+        assertTrue(
             "stale tick ($STALE_TICK_MS ms) must be a positive fraction of the " +
-                "staleness window (${ConvoyArrowPlanner.STALE_AFTER_MS} ms)"
-        }
+                "staleness window (${ConvoyArrowPlanner.STALE_AFTER_MS} ms)",
+            STALE_TICK_MS in 1 until ConvoyArrowPlanner.STALE_AFTER_MS,
+        )
     }
 }
