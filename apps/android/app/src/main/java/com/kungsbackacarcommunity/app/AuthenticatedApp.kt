@@ -1208,6 +1208,23 @@ fun AuthenticatedApp(
                     convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
                 }
                 LaunchedEffect(currentConvoyDestination, navDestination) {
+                    if (navDestination == null) {
+                        // Navigation ended (arrived, or the user stopped it). The
+                        // banner exists solely to say what happened to the
+                        // destination they were DRIVING TO, and every one of its
+                        // messages is phrased that way — "…while you were
+                        // navigating", plus an offer to re-route to the
+                        // replacement. Left up after navigation ends it is not
+                        // merely stale, it asserts something false.
+                        //
+                        // It cannot clear itself below: navigationEvent() returns
+                        // Unchanged as soon as navigatingTo is null, and the guard
+                        // there only ever WRITES a non-Unchanged event, so nothing
+                        // would ever take it down.
+                        convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                        previousConvoyDestination = currentConvoyDestination
+                        return@LaunchedEffect
+                    }
                     val event =
                         ConvoyDestinations.navigationEvent(
                             previous = previousConvoyDestination,

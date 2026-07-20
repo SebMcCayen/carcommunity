@@ -143,9 +143,9 @@ fun ConvoyStatusBar(
     compact: Boolean = false,
     onInvite: ((String) -> Unit)? = null,
     onLeaveConvoy: ((String) -> Unit)? = null,
-    onSetDestination: () -> Unit = {},
-    onClearDestination: (String) -> Unit = {},
-    onNavigateToDestination: (LatLng, String) -> Unit = { _, _ -> },
+    onSetDestination: (() -> Unit)? = null,
+    onClearDestination: ((String) -> Unit)? = null,
+    onNavigateToDestination: ((LatLng, String) -> Unit)? = null,
     navigationEvent: ConvoyDestinationNavigationEvent =
         ConvoyDestinationNavigationEvent.Unchanged,
     onDismissNavigationEvent: () -> Unit = {},
@@ -324,19 +324,26 @@ fun ConvoyStatusBar(
             // render disabled — see the ConvoyDestination file KDoc.
             ConvoyDestinationRow(
                 state = state,
-                onSetDestination = {
-                    // Replacing somebody ELSE's destination changes where the
-                    // whole group is heading, so it confirms first. Replacing
-                    // your own does not: a confirmation on a correction you are
-                    // making to your own pick only trains people to dismiss the
-                    // dialog that matters.
-                    if (state.destinationState is ConvoyDestinationState.SetByOther) {
-                        confirmOverwrite = true
-                    } else {
-                        onSetDestination()
-                    }
-                },
-                onClearDestination = { onClearDestination(state.convoyId) },
+                // Wrapped, but only when the host actually supplied a handler:
+                // `?.let` keeps null NULL, so the row's usability gate still sees
+                // "no handler" rather than a wrapper that would swallow the tap.
+                onSetDestination =
+                    onSetDestination?.let { set ->
+                        {
+                            // Replacing somebody ELSE's destination changes where
+                            // the whole group is heading, so it confirms first.
+                            // Replacing your own does not: a confirmation on a
+                            // correction you are making to your own pick only
+                            // trains people to dismiss the dialog that matters.
+                            if (state.destinationState is ConvoyDestinationState.SetByOther) {
+                                confirmOverwrite = true
+                            } else {
+                                set()
+                            }
+                        }
+                    },
+                onClearDestination =
+                    onClearDestination?.let { clear -> { clear(state.convoyId) } },
                 onNavigateToDestination = onNavigateToDestination,
             )
 
@@ -439,7 +446,7 @@ fun ConvoyStatusBar(
                 TextButton(
                     onClick = {
                         confirmOverwrite = false
-                        onSetDestination()
+                        onSetDestination?.invoke()
                     },
                 ) {
                     Text(stringResource(R.string.convoy_barDestinationOverwriteAction))
@@ -468,11 +475,20 @@ fun ConvoyStatusBar(
 @Composable
 private fun ConvoyDestinationRow(
     state: ConvoyBarState,
-    onSetDestination: () -> Unit,
-    onClearDestination: () -> Unit,
-    onNavigateToDestination: (LatLng, String) -> Unit,
+    onSetDestination: (() -> Unit)?,
+    onClearDestination: (() -> Unit)?,
+    onNavigateToDestination: ((LatLng, String) -> Unit)?,
 ) {
-    val wired = ConvoyDestinations.isWired
+    // Usable needs BOTH halves, exactly as invite/leave do above: the
+    // availability flag says the callable exists, the handler says this host
+    // actually wired it up. Gating on the flag alone would mean that the day
+    // ConvoyDestinations.availability flips to Wired, a host that had not yet
+    // passed the callbacks would render enabled buttons that silently do
+    // nothing — the precise failure the invite/leave gating exists to prevent,
+    // and there is no reason for this row to learn it the hard way separately.
+    val setUsable = ConvoyDestinations.isWired && onSetDestination != null
+    val clearUsable = ConvoyDestinations.isWired && onClearDestination != null
+    val navigateUsable = ConvoyDestinations.isWired && onNavigateToDestination != null
     val destination =
         when (val d = state.destinationState) {
             is ConvoyDestinationState.SetByMe -> d.destination
@@ -522,15 +538,15 @@ private fun ConvoyDestinationRow(
         // the map search flow uses; there is no convoy-specific navigation path.
         if (destination != null) {
             IconButton(
-                onClick = { onNavigateToDestination(destination.point, placeLabel) },
-                enabled = wired,
+                onClick = { onNavigateToDestination?.invoke(destination.point, placeLabel) },
+                enabled = navigateUsable,
                 modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_NAVIGATE_TAG),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Navigation,
                     contentDescription =
                         stringResource(
-                            if (wired) {
+                            if (navigateUsable) {
                                 R.string.convoy_barDestinationNavigate
                             } else {
                                 R.string.convoy_barDestinationNavigateUnavailable
@@ -544,8 +560,8 @@ private fun ConvoyDestinationRow(
         // Set / change. Any accepted member may set one (see the callable
         // contract); replacing someone else's confirms first, upstream of here.
         IconButton(
-            onClick = onSetDestination,
-            enabled = wired && !state.busy,
+            onClick = { onSetDestination?.invoke() },
+            enabled = setUsable && !state.busy,
             modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_SET_TAG),
         ) {
             Icon(
@@ -553,7 +569,7 @@ private fun ConvoyDestinationRow(
                 contentDescription =
                     stringResource(
                         when {
-                            !wired -> R.string.convoy_barDestinationSetUnavailable
+                            !setUsable -> R.string.convoy_barDestinationSetUnavailable
                             destination != null -> R.string.convoy_barDestinationChange
                             else -> R.string.convoy_barDestinationSet
                         },
@@ -565,8 +581,8 @@ private fun ConvoyDestinationRow(
         // so the control is not a button that exists to be refused.
         if (destination != null && state.canClearDestination) {
             IconButton(
-                onClick = onClearDestination,
-                enabled = wired && !state.busy,
+                onClick = { onClearDestination?.invoke() },
+                enabled = clearUsable && !state.busy,
                 modifier = Modifier.testTag(CONVOY_BAR_DESTINATION_CLEAR_TAG),
                 // Destructive red, but only while the control can actually do
                 // something. Handing the colour to `iconButtonColors` rather than
@@ -576,7 +592,7 @@ private fun ConvoyDestinationRow(
                 // hard `tint = error` bypasses that and paints a DISABLED clear
                 // icon in full strength destructive red. That is not hypothetical
                 // here: [ConvoyDestinations.availability] is BackendMissing, so
-                // `wired` is false on every build today and this button ships
+                // `clearUsable` is false on every build today and this button ships
                 // permanently disabled. It must not look tappable.
                 colors =
                     IconButtonDefaults.iconButtonColors(
@@ -587,7 +603,7 @@ private fun ConvoyDestinationRow(
                     imageVector = Icons.Filled.Clear,
                     contentDescription =
                         stringResource(
-                            if (wired) {
+                            if (clearUsable) {
                                 R.string.convoy_barDestinationClear
                             } else {
                                 R.string.convoy_barDestinationClearUnavailable
@@ -614,7 +630,7 @@ private fun ConvoyDestinationRow(
 private fun ConvoyDestinationNavigationBanner(
     event: ConvoyDestinationNavigationEvent,
     onDismiss: () -> Unit,
-    onNavigateToNew: (LatLng, String) -> Unit,
+    onNavigateToNew: ((LatLng, String) -> Unit)?,
 ) {
     if (event is ConvoyDestinationNavigationEvent.Unchanged) return
     val unnamed = stringResource(R.string.convoy_barDestinationUnnamed)
@@ -636,12 +652,13 @@ private fun ConvoyDestinationNavigationBanner(
                 TextButton(
                     onClick = {
                         onDismiss()
-                        onNavigateToNew(
+                        onNavigateToNew?.invoke(
                             event.destination.point,
                             event.destination.label?.takeIf { it.isNotBlank() } ?: unnamed,
                         )
                     },
-                    enabled = ConvoyDestinations.isWired,
+                    // Same both-halves gate as the row above.
+                    enabled = ConvoyDestinations.isWired && onNavigateToNew != null,
                 ) {
                     Text(stringResource(R.string.convoy_barDestinationNavigateNew))
                 }
