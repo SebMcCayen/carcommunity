@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
+import com.kungsbackacarcommunity.app.auth.AuthRepository
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.FirebaseAuthRepository
 import com.kungsbackacarcommunity.app.auth.GoogleCredentialTokenProvider
@@ -70,12 +72,17 @@ import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
+import com.kungsbackacarcommunity.app.push.ActiveChatRegistry
 import com.kungsbackacarcommunity.app.push.FirebasePushTokenRepository
 import com.kungsbackacarcommunity.app.push.FirebasePushTokenSource
+import com.kungsbackacarcommunity.app.push.KccMessagingService
+import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
 import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
@@ -87,6 +94,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Cold start from a notification tap: park the link before the shell
+        // composes, so it is already waiting when the shell starts collecting.
+        // Guarded against savedInstanceState so a rotation does not replay a
+        // navigation the member already performed (the Activity is recreated
+        // with the SAME launch Intent).
+        if (savedInstanceState == null) {
+            publishPushDeepLink(intent)
+        }
 
         // Draw edge-to-edge so map/content renders behind the system bars. The
         // OS navigation bar is tinted with the theme surface at 25% opacity (75%
@@ -277,7 +293,7 @@ class MainActivity : ComponentActivity() {
                 },
                 // signOut flips Firebase auth state; the authState listener
                 // re-renders AppRoot back to the sign-in screen reactively.
-                onSignOutClick = { authRepository?.signOut() },
+                onSignOutClick = { signOut(authRepository, pushRegistrationCoordinator) },
                 signedInContent = { uid, displayName ->
                     AuthenticatedApp(
                         uid = uid,
@@ -325,10 +341,74 @@ class MainActivity : ComponentActivity() {
                         pushRegistrationCoordinator = pushRegistrationCoordinator,
                         loginRecordCoordinator = loginRecordCoordinator,
                         flags = flags,
-                        onSignOut = { authRepository?.signOut() },
+                        onSignOut = { signOut(authRepository, pushRegistrationCoordinator) },
                     )
                 },
             )
+        }
+    }
+
+    /**
+     * Warm start from a notification tap. The messaging service launches
+     * MainActivity with CLEAR_TOP | SINGLE_TOP and the manifest declares
+     * launchMode="singleTop", so an already-running task is reused and the new
+     * extras arrive here rather than in a fresh onCreate.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Keep getIntent() consistent with what was just handled; otherwise a
+        // later recreation would resurrect the stale launch Intent.
+        setIntent(intent)
+        publishPushDeepLink(intent)
+    }
+
+    /** Hands a tapped notification's destination to the shell, if there is one. */
+    private fun publishPushDeepLink(intent: Intent?) {
+        KccMessagingService.deepLinkFrom(intent)?.let(PushNavigator::publish)
+    }
+
+    /**
+     * Signs out, unregistering this device's push token FIRST.
+     *
+     * Without the unregister, a shared or handed-on phone keeps receiving the
+     * previous member's DMs indefinitely — the backend has no way to know the
+     * device changed hands. [PushDisplay.shouldDisplay] already refuses to
+     * DISPLAY them while signed out, but that is a client-side guard on data
+     * that should never have been sent; this closes it at the source.
+     *
+     * The unregister is best-effort and time-bounded: it needs the auth token
+     * that sign-out is about to invalidate, so it must run first, but a member
+     * on a bad connection must never be trapped in a signed-in state by it.
+     * On timeout or failure sign-out proceeds anyway, and the stale token is
+     * then cleaned up on the server side the first time FCM reports it dead or
+     * when the next member registers it (the hash doc id is per-token, so a new
+     * sign-in on the same device writes the same document under the new uid).
+     */
+    private fun signOut(
+        authRepository: AuthRepository?,
+        pushRegistrationCoordinator: PushRegistrationCoordinator?,
+    ) {
+        // Local push state belongs to the departing member — drop it now so a
+        // pending deep link cannot navigate whoever signs in next.
+        PushNavigator.clear()
+        ActiveChatRegistry.clear()
+
+        if (pushRegistrationCoordinator == null) {
+            authRepository?.signOut()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                withTimeoutOrNull(PUSH_UNREGISTER_TIMEOUT_MS) {
+                    pushRegistrationCoordinator.unregisterCurrentToken()
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Best-effort; never block sign-out on it.
+            } finally {
+                authRepository?.signOut()
+            }
         }
     }
 
@@ -348,5 +428,14 @@ class MainActivity : ComponentActivity() {
         val surface =
             if (darkTheme) KccDarkColors.surfaceBackground else KccLightColors.surfaceBackground
         return surface.copy(alpha = 0.25f).toArgb()
+    }
+
+    private companion object {
+        /**
+         * Upper bound on how long sign-out waits for the push-token unregister.
+         * Short on purpose: sign-out must feel immediate, and a stale token has
+         * a server-side fallback (see [signOut]).
+         */
+        const val PUSH_UNREGISTER_TIMEOUT_MS = 3_000L
     }
 }

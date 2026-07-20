@@ -30,10 +30,14 @@ import kotlinx.coroutines.launch
  * - [onMessageReceived]: maps the message through [PushDisplay] and posts a
  *   system notification only when a user is signed in AND POST_NOTIFICATIONS
  *   is granted ([PushDisplay.shouldDisplay]); silently drops it otherwise
- *   (the durable in-app inbox is the source of truth). The signed-in guard
- *   matters because tokens outlive sign-out (unregister-on-sign-out is
- *   deferred): a signed-out shared device must not display the previous
- *   user's account/event notifications.
+ *   (the durable in-app inbox is the source of truth, so nothing is lost).
+ *   The signed-in guard is defence in depth for shared devices: sign-out does
+ *   unregister the token now, but that call can fail or race an in-flight
+ *   send. It additionally drops notifications for the chat surface the member
+ *   is currently looking at ([ActiveChatRegistry]).
+ *
+ * Tapping a notification carries its [PushDeepLink] to [MainActivity] as
+ * Intent extras, which hands it to the shell via [PushNavigator].
  *
  * Config-less safety: FCM only delivers when google-services.json is present,
  * so this service never runs in CI builds; every Firebase touch is still
@@ -83,6 +87,10 @@ class KccMessagingService : FirebaseMessagingService() {
                 notificationBody = message.notification?.body,
             )
 
+        // Don't buzz someone about the conversation already on their screen —
+        // they are watching the message arrive. The inbox item still exists.
+        if (ActiveChatRegistry.suppresses(model.deepLink)) return
+
         // Idempotent; also covers process starts that predate channel creation.
         PushChannels.ensureCreated(applicationContext)
 
@@ -96,7 +104,7 @@ class KccMessagingService : FirebaseMessagingService() {
                     ),
                 )
                 .setContentTitle(model.title ?: getString(R.string.app_name))
-                .setContentIntent(openAppIntent())
+                .setContentIntent(openAppIntent(model.deepLink))
                 .setAutoCancel(true)
                 .apply { model.body?.let { setContentText(it) } }
                 .build()
@@ -110,20 +118,28 @@ class KccMessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * Content intent that opens the app when the notification is tapped. Deep-
-     * linking to the related entity (actionType/relatedEntityId) is deferred;
-     * for now the launcher activity is brought to front (CLEAR_TOP | SINGLE_TOP
-     * reuses the existing task instead of stacking a new MainActivity). Without
-     * a content intent [NotificationCompat.setAutoCancel] has nothing to fire,
-     * so the notification would also not dismiss on tap.
+     * Content intent that opens the app at [link] when the notification is
+     * tapped. CLEAR_TOP | SINGLE_TOP reuses the existing task rather than
+     * stacking a MainActivity, so the extras arrive via `onNewIntent` on a warm
+     * app and via `onCreate` on a cold one — MainActivity handles both.
+     *
+     * The request code is derived from the link so that two notifications for
+     * DIFFERENT destinations get distinct PendingIntents. With a constant code,
+     * FLAG_UPDATE_CURRENT would rewrite the earlier notification's extras and
+     * both would navigate to whichever arrived last.
+     *
+     * Without a content intent [NotificationCompat.setAutoCancel] has nothing
+     * to fire, so the notification would also not dismiss on tap.
      */
-    private fun openAppIntent(): PendingIntent {
+    private fun openAppIntent(link: PushDeepLink): PendingIntent {
         val intent =
             Intent(applicationContext, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_PUSH_TARGET, link.target.wire)
+                .putExtra(EXTRA_PUSH_ENTITY_ID, link.entityId)
         return PendingIntent.getActivity(
             applicationContext,
-            0,
+            link.hashCode(),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -132,5 +148,26 @@ class KccMessagingService : FirebaseMessagingService() {
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
+    }
+
+    companion object {
+        /** Intent extra: [PushTarget.wire] of the tapped notification. */
+        const val EXTRA_PUSH_TARGET = "com.kungsbackacarcommunity.app.push.TARGET"
+
+        /** Intent extra: the target's entity id, when it has one. */
+        const val EXTRA_PUSH_ENTITY_ID = "com.kungsbackacarcommunity.app.push.ENTITY_ID"
+
+        /**
+         * Decodes the deep link a notification tap put on [intent], or null if
+         * this intent did not come from a notification (a normal launcher
+         * start, which must not navigate anywhere).
+         */
+        fun deepLinkFrom(intent: Intent?): PushDeepLink? {
+            val target = intent?.getStringExtra(EXTRA_PUSH_TARGET) ?: return null
+            return PushDeepLink(
+                target = PushTarget.fromWire(target),
+                entityId = intent.getStringExtra(EXTRA_PUSH_ENTITY_ID),
+            )
+        }
     }
 }

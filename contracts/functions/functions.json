@@ -480,7 +480,7 @@
     {
       "name": "notifications.registerPushToken",
       "domain": "notifications",
-      "description": "Registers a push device token. Only the SHA-256 hash of the FCM token is stored (as the userPrivate/{uid}/pushTokens document ID — registration is idempotent, re-registers bump lastSeenAt); the raw token never appears in documents, logs, or responses. Gated by the pushNotifications feature flag. FCM delivery itself (sendPushNotification) ships with the end-of-MVP Firebase console setup. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
+      "description": "Registers a push device token. The raw FCM token is stored in the userPrivate/{uid}/pushTokens document (FCM addresses a device BY the token, so a hash-only registry cannot send); the SHA-256 hash remains the document ID, which keeps registration idempotent — re-registers bump lastSeenAt. Multiple devices per member are supported (one document per token). The raw token is never logged and never returned: the response carries only the tokenId hash, and the collection denies ALL client access in firestore.rules. Gated by the pushNotifications feature flag. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
@@ -489,7 +489,7 @@
     {
       "name": "notifications.adminSend",
       "domain": "notifications",
-      "description": "Admin batch in-app notification send. Resolves an audience (all_users/free_users/members/admins/specific_user/event_participants), then fans an in-app notification out via writeInAppNotification (skips deleted/suspended recipients and honours per-category in-app opt-outs; essential categories always deliver). Idempotent per idempotencyKey (deterministic batchId; a replay is already-exists). Broad audiences (all_users/free_users) require confirmed:true. Synchronous fan-out bounded by 500 (larger audiences rejected). Mandatory reason is written to adminAuditEvents. Push delivery is out of scope (needs FCM console setup). Deployed via grouped export as notifications-adminSend (functions/src/notifications/adminSend.ts).",
+      "description": "Admin batch in-app notification send. Resolves an audience (all_users/free_users/members/admins/specific_user/event_participants), then fans an in-app notification out via writeInAppNotification (skips deleted/suspended recipients and honours per-category in-app opt-outs; essential categories always deliver). Idempotent per idempotencyKey (deterministic batchId; a replay is already-exists). Broad audiences (all_users/free_users) require confirmed:true. Synchronous fan-out bounded by 500 (larger audiences rejected). Mandatory reason is written to adminAuditEvents. Push follows automatically for every delivered item via the notifications-onNotificationCreated trigger. Deployed via grouped export as notifications-adminSend (functions/src/notifications/adminSend.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",

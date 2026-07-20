@@ -2,12 +2,18 @@
  * notifications.registerPushToken / unregisterPushToken — push device
  * registration callables (contracts/functions/functions.json).
  *
- * Legacy notification-service parity on the Firestore model:
- * - Only the SHA-256 hash of the FCM token is ever stored (the migration
- *   mapping's "FCM token hash only" option) and it doubles as the
- *   `userPrivate/{uid}/pushTokens/{tokenId}` document ID, so registration
- *   is naturally idempotent — a re-register bumps lastSeenAt. The raw
- *   token never appears in documents, logs, or responses.
+ * Storage model:
+ * - The SHA-256 hash of the FCM token is the
+ *   `userPrivate/{uid}/pushTokens/{tokenId}` document ID, so registration is
+ *   naturally idempotent — a re-register bumps lastSeenAt. One document per
+ *   device means a member may hold several (phone + tablet).
+ * - The document ALSO stores the raw token, because FCM addresses a device by
+ *   the token itself and the previous hash-only registry could never actually
+ *   send. The raw token is still never logged and never returned (the response
+ *   carries only the tokenId hash), and `pushTokens` denies ALL client access
+ *   in firebase/firestore.rules — only the Admin SDK reads it.
+ * - It is erased with `userPrivate/{uid}` on account deletion, and the send
+ *   path (sendPush.ts) prunes tokens FCM reports as permanently dead.
  * - Registration is gated by the pushNotifications feature flag and
  *   requires an active (non-suspended) account, like the legacy
  *   registerDevice route.
@@ -15,9 +21,8 @@
  *   able to clean up their devices (legacy requireAuthenticatedHook) — and
  *   is idempotent.
  *
- * Actual FCM delivery (`sendPushNotification`) is deliberately NOT part of
- * this phase: it requires the Firebase console / FCM project setup that
- * the migration schedules at the end of the MVP.
+ * Delivery itself lives in sendPush.ts (the notifications-onNotificationCreated
+ * Firestore trigger), which reads this registry.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -77,6 +82,12 @@ export const registerPushToken = onCall(
       const existing = await tx.get(ref);
       if (existing.exists) {
         tx.update(ref, {
+          // `token` is rewritten on every re-register, not just on create.
+          // Registrations written before the raw token was stored are
+          // hash-only and therefore unsendable; rewriting it here upgrades
+          // them in place the first time the device checks in, so no member
+          // has to unregister/reinstall to start receiving push.
+          token: parsed.input.token,
           platform: parsed.input.platform,
           appVersion: parsed.input.appVersion ?? null,
           buildNumber: parsed.input.buildNumber ?? null,

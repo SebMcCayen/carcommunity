@@ -203,14 +203,21 @@ service cloud.firestore {
       allow update: if isOwner(userId) && validUserPrivateUpdate();
       // No client deletes: account deletion is handled by backend functions.
 
-      // Push token registrations (Phase 9l). Documents contain only the
-      // SHA-256 token hash (as the document ID), platform, and app
-      // metadata — never the raw FCM token. All writes go through the
-      // notifications.registerPushToken / unregisterPushToken callables so
-      // hashing and lastSeenAt maintenance stay backend-controlled.
+      // Push token registrations. The document ID is the SHA-256 hash of the
+      // FCM token and the document now also holds the RAW token, because FCM
+      // addresses a device by the token itself — a hash-only registry can
+      // never send (functions/src/notifications/notifications-core.ts).
+      //
+      // Consequently this collection is CLOSED TO CLIENTS ENTIRELY, reads
+      // included. Owner-read was safe when the row was just a hash plus app
+      // metadata; it is not worth keeping now that a read returns raw,
+      // send-addressable tokens for every device the member owns. Nothing
+      // needs it: the client learns its own token from the FCM SDK, and both
+      // writes already go through the notifications.registerPushToken /
+      // unregisterPushToken callables. Only the Admin SDK (which bypasses
+      // these rules) touches this data.
       match /pushTokens/{tokenId} {
-        allow read: if isOwner(userId);
-        // No client writes.
+        allow read, write: if false;
       }
     }
 

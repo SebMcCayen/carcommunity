@@ -51,6 +51,7 @@ import {
 } from './billboards/manageBillboard';
 import { markAllRead, markRead } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
+import { onNotificationCreated } from './notifications/sendPush';
 import { adminSend as notificationsAdminSend } from './notifications/adminSend';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
 import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
@@ -353,14 +354,23 @@ export const billboards = {
  * Notifications domain (grouped export → deployed as
  * `notifications-markRead`, `notifications-markAllRead`,
  * `notifications-registerPushToken`, `notifications-unregisterPushToken`,
- * and the scheduled `notifications-cleanupExpired`).
+ * the scheduled `notifications-cleanupExpired`, and the Firestore trigger
+ * `notifications-onNotificationCreated`).
  *
  * Durable in-app inbox (contracts/functions/functions.json): owner-only
  * reads of `notifications/{uid}/items/`, backend-only writes (delivery via
  * writeInAppNotification, read-state via the mark callables), push token
- * registrations stored as SHA-256 hashes only, and the daily retention
- * sweep (unread 30 days, read 7 days). FCM delivery itself ships with the
- * end-of-MVP Firebase console setup.
+ * registrations, and the daily retention sweep (unread 30 days, read 7 days).
+ *
+ * `notifications-onNotificationCreated` is the FCM delivery path: a create
+ * trigger on `notifications/{uid}/items/{id}` that pushes the item to the
+ * member's registered devices. It hangs off the OUTPUT of
+ * writeInAppNotification precisely so push inherits the in-app opt-out
+ * decision structurally — no inbox document (opted out / suspended / deleted)
+ * means no push, and the decision is re-derived through decidePushDelivery,
+ * which calls decideInAppDelivery internally. Sends are data-only multicasts
+ * batched at 500 tokens; tokens FCM reports as dead are pruned from the
+ * registry (functions/src/notifications/sendPush.ts).
  */
 export const notifications = {
   markRead,
@@ -369,6 +379,7 @@ export const notifications = {
   unregisterPushToken,
   adminSend: notificationsAdminSend,
   cleanupExpired: cleanupExpiredNotifications,
+  onNotificationCreated,
 };
 
 /**

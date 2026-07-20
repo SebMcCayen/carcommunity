@@ -260,7 +260,7 @@ describe('notifications push token registration', () => {
   const tokensOf = (uid: string) =>
     adminDb.collection('userPrivate').doc(uid).collection('pushTokens');
 
-  it('stores only the token hash and registers idempotently', async () => {
+  it('keys the document by the token hash, stores the token, and registers idempotently', async () => {
     const rawToken = 'fcm-raw-token-abc-123';
     await signInAs(user);
     const result = (
@@ -272,8 +272,15 @@ describe('notifications push token registration', () => {
     ).data as { tokenId: string; platform: string };
 
     expect(result.tokenId).toBe(hashPushToken(rawToken));
+    // The RESPONSE still exposes only the hash — the raw token never round-trips
+    // back to a client.
+    expect(JSON.stringify(result)).not.toContain(rawToken);
+
     const stored = (await tokensOf(user.uid).doc(result.tokenId).get()).data()!;
-    expect(JSON.stringify(stored)).not.toContain(rawToken);
+    // The document DOES hold the raw token: FCM addresses a device by it, so a
+    // hash-only row is unsendable. It is protected by rules (no client access
+    // at all — see security-rules.emulator.test.ts) rather than by omission.
+    expect(stored.token).toBe(rawToken);
     expect(stored.platform).toBe('android');
     expect(stored.createdAt).toBeInstanceOf(Timestamp);
 

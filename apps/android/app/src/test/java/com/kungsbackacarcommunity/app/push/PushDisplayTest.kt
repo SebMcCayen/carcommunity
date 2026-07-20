@@ -19,8 +19,8 @@ class PushDisplayTest {
                         "title" to "Meet at the harbor",
                         "previewText" to "Starts in one hour",
                         "body" to "Long body",
-                        "actionType" to "open_event",
-                        "relatedEntityId" to "event-1",
+                        "target" to "event",
+                        "entityId" to "event-1",
                         "notificationId" to "n-1",
                     ),
             )
@@ -28,9 +28,58 @@ class PushDisplayTest {
         assertEquals("Starts in one hour", model.body)
         assertEquals(PushChannel.EVENTS.id, model.channelId)
         assertEquals(NotificationCategory.EVENT_REMINDER, model.category)
-        assertEquals("open_event", model.actionType)
-        assertEquals("event-1", model.relatedEntityId)
+        assertEquals(PushDeepLink(PushTarget.EVENT, "event-1"), model.deepLink)
         assertEquals("n-1", model.notificationId)
+    }
+
+    @Test
+    fun `a payload without previewText shows the title alone`() {
+        // What the backend sends when the member has lock-screen previews off:
+        // the preview is simply absent, so there is nothing to leak.
+        val model =
+            PushDisplay.fromMessage(
+                data =
+                    mapOf(
+                        "category" to "direct_message",
+                        "title" to "Nytt meddelande",
+                        "target" to "dm",
+                        "entityId" to "other-uid",
+                    ),
+            )
+        assertEquals("Nytt meddelande", model.title)
+        assertNull(model.body)
+        assertEquals(PushDeepLink(PushTarget.DM, "other-uid"), model.deepLink)
+    }
+
+    @Test
+    fun `an unknown or absent target degrades to the inbox`() {
+        assertEquals(PushTarget.NOTIFICATIONS, PushTarget.fromWire(null))
+        assertEquals(PushTarget.NOTIFICATIONS, PushTarget.fromWire("open_teleporter"))
+        assertEquals(
+            PushDeepLink(PushTarget.NOTIFICATIONS, null),
+            PushDisplay.fromMessage(data = emptyMap()).deepLink,
+        )
+    }
+
+    @Test
+    fun `every backend target wire value is understood`() {
+        // Mirrors PUSH_DEEP_LINK_TARGETS in notifications-core.ts. A value added
+        // there without a case here would silently fall back to the inbox.
+        val wireValues =
+            listOf(
+                "dm",
+                "community_chat",
+                "convoy_chat",
+                "convoys",
+                "friends",
+                "event",
+                "subscription",
+                "notifications",
+            )
+        assertEquals(wireValues.toSet(), PushTarget.entries.map { it.wire }.toSet())
+        wireValues.forEach { wire ->
+            assertEquals(wire, PushTarget.fromWire(wire).wire)
+        }
     }
 
     @Test
@@ -71,8 +120,8 @@ class PushDisplayTest {
         assertNull(model.title)
         assertNull(model.body)
         assertNull(model.notificationId)
-        assertNull(model.actionType)
-        assertNull(model.relatedEntityId)
+        assertEquals(PushTarget.NOTIFICATIONS, model.deepLink.target)
+        assertNull(model.deepLink.entityId)
     }
 
     @Test
@@ -88,8 +137,9 @@ class PushDisplayTest {
 
     @Test
     fun `display requires BOTH a signed-in user and the notification permission`() {
-        // Signed-out pushes must never display (tokens outlive sign-out;
-        // a shared device would leak the previous user's notifications).
+        // Signed-out pushes must never display. Sign-out unregisters the token,
+        // but that call can fail or race an in-flight send, so a shared device
+        // must still refuse to show the previous member's notifications.
         assertFalse(PushDisplay.shouldDisplay(signedIn = false, permissionGranted = true))
         assertFalse(PushDisplay.shouldDisplay(signedIn = false, permissionGranted = false))
         // Signed in but permission denied — dropped.

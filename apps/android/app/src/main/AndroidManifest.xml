@@ -54,9 +54,13 @@
              it purely as a WindowInsets.ime inset. The declaration's whole job is
              to take PAN off the table, leaving the app's own imePadding as the
              single thing that moves the composer. -->
+        <!-- launchMode="singleTop": tapping a push reuses the running task and
+             delivers the deep-link extras to onNewIntent instead of stacking a
+             second MainActivity on top of the member's current screen. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.KCC"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
