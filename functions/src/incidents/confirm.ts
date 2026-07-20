@@ -115,6 +115,23 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
       throw new HttpsError('failed-precondition', 'This incident is no longer active.');
     }
 
+    // `reporterUid` must be a real uid before the self-confirmation check below
+    // can mean anything. A user-sourced incident always has one (report.ts
+    // writes `reporterUid: actor.uid` unconditionally), so a missing or
+    // non-string value is corruption from outside — and the failure mode is
+    // worse than the malformed createdAt/type below, because it is silent: a
+    // `null` reporterUid never equals any caller's uid, so the authorization
+    // check does not reject, it simply never fires, and the reporter can
+    // confirm and extend their own report. An authorization guard that
+    // quietly stops guarding is exactly the class of thing that must be loud.
+    if (typeof data.reporterUid !== 'string' || data.reporterUid.length === 0) {
+      logger.error('incidents.confirm: user incident has a missing/invalid reporterUid', {
+        incidentId,
+        reporterUidType: typeof data.reporterUid,
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+
     if (data.reporterUid === actor.uid) {
       throw new HttpsError('permission-denied', 'You cannot confirm your own report.');
     }

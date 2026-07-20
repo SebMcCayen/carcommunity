@@ -668,6 +668,27 @@ describe('incidents.confirm', () => {
     expect((await ref.collection('confirmations').doc(otherMember.uid).get()).exists).toBe(false);
   });
 
+  it('REFUSES to confirm a user incident whose reporterUid is missing', async () => {
+    // Sharper than the two below: a null reporterUid does not make the
+    // self-confirmation check REJECT, it makes it never fire — so without this
+    // guard the reporter could confirm and extend their own report. Asserted
+    // from the reporter's own session for exactly that reason.
+    const ref = await seedMalformed('malformed-reporter-uid', { reporterUid: null });
+    const before = (await ref.get()).data()!.expiresAt as InstanceType<typeof Timestamp>;
+
+    await signInAs(member);
+    expect(await callableErrorCode(call('incidents-confirm', { incidentId: ref.id }))).toBe(
+      'functions/internal',
+    );
+
+    const after = await ref.get();
+    expect(after.data()?.confirmationCount).toBeUndefined();
+    expect((after.data()?.expiresAt as InstanceType<typeof Timestamp>).toMillis()).toBe(
+      before.toMillis(),
+    );
+    expect((await ref.collection('confirmations').doc(member.uid).get()).exists).toBe(false);
+  });
+
   it('REFUSES to confirm an incident whose type is not a known incident type', async () => {
     const ref = await seedMalformed('malformed-type', { type: 'meteor-strike' });
     const before = (await ref.get()).data()!.expiresAt as InstanceType<typeof Timestamp>;
