@@ -51,13 +51,7 @@ import { haversineDistanceMeters, isValidCoordinate } from '../crownHunt/crown-h
 // ---------------------------------------------------------------------------
 
 /** Reportable incident categories. */
-export const INCIDENT_TYPES = [
-  'accident',
-  'roadwork',
-  'hazard',
-  'police',
-  'road_closed',
-] as const;
+export const INCIDENT_TYPES = ['accident', 'roadwork', 'hazard', 'police', 'road_closed'] as const;
 export type IncidentType = (typeof INCIDENT_TYPES)[number];
 
 /** Where an incident came from. */
@@ -221,6 +215,11 @@ export function expiryFor(type: IncidentType, now: Date): Date {
  * number of confirmations pushes `expiresAt` past
  * `createdAt + LIFETIME_CAP_MULTIPLIER × INCIDENT_TTL_MS[type]`.
  *
+ * Read "pushes past" precisely — it is a bound on what a confirmation MOVES the
+ * expiry to, not a post-condition on the stored value. A document that already
+ * carries an over-cap expiry from outside this module keeps it; see
+ * {@link extendedExpiryFor} for why clamping down would be the wrong trade.
+ *
  * 3× is the deliberate trade-off: a genuinely persistent situation (12h
  * roadwork) can be kept alive for a day and a half by passers-by, which covers
  * a real multi-day roadwork's useful window, while a stale police sighting
@@ -247,6 +246,25 @@ export interface ExtendedExpiry {
  * "I just drove past it" means), but never past the absolute lifetime cap, and
  * never BACKWARDS — an incident whose current expiry is already further out
  * (e.g. a long-TTL type confirmed early) keeps the later value.
+ *
+ * WHICH RULE WINS WHEN THEY CONFLICT: never-backwards. A stored expiry that is
+ * ALREADY past the ceiling is returned unchanged rather than clamped down, so
+ * this function's output can exceed the ceiling — but only by passing through a
+ * value it did not produce. The invariant the cap actually asserts is intact:
+ * no confirmation ever MOVES `expiresAt` outward past the ceiling, and in this
+ * case it moves it not at all (`extended: false`, and the callable writes the
+ * same instant back).
+ *
+ * That is deliberate, not an oversight. An over-cap expiry can only come from
+ * outside this module (a console edit, a restore from a stale export, an older
+ * bug) — no writer produces one, since report.ts stamps `createdAt + 1×TTL` and
+ * only this function ever moves it. Clamping DOWN here would not rescue such a
+ * document anyway: its lifetime is governed by the TTL sweep reading
+ * `expiresAt`, so it survives to its bogus expiry whether or not anyone ever
+ * confirms it. Clamping would therefore fix nothing in general, while
+ * introducing a "confirming an incident SHORTENS its life" behaviour — a
+ * surprising, user-visible regression traded for a partial patch of a defect
+ * this function did not create.
  *
  * Pure: takes the instants, returns the new instant. The callable supplies
  * `createdAt` from the stored document so the cap is anchored to the real

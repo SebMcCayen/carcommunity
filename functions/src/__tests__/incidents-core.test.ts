@@ -152,9 +152,9 @@ describe('incidents-core input parsing', () => {
   });
 
   it('rejects unknown keys (strict) and over-long notes', () => {
-    expect(
-      parseReportInput({ type: 'roadwork', latitude: 57, longitude: 12, extra: 1 }).ok,
-    ).toBe(false);
+    expect(parseReportInput({ type: 'roadwork', latitude: 57, longitude: 12, extra: 1 }).ok).toBe(
+      false,
+    );
     expect(
       parseReportInput({ type: 'roadwork', latitude: 57, longitude: 12, note: 'x'.repeat(201) }).ok,
     ).toBe(false);
@@ -395,8 +395,12 @@ describe('incidents-core confirmation expiry extension', () => {
       // Stop once the incident would actually be dead — the callable refuses to
       // confirm an expired incident, so confirmations cannot resume after that.
       if (now.getTime() >= expiresAt.getTime()) break;
-      expiresAt = extendedExpiryFor({ type, createdAt: T0, currentExpiresAt: expiresAt, now })
-        .expiresAt;
+      expiresAt = extendedExpiryFor({
+        type,
+        createdAt: T0,
+        currentExpiresAt: expiresAt,
+        now,
+      }).expiresAt;
       expect(expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
     }
     // The cap is genuinely reached (the test is not vacuously passing).
@@ -438,6 +442,37 @@ describe('incidents-core confirmation expiry extension', () => {
     expect(early.expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
     expect(late.expiresAt.getTime()).toBeLessThanOrEqual(ceiling);
     expect(late.expiresAt.getTime()).toBeGreaterThan(early.expiresAt.getTime());
+  });
+
+  it('passes an already-over-cap expiry through unchanged rather than clamping it down', () => {
+    // An expiry beyond the ceiling can only arrive from OUTSIDE this module (a
+    // console edit, a stale restore, an older bug) — no writer produces one.
+    // The documented precedence is never-backwards over the ceiling, so the
+    // value is returned untouched and the confirmation buys nothing.
+    const type = 'police';
+    const ttl = INCIDENT_TTL_MS[type];
+    const wayOut = new Date(T0.getTime() + 500 * ttl);
+    const result = extendedExpiryFor({
+      type,
+      createdAt: T0,
+      currentExpiresAt: wayOut,
+      now: at(0.5 * ttl),
+    });
+    // Unchanged — the confirmation did NOT move it, in either direction.
+    expect(result.expiresAt.getTime()).toBe(wayOut.getTime());
+    expect(result.extended).toBe(false);
+    // And the invariant the cap actually asserts still holds: repeated
+    // confirmations never push it further out.
+    let expiresAt = result.expiresAt;
+    for (let i = 0; i < 50; i += 1) {
+      expiresAt = extendedExpiryFor({
+        type,
+        createdAt: T0,
+        currentExpiresAt: expiresAt,
+        now: at((i + 1) * ttl),
+      }).expiresAt;
+      expect(expiresAt.getTime()).toBe(wayOut.getTime());
+    }
   });
 
   it('caps every incident type', () => {
