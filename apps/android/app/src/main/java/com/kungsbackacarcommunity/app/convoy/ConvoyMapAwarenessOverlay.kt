@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -95,17 +96,17 @@ fun ConvoyMapAwarenessOverlay(
     nowMillis: () -> Long = { System.currentTimeMillis() },
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
-    var viewportSize by remember { mutableStateOf(IntOffset.Zero) }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
     Box(
         modifier =
             modifier
                 .fillMaxSize()
-                .onSizeChanged { viewportSize = IntOffset(it.width, it.height) }
+                .onSizeChanged { viewportSize = it }
                 .testTag(CONVOY_AWARENESS_OVERLAY_TAG),
     ) {
         val snapshot = camera ?: return@Box
-        if (members.isEmpty() || viewportSize.x <= 0 || viewportSize.y <= 0) return@Box
+        if (members.isEmpty() || viewportSize.width <= 0 || viewportSize.height <= 0) return@Box
 
         val edgeInsetPx = with(LocalDensity.current) { EDGE_INSET.toPx() }
         // The inside/outside margin is the chip's RADIUS, converted at the
@@ -150,8 +151,8 @@ fun ConvoyMapAwarenessOverlay(
                     cameraLatitude = snapshot.latitude,
                     cameraLongitude = snapshot.longitude,
                     cameraBearing = snapshot.bearing,
-                    viewportWidth = viewportSize.x.toFloat(),
-                    viewportHeight = viewportSize.y.toFloat(),
+                    viewportWidth = viewportSize.width.toFloat(),
+                    viewportHeight = viewportSize.height.toFloat(),
                     edgeInsetPx = edgeInsetPx,
                     viewportMarginPx = viewportMarginPx,
                     // The tick IS the clock reading, so the value that decided to
