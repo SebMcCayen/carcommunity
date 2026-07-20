@@ -180,7 +180,10 @@ class LocationSharingService : Service() {
             // just a service that quietly walked away from an open session.
             // The uid it was built for comes along so we can verify the callable
             // would act on the right account — see stopSharingAndSelf.
-            stopSharingAndSelf(expectedUid = intent.getStringExtra(EXTRA_UID))
+            stopSharingAndSelf(
+                expectedUid = intent.getStringExtra(EXTRA_UID),
+                startId = startId,
+            )
             return START_NOT_STICKY
         }
 
@@ -387,7 +390,7 @@ class LocationSharingService : Service() {
      * kill the call before dispatch, leaving the session live server-side until
      * expiry — see [LiveSharingStop] for the measurement.
      */
-    private fun stopSharingAndSelf(expectedUid: String?) {
+    private fun stopSharingAndSelf(expectedUid: String?, startId: Int) {
         // `live.stopSession` is scoped to the CURRENTLY signed-in FirebaseAuth
         // user, not to whoever this notification was posted for. Those can differ:
         // the SIGNED_OUT teardown is driven by the 15 s tick, so after a sign-out
@@ -432,7 +435,13 @@ class LocationSharingService : Service() {
         stopScope.launch {
             LiveSharingStop.run(
                 stopSession = { repo.stopSession() },
-                finish = { stopSelf() },
+                // stopSelf(startId), NOT stopSelf(): the teardown is deferred for
+                // the length of the round trip, and the user can start sharing
+                // again inside that window. An unconditional stop would then kill
+                // the NEW run — sharing that silently dies seconds after the user
+                // asked for it. The startId form stops only while this remains
+                // the most recent start, so a newer one wins.
+                finish = { stopSelf(startId) },
             )
         }
     }
