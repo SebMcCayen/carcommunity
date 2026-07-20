@@ -109,6 +109,9 @@ import {
   list as convoyChatList,
   post as convoyChatPost,
 } from './chatchannels/convoyChat';
+import { reportMessage as chatChannelsReportMessage } from './chatchannels/reportMessage';
+import { reportMessage as dmReportMessage } from './dm/reportMessage';
+import { reportUser as moderationReportUser } from './moderation/reportUser';
 
 /**
  * GET /health
@@ -605,6 +608,7 @@ export const dm = {
   listConversations: dmListConversations,
   getMessages: dmGetMessages,
   markRead: dmMarkRead,
+  reportMessage: dmReportMessage,
 };
 
 /**
@@ -698,4 +702,42 @@ export const communityChat = {
 export const convoyChat = {
   post: convoyChatPost,
   list: convoyChatList,
+};
+
+/**
+ * Chat-channel moderation (grouped export → deployed as
+ * `chatchannels-reportMessage`).
+ *
+ * The report path for the two CHANNEL chats. It is one callable across both
+ * channels (`{ channel: 'community' | 'convoy', convoyId? }`) rather than one
+ * per channel because the only thing that differs is the eligibility check;
+ * the validation, dedup, rate limit, snapshot and admin queue are identical,
+ * and splitting them would be two chances to drift. Eligibility mirrors each
+ * channel's read rule (any active member for community; an ACCEPTED convoy
+ * member for convoy, via the same gate convoyChat.post/list use). Writes
+ * moderationReports/{reportId} — admin-read-only, client-write-denied
+ * (firebase/firestore.rules) — snapshotting the reported message because
+ * channel messages are TTL-deleted. Blocking does NOT gate reporting, in
+ * either direction. See functions/src/moderation/moderation-core.ts.
+ */
+export const chatchannels = {
+  reportMessage: chatChannelsReportMessage,
+};
+
+/**
+ * Moderation domain (grouped export → deployed as `moderation-reportUser`).
+ *
+ * Reporting a PERSON rather than a message — the escalation for behaviour that
+ * doesn't reduce to one line of chat. Gated on requireActiveActor (matching
+ * blocking.*, the sibling safety tool: a lapsed member must still be able to
+ * report harassment), rejects self-reports, and deduplicates per
+ * (reporter, reportedUser) WITHOUT the reason, so one reporter cannot fill the
+ * queue by cycling the reason enum — a repeat tallies `occurrences` on the one
+ * document instead. Captures only the reported user's public profile
+ * projection plus that tally; never their history. A per-target aggregate at
+ * moderationUserSummaries/{uid} carries the distinct-reporter count for O(1)
+ * admin triage. See functions/src/moderation/moderation-core.ts.
+ */
+export const moderation = {
+  reportUser: moderationReportUser,
 };
