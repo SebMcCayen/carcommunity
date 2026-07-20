@@ -182,4 +182,37 @@ class ConvoyFocusTest {
             ConvoyFocusPlanner.plan(store.mode.value, me, listOf(other)),
         )
     }
+
+    /**
+     * The distinction the surface's `toggled` check depends on.
+     *
+     * `plan` returns FollowSelf for TWO different reasons: the user switched
+     * focus off, and focus is still on but there is nothing fittable yet. The
+     * surface must not confuse them — treating the second as a user toggle makes
+     * a transient roster gap force-resume following and snatch the camera back
+     * from someone who deliberately panned away. Which is why setConvoyFit takes
+     * the mode as its own argument rather than inferring intent from null points.
+     */
+    @Test
+    fun `follow-self from an empty roster is not the same as focus being switched off`() {
+        // Focus ON, but nobody's position is known this tick.
+        val gap = ConvoyFocusPlanner.plan(ConvoyFocusMode.Convoy, me, emptyList())
+        // Focus OFF, with a full roster available.
+        val off = ConvoyFocusPlanner.plan(ConvoyFocusMode.Me, me, listOf(other))
+
+        // Both yield the SAME plan — that is the whole point. The plan is
+        // therefore not sufficient information for the surface to decide whether
+        // the user acted, and any implementation that reads intent out of it is
+        // wrong for one of these two cases.
+        assertEquals(ConvoyCameraPlan.FollowSelf, gap)
+        assertEquals(ConvoyCameraPlan.FollowSelf, off)
+        assertEquals(gap, off)
+
+        // The mode is what separates them, and it is available at the call site
+        // that has to choose — so the surface is given it directly.
+        assertTrue(
+            "focus stays ON during a data gap; only the user's choice turns it off",
+            ConvoyFocusMode.Convoy != ConvoyFocusMode.Me,
+        )
+    }
 }

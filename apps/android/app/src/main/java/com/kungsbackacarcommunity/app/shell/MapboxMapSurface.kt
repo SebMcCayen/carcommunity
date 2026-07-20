@@ -159,6 +159,10 @@ class MapboxMapSurface : MapSurface {
     // rather than becoming a second camera owner.
     private var convoyFitPoints: List<MapPoint>? = null
 
+    // The user's convoy-focus choice, tracked separately from [convoyFitPoints]
+    // so a transient "nothing to fit" is never mistaken for switching focus off.
+    private var convoyFocusEnabled: Boolean = false
+
     // The fit currently applied to the camera, so a stream of live positions that
     // does not actually change the framing does not re-ease the camera every
     // second (see ConvoyFocusPlanner.shouldRefit). Null when not fitting.
@@ -369,18 +373,27 @@ class MapboxMapSurface : MapSurface {
         }.getOrNull()
     }
 
-    override fun setConvoyFit(points: List<MapPoint>?) {
-        val previous = convoyFitPoints
+    override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
+        val previousFocusEnabled = convoyFocusEnabled
         convoyFitPoints = points?.takeIf { it.isNotEmpty() }
+        convoyFocusEnabled = focusEnabled
 
         // Turning the fit ON or OFF is an explicit user act (the convoy bar's
         // focus toggle), so — exactly like the my-location control — it resumes
         // following and cancels any pending idle-return. Everything else that
         // reaches this method is a position/roster tick, which must NOT resume
         // following, or a user who had panned away would be yanked back every
-        // second. The two are told apart by the null transition: the fit stays
-        // non-null across ticks, so only a genuine toggle flips it.
-        val toggled = (previous == null) != (convoyFitPoints == null)
+        // second.
+        //
+        // The two are told apart by the user's FOCUS CHOICE, not by whether
+        // `points` went null. Those are different questions: the planner also
+        // hands us null while focus is ON but nothing is fittable yet (nobody
+        // sharing a position, or only one point). Reading a null as "the user
+        // switched focus off" would make a transient data gap — one tick where
+        // the roster is momentarily empty — force-resume following and snatch the
+        // camera back from someone who had deliberately panned away to look at
+        // something.
+        val toggled = previousFocusEnabled != focusEnabled
         if (toggled) {
             followController.onRecenterRequested()
             idleReturnJob?.cancel()
@@ -388,15 +401,22 @@ class MapboxMapSurface : MapSurface {
         }
 
         if (convoyFitPoints == null) {
-            // Convoy focus turned off — the user switched back to "me", left the
-            // convoy, or the convoy ended. Forget the applied fit and glide back
-            // to the normal framing, which restores the ZOOM as well as the
-            // centre. Without this the camera would be left wherever the last fit
-            // put it: technically following the user again, but stuck zoomed out
-            // over an area the group no longer occupies. Only when we were
-            // actually fitting, so an unrelated null does not yank the camera.
+            // Nothing to frame. Forget the applied fit either way, so a later
+            // refit is not compared against a stale bounding box.
             appliedConvoyFit = null
-            if (previous != null && followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+            // Glide back to the normal framing — which restores the ZOOM as well
+            // as the centre — ONLY when the user actually switched focus off
+            // (or left / the convoy ended). Without that the camera would be left
+            // wherever the last fit put it: technically following the user again,
+            // but stuck zoomed out over an area the group no longer occupies.
+            //
+            // Gated on `toggled` rather than on `previous != null`, because a
+            // momentary gap in live positions also arrives here with focus still
+            // ON. Easing to the user then would re-zoom the map mid-convoy every
+            // time the roster blinked.
+            if (toggled && !focusEnabled &&
+                followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)
+            ) {
                 easeToUser()
             }
             return
@@ -1139,6 +1159,7 @@ class MapboxMapSurface : MapSurface {
                 // so clearing the applied fit here cannot strand the camera.
                 convoyFitPoints = null
                 appliedConvoyFit = null
+                convoyFocusEnabled = false
                 mapView.onDestroy()
             },
         )

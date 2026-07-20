@@ -169,6 +169,7 @@ import com.kungsbackacarcommunity.app.location.openAppLocationSettings
 import com.kungsbackacarcommunity.app.location.openDeviceLocationSettings
 import com.kungsbackacarcommunity.app.location.shouldShowLocationRationale
 import com.kungsbackacarcommunity.app.map.ConvoyCameraPlan
+import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyFocusStore
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
@@ -1275,11 +1276,18 @@ fun AuthenticatedApp(
                                 },
                         )
                     mapSurface.setConvoyFit(
-                        when (plan) {
-                            is ConvoyCameraPlan.FollowSelf -> null
-                            is ConvoyCameraPlan.FitConvoy ->
-                                plan.points.map { MapPoint(it.longitude, it.latitude) }
-                        },
+                        points =
+                            when (plan) {
+                                is ConvoyCameraPlan.FollowSelf -> null
+                                is ConvoyCameraPlan.FitConvoy ->
+                                    plan.points.map { MapPoint(it.longitude, it.latitude) }
+                            },
+                        // The user's CHOICE, passed separately from the points:
+                        // the planner also yields FollowSelf (null points) while
+                        // focus is still on but nobody is sharing a position yet,
+                        // and the surface must not read that transient gap as the
+                        // user switching focus off. See MapSurface.setConvoyFit.
+                        focusEnabled = convoyFocusMode == ConvoyFocusMode.Convoy,
                     )
                 }
 

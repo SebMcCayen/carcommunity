@@ -98,9 +98,17 @@ object ConvoyEdgeGeometry {
         val toLat = Math.toRadians(toLatitude)
         val deltaLat = toLat - fromLat
         val deltaLng = Math.toRadians(toLongitude - fromLongitude)
+        // Clamped into [0, 1]: `a` is mathematically a squared sine and cannot
+        // leave that range, but floating-point rounding can push it a hair past
+        // 1 for near-antipodal points. `sqrt(1 - a)` would then be NaN, and a NaN
+        // distance propagates silently into the planner — a member sorted by a
+        // NaN distance neither compares nor filters predictably, so an arrow
+        // would go missing or point nowhere with nothing to indicate why.
         val a =
-            sin(deltaLat / 2) * sin(deltaLat / 2) +
-                cos(fromLat) * cos(toLat) * sin(deltaLng / 2) * sin(deltaLng / 2)
+            (
+                sin(deltaLat / 2) * sin(deltaLat / 2) +
+                    cos(fromLat) * cos(toLat) * sin(deltaLng / 2) * sin(deltaLng / 2)
+                ).coerceIn(0.0, 1.0)
         return 2 * EARTH_RADIUS_METERS * atan2(sqrt(a), sqrt(1 - a))
     }
 

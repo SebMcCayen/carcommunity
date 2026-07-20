@@ -142,7 +142,17 @@ object ConvoyArrowPlanner {
      */
     const val MIN_ARROW_DISTANCE_METERS: Double = 5.0
 
-    /** Viewport slack for the inside/outside decision (hysteresis, px). */
+    /**
+     * Fallback viewport slack for the inside/outside decision, in device px.
+     *
+     * Callers that know the display density should pass their own
+     * `viewportMarginPx` to [plan] instead — the margin needs to be about the
+     * chip's RADIUS so a member is reclassified as off-screen just before their
+     * chip starts being clipped, and the chip is sized in dp. A fixed px value
+     * is only correct at mdpi: at 3x the chip radius is ~72px while this is 24,
+     * so a member would stay a marker while already half off the screen, and
+     * flicker between marker and arrow along the edge.
+     */
     const val VIEWPORT_MARGIN_PX: Float = 24f
 
     /**
@@ -169,6 +179,7 @@ object ConvoyArrowPlanner {
         viewportHeight: Float,
         edgeInsetPx: Float,
         nowMillis: Long,
+        viewportMarginPx: Float = VIEWPORT_MARGIN_PX,
         project: (ConvoyMemberPosition) -> ProjectedPoint?,
     ): ConvoyPlacements {
         if (viewportWidth <= 0f || viewportHeight <= 0f) return ConvoyPlacements()
@@ -218,7 +229,7 @@ object ConvoyArrowPlanner {
                         point = projected,
                         viewportWidth = viewportWidth,
                         viewportHeight = viewportHeight,
-                        marginPx = VIEWPORT_MARGIN_PX,
+                        marginPx = viewportMarginPx,
                     )
 
             if (inside || distance < MIN_ARROW_DISTANCE_METERS) {

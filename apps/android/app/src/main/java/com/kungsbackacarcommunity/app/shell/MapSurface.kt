@@ -261,8 +261,17 @@ interface MapSurface {
      * Clearing it (null) restores the normal framing, including the zoom, so a
      * convoy that ends cannot leave the camera stuck zoomed out over the group.
      * A no-op beyond storing the value on the stub.
+     *
+     * [focusEnabled] is the USER'S CHOICE — whether convoy focus is switched on —
+     * and is deliberately separate from whether [points] happens to be null.
+     * The two differ, and conflating them is a real bug: the planner also returns
+     * null when focus IS on but there is nothing fittable yet (nobody sharing a
+     * position, or only one point). Inferring "the user toggled focus off" from a
+     * null would then fire on a transient data gap and force-resume following,
+     * yanking the camera back from a user who had deliberately panned away.
+     * Only a change in [focusEnabled] counts as the deliberate act.
      */
-    fun setConvoyFit(points: List<MapPoint>?)
+    fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean)
 
     /**
      * The most recent "navigate to this place?" gesture, or null when none is
@@ -426,8 +435,14 @@ class StubMapSurface(
     /** Last value passed to [setConvoyFit] — observable so tests can assert the wiring. */
     val convoyFit: StateFlow<List<MapPoint>?> = convoyFitFlow.asStateFlow()
 
-    override fun setConvoyFit(points: List<MapPoint>?) {
+    private val convoyFocusEnabledFlow = MutableStateFlow(false)
+
+    /** Last [focusEnabled] passed to [setConvoyFit] — observable for tests. */
+    val convoyFocusEnabled: StateFlow<Boolean> = convoyFocusEnabledFlow.asStateFlow()
+
+    override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
         convoyFitFlow.value = points
+        convoyFocusEnabledFlow.value = focusEnabled
     }
 
     // Test hook: the projection the stub should report, or null for "no map".

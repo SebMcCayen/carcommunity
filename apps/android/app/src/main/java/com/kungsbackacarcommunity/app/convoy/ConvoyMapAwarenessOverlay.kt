@@ -108,6 +108,11 @@ fun ConvoyMapAwarenessOverlay(
         if (members.isEmpty() || viewportSize.x <= 0 || viewportSize.y <= 0) return@Box
 
         val edgeInsetPx = with(LocalDensity.current) { EDGE_INSET.toPx() }
+        // The inside/outside margin is the chip's RADIUS, converted at the
+        // current density, so a member flips to an arrow just as their chip would
+        // start being clipped by the edge. A fixed px constant would only be
+        // right at mdpi and would leave a 3x device drawing half-clipped markers.
+        val viewportMarginPx = with(LocalDensity.current) { (CHIP_SIZE / 2).toPx() }
 
         // TIME is the fourth thing that can change the answer, and unlike the
         // camera, the roster and the viewport, nothing emits when it passes.
@@ -139,7 +144,7 @@ fun ConvoyMapAwarenessOverlay(
         // into the live map, which is why it is keyed on the snapshot rather than
         // memoised on the members alone.
         val placements =
-            remember(snapshot, members, viewportSize, edgeInsetPx, staleTick) {
+            remember(snapshot, members, viewportSize, edgeInsetPx, viewportMarginPx, staleTick) {
                 ConvoyArrowPlanner.plan(
                     members = members,
                     cameraLatitude = snapshot.latitude,
@@ -148,6 +153,7 @@ fun ConvoyMapAwarenessOverlay(
                     viewportWidth = viewportSize.x.toFloat(),
                     viewportHeight = viewportSize.y.toFloat(),
                     edgeInsetPx = edgeInsetPx,
+                    viewportMarginPx = viewportMarginPx,
                     // The tick IS the clock reading, so the value that decided to
                     // recompute is the same one the staleness test uses.
                     nowMillis = staleTick,
