@@ -148,6 +148,37 @@ describe('runCommunityChatDigest — query path', () => {
     expect(await digestItems(stable)).toHaveLength(1);
   });
 
+  it('advances the marker BEFORE delivery, so a delivery failure never duplicates', async () => {
+    // Failure ordering: the marker + notification writes are not atomic. We advance
+    // the marker first, so a transient delivery failure yields a MISSED digest (marker
+    // advanced, nothing delivered), never a DUPLICATE on the next run. Inject a
+    // throwing deliverer to force that failure and assert both halves.
+    const flaky = await seedUser('flaky', { lastReadAtMs: BASE_MS });
+
+    const throwingDeliver = () => {
+      throw new Error('simulated transient delivery failure');
+    };
+
+    // Run 1: delivery throws AFTER the marker advanced.
+    const summary = await runCommunityChatDigest(
+      now,
+      { threshold: COMMUNITY_DIGEST_MIN_UNREAD, maxCandidates: 20_000, pageSize: 400 },
+      { deliver: throwingDeliver as never },
+    );
+    expect(summary.notified).toBeGreaterThanOrEqual(1);
+
+    // Nothing was delivered (the writer threw)...
+    expect(await digestItems(flaky)).toHaveLength(0);
+    // ...but the marker DID advance to the newest instant.
+    const privAfter = (await adminDb.collection('userPrivate').doc(flaky).get()).data()!;
+    expect((privAfter.communityChatDigestedUpTo as Timestamp).toMillis()).toBe(NEWEST_MS);
+
+    // Run 2 with the real deliverer: the advanced marker means already-digested, so
+    // NO duplicate is delivered for the same backlog.
+    await runCommunityChatDigest(now);
+    expect(await digestItems(flaky)).toHaveLength(0);
+  });
+
   it('exposes the documented minimum-unread threshold', () => {
     expect(COMMUNITY_DIGEST_MIN_UNREAD).toBe(3);
   });

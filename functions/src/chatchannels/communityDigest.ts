@@ -41,6 +41,9 @@
  * only when ≥ threshold NEW messages arrive after their last digest (or never, if the
  * chat stays quiet). Secondary: a per-UTC-day deterministic notificationId collapses a
  * same-day replay. Reading the chat advances lastReadAt and ends re-digesting.
+ * The marker is advanced BEFORE the notification write (the two are not atomic): a
+ * failure between them costs a missed digest, never a duplicate — the deliberate
+ * tradeoff documented at the write site.
  *
  * OPT-OUT is INHERITED, never re-checked here: every notice goes through
  * writeInAppNotification, whose decideInAppDelivery drops deleted/suspended recipients
@@ -119,6 +122,15 @@ export interface CommunityDigestLimits {
 }
 
 /**
+ * Injectable I/O — production uses the real notification writer; a test can pass a
+ * stub (e.g. one that throws) to exercise the marker/delivery failure ordering. Same
+ * test-seam intent as `limits`; the scheduled entry point never passes it.
+ */
+export interface CommunityDigestDeps {
+  deliver: typeof writeInAppNotification;
+}
+
+/**
  * Runs one digest sweep against `now`.
  *
  * `limits` exists so a test can seed a small scale and exercise the bounds; the
@@ -131,6 +143,7 @@ export async function runCommunityChatDigest(
     maxCandidates: MAX_CANDIDATES_PER_RUN,
     pageSize: CANDIDATE_PAGE_SIZE,
   },
+  deps: CommunityDigestDeps = { deliver: writeInAppNotification },
 ): Promise<CommunityDigestSummary> {
   const summary: CommunityDigestSummary = {
     emptyChannel: false,
@@ -227,10 +240,40 @@ export async function runCommunityChatDigest(
         continue;
       }
 
+      // PRIMARY idempotency guard, written BEFORE delivery. The two writes (marker +
+      // notification) are not atomic, so ORDER decides the failure mode between them:
+      //   - marker FIRST (here): a transient failure after the marker advances but
+      //     before delivery costs at most a MISSED digest — the notice is silently
+      //     dropped, never re-attempted.
+      //   - notification first: a marker-write failure after a delivered notice leaves
+      //     a delivered-but-unmarked state; next run mints a NEW per-UTC-day
+      //     notificationId and re-delivers the SAME backlog — a DUPLICATE, recurring
+      //     daily until the member reads the chat.
+      // For a daily, low-value nudge a missed roll-up is invisible, whereas a duplicate
+      // is precisely the notification fatigue the digest exists to remove and trains
+      // members to ignore it — so we prefer the missed digest and advance the marker
+      // first. Stamped on the DECISION to notify (threshold crossed), independent of
+      // delivery outcome, so a muted recipient is not re-evaluated every run.
+      try {
+        await userPrivateRef(doc.id).set(
+          { communityChatDigestedUpTo: latestMessageStamp },
+          { merge: true },
+        );
+      } catch (error) {
+        // Nothing was delivered and the marker did NOT advance, so the next run simply
+        // retries this member (all writes idempotent) — no duplicate risk.
+        logger.error('Community digest marker write failed; will retry next run', {
+          uid: doc.id,
+          error: String(error),
+        });
+        continue;
+      }
+      summary.notified += 1;
+
       try {
         // Opt-out / suspended / deleted eligibility is OWNED by this call — not
         // re-checked here. The per-UTC-day id is the secondary idempotency guard.
-        await writeInAppNotification(
+        await deps.deliver(
           doc.id,
           {
             category: 'community_chat',
@@ -242,20 +285,10 @@ export async function runCommunityChatDigest(
           },
           communityDigestNotificationId(now),
         );
-
-        // PRIMARY idempotency guard: advance the digest marker to this run's newest
-        // instant so this unread run is never re-digested. Stamped on the DECISION
-        // to notify (threshold crossed), independent of delivery outcome, so a muted
-        // recipient is not re-evaluated every run for the same backlog.
-        await userPrivateRef(doc.id).set(
-          { communityChatDigestedUpTo: latestMessageStamp },
-          { merge: true },
-        );
-        summary.notified += 1;
       } catch (error) {
-        // One member's failure must not abort the sweep; the marker was not
-        // advanced, so the next run retries this member (all writes idempotent).
-        logger.error('Community digest delivery failed; will retry next run', {
+        // The marker is ALREADY advanced, so we deliberately do NOT retry: a missed
+        // daily nudge is the accepted cost of guaranteeing no duplicate (see above).
+        logger.error('Community digest delivery failed after marker advanced; dropping to avoid a duplicate', {
           uid: doc.id,
           error: String(error),
         });
