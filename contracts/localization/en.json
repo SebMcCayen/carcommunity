@@ -635,7 +635,19 @@
     "recordPermissionRationale": "Location access is required to record a drive.",
     "recordPermissionDenied": "Location access was denied. Allow location to record a drive.",
     "recordLocationUnavailable": "Location is not available on this device.",
-    "recordBack": "Back"
+    "recordBack": "Back",
+    "statsEntryTitle": "Your driving",
+    "statsEntrySubtitle": "Totals and records",
+    "statsTitle": "Your driving",
+    "statsEmpty": "No drives to summarise yet.",
+    "statsAllTime": "All time",
+    "statsThisMonth": "This month",
+    "statsTotalDrives": "Drives",
+    "statsTotalDistance": "Distance",
+    "statsTotalTime": "Total time",
+    "statsLongest": "Longest drive",
+    "statsAverage": "Average length",
+    "statsFastest": "Fastest average speed"
   },
   "garage": {
     "screenTitle": "My Garage",

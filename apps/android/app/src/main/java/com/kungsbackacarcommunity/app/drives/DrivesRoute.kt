@@ -51,6 +51,11 @@ fun DrivesRoute(
     val scope = rememberCoroutineScope()
 
     var selectedRideId by remember { mutableStateOf<String?>(null) }
+    // The "your driving" stats page is an internal level of this route (peer of
+    // the detail view), folded over the already-loaded drive list — no refetch.
+    var showStats by remember { mutableStateOf(false) }
+
+    val loaded = state as? DrivesState.Loaded
 
     LaunchedEffect(deleteStatus) {
         if (deleteStatus == DriveDeleteStatus.Deleted) {
@@ -59,16 +64,16 @@ fun DrivesRoute(
         }
     }
 
-    val selected =
-        (state as? DrivesState.Loaded)?.drives?.firstOrNull { it.rideId == selectedRideId }
+    val selected = loaded?.drives?.firstOrNull { it.rideId == selectedRideId }
 
-    // System/gesture Back unwinds one internal level (detail -> list); at the
-    // list root it is disabled so the shell's BackHandler returns to Home.
+    // System/gesture Back unwinds one internal level (detail/stats -> list); at
+    // the list root it is disabled so the shell's BackHandler returns to Home.
     // Enabling on `selectedRideId != null` alone (not also `selected != null`)
     // ensures a transient null `selected` during a list refresh still unwinds to
     // the list instead of falling through to the shell handler (Home).
-    BackHandler(enabled = selectedRideId != null) {
+    BackHandler(enabled = selectedRideId != null || showStats) {
         selectedRideId = null
+        showStats = false
         coordinator.reset()
     }
 
@@ -84,11 +89,15 @@ fun DrivesRoute(
                 },
             )
 
+        showStats ->
+            DriveStatsScreen(drives = loaded?.drives ?: emptyList())
+
         else ->
             DrivesListScreen(
                 state = state,
                 onSelect = { rideId -> selectedRideId = rideId },
                 onRetry = { reloadKey++ },
+                onShowStats = { showStats = true },
             )
     }
 }
