@@ -4,6 +4,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 /** UI-facing status of the convoy snapshot (my convoys + pending invites). */
@@ -54,10 +57,17 @@ sealed interface CreateConvoyState {
 
 /**
  * Orchestrates the convoy management surface (load + create + respond + start +
- * end). Pure Kotlin so it is unit-testable with a fake repository. There is no
- * live listener — every successful mutation re-fetches the snapshot via [load].
- * The detail/summary views read a single convoy out of the loaded snapshot by
- * id, so a start/end re-fetch updates them without extra plumbing.
+ * end). Pure Kotlin so it is unit-testable with a fake repository. Every
+ * successful mutation re-fetches the snapshot via [load]; the detail/summary
+ * views read a single convoy out of the loaded snapshot by id, so a start/end
+ * re-fetch updates them without extra plumbing.
+ *
+ * On top of that polled read, [observeActiveConvoy] optionally watches the ONE
+ * active convoy LIVE (a Firestore snapshot listener via
+ * [ConvoyRepository.observeConvoy]) and folds each update back into [status], so
+ * a shared destination or a membership/status change made by another member
+ * appears without waiting for a re-fetch. The driving surface (the convoy bar)
+ * starts it; the management list does not need it.
  */
 class ConvoyCoordinator(
     private val repository: ConvoyRepository,
@@ -89,6 +99,52 @@ class ConvoyCoordinator(
     // UI disable that convoy's action buttons while it runs.
     private val inFlight = MutableStateFlow<Set<String>>(emptySet())
     val busyConvoys: StateFlow<Set<String>> = inFlight.asStateFlow()
+
+    /**
+     * Watches the ACTIVE convoy (the one the bar describes — see
+     * [ConvoyBar.activeConvoy]) LIVE, folding each Firestore snapshot back into
+     * [status] so a shared destination, a member join/leave, or a status change
+     * set by someone ELSE reaches the bar/map without waiting for a re-fetch. This
+     * is the piece #486's instant shared destination was waiting on.
+     *
+     * Lifecycle (attach/detach), by construction rather than by bookkeeping:
+     *  - It derives the active convoy id from [status] and watches ONLY that one
+     *    document — never the whole convoy set.
+     *  - [collectLatest] means when the active convoy changes (a switch, or it
+     *    ends / the caller leaves and it drops out of the active set → id becomes
+     *    null), the previous [ConvoyRepository.observeConvoy] collection is
+     *    cancelled, which runs its `awaitClose` and removes the Firestore listener.
+     *    A null id attaches nothing.
+     *  - This function suspends for as long as it observes, so the caller scopes
+     *    the listener's whole lifetime by scoping the coroutine (a screen-scoped
+     *    `LaunchedEffect`): leaving the screen cancels it and detaches the
+     *    listener. A leaked listener — the thing that would bill and drain battery
+     *    — is therefore not reachable.
+     *
+     * Offline persistence / double-emit: an unchanged snapshot maps to a
+     * [ConvoySummary] equal to the one already in [status], and [mergeConvoyUpdate]
+     * then produces a [ConvoyListStatus] equal to the current one, which the
+     * [StateFlow] drops — so the cache-then-server emissions Firestore delivers do
+     * not churn the UI. A null emission (doc gone / read denied) is ignored so the
+     * last good value is kept until a real change arrives.
+     *
+     * Must be started AFTER (or concurrently with) [load]: the merge only applies
+     * to a convoy already present in the loaded snapshot, so a live update for a
+     * convoy the list has not yet produced is a no-op until [load] lands it.
+     */
+    suspend fun observeActiveConvoy(viewerUid: String?) {
+        statusState
+            .map { ConvoyBar.activeConvoy(it)?.convoyId }
+            .distinctUntilChanged()
+            .collectLatest { convoyId ->
+                if (convoyId == null) return@collectLatest
+                repository.observeConvoy(convoyId, viewerUid).collect { fresh ->
+                    if (fresh != null) {
+                        statusState.update { mergeConvoyUpdate(it, fresh) }
+                    }
+                }
+            }
+    }
 
     suspend fun load() {
         try {

@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -53,6 +57,18 @@ class ConvoyCoordinatorTest {
         var lastInvitees: List<String>? = null
         var lastTitle: String? = null
         var createCalls = 0
+
+        // Live-observe seam: the test emits into this to simulate a Firestore
+        // snapshot firing, and records what the coordinator asked to observe.
+        val observeFlow = MutableSharedFlow<ConvoySummary?>(replay = 1)
+        val observedConvoyIds = mutableListOf<String>()
+        var lastObservedCallerUid: String? = null
+
+        override fun observeConvoy(convoyId: String, callerUid: String?): Flow<ConvoySummary?> {
+            observedConvoyIds += convoyId
+            lastObservedCallerUid = callerUid
+            return observeFlow
+        }
 
         override suspend fun list(): ConvoyListResult {
             listCalls++
@@ -162,6 +178,69 @@ class ConvoyCoordinatorTest {
         coordinator.end("c1")
         assertEquals(ConvoyActionError.AlreadyEnded, coordinator.actionError.value)
     }
+
+    @Test
+    fun `observeActiveConvoy watches the active convoy with the viewer uid`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val repo =
+                FakeRepo().apply {
+                    listResult = ConvoyListResult.Loaded(listOf(convoy("c1")), emptyList())
+                }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+            backgroundScope.launch { coordinator.observeActiveConvoy("me") }
+            assertEquals(listOf("c1"), repo.observedConvoyIds)
+            assertEquals("me", repo.lastObservedCallerUid)
+        }
+
+    @Test
+    fun `observeActiveConvoy folds a live destination into the active convoy`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val active = convoy("c1")
+            val repo =
+                FakeRepo().apply {
+                    listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+                }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+            backgroundScope.launch { coordinator.observeActiveConvoy("me") }
+
+            val fresh =
+                active.copy(
+                    destination =
+                        ConvoyDestination(
+                            latitude = 57.0,
+                            longitude = 12.0,
+                            label = "Torg",
+                            setByUid = "someone",
+                            setByDisplayName = "Anna",
+                            setAt = null,
+                        ),
+                )
+            repo.observeFlow.emit(fresh)
+
+            val loaded = coordinator.status.value as ConvoyListStatus.Loaded
+            assertEquals("Torg", loaded.convoy("c1")?.destination?.label)
+        }
+
+    @Test
+    fun `observeActiveConvoy ignores a null emission and keeps the last value`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val active = convoy("c1")
+            val repo =
+                FakeRepo().apply {
+                    listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+                }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+            backgroundScope.launch { coordinator.observeActiveConvoy("me") }
+
+            repo.observeFlow.emit(active.copy(title = "Renamed"))
+            repo.observeFlow.emit(null) // doc gone / read denied — must not wipe it
+
+            val loaded = coordinator.status.value as ConvoyListStatus.Loaded
+            assertEquals("Renamed", loaded.convoy("c1")?.title)
+        }
 
     @Test
     fun `clearActionError resets the row error`() = runTest {

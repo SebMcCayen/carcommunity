@@ -75,8 +75,10 @@ data class ConvoySummary(
      * field yet, so it is simply absent from every response today and stays null.
      * It hangs off the summary rather than being a second read, so when the
      * backend lands the destination arrives through the convoy read path members
-     * already use, with no new listener. See [ConvoyDestination] for the full
-     * callable contract this is waiting on.
+     * already use. That read path is now LIVE for the active convoy
+     * ([ConvoyRepository.observeConvoy] / [ConvoyCoordinator.observeActiveConvoy]),
+     * so a destination another member sets appears without a re-fetch. See
+     * [ConvoyDestination] for the full callable contract this is waiting on.
      */
     val destination: ConvoyDestination? = null,
 ) {
