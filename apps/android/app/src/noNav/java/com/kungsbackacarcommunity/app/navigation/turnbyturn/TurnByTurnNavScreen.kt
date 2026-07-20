@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /**
@@ -36,7 +37,10 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  * @param destination the chosen destination coordinate.
  * @param destinationLabel human-readable destination name for the header.
  * @param onExit leave the navigation view.
- * @param onReportIncident report an incident/roadwork (wired by the host).
+ * @param onReportIncident report an incident/roadwork of the picked category
+ *   (wired by the host to the shared `incidents-report` path; unused here).
+ * @param incidentReportingEnabled whether reporting is offered (unused here —
+ *   this stub owns no map and no control stack).
  * @param isLiveSharing whether a live-location session is running (unused here;
  *   the real impl keeps the live control on screen while driving).
  * @param canShareLive whether the caller may start a session (unused here).
@@ -53,11 +57,12 @@ fun TurnByTurnNavScreen(
     destination: LatLng,
     destinationLabel: String,
     onExit: () -> Unit,
-    onReportIncident: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onReportIncident: (IncidentType) -> Unit,
     modifier: Modifier = Modifier,
     // Present ONLY to keep this stub's signature identical to the real src/nav
     // implementation, so the single host call site compiles in both builds.
     // Unused: this screen renders an "unavailable" panel and owns no map.
+    @Suppress("UNUSED_PARAMETER") incidentReportingEnabled: Boolean = false,
     @Suppress("UNUSED_PARAMETER") isLiveSharing: Boolean = false,
     @Suppress("UNUSED_PARAMETER") canShareLive: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onStartLiveShare: () -> Unit = {},

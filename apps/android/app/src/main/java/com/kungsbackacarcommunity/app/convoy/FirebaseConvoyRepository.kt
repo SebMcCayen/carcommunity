@@ -63,37 +63,7 @@ class FirebaseConvoyRepository private constructor(
     private suspend fun callForData(
         name: String,
         payload: Map<String, Any?>,
-    ): Result<Map<String, Any?>> =
-        suspendCancellableCoroutine { continuation ->
-            functions
-                .getHttpsCallable(name)
-                .call(payload)
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        @Suppress("UNCHECKED_CAST")
-                        val data = task.result?.getData() as? Map<String, Any?>
-                        // A successful callable that returns no Map payload is an
-                        // unexpected response — surface it as an error rather than
-                        // rendering an empty/half-built convoy.
-                        if (data == null) {
-                            continuation.resume(
-                                Result.failure(
-                                    IllegalStateException("$name returned an unexpected or empty payload"),
-                                ),
-                            )
-                        } else {
-                            continuation.resume(Result.success(data))
-                        }
-                    } else {
-                        continuation.resume(
-                            Result.failure(
-                                task.exception ?: IllegalStateException("$name failed without a cause"),
-                            ),
-                        )
-                    }
-                }
-        }
+    ): Result<Map<String, Any?>> = functions.callConvoyFunction(name, payload)
 
     companion object {
         private const val REGION = "europe-west1"
@@ -110,8 +80,49 @@ class FirebaseConvoyRepository private constructor(
     }
 }
 
+/**
+ * Invokes a convoy callable and unwraps its `Map` payload. Shared by
+ * [FirebaseConvoyRepository] and [FirebaseConvoyDestinationRepository] so the two
+ * halves of the convoy domain cannot drift apart in how they treat an empty or
+ * failed response.
+ */
+internal suspend fun FirebaseFunctions.callConvoyFunction(
+    name: String,
+    payload: Map<String, Any?>,
+): Result<Map<String, Any?>> =
+    suspendCancellableCoroutine { continuation ->
+        this
+            .getHttpsCallable(name)
+            .call(payload)
+            .addOnCompleteListener { task ->
+                if (!continuation.isActive) return@addOnCompleteListener
+                if (task.isSuccessful) {
+                    @Suppress("UNCHECKED_CAST")
+                    val data = task.result?.getData() as? Map<String, Any?>
+                    // A successful callable that returns no Map payload is an
+                    // unexpected response — surface it as an error rather than
+                    // rendering an empty/half-built convoy.
+                    if (data == null) {
+                        continuation.resume(
+                            Result.failure(
+                                IllegalStateException("$name returned an unexpected or empty payload"),
+                            ),
+                        )
+                    } else {
+                        continuation.resume(Result.success(data))
+                    }
+                } else {
+                    continuation.resume(
+                        Result.failure(
+                            task.exception ?: IllegalStateException("$name failed without a cause"),
+                        ),
+                    )
+                }
+            }
+    }
+
 /** Translates a raw callable failure into the pure, testable error code. */
-private fun Throwable.toErrorCode(): ConvoyErrorCode {
+internal fun Throwable.toErrorCode(): ConvoyErrorCode {
     val functionsError = this as? FirebaseFunctionsException ?: return ConvoyErrorCode.Other
     return when (functionsError.code) {
         FirebaseFunctionsException.Code.UNAUTHENTICATED -> ConvoyErrorCode.Unauthenticated

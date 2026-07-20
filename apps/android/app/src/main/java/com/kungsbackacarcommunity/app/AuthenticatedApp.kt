@@ -103,11 +103,17 @@ import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.config.MemberGating
 import com.kungsbackacarcommunity.app.convoy.ConvoyBar
 import com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestination
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationNavigationEvent
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
+import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
+import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
@@ -209,10 +215,14 @@ import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
+import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
+import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
+import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -222,6 +232,7 @@ import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
+import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -533,11 +544,25 @@ fun AuthenticatedApp(
             val incidentMarkers =
                 remember(nearbyIncidents) {
                     nearbyIncidents.map { incident ->
+                        // The host is where an IncidentType becomes the drawing
+                        // primitives the map seam takes — the disc colour, the
+                        // category glyph, and the glyph tint that keeps it
+                        // readable on that particular disc.
                         MapIncidentMarker(
                             id = incident.id,
                             longitude = incident.longitude,
                             latitude = incident.latitude,
+                            // Colour AND glyph. The glyph is what makes an
+                            // accident tellable from roadwork at a glance on a
+                            // moving map (and to a colour-blind driver); the
+                            // colour is now the redundant second channel, not
+                            // the only one. Resolved here because the map
+                            // surface seam deliberately knows nothing about
+                            // IncidentType.
                             colorArgb = IncidentPalette.colorArgb(incident.type),
+                            iconRes = incidentGlyphRes(incident.type),
+                            glyphColorArgb =
+                                IncidentMarkerStyle.glyphColorArgb(incident.type),
                         )
                     }
                 }
@@ -553,6 +578,27 @@ fun AuthenticatedApp(
             // means a user who turns the layer off stops polling, and turning it back
             // on re-fetches immediately.
             var incidentsLayerEnabled by rememberSaveable { mutableStateOf(true) }
+            // The incident marker the user has TAPPED, resolved back from the id
+            // the map surface published to the incident we already hold. Only the
+            // id crosses the surface seam (the surface knows nothing about
+            // incidents), so the resolution happens here.
+            //
+            // Deliberately derived from [nearbyIncidents] rather than snapshotted:
+            // if a refresh drops the incident while its sheet is open (it expired,
+            // or the user just removed it), the lookup returns null and the sheet
+            // closes itself instead of sitting there describing something that is
+            // no longer on the map.
+            val tappedIncidentId by mapSurface.incidentTap.collectAsState()
+            val tappedIncident =
+                remember(tappedIncidentId, nearbyIncidents) {
+                    tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
+                }
+            // True while a removal is in flight, so the sheet can disable its
+            // remove button. Keyed to the open incident: the sheet now survives
+            // the round-trip, and a flag left set by a previous sheet would
+            // arrive disabled.
+            var incidentRemoveInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -707,13 +753,48 @@ fun AuthenticatedApp(
             // LIVE_LOCATION feature flag is off (not a membership issue) — so an active
             // member with the flag disabled doesn't see a misleading subscription upsell.
             val featureUnavailableText = stringResource(R.string.shell_unavailable)
-            // Shown when the nav view's "Report incident/roadwork" is tapped while
-            // the incidents feature (a sibling PR) is not yet present in this build.
-            val reportComingSoonText = stringResource(R.string.turnByTurn_reportComingSoon)
             val incidentReportSuccessText = stringResource(R.string.incidents_reportSuccess)
             val incidentReportErrorText = stringResource(R.string.incidents_reportError)
             val incidentLocationUnavailableText =
                 stringResource(R.string.incidents_locationUnavailable)
+            val incidentRemoveSuccessText = stringResource(R.string.incidents_removeSuccess)
+            val incidentRemoveErrorText = stringResource(R.string.incidents_removeError)
+            val incidentVerifyUnavailableText = stringResource(R.string.incidents_verifyUnavailable)
+
+            // ── The ONE incident-reporting path ─────────────────────────────
+            //
+            // Hoisted here because there are now two entry points into it — the
+            // map home's report control and the navigation view's — and they must
+            // be the same report. Reporting from behind the wheel is exactly when
+            // it matters most, so the nav view raises the same category picker and
+            // files through the same `incidents-report` callable rather than
+            // owning a second, drifting copy (it previously showed a "coming soon"
+            // snackbar, which is now gone: the feature is live).
+            //
+            // The controller resolves the location itself, so neither call site
+            // passes one, and the callable reads the caller's identity from the
+            // Firebase Auth token rather than any threaded-through auth context —
+            // which is why this works unchanged from inside the nav view.
+            //
+            // The snackbar is readable from navigation: SnackbarHost is the LAST
+            // child of the shell's outer Box, so it draws OVER the full-screen nav
+            // view rather than under it.
+            val incidentReportingEnabled =
+                incidentController != null &&
+                    MemberGating.allows(profile?.activeMember == true)
+            val reportIncident: (IncidentType) -> Unit = { type ->
+                incidentController?.let { controller ->
+                    scope.launch {
+                        val text =
+                            when (controller.report(type)) {
+                                is ReportOutcome.Success -> incidentReportSuccessText
+                                ReportOutcome.NoLocation -> incidentLocationUnavailableText
+                                is ReportOutcome.Failed -> incidentReportErrorText
+                            }
+                        snackbarHostState.showSnackbar(text)
+                    }
+                }
+            }
 
             // Refresh the nearby-incidents layer around the user whenever the Map
             // tab is shown AND the "Traffic alerts" layer is enabled. A single
@@ -1174,6 +1255,36 @@ fun AuthenticatedApp(
                     mapSurface.setActive(mapCover != MapCover.Opaque)
                 }
 
+                // The ONE way this app starts turn-by-turn navigation to a
+                // coordinate. Hoisted out of the search overlay's Start button so
+                // the convoy bar's "start navigation to the shared destination"
+                // goes through exactly the same path — same SDK-vs-handoff
+                // decision, same missing-maps-app fallback — instead of growing a
+                // second, subtly different navigation launcher.
+                val startNavigationTo: (LatLng, String) -> Unit = { dest, label ->
+                    // Real in-app Mapbox turn-by-turn only exists in a build that
+                    // bundles the Navigation SDK (NAV_SDK_ENABLED). The token-less
+                    // noNav build (incl. the current Play release — its CI provides
+                    // no MAPBOX_DOWNLOADS_TOKEN) would only show the "unavailable"
+                    // stub, so there we hand off to the device's maps app for
+                    // genuine turn-by-turn instead.
+                    if (BuildConfig.NAV_SDK_ENABLED) {
+                        navDestinationLabel = label
+                        navDestination = dest
+                    } else {
+                        ExternalNavigation.launch(
+                            context = context,
+                            destination = dest,
+                            label = label,
+                            onUnavailable = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(navAppMissingText)
+                                }
+                            },
+                        )
+                    }
+                }
+
                 // Convoy status bar, hoisted here so the map home and turn-by-turn
                 // navigation share ONE coordinator and therefore one source of
                 // convoy truth — the same snapshot, the same member count, the same
@@ -1185,15 +1296,117 @@ fun AuthenticatedApp(
                 // loads once. Someone joining or leaving elsewhere therefore shows
                 // up on the next refresh rather than instantly; acceptable for a
                 // head-count, and the alternative is a second source of truth.
+
+                // The SHARED-destination repository. Deliberately the "no backend"
+                // one: `convoy-setDestination` / `convoy-clearDestination` are not
+                // deployed (see the ConvoyDestination file KDoc for the contract
+                // they are waiting on), so it refuses every call without touching
+                // the network and the bar's destination controls render disabled.
+                //
+                // WHEN THE BACKEND LANDS the body of this remember becomes
+                // `FirebaseConvoyDestinationRepository.createIfAvailable(context)
+                //     ?: UnavailableConvoyDestinationRepository`
+                // and ConvoyDestinations.availability is flipped to Wired. That is
+                // the whole client change — everything below already works.
+                //
+                // It is wrapped in `remember` now, while the value is still a
+                // stable object and the wrapper looks redundant, precisely so that
+                // swap stays a one-line edit. `createIfAvailable` builds a NEW
+                // instance per call; assigned directly it would produce a
+                // different repository on every recomposition, which changes a key
+                // of the remember below and would rebuild ConvoyCoordinator each
+                // time — re-running load() and resetting convoy state in a loop.
+                val convoyDestinationRepository: ConvoyDestinationRepository =
+                    remember { UnavailableConvoyDestinationRepository }
                 val convoyBarCoordinator =
-                    remember(convoyRepository) { convoyRepository?.let { ConvoyCoordinator(it) } }
+                    remember(convoyRepository, convoyDestinationRepository) {
+                        convoyRepository?.let {
+                            ConvoyCoordinator(it, convoyDestinationRepository)
+                        }
+                    }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
                 val convoyBarStatus: ConvoyListStatus =
                     convoyBarCoordinator?.status?.collectAsState()?.value
                         ?: ConvoyListStatus.Loading
                 val convoyBarBusy =
                     convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
-                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy)
+                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid)
+
+                // Track what happened to the destination the user is CURRENTLY
+                // navigating to. The comparison is against the previous snapshot,
+                // so a destination cleared or replaced by someone else is noticed
+                // on the next convoy refresh — and never cancels the running
+                // turn-by-turn (see ConvoyDestinationNavigationEvent).
+                val currentConvoyDestination =
+                    when (val d = convoyBarState?.destinationState) {
+                        is ConvoyDestinationState.SetByMe -> d.destination
+                        is ConvoyDestinationState.SetByOther -> d.destination
+                        else -> null
+                    }
+                var previousConvoyDestination by
+                    remember { mutableStateOf<ConvoyDestination?>(null) }
+                var convoyDestinationEvent by
+                    remember {
+                        mutableStateOf<ConvoyDestinationNavigationEvent>(
+                            ConvoyDestinationNavigationEvent.Unchanged,
+                        )
+                    }
+                // Both of the above are session-scoped, so they must be cleared
+                // when the ACTIVE CONVOY changes identity — including to null,
+                // which is "left it / it ended".
+                //
+                // Without this they leak across convoys: leave a convoy while
+                // navigating to its destination and the banner ("the shared
+                // destination was removed") is still on screen when you join the
+                // next one, now describing a convoy you are no longer in. Worse,
+                // `previousConvoyDestination` would still hold the OLD convoy's
+                // destination, so the first comparison inside the new convoy is
+                // against a place from the previous one and can fabricate a
+                // "destination changed" event that never happened.
+                //
+                // Declared BEFORE the event effect so that on a convoy switch the
+                // reset runs first and the comparison below starts from a clean
+                // slate. (#487 does the same thing for camera focus via
+                // ConvoyFocusStore.onActiveConvoyChanged.)
+                LaunchedEffect(convoyBarState?.convoyId) {
+                    previousConvoyDestination = null
+                    convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                }
+                LaunchedEffect(currentConvoyDestination, navDestination) {
+                    if (navDestination == null) {
+                        // Navigation ended (arrived, or the user stopped it). The
+                        // banner exists solely to say what happened to the
+                        // destination they were DRIVING TO, and every one of its
+                        // messages is phrased that way — "…while you were
+                        // navigating", plus an offer to re-route to the
+                        // replacement. Left up after navigation ends it is not
+                        // merely stale, it asserts something false.
+                        //
+                        // It cannot clear itself below: navigationEvent() returns
+                        // Unchanged as soon as navigatingTo is null, and the guard
+                        // there only ever WRITES a non-Unchanged event, so nothing
+                        // would ever take it down.
+                        convoyDestinationEvent = ConvoyDestinationNavigationEvent.Unchanged
+                        previousConvoyDestination = currentConvoyDestination
+                        return@LaunchedEffect
+                    }
+                    val event =
+                        ConvoyDestinations.navigationEvent(
+                            previous = previousConvoyDestination,
+                            current = currentConvoyDestination,
+                            navigatingTo = navDestination,
+                        )
+                    if (event != ConvoyDestinationNavigationEvent.Unchanged) {
+                        convoyDestinationEvent = event
+                    }
+                    previousConvoyDestination = currentConvoyDestination
+                }
+
+                // Opening the search overlay AS THE CONVOY'S PLACE PICKER rather
+                // than as a plain navigate-somewhere search. One overlay, one set
+                // of recents/saved places/long-press handling — the only
+                // difference is the extra action in the route preview.
+                var navSearchConvoyPick by rememberSaveable { mutableStateOf(false) }
                 // null (rather than a bar that draws nothing) is what makes "not in
                 // a convoy" compose literally nothing at all — no empty bar, no
                 // placeholder, and no space reserved in the top chrome column.
@@ -1319,6 +1532,28 @@ fun AuthenticatedApp(
                                 onEndConvoy = { convoyId ->
                                     scope.launch { convoyBarCoordinator.end(convoyId) }
                                 },
+                                // Reuse the map's own search / saved-places /
+                                // long-press picker instead of a second one; it
+                                // comes back through onSetAsConvoyDestination.
+                                onSetDestination = {
+                                    navSearchConvoyPick = true
+                                    navSearchOpen = true
+                                },
+                                onClearDestination = { convoyId ->
+                                    scope.launch {
+                                        convoyBarCoordinator.clearDestination(convoyId)
+                                    }
+                                },
+                                // The SAME navigation entry point the search
+                                // flow's Start button uses — no parallel path.
+                                onNavigateToDestination = { dest, label ->
+                                    startNavigationTo(dest, label)
+                                },
+                                navigationEvent = convoyDestinationEvent,
+                                onDismissNavigationEvent = {
+                                    convoyDestinationEvent =
+                                        ConvoyDestinationNavigationEvent.Unchanged
+                                },
                             )
                         }
                     } else {
@@ -1332,9 +1567,9 @@ fun AuthenticatedApp(
                     // an OPAQUE cover and stands the shell's map down. On the
                     // config-less / CI build this is the no-SDK stub (see the
                     // src/noNav TurnByTurnNavScreen). The report affordance is wired
-                    // to a "coming soon" snackbar until the incidents feature (a
-                    // sibling PR) lands — swap `onReportIncident` to that feature's
-                    // entry point once it is present in this branch.
+                    // to the SAME reporting path as the map home's control (see
+                    // `reportIncident` above) — one callable, one picker, one set of
+                    // result messages.
                     TurnByTurnNavScreen(
                         origin = null,
                         destination = navDestination!!,
@@ -1344,12 +1579,9 @@ fun AuthenticatedApp(
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
                         },
-                        onReportIncident = {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(reportComingSoonText)
-                            }
-                        },
+                        onReportIncident = reportIncident,
                         modifier = Modifier.fillMaxSize(),
+                        incidentReportingEnabled = incidentReportingEnabled,
                         // Live location keeps running while the user navigates, so
                         // its control has to come WITH them into the navigation
                         // screen — wired to the same coordinator and the same
@@ -1391,30 +1623,38 @@ fun AuthenticatedApp(
                             // state rather than re-previewing the last place.
                             navSearchTarget = null
                             navSearchTargetName = null
+                            // Backing out of the picker must not leave the next
+                            // plain search offering to set a convoy destination.
+                            navSearchConvoyPick = false
                         },
-                        onStartNavigation = { dest, label ->
-                            // Real in-app Mapbox turn-by-turn only exists in a build
-                            // that bundles the Navigation SDK (NAV_SDK_ENABLED). The
-                            // token-less noNav build (incl. the current Play release —
-                            // its CI provides no MAPBOX_DOWNLOADS_TOKEN) would only
-                            // show the "unavailable" stub, so there we hand off to the
-                            // device's maps app for genuine turn-by-turn instead.
-                            if (BuildConfig.NAV_SDK_ENABLED) {
-                                navDestinationLabel = label
-                                navDestination = dest
-                            } else {
-                                ExternalNavigation.launch(
-                                    context = context,
-                                    destination = dest,
-                                    label = label,
-                                    onUnavailable = {
+                        onStartNavigation = startNavigationTo,
+                        // Only offered when this overlay was opened AS the convoy
+                        // bar's place picker, and only enabled once
+                        // `convoy-setDestination` exists.
+                        onSetAsConvoyDestination =
+                            if (navSearchConvoyPick && convoyBarState != null) {
+                                { dest, label ->
+                                    val coordinator = convoyBarCoordinator
+                                    if (coordinator != null) {
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(navAppMissingText)
+                                            coordinator.setDestination(
+                                                convoyId = convoyBarState.convoyId,
+                                                latitude = dest.latitude,
+                                                longitude = dest.longitude,
+                                                label = label,
+                                            )
                                         }
-                                    },
-                                )
-                            }
-                        },
+                                    }
+                                    mapSurface.setRouteOverlay(null)
+                                    navSearchOpen = false
+                                    navSearchConvoyPick = false
+                                    navSearchTarget = null
+                                    navSearchTargetName = null
+                                }
+                            } else {
+                                null
+                            },
+                        convoyDestinationEnabled = ConvoyDestinations.isWired,
                         recentStore = recentSearchesStore,
                         savedStore = savedPlacesStore,
                         initialTarget = navSearchTarget,
@@ -1706,25 +1946,11 @@ fun AuthenticatedApp(
                                     trafikverketDataShown = trafikverketDataShown,
                                     incidentsLayerEnabled = incidentsLayerEnabled,
                                     onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
-                                    incidentReportingEnabled =
-                                        incidentController != null &&
-                                            MemberGating.allows(profile?.activeMember == true),
-                                    onReportIncident = { type ->
-                                        incidentController?.let { controller ->
-                                            scope.launch {
-                                                val text =
-                                                    when (controller.report(type)) {
-                                                        is ReportOutcome.Success ->
-                                                            incidentReportSuccessText
-                                                        ReportOutcome.NoLocation ->
-                                                            incidentLocationUnavailableText
-                                                        is ReportOutcome.Failed ->
-                                                            incidentReportErrorText
-                                                    }
-                                                snackbarHostState.showSnackbar(text)
-                                            }
-                                        }
-                                    },
+                                    // Hoisted above (shared with the turn-by-turn
+                                    // report button) rather than inlined here, so
+                                    // both call sites go through one lambda.
+                                    incidentReportingEnabled = incidentReportingEnabled,
+                                    onReportIncident = reportIncident,
                                     // Convoy status bar above the search row (full
                                     // variant, with the explanation line).
                                     convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
@@ -1733,6 +1959,83 @@ fun AuthenticatedApp(
                                     convoyOverlay = convoyOverlaySlot,
                                 )
 
+                                // Tapping an incident badge on the map opens its
+                                // details. Composed inside the map-chrome subtree
+                                // (which is taken out of the semantics tree while
+                                // another tab covers the map), so a tap that landed
+                                // just before a tab switch cannot leave a dialog
+                                // hanging over an unrelated page.
+                                //
+                                // Rendered only while the tapped id still resolves
+                                // to a loaded incident: an incident that expires (or
+                                // is removed) out from under an open sheet closes it
+                                // rather than leaving a sheet describing a marker
+                                // that is no longer on the map.
+                                val openIncident = tappedIncident
+                                if (openIncident != null) {
+                                    IncidentDetailsSheet(
+                                        incident = openIncident,
+                                        // Decides remove-vs-confirm. A null/blank uid
+                                        // is never an owner, so a viewer we cannot
+                                        // identify is never handed the remove action.
+                                        viewerUid = uid,
+                                        // Read once per sheet opening: the age line is
+                                        // a coarse bucket ("12 min ago"), so ticking it
+                                        // every frame would recompose the dialog
+                                        // constantly to almost never change the text.
+                                        nowMillis = remember(openIncident.id) { System.currentTimeMillis() },
+                                        // Unreachable while confirming is
+                                        // BackendMissing — the button is rendered
+                                        // disabled — but wired to the snackbar rather
+                                        // than left empty, so the day
+                                        // `incidents-confirm` lands there is one
+                                        // obvious place to call it.
+                                        onConfirm = {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    incidentVerifyUnavailableText,
+                                                )
+                                            }
+                                        },
+                                        // The sheet is NOT dismissed up front: see
+                                        // [runIncidentRemoval], which closes it only once
+                                        // the backend has accepted. Dismissing before the
+                                        // outcome was known closed the sheet for FAILED
+                                        // removals too, so a removal that never happened
+                                        // looked exactly like one that did, and took the
+                                        // incident away before the user could retry.
+                                        onRemove = {
+                                            val controller = incidentController
+                                            if (controller != null && !incidentRemoveInFlight) {
+                                                incidentRemoveInFlight = true
+                                                scope.launch {
+                                                    val removed =
+                                                        try {
+                                                            runIncidentRemoval(
+                                                                controller = controller,
+                                                                mapSurface = mapSurface,
+                                                                incidentId = openIncident.id,
+                                                            )
+                                                        } finally {
+                                                            // Cleared even if the coroutine is
+                                                            // cancelled, so a cancelled removal
+                                                            // cannot wedge the button disabled.
+                                                            incidentRemoveInFlight = false
+                                                        }
+                                                    snackbarHostState.showSnackbar(
+                                                        if (removed) {
+                                                            incidentRemoveSuccessText
+                                                        } else {
+                                                            incidentRemoveErrorText
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        removeInProgress = incidentRemoveInFlight,
+                                        onDismiss = { mapSurface.consumeIncidentTap() },
+                                    )
+                                }
                                 // Location explanation, over the map rather than
                                 // inside MapHome so the map chrome stays one
                                 // concern. Anchored to the bottom so it does not
