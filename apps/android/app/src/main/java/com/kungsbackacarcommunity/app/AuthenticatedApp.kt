@@ -201,6 +201,7 @@ import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
@@ -216,6 +217,7 @@ import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
+import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
@@ -533,6 +535,13 @@ fun AuthenticatedApp(
                             id = incident.id,
                             longitude = incident.longitude,
                             latitude = incident.latitude,
+                            // Colour AND glyph. The glyph is what makes an
+                            // accident tellable from roadwork at a glance on a
+                            // moving map (and to a colour-blind driver); the
+                            // colour is now the redundant second channel, not
+                            // the only one. Resolved here because the map
+                            // surface seam deliberately knows nothing about
+                            // IncidentType.
                             colorArgb = IncidentPalette.colorArgb(incident.type),
                             iconRes = incidentGlyphRes(incident.type),
                             glyphColorArgb =
@@ -552,6 +561,27 @@ fun AuthenticatedApp(
             // means a user who turns the layer off stops polling, and turning it back
             // on re-fetches immediately.
             var incidentsLayerEnabled by rememberSaveable { mutableStateOf(true) }
+            // The incident marker the user has TAPPED, resolved back from the id
+            // the map surface published to the incident we already hold. Only the
+            // id crosses the surface seam (the surface knows nothing about
+            // incidents), so the resolution happens here.
+            //
+            // Deliberately derived from [nearbyIncidents] rather than snapshotted:
+            // if a refresh drops the incident while its sheet is open (it expired,
+            // or the user just removed it), the lookup returns null and the sheet
+            // closes itself instead of sitting there describing something that is
+            // no longer on the map.
+            val tappedIncidentId by mapSurface.incidentTap.collectAsState()
+            val tappedIncident =
+                remember(tappedIncidentId, nearbyIncidents) {
+                    tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
+                }
+            // True while a removal is in flight, so the sheet can disable its
+            // remove button. Keyed to the open incident: the sheet now survives
+            // the round-trip, and a flag left set by a previous sheet would
+            // arrive disabled.
+            var incidentRemoveInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -710,6 +740,9 @@ fun AuthenticatedApp(
             val incidentReportErrorText = stringResource(R.string.incidents_reportError)
             val incidentLocationUnavailableText =
                 stringResource(R.string.incidents_locationUnavailable)
+            val incidentRemoveSuccessText = stringResource(R.string.incidents_removeSuccess)
+            val incidentRemoveErrorText = stringResource(R.string.incidents_removeError)
+            val incidentVerifyUnavailableText = stringResource(R.string.incidents_verifyUnavailable)
 
             // ── The ONE incident-reporting path ─────────────────────────────
             //
@@ -1634,6 +1667,83 @@ fun AuthenticatedApp(
                                     convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
                                 )
 
+                                // Tapping an incident badge on the map opens its
+                                // details. Composed inside the map-chrome subtree
+                                // (which is taken out of the semantics tree while
+                                // another tab covers the map), so a tap that landed
+                                // just before a tab switch cannot leave a dialog
+                                // hanging over an unrelated page.
+                                //
+                                // Rendered only while the tapped id still resolves
+                                // to a loaded incident: an incident that expires (or
+                                // is removed) out from under an open sheet closes it
+                                // rather than leaving a sheet describing a marker
+                                // that is no longer on the map.
+                                val openIncident = tappedIncident
+                                if (openIncident != null) {
+                                    IncidentDetailsSheet(
+                                        incident = openIncident,
+                                        // Decides remove-vs-confirm. A null/blank uid
+                                        // is never an owner, so a viewer we cannot
+                                        // identify is never handed the remove action.
+                                        viewerUid = uid,
+                                        // Read once per sheet opening: the age line is
+                                        // a coarse bucket ("12 min ago"), so ticking it
+                                        // every frame would recompose the dialog
+                                        // constantly to almost never change the text.
+                                        nowMillis = remember(openIncident.id) { System.currentTimeMillis() },
+                                        // Unreachable while confirming is
+                                        // BackendMissing — the button is rendered
+                                        // disabled — but wired to the snackbar rather
+                                        // than left empty, so the day
+                                        // `incidents-confirm` lands there is one
+                                        // obvious place to call it.
+                                        onConfirm = {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    incidentVerifyUnavailableText,
+                                                )
+                                            }
+                                        },
+                                        // The sheet is NOT dismissed up front: see
+                                        // [runIncidentRemoval], which closes it only once
+                                        // the backend has accepted. Dismissing before the
+                                        // outcome was known closed the sheet for FAILED
+                                        // removals too, so a removal that never happened
+                                        // looked exactly like one that did, and took the
+                                        // incident away before the user could retry.
+                                        onRemove = {
+                                            val controller = incidentController
+                                            if (controller != null && !incidentRemoveInFlight) {
+                                                incidentRemoveInFlight = true
+                                                scope.launch {
+                                                    val removed =
+                                                        try {
+                                                            runIncidentRemoval(
+                                                                controller = controller,
+                                                                mapSurface = mapSurface,
+                                                                incidentId = openIncident.id,
+                                                            )
+                                                        } finally {
+                                                            // Cleared even if the coroutine is
+                                                            // cancelled, so a cancelled removal
+                                                            // cannot wedge the button disabled.
+                                                            incidentRemoveInFlight = false
+                                                        }
+                                                    snackbarHostState.showSnackbar(
+                                                        if (removed) {
+                                                            incidentRemoveSuccessText
+                                                        } else {
+                                                            incidentRemoveErrorText
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        removeInProgress = incidentRemoveInFlight,
+                                        onDismiss = { mapSurface.consumeIncidentTap() },
+                                    )
+                                }
                                 // Location explanation, over the map rather than
                                 // inside MapHome so the map chrome stays one
                                 // concern. Anchored to the bottom so it does not

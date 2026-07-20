@@ -1053,7 +1053,21 @@
     "reportError": "Det gick inte att skicka rapporten. Försök igen.",
     "locationUnavailable": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
     "markerLabel": "Händelse",
-    "sourceTrafikverket": "Källa: Trafikverket"
+    "sourceTrafikverket": "Källa: Trafikverket",
+    "close": "Stäng",
+    "ageJustNow": "Nyss",
+    "ageMinutes": "för %1$d min sedan",
+    "ageHours": "för %1$d tim sedan",
+    "ageDays": "för %1$d dygn sedan",
+    "ageUnknown": "Okänd tidpunkt",
+    "sourceMember": "Rapporterad av en medlem",
+    "sourceImported": "Hämtad från Trafikverket",
+    "verifyAction": "Finns den kvar?",
+    "verifyUnavailable": "Att bekräfta en händelse går inte än – funktionen saknar stöd i backend.",
+    "removeAction": "Ta bort min rapport",
+    "removeSuccess": "Din rapport togs bort.",
+    "removeError": "Det gick inte att ta bort rapporten. Försök igen.",
+    "removeImportedExplanation": "Händelser från Trafikverket sköts av dem och försvinner av sig själva."
   },
   "whatsNew": {
     "title": "Vad är nytt",

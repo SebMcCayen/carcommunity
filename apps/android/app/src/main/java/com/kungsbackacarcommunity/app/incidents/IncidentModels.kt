@@ -31,8 +31,17 @@ enum class IncidentType(val wire: String) {
 
 /**
  * An active incident to draw on the map. Only the coordinate + type are needed
- * to render a marker; [id] identifies it for removal, [note] for a future
- * detail sheet.
+ * to render a marker; [id] identifies it for removal, [note] and the two fields
+ * below feed the tap-to-open detail sheet.
+ *
+ * [reporterUid] and [createdAtIso] were ALREADY on the wire (the backend's
+ * `IncidentView` has carried both since the callables were written) — the client
+ * simply threw them away. They are parsed now because the detail sheet needs to
+ * answer two questions the marker alone cannot: *whose* report is this (mine ⇒
+ * offer remove, someone else's ⇒ offer confirm) and *how old* is it. Both stay
+ * nullable: an imported Trafikverket row has no reporter, and a report read back
+ * in the same round-trip as its own write has a server timestamp that has not
+ * resolved yet, so `createdAt` legitimately comes back null.
  */
 data class Incident(
     val id: String,
@@ -41,6 +50,10 @@ data class Incident(
     val latitude: Double,
     val note: String? = null,
     val source: String = "user",
+    /** The uid that reported it, or null for imported/anonymous rows. */
+    val reporterUid: String? = null,
+    /** ISO-8601 creation instant as sent by the backend, or null when unresolved. */
+    val createdAtIso: String? = null,
 )
 
 /** The backend's `source` value for incidents imported from Trafikverket. */
