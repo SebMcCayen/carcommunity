@@ -18,6 +18,13 @@ enum class SignInFailure {
     /** Sign-in cannot run in this build (no OAuth client configured). */
     UNAVAILABLE,
 
+    /**
+     * There is no Google account on the device, so there was no credential to
+     * offer. Distinct from [GENERIC] because the user can actually fix this —
+     * the screen shows how, instead of a dead-end "try again".
+     */
+    NO_GOOGLE_ACCOUNT,
+
     /** The credential flow or Firebase exchange failed. */
     GENERIC,
 }
@@ -108,6 +115,23 @@ class SignInCoordinator(
                 // Idle, not Failed: the user chose to back out, so the login screen
                 // returns to its resting state instead of accusing them of an error.
                 state.value = SignInStatus.Idle
+                return
+            } catch (noAccount: SignInNoGoogleAccountException) {
+                // No Google account on the device. Dropped BEFORE any diagnostics
+                // document is written, for the same reason as the cancellation
+                // above: a pre-auth report auto-files a PUBLIC GitHub issue, and
+                // this is now an expected, user-fixable state rather than a fault.
+                //
+                // NOTE this reverses the call made when #457 was fixed, which kept
+                // NoCredentialException reportable BECAUSE it was a dead end. The
+                // screen now names the problem and offers a route to the
+                // add-account settings, so the user has somewhere to go — which is
+                // exactly the condition that makes dropping the report correct.
+                //
+                // Failed(NO_GOOGLE_ACCOUNT), not Idle: unlike a cancellation the
+                // user did not choose this, so the screen must explain what is
+                // missing rather than silently returning to rest.
+                state.value = SignInStatus.Failed(SignInFailure.NO_GOOGLE_ACCOUNT)
                 return
             } catch (unavailable: SignInUnavailableException) {
                 // Configuration gap, not a runtime error — never reported as a failure.

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.auth
 
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -285,6 +286,42 @@ class SignInCoordinatorTest {
         )
         // And the user is simply back at the login screen — not accused of an error.
         assertEquals(SignInStatus.Idle, coordinator.status.value)
+        assertTrue(repository.receivedTokens.isEmpty())
+    }
+
+    @Test
+    fun `no google account produces its own state and writes no diagnostics report`() = runTest {
+        val repository = FakeAuthRepository()
+        val reported = mutableListOf<SignInFailureDetails>()
+        val coordinator =
+            SignInCoordinator(
+                {
+                    // Driven through the REAL mapping, so this fails if either the
+                    // provider mapping OR the coordinator branch regresses.
+                    throw GoogleCredentialTokenProvider.toSignInException(
+                        NoCredentialException("no google account on device"),
+                    )
+                },
+                repository,
+                { details -> reported += details },
+            )
+
+        coordinator.signIn()
+
+        // The user-visible half: a distinct state, NOT the generic error. Before
+        // this fix the coordinator produced Failed(GENERIC) here, so asserting
+        // the enum value is what gives this teeth.
+        assertEquals(
+            SignInStatus.Failed(SignInFailure.NO_GOOGLE_ACCOUNT),
+            coordinator.status.value,
+        )
+        // The diagnostics half: nothing submitted => no report doc => no public
+        // GitHub issue filed for a device that simply needs an account added.
+        assertTrue(
+            "A missing Google account must not be reported as a fault, but got: " +
+                reported.map { it.errorType },
+            reported.isEmpty(),
+        )
         assertTrue(repository.receivedTokens.isEmpty())
     }
 

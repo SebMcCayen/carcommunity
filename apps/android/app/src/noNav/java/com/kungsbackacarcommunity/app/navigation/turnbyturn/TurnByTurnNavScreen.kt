@@ -47,6 +47,9 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  * @param onStartLiveShare start a live-sharing session (unused here).
  * @param onHideMeNow the privacy stop (unused here).
  * @param onOpenLiveShareDetails open the full live-location screen (unused here).
+ * @param convoyBar the convoy status bar slot (unused here; the real impl places
+ *   it below the maneuver banner). This screen renders no map chrome at all, so
+ *   there is nowhere honest to put it.
  */
 @Composable
 fun TurnByTurnNavScreen(
@@ -65,6 +68,7 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") onStartLiveShare: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") onHideMeNow: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") onOpenLiveShareDetails: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
 ) {
     BackHandler { onExit() }
     Box(

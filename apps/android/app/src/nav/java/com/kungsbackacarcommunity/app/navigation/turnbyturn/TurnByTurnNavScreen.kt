@@ -209,6 +209,21 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * @param onHideMeNow the privacy stop — remove my position now.
  * @param onOpenLiveShareDetails open the full live-location screen (the complete
  *   controls, including exactly who can see the caller, and the privacy details).
+ * @param convoyBar the shared convoy status bar
+ *   ([com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar]), composed only when
+ *   the driver is in a convoy — a convoy does not stop existing because someone
+ *   pressed "Start", so the roster and its controls come along.
+ *
+ *   Placed as the LAST item of the top column, BELOW the maneuver banner rather
+ *   than above it. The column stacks, so no position could ever *obscure* the
+ *   banner; the question is only what gets pushed down. Inserting the bar above
+ *   would shove the current-turn instruction — the one piece of this screen a
+ *   driver reads at a glance, at speed — further from the top edge and behind a
+ *   piece of social chrome in the reading order. Below the banner it costs the
+ *   maneuver nothing, still reads as top chrome, and lands inside the region the
+ *   navigation camera already reserves as top padding. It is also rendered in its
+ *   `compact` form here (no explanation line), because vertical space beside
+ *   safety-critical instructions is not free.
  */
 @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
 @Composable
@@ -227,6 +242,7 @@ fun TurnByTurnNavScreen(
     onStartLiveShare: () -> Unit = {},
     onHideMeNow: () -> Unit = {},
     onOpenLiveShareDetails: () -> Unit = {},
+    convoyBar: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val token = stringResource(R.string.mapbox_access_token)
@@ -537,6 +553,11 @@ fun TurnByTurnNavScreen(
                     }
                 }
             }
+
+            // Convoy status bar, LAST so the maneuver banner keeps its place at
+            // the top of the screen (see the [convoyBar] KDoc). Composed only
+            // while the driver is actually in a convoy.
+            convoyBar?.invoke()
         }
 
         // Bottom chrome, stacked as ONE column so nothing can overlap: the speed
