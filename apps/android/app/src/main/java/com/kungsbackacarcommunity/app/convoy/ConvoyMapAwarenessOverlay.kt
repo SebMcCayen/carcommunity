@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -49,7 +50,6 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapSurface
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /** Test tag on the whole convoy awareness overlay. */
@@ -221,9 +221,15 @@ private fun directionDescription(placement: ConvoyMemberPlacement.OffScreen): St
             // separator, so a Swedish screen reader would announce "1.2 km"
             // instead of "1,2 km". This value is spoken, not parsed, so it
             // formats for the USER's locale.
+            //
+            // Read through LocalLocale rather than Locale.getDefault(): the
+            // latter is not observable state, so a composable that reads it does
+            // not recompose when the user changes their locale and would keep
+            // announcing distances with the old separator until something else
+            // happened to invalidate it. (Android lint: NonObservableLocale.)
             stringResource(
                 R.string.convoy_awarenessDistanceKm,
-                String.format(Locale.getDefault(), "%.1f", km),
+                String.format(LocalLocale.current.platformLocale, "%.1f", km),
             )
         }
     return if (placement.extraCount > 0) {
