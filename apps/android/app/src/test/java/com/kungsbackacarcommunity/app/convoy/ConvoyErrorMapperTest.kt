@@ -46,6 +46,31 @@ class ConvoyErrorMapperTest {
         assertEquals(ConvoyActionError.AlreadyEnded, ConvoyErrorMapper.mapEnd(ConvoyErrorCode.FailedPrecondition))
     }
 
+    /**
+     * `clear` is the ONE convoy callable where permission-denied does not mean
+     * "you are not in this convoy". It means "you are, but you neither set this
+     * destination nor own the convoy". Reporting that as NotMember sends a member
+     * looking for a membership problem they do not have.
+     */
+    @Test
+    fun `clearDestination reports permission-denied as NotAllowed, not NotMember`() {
+        assertEquals(
+            ConvoyActionError.NotAllowed,
+            ConvoyErrorMapper.mapClearDestination(ConvoyErrorCode.PermissionDenied),
+        )
+        // ...while every other convoy mapper keeps reserving it for a genuine
+        // non-member, so the distinction above is a real difference and not just
+        // a renamed constant.
+        assertEquals(
+            ConvoyActionError.NotMember,
+            ConvoyErrorMapper.mapSetDestination(ConvoyErrorCode.PermissionDenied),
+        )
+        assertEquals(
+            ConvoyActionError.NotMember,
+            ConvoyErrorMapper.mapEnd(ConvoyErrorCode.PermissionDenied),
+        )
+    }
+
     @Test
     fun `unknown codes collapse to Generic`() {
         assertEquals(ConvoyActionError.Generic, ConvoyErrorMapper.mapList(ConvoyErrorCode.Other))

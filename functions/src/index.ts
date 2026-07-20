@@ -74,6 +74,7 @@ import { onClientErrorReport } from './errors/onClientErrorReport';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
+import { confirm as confirmIncident } from './incidents/confirm';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
@@ -89,10 +90,14 @@ import {
   sendMessage as dmSendMessage,
 } from './dm/manageDirectMessages';
 import {
+  clearDestination as clearConvoyDestination,
   create as createConvoy,
   end as endConvoy,
+  invite as inviteToConvoy,
+  leave as leaveConvoy,
   list as listConvoys,
   respond as respondConvoy,
+  setDestination as setConvoyDestination,
   start as startConvoy,
 } from './convoy/manageConvoy';
 import {
@@ -444,7 +449,8 @@ export const errors = {
 
 /**
  * Crowd-sourced incidents / roadwork domain (grouped export → deployed as
- * `incidents-report`, `incidents-listNearby`, `incidents-remove`, the
+ * `incidents-report`, `incidents-listNearby`, `incidents-remove`,
+ * `incidents-confirm`, the
  * scheduled `incidents-cleanupExpired`, and the scheduled
  * `incidents-syncTrafikverket`) — the navigation feature's Waze-style map
  * layer. NEW additive domain.
@@ -455,7 +461,11 @@ export const errors = {
  * reads ACTIVE, unexpired incidents — directly via security rules and, for the
  * map's bounded batch, via `incidents.listNearby` (chunked `geoCell in`
  * queries + server-side Haversine radius filter, never a full scan). Reporters
- * (or admins) clear their own via `incidents.remove`. `incidents-cleanupExpired`
+ * (or admins) clear their own via `incidents.remove`. Any OTHER member confirms a
+ * report is still there via `incidents.confirm`, which counts one confirmation
+ * per user (sub-collection doc keyed by uid) and pushes `expiresAt` out up to a
+ * hard lifetime cap — confirmed incidents persist, stale ones fade.
+ * `incidents-cleanupExpired`
  * sweeps expired docs every 15 min. `incidents-syncTrafikverket` imports Swedish
  * roadwork/traffic situations from the Trafikverket open API — GUARDED on the
  * `TRAFIKVERKET_API_KEY` secret, so it no-ops safely until the free key is set.
@@ -464,6 +474,7 @@ export const incidents = {
   report: reportIncident,
   listNearby: listNearbyIncidents,
   remove: removeIncident,
+  confirm: confirmIncident,
   cleanupExpired: cleanupExpiredIncidents,
   syncTrafikverket,
 };
@@ -602,11 +613,13 @@ export const dm = {
 
 /**
  * Convoy domain (grouped export → deployed as `convoy-create`,
- * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`).
+ * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`,
+ * `convoy-leave`, `convoy-invite`, `convoy-setDestination`,
+ * `convoy-clearDestination`).
  *
  * The convoy FOUNDATION (contracts/functions/functions.json:
- * convoy.create/respond/start/end/list) for the larger convoy + 3-channel-chat
- * epic — chat channels are a SEPARATE follow-up and are NOT part of this domain.
+ * convoy.create/respond/start/end/list/leave/invite/setDestination/
+ * clearDestination) — chat channels are a SEPARATE domain (convoyChat below).
  * Model: `convoys/{convoyId}` with ownerUid, status (forming|active|ended), a
  * `memberUids` array (owner + invitees; drives the array-contains list read and
  * the rules membership gate), a `members` map keyed by uid
@@ -614,10 +627,27 @@ export const dm = {
  * denormalized memberProfiles, and a `summary` computed + stored on end
  * (duration + accepted participants; distance null — no shared-route
  * aggregation in this foundation). Member-readable, callable-only writes
- * (firebase/firestore.rules). Only FRIENDS of the owner may be invited
- * (users/{owner}/friends), blocking honoured both ways (non-friend/blocked
+ * (firebase/firestore.rules). Only FRIENDS of the INVITER may be invited
+ * (users/{inviter}/friends), blocking honoured both ways (non-friend/blocked
  * invitees silently skipped). On invite a best-effort in-app notification is
- * written (writeInAppNotification, 'system_notice' category). LIVE POSITIONS
+ * written (writeInAppNotification, 'convoy_invite' category).
+ *
+ * MEMBERSHIP CHANGES: any ACCEPTED member may `invite` into an existing convoy
+ * (friend-gated to them, block-checked against every other accepted member,
+ * capped at 25 total members); a non-owner accepted member may `leave`
+ * (removed from memberUids/members/memberProfiles, so their convoy read, convoy
+ * chat and live-position slot all drop with it). The OWNER may NOT leave —
+ * they use `end`, since an owner leaving would orphan every owner-gated
+ * transition. The last non-owner leaving does NOT auto-end the convoy.
+ *
+ * SHARED DESTINATION: `setDestination` / `clearDestination` maintain an
+ * optional `destination` field on the convoy doc ({latitude, longitude, label,
+ * setByUid, setByDisplayName, setAt}) that is serialized into every
+ * ConvoySummary, so members receive it through the convoy read path they
+ * already subscribe to rather than a second listener. Any accepted member may
+ * set (last write wins); the SETTER or the OWNER may clear. It SURVIVES `end`
+ * untouched as a record of where the convoy was headed, and arrival is
+ * deliberately not tracked and never auto-ends the convoy. LIVE POSITIONS
  * reuse the live-location domain: the response's livePositionUids (accepted
  * members) are the uids the convoy map subscribes to at RTDB
  * liveLocation/{uid}/latest — the convoy never duplicates GPS storage.
@@ -628,6 +658,10 @@ export const convoy = {
   start: startConvoy,
   end: endConvoy,
   list: listConvoys,
+  leave: leaveConvoy,
+  invite: inviteToConvoy,
+  setDestination: setConvoyDestination,
+  clearDestination: clearConvoyDestination,
 };
 
 /**

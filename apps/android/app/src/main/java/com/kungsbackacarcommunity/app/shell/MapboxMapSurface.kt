@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -22,6 +23,8 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
+import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
+import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -51,11 +54,16 @@ import com.mapbox.maps.extension.style.layers.properties.generated.Visibility
 import com.mapbox.maps.extension.style.sources.addSource
 import com.mapbox.maps.extension.style.sources.generated.vectorSource
 import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.compass.compass
@@ -144,6 +152,31 @@ class MapboxMapSurface : MapSurface {
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
+    // Where the camera is, rounded so a settled camera stops re-emitting (see
+    // [MapCameraSnapshot]). Fed from the same camera-change listener that drives
+    // [bearingFlow]; consumed by the convoy awareness overlay.
+    private val cameraSnapshotFlow = MutableStateFlow<MapCameraSnapshot?>(null)
+    override val cameraSnapshot: StateFlow<MapCameraSnapshot?> = cameraSnapshotFlow.asStateFlow()
+
+    // "Keep the whole convoy in view": the points the camera should be framing
+    // instead of the user's puck, or null for normal follow. Applied ONLY from
+    // inside the existing follow path (see [applyConvoyFit]), so it inherits the
+    // gesture detach, the idle-return timer and the deference to a route overlay
+    // rather than becoming a second camera owner.
+    private var convoyFitPoints: List<MapPoint>? = null
+
+    // The user's convoy-focus choice, tracked separately from [convoyFitPoints]
+    // so a transient "nothing to fit" is never mistaken for switching focus off.
+    private var convoyFocusEnabled: Boolean = false
+
+    // The fit currently applied to the camera, so a stream of live positions that
+    // does not actually change the framing does not re-ease the camera every
+    // second (see ConvoyFocusPlanner.shouldRefit). Null when not fitting.
+    private var appliedConvoyFit: List<ConvoyLatLng>? = null
+
+    private val incidentTapFlow = MutableStateFlow<String?>(null)
+    override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
     // The map long-click gesture listener ("hold to navigate here"); held so it
     // can be detached in onRelease.
     private var longClickListener: OnMapLongClickListener? = null
@@ -177,7 +210,36 @@ class MapboxMapSurface : MapSurface {
     private var lastPoint: Point? = null
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
-    private var incidentMarkerManager: CircleAnnotationManager? = null
+    // Incidents are POINT annotations (an icon), not circles: the categories have
+    // to be told apart at a glance on a moving map, which a coloured dot cannot
+    // do. Point annotations also carry a per-annotation click listener, which is
+    // what makes the markers tappable.
+    private var incidentMarkerManager: PointAnnotationManager? = null
+    // Maps a drawn annotation back to the incident id it represents, so a click
+    // can be reported across the seam. Keyed on the annotation's own id rather
+    // than a coordinate so two incidents reported at the same spot stay distinct.
+    // Rebuilt on every redraw and cleared with the manager.
+    //
+    // Module-visible rather than private only so unit tests can seed a drawn
+    // badge without a GL surface (annotations cannot be created off-device).
+    internal val incidentIdsByAnnotation = mutableMapOf<String, String>()
+
+    // The incident annotation click listener, held so it can be detached in
+    // onRelease alongside the map's other listeners.
+    private var incidentClickListener: OnPointAnnotationClickListener? = null
+
+    // Application context, kept only to rasterise the incident marker images
+    // (which needs resources + display density). The APPLICATION context
+    // specifically: this surface outlives individual MapViews, and holding an
+    // Activity here would leak it.
+    private var appContext: Context? = null
+
+    // Style-image names already registered on the CURRENT style, so each
+    // category's marker image is rasterised and uploaded once rather than on
+    // every redraw. Cleared whenever the style is (re)loaded or the surface is
+    // released: style images do NOT survive a style reload, so a stale "already
+    // registered" entry would leave an icon-less marker behind.
+    private val registeredIncidentImages = mutableSetOf<String>()
     // The incident markers currently drawn, so a recomposition only clears and
     // redraws them when the set ACTUALLY changes (unrelated recompositions must
     // not flicker the layer). Reset to null whenever the manager is (re)created
@@ -337,8 +399,149 @@ class MapboxMapSurface : MapSurface {
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
         // The Content update lambda observes this flow and (re)draws the incident
-        // circles when the set changes, so publishing the value is enough.
+        // badges when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
+        val map = mapViewRef ?: return null
+        return runCatching {
+            val screen = map.mapboxMap.pixelForCoordinate(Point.fromLngLat(longitude, latitude))
+            MapScreenPoint(x = screen.x.toFloat(), y = screen.y.toFloat())
+        }.getOrNull()
+    }
+
+    override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
+        val previousFocusEnabled = convoyFocusEnabled
+        convoyFitPoints = points?.takeIf { it.isNotEmpty() }
+        convoyFocusEnabled = focusEnabled
+
+        // Turning the fit ON or OFF is an explicit user act (the convoy bar's
+        // focus toggle), so — exactly like the my-location control — it resumes
+        // following and cancels any pending idle-return. Everything else that
+        // reaches this method is a position/roster tick, which must NOT resume
+        // following, or a user who had panned away would be yanked back every
+        // second.
+        //
+        // The two are told apart by the user's FOCUS CHOICE, not by whether
+        // `points` went null. Those are different questions: the planner also
+        // hands us null while focus is ON but nothing is fittable yet (nobody
+        // sharing a position, or only one point). Reading a null as "the user
+        // switched focus off" would make a transient data gap — one tick where
+        // the roster is momentarily empty — force-resume following and snatch the
+        // camera back from someone who had deliberately panned away to look at
+        // something.
+        val toggled = previousFocusEnabled != focusEnabled
+        if (toggled) {
+            followController.onRecenterRequested()
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+        }
+
+        if (convoyFitPoints == null) {
+            // Nothing to frame. Forget the applied fit either way, so a later
+            // refit is not compared against a stale bounding box.
+            appliedConvoyFit = null
+            // Glide back to the normal framing — which restores the ZOOM as well
+            // as the centre — ONLY when the user actually switched focus off
+            // (or left / the convoy ended). Without that the camera would be left
+            // wherever the last fit put it: technically following the user again,
+            // but stuck zoomed out over an area the group no longer occupies.
+            //
+            // Gated on `toggled` rather than on `previous != null`, because a
+            // momentary gap in live positions also arrives here with focus still
+            // ON. Easing to the user then would re-zoom the map mid-convoy every
+            // time the roster blinked.
+            if (toggled && !focusEnabled &&
+                followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)
+            ) {
+                easeToUser()
+            }
+            return
+        }
+
+        // Applies immediately rather than waiting for the next GPS fix, so the
+        // toggle feels like it did something — but still behind the follow gate,
+        // so a position tick arriving while the user is mid-pan cannot steal the
+        // camera from them. A toggle always passes the gate, because the branch
+        // above just resumed following.
+        if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+            applyConvoyFit()
+        }
+    }
+
+    /**
+     * Ease the camera to frame the current [convoyFitPoints], if anything has
+     * actually changed.
+     *
+     * Called from the two places the framing can go out of date: the focus
+     * choice/roster changing ([setConvoyFit]) and a new position arriving (the
+     * indicator-position listener). Both entries are already gated on
+     * [CameraFollowController.shouldTrack], so a user who has panned away keeps
+     * their view and gets the fit back when the idle timer resumes follow —
+     * exactly like plain follow behaves.
+     */
+    private fun applyConvoyFit() {
+        val map = mapViewRef ?: return
+        val points = convoyFitPoints ?: return
+        val asLatLng = points.map { ConvoyLatLng(latitude = it.latitude, longitude = it.longitude) }
+        // Live positions tick every second; re-easing on each one is visibly
+        // seasick and pointless when the framing is unchanged.
+        if (!ConvoyFocusPlanner.shouldRefit(appliedConvoyFit, asLatLng)) return
+
+        runCatching {
+            // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
+            // display density exactly as the route-overlay fit does. Passing the
+            // dp numbers raw made the padding shrink with density: on a 3x phone
+            // 140 would have been ~47dp of real breathing room, gluing members to
+            // the edge under the very controls the padding exists to clear.
+            val density = map.resources.displayMetrics.density
+            val fitted =
+                map.mapboxMap.cameraForCoordinates(
+                    coordinates = points.map { Point.fromLngLat(it.longitude, it.latitude) },
+                    camera =
+                        cameraOptions {
+                            // Keep the user's own bearing and tilt: a convoy fit
+                            // reframes WHAT is shown, it does not spin the map
+                            // out from under a driver who is using it course-up.
+                            bearing(map.mapboxMap.cameraState.bearing)
+                            pitch(this@MapboxMapSurface.pitch)
+                        },
+                    coordinatesPadding =
+                        EdgeInsets(
+                            CONVOY_FIT_PAD_TOP * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                        ),
+                    maxZoom = null,
+                    offset = null,
+                )
+            // Clamp both ends. Too far out and the convoy becomes dots on a
+            // country map with no usable road detail; too far in and a bunched-up
+            // group fills the screen at building level. cameraForCoordinates
+            // happily returns either for a degenerate spread.
+            val zoom =
+                (fitted.zoom ?: MapMarkers.OWN_MARKER_ZOOM)
+                    .coerceIn(MIN_CONVOY_FIT_ZOOM, MAX_CONVOY_FIT_ZOOM)
+            map.camera.easeTo(
+                cameraOptions {
+                    center(fitted.center)
+                    zoom(zoom)
+                    pitch(this@MapboxMapSurface.pitch)
+                },
+                mapAnimationOptions { duration(CONVOY_FIT_ANIMATION_MS) },
+            )
+            appliedConvoyFit = asLatLng
+        }
+    }
+
+    override fun emitIncidentTap(incidentId: String) {
+        incidentTapFlow.value = incidentId
+    }
+
+    override fun consumeIncidentTap() {
+        incidentTapFlow.value = null
     }
 
     override fun emitLongPress(point: MapPoint) {
@@ -606,6 +809,15 @@ class MapboxMapSurface : MapSurface {
                         return@OnIndicatorPositionChangedListener
                     }
                     val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                    // "Keep the whole convoy in view" replaces the follow TARGET,
+                    // not the follow MACHINERY: same gate above, same listener,
+                    // just a different thing to frame. Own movement still drives
+                    // it, because the user is one of the points being framed.
+                    if (convoyFitPoints != null) {
+                        centeredOnFirstFix = true
+                        applyConvoyFit()
+                        return@OnIndicatorPositionChangedListener
+                    }
                     runCatching {
                         if (!centeredOnFirstFix) {
                             // Open the FIRST fix close to the user, at the own-marker
@@ -653,6 +865,7 @@ class MapboxMapSurface : MapSurface {
                 if (token.isNotBlank()) {
                     MapboxOptions.accessToken = token
                 }
+                appContext = context.applicationContext
                 MapView(context).apply {
                     mapViewRef = this
                     // The surface now genuinely exists and is on screen — from
@@ -711,8 +924,23 @@ class MapboxMapSurface : MapSurface {
                                 // are visually smooth for a compass needle, and the
                                 // MutableStateFlow dedupes consecutive equal values so
                                 // only real 1° changes propagate downstream.
+                                val camera = mapboxMap.cameraState
                                 bearingFlow.value =
-                                    mapboxMap.cameraState.bearing.toFloat().roundToInt().toFloat()
+                                    camera.bearing.toFloat().roundToInt().toFloat()
+                                // Same de-duplication argument as the bearing
+                                // above, applied to the whole camera: the convoy
+                                // awareness overlay reprojects every member when
+                                // this changes, so it is rounded to about a metre
+                                // / a hundredth of a zoom / a whole degree and
+                                // StateFlow collapses the settled frames.
+                                cameraSnapshotFlow.value =
+                                    MapCameraSnapshot.of(
+                                        latitude = camera.center.latitude(),
+                                        longitude = camera.center.longitude(),
+                                        zoom = camera.zoom,
+                                        bearing = camera.bearing,
+                                        pitch = camera.pitch,
+                                    )
                             }
                         }
                     cameraChangeListener = camListener
@@ -859,8 +1087,41 @@ class MapboxMapSurface : MapSurface {
                         // flow value so markers fetched while the style was still
                         // loading are rendered (not lost).
                         runCatching {
-                            incidentMarkerManager = annotations.createCircleAnnotationManager()
+                            val incidentManager = annotations.createPointAnnotationManager()
+                            // Never let the symbol layer's collision detection drop
+                            // an incident: in a Swedish town centre a dozen imported
+                            // roadwork markers overlap, and Mapbox's default is to
+                            // HIDE the ones that collide — which would silently lose
+                            // incidents from the map. Overlapping badges are the
+                            // lesser evil; a missing accident is not.
+                            incidentManager.iconAllowOverlap = true
+                            incidentManager.iconIgnorePlacement = true
+                            // Tap an incident badge → publish its id so the host can
+                            // open the detail sheet.
+                            //
+                            // This is an ANNOTATION click, not a map click: the
+                            // annotation plugin hit-tests its own symbols first and
+                            // we return true to consume the event, so the tap never
+                            // falls through to the basemap-POI interaction (which
+                            // would open a "navigate here?" preview for the crash the
+                            // user was asking about). Pan/pinch/rotate and the
+                            // long-press "navigate here" gesture are all untouched —
+                            // none of them is a tap.
+                            val incidentClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    onIncidentAnnotationClicked(annotation.id)
+                                }
+                            incidentClickListener = incidentClick
+                            incidentManager.addClickListener(incidentClick)
+                            incidentMarkerManager = incidentManager
                             lastAppliedIncidents = null
+                            // Style images are owned by the style that was just
+                            // (re)loaded, so anything registered against the
+                            // PREVIOUS one is gone. Forgetting them here is what
+                            // makes the icons survive a style reload: the next
+                            // draw re-uploads them instead of assuming they are
+                            // still present.
+                            registeredIncidentImages.clear()
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
                         }
                         // Device-location puck (blue dot). Shows only when the
@@ -958,19 +1219,42 @@ class MapboxMapSurface : MapSurface {
                 // old map while the recreated map's camera starts at north (0). The
                 // fresh map's camera-change listener re-populates this once it emits.
                 bearingFlow.value = 0f
+                cameraSnapshotFlow.value = null
                 routeLineManager = null
+                // Detach the incident click listener before dropping the manager,
+                // so a torn-down map cannot keep publishing taps.
+                incidentClickListener?.let { l ->
+                    runCatching { incidentMarkerManager?.removeClickListener(l) }
+                }
+                incidentClickListener = null
                 destMarkerManager = null
                 incidentMarkerManager = null
+                // The annotations are gone with their manager, so the lookup that
+                // described them must go too — otherwise a stale annotation id
+                // could resolve to an incident on the NEXT map.
+                incidentIdsByAnnotation.clear()
                 // Managers are gone, so a later re-init must redraw the overlay
                 // and the incident markers.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
+                // The style (and every image registered on it) dies with this
+                // MapView, so a later map must re-upload the marker images
+                // rather than believe these are still present.
+                registeredIncidentImages.clear()
+                appContext = null
                 mapViewRef = null
                 lastPoint = null
                 centeredOnFirstFix = false
                 // A later recreated map (e.g. after a tab switch) should open
                 // following the user again, even if the user had panned away.
                 followController.reset()
+                // A fresh map opens on the normal follow framing. The convoy
+                // focus CHOICE lives in the shell (see ConvoyFocusStore) and
+                // is re-pushed on the next composition if it is still Convoy,
+                // so clearing the applied fit here cannot strand the camera.
+                convoyFitPoints = null
+                appliedConvoyFit = null
+                convoyFocusEnabled = false
                 mapView.onDestroy()
             },
         )
@@ -992,6 +1276,46 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
+     * Handles a tap on one of THIS surface's incident badges, returning whether
+     * the tap was consumed.
+     *
+     * **Always returns true.** The annotation plugin resolves the tapped symbol
+     * against its own live annotation map BEFORE invoking this listener and
+     * bails out itself when it finds nothing (`AnnotationManagerImpl`'s click
+     * interaction returns false without calling any listener). So by the time we
+     * are called the tap has definitionally landed on a badge belonging to the
+     * incidents manager — which makes consuming it always the correct answer,
+     * whether or not we can still name the incident.
+     *
+     * Returning false instead would hand the tap onward to the next registered
+     * interaction, which is the basemap-POI click that raises a "navigate here?"
+     * preview. Offering to route the user to a petrol station because they
+     * tapped an accident badge is worse than any no-op.
+     *
+     * An id we cannot resolve means [incidentIdsByAnnotation] has drifted out of
+     * step with the annotations actually drawn — the two are written together in
+     * [applyIncidentMarkers], so they can only diverge if a native call there
+     * failed and was swallowed. Rather than eat the gesture silently we treat it
+     * as the cache-invalidation signal it is and force a full redraw, which
+     * rebuilds the lookup from the current markers so the next tap resolves.
+     * Nothing is shown to the user: the condition is an internal desync with no
+     * meaning to them, and it repairs itself before they can tap again.
+     */
+    internal fun onIncidentAnnotationClicked(annotationId: String): Boolean {
+        val incidentId = incidentIdsByAnnotation[annotationId]
+        if (incidentId != null) {
+            emitIncidentTap(incidentId)
+            return true
+        }
+        // Reset-then-reapply: the same idiom used wherever the manager is
+        // (re)created or torn down. It can only cause an extra redraw, never
+        // skip one, so it cannot strand the layer in a half-drawn state.
+        lastAppliedIncidents = null
+        applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
+        return true
+    }
+
+    /**
      * Redraws the incident markers only when the set differs from the last one
      * applied, so unrelated recompositions (traffic toggle, route redraw,
      * live-sharing pulse) don't clear/redraw the whole incidents layer. The
@@ -999,33 +1323,113 @@ class MapboxMapSurface : MapSurface {
      */
     private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
         if (markers == lastAppliedIncidents) return
-        applyIncidentMarkers(markers)
-        lastAppliedIncidents = markers
+        // Cache ONLY a complete draw. An incomplete one (the style handle not
+        // available yet, so a marker image could not be uploaded) would
+        // otherwise be remembered as applied, and every later update carrying
+        // the same markers would short-circuit here — leaving those incidents
+        // drawn as blank, icon-less annotations for as long as the set did not
+        // change. Declining to cache costs one redundant redraw and makes the
+        // next update repair it.
+        if (applyIncidentMarkers(markers)) {
+            lastAppliedIncidents = markers
+        }
     }
 
     /**
-     * Clears and redraws the incident circles (one coloured circle per marker).
-     * A no-op until the manager exists (style loaded). Every native call is
-     * wrapped defensively so a partial/failed draw degrades rather than crashing.
+     * Clears and redraws the incident markers — one CATEGORY ICON per marker —
+     * and rebuilds the annotation-id → incident-id lookup the click listener
+     * resolves taps through. A no-op until the manager exists (style loaded).
+     * Every native call is wrapped defensively so a partial/failed draw degrades
+     * rather than crashing.
      *
-     * On-device verification note: annotation rendering runs only on a
-     * token-provisioned device, so it is verified on device.
+     * These were plain coloured circles, which made colour the only thing
+     * distinguishing an accident from roadworks — unreadable for a colour-blind
+     * user, and hard for anyone at a glance while driving. Each marker now
+     * carries its category's glyph (see
+     * `com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle`), so the
+     * shape carries the meaning and the colour reinforces it.
+     *
+     * Each distinct marker image is rasterised and registered on the style once
+     * (see [registeredIncidentImages]); the annotations themselves then only
+     * reference it by name, so redrawing the layer does not re-upload bitmaps.
+     *
+     * The lookup is cleared FIRST and repopulated as annotations are created, so
+     * it can never outlive the annotations it describes and hand the click
+     * listener a stale incident id after a redraw.
+     *
+     * ACCESSIBILITY, stated here so its absence is not read as an oversight:
+     * these markers carry no content description, because there is nowhere to
+     * put one. They are Mapbox `PointAnnotation`s — style images inside the GL
+     * surface — not Views and not composables, so no node exists in the
+     * semantics tree to label, and `PointAnnotationOptions` exposes no
+     * accessibility surface of its own (maps-annotation 11.26.0). A screen
+     * reader cannot reach an individual badge at all, which is a real gap but an
+     * ARCHITECTURAL one: closing it needs a different affordance (an accessible
+     * list of nearby incidents), not a string on the annotation. The incident
+     * content itself IS accessible once a sheet is open — `IncidentDetailsSheet`
+     * announces category, age and source as ordinary text.
+     *
+     * On-device verification note: annotation rendering and hit-testing run only
+     * on a token-provisioned device, so they are verified on device.
      */
-    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>) {
-        val manager = incidentMarkerManager ?: return
+    private fun applyIncidentMarkers(markers: List<MapIncidentMarker>): Boolean {
+        val manager = incidentMarkerManager ?: return false
+        val style = mapViewRef?.mapboxMap?.style
+        val context = appContext
+        // Every image this draw needs must be on the style, or the annotations
+        // below would reference a name the style does not know and render as
+        // nothing. Tracked so the CALLER can decline to cache an incomplete draw
+        // and simply try again on the next update.
+        var complete = true
         runCatching { manager.deleteAll() }
+        incidentIdsByAnnotation.clear()
         for (marker in markers) {
-            runCatching {
-                manager.create(
-                    CircleAnnotationOptions()
-                        .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                        .withCircleRadius(INCIDENT_MARKER_RADIUS)
-                        .withCircleColor(marker.colorArgb)
-                        .withCircleStrokeWidth(INCIDENT_MARKER_STROKE)
-                        .withCircleStrokeColor(INCIDENT_MARKER_STROKE_COLOR),
+            val imageId =
+                IncidentMarkerBitmaps.imageId(
+                    iconRes = marker.iconRes,
+                    discColorArgb = marker.colorArgb,
+                    glyphColorArgb = marker.glyphColorArgb,
                 )
+            // Register this category's image on first use against the current
+            // style. If the style handle or context is unavailable the image
+            // cannot be uploaded, so this draw is incomplete — never a crash.
+            if (imageId !in registeredIncidentImages) {
+                val bitmap =
+                    if (style != null && context != null) {
+                        IncidentMarkerBitmaps.create(
+                            context = context,
+                            iconRes = marker.iconRes,
+                            discColorArgb = marker.colorArgb,
+                            glyphColorArgb = marker.glyphColorArgb,
+                        )
+                    } else {
+                        null
+                    }
+                // Only remember it as registered once the upload actually
+                // succeeded, so a transient failure retries on the next redraw
+                // rather than permanently marking the icon as present.
+                val added =
+                    bitmap != null &&
+                        style != null &&
+                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
+                if (added) registeredIncidentImages.add(imageId) else complete = false
+            }
+            runCatching {
+                val annotation =
+                    manager.create(
+                        PointAnnotationOptions()
+                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                            .withIconImage(imageId)
+                            // Anchored at the centre: this is a disc badge marking a
+                            // point, not a pin whose tip is the location.
+                            .withIconAnchor(IconAnchor.CENTER),
+                    )
+                // Record the drawn annotation so a tap on it resolves back to the
+                // incident it represents.
+                incidentIdsByAnnotation[annotation.id] = marker.id
             }
         }
+        return complete
     }
 
     /**
@@ -1124,11 +1528,9 @@ class MapboxMapSurface : MapSurface {
         const val DEST_MARKER_STROKE = MapMarkerStyle.DEST_MARKER_STROKE
         const val DEST_MARKER_STROKE_COLOR = MapMarkerStyle.DEST_MARKER_STROKE_COLOR
 
-        // Incident circles: the per-marker fill colour is supplied by the host
-        // (category colour); a white stroke keeps them legible on any basemap.
-        const val INCIDENT_MARKER_RADIUS = 8.0
-        const val INCIDENT_MARKER_STROKE = 2.0
-        const val INCIDENT_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+        // (Incident markers are icon images, not circles — their geometry and
+        // colours live in `incidents/IncidentMarkerStyle.kt`, which is pure and
+        // unit-tested for light/dark legibility.)
 
         // Camera-fit padding (dp; multiplied by display density → px before use):
         // extra room at the bottom for the summary sheet.
@@ -1151,6 +1553,44 @@ class MapboxMapSurface : MapSurface {
          * plugin).
          */
         const val FOLLOW_ANIMATION_MS = 700L
+
+        /**
+         * Duration (ms) of the camera glide when the convoy fit is (re)applied.
+         * Longer than a follow step: a fit can change the zoom as well as the
+         * centre, and a slow reframe reads as the map thinking rather than
+         * lurching.
+         */
+        const val CONVOY_FIT_ANIMATION_MS = 900L
+
+        /**
+         * Padding kept between the framed convoy members and the viewport edge,
+         * so nobody ends up glued to the side of the screen where the floating
+         * controls are. The top gets more because the convoy bar and the search
+         * row live there.
+         *
+         * In **dp**, like [ROUTE_PAD_TOP] and friends above — multiplied by
+         * display density at the call site, because `EdgeInsets` takes device
+         * pixels. Density-independent is the whole point: the controls these
+         * clear are themselves laid out in dp.
+         */
+        const val CONVOY_FIT_PAD_SIDE = 140.0
+        const val CONVOY_FIT_PAD_TOP = 260.0
+
+        /**
+         * How far the convoy fit is allowed to zoom OUT. Beyond this the basemap
+         * has no road detail worth showing and the members are dots on a map of
+         * the country — the fit stops being useful long before it stops being
+         * possible, so a member who has driven to another city pins the zoom here
+         * and simply falls off the edge (where the direction arrows pick them up).
+         */
+        const val MIN_CONVOY_FIT_ZOOM = 8.0
+
+        /**
+         * How far the convoy fit is allowed to zoom IN, for a group bunched at
+         * one traffic light: without this, a near-zero bounding box asks for a
+         * street-furniture zoom level.
+         */
+        const val MAX_CONVOY_FIT_ZOOM = 16.5
 
         /**
          * Import id of the Mapbox Standard style's basemap, used to set config

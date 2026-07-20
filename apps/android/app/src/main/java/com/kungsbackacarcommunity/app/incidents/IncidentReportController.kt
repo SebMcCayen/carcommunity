@@ -92,6 +92,28 @@ class IncidentReportController(
     }
 
     /**
+     * Removes the caller's own report [incidentId] and drops it from
+     * [nearbyIncidents]. Returns true when the backend accepted the removal.
+     *
+     * The local drop happens only AFTER the call succeeds, so a rejected removal
+     * (the backend refuses anything that is not your own user-sourced report)
+     * leaves the marker on the map rather than hiding an incident that is still
+     * live for everyone else. Cancellation propagates; any other failure returns
+     * false for the caller to surface.
+     */
+    suspend fun remove(incidentId: String): Boolean {
+        return try {
+            repository.remove(incidentId)
+            nearbyFlow.value = nearbyFlow.value.filterNot { it.id == incidentId }
+            true
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
      * Adds (or replaces, by id) a single incident in [nearbyIncidents]. Keyed on
      * id so a later fetch that also returns it cannot double it up.
      */

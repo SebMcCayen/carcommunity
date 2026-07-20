@@ -759,5 +759,6 @@ private fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.InviteGone -> R.string.convoy_errorInviteGone
         ConvoyActionError.CannotStart -> R.string.convoy_errorCannotStart
         ConvoyActionError.AlreadyEnded -> R.string.convoy_errorAlreadyEnded
+        ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric
     }

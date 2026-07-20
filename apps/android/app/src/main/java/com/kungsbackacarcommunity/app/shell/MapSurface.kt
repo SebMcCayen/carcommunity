@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -77,15 +78,90 @@ data class MapRouteOverlay(
 /**
  * A crowd-sourced incident marker to draw on the map (the Waze-style layer,
  * shared by all users). Shell-owned and self-contained so the [MapSurface] seam
- * stays free of the incidents package's types: [colorArgb] is the category
- * colour resolved by the host, [id] identifies the marker for de-duplication.
+ * stays free of the incidents package's types: the host resolves the category
+ * into the primitives below, and [id] identifies the marker both for
+ * de-duplication and for reporting a tap back ([MapSurface.emitIncidentTap]).
+ *
+ * The marker is an ICON on a coloured disc, not a bare coloured dot — colour
+ * alone could not tell one category from another for a colour-blind user, so
+ * the glyph carries the meaning. See
+ * `com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle` for the
+ * legibility rules these three values come from.
+ *
+ * @property colorArgb the category disc colour, resolved by the host.
+ * @property iconRes drawable resource for the category glyph. A plain resource
+ *   id (an `Int`) rather than a category type, which is what keeps this seam
+ *   free of the incidents package while still carrying the shape.
+ * @property glyphColorArgb the colour to tint [iconRes] with — chosen by the
+ *   host per category for contrast against [colorArgb], since a single fixed
+ *   glyph colour is unreadable on some discs.
  */
 data class MapIncidentMarker(
     val id: String,
     val longitude: Double,
     val latitude: Double,
     val colorArgb: Int,
+    @DrawableRes val iconRes: Int,
+    val glyphColorArgb: Int,
 )
+
+/**
+ * A point in the map view's own pixel space, as the renderer projected it.
+ * Origin is the view's top-left, y grows downward.
+ */
+data class MapScreenPoint(
+    val x: Float,
+    val y: Float,
+)
+
+/**
+ * A settled snapshot of where the camera is.
+ *
+ * Deliberately ROUNDED (see [MapCameraSnapshot.of]) rather than raw. The map
+ * emits a camera change on every animation frame; a snapshot carrying full
+ * precision would therefore be a new value ~60 times a second and re-run every
+ * consumer with it. Rounding to about a metre, a hundredth of a zoom level and a
+ * whole degree makes consecutive frames of a settled camera compare EQUAL, so
+ * `StateFlow`'s own de-duplication collapses them and only real camera movement
+ * propagates.
+ */
+data class MapCameraSnapshot(
+    val latitude: Double,
+    val longitude: Double,
+    val zoom: Double,
+    val bearing: Double,
+    val pitch: Double,
+) {
+    companion object {
+        /** Rounds a raw camera state into a de-duplicable snapshot. */
+        fun of(
+            latitude: Double,
+            longitude: Double,
+            zoom: Double,
+            bearing: Double,
+            pitch: Double,
+        ): MapCameraSnapshot =
+            MapCameraSnapshot(
+                // 5 decimal places of latitude is a bit over a metre — finer than
+                // the camera movement anyone can see, coarser than float noise.
+                latitude = round(latitude, COORDINATE_DECIMALS),
+                longitude = round(longitude, COORDINATE_DECIMALS),
+                zoom = round(zoom, ZOOM_DECIMALS),
+                bearing = round(bearing, 0),
+                pitch = round(pitch, 0),
+            )
+
+        private const val COORDINATE_DECIMALS = 5
+        private const val ZOOM_DECIMALS = 2
+
+        private fun round(value: Double, decimals: Int): Double {
+            if (!value.isFinite()) return 0.0
+            var factor = 1.0
+            repeat(decimals) { factor *= 10.0 }
+            return kotlin.math.round(value * factor) / factor
+        }
+    }
+}
 
 /**
  * A user gesture on the map asking "navigate to this place?".
@@ -164,6 +240,58 @@ interface MapSurface {
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
 
     /**
+     * Where the camera currently is, or null before the map has one.
+     *
+     * Exists for the convoy awareness overlay, which needs the camera CENTRE and
+     * BEARING to work out which way an off-screen member lies (see
+     * `map/ConvoyEdgeGeometry.kt`). Rounded and de-duplicated, so a settled
+     * camera does not re-run the overlay every frame. A surface with no real
+     * camera (the stub) leaves this null forever.
+     */
+    val cameraSnapshot: StateFlow<MapCameraSnapshot?>
+
+    /**
+     * Project a geographic coordinate into the map view's pixel space, or null
+     * when there is no map to project with (not composed, no style, or the stub).
+     *
+     * This is the renderer's OWN projection, deliberately, because it is the only
+     * thing that accounts exactly for zoom, rotation AND pitch. Reimplementing it
+     * would mean reimplementing the camera's projection matrix.
+     *
+     * Two caveats the caller must handle, both documented on
+     * `ConvoyEdgeGeometry.isProjectionTrustworthy`: the returned point may be far
+     * outside the viewport, and for a coordinate behind a TILTED camera it may be
+     * folded back into view rather than being honestly off-screen.
+     */
+    fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
+
+    /**
+     * Frame [points] (with padding) instead of following the user, or pass null
+     * to go back to normal follow.
+     *
+     * This is how "keep the whole convoy in view" is expressed, and it is routed
+     * through the surface's EXISTING follow path rather than moving the camera
+     * itself: the same manual-gesture detach, the same idle-return timer, and the
+     * same deference to a route overlay all apply unchanged. Two camera owners
+     * fighting each other is the failure mode of this feature, so there is
+     * exactly one.
+     *
+     * Clearing it (null) restores the normal framing, including the zoom, so a
+     * convoy that ends cannot leave the camera stuck zoomed out over the group.
+     * A no-op beyond storing the value on the stub.
+     *
+     * [focusEnabled] is the USER'S CHOICE — whether convoy focus is switched on —
+     * and is deliberately separate from whether [points] happens to be null.
+     * The two differ, and conflating them is a real bug: the planner also returns
+     * null when focus IS on but there is nothing fittable yet (nobody sharing a
+     * position, or only one point). Inferring "the user toggled focus off" from a
+     * null would then fire on a transient data gap and force-resume following,
+     * yanking the camera back from a user who had deliberately panned away.
+     * Only a change in [focusEnabled] counts as the deliberate act.
+     */
+    fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean)
+
+    /**
      * The most recent "navigate to this place?" gesture, or null when none is
      * pending. The host observes this to open the navigation preview for the
      * requested place, then calls [consumePlaceRequest] to clear it.
@@ -173,6 +301,23 @@ interface MapSurface {
      * confirmations — see [MapPlaceRequest].
      */
     val placeRequest: StateFlow<MapPlaceRequest?>
+
+    /**
+     * The id of the incident marker most recently TAPPED, or null when none is
+     * pending. The host observes this to open the incident detail sheet, then
+     * calls [consumeIncidentTap] to clear it.
+     *
+     * Deliberately a THIRD, separate flow rather than another producer of
+     * [placeRequest]: a tap on an incident marker means "tell me about this
+     * incident", which is a different intent from the two gestures that mean
+     * "navigate to this place" — routing it through [placeRequest] would open a
+     * route preview to the crash you were asking about.
+     *
+     * Only the id crosses the seam. The surface has no idea what an incident IS
+     * (it was handed a colour, a glyph and an id to draw), so the host resolves
+     * the id back to the incident it already holds.
+     */
+    val incidentTap: StateFlow<String?>
 
     /** Recentre the camera on the user's position. */
     fun recenter()
@@ -192,6 +337,16 @@ interface MapSurface {
 
     /** Clear the pending [placeRequest] once the host has opened the preview for it. */
     fun consumePlaceRequest()
+
+    /**
+     * Record a tap on the incident marker with [incidentId]. Called by the real
+     * surface's annotation click listener; also drivable by the stub/tests to
+     * simulate the tap without a GL surface.
+     */
+    fun emitIncidentTap(incidentId: String)
+
+    /** Clear the pending [incidentTap] once the host has opened the sheet for it. */
+    fun consumeIncidentTap()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. A no-op on
@@ -315,6 +470,53 @@ class StubMapSurface(
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
+    // The stub has no camera, so it never has a position to report and never
+    // projects anything: the convoy overlay simply draws nothing on it, which is
+    // exactly right for CI and the token-less build.
+    private val cameraSnapshotFlow = MutableStateFlow<MapCameraSnapshot?>(null)
+    override val cameraSnapshot: StateFlow<MapCameraSnapshot?> = cameraSnapshotFlow.asStateFlow()
+
+    private val convoyFitFlow = MutableStateFlow<List<MapPoint>?>(null)
+    /** Last value passed to [setConvoyFit] — observable so tests can assert the wiring. */
+    val convoyFit: StateFlow<List<MapPoint>?> = convoyFitFlow.asStateFlow()
+
+    private val convoyFocusEnabledFlow = MutableStateFlow(false)
+
+    /** Last [focusEnabled] passed to [setConvoyFit] — observable for tests. */
+    val convoyFocusEnabled: StateFlow<Boolean> = convoyFocusEnabledFlow.asStateFlow()
+
+    override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
+        convoyFitFlow.value = points
+        convoyFocusEnabledFlow.value = focusEnabled
+    }
+
+    // Test hook: the projection the stub should report, or null for "no map".
+    private var projectionForTest: ((Double, Double) -> MapScreenPoint?)? = null
+
+    /**
+     * No camera on the stub, so nothing can be projected — unless a test has
+     * installed a projection via [setProjectionForTest].
+     */
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? =
+        projectionForTest?.invoke(latitude, longitude)
+
+    /** Test hook: pin a camera snapshot so overlay logic can be exercised off-device. */
+    fun setCameraSnapshotForTest(snapshot: MapCameraSnapshot?) {
+        cameraSnapshotFlow.value = snapshot
+    }
+
+    /**
+     * Test hook: stand in for the renderer's coordinate→pixel projection, so the
+     * convoy awareness overlay can be driven without a real Mapbox surface.
+     * Null (the default) keeps the stub's "there is no map" behaviour.
+     */
+    fun setProjectionForTest(projection: ((Double, Double) -> MapScreenPoint?)?) {
+        projectionForTest = projection
+    }
+
+    private val incidentTapFlow = MutableStateFlow<String?>(null)
+    override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
         private set
@@ -377,6 +579,14 @@ class StubMapSurface(
 
     override fun consumePlaceRequest() {
         placeRequestFlow.value = null
+    }
+
+    override fun emitIncidentTap(incidentId: String) {
+        incidentTapFlow.value = incidentId
+    }
+
+    override fun consumeIncidentTap() {
+        incidentTapFlow.value = null
     }
 
     /** No rotatable camera on the stub, so resetting to north is a no-op. */

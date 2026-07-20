@@ -29,6 +29,7 @@ import {
   geoCellsForRadius,
   isWithinRadius,
   parseListNearbyInput,
+  readConfirmationCount,
   type IncidentType,
   type IncidentSource,
   type IncidentView,
@@ -112,6 +113,10 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         note: (data.note as string | null) ?? null,
         createdAt: tsToIso(data.createdAt),
         expiresAt: tsToIso(data.expiresAt),
+        // Absent until the first confirmation writes it. Corrupt (NaN, negative,
+        // fractional) degrades to 0 for this one marker rather than failing the
+        // batch — see readConfirmationCount.
+        confirmationCount: readConfirmationCount(data.confirmationCount),
       });
     }
   }

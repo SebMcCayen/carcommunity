@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
@@ -37,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -75,6 +77,9 @@ const val NAV_SEARCH_TEST_TAG = "nav_search"
 
 /** Test tag on the route preview's "Start" (turn-by-turn) button. */
 const val NAV_START_TEST_TAG = "nav_start"
+
+/** Test tag on the "set this place as the convoy's shared destination" action. */
+const val NAV_CONVOY_DESTINATION_TEST_TAG = "nav_convoy_destination"
 
 /** Test tag on the saved-places card in the empty search state. */
 const val NAV_SAVED_TEST_TAG = "nav_saved"
@@ -127,6 +132,17 @@ const val NAV_SAVE_CONFIRM_TEST_TAG = "nav_save_confirm"
  *   label, so the preview can name the destination instead of calling it a
  *   dropped pin. Null (a long-press on open map, where there is nothing to name)
  *   falls back to reverse-geocoding for a label. Ignored without [initialTarget].
+ * @param onSetAsConvoyDestination when non-null, the route preview gains a second
+ *   action: "set this place as the CONVOY's shared destination". This is how the
+ *   convoy bar picks a destination — deliberately reusing this one search + saved
+ *   places + recents + map-long-press flow rather than growing a second place
+ *   picker that would have its own geocoding, its own recents and its own bugs.
+ *   Null (the default) for a normal navigate-only open, i.e. whenever the user is
+ *   not in a convoy.
+ * @param convoyDestinationEnabled whether that second action can actually run.
+ *   False while `convoy-setDestination` does not exist
+ *   (`ConvoyDestinations.availability`), which renders the button disabled rather
+ *   than absent — same honesty rule as the convoy bar's own controls.
  */
 @Composable
 fun NavigationSearchScreen(
@@ -139,6 +155,8 @@ fun NavigationSearchScreen(
     savedStore: SavedPlacesStore? = null,
     initialTarget: LatLng? = null,
     initialTargetName: String? = null,
+    onSetAsConvoyDestination: ((LatLng, String) -> Unit)? = null,
+    convoyDestinationEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -326,6 +344,14 @@ fun NavigationSearchScreen(
                     if (dest != null) onStartNavigation(dest.point, dest.name)
                 },
                 onSave = { saveTarget = state.destination },
+                onSetAsConvoyDestination =
+                    onSetAsConvoyDestination?.let { setForConvoy ->
+                        {
+                            val dest = state.destination
+                            if (dest != null) setForConvoy(dest.point, dest.name)
+                        }
+                    },
+                convoyDestinationEnabled = convoyDestinationEnabled,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -790,6 +816,8 @@ private fun RouteSheet(
     onClear: () -> Unit,
     onStart: () -> Unit,
     onSave: () -> Unit,
+    onSetAsConvoyDestination: (() -> Unit)?,
+    convoyDestinationEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val destination = state.destination ?: return
@@ -910,6 +938,37 @@ private fun RouteSheet(
                     )
                     Text(
                         text = stringResource(R.string.turnByTurn_start),
+                        modifier = Modifier.padding(start = KccSpacing.s2),
+                    )
+                }
+            }
+
+            // "Set for the convoy" — only present when the host opened this
+            // screen as the convoy bar's place picker. Shown as soon as a
+            // DESTINATION is resolved, not only once a ROUTE is: sharing a place
+            // with the group is meaningful even if this phone can't route to it
+            // right now (no GPS fix, directions request failed). Disabled while
+            // `convoy-setDestination` does not exist.
+            if (onSetAsConvoyDestination != null) {
+                OutlinedButton(
+                    onClick = onSetAsConvoyDestination,
+                    enabled = convoyDestinationEnabled,
+                    modifier = Modifier.fillMaxWidth().testTag(NAV_CONVOY_DESTINATION_TEST_TAG),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Group,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                if (convoyDestinationEnabled) {
+                                    R.string.convoy_barDestinationPickAction
+                                } else {
+                                    R.string.convoy_barDestinationSetUnavailable
+                                },
+                            ),
                         modifier = Modifier.padding(start = KccSpacing.s2),
                     )
                 }

@@ -121,7 +121,8 @@ class FirebaseLiveLocationRepository private constructor(
 /**
  * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when
  * absent (not sharing) or missing a coordinate. Reads only the marker-complete
- * fields written by live.updatePosition (latitude/longitude/displayName).
+ * fields written by live.updatePosition (latitude/longitude/displayName), plus
+ * `recordedAt` so viewers can judge staleness.
  */
 private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
     if (!exists()) return null
@@ -134,6 +135,7 @@ private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
         longitude = longitude,
         displayName = displayName,
         mainCar = child("mainCar").toLiveMainCar(),
+        recordedAtIso = child("recordedAt").getValue(String::class.java),
     )
 }
 

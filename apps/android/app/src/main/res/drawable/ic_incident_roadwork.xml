@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Incident glyph: ROADWORK — the standard roadworks "digging figure" barrier
+  sign, reduced to a cone plus barrier bar so it survives marker scale.
+
+  Tinted at runtime (see IncidentMarkerStyle.glyphColorArgb).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M13.2,2.5C13.2,3.6 12.3,4.5 11.2,4.5S9.2,3.6 9.2,2.5 10.1,0.5 11.2,0.5 13.2,1.4 13.2,2.5Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14.5,5.5H8.5L5.5,13.5H8L9,10.5V21H11.5V15H12.5V21H15V10.5L16,13.5H18.5Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2,22H22V24H2Z" />
+</vector>

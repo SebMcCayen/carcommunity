@@ -682,7 +682,19 @@ service cloud.firestore {
       allow read: if isAuthenticated()
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time;
-      // No client writes — incidents.report / incidents.remove (callables).
+      // No client writes — incidents.report / incidents.remove /
+      // incidents.confirm (callables).
+      //
+      // The `confirmations/{uid}` sub-collection (the one-per-user confirmation
+      // ledger written by incidents.confirm) is deliberately NOT matched here:
+      // this block does not recurse into sub-collections, so the deny-all
+      // catch-all governs it and it stays callable-only — unreadable and
+      // unwritable by clients. That is intended: a member must not be able to
+      // forge a confirmation, enumerate who confirmed what, or extend an
+      // incident's life by writing the ledger directly. The confirmation state
+      // a client needs comes back from incidents.confirm itself
+      // (confirmationCount / alreadyConfirmed) and from listNearby
+      // (confirmationCount on each incident).
     }
 
     // -------------------------------------------------------------------------
