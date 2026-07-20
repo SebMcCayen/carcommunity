@@ -50,11 +50,13 @@ enum class ThemePreference {
 /**
  * Device-local persistence for [ThemePreference].
  *
- * SharedPreferences, no Firebase — mirroring [com.kungsbackacarcommunity.app
- * .welcome.WelcomeStore] and WhatsNewStore. Deliberately device-local and NOT
- * account state: "this phone renders the app dark" belongs to the phone (a
- * bright car interior vs. a dim one), it must work before sign-in, and syncing
- * it would need a rules/Firestore change for no user-visible benefit.
+ * SharedPreferences, no Firebase — mirroring
+ * [com.kungsbackacarcommunity.app.welcome.WelcomeStore] and
+ * [com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore]. Deliberately
+ * device-local and NOT account state: "this phone renders the app dark" belongs
+ * to the phone (a bright car interior vs. a dim one), it must work before
+ * sign-in, and syncing it would need a rules/Firestore change for no
+ * user-visible benefit.
  *
  * Exposes a [StateFlow] rather than a getter so a change applies live: the
  * activity collects it, so picking a preference re-renders the theme on the
