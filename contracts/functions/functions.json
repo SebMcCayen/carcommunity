@@ -694,6 +694,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "dm.reportMessage",
+      "domain": "dm",
+      "description": "Reports a message in a 1:1 DM conversation ({ conversationId, messageId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }). Caller must be one of the conversation's two members; a missing conversation and a conversation the caller isn't in both return not-found (parity with dm.getMessages, so the endpoint can't probe whether two people talk). Reporting your own message is invalid-argument. Ids are constrained to a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) so a hostile id is invalid-argument rather than a traversal into another document. BLOCKING does NOT gate reporting either way. SNAPSHOTS the reported message (text + author uid/displayName + createdAt) into the report because DM messages are readable only by the two participants — rules give admins no read path into conversations, so a report holding only ids would be unactionable; exactly one message is copied, never the thread. Deduplicates per conversation+message+reporter+reason (repeat silently refreshes details only; never resets a report a moderator already actioned, and the response never reveals a prior report existed). Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as dm-reportMessage (functions/src/dm/reportMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "convoy.create",
       "domain": "convoy",
       "description": "Creates a convoy and invites a list of the owner's FRIENDS ({ inviteeUids:[uid] (1..50), title? (1..80) }). Each invitee is validated: must be an established friend (users/{owner}/friends/{uid}), not blocked either way, and a non-restricted existing account — non-friend/blocked/missing/self/duplicate invitees are silently SKIPPED (never an error that would reveal a block). Writes convoys/{convoyId} (status 'forming') with the owner seeded as members[owner]={role:'owner',inviteStatus:'accepted'} and each accepted invitee as {role:'member',inviteStatus:'invited'}; memberUids=[owner,...invitees] drives the list read + rules gate; memberProfiles denormalized. Writes a best-effort in-app notification per invitee (system_notice category). Returns { convoy: ConvoySummary, invited:[uid], skipped:[{uid,reason}] } where reason is self|not_friend|not_found|duplicate (a block edge either way is surfaced as the neutral not_found, so the inviter can't infer who blocked whom). failed-precondition if no invitee is valid. Deployed via grouped export as convoy-create (functions/src/convoy/manageConvoy.ts).",
@@ -732,7 +741,43 @@
     {
       "name": "convoy.list",
       "domain": "convoy",
-      "description": "Lists the caller's convoys ({} input): { convoys:[ConvoySummary], pendingInvites:[ConvoySummary] } newest-first (bounded at 200 via the [memberUids CONTAINS, createdAt DESC] index). pendingInvites is the subset the caller still has a pending invite for (non-ended + viewer.inviteStatus=='invited'). ConvoySummary = { convoyId, ownerUid, title, status, members:[{uid,role,inviteStatus,joinedAt,displayName,avatarPath}] (inviteStatus is the green dot), memberUids, viewer:{role,inviteStatus}|null, livePositionUids:[uid] (accepted members — the uids the map subscribes to at RTDB liveLocation/{uid}/latest for live positions), summary:{durationSeconds,participantUids,participantCount,distanceMeters}|null, createdAt, startedAt, endedAt }. Deployed via grouped export as convoy-list (functions/src/convoy/manageConvoy.ts).",
+      "description": "Lists the caller's convoys ({} input): { convoys:[ConvoySummary], pendingInvites:[ConvoySummary] } newest-first (bounded at 200 via the [memberUids CONTAINS, createdAt DESC] index). pendingInvites is the subset the caller still has a pending invite for (non-ended + viewer.inviteStatus=='invited'). ConvoySummary = { convoyId, ownerUid, title, status, members:[{uid,role,inviteStatus,joinedAt,displayName,avatarPath}] (inviteStatus is the green dot), memberUids, viewer:{role,inviteStatus}|null, livePositionUids:[uid] (accepted members — the uids the map subscribes to at RTDB liveLocation/{uid}/latest for live positions), destination:{latitude,longitude,label,setByUid,setByDisplayName,setAt}|null (the shared destination — see convoy.setDestination; survives end), summary:{durationSeconds,participantUids,participantCount,distanceMeters}|null, createdAt, startedAt, endedAt }. Deployed via grouped export as convoy-list (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.leave",
+      "domain": "convoy",
+      "description": "An ACCEPTED non-owner member removes THEMSELVES from a convoy ({ convoyId }). Fills the gap convoy.respond cannot: respond hard-requires members[caller].inviteStatus=='invited' and throws failed-precondition once you have accepted. The caller's entry is deleted from members + memberProfiles and their uid removed from memberUids (all three written whole in one transaction), so their convoy read (rules gate on memberUids), their convoy chat access and their livePositionUids slot all drop together. The OWNER is refused with failed-precondition and must use convoy.end — an owner leaving would orphan every owner-gated transition (start/end/summary) with no succession rule. A still-invited or declined member is also failed-precondition (nothing to leave; respond is their path); an ended convoy is failed-precondition; a non-member / unknown convoy is not-found (never permission-denied, so a convoy can't be probed). The LAST non-owner leaving does NOT auto-end the convoy — it is left alive with the owner alone, because ending writes the permanent shared summary and is the owner's deliberate act. Returns { convoy: ConvoySummary (built from the post-transaction state; viewer is null — the caller is no longer a member), remainingMemberCount }. Deployed via grouped export as convoy-leave (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.invite",
+      "domain": "convoy",
+      "description": "Adds invitees to an EXISTING convoy ({ convoyId, inviteeUids: [uid] (1..25) }) as members[uid]={role:'member',inviteStatus:'invited'} — convoy.create takes invitees only at creation, so without this a convoy can never grow. ANY ACCEPTED member may invite, not the owner alone: a convoy is a peer group and the owner is frequently the one driving, so owner-only would make the common case (adding the friend who just phoned) impossible; every candidate must still be an established FRIEND of the INVITER (users/{inviter}/friends/{uid}), which is what keeps 'any member' from meaning 'any stranger'. Blocking is honoured both ways against the inviter AND against every other ACCEPTED member, so nobody can be pulled into a convoy with someone who blocked them. Skip reasons are the same neutral set as convoy.create plus already_member (uid already in memberUids); a block edge is surfaced as the neutral not_found. Bounded: max 25 invitees per call and a hard cap of 25 TOTAL members (MAX_CONVOY_SIZE) — an over-cap batch is refused WHOLE (failed-precondition) rather than partially applied. Membership + cap are re-asserted inside the transaction and memberUids grows via arrayUnion, so concurrent invites/leaves cannot clobber each other. IDEMPOTENT: if every requested uid is already in the convoy — including when a CONCURRENT invite added them mid-call — the call SUCCEEDS with invited:[] and reason already_member, because the post-state asked for is the post-state that exists. Ended convoy / caller not accepted / no requested uid addable AND none already a member → failed-precondition; non-member or unknown convoy → not-found. Writes the same best-effort in-app 'convoy_invite' notification per added invitee as convoy.create (one shared path, so an invitee's opt-out works identically). Returns { convoy: ConvoySummary, invited:[uid], skipped:[{uid,reason}] }. Deployed via grouped export as convoy-invite (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.setDestination",
+      "domain": "convoy",
+      "description": "Sets or REPLACES the convoy's SHARED DESTINATION ({ convoyId, latitude, longitude, label? }) — the one place every member can start navigation to. Any ACCEPTED member may set it (not owner-only: the owner is frequently driving and the person who knows where the meet is often isn't whoever pressed create); last write wins, with the whole destination object written atomically so a new coordinate is never observable paired with the previous label. Server-validated: latitude finite in [-90,90], longitude finite in [-180,180] (NaN/Infinity explicitly rejected — they survive JSON round-trips and would poison downstream distance math), label trimmed and max 120 chars (over-length is invalid-argument, never silent truncation; blank-after-trim stored as ABSENT, not ''). setByUid comes from the verified auth context and setAt from the server clock — never client-supplied, or a member could attribute a destination to someone else; setByDisplayName is denormalized from memberProfiles like members[].displayName. A 'forming' convoy MAY have a destination (agreeing where to go is what happens before rolling); 'ended' → failed-precondition; caller not accepted → failed-precondition; non-member / unknown convoy → not-found (never permission-denied). Members READ it as ConvoySummary.destination on the convoy read path they already use — no new listener, no second source of truth. ARRIVAL is deliberately NOT tracked and NEVER auto-ends the convoy. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-setDestination (functions/src/convoy/manageConvoy.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "convoy.clearDestination",
+      "domain": "convoy",
+      "description": "Clears the convoy's shared destination ({ convoyId }), deleting the `destination` field. Permitted to the member who SET it or the convoy OWNER — clearing is strictly more destructive than replacing (it can leave members mid-drive with nothing to navigate to and leaves no replacement to explain itself), so setter-or-owner lets the person who made the mess undo it and gives the owner a moderation path without letting any member wipe a plan the group is following. Any other accepted member → permission-denied (they already know the convoy exists, so not-found would mislead). Clearing when nothing is set is an idempotent NO-OP, not an error (two people tapping at once is normal). Ended convoy → failed-precondition: the destination SURVIVES convoy.end untouched as a record of where the group was headed, so there is nothing live to clear. Caller not accepted → failed-precondition; non-member / unknown convoy → not-found. Returns { convoy: ConvoySummary }. Deployed via grouped export as convoy-clearDestination (functions/src/convoy/manageConvoy.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -778,6 +823,60 @@
       "name": "convoyChat.list",
       "domain": "convoyChat",
       "description": "Paginated newest-first convoy chat messages ({ convoyId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only an accepted member of the convoy may read (same gate as convoyChat.post; missing convoy/outsider not-found, still-invited/declined failed-precondition). Returns { convoyId, messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore } (page size 30). mentionedUids is always [] here — convoyChat.post accepts no @mentions (the chat already notifies every accepted member, so a mention notice would duplicate one they get anyway); the field is present only so both channels share one message shape. Deployed via grouped export as convoyChat-list (functions/src/chatchannels/convoyChat.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "chatchannels.reportMessage",
+      "domain": "chatchannels",
+      "description": "Reports a message in either CHANNEL chat ({ channel: 'community'|'convoy', convoyId (required for and only for convoy), messageId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }). One callable for both channels because only the eligibility check differs. Eligibility mirrors each channel's read rule: community = any active member; convoy = an ACCEPTED member of that convoy (same gate as convoyChat.post/list — missing convoy/outsider not-found, still-invited failed-precondition). Passing convoyId with channel 'community' (or omitting it for convoy) is invalid-argument, never silently ignored. Reporting your own message is invalid-argument. Ids are constrained to a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) so a hostile id is invalid-argument rather than a traversal into another document. BLOCKING does NOT gate reporting either way. SNAPSHOTS the reported message (text + author uid/displayName + createdAt) because channel messages are TTL-deleted (community 120d / convoy 30d) and a report holding only ids would go blank. Deduplicates per channel+scope+message+reporter+reason (repeat silently refreshes details only; never resets a report a moderator already actioned). Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as chatchannels-reportMessage (functions/src/chatchannels/reportMessage.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "moderation.reportUser",
+      "domain": "moderation",
+      "description": "Reports a PERSON rather than a message ({ reportedUserId, reason: harassment|hate_or_abuse|spam|unsafe_driving|privacy|other, details? <=500 chars }) — the escalation for behaviour that doesn't reduce to one line of chat. AUTHENTICATED-active gate (requireActiveActor, matching blocking.block/unblock rather than the member-gated chat callables: reporting harassment must not require a live subscription; suspended/deleted still rejected). Self-report invalid-argument; a reportedUserId that is not a single Firestore document-id segment (no `/`, no `.`/`..`, no reserved `__*__`) is invalid-argument; missing or soft-deleted target not-found. BLOCKING does NOT gate reporting either way. Deduplicates per (reporter, reportedUser) WITHOUT the reason, so a single reporter cannot fill the queue by cycling the reason enum — a repeat updates reason+details and increments `occurrences` on the one document, which also makes the row count for a target equal the number of DISTINCT reporters. Captures ONLY the target's public profile projection (displayName+avatarPath, snapshotted so a rename doesn't orphan the row) plus the tally — never their message history, drives or garage. A per-target aggregate at moderationUserSummaries/{uid} ({reporterCount, totalSubmissions, lastReportedAt}) is maintained in the same transaction for O(1) 'how many prior reports' triage. Rate-limited to 10 NEW reports/hour/reporter across all report types (resource-exhausted). Writes moderationReports/{reportId} (admin-read-only, client-write-denied). Returns { reported: true }. Deployed via grouped export as moderation-reportUser (functions/src/moderation/reportUser.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "incidents.report",
+      "domain": "incidents",
+      "description": "Creates a crowd-sourced road incident ({ type: accident|roadwork|hazard|police|road_closed, latitude, longitude, note? }, note <=200 chars). Member-gated. Writes incidents/{id} with a computed geoCell (coarse grid key used by listNearby instead of a full-collection scan), source:'user', reporterUid, a server createdAt, and a per-type expiresAt TTL (police 1h .. roadwork 12h). Clients cannot write the collection directly (firebase/firestore.rules denies all client writes), so a report cannot be forged, backdated, or spoofed as a Trafikverket import. Returns the IncidentView { id, type, latitude, longitude, source, reporterUid, note, createdAt, expiresAt, confirmationCount }. Deployed via grouped export as incidents-report (functions/src/incidents/report.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "incidents.listNearby",
+      "domain": "incidents",
+      "description": "Bounded read of ACTIVE, unexpired incidents near a point ({ latitude, longitude, radiusMeters? }, radius clamped to 100..50000 m, default 15000). Open to ANY active signed-in user, not only members — the Waze-style map layer is shared by all users and this is a read. Enumerates the grid cells covering the radius and reads only those via chunked `geoCell in [...]` queries (+ status=='active' and expiresAt>now), then filters to the exact server-computed Haversine radius (a client-supplied distance is never trusted) and caps at 200. Returns { incidents: IncidentView[] }. Deployed via grouped export as incidents-listNearby (functions/src/incidents/listNearby.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "incidents.remove",
+      "domain": "incidents",
+      "description": "Clears an incident the caller no longer stands behind ({ incidentId }). A signed-in caller may remove their OWN report; an admin may remove any (moderation). Idempotent: removing a missing incident is a no-op success ({ removed: false }). Imported (source!='user') incidents are failed-precondition for EVERYONE including admins — the Trafikverket sync would just re-upsert them. Deletes the document and its confirmations sub-collection (recursiveDelete) so the marker disappears for everyone on the next nearby fetch. Returns { removed }. Deployed via grouped export as incidents-remove (functions/src/incidents/remove.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "incidents.confirm",
+      "domain": "incidents",
+      "description": "Confirms someone else's incident is still there ({ incidentId }) — the 'is this still there?' action on a marker. Declared access 'member' (requireMemberActor), matching incidents.report rather than the read-only listNearby: it is a write that keeps a marker alive for every user. NOTE the declared access is what is enforced WHEN THE GATE IS ON: functions/src/shared/memberGating.ts currently sets MEMBER_GATING_ENABLED = false repo-wide, so the entitlement half of every 'member' declaration in this registry is presently bypassed and any signed-in, non-suspended, non-deleted caller passes. Suspension and soft-deletion are NEVER bypassed. Re-locking is the documented five-switch procedure in memberGating.ts; this callable needs no change when it happens. ONE confirmation per user per incident, enforced by the document id of incidents/{id}/confirmations/{uid} claimed with tx.create in the same transaction that increments incidents/{id}.confirmationCount and extends expiresAt — concurrent double-taps cannot double-count. A repeat is idempotent success with alreadyConfirmed:true (no second write, no further extension), not an error. The reporter cannot confirm their own report (permission-denied). Confirming resets expiresAt to a fresh per-type TTL from now, never backwards and never past the hard cap createdAt + 3x the type's TTL, so a confirmed incident persists but can never become immortal. A missing incident is not-found; an inactive/expired one is failed-precondition; an imported (source!='user') one is failed-precondition because runTrafikverketSync full-overwrites each tv_ doc every 30 minutes and upstream is the authority on whether it is still live. No notification is sent to the reporter (ambient corroboration, not a social interaction). Returns { incidentId, confirmationCount, expiresAt, alreadyConfirmed }. Deployed via grouped export as incidents-confirm (functions/src/incidents/confirm.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",

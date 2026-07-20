@@ -25,8 +25,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import kotlin.random.Random
 
@@ -127,7 +127,7 @@ fun SignInScreen(
                     contentScale = ContentScale.Crop,
                 )
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = KccSpacing.s6),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -136,26 +136,26 @@ fun SignInScreen(
                         contentDescription = stringResource(R.string.app_name),
                         modifier = Modifier.fillMaxWidth(0.7f),
                     )
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(KccSpacing.s8))
                     Text(
                         text = stringResource(R.string.auth_loginTitle),
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(KccSpacing.s2))
                     Text(
                         text = stringResource(R.string.auth_loginSubtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(KccSpacing.s6))
 
                     when (status) {
                         SignInStatus.InProgress -> {
                             CircularProgressIndicator()
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(KccSpacing.s2))
                             Text(
                                 text = stringResource(R.string.auth_loading),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -177,19 +177,19 @@ fun SignInScreen(
                             // add-account activity (managed profiles, some ROMs):
                             // the message alone still names Settings > Accounts.
                             if (status.reason == SignInFailure.NO_GOOGLE_ACCOUNT && canAddAccount) {
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(KccSpacing.s4))
                                 Button(onClick = onAddGoogleAccountClick) {
                                     Text(stringResource(R.string.auth_addGoogleAccountButton))
                                 }
                             }
-                            Spacer(Modifier.height(16.dp))
+                            Spacer(Modifier.height(KccSpacing.s4))
                             GoogleSignInButton(onSignInClick)
                         }
 
                         SignInStatus.Idle -> GoogleSignInButton(onSignInClick)
                     }
 
-                    Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(KccSpacing.s6))
                     // Random car quote in place of the old privacy note.
                     // In production (quoteIndex == null) a random index is
                     // drawn and remembered so the pick stays stable across

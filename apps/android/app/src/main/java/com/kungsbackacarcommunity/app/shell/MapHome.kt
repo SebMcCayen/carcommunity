@@ -210,6 +210,26 @@ fun MapHome(
     // legitimately contributes nothing. Defaults false so callers/tests that do
     // not wire incidents show no credit.
     trafikverketDataShown: Boolean = false,
+    // Optional convoy status bar, composed as the FIRST row of the top chrome
+    // column (above the search row) while — and only while — the caller is in a
+    // convoy. A slot rather than convoy parameters so the shell keeps knowing
+    // nothing about the convoy domain, and so "not in a convoy" is expressed by
+    // the host passing null: nothing is composed at all, rather than an empty bar.
+    // Sharing the existing top Column means the bar can never overlap the search
+    // bar or the profile button — they simply stack — and the right-side floating
+    // controls are bottom-aligned, so they are untouched either way.
+    convoyBar: (@Composable () -> Unit)? = null,
+    // Optional convoy awareness layer (member markers + off-screen direction
+    // arrows), composed directly ON the map and UNDER all the floating chrome,
+    // so an arrow pinned to the top edge tucks behind the search bar rather than
+    // covering it. A slot for the same reason [convoyBar] is one: the shell stays
+    // ignorant of the convoy domain, and "not in a convoy" is the host passing
+    // null, which composes nothing whatsoever.
+    //
+    // Deliberately NOT inside the map surface: it needs Compose (a remote car
+    // photo per member) and it must never intercept map gestures, which is why it
+    // carries no pointer input of its own.
+    convoyOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -341,6 +361,12 @@ fun MapHome(
     // map through the [mapSurface] hooks instead. The Box stays transparent so
     // the shell's map shows through.
     Box(modifier = modifier.fillMaxSize().testTag(MAP_HOME_TEST_TAG)) {
+        // Convoy awareness (member markers + off-screen direction arrows) sits
+        // at the BOTTOM of the chrome stack: it belongs to the map, so every
+        // control composed below this point draws over it rather than being
+        // covered by a car photo pinned to a screen edge.
+        convoyOverlay?.invoke()
+
         // Transparent outside-tap catcher, shown only while the search bar is
         // expanded: a tap on the open map area collapses it back to the round
         // icon. It's composed here, above the map but below every later overlay
@@ -374,6 +400,7 @@ fun MapHome(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            convoyBar?.invoke()
             SearchBarRow(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,

@@ -8,6 +8,9 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -48,7 +51,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
@@ -67,6 +72,8 @@ import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.CircleControl
@@ -126,6 +133,7 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -180,8 +188,14 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * @param destination the chosen destination coordinate.
  * @param destinationLabel human-readable destination name (shown on the exit bar).
  * @param onExit leave the navigation view (back to the map/search).
- * @param onReportIncident report an incident/roadwork; wired by the host to the
- *   incidents feature when present, else a "coming soon" no-op (see host).
+ * @param onReportIncident report an incident/roadwork of the picked category.
+ *   Wired by the host to the SAME `incidents-report` callable the map home uses
+ *   (one reporting path, not a navigation-specific copy), so a report filed while
+ *   driving is indistinguishable from one filed on the map home.
+ * @param incidentReportingEnabled whether the report control is offered at all.
+ *   Mirrors the map home's gate (a configured Firebase incidents controller + an
+ *   active member); false hides the control rather than showing one that cannot
+ *   file anything.
  * @param isLiveSharing whether a live-location session is currently running.
  *   Turns the live control GREEN, exactly as on the map home. Starting to
  *   navigate does NOT stop a session, so this control has to stay on screen: the
@@ -195,6 +209,21 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * @param onHideMeNow the privacy stop — remove my position now.
  * @param onOpenLiveShareDetails open the full live-location screen (the complete
  *   controls, including exactly who can see the caller, and the privacy details).
+ * @param convoyBar the shared convoy status bar
+ *   ([com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar]), composed only when
+ *   the driver is in a convoy — a convoy does not stop existing because someone
+ *   pressed "Start", so the roster and its controls come along.
+ *
+ *   Placed as the LAST item of the top column, BELOW the maneuver banner rather
+ *   than above it. The column stacks, so no position could ever *obscure* the
+ *   banner; the question is only what gets pushed down. Inserting the bar above
+ *   would shove the current-turn instruction — the one piece of this screen a
+ *   driver reads at a glance, at speed — further from the top edge and behind a
+ *   piece of social chrome in the reading order. Below the banner it costs the
+ *   maneuver nothing, still reads as top chrome, and lands inside the region the
+ *   navigation camera already reserves as top padding. It is also rendered in its
+ *   `compact` form here (no explanation line), because vertical space beside
+ *   safety-critical instructions is not free.
  */
 @OptIn(ExperimentalPreviewMapboxNavigationAPI::class)
 @Composable
@@ -203,8 +232,9 @@ fun TurnByTurnNavScreen(
     destination: LatLng,
     destinationLabel: String,
     onExit: () -> Unit,
-    onReportIncident: () -> Unit,
+    onReportIncident: (IncidentType) -> Unit,
     modifier: Modifier = Modifier,
+    incidentReportingEnabled: Boolean = false,
     // Defaulted so callers/tests that don't wire live sharing still compile; the
     // control then simply offers the (gated) start path.
     isLiveSharing: Boolean = false,
@@ -212,6 +242,7 @@ fun TurnByTurnNavScreen(
     onStartLiveShare: () -> Unit = {},
     onHideMeNow: () -> Unit = {},
     onOpenLiveShareDetails: () -> Unit = {},
+    convoyBar: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val token = stringResource(R.string.mapbox_access_token)
@@ -318,8 +349,44 @@ fun TurnByTurnNavScreen(
         } else {
             NavigationStyles.NAVIGATION_DAY_STYLE
         }
-    LaunchedEffect(engine, navStyleUri) {
-        engine.loadStyleAndInit(navStyleUri)
+    // ── Entry handoff: map home → navigation, without the white flash ────────
+    //
+    // See [NavHandoff] for the full rationale. In short: this screen builds a
+    // SECOND MapView, and a new Mapbox GL surface paints blank frames for the
+    // whole of its first style load. Those frames used to be mounted straight
+    // over the shell's map — the flash. Now an opaque, Compose-drawn veil fades
+    // in over the shell map's last painted frame FIRST, the nav map mounts and
+    // loads its style behind it, and the veil fades away onto a finished map.
+    val styleLoaded by engine.styleLoaded.collectAsState()
+    var phase by remember { mutableStateOf(NavHandoffPhase.VeilIn) }
+
+    // Drive the phases. Each step is a plain delay rather than an animation
+    // callback so the sequence cannot stall on a dropped frame.
+    LaunchedEffect(engine) {
+        delay(NavHandoff.FADE_MILLIS.toLong())
+        phase = NavHandoff.afterVeilIn(engine.styleLoaded.value)
+    }
+    LaunchedEffect(engine, phase, styleLoaded) {
+        if (phase != NavHandoffPhase.Loading) return@LaunchedEffect
+        if (styleLoaded) {
+            phase = NavHandoff.whileLoading(styleLoaded = true, timedOut = false)
+            return@LaunchedEffect
+        }
+        // Style still loading: wait for it, but never past the cap.
+        delay(NavHandoff.STYLE_TIMEOUT_MILLIS)
+        phase = NavHandoff.whileLoading(styleLoaded = false, timedOut = true)
+    }
+    LaunchedEffect(phase) {
+        if (phase != NavHandoffPhase.Revealing) return@LaunchedEffect
+        delay(NavHandoff.FADE_MILLIS.toLong())
+        phase = NavHandoffPhase.Ready
+    }
+
+    // The style load is started only once the map is actually mounted — starting
+    // it earlier would not help (the surface has to exist to render it) and the
+    // whole point is that every blank frame lands behind an opaque veil.
+    LaunchedEffect(engine, navStyleUri, phase.mapMounted) {
+        if (phase.mapMounted) engine.loadStyleAndInit(navStyleUri)
     }
 
     DisposableEffect(engine, lifecycleOwner) {
@@ -394,10 +461,22 @@ fun TurnByTurnNavScreen(
     // tapping the live control opens the shared transparent popup over the map.
     var liveOpen by remember { mutableStateOf(false) }
 
+    // Incident-report category picker open/close — local, transient UI state, the
+    // same shape as the map home's `reportOpen` (a plain `remember`, deliberately
+    // NOT saveable: a half-made report should not survive process death).
+    var reportOpen by remember { mutableStateOf(false) }
+
     BackHandler { onExit() }
 
     Box(modifier = modifier.fillMaxSize().testTag(TURN_BY_TURN_TEST_TAG)) {
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        // Mounted only once the veil is opaque (see [NavHandoffPhase.mapMounted]).
+        // Mounting it during the fade-in is precisely what let the blank GL
+        // frames show through, because a MapView is SurfaceView-backed and is
+        // punched through the window rather than composited with the veil above
+        // it — it cannot be hidden by alpha, only by not being there yet.
+        if (phase.mapMounted) {
+            AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        }
 
         // Top: exit bar + maneuver banner (current turn + upcoming).
         Column(
@@ -474,6 +553,11 @@ fun TurnByTurnNavScreen(
                     }
                 }
             }
+
+            // Convoy status bar, LAST so the maneuver banner keeps its place at
+            // the top of the screen (see the [convoyBar] KDoc). Composed only
+            // while the driver is actually in a convoy.
+            convoyBar?.invoke()
         }
 
         // Bottom chrome, stacked as ONE column so nothing can overlap: the speed
@@ -530,15 +614,22 @@ fun TurnByTurnNavScreen(
                             if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
                         onClick = { liveOpen = true },
                     )
-                    FloatingActionButton(
-                        onClick = onReportIncident,
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
+                    // Report incident/roadwork — the map home's control, not a
+                    // navigation-specific one. It was a 56.dp tinted
+                    // FloatingActionButton, which read as a different KIND of
+                    // affordance sitting in a stack of 48.dp neutral circles; it
+                    // is now the same [CircleControl] with the same neutral
+                    // surface/onSurface treatment PR #468 established for the map
+                    // home's report button, so the stack is one family of
+                    // controls. Opens the SHARED category picker, whose choice
+                    // goes to the host's single reporting path.
+                    if (incidentReportingEnabled) {
+                        CircleControl(
+                            icon = Icons.Filled.Warning,
                             contentDescription =
-                                stringResource(R.string.turnByTurn_reportIncident),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                stringResource(R.string.incidents_reportButton),
+                            onClick = { reportOpen = true },
+                            modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
                         )
                     }
                     if (!following) {
@@ -575,11 +666,86 @@ fun TurnByTurnNavScreen(
                 onDismiss = { liveOpen = false },
             )
         }
+
+        // The SHARED incident category picker from the map home — the same
+        // composable, so navigation offers the same categories in the same order
+        // with the same wording. Picking a category hands the choice straight to
+        // the host, which routes it to the one `incidents-report` callable.
+        if (reportOpen) {
+            IncidentTypePickerDialog(
+                onPick = { type ->
+                    reportOpen = false
+                    onReportIncident(type)
+                },
+                onDismiss = { reportOpen = false },
+            )
+        }
+
+        // ── The handoff veil ────────────────────────────────────────────────
+        //
+        // Drawn LAST so it covers the map and this screen's chrome together:
+        // navigation arrives as one dissolve rather than a map swap with
+        // buttons appearing over it.
+        //
+        // Its colour is the app's own surface for the CURRENT theme — the same
+        // day/night signal that picks the navigation style URI — so the
+        // transition never passes through white on a dark map. That was the
+        // reported symptom, and a hardcoded light veil would simply have
+        // reintroduced it after dark.
+        //
+        // While it IS up it swallows every pointer event, the same way an
+        // opaque page drawn over the shell map does. An opaque
+        // overlay that does not block input is worse than no overlay: a Box with
+        // only `background`/`alpha` registers no pointer-input modifier, so taps
+        // and drags fall straight through to the chrome and the map beneath it —
+        // the user would be hitting the exit bar, the report control or a pan
+        // gesture they cannot see, for up to STYLE_TIMEOUT_MILLIS on a slow
+        // style load.
+        //
+        // Once the transition is over it is not composed AT ALL, so it cannot go
+        // on eating gestures meant for the map — the mistake PR #464 fixed,
+        // where an always-present Surface swallowed every one of them.
+        if (phase.veilVisible) {
+            // An explicit Animatable seeded at NavHandoff.VEIL_START_ALPHA, NOT
+            // animateFloatAsState: that initialises to its first target, and the
+            // first target here is the opaque 1f of VeilIn — so it would snap
+            // straight to opaque and only the fade-OUT would ever animate. The
+            // dissolve away from the map home is half the point, so the starting
+            // value has to be stated rather than inferred.
+            val veil = remember { Animatable(NavHandoff.VEIL_START_ALPHA) }
+            LaunchedEffect(phase.veilTargetAlpha) {
+                veil.animateTo(
+                    targetValue = phase.veilTargetAlpha,
+                    animationSpec = tween(NavHandoff.FADE_MILLIS),
+                )
+            }
+            val veilAlpha = veil.value
+            Box(
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .alpha(veilAlpha)
+                        .background(MaterialTheme.colorScheme.surface)
+                        // Consumed on the Main pass, which children see first;
+                        // the veil has no children, so this simply ends every
+                        // gesture here instead of letting it reach a sibling.
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent().changes.forEach { it.consume() }
+                                }
+                            }
+                        },
+            )
+        }
     }
 }
 
 /** Test tag on the navigation speed readout (current speed + posted limit). */
 const val TURN_BY_TURN_SPEED_TEST_TAG = "turn_by_turn_speed"
+
+/** Test tag on the navigation view's round "report incident/roadwork" control. */
+const val TURN_BY_TURN_REPORT_TAG = "turn_by_turn_report"
 
 /**
  * The bottom-left speed readout: the driver's CURRENT speed always, and the
@@ -844,6 +1010,39 @@ private class TurnByTurnEngine(
     private val speedFlow = MutableStateFlow<NavSpeedInfo?>(null)
     val speed: StateFlow<NavSpeedInfo?> = speedFlow.asStateFlow()
 
+    /**
+     * Whether this map has finished its FIRST style load and is painting real
+     * content — the signal that ends the entry handoff (see [NavHandoff]).
+     *
+     * A brand-new `MapView` paints blank frames until its style is up, which is
+     * what the white flash was. The screen keeps an opaque veil over the map
+     * until this turns true, so those frames are never presented.
+     *
+     * Deliberately latching: it is set true on the first successful style load
+     * and never reset. A later day/night style reload does drop back to blank
+     * frames briefly, but re-running the whole entry dissolve mid-drive would be
+     * more disruptive than the flicker it hides, so the veil is an entry
+     * transition only.
+     */
+    private val styleLoadedFlow = MutableStateFlow(false)
+    val styleLoaded: StateFlow<Boolean> = styleLoadedFlow.asStateFlow()
+
+    /**
+     * Identifies the most recent [loadStyleAndInit] request, so a completing
+     * load can tell whether it is still the one being waited on.
+     *
+     * A system light/dark flip re-keys the caller's effect and starts a SECOND
+     * style load, which can overlap the first — and the first one completing
+     * would otherwise report "the map is painting real content" while the map is
+     * in fact mid-way through loading the newer style, revealing the veil onto
+     * exactly the blank frames it exists to hide. Only the newest request is
+     * allowed to end the handoff.
+     *
+     * Main-thread only, like the rest of this class's mutable state: both the
+     * callers (Compose effects) and Mapbox's style callback run there.
+     */
+    private var styleLoadToken = 0
+
     private val viewportDataSource = MapboxNavigationViewportDataSource(mapView.mapboxMap)
     private val navigationCamera =
         NavigationCamera(mapView.mapboxMap, mapView.camera, viewportDataSource)
@@ -979,19 +1178,40 @@ private class TurnByTurnEngine(
         // were being cleaned up before, so those map-level registrations and
         // list entries accumulated one set per day/night flip.
         releaseDestMarkerManager()
-        runCatching {
-            mapView.mapboxMap.loadStyle(styleUri) { style ->
-                runCatching { routeLineView.initializeLayers(style) }
-                // Create the destination-marker manager against the freshly
-                // loaded style and redraw the marker. A style reload (day/night
-                // flip) drops every annotation, so the marker has to be redrawn
-                // here rather than only once at startup.
-                runCatching {
-                    destMarkerManager = mapView.annotations.createCircleAnnotationManager()
-                    drawDestinationMarker()
+        // Claim this request. Anything still in flight from an earlier one is
+        // now stale and must not be allowed to end the handoff.
+        val token = ++styleLoadToken
+        val loaded =
+            runCatching {
+                mapView.mapboxMap.loadStyle(styleUri) { style ->
+                    runCatching { routeLineView.initializeLayers(style) }
+                    // Create the destination-marker manager against the freshly
+                    // loaded style and redraw the marker. A style reload (day/night
+                    // flip) drops every annotation, so the marker has to be redrawn
+                    // here rather than only once at startup.
+                    runCatching {
+                        destMarkerManager = mapView.annotations.createCircleAnnotationManager()
+                        drawDestinationMarker()
+                    }
+                    // The map now has a style and is painting real content, so the
+                    // handoff veil covering it can be faded away. Set LAST, after
+                    // the route line and destination marker are in place, so the
+                    // reveal never lands on a basemap that is still missing the
+                    // route the user just asked for.
+                    //
+                    // Only if this is still the CURRENT request: a theme flip
+                    // during the handoff starts a newer load, and letting this
+                    // older one report success would reveal the veil onto the
+                    // newer style's blank frames — the flash, reintroduced.
+                    if (token == styleLoadToken) styleLoadedFlow.value = true
                 }
-            }
-        }
+            }.isSuccess
+        // A throw here means no style load was ever started, so the callback above
+        // will never run and would strand the veil until its timeout. Release it
+        // now: a map with no style is a bad screen, but a permanently veiled one
+        // is a dead screen. Token-guarded for the same reason as the success
+        // path — a newer request in flight is still going to report for itself.
+        if (!loaded && token == styleLoadToken) styleLoadedFlow.value = true
     }
 
     /**

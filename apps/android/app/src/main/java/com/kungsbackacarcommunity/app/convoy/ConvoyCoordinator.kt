@@ -61,6 +61,17 @@ sealed interface CreateConvoyState {
  */
 class ConvoyCoordinator(
     private val repository: ConvoyRepository,
+    /**
+     * The SHARED-destination half of the convoy domain, which has no deployed
+     * callables yet — hence the default: [UnavailableConvoyDestinationRepository]
+     * refuses every call without touching the network, and the bar's destination
+     * controls render disabled ([ConvoyDestinations.availability]). When
+     * `convoy-setDestination` / `convoy-clearDestination` ship, this default is
+     * replaced by [FirebaseConvoyDestinationRepository] at the construction site
+     * and the flag is flipped. Nothing below changes.
+     */
+    private val destinationRepository: ConvoyDestinationRepository =
+        UnavailableConvoyDestinationRepository,
 ) {
     private val statusState = MutableStateFlow<ConvoyListStatus>(ConvoyListStatus.Loading)
     val status: StateFlow<ConvoyListStatus> = statusState.asStateFlow()
@@ -139,6 +150,29 @@ class ConvoyCoordinator(
     }
 
     /**
+     * Sets (or replaces) the convoy's shared destination, then re-fetches like
+     * every other mutation so the new destination reaches the bar through the
+     * one convoy read path.
+     */
+    suspend fun setDestination(
+        convoyId: String,
+        latitude: Double,
+        longitude: Double,
+        label: String?,
+    ) {
+        runRowAction(convoyId) {
+            destinationRepository
+                .setDestination(convoyId, latitude, longitude, label)
+                .errorOrNull()
+        }
+    }
+
+    /** Clears the convoy's shared destination (setter or owner only). */
+    suspend fun clearDestination(convoyId: String) {
+        runRowAction(convoyId) { destinationRepository.clearDestination(convoyId).errorOrNull() }
+    }
+
+    /**
      * Runs a single-convoy mutation guarded against rapid double-taps, then
      * always re-fetches the snapshot (so a success updates the list/detail and a
      * stale row disappears). [action] returns the mapped error on failure, or
@@ -182,4 +216,21 @@ private fun ConvoyMutationResult.errorOrNull(): ConvoyActionError? =
     when (this) {
         is ConvoyMutationResult.Updated -> null
         is ConvoyMutationResult.Failed -> error
+    }
+
+/**
+ * Same, for the destination results.
+ *
+ * [ConvoyDestinationResult.Unavailable] maps to NO error on purpose. It means
+ * "this callable was never built", which is not a failure the user caused and not
+ * something to show them a red line about — the control that would have produced
+ * it is disabled and already carries an honest explanation. Turning it into
+ * [ConvoyActionError.Generic] would put "something went wrong" on a feature that
+ * simply does not exist yet.
+ */
+private fun ConvoyDestinationResult.errorOrNull(): ConvoyActionError? =
+    when (this) {
+        is ConvoyDestinationResult.Updated -> null
+        is ConvoyDestinationResult.Failed -> error
+        ConvoyDestinationResult.Unavailable -> null
     }

@@ -44,20 +44,18 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
+import { requireAcceptedConvoyMember } from './convoyMembership';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   CONVOY_CHAT_RETENTION_DAYS,
-  CONVOY_NOT_FOUND_MESSAGE,
   EMPTY_MESSAGE_MESSAGE,
-  NOT_CONVOY_MEMBER_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
   chatMessageExpiry,
   convoyChatNotificationId,
-  isAcceptedConvoyMember,
   messagePreview,
   parseListConvoyInput,
   parsePostConvoyInput,
@@ -77,10 +75,6 @@ const CALLABLE_OPTS = {
 // ---------------------------------------------------------------------------
 // Firestore references
 // ---------------------------------------------------------------------------
-
-function convoyRef(convoyId: string) {
-  return db.collection('convoys').doc(convoyId);
-}
 
 function convoyMessagesRef(convoyId: string) {
   return db.collection('convoyChats').doc(convoyId).collection('messages');
@@ -107,35 +101,10 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
   return toProfileProjection(snap.data());
 }
 
-/**
- * Loads the convoy doc and asserts the caller is an ACCEPTED member. Not-found
- * (never permission-denied) for a missing convoy OR a non/pending/declined
- * member so a convoy can't be probed by an outsider.
- *
- * Returns the convoy data so a caller that also needs it — post's notification
- * fan-out reads the accepted-member list off it — costs no second read.
- */
-async function requireAcceptedMember(
-  convoyId: string,
-  uid: string,
-): Promise<Record<string, unknown>> {
-  const snap = await convoyRef(convoyId).get();
-  if (!snap.exists) {
-    throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
-  }
-  if (!isAcceptedConvoyMember(snap.data(), uid)) {
-    // A member of the convoy who hasn't accepted gets a distinct precondition;
-    // a total outsider gets not-found (can't tell a convoy exists).
-    const memberUids = Array.isArray(snap.data()?.memberUids)
-      ? (snap.data()!.memberUids as unknown[])
-      : [];
-    if (memberUids.includes(uid)) {
-      throw new HttpsError('failed-precondition', NOT_CONVOY_MEMBER_MESSAGE);
-    }
-    throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
-  }
-  return snap.data() ?? {};
-}
+// The accepted-member gate now lives in ./convoyMembership so
+// chatchannels.reportMessage enforces the identical rule (a member of the
+// convoy who hasn't accepted → failed-precondition; a total outsider or a
+// missing convoy → not-found, so a convoy can't be probed).
 
 // ---------------------------------------------------------------------------
 // convoyChat.post
@@ -157,7 +126,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
 
-  const convoy = await requireAcceptedMember(convoyId, actor.uid);
+  const convoy = await requireAcceptedConvoyMember(convoyId, actor.uid);
 
   const senderProfile = await loadProfile(actor.uid);
   if (!senderProfile) {
@@ -234,7 +203,7 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoyRes
   }
   const { convoyId, before } = parsed.input;
 
-  await requireAcceptedMember(convoyId, actor.uid);
+  await requireAcceptedConvoyMember(convoyId, actor.uid);
 
   let query = convoyMessagesRef(convoyId)
     .orderBy('createdAt', 'desc')

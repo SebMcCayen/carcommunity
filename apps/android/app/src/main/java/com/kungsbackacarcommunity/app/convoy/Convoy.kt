@@ -67,6 +67,18 @@ data class ConvoySummary(
     val createdAt: String?,
     val startedAt: String?,
     val endedAt: String?,
+    /**
+     * The convoy's SHARED destination — one member's pick that every other member
+     * can start navigating to — or null when nobody has set one.
+     *
+     * Defaulted and parsed forward-compatibly: no deployed callable writes this
+     * field yet, so it is simply absent from every response today and stays null.
+     * It hangs off the summary rather than being a second read, so when the
+     * backend lands the destination arrives through the convoy read path members
+     * already use, with no new listener. See [ConvoyDestination] for the full
+     * callable contract this is waiting on.
+     */
+    val destination: ConvoyDestination? = null,
 ) {
     /** True when the caller owns this convoy (drives the Start/End controls). */
     val viewerIsOwner: Boolean get() = viewer?.role == ConvoyRole.Owner
@@ -95,6 +107,17 @@ enum class ConvoyActionError {
     InviteGone,
     CannotStart,
     AlreadyEnded,
+
+    /**
+     * The caller IS a member, but is not permitted to do this particular thing —
+     * today only clearing a shared destination someone else set when you are not
+     * the convoy owner (see [ConvoyErrorMapper.mapClearDestination]).
+     *
+     * Distinct from [NotMember], which says you are not in the convoy at all.
+     * Telling a member they are "not a member" for an authorization refusal
+     * sends them looking for a membership problem that does not exist.
+     */
+    NotAllowed,
     Generic,
 }
 
@@ -192,6 +215,42 @@ object ConvoyErrorMapper {
             else -> ConvoyActionError.Generic
         }
 
+    /**
+     * For `convoy-setDestination`. Membership failures come back as `not-found`
+     * (a convoy must not be probeable), and the only precondition failure is a
+     * convoy that has already ended. A bad coordinate or an over-long label is
+     * `invalid-argument`.
+     */
+    fun mapSetDestination(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
+            else -> ConvoyActionError.Generic
+        }
+
+    /**
+     * For `convoy-clearDestination`. Unlike set, `permission-denied` here is the
+     * expected refusal for a member who neither set the destination nor owns the
+     * convoy — they already know the convoy exists, so `not-found` would mislead
+     * rather than protect.
+     */
+    fun mapClearDestination(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            // NOT NotMember: for clear, permission-denied is specifically the
+            // member-but-not-setter-or-owner refusal described above. Every other
+            // convoy callable reserves permission-denied for a genuine
+            // non-member, which is why this is the one mapper that differs.
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotAllowed
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
+            else -> ConvoyActionError.Generic
+        }
+
     /** For `convoy-list` (only the auth/member gate can realistically fail). */
     fun mapList(code: ConvoyErrorCode): ConvoyActionError =
         when (code) {
@@ -253,6 +312,31 @@ object ConvoyResponseParser {
             createdAt = map["createdAt"] as? String,
             startedAt = map["startedAt"] as? String,
             endedAt = map["endedAt"] as? String,
+            destination = parseDestination(map["destination"]),
+        )
+    }
+
+    /**
+     * Parses the (not-yet-served) shared destination. A destination missing a
+     * usable coordinate, or carrying one outside WGS-84 bounds, is dropped rather
+     * than surfaced: a bar offering "start navigation" to a corrupt coordinate is
+     * worse than a bar offering nothing. `setByUid` is likewise required — an
+     * unattributable destination cannot be shown as "set by" anyone, nor have its
+     * clear permission evaluated.
+     */
+    private fun parseDestination(raw: Any?): ConvoyDestination? {
+        val map = raw as? Map<*, *> ?: return null
+        val latitude = (map["latitude"] as? Number)?.toDouble() ?: return null
+        val longitude = (map["longitude"] as? Number)?.toDouble() ?: return null
+        if (!ConvoyDestinations.isValidCoordinate(latitude, longitude)) return null
+        val setByUid = (map["setByUid"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        return ConvoyDestination(
+            latitude = latitude,
+            longitude = longitude,
+            label = (map["label"] as? String)?.takeIf { it.isNotBlank() },
+            setByUid = setByUid,
+            setByDisplayName = (map["setByDisplayName"] as? String)?.takeIf { it.isNotBlank() },
+            setAt = map["setAt"] as? String,
         )
     }
 

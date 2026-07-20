@@ -11,6 +11,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { parseRemoveInput } from './incidents-core';
@@ -61,6 +62,42 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
     tx.delete(ref);
     return true;
   });
+
+  if (removed) {
+    // A document delete does not remove its sub-collections, so the transaction
+    // above leaves the `confirmations/{uid}` ledger orphaned. recursiveDelete
+    // cannot run inside a transaction, so sweep it immediately after the commit
+    // (the incident is already gone for readers at this point).
+    //
+    // BEST-EFFORT, deliberately. The user-visible operation — the marker
+    // disappearing for everyone — is complete the moment the transaction
+    // commits. Letting a transient failure here propagate would report failure
+    // for an operation that succeeded, and the natural retry is worse than
+    // useless: the incident is already gone, so the second call takes the
+    // idempotent no-op branch and returns `{ removed: false }`, telling the
+    // user nothing was removed when in fact it was.
+    //
+    // What an orphan costs: nothing user-visible. The ledger is callable-only
+    // (the rules' deny-all catch-all covers the sub-collection), no query reads
+    // it — there is no collection-group query over `confirmations` anywhere in
+    // the codebase — and document ids are never reused, so a future report
+    // cannot inherit one. It is dead storage and nothing else.
+    //
+    // NOTE it is NOT reclaimed later: the TTL sweep queries the `incidents`
+    // collection, and this incident's document no longer exists, so the sweep
+    // will never match it and never recurse into it. The orphan is permanent.
+    // That is an acceptable price for not lying about the outcome, but it is
+    // the reason this logs at error severity with the incident id rather than
+    // swallowing quietly — a recurring pattern here is a real signal.
+    try {
+      await db.recursiveDelete(ref);
+    } catch (error) {
+      logger.error('incidents.remove: confirmation ledger cleanup failed; orphan left behind', {
+        incidentId: parsed.input.incidentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   return { removed };
 });
