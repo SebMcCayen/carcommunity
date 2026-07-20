@@ -17,6 +17,7 @@
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
+    "jsdom": "^29.1.1",
     "prettier": "^3.9.5"
   },
   "overrides": {
