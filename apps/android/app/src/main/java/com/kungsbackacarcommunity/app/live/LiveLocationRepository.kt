@@ -41,6 +41,20 @@ data class LiveMarker(
     val displayName: String? = null,
     /** The sharer's main car at session start, or null when they have none. */
     val mainCar: LiveMainCar? = null,
+    /**
+     * When this sample was recorded, ISO-8601, as written by the publisher, or
+     * null when the node predates the field / it is unreadable.
+     *
+     * Carried so a viewer can tell a live position from a position that has
+     * simply stopped updating. A `latest` node is removed when a session stops
+     * or expires, but a device that loses signal mid-drive leaves its last
+     * sample sitting there looking current — and the convoy direction arrows
+     * would then point confidently at where somebody used to be. Consumers
+     * decide the window (see
+     * [com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner.STALE_AFTER_MS]);
+     * null means "unknown", which is deliberately NOT treated as stale.
+     */
+    val recordedAtIso: String? = null,
 )
 
 /**

@@ -111,6 +111,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
+import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -162,6 +163,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
+import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.location.LocationAccess
@@ -172,7 +174,13 @@ import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.openAppLocationSettings
 import com.kungsbackacarcommunity.app.location.openDeviceLocationSettings
 import com.kungsbackacarcommunity.app.location.shouldShowLocationRationale
+import com.kungsbackacarcommunity.app.map.ConvoyCameraPlan
+import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
+import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
+import com.kungsbackacarcommunity.app.map.ConvoyFocusStore
+import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapRoute
+import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
@@ -217,11 +225,17 @@ import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
+import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
+import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
 import com.kungsbackacarcommunity.app.shell.ShellRoute
 import com.kungsbackacarcommunity.app.shell.ShellTab
+import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
+import com.kungsbackacarcommunity.app.shell.GARAGE_PANEL_TEST_TAG
+import com.kungsbackacarcommunity.app.shell.HISTORY_PANEL_TEST_TAG
+import com.kungsbackacarcommunity.app.shell.SOCIAL_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
@@ -238,6 +252,8 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -267,34 +283,6 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
  * the same register as the map's own short camera eases.
  */
 private const val SHELL_TAB_FADE_MILLIS = 200
-
-/**
- * What is drawn over the shell's single map surface.
- *
- * The map is composed once for the whole signed-in shell and never disposed, so
- * "which page is the user on" is, from the map's point of view, only ever this
- * question: can they see it, and can they touch it? Two different answers hang
- * off that — whether the surface stays live ([MapSurface.setActive]) and whether
- * the map home's chrome stands down — and they are NOT the same answer, which is
- * exactly why this is one enum and not a pair of booleans that can drift.
- */
-private enum class MapCover {
-    /** Nothing over it: the map home. Visible, live, interactive. */
-    None,
-
-    /**
-     * Chrome over a map the user can still see (the address search). The surface
-     * stays LIVE — it is showing the route and the puck — but the map home's own
-     * chrome stands down, because it is not the page in front any more.
-     */
-    Transparent,
-
-    /**
-     * The map is hidden entirely (a non-map tab, a full-screen route,
-     * turn-by-turn). Nothing to see, so the surface is stood down.
-     */
-    Opaque,
-}
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -1148,32 +1136,18 @@ fun AuthenticatedApp(
                     route = null
                 }
 
-                // System Back: close an open route first; from a non-Map tab
-                // return to the Map tab; from Map exit the app (no handler). The
-                // decision is delegated to the unit-tested ShellNavigation.onBack
-                // so production back behaviour and its tests can't drift. Nested
-                // route BackHandlers compose deeper and take priority while
-                // enabled, so this only fires at a route's own root.
-                // What, if anything, is drawn over the map — the SINGLE source of
-                // truth for every "the map isn't the thing on screen" decision in
-                // the shell. Everything downstream (standing the surface down,
-                // clearing its semantics, standing the map home's chrome down,
-                // gating the chat hub) derives from this one value rather than
-                // re-deriving its own condition, so they cannot drift apart as
-                // pages are added.
+                // What, if anything, is drawn over the map. Delegated to the
+                // unit-tested [ShellNavigation.mapCover] so production and its
+                // tests can't drift; everything downstream (standing the surface
+                // down, clearing its semantics, standing the map home's chrome
+                // down, gating the chat hub) derives from this ONE value.
                 val mapCover =
-                    when {
-                        // Turn-by-turn brings its own full-screen map.
-                        navDestination != null -> MapCover.Opaque
-                        // The address search is the one page that draws its chrome
-                        // over a map the user is still looking at (it shows the
-                        // route it just drew, and the puck).
-                        navSearchOpen -> MapCover.Transparent
-                        // Full-screen routes and the non-map tabs both hide it.
-                        route != null -> MapCover.Opaque
-                        selectedTab != ShellTab.Map -> MapCover.Opaque
-                        else -> MapCover.None
-                    }
+                    ShellNavigation.mapCover(
+                        tab = selectedTab,
+                        route = route,
+                        navigating = navDestination != null,
+                        navSearchOpen = navSearchOpen,
+                    )
 
                 // Collapse the location prompt as soon as another page covers the
                 // map, matching how the map's other transient UI is reset (see
@@ -1181,6 +1155,11 @@ fun AuthenticatedApp(
                 // affordance, not a preference: it silences the card for this look
                 // at the map, and the next visit re-evaluates. The failed-to-open
                 // -settings note is cleared with it — it describes one attempt.
+                //
+                // A translucent panel counts as a cover: it obscures the card's
+                // place on the map, so the same "this look at the map is over"
+                // reasoning applies. That matches the `covered` flag handed to
+                // MapHome below, which is derived from this same [mapCover].
                 LaunchedEffect(mapCover) {
                     if (mapCover != MapCover.None) {
                         locationPromptDismissed = false
@@ -1188,6 +1167,17 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // System Back: close an open route first; from a non-Map tab
+                // return to the Map tab; from Map exit the app (no handler). The
+                // decision is delegated to the unit-tested ShellNavigation.onBack
+                // so production back behaviour and its tests can't drift. Nested
+                // route BackHandlers compose deeper and take priority while
+                // enabled, so this only fires at a route's own root.
+                //
+                // Back is also the panels' non-gesture dismissal: from History,
+                // Social or Garage it returns to the Map tab, which is exactly
+                // what pulling the panel down does. A drag-to-dismiss overlay
+                // needs a route that is not a drag.
                 val backResult = ShellNavigation.onBack(selectedTab, route)
                 BackHandler(enabled = backResult != ShellBackResult.Exit) {
                     when (backResult) {
@@ -1399,12 +1389,122 @@ fun AuthenticatedApp(
                 // null (rather than a bar that draws nothing) is what makes "not in
                 // a convoy" compose literally nothing at all — no empty bar, no
                 // placeholder, and no space reserved in the top chrome column.
+                // ---- Convoy map awareness + camera focus ----------------------
+                //
+                // Two features off one source of truth: where the other people in
+                // the convoy are (drawn as markers, or as edge arrows once they
+                // leave the viewport) and what the camera frames (just you, or the
+                // whole group). Both need the same input — the live positions of
+                // the convoy's accepted members — so it is resolved once, here.
+                val activeConvoy = ConvoyBar.activeConvoy(convoyBarStatus)
+
+                // Session-scoped, and reset whenever the active convoy changes
+                // identity — including to null, which is "left / ended". That reset
+                // is what guarantees the camera goes back to normal instead of
+                // being left zoomed out over a group that no longer exists.
+                val convoyFocusStore = remember { ConvoyFocusStore() }
+                LaunchedEffect(activeConvoy?.convoyId) {
+                    convoyFocusStore.onActiveConvoyChanged(activeConvoy?.convoyId)
+                }
+                val convoyFocusMode by convoyFocusStore.mode.collectAsState()
+
+                // Accepted members whose live position this convoy may read (the
+                // backend already narrows that — see ConvoySummary.livePositionUids);
+                // own uid dropped because the user is the puck, not a marker.
+                val convoyLiveUids =
+                    remember(activeConvoy?.convoyId, activeConvoy?.livePositionUids, uid) {
+                        activeConvoy
+                            ?.livePositionUids
+                            .orEmpty()
+                            .filter { it.isNotBlank() && it != uid }
+                            .distinct()
+                    }
+                // One per-uid RTDB read each, combined — the same no-collection-scan
+                // shape MapRoute uses, because the rules grant per-uid reads only.
+                val convoyMarkersFlow: Flow<List<LiveMarker?>> =
+                    remember(liveLocationRepository, convoyLiveUids) {
+                        if (liveLocationRepository == null || convoyLiveUids.isEmpty()) {
+                            flowOf(emptyList())
+                        } else {
+                            combine(
+                                convoyLiveUids.map { liveLocationRepository.observeLatest(it) },
+                            ) { it.toList() }
+                        }
+                    }
+                val convoyMarkers by convoyMarkersFlow.collectAsState(initial = emptyList())
+                val convoyMemberPositions =
+                    remember(convoyMarkers) {
+                        convoyMarkers.filterNotNull().map { it.toConvoyMemberPosition() }
+                    }
+
+                // The user's own live position. Only available while they are
+                // live-sharing; without it the fit simply frames the others (and
+                // falls back to plain follow when there is too little to fit).
+                val ownLiveMarkerFlow: Flow<LiveMarker?> =
+                    remember(uid, liveLocationRepository, activeConvoy?.convoyId) {
+                        if (liveLocationRepository != null && uid.isNotBlank() && activeConvoy != null) {
+                            liveLocationRepository.observeLatest(uid)
+                        } else {
+                            flowOf(null)
+                        }
+                    }
+                val ownLiveMarker by ownLiveMarkerFlow.collectAsState(initial = null)
+
+                // Push the framing decision at the map surface, which applies it
+                // inside its EXISTING follow path (see MapSurface.setConvoyFit).
+                // Null means "follow me" — and that is also what the planner
+                // returns when it has too little to fit, so the restore path is the
+                // same code as the never-enabled path rather than a special case
+                // somebody can forget to write.
+                LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions) {
+                    val plan =
+                        ConvoyFocusPlanner.plan(
+                            mode = convoyFocusMode,
+                            ownPosition =
+                                ownLiveMarker?.let { ConvoyLatLng(it.latitude, it.longitude) },
+                            memberPositions =
+                                convoyMemberPositions.map {
+                                    ConvoyLatLng(it.latitude, it.longitude)
+                                },
+                        )
+                    mapSurface.setConvoyFit(
+                        points =
+                            when (plan) {
+                                is ConvoyCameraPlan.FollowSelf -> null
+                                is ConvoyCameraPlan.FitConvoy ->
+                                    plan.points.map { MapPoint(it.longitude, it.latitude) }
+                            },
+                        // The user's CHOICE, passed separately from the points:
+                        // the planner also yields FollowSelf (null points) while
+                        // focus is still on but nobody is sharing a position yet,
+                        // and the surface must not read that transient gap as the
+                        // user switching focus off. See MapSurface.setConvoyFit.
+                        focusEnabled = convoyFocusMode == ConvoyFocusMode.Convoy,
+                    )
+                }
+
+                // Composes nothing at all unless there is somebody to draw, so a
+                // convoy where nobody is sharing yet adds no layer to the map.
+                val convoyOverlaySlot: (@Composable () -> Unit)? =
+                    if (convoyMemberPositions.isNotEmpty()) {
+                        {
+                            ConvoyMapAwarenessOverlay(
+                                mapSurface = mapSurface,
+                                members = convoyMemberPositions,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 val convoyBarSlot: (@Composable (Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {
                         { compact ->
                             ConvoyStatusBar(
                                 state = convoyBarState,
                                 compact = compact,
+                                focusMode = convoyFocusMode,
+                                onFocusModeChange = { convoyFocusStore.setMode(it) },
                                 // Only ever reached for the OWNER (a member's leave
                                 // has no callable and renders disabled); the bar
                                 // confirms before this fires.
@@ -1683,11 +1783,12 @@ fun AuthenticatedApp(
                             Modifier.fillMaxSize().then(
                                 // What the Scaffold's containerColor did: paint an
                                 // opaque background under a page that hides the
-                                // map. Pages already paint their own (see
-                                // ShellTabPage), so this is belt-and-braces and,
-                                // like before, is derived from the same [mapCover]
-                                // as setActive, so "is it live" and "is it painted
-                                // over" cannot drift apart.
+                                // map. Only OPAQUE covers get it: the History /
+                                // Social / Garage panels are translucent and must
+                                // keep showing the live map through and above
+                                // them, which is exactly why this is derived from
+                                // the same [mapCover] as setActive, so "is it live"
+                                // and "is it painted over" cannot drift apart.
                                 if (mapCover == MapCover.Opaque) {
                                     Modifier.background(MaterialTheme.colorScheme.background)
                                 } else {
@@ -1833,6 +1934,9 @@ fun AuthenticatedApp(
                                     // Convoy status bar above the search row (full
                                     // variant, with the explanation line).
                                     convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
+                                    // Convoy member markers + off-screen direction
+                                    // arrows, drawn on the map under the chrome.
+                                    convoyOverlay = convoyOverlaySlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its
@@ -1960,9 +2064,12 @@ fun AuthenticatedApp(
                                 }
                             }
 
-                            // The other tabs render as an opaque page over the map, crossfaded so
-                            // pages resolve into each other instead of snapping. Leaving a tab
-                            // fades its page back out to reveal the map that was there all along.
+                            // The other three tabs render as TRANSLUCENT PANELS pulled down over
+                            // the map (see TranslucentShellPanel), crossfaded so panels resolve
+                            // into each other instead of snapping. Leaving a tab fades its panel
+                            // back out to reveal the map, which was live underneath the whole
+                            // time — that is the point of the panel: the map stays visible and,
+                            // outside the card, still answers to touch.
                             Crossfade(
                                 targetState = selectedTab,
                                 animationSpec = tween(SHELL_TAB_FADE_MILLIS),
@@ -1977,7 +2084,10 @@ fun AuthenticatedApp(
                                     ShellTab.Map, ShellTab.Create -> Unit
 
                                     ShellTab.History ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = HISTORY_PANEL_TEST_TAG,
+                                        ) {
                                             if (drivesRepository != null) {
                                                 DrivesRoute(
                                                     repository = drivesRepository,
@@ -1992,7 +2102,10 @@ fun AuthenticatedApp(
                                         }
 
                                     ShellTab.Social ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = SOCIAL_PANEL_TEST_TAG,
+                                        ) {
                                             HubScreen(
                                                 title = stringResource(R.string.shell_socialTitle),
                                                 // Alphabetical by the DISPLAYED, localized label
@@ -2105,7 +2218,10 @@ fun AuthenticatedApp(
                                     // signed-in user (no longer member-gated, PR
                                     // #428); only the repo needs to be wired.
                                     ShellTab.Garage ->
-                                        ShellTabPage {
+                                        TranslucentShellPanel(
+                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            testTag = GARAGE_PANEL_TEST_TAG,
+                                        ) {
                                             if (garageRepository != null) {
                                                 GarageRoute(
                                                     repository = garageRepository,
@@ -2337,38 +2453,6 @@ fun AuthenticatedApp(
     }
 }
 
-/**
- * A non-map bottom-nav tab's page, drawn over the still-composed map home.
- *
- * The map is no longer disposed when you leave the Map tab (it stays alive so
- * returning to it can't blank the screen), which makes it a live, pannable
- * MapView sitting directly underneath these pages. That imposes two things this
- * wrapper exists to guarantee:
- *
- * - **Opaque.** [MaterialTheme.colorScheme.background] — the same container
- *   colour the shell frame gives the tabs today, so the pages look exactly as they
- *   did — so the map cannot show through the page it is behind.
- * - **Touch-blocking.** Every pointer event that reaches the page background is
- *   swallowed, so a drag over a tab's empty space can't pan the invisible map
- *   underneath and leave the camera somewhere new. Consumption happens on the
- *   Main pass, which children see first, so the page's own buttons and lists
- *   keep working normally.
- */
-@Composable
-private fun ShellTabPage(content: @Composable () -> Unit) {
-    Surface(
-        modifier =
-            Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        awaitPointerEvent().changes.forEach { it.consume() }
-                    }
-                }
-            },
-        color = MaterialTheme.colorScheme.background,
-        content = content,
-    )
-}
 
 /**
  * Height of [ShellBottomBar]. Mirrors the Material3 [NavigationBar] container

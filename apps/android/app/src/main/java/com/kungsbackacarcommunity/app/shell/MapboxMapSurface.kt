@@ -23,6 +23,8 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.map.CameraFollowController
+import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
+import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -149,6 +151,28 @@ class MapboxMapSurface : MapSurface {
 
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
+
+    // Where the camera is, rounded so a settled camera stops re-emitting (see
+    // [MapCameraSnapshot]). Fed from the same camera-change listener that drives
+    // [bearingFlow]; consumed by the convoy awareness overlay.
+    private val cameraSnapshotFlow = MutableStateFlow<MapCameraSnapshot?>(null)
+    override val cameraSnapshot: StateFlow<MapCameraSnapshot?> = cameraSnapshotFlow.asStateFlow()
+
+    // "Keep the whole convoy in view": the points the camera should be framing
+    // instead of the user's puck, or null for normal follow. Applied ONLY from
+    // inside the existing follow path (see [applyConvoyFit]), so it inherits the
+    // gesture detach, the idle-return timer and the deference to a route overlay
+    // rather than becoming a second camera owner.
+    private var convoyFitPoints: List<MapPoint>? = null
+
+    // The user's convoy-focus choice, tracked separately from [convoyFitPoints]
+    // so a transient "nothing to fit" is never mistaken for switching focus off.
+    private var convoyFocusEnabled: Boolean = false
+
+    // The fit currently applied to the camera, so a stream of live positions that
+    // does not actually change the framing does not re-ease the camera every
+    // second (see ConvoyFocusPlanner.shouldRefit). Null when not fitting.
+    private var appliedConvoyFit: List<ConvoyLatLng>? = null
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
     override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
@@ -377,6 +401,139 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the incident
         // badges when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
+        val map = mapViewRef ?: return null
+        return runCatching {
+            val screen = map.mapboxMap.pixelForCoordinate(Point.fromLngLat(longitude, latitude))
+            MapScreenPoint(x = screen.x.toFloat(), y = screen.y.toFloat())
+        }.getOrNull()
+    }
+
+    override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
+        val previousFocusEnabled = convoyFocusEnabled
+        convoyFitPoints = points?.takeIf { it.isNotEmpty() }
+        convoyFocusEnabled = focusEnabled
+
+        // Turning the fit ON or OFF is an explicit user act (the convoy bar's
+        // focus toggle), so — exactly like the my-location control — it resumes
+        // following and cancels any pending idle-return. Everything else that
+        // reaches this method is a position/roster tick, which must NOT resume
+        // following, or a user who had panned away would be yanked back every
+        // second.
+        //
+        // The two are told apart by the user's FOCUS CHOICE, not by whether
+        // `points` went null. Those are different questions: the planner also
+        // hands us null while focus is ON but nothing is fittable yet (nobody
+        // sharing a position, or only one point). Reading a null as "the user
+        // switched focus off" would make a transient data gap — one tick where
+        // the roster is momentarily empty — force-resume following and snatch the
+        // camera back from someone who had deliberately panned away to look at
+        // something.
+        val toggled = previousFocusEnabled != focusEnabled
+        if (toggled) {
+            followController.onRecenterRequested()
+            idleReturnJob?.cancel()
+            idleReturnJob = null
+        }
+
+        if (convoyFitPoints == null) {
+            // Nothing to frame. Forget the applied fit either way, so a later
+            // refit is not compared against a stale bounding box.
+            appliedConvoyFit = null
+            // Glide back to the normal framing — which restores the ZOOM as well
+            // as the centre — ONLY when the user actually switched focus off
+            // (or left / the convoy ended). Without that the camera would be left
+            // wherever the last fit put it: technically following the user again,
+            // but stuck zoomed out over an area the group no longer occupies.
+            //
+            // Gated on `toggled` rather than on `previous != null`, because a
+            // momentary gap in live positions also arrives here with focus still
+            // ON. Easing to the user then would re-zoom the map mid-convoy every
+            // time the roster blinked.
+            if (toggled && !focusEnabled &&
+                followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)
+            ) {
+                easeToUser()
+            }
+            return
+        }
+
+        // Applies immediately rather than waiting for the next GPS fix, so the
+        // toggle feels like it did something — but still behind the follow gate,
+        // so a position tick arriving while the user is mid-pan cannot steal the
+        // camera from them. A toggle always passes the gate, because the branch
+        // above just resumed following.
+        if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+            applyConvoyFit()
+        }
+    }
+
+    /**
+     * Ease the camera to frame the current [convoyFitPoints], if anything has
+     * actually changed.
+     *
+     * Called from the two places the framing can go out of date: the focus
+     * choice/roster changing ([setConvoyFit]) and a new position arriving (the
+     * indicator-position listener). Both entries are already gated on
+     * [CameraFollowController.shouldTrack], so a user who has panned away keeps
+     * their view and gets the fit back when the idle timer resumes follow —
+     * exactly like plain follow behaves.
+     */
+    private fun applyConvoyFit() {
+        val map = mapViewRef ?: return
+        val points = convoyFitPoints ?: return
+        val asLatLng = points.map { ConvoyLatLng(latitude = it.latitude, longitude = it.longitude) }
+        // Live positions tick every second; re-easing on each one is visibly
+        // seasick and pointless when the framing is unchanged.
+        if (!ConvoyFocusPlanner.shouldRefit(appliedConvoyFit, asLatLng)) return
+
+        runCatching {
+            // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
+            // display density exactly as the route-overlay fit does. Passing the
+            // dp numbers raw made the padding shrink with density: on a 3x phone
+            // 140 would have been ~47dp of real breathing room, gluing members to
+            // the edge under the very controls the padding exists to clear.
+            val density = map.resources.displayMetrics.density
+            val fitted =
+                map.mapboxMap.cameraForCoordinates(
+                    coordinates = points.map { Point.fromLngLat(it.longitude, it.latitude) },
+                    camera =
+                        cameraOptions {
+                            // Keep the user's own bearing and tilt: a convoy fit
+                            // reframes WHAT is shown, it does not spin the map
+                            // out from under a driver who is using it course-up.
+                            bearing(map.mapboxMap.cameraState.bearing)
+                            pitch(this@MapboxMapSurface.pitch)
+                        },
+                    coordinatesPadding =
+                        EdgeInsets(
+                            CONVOY_FIT_PAD_TOP * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                            CONVOY_FIT_PAD_SIDE * density,
+                        ),
+                    maxZoom = null,
+                    offset = null,
+                )
+            // Clamp both ends. Too far out and the convoy becomes dots on a
+            // country map with no usable road detail; too far in and a bunched-up
+            // group fills the screen at building level. cameraForCoordinates
+            // happily returns either for a degenerate spread.
+            val zoom =
+                (fitted.zoom ?: MapMarkers.OWN_MARKER_ZOOM)
+                    .coerceIn(MIN_CONVOY_FIT_ZOOM, MAX_CONVOY_FIT_ZOOM)
+            map.camera.easeTo(
+                cameraOptions {
+                    center(fitted.center)
+                    zoom(zoom)
+                    pitch(this@MapboxMapSurface.pitch)
+                },
+                mapAnimationOptions { duration(CONVOY_FIT_ANIMATION_MS) },
+            )
+            appliedConvoyFit = asLatLng
+        }
     }
 
     override fun emitIncidentTap(incidentId: String) {
@@ -652,6 +809,15 @@ class MapboxMapSurface : MapSurface {
                         return@OnIndicatorPositionChangedListener
                     }
                     val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                    // "Keep the whole convoy in view" replaces the follow TARGET,
+                    // not the follow MACHINERY: same gate above, same listener,
+                    // just a different thing to frame. Own movement still drives
+                    // it, because the user is one of the points being framed.
+                    if (convoyFitPoints != null) {
+                        centeredOnFirstFix = true
+                        applyConvoyFit()
+                        return@OnIndicatorPositionChangedListener
+                    }
                     runCatching {
                         if (!centeredOnFirstFix) {
                             // Open the FIRST fix close to the user, at the own-marker
@@ -758,8 +924,23 @@ class MapboxMapSurface : MapSurface {
                                 // are visually smooth for a compass needle, and the
                                 // MutableStateFlow dedupes consecutive equal values so
                                 // only real 1° changes propagate downstream.
+                                val camera = mapboxMap.cameraState
                                 bearingFlow.value =
-                                    mapboxMap.cameraState.bearing.toFloat().roundToInt().toFloat()
+                                    camera.bearing.toFloat().roundToInt().toFloat()
+                                // Same de-duplication argument as the bearing
+                                // above, applied to the whole camera: the convoy
+                                // awareness overlay reprojects every member when
+                                // this changes, so it is rounded to about a metre
+                                // / a hundredth of a zoom / a whole degree and
+                                // StateFlow collapses the settled frames.
+                                cameraSnapshotFlow.value =
+                                    MapCameraSnapshot.of(
+                                        latitude = camera.center.latitude(),
+                                        longitude = camera.center.longitude(),
+                                        zoom = camera.zoom,
+                                        bearing = camera.bearing,
+                                        pitch = camera.pitch,
+                                    )
                             }
                         }
                     cameraChangeListener = camListener
@@ -1038,6 +1219,7 @@ class MapboxMapSurface : MapSurface {
                 // old map while the recreated map's camera starts at north (0). The
                 // fresh map's camera-change listener re-populates this once it emits.
                 bearingFlow.value = 0f
+                cameraSnapshotFlow.value = null
                 routeLineManager = null
                 // Detach the incident click listener before dropping the manager,
                 // so a torn-down map cannot keep publishing taps.
@@ -1066,6 +1248,13 @@ class MapboxMapSurface : MapSurface {
                 // A later recreated map (e.g. after a tab switch) should open
                 // following the user again, even if the user had panned away.
                 followController.reset()
+                // A fresh map opens on the normal follow framing. The convoy
+                // focus CHOICE lives in the shell (see ConvoyFocusStore) and
+                // is re-pushed on the next composition if it is still Convoy,
+                // so clearing the applied fit here cannot strand the camera.
+                convoyFitPoints = null
+                appliedConvoyFit = null
+                convoyFocusEnabled = false
                 mapView.onDestroy()
             },
         )
@@ -1364,6 +1553,44 @@ class MapboxMapSurface : MapSurface {
          * plugin).
          */
         const val FOLLOW_ANIMATION_MS = 700L
+
+        /**
+         * Duration (ms) of the camera glide when the convoy fit is (re)applied.
+         * Longer than a follow step: a fit can change the zoom as well as the
+         * centre, and a slow reframe reads as the map thinking rather than
+         * lurching.
+         */
+        const val CONVOY_FIT_ANIMATION_MS = 900L
+
+        /**
+         * Padding kept between the framed convoy members and the viewport edge,
+         * so nobody ends up glued to the side of the screen where the floating
+         * controls are. The top gets more because the convoy bar and the search
+         * row live there.
+         *
+         * In **dp**, like [ROUTE_PAD_TOP] and friends above — multiplied by
+         * display density at the call site, because `EdgeInsets` takes device
+         * pixels. Density-independent is the whole point: the controls these
+         * clear are themselves laid out in dp.
+         */
+        const val CONVOY_FIT_PAD_SIDE = 140.0
+        const val CONVOY_FIT_PAD_TOP = 260.0
+
+        /**
+         * How far the convoy fit is allowed to zoom OUT. Beyond this the basemap
+         * has no road detail worth showing and the members are dots on a map of
+         * the country — the fit stops being useful long before it stops being
+         * possible, so a member who has driven to another city pins the zoom here
+         * and simply falls off the edge (where the direction arrows pick them up).
+         */
+        const val MIN_CONVOY_FIT_ZOOM = 8.0
+
+        /**
+         * How far the convoy fit is allowed to zoom IN, for a group bunched at
+         * one traffic light: without this, a near-zero bounding box asks for a
+         * street-furniture zoom level.
+         */
+        const val MAX_CONVOY_FIT_ZOOM = 16.5
 
         /**
          * Import id of the Mapbox Standard style's basemap, used to set config

@@ -24,7 +24,20 @@
  *  - `note`        — optional free-text (bounded, sanitized client-side).
  *  - `createdAt`   — server timestamp.
  *  - `expiresAt`   — auto-expiry timestamp (per-type TTL, {@link expiryFor});
- *                    a scheduled sweep deletes docs past it.
+ *                    a scheduled sweep deletes docs past it. Confirmations push
+ *                    it out ({@link extendedExpiryFor}) up to a hard lifetime
+ *                    cap, so a confirmed incident persists but never forever.
+ *  - `confirmationCount` — how many other members have confirmed it is still
+ *                    there. Maintained ONLY by `incidents.confirm`, in the same
+ *                    transaction that claims the confirmation doc.
+ *
+ * Sub-collection — `incidents/{incidentId}/confirmations/{uid}`:
+ *  The confirmation ledger. The document id IS the confirming uid, which makes
+ *  "one confirmation per user per incident" a primary-key property rather than
+ *  a scan: the claim is a `tx.create` that fails if the doc already exists, so
+ *  concurrent double-taps cannot both win. Callable-only (denied by the rules'
+ *  deny-all catch-all — the `match /incidents/{incidentId}` block does not
+ *  recurse into sub-collections).
  *
  * Pure module — no Firebase Admin SDK imports. Geo maths reuse the crownHunt
  * Haversine helper (single source of truth for great-circle distance).
@@ -38,13 +51,7 @@ import { haversineDistanceMeters, isValidCoordinate } from '../crownHunt/crown-h
 // ---------------------------------------------------------------------------
 
 /** Reportable incident categories. */
-export const INCIDENT_TYPES = [
-  'accident',
-  'roadwork',
-  'hazard',
-  'police',
-  'road_closed',
-] as const;
+export const INCIDENT_TYPES = ['accident', 'roadwork', 'hazard', 'police', 'road_closed'] as const;
 export type IncidentType = (typeof INCIDENT_TYPES)[number];
 
 /** Where an incident came from. */
@@ -193,9 +200,126 @@ export function isWithinRadius(
 // Expiry
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether a stored `confirmationCount` is a value the contract can honour.
+ *
+ * `typeof x === 'number'` is not enough: Firestore stores doubles, so NaN and
+ * ±Infinity are storable, and both survive a `FieldValue.increment` unchanged
+ * (NaN + 1 is NaN). Neither is JSON-representable either — the callable
+ * framework serialises them to `null`, so a client typed against
+ * `confirmationCount: number` would receive `null` and violate its own contract
+ * without ever seeing an error.
+ *
+ * ABSENT is not invalid: the field is unwritten until the first confirmation,
+ * which is the normal state of every fresh report. Callers treat `undefined` as
+ * 0 and use this only to judge a value that IS present.
+ */
+export function isValidConfirmationCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * A stored `confirmationCount` normalised for a READ path: absent or corrupt
+ * becomes 0.
+ *
+ * Deliberately more forgiving than the write path. `incidents.confirm` refuses
+ * outright on a corrupt count, because it is about to write a derived value
+ * back and must not build on a number it cannot trust. `listNearby` renders a
+ * shared map layer in bulk, where one corrupt document must not blank out
+ * everyone's map or fail the whole batch — so it degrades that single marker to
+ * "0 confirmations", exactly as it already skips documents with a malformed
+ * `expiresAt` or coordinates rather than aborting.
+ */
+export function readConfirmationCount(value: unknown): number {
+  return isValidConfirmationCount(value) ? value : 0;
+}
+
 /** Expiry instant for a freshly-reported incident of `type`. */
 export function expiryFor(type: IncidentType, now: Date): Date {
   return new Date(now.getTime() + INCIDENT_TTL_MS[type]);
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation ("is this still there?") expiry extension
+// ---------------------------------------------------------------------------
+
+/**
+ * Hard ceiling on an incident's total lifetime, as a multiple of its per-type
+ * TTL. A confirmed incident lives longer, but it can NEVER become immortal: no
+ * number of confirmations pushes `expiresAt` past
+ * `createdAt + LIFETIME_CAP_MULTIPLIER × INCIDENT_TTL_MS[type]`.
+ *
+ * Read "pushes past" precisely — it is a bound on what a confirmation MOVES the
+ * expiry to, not a post-condition on the stored value. A document that already
+ * carries an over-cap expiry from outside this module keeps it; see
+ * {@link extendedExpiryFor} for why clamping down would be the wrong trade.
+ *
+ * 3× is the deliberate trade-off: a genuinely persistent situation (12h
+ * roadwork) can be kept alive for a day and a half by passers-by, which covers
+ * a real multi-day roadwork's useful window, while a stale police sighting
+ * (1h TTL) dies within 3h even if a handful of people confirm it. Beyond the
+ * cap the incident ages out and someone has to report it afresh — which is the
+ * correct signal, because a fresh report proves it is still there NOW.
+ */
+export const LIFETIME_CAP_MULTIPLIER = 3;
+
+/**
+ * Result of applying one confirmation to an incident's expiry.
+ * `extended` is false when the cap (or an already-later expiry) means the
+ * confirmation bought no extra time — the confirmation still counts.
+ */
+export interface ExtendedExpiry {
+  expiresAt: Date;
+  extended: boolean;
+}
+
+/**
+ * Expiry after a confirmation at `now`.
+ *
+ * A confirmation resets the clock to a full fresh TTL from NOW (that is what
+ * "I just drove past it" means), but never past the absolute lifetime cap, and
+ * never BACKWARDS — an incident whose current expiry is already further out
+ * (e.g. a long-TTL type confirmed early) keeps the later value.
+ *
+ * WHICH RULE WINS WHEN THEY CONFLICT: never-backwards. A stored expiry that is
+ * ALREADY past the ceiling is returned unchanged rather than clamped down, so
+ * this function's output can exceed the ceiling — but only by passing through a
+ * value it did not produce. The invariant the cap actually asserts is intact:
+ * no confirmation ever MOVES `expiresAt` outward past the ceiling, and in this
+ * case it moves it not at all (`extended: false`, and the callable writes the
+ * same instant back).
+ *
+ * That is deliberate, not an oversight. An over-cap expiry can only come from
+ * outside this module (a console edit, a restore from a stale export, an older
+ * bug) — no writer produces one, since report.ts stamps `createdAt + 1×TTL` and
+ * only this function ever moves it. Clamping DOWN here would not rescue such a
+ * document anyway: its lifetime is governed by the TTL sweep reading
+ * `expiresAt`, so it survives to its bogus expiry whether or not anyone ever
+ * confirms it. Clamping would therefore fix nothing in general, while
+ * introducing a "confirming an incident SHORTENS its life" behaviour — a
+ * surprising, user-visible regression traded for a partial patch of a defect
+ * this function did not create.
+ *
+ * Pure: takes the instants, returns the new instant. The callable supplies
+ * `createdAt` from the stored document so the cap is anchored to the real
+ * report time, not to the confirmation time.
+ */
+export function extendedExpiryFor(params: {
+  type: IncidentType;
+  createdAt: Date;
+  currentExpiresAt: Date;
+  now: Date;
+}): ExtendedExpiry {
+  const ttl = INCIDENT_TTL_MS[params.type];
+  const ceiling = params.createdAt.getTime() + LIFETIME_CAP_MULTIPLIER * ttl;
+  const proposed = params.now.getTime() + ttl;
+  // Never past the cap, never earlier than the expiry the doc already has.
+  const capped = Math.min(proposed, ceiling);
+  const next = Math.max(capped, params.currentExpiresAt.getTime());
+  return {
+    expiresAt: new Date(next),
+    extended: next > params.currentExpiresAt.getTime(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,9 +356,12 @@ const incidentIdSchema = z
 
 const removeInputSchema = z.object({ incidentId: incidentIdSchema }).strict();
 
+const confirmInputSchema = z.object({ incidentId: incidentIdSchema }).strict();
+
 export type ReportInput = z.infer<typeof reportInputSchema>;
 export type ListNearbyInput = z.infer<typeof listNearbyInputSchema>;
 export type RemoveInput = z.infer<typeof removeInputSchema>;
+export type ConfirmInput = z.infer<typeof confirmInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -256,6 +383,8 @@ export const parseListNearbyInput = (d: unknown) =>
   parse(listNearbyInputSchema, d, 'Expected { latitude, longitude, radiusMeters? }.');
 export const parseRemoveInput = (d: unknown) =>
   parse(removeInputSchema, d, 'Expected { incidentId }.');
+export const parseConfirmInput = (d: unknown) =>
+  parse(confirmInputSchema, d, 'Expected { incidentId }.');
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -309,6 +438,8 @@ export interface IncidentView {
   note: string | null;
   createdAt: string | null;
   expiresAt: string | null;
+  /** How many OTHER members have confirmed it is still there (0 when none). */
+  confirmationCount: number;
 }
 
 // ---------------------------------------------------------------------------

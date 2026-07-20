@@ -19,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,35 @@ val AeroPageBottomPadding: Dp = KccSpacing.s6
  *   Same reason the status-bar inset is applied here rather than outside.
  *   Null (the default) leaves every other page byte-identical.
  */
+/**
+ * The page background an Aero page paints, and whether it insets itself for the
+ * status bar.
+ *
+ * Both answers flip when the page is rendered inside a [TranslucentShellPanel]:
+ * the panel's card already paints a TRANSLUCENT surface (an opaque page
+ * background on top of it would defeat the whole point — the live map has to
+ * read through) and the card already sits below the status bar (a second inset
+ * would push the title down by the status-bar height for no reason). Derived
+ * here, in ONE place, from [LocalInTranslucentPanel], so [AeroPage] and
+ * [AeroLazyPage] cannot answer it differently.
+ */
+@Composable
+private fun aeroPageBackground(): Color =
+    if (LocalInTranslucentPanel.current) {
+        Color.Transparent
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+
+/**
+ * The status-bar inset an Aero page applies to its own chrome — none inside a
+ * [TranslucentShellPanel], which has already applied it to the card. See
+ * [aeroPageBackground].
+ */
+@Composable
+private fun Modifier.aeroPageStatusBarInset(): Modifier =
+    if (LocalInTranslucentPanel.current) this else this.statusBarsPadding()
+
 @Composable
 fun AeroPage(
     title: String,
@@ -77,7 +107,7 @@ fun AeroPage(
     contentWindowInsets: WindowInsets? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
         val scrollState = rememberScrollState()
         // Fixed chrome: the status-bar inset and the top breathing room live on
         // this outer Column, OUTSIDE the scroll viewport, so they stay pinned and
@@ -89,7 +119,7 @@ fun AeroPage(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    .aeroPageStatusBarInset()
                     .then(
                         if (contentWindowInsets != null) {
                             Modifier.windowInsetsPadding(contentWindowInsets)
@@ -139,7 +169,7 @@ fun AeroLazyPage(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = modifier.fillMaxSize(), color = aeroPageBackground()) {
         // Fixed chrome: status-bar inset + top breathing room, OUTSIDE the
         // caller's LazyColumn scroll viewport, so they stay pinned (parity with
         // AeroPage). The caller's list then scrolls beneath this fixed top inset.
@@ -147,7 +177,7 @@ fun AeroLazyPage(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    .aeroPageStatusBarInset()
                     .padding(top = AeroPageTopSpacing),
         ) {
             content()

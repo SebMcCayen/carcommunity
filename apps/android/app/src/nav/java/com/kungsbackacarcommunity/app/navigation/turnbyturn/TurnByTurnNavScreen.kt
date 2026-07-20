@@ -693,8 +693,8 @@ fun TurnByTurnNavScreen(
         // reported symptom, and a hardcoded light veil would simply have
         // reintroduced it after dark.
         //
-        // While it IS up it swallows every pointer event, the same way
-        // [ShellTabPage] does for the pages drawn over the shell map. An opaque
+        // While it IS up it swallows every pointer event, the same way an
+        // opaque page drawn over the shell map does. An opaque
         // overlay that does not block input is worse than no overlay: a Box with
         // only `background`/`alpha` registers no pointer-input modifier, so taps
         // and drags fall straight through to the chrome and the map beneath it —

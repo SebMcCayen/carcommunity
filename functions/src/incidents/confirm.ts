@@ -1,0 +1,242 @@
+/**
+ * incidents.confirm — "is this still there?" confirmation on someone else's
+ * crowd-sourced incident (contracts/functions/functions.json: incidents.confirm).
+ *
+ * Deployed via the `incidents` export group as `incidents-confirm`
+ * (europe-west1). Member-gated (requireMemberActor), matching `incidents.report`
+ * rather than the read-only `incidents.listNearby`: a confirmation is a WRITE
+ * that changes what every user on the map sees and keeps a marker alive, so it
+ * demands the same trust level as creating one in the first place.
+ *
+ * Semantics:
+ *  - One confirmation per user per incident, enforced by the document id of
+ *    `incidents/{id}/confirmations/{uid}` — claimed with `tx.create` inside the
+ *    same transaction that bumps the counter and the expiry, so a double-tap
+ *    (or two devices) cannot double-count. A repeat confirmation is NOT an
+ *    error: it returns the current state with `alreadyConfirmed: true`, so the
+ *    client's button settles into a stable "confirmed" state either way.
+ *  - The reporter cannot confirm their own report (self-corroboration is not
+ *    evidence).
+ *  - Confirming extends `expiresAt` to a fresh TTL from now, bounded by the
+ *    hard lifetime cap in extendedExpiryFor — a popular incident persists but
+ *    never becomes immortal.
+ *  - Imported (Trafikverket) incidents are NOT confirmable; see below.
+ *
+ * No notification is sent to the reporter. A confirmation is ambient corroboration,
+ * not a social interaction: on a busy road one report could collect dozens, and
+ * a push per confirmation would be pure noise for zero action the reporter can
+ * take. The count is visible on the marker, which is where it is useful.
+ */
+
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { db } from '../firebase';
+import { requireMemberActor } from '../shared/memberActor';
+import {
+  INCIDENT_ACTIVE_STATUS,
+  INCIDENT_TYPES,
+  extendedExpiryFor,
+  isValidConfirmationCount,
+  parseConfirmInput,
+  readConfirmationCount,
+  type IncidentType,
+} from './incidents-core';
+
+const CALLABLE_OPTS = {
+  region: 'europe-west1',
+  memory: '256MiB' as const,
+  timeoutSeconds: 30,
+  enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+};
+
+/** Sub-collection holding the per-uid confirmation ledger. */
+export const CONFIRMATIONS_SUBCOLLECTION = 'confirmations';
+
+export interface ConfirmResponse {
+  incidentId: string;
+  /** Total confirmations after this call. */
+  confirmationCount: number;
+  /** Incident expiry after this call (ISO-8601). */
+  expiresAt: string;
+  /** True when this caller had already confirmed (no double count). */
+  alreadyConfirmed: boolean;
+}
+
+export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmResponse> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseConfirmInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const incidentId = parsed.input.incidentId;
+
+  const ref = db.collection('incidents').doc(incidentId);
+  const confirmationRef = ref.collection(CONFIRMATIONS_SUBCOLLECTION).doc(actor.uid);
+
+  return db.runTransaction(async (tx) => {
+    // Both reads must precede any write in a Firestore transaction.
+    const [snap, existing] = await Promise.all([tx.get(ref), tx.get(confirmationRef)]);
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'Incident not found.');
+    }
+    const data = snap.data()!;
+
+    // Imported (Trafikverket) incidents are importer-owned: runTrafikverketSync
+    // rewrites each `tv_` doc with a full `batch.set` (no merge) every 30
+    // minutes, which would silently wipe a confirmationCount and re-stamp the
+    // expiry we just extended. Upstream is also the authority on whether the
+    // situation is still live — that is exactly what the 30-minute re-sync
+    // means — so a member confirmation would add nothing and fight the
+    // importer. Rejected for everyone, mirroring incidents.remove.
+    if (data.source !== 'user') {
+      throw new HttpsError(
+        'failed-precondition',
+        'Imported incidents are kept up to date automatically and cannot be confirmed.',
+      );
+    }
+
+    // ONE clock reading for the whole decision: the liveness check below and the
+    // extended expiry computed further down must agree on what "now" is.
+    // Re-reading the clock would not make anything safer — a deadline compared
+    // against a wall clock is racy by construction, and any number of re-checks
+    // only moves the window rather than closing it — but a single reading makes
+    // the handler internally consistent and removes the question entirely.
+    const now = new Date();
+
+    // A dead incident cannot be confirmed back to life — the sweep may not have
+    // reached it yet, but it is already invisible to every reader (the read rule
+    // gates on status + expiresAt). Report it fresh instead.
+    const currentExpiresAt = data.expiresAt;
+    if (
+      data.status !== INCIDENT_ACTIVE_STATUS ||
+      !(currentExpiresAt instanceof Timestamp) ||
+      currentExpiresAt.toMillis() <= now.getTime()
+    ) {
+      throw new HttpsError('failed-precondition', 'This incident is no longer active.');
+    }
+
+    // `reporterUid` must be a real uid before the self-confirmation check below
+    // can mean anything. A user-sourced incident always has one (report.ts
+    // writes `reporterUid: actor.uid` unconditionally), so a missing or
+    // non-string value is corruption from outside — and the failure mode is
+    // worse than the malformed createdAt/type below, because it is silent: a
+    // `null` reporterUid never equals any caller's uid, so the authorization
+    // check does not reject, it simply never fires, and the reporter can
+    // confirm and extend their own report. An authorization guard that
+    // quietly stops guarding is exactly the class of thing that must be loud.
+    if (typeof data.reporterUid !== 'string' || data.reporterUid.length === 0) {
+      logger.error('incidents.confirm: user incident has a missing/invalid reporterUid', {
+        incidentId,
+        reporterUidType: typeof data.reporterUid,
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+
+    if (data.reporterUid === actor.uid) {
+      throw new HttpsError('permission-denied', 'You cannot confirm your own report.');
+    }
+
+    // Absent is the normal pre-first-confirmation state → 0. PRESENT but not a
+    // non-negative integer is corruption, and this is a write path: the reply
+    // and the next confirmation both build on this number, and NaN survives
+    // `FieldValue.increment` (NaN + 1 is NaN) so a single corrupt value would
+    // be permanent. It is not even reportable — the callable framework
+    // serialises NaN/Infinity to JSON `null`, so a client typed against
+    // `confirmationCount: number` would silently receive `null`. Refuse, as
+    // with the other malformed fields. (listNearby takes the opposite branch on
+    // purpose: it is a bulk read of a shared map layer, so it degrades the one
+    // marker to 0 rather than failing everyone's batch — see
+    // readConfirmationCount.)
+    if (data.confirmationCount !== undefined && !isValidConfirmationCount(data.confirmationCount)) {
+      logger.error('incidents.confirm: incident has a corrupt confirmationCount', {
+        incidentId,
+        confirmationCount: String(data.confirmationCount),
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    const storedCount = readConfirmationCount(data.confirmationCount);
+
+    // Already confirmed → idempotent success, nothing written. The expiry is NOT
+    // extended again: otherwise one member could hold an incident open forever
+    // by re-tapping (the lifetime cap bounds it anyway, but not writing is both
+    // cheaper and clearer).
+    if (existing.exists) {
+      return {
+        incidentId,
+        confirmationCount: storedCount,
+        expiresAt: currentExpiresAt.toDate().toISOString(),
+        alreadyConfirmed: true,
+      };
+    }
+
+    // FAIL FAST on a malformed document rather than substituting defaults.
+    //
+    // Both inputs below decide how long this incident lives, so a wrong value
+    // is not cosmetic: `createdAt` anchors the lifetime cap (defaulting it to
+    // `now` would silently RE-ANCHOR the cap on every confirmation, which is
+    // exactly the immortality the cap exists to prevent), and `type` selects
+    // the TTL (defaulting a corrupt type to 'hazard' would write an expiry
+    // computed under the wrong rules). Extending the wrong incident's life is
+    // strictly worse than refusing, so we refuse.
+    //
+    // REACHABILITY: this is defensive-only under the current schema. The only
+    // writers of `incidents/{id}` are incidents/report.ts (validated enum type,
+    // server-timestamp createdAt) and the Trafikverket importer (rejected above
+    // by the `source !== 'user'` guard); firebase/firestore.rules denies ALL
+    // client writes to the collection. So no code path produces a malformed
+    // user incident today — this guards a hand-edit in the console, a restore
+    // from a stale export, or a future schema change, and turns any of them
+    // into a loud, findable error instead of quiet mis-expiry.
+    //
+    // `internal`, not `failed-precondition`: failed-precondition is this
+    // callable's vocabulary for NORMAL states the user can understand (expired,
+    // imported). A corrupt document is a server-side defect the user can do
+    // nothing about, and the message stays opaque rather than leaking schema
+    // detail. The logger.error below carries the incidentId so the offending
+    // document can actually be found.
+    if (!(data.createdAt instanceof Timestamp)) {
+      logger.error('incidents.confirm: incident has a missing/invalid createdAt', {
+        incidentId,
+        createdAtType: typeof data.createdAt,
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    if (!(INCIDENT_TYPES as readonly string[]).includes(data.type as string)) {
+      logger.error('incidents.confirm: incident has an unrecognised type', {
+        incidentId,
+        type: String(data.type),
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    const createdAt = data.createdAt.toDate();
+    const type = data.type as IncidentType;
+
+    const { expiresAt } = extendedExpiryFor({
+      type,
+      createdAt,
+      currentExpiresAt: currentExpiresAt.toDate(),
+      now,
+    });
+
+    // `create` (not `set`): if a concurrent call for the same uid slipped in
+    // between the read above and this commit, the transaction aborts and
+    // retries rather than double-counting.
+    tx.create(confirmationRef, {
+      uid: actor.uid,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(ref, {
+      confirmationCount: FieldValue.increment(1),
+      expiresAt: Timestamp.fromDate(expiresAt),
+    });
+
+    return {
+      incidentId,
+      confirmationCount: storedCount + 1,
+      expiresAt: expiresAt.toISOString(),
+      alreadyConfirmed: false,
+    };
+  });
+});
