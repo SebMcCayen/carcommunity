@@ -543,6 +543,74 @@ describe('moderation-reportUser', () => {
   });
 });
 
+describe('malformed stored messages and hostile ids', () => {
+  it('refuses to file a report that would name nobody', async () => {
+    // A channel message with no senderUid cannot be created through any write
+    // path (rules deny client writes; communityChat.post sets senderUid from
+    // the actor), so it is forged here with the admin SDK. The point is what
+    // the callable does if one ever exists: refuse, rather than write a report
+    // whose reportedUserId and snapshot author are the empty string.
+    const reporter = await newMember('MalformedReporterMod');
+    const messageId = `malformed-${Date.now()}`;
+    await adminDb
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
+      .doc(messageId)
+      .set({ text: 'no author here', createdAt: new Date() });
+
+    await signInAs(reporter);
+    expect(
+      await callableErrorCode(
+        call('chatchannels-reportMessage', { channel: 'community', messageId, reason: 'spam' }),
+      ),
+    ).toBe('functions/internal');
+
+    // And nothing was written: an empty-author report is worse than none.
+    const wouldBeId = moderationMessageReportId({
+      surface: 'community',
+      scopeId: 'global',
+      messageId,
+      reporterUserId: reporter.uid,
+      reason: 'spam',
+    });
+    expect((await adminDb.collection('moderationReports').doc(wouldBeId).get()).exists).toBe(false);
+
+    await adminDb
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
+      .doc(messageId)
+      .delete();
+  });
+
+  it('rejects ids containing a path separator with invalid-argument, not internal', async () => {
+    // `doc('a/b/c')` addresses a document in a different collection entirely.
+    // The parser must stop it before Firestore ever sees it.
+    const member = await newMember('PathProbeMod');
+    await signInAs(member);
+    expect(
+      await callableErrorCode(
+        call('dm-reportMessage', {
+          conversationId: 'a/b/c',
+          messageId: 'm1',
+          reason: 'spam',
+        }),
+      ),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(
+        call('dm-reportMessage', { conversationId: 'a/b', messageId: 'm1', reason: 'spam' }),
+      ),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(
+        call('moderation-reportUser', { reportedUserId: `users/${member.uid}`, reason: 'spam' }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+});
+
 describe('moderationReports rules', () => {
   it('is admin-read-only and denies every client write', async () => {
     const member = await newMember('RulesProbeMod');

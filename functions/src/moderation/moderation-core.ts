@@ -138,19 +138,46 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 // Input schemas
 // ---------------------------------------------------------------------------
 
+/**
+ * A single Firestore DOCUMENT-ID segment.
+ *
+ * Every id these schemas accept is handed straight to `collection(...).doc(id)`,
+ * and `doc()` does not treat its argument as one opaque segment: it splits on
+ * `/`. So an unconstrained id is a path-injection hole, not merely a
+ * validation gap — `conversations.doc('a/b/c')` addresses a document in a
+ * completely different collection than the caller named, and an even-segment
+ * path throws deep inside the SDK, surfacing as an opaque `internal` instead
+ * of `invalid-argument`. The three shapes below are therefore constrained to
+ * what real ids actually are, not merely stripped of `/`:
+ *
+ *  - Firebase Auth uids are alphanumeric (`users/{uid}` doc ids);
+ *  - conversation ids are `dmPairId` = two such uids sorted and joined with
+ *    `__` (dm/dm-core.ts), so `_` must stay legal;
+ *  - message/convoy ids are Firestore auto-ids (`[A-Za-z0-9]{20}`).
+ *
+ * `[A-Za-z0-9._-]` covers all three with room to spare while excluding `/` and
+ * every other path metacharacter. `.` / `..` and the reserved `__*__` form are
+ * additionally refused: Firestore rejects them outright, so accepting them
+ * only converts a bad payload into a 500.
+ */
+const documentIdSchema = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .regex(/^[A-Za-z0-9._-]+$/)
+    .refine((id) => id !== '.' && id !== '..')
+    .refine((id) => !/^__.*__$/.test(id));
+
 /** Firestore-safe id (matches chatchannels/chat-core's idSchema). */
-const idSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(300)
-  .regex(/^[A-Za-z0-9._-]+$/)
-  .refine((id) => id !== '.' && id !== '..');
+const idSchema = documentIdSchema(300);
 
 /** Conversation ids are `uidLow__uidHigh` (dm-core dmPairId) — `_` is allowed. */
-const conversationIdSchema = z.string().trim().min(1).max(300);
+const conversationIdSchema = documentIdSchema(300);
 
-const uidSchema = z.string().trim().min(1).max(128);
+/** Firebase uids are <=128 chars and address `users/{uid}` directly. */
+const uidSchema = documentIdSchema(128);
 
 const detailsSchema = z.string().max(MODERATION_REPORT_DETAILS_MAX_LENGTH).optional();
 
@@ -224,6 +251,27 @@ export const SELF_MESSAGE_REPORT_MESSAGE = 'You cannot report your own message.'
 export const MESSAGE_NOT_FOUND_MESSAGE = 'Message not found.';
 export const CONVERSATION_NOT_FOUND_MESSAGE = 'Conversation not found.';
 export const USER_NOT_FOUND_MESSAGE = 'User not found.';
+/**
+ * A stored message whose `senderUid` is missing or not a non-empty string.
+ *
+ * UNREACHABLE BY CONSTRUCTION, and the guard is deliberately defensive: the
+ * Firestore rules allow NO client writes to communityChat/{c}/messages,
+ * convoyChats/{c}/messages or conversations/{p}/messages, and the only writers
+ * — communityChat.post / convoyChat.post / dm.sendMessage — build the document
+ * through chat-core `buildMessageDocument` / dm-core `buildDirectMessageDocument`,
+ * both of which set `senderUid` from the authenticated actor's uid. There is no
+ * path that can persist one without an author.
+ *
+ * It is still worth a hard stop rather than a fallback: filing a report whose
+ * `reportedUserId` and snapshot author are `''` names NOBODY, which is worse in
+ * the queue than no report at all (it cannot be triaged and it poisons the
+ * per-person pivot). `internal` rather than `failed-precondition` because
+ * failed-precondition is reserved for normal states the user can act on, and
+ * this is a corrupt document only we can fix — paired with a logger.error
+ * carrying the ids so the bad document is findable.
+ */
+export const MALFORMED_MESSAGE_MESSAGE = 'This message could not be reported.';
+
 export const RATE_LIMITED_MESSAGE =
   'Too many reports — please wait a while before submitting another.';
 

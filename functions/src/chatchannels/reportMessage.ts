@@ -29,6 +29,7 @@
  * holding only a messageId would go blank. See moderation-core.ts.
  */
 
+import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -36,6 +37,7 @@ import { requireMemberActor } from '../shared/memberActor';
 import { COMMUNITY_CHANNEL_ID } from './chat-core';
 import { requireAcceptedConvoyMember } from './convoyMembership';
 import {
+  MALFORMED_MESSAGE_MESSAGE,
   MESSAGE_NOT_FOUND_MESSAGE,
   SELF_MESSAGE_REPORT_MESSAGE,
   parseReportChannelMessageInput,
@@ -78,7 +80,20 @@ export const reportMessage = onCall(CALLABLE_OPTS, async (request): Promise<Repo
     throw new HttpsError('not-found', MESSAGE_NOT_FOUND_MESSAGE);
   }
   const message = messageSnap.data() ?? {};
-  const authorUserId = typeof message.senderUid === 'string' ? message.senderUid : '';
+  const authorUserId = typeof message.senderUid === 'string' ? message.senderUid.trim() : '';
+  if (authorUserId === '') {
+    // Defensive: no write path can persist a channel message without a
+    // senderUid (rules deny client writes to communityChat/convoyChats
+    // messages; communityChat.post / convoyChat.post build it from the actor
+    // uid). See MALFORMED_MESSAGE_MESSAGE for why this refuses instead of
+    // filing a report that names nobody.
+    logger.error('chatchannels.reportMessage: stored message has no author uid', {
+      channel: input.channel,
+      scopeId,
+      messageId: input.messageId,
+    });
+    throw new HttpsError('internal', MALFORMED_MESSAGE_MESSAGE);
+  }
   if (authorUserId === actor.uid) {
     throw new HttpsError('invalid-argument', SELF_MESSAGE_REPORT_MESSAGE);
   }

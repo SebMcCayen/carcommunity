@@ -28,6 +28,7 @@
  * never the thread — into the admin-read-only report. See moderation-core.ts.
  */
 
+import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
@@ -35,6 +36,7 @@ import { requireMemberActor } from '../shared/memberActor';
 import { isConversationMember } from './dm-core';
 import {
   CONVERSATION_NOT_FOUND_MESSAGE,
+  MALFORMED_MESSAGE_MESSAGE,
   MESSAGE_NOT_FOUND_MESSAGE,
   SELF_MESSAGE_REPORT_MESSAGE,
   parseReportDirectMessageInput,
@@ -69,7 +71,18 @@ export const reportMessage = onCall(CALLABLE_OPTS, async (request): Promise<Repo
     throw new HttpsError('not-found', MESSAGE_NOT_FOUND_MESSAGE);
   }
   const message = messageSnap.data() ?? {};
-  const authorUserId = typeof message.senderUid === 'string' ? message.senderUid : '';
+  const authorUserId = typeof message.senderUid === 'string' ? message.senderUid.trim() : '';
+  if (authorUserId === '') {
+    // Defensive: no write path can persist a DM message without a senderUid
+    // (rules deny client writes; dm.sendMessage builds it from the actor uid).
+    // See MALFORMED_MESSAGE_MESSAGE for why this refuses instead of filing a
+    // report that names nobody.
+    logger.error('dm.reportMessage: stored message has no author uid', {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+    });
+    throw new HttpsError('internal', MALFORMED_MESSAGE_MESSAGE);
+  }
   if (authorUserId === actor.uid) {
     throw new HttpsError('invalid-argument', SELF_MESSAGE_REPORT_MESSAGE);
   }

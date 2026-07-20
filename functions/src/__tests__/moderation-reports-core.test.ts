@@ -134,6 +134,68 @@ describe('parseReportDirectMessageInput', () => {
   });
 });
 
+/**
+ * Every id these parsers accept is handed straight to `collection(...).doc(id)`.
+ * Firestore does NOT treat a `/` as a literal character there: it splits the
+ * path, so `conversations/.doc('a/b/c')` addresses a DIFFERENT document than
+ * the one the caller named, and an even-segment count throws an opaque
+ * `internal` instead of `invalid-argument`. The parser is the only place that
+ * can stop it, so these ids must be constrained to the shape real ones have.
+ */
+describe('path-segment safety of every id that reaches doc()', () => {
+  const HOSTILE = ['a/b', 'a/b/c', '/', '../x', '..', '.', '__reserved__', 'a b', 'a\u0000b'];
+
+  it('rejects path separators and reserved ids in conversationId', () => {
+    for (const conversationId of HOSTILE) {
+      expect(
+        parseReportDirectMessageInput({ conversationId, messageId: 'm1', reason: 'spam' }).ok,
+        `conversationId ${JSON.stringify(conversationId)} must be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects path separators and reserved ids in reportedUserId', () => {
+    for (const reportedUserId of HOSTILE) {
+      expect(
+        parseReportUserInput({ reportedUserId, reason: 'spam' }).ok,
+        `reportedUserId ${JSON.stringify(reportedUserId)} must be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects path separators and reserved ids in messageId and convoyId', () => {
+    for (const hostile of HOSTILE) {
+      expect(
+        parseReportChannelMessageInput({ channel: 'community', messageId: hostile, reason: 'spam' })
+          .ok,
+        `messageId ${JSON.stringify(hostile)} must be rejected`,
+      ).toBe(false);
+      expect(
+        parseReportChannelMessageInput({
+          channel: 'convoy',
+          convoyId: hostile,
+          messageId: 'm1',
+          reason: 'spam',
+        }).ok,
+        `convoyId ${JSON.stringify(hostile)} must be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  it('still accepts the id shapes the product actually mints', () => {
+    // A `__`-joined dmPairId of two Firebase uids, and a plain Firestore
+    // auto-id — the constraint must not break the real callers.
+    expect(
+      parseReportDirectMessageInput({
+        conversationId: 'AbC123uidLow__XyZ789uidHigh',
+        messageId: 'kJ8s-_.d92',
+        reason: 'spam',
+      }).ok,
+    ).toBe(true);
+    expect(parseReportUserInput({ reportedUserId: 'AbC123uidLow', reason: 'spam' }).ok).toBe(true);
+  });
+});
+
 describe('parseReportUserInput', () => {
   it('accepts a reported uid + reason', () => {
     expect(parseReportUserInput({ reportedUserId: 'u2', reason: 'harassment' }).ok).toBe(true);
