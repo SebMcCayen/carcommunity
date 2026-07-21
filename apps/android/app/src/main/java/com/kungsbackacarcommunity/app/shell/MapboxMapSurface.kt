@@ -1885,7 +1885,7 @@ class MapboxMapSurface : MapSurface {
          * puck's pulse stays green (that colour is unchanged), only the tail moves
          * to the brand yellow.
          */
-        val BREADCRUMB_COLOR: Int = KccPalette.crownGold.toArgb()
+        private val BREADCRUMB_COLOR: Int = KccPalette.crownGold.toArgb()
 
         // Derived by splitting the single-source [BREADCRUMB_COLOR] ARGB into its
         // R/G/B components, so the tail tracks the brand token if it ever changes;
