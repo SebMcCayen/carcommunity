@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -43,9 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.media.ImageCrop
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import kotlinx.coroutines.launch
@@ -183,10 +181,11 @@ internal const val VEHICLE_GALLERY_SET_COVER_TAG = "vehicleGallerySetCover"
 internal const val VEHICLE_GALLERY_REMOVE_TAG = "vehicleGalleryRemove"
 
 /**
- * The swipeable photo gallery: a full-width 16:9 pager over [photoPaths], with a
- * "current / total" counter and a tappable thumbnail strip whenever there is
- * more than one photo. Falls back to a single empty placeholder tile when the
- * car has no photo yet, so the page layout is stable either way.
+ * The swipeable photo gallery: a full-width ROUND (circle-clipped) pager over
+ * [photoPaths], with a "current / total" counter and a tappable thumbnail strip
+ * whenever there is more than one photo. Falls back to a single empty
+ * placeholder tile when the car has no photo yet, so the page layout is stable
+ * either way.
  *
  * Reads straight off [photoPaths] (cover first), so the pager, counter and
  * thumbnails all follow the data with no per-count rework.
@@ -215,8 +214,8 @@ internal fun VehicleGalleryPager(
         state = pagerState,
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(ImageCrop.VEHICLE_ASPECT_RATIO)
-            .clip(RoundedCornerShape(KccRadius.md)),
+            .aspectRatio(1f)
+            .clip(CircleShape),
     ) { page ->
         GalleryPhoto(path = photoPaths[page], modifier = Modifier.fillMaxSize())
     }
@@ -261,13 +260,13 @@ internal fun VehicleGalleryPager(
                     modifier = Modifier
                         .testTag(vehicleGalleryThumbnailTag(index))
                         .size(KccSpacing.s12)
-                        .clip(RoundedCornerShape(KccRadius.sm))
+                        .clip(CircleShape)
                         .then(
                             if (selected) {
                                 Modifier.border(
                                     width = 2.dp,
                                     color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(KccRadius.sm),
+                                    shape = CircleShape,
                                 )
                             } else {
                                 Modifier
@@ -369,8 +368,8 @@ private fun GalleryPlaceholder() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(ImageCrop.VEHICLE_ASPECT_RATIO)
-            .clip(RoundedCornerShape(KccRadius.md))
+            .aspectRatio(1f)
+            .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {

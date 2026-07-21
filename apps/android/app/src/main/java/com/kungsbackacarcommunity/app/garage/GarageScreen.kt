@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -223,9 +222,10 @@ private fun VehicleCard(
 }
 
 /**
- * The car's photo, resolved from its Storage path at render time. Mirrors the
- * member-profile card's photo (same 16:9 crop), so a car looks the same in its
- * owner's garage as it does on their public profile.
+ * The car's photo, resolved from its Storage path at render time. Rendered as a
+ * CIRCLE in My Garage: a square (1:1) box clipped to [CircleShape], with
+ * `ContentScale.Crop` centre-cropping whatever ratio the source was into the
+ * circle — no stretching, just a centred round cut.
  *
  * Renders nothing when the car has no photo, or while/if the URL cannot be
  * resolved (config-less build) — the card simply starts at its title, exactly
@@ -243,8 +243,8 @@ private fun VehiclePhoto(imagePath: String?) {
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(KccRadius.sm)),
+                    .aspectRatio(1f)
+                    .clip(CircleShape),
         )
     }
 }
