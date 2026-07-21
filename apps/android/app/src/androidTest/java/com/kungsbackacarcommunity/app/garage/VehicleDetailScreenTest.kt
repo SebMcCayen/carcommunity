@@ -1,9 +1,11 @@
 package com.kungsbackacarcommunity.app.garage
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -117,7 +119,16 @@ class VehicleDetailScreenTest {
 
         // Navigate to the non-cover photo via its thumbnail; "set as cover" now
         // becomes enabled and, when tapped, fires onSetCover with that photo.
+        // The tap animates the pager to that page, and the fling settles on the
+        // real-time clock — waitForIdle can race ahead of it (as with a debounced
+        // delay), so poll until "set as cover" actually flips to enabled before
+        // exercising it.
         composeTestRule.onNodeWithTag(vehicleGalleryThumbnailTag(1)).performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule.onAllNodesWithTag(VEHICLE_GALLERY_SET_COVER_TAG)
+                .fetchSemanticsNodes()
+                .any { SemanticsProperties.Disabled !in it.config }
+        }
         composeTestRule.onNodeWithTag(VEHICLE_GALLERY_SET_COVER_TAG)
             .assertIsEnabled()
             .performClick()

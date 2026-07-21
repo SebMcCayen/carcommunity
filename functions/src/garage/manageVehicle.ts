@@ -16,10 +16,11 @@
  * `imagePath === photoPaths[0]` (or both empty/null). Legacy vehicles created
  * before photoPaths are read as `[imagePath]` (readExistingPhotoPaths).
  *
- * All four require a signed-in, non-suspended, non-deleted caller acting on
+ * All seven require a signed-in, non-suspended, non-deleted caller acting on
  * their OWN cars (requireActiveActor). Managing your own garage is NOT
  * member-gated — any authenticated user may add/update/delete/setMain their
- * own vehicles (Seb-approved ungate). Vehicles documents are
+ * own vehicles and manage their photos (add/remove/reorder) (Seb-approved
+ * ungate). Vehicles documents are
  * authenticated-readable by design (docs/firebase-data-model.md), so all
  * writes still go through these callables: the strict schemas make registration
  * numbers / VIN / location unrepresentable, the per-user vehicle cap is

@@ -441,9 +441,19 @@ describe('garage multi-photo (add / remove / reorder)', () => {
       await callableErrorCode(call('garage-addVehiclePhoto', { vehicleId, photoPath: path('a.jpg') })),
     ).toBe('functions/already-exists');
 
+    // A foreign caller must supply a path under THEIR OWN prefix so the
+    // own-prefix guard passes; the ownership check is then what rejects them —
+    // a foreign vehicle is not-found (never permission-denied, no existence
+    // probing). A path under the owner's prefix would trip invalid-argument
+    // first, before ownership is ever consulted.
     await signInAs(otherMember);
     expect(
-      await callableErrorCode(call('garage-addVehiclePhoto', { vehicleId, photoPath: path('z.jpg') })),
+      await callableErrorCode(
+        call('garage-addVehiclePhoto', {
+          vehicleId,
+          photoPath: `vehicleImages/${otherMember.uid}/${vehicleId}/z.jpg`,
+        }),
+      ),
     ).toBe('functions/not-found');
   });
 

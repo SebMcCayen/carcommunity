@@ -66,8 +66,9 @@ data class Vehicle(
     /**
      * Cloud Storage path of the COVER photo
      * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. Kept as a
-     * denormalised mirror of [photoPaths]`[0]` for the profile card and legacy
-     * clients. The path is stored; a URL is resolved lazily for rendering.
+     * denormalised mirror of the cover (`photoPaths[0]`) for the profile card
+     * and legacy clients. The path is stored; a URL is resolved lazily for
+     * rendering.
      */
     val imagePath: String? = null,
     /**
