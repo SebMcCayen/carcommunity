@@ -2,6 +2,9 @@ package com.kungsbackacarcommunity.app.incidents
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -362,6 +365,152 @@ class IncidentReportControllerTest {
         // when the fetched list is empty (an area with no active incidents).
         assertTrue(controller.refreshAroundCurrent())
         assertEquals(1, fake.listNearbyCalls)
+        assertEquals(seeded, controller.nearbyIncidents.value)
+    }
+
+    /**
+     * THE FIX for "an incident someone else reports isn't visible to me": the
+     * shared layer must keep refreshing, not fetch once and go stale. Every user
+     * but the reporter learns of a report only through listNearby, so a report
+     * made while they are already on the map must still surface. Here the fix is
+     * available from the first pass, so after the immediate acquisition the poll
+     * must fire again on each interval.
+     */
+    @Test
+    fun `pollNearby keeps refreshing on a cadence so later reports surface`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+
+        backgroundScope.launch {
+            controller.pollNearby(
+                pollIntervalMs = 30_000L,
+                initialRetryMs = 3_000L,
+                initialAttempts = 5,
+            )
+        }
+
+        // Phase 1 acquires the fix on the first pass (no backoff consumed).
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+
+        // Steady state: one more fetch per interval — the map stays live.
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(3, fake.listNearbyCalls)
+    }
+
+    /**
+     * On a cold open the fused last-known location is frequently null, so the
+     * first passes no-op; the poll must retry on a short backoff until a fix
+     * arrives (no listNearby yet), THEN settle into the live cadence — rather
+     * than firing the callable blindly or giving up.
+     */
+    @Test
+    fun `pollNearby retries until a fix arrives, then polls live`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        // No fix for the first two passes, then a real fix.
+        var fixCalls = 0
+        val controller =
+            IncidentReportController(fake) {
+                fixCalls += 1
+                if (fixCalls <= 2) null else here
+            }
+
+        backgroundScope.launch {
+            controller.pollNearby(
+                pollIntervalMs = 30_000L,
+                initialRetryMs = 3_000L,
+                initialAttempts = 5,
+            )
+        }
+
+        // Pass 1: no fix → no fetch, waiting on the short retry backoff.
+        runCurrent()
+        assertEquals(0, fake.listNearbyCalls)
+
+        // Pass 2: still no fix.
+        advanceTimeBy(3_000L)
+        runCurrent()
+        assertEquals(0, fake.listNearbyCalls)
+
+        // Pass 3: fix arrives → the layer finally populates.
+        advanceTimeBy(3_000L)
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+
+        // ...and now it is on the live cadence, not the short retry one.
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+    }
+
+    /**
+     * A zero/negative interval would make the poll a `delay(0)` busy loop that
+     * hammers the backend and drains the battery, so misuse must fail fast
+     * rather than ship a hot loop.
+     */
+    @Test
+    fun `pollNearby rejects a non-positive poll interval`() = runTest {
+        val controller = IncidentReportController(FakeIncidentRepository()) { here }
+        val zero = catchCancellation { controller.pollNearby(pollIntervalMs = 0L) }
+        assertTrue("zero interval must be rejected", zero is IllegalArgumentException)
+        val negative = catchCancellation { controller.pollNearby(pollIntervalMs = -1L) }
+        assertTrue("negative interval must be rejected", negative is IllegalArgumentException)
+    }
+
+    @Test
+    fun `pollNearby rejects a non-positive initial retry`() = runTest {
+        val controller = IncidentReportController(FakeIncidentRepository()) { here }
+        val thrown = catchCancellation { controller.pollNearby(initialRetryMs = 0L) }
+        assertTrue("zero retry must be rejected", thrown is IllegalArgumentException)
+    }
+
+    /**
+     * A transient fetch failure mid-poll must NOT blank the shared map or kill
+     * the loop: the previous markers stay, and the next tick recovers.
+     */
+    @Test
+    fun `pollNearby survives a fetch failure and keeps the previous markers`() = runTest {
+        val seeded = listOf(Incident("seed", IncidentType.ROADWORK, 12.0, 57.5))
+        val repo =
+            object : IncidentRepository {
+                var calls = 0
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                    Incident("reported", type, location.longitude, location.latitude)
+                override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
+                    calls += 1
+                    if (calls == 2) throw IllegalStateException("network")
+                    return seeded
+                }
+                override suspend fun remove(incidentId: String) = Unit
+            }
+        val controller = IncidentReportController(repo) { here }
+
+        backgroundScope.launch {
+            controller.pollNearby(
+                pollIntervalMs = 30_000L,
+                initialRetryMs = 3_000L,
+                initialAttempts = 5,
+            )
+        }
+
+        // Pass 1 populates the layer.
+        runCurrent()
+        assertEquals(seeded, controller.nearbyIncidents.value)
+
+        // Pass 2 throws — the layer must keep the previous markers, not blank.
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(seeded, controller.nearbyIncidents.value)
+
+        // Pass 3 proves the loop survived the throw and is still polling.
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(3, repo.calls)
         assertEquals(seeded, controller.nearbyIncidents.value)
     }
 
