@@ -46,6 +46,7 @@ class SettingsThemeSemanticsTest {
                 KccTheme(darkTheme = false) {
                     SettingsScreen(
                         onManageSubscription = null,
+                        onSavedPlaces = {},
                         onNotificationSettings = null,
                         onBlockedUsers = null,
                         onPartnerStats = null,

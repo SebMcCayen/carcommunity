@@ -286,4 +286,106 @@ class SavedPlacesTest {
             )
         assertEquals(1, store.saved().count { it.kind == SavedPlaceKind.Home })
     }
+
+    // --- "Change address" re-point: kind/label defaults + stale-row sweep ------
+
+    @Test
+    fun `save defaults to a fresh Favourite named after the place with no context`() {
+        val (kind, label) = SavedPlaces.resolveSaveDefaults(place("a"), existing = null, edit = null)
+        assertEquals(SavedPlaceKind.Favourite, kind)
+        assertEquals("Place a", label)
+    }
+
+    @Test
+    fun `save defaults follow an existing match at this address`() {
+        val existing = SavedPlaces.create(SavedPlaceKind.Work, place("a"), "ignored")
+        val (kind, _) = SavedPlaces.resolveSaveDefaults(place("a"), existing = existing, edit = null)
+        assertEquals(SavedPlaceKind.Work, kind)
+    }
+
+    @Test
+    fun `a pending Home re-point pre-selects Home even for a brand-new address`() {
+        val home = SavedPlaces.create(SavedPlaceKind.Home, place("old"), "old street")
+        // The new address is not yet saved, so `existing` is null — the exact case
+        // that used to default to Favourite and fork a second entry.
+        val (kind, _) = SavedPlaces.resolveSaveDefaults(place("new"), existing = null, edit = SavedPlaces.editOf(home))
+        assertEquals(SavedPlaceKind.Home, kind)
+    }
+
+    @Test
+    fun `a pending favourite re-point keeps the favourite's label`() {
+        val fav = favourite("old", label = "Mamma")
+        val (kind, label) = SavedPlaces.resolveSaveDefaults(place("new"), existing = null, edit = SavedPlaces.editOf(fav))
+        assertEquals(SavedPlaceKind.Favourite, kind)
+        assertEquals("Mamma", label)
+    }
+
+    @Test
+    fun `re-pointing Home strands nothing to sweep - its id is unchanged`() {
+        val home = SavedPlaces.create(SavedPlaceKind.Home, place("old"), "old")
+        val sweep = SavedPlaces.sweepIdFor(SavedPlaces.editOf(home), place("new"), SavedPlaceKind.Home)
+        assertNull(sweep)
+    }
+
+    @Test
+    fun `re-pointing a favourite to a new address sweeps its old id`() {
+        val fav = favourite("old", label = "Mamma")
+        val sweep = SavedPlaces.sweepIdFor(SavedPlaces.editOf(fav), place("new"), SavedPlaceKind.Favourite)
+        assertEquals("fav:old", sweep)
+    }
+
+    @Test
+    fun `converting a favourite into Home during the dialog sweeps the old favourite`() {
+        val fav = favourite("old", label = "Mamma")
+        // The user opened "Change address" on a favourite but picked Home in the
+        // dialog: the new entry's id is "home", so the old "fav:old" must go.
+        val sweep = SavedPlaces.sweepIdFor(SavedPlaces.editOf(fav), place("new"), SavedPlaceKind.Home)
+        assertEquals("fav:old", sweep)
+    }
+
+    @Test
+    fun `Change Home address updates Home in place rather than forking a Favourite`() {
+        val store = InMemorySavedPlacesStore(listOf(SavedPlaces.create(SavedPlaceKind.Home, place("old"), "old")))
+        val edit = SavedPlaces.editOf(store.saved().single { it.kind == SavedPlaceKind.Home })
+        val newAddress = place("new", lng = 12.0)
+
+        // Replay the picker's save: resolve the dialog defaults, sweep if needed,
+        // then write through the same upsert the controller uses.
+        val (kind, label) = SavedPlaces.resolveSaveDefaults(newAddress, existing = null, edit = edit)
+        SavedPlaces.sweepIdFor(edit, newAddress, kind)?.let { store.remove(it) }
+        store.save(SavedPlaces.create(kind, newAddress, label))
+
+        val saved = store.saved()
+        assertEquals(1, saved.size)
+        val single = saved.single()
+        assertEquals(SavedPlaceKind.Home, single.kind)
+        assertEquals("home", single.id)
+        assertEquals("new", single.place.id)
+        assertTrue(saved.none { it.kind == SavedPlaceKind.Favourite })
+    }
+
+    @Test
+    fun `Change favourite address moves the favourite instead of leaving a ghost`() {
+        val store = InMemorySavedPlacesStore(listOf(favourite("old", label = "Mamma")))
+        val edit = SavedPlaces.editOf(store.saved().single())
+        val newAddress = place("new", lng = 20.0)
+
+        val (kind, label) = SavedPlaces.resolveSaveDefaults(newAddress, existing = null, edit = edit)
+        SavedPlaces.sweepIdFor(edit, newAddress, kind)?.let { store.remove(it) }
+        store.save(SavedPlaces.create(kind, newAddress, label))
+
+        val saved = store.saved()
+        assertEquals(1, saved.size)
+        assertEquals("fav:new", saved.single().id)
+        assertEquals("Mamma", saved.single().label)
+    }
+
+    @Test
+    fun `without the sweep a re-pointed favourite would strand its old row`() {
+        // Guards the regression: skipping the sweep leaves BOTH the old and the new
+        // favourite, which is exactly what threading the edit exists to prevent.
+        val store = InMemorySavedPlacesStore(listOf(favourite("old", label = "Mamma")))
+        store.save(SavedPlaces.create(SavedPlaceKind.Favourite, place("new", lng = 20.0), "Mamma"))
+        assertEquals(2, store.saved().count { it.kind == SavedPlaceKind.Favourite })
+    }
 }

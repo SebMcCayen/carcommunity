@@ -196,6 +196,11 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
 import com.kungsbackacarcommunity.app.navigation.PrefsSavedPlacesStore
+import com.kungsbackacarcommunity.app.navigation.SavedPlace
+import com.kungsbackacarcommunity.app.navigation.SavedPlaceEdit
+import com.kungsbackacarcommunity.app.navigation.SavedPlaces
+import com.kungsbackacarcommunity.app.navigation.SavedPlacesScreen
+import com.kungsbackacarcommunity.app.navigation.SavedPlacesStore
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -921,6 +926,12 @@ fun AuthenticatedApp(
             // consumed so a later gesture re-triggers.
             var navSearchTarget by remember { mutableStateOf<LatLng?>(null) }
             var navSearchTargetName by remember { mutableStateOf<String?>(null) }
+            // Set only when the picker was opened to CHANGE an already-saved
+            // place's address (Saved-places screen → "Change address"): carries
+            // WHICH place, so the save dialog pre-selects its kind (a re-pointed
+            // Home saves back as Home, not a new Favourite) and sweeps the old row.
+            // Cleared on every close of the overlay so no later open inherits it.
+            var navSearchInitialEdit by remember { mutableStateOf<SavedPlaceEdit?>(null) }
             val pendingPlace by mapSurface.placeRequest.collectAsState()
             LaunchedEffect(pendingPlace) {
                 val requested = pendingPlace ?: return@LaunchedEffect
@@ -1653,6 +1664,9 @@ fun AuthenticatedApp(
                             navDestination = null
                             mapSurface.setRouteOverlay(null)
                             navSearchOpen = false
+                            // Closing the underlying picker: drop any change-address
+                            // context so the next open starts uncontextualized.
+                            navSearchInitialEdit = null
                         },
                         onReportIncident = reportIncident,
                         modifier = Modifier.fillMaxSize(),
@@ -1701,6 +1715,8 @@ fun AuthenticatedApp(
                             // Backing out of the picker must not leave the next
                             // plain search offering to set a convoy destination.
                             navSearchConvoyPick = false
+                            // ...nor pre-frame the next save as a change-address.
+                            navSearchInitialEdit = null
                         },
                         onStartNavigation = startNavigationTo,
                         // Only offered when this overlay was opened AS the convoy
@@ -1725,6 +1741,7 @@ fun AuthenticatedApp(
                                     navSearchConvoyPick = false
                                     navSearchTarget = null
                                     navSearchTargetName = null
+                                    navSearchInitialEdit = null
                                 }
                             } else {
                                 null
@@ -1734,6 +1751,7 @@ fun AuthenticatedApp(
                         savedStore = savedPlacesStore,
                         initialTarget = navSearchTarget,
                         initialTargetName = navSearchTargetName,
+                        initialSaveEdit = navSearchInitialEdit,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {
@@ -1852,6 +1870,44 @@ fun AuthenticatedApp(
                                 memberGated = false,
                                 isActiveMember = profile?.activeMember == true,
                             ),
+                        // The SAME per-uid store the navigation search reads/writes,
+                        // so the Saved-places management screen and the inline save
+                        // flow share one source of truth.
+                        savedPlacesStore = savedPlacesStore,
+                        // "Add a place" / "Change address" on the management screen
+                        // reuse the existing address picker: close this route and
+                        // open the navigation search (search-first). route=null so
+                        // the picker returns to the map home, not to a stale
+                        // saved-places snapshot.
+                        onOpenAddressSearch = {
+                            // "Add a place": a fresh save, so no change-address
+                            // context — clear it in case one lingered.
+                            navSearchInitialEdit = null
+                            // Search-first: drop any lingering map-tap / post-
+                            // navigation target (TurnByTurnNavScreen.onExit leaves
+                            // navSearchTarget set) and convoy-pick so the picker
+                            // opens on the search field, not a stale place preview.
+                            navSearchTarget = null
+                            navSearchTargetName = null
+                            navSearchConvoyPick = false
+                            route = null
+                            navSearchOpen = true
+                        },
+                        // "Change address" for a specific saved place: carry its
+                        // kind/label/id into the picker so the save UPDATES that
+                        // place (re-pointed Home stays Home) rather than forking a
+                        // Favourite. See SavePlaceDialog's use of initialSaveEdit.
+                        onChangeSavedPlaceAddress = { place ->
+                            navSearchInitialEdit = SavedPlaces.editOf(place)
+                            // The re-point is the only context this open carries;
+                            // clear any stale map-tap target / convoy-pick so it
+                            // can't override the search-first change-address flow.
+                            navSearchTarget = null
+                            navSearchTargetName = null
+                            navSearchConvoyPick = false
+                            route = null
+                            navSearchOpen = true
+                        },
                     )
                 } else {
                     // The shell's page frame. Deliberately a Box + bottom bar
@@ -2865,6 +2921,9 @@ private fun RouteHost(
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     partnerStatsEnabled: Boolean,
+    savedPlacesStore: SavedPlacesStore,
+    onOpenAddressSearch: () -> Unit,
+    onChangeSavedPlaceAddress: (SavedPlace) -> Unit,
 ) {
     val context = LocalContext.current
     // The one guarded profile-navigation callback every member-bearing surface
@@ -3286,6 +3345,18 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
+        ShellRoute.SavedPlaces ->
+            SavedPlacesScreen(
+                store = savedPlacesStore,
+                onAddPlace = onOpenAddressSearch,
+                // Re-pointing a shortcut reuses the same picker, carrying WHICH
+                // place is being changed so its save dialog pre-selects the right
+                // kind (a re-pointed Home saves back as Home via
+                // NavigationController.savePlace) rather than defaulting to a new
+                // Favourite — and, for a favourite, sweeps the stale row.
+                onChangeLocation = onChangeSavedPlaceAddress,
+            )
+
         ShellRoute.Settings ->
             SettingsScreen(
                 onManageSubscription =
@@ -3294,6 +3365,7 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                onSavedPlaces = { onOpenRoute(ShellRoute.SavedPlaces) },
                 onNotificationSettings =
                     if (notificationSettingsRepository != null) {
                         { onOpenRoute(ShellRoute.NotificationSettings) }

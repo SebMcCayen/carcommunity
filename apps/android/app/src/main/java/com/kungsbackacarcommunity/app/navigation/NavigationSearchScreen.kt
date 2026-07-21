@@ -24,12 +24,9 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -143,6 +140,12 @@ const val NAV_SAVE_CONFIRM_TEST_TAG = "nav_save_confirm"
  *   False while `convoy-setDestination` does not exist
  *   (`ConvoyDestinations.availability`), which renders the button disabled rather
  *   than absent — same honesty rule as the convoy bar's own controls.
+ * @param initialSaveEdit set when this overlay was opened to CHANGE the address of
+ *   an already-saved place (the Saved-places screen's "Change address"). It
+ *   pre-frames the save dialog to that place's kind (so re-pointing Home saves
+ *   back as Home, not a new Favourite) and label, and — for a favourite whose id
+ *   moves with its address — sweeps the stale row. Null (the default) for a normal
+ *   search-first open, where a fresh save defaults to a Favourite.
  */
 @Composable
 fun NavigationSearchScreen(
@@ -157,6 +160,7 @@ fun NavigationSearchScreen(
     initialTargetName: String? = null,
     onSetAsConvoyDestination: ((LatLng, String) -> Unit)? = null,
     convoyDestinationEnabled: Boolean = false,
+    initialSaveEdit: SavedPlaceEdit? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -201,6 +205,11 @@ fun NavigationSearchScreen(
     // preview's save button (a new or already-saved destination) and from a
     // saved row's edit button in the empty search state.
     var saveTarget by remember { mutableStateOf<PlaceSuggestion?>(null) }
+
+    // The pending "change address" re-point, consumed by the FIRST save so a
+    // second save in the same session is a normal fresh Favourite again. Re-armed
+    // (via the remember key) if the host passes a new edit. See [initialSaveEdit].
+    var pendingEdit by remember(initialSaveEdit) { mutableStateOf(initialSaveEdit) }
 
     // Pick a place (suggestion or recent) AND dismiss the keyboard first, so the
     // route sheet's directions aren't left behind the IME (see above).
@@ -366,13 +375,32 @@ fun NavigationSearchScreen(
         SavePlaceDialog(
             place = target,
             existing = SavedPlaces.find(state.savedPlaces, target),
-            onDismiss = { saveTarget = null },
+            pendingEdit = pendingEdit,
+            onDismiss = {
+                // Abandoning the dialog abandons the re-point: consume it so a
+                // later save this session is a fresh place, not a stale change-
+                // address that would default to the old kind and sweep its id
+                // (e.g. remove "home" when saving an unrelated favourite).
+                pendingEdit = null
+                saveTarget = null
+            },
             onSave = { kind, label ->
+                // Sweep the old row FIRST (before adding the new one) so the brief
+                // over-cap moment can't make upsert evict an unrelated favourite.
+                // Null unless this is a re-point whose id moved — Home/Work keep
+                // their id and are updated in place by savePlace. See [sweepIdFor].
+                SavedPlaces.sweepIdFor(pendingEdit, target, kind)
+                    ?.let { controller.removeSavedPlace(it) }
                 controller.savePlace(target, kind, label)
+                // Consume the re-point: a later save this session is a fresh place.
+                pendingEdit = null
                 saveTarget = null
             },
             onRemove = { id ->
                 controller.removeSavedPlace(id)
+                // Removing here also concludes any pending re-point, so it can't
+                // be re-applied to an unrelated later save. See onDismiss above.
+                pendingEdit = null
                 saveTarget = null
             },
         )
@@ -497,27 +525,6 @@ private fun SuggestionsCard(
 }
 
 /**
- * Localized display name for a saved place: the singletons always read "Home"/
- * "Work" from resources (the user's stored label is irrelevant there and would
- * be the raw street name for a Home saved straight from a search result),
- * favourites read the user's own label.
- */
-@Composable
-private fun SavedPlace.displayLabel(): String =
-    when (kind) {
-        SavedPlaceKind.Home -> stringResource(R.string.addressSearch_savedHome)
-        SavedPlaceKind.Work -> stringResource(R.string.addressSearch_savedWork)
-        SavedPlaceKind.Favourite -> label
-    }
-
-private fun SavedPlaceKind.icon() =
-    when (this) {
-        SavedPlaceKind.Home -> Icons.Filled.Home
-        SavedPlaceKind.Work -> Icons.Filled.Work
-        SavedPlaceKind.Favourite -> Icons.Filled.Star
-    }
-
-/**
  * The user's saved places in the empty search state. Tapping a row selects it as
  * the destination — the identical [NavigationController.select] path a search
  * result takes — so a saved place is genuinely one tap from a route preview. The
@@ -629,13 +636,18 @@ private fun SavedPlacesCard(
 private fun SavePlaceDialog(
     place: PlaceSuggestion,
     existing: SavedPlace?,
+    pendingEdit: SavedPlaceEdit?,
     onDismiss: () -> Unit,
     onSave: (SavedPlaceKind, String) -> Unit,
     onRemove: (String) -> Unit,
 ) {
-    var kind by remember(existing) { mutableStateOf(existing?.kind ?: SavedPlaceKind.Favourite) }
-    var label by
-        remember(existing) { mutableStateOf(existing?.label ?: place.name) }
+    // A pending re-point ("Change Home address") pre-selects that kind + label, so
+    // the dialog opens on Home rather than the Favourite default; otherwise it
+    // falls back to an existing match, then to a fresh Favourite (see
+    // [SavedPlaces.resolveSaveDefaults]).
+    val defaults = SavedPlaces.resolveSaveDefaults(place, existing, pendingEdit)
+    var kind by remember(existing, pendingEdit) { mutableStateOf(defaults.first) }
+    var label by remember(existing, pendingEdit) { mutableStateOf(defaults.second) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

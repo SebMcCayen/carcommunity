@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CardMembership
@@ -62,6 +63,7 @@ import com.kungsbackacarcommunity.app.design.ThemePreference
 @Composable
 fun SettingsScreen(
     onManageSubscription: (() -> Unit)?,
+    onSavedPlaces: () -> Unit,
     onNotificationSettings: (() -> Unit)?,
     onBlockedUsers: (() -> Unit)?,
     onPartnerStats: (() -> Unit)?,
@@ -84,6 +86,13 @@ fun SettingsScreen(
                 onManageSubscription,
             )
         }
+        // Always available: saved places are device-local (no backend dependency
+        // to guard on), so unlike the rows around it this needs no null check.
+        HubRow(
+            stringResource(R.string.settingsMenu_savedPlaces),
+            Icons.Filled.Bookmark,
+            onSavedPlaces,
+        )
         if (onNotificationSettings != null) {
             HubRow(
                 stringResource(R.string.settingsMenu_notificationSettings),
