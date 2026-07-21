@@ -107,6 +107,7 @@ import {
   markRead as communityChatMarkRead,
   post as communityChatPost,
 } from './chatchannels/communityChat';
+import { digest as communityChatDigest } from './chatchannels/communityDigest';
 import {
   list as convoyChatList,
   post as convoyChatPost,
@@ -678,7 +679,8 @@ export const convoy = {
 
 /**
  * Community chat domain (grouped export → deployed as `communityChat-post`,
- * `communityChat-list`, `communityChat-markRead`).
+ * `communityChat-list`, `communityChat-markRead`, and the scheduled
+ * `communityChat-digest`).
  *
  * The single APP-WIDE chat — one of the THREE product chats (community / convoy
  * / friends-DMs; the friends chat is the existing `dm` domain). Model: a fixed
@@ -691,11 +693,23 @@ export const convoy = {
  * derives the unread dot from its newest-message live listener (O(1) per user).
  * Blocking is NOT filtered server-side (global town square — a client display
  * concern). See functions/src/chatchannels/chat-core.ts.
+ *
+ * There is deliberately NO per-message notification producer (that would be an
+ * O(members × messages) fan-out on the town square). Instead the channel notifies
+ * via (1) @MENTIONS (communityChat.post) and (2) the scheduled `communityChat-digest`
+ * (18:00 Europe/Stockholm, daily): a low-frequency roll-up that writes ONE
+ * `community_chat` notice to each member with >= COMMUNITY_DIGEST_MIN_UNREAD messages
+ * since their communityChatLastReadAt. Cost is O(behind-members) per DAY (a
+ * last-read range query + one count() per behind member — never per message);
+ * re-notify is prevented by the userPrivate/{uid}.communityChatDigestedUpTo marker,
+ * and the per-category opt-out is inherited via writeInAppNotification. See
+ * functions/src/chatchannels/communityDigest.ts + communityDigest-core.ts.
  */
 export const communityChat = {
   post: communityChatPost,
   list: communityChatList,
   markRead: communityChatMarkRead,
+  digest: communityChatDigest,
 };
 
 /**
