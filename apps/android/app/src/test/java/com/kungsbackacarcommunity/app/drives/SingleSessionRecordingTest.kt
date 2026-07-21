@@ -45,6 +45,14 @@ class SingleSessionRecordingTest {
 
     private companion object {
         const val UID = "uid-owner"
+
+        /**
+         * Bound (ms) for a negative cross-thread assertion: how long a wrong
+         * cancel dispatched to Dispatchers.IO gets to surface before we assert it
+         * did not happen. Small — the passing path never cancels, so it is a
+         * fixed cost, not a source of flakiness.
+         */
+        const val SETTLE_MS = 50L
     }
 
     @Test
@@ -303,7 +311,12 @@ class SingleSessionRecordingTest {
         // The post-save clear() the "Saved" state triggers must NOT cancel the
         // same user's upload — that is the exact half-state this writer avoids.
         SingleSessionRecording.clear()
-        delay(50)
+        // A real (short) settle is load-bearing here, not a hack: an erroneous
+        // cancel would surface on Dispatchers.IO (a different thread pool), so
+        // yield()/delay(0) on this thread can't observe it — we bound how long a
+        // wrong cancel has to reveal itself. The passing path is timing-
+        // independent (a correct clear() never cancels), so this cannot flake.
+        delay(SETTLE_MS)
         assertFalse(
             "post-save clear() must not cancel the same user's upload",
             uploader.cancelled.isCompleted,
@@ -328,6 +341,26 @@ class SingleSessionRecordingTest {
     }
 
     @Test
+    fun `every upload started in one sign-in is cancelled together on sign-out`() = runBlocking {
+        // Drive 1: saved, its upload still in flight (retrying) when the user
+        // records a second drive in the SAME sign-in.
+        val first = GatedUploader()
+        startWithInFlightUpload(first)
+        SingleSessionRecording.clear() // post-save clear; drive 1's upload lives on
+
+        // Drive 2 in the same sign-in — must share drive 1's scope, not orphan it.
+        val second = GatedUploader()
+        startWithInFlightUpload(second)
+
+        // A single sign-out must cancel BOTH uploads, not only the latest.
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+        withTimeout(5_000) { first.cancelled.await() }
+        withTimeout(5_000) { second.cancelled.await() }
+        assertTrue(first.cancelled.isCompleted)
+        assertTrue(second.cancelled.isCompleted)
+    }
+
+    @Test
     fun `a same-uid rotation does not cancel the in-flight route upload`() = runBlocking {
         val uploader = GatedUploader()
         startWithInFlightUpload(uploader)
@@ -335,7 +368,9 @@ class SingleSessionRecordingTest {
         // Rotation re-runs the effect with the SAME signed-in uid: the upload
         // must keep running (only a genuine auth change tears it down).
         SingleSessionRecording.clearIfNotOwnedBy(UID)
-        delay(50)
+        // Same rationale as above: bound the window for a wrong cross-thread
+        // cancel to surface; a correct same-uid path never cancels, so no flake.
+        delay(SETTLE_MS)
         assertFalse(uploader.cancelled.isCompleted)
 
         // Cleanup: a real sign-out cancels the scope so no thread leaks.

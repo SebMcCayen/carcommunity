@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,22 +69,24 @@ object SingleSessionRecording {
     private var ownerUid: String? = null
 
     /**
-     * The scope this session's background route upload runs on, and the uid that
-     * upload is attributed to. Created fresh per [start] and passed to the
-     * coordinator so the upload is PROCESS-scoped (survives Activity recreation
-     * and the composition that triggered the save) — the same lifetime the
-     * recording itself has, and the reason the upload cannot live in `remember`.
+     * The scope background route uploads run on, and the uid they are attributed
+     * to. ONE scope PER SIGNED-IN uid, reused across every session that uid
+     * records (see [start]), so all of a user's uploads share a single
+     * cancellation handle. It is passed to each session's coordinator so the
+     * upload is PROCESS-scoped (survives Activity recreation and the composition
+     * that triggered the save) — the same lifetime the recording itself has, and
+     * the reason the upload cannot live in `remember`.
      *
      * It deliberately OUTLIVES a normal [clear]: the fire-and-forget upload is
      * kicked off the instant the drive reaches "Saved", which is the very state
      * that triggers [clear], so cancelling it there would lose the route with no
      * retry — the exact half-state this whole writer avoids. Instead it is
      * cancelled ONLY by [clearIfNotOwnedBy] when the signed-in user stops being
-     * [uploadOwnerUid] (sign-out or account switch): an upload started under
-     * user A's auth must never continue — and retry — under user B's. Kept
-     * alongside [ownerUid] rather than folded into it because [clear] nulls
-     * [ownerUid] while this must persist until the upload's owner actually
-     * leaves.
+     * [uploadOwnerUid] (sign-out or account switch): every upload started under
+     * user A's auth is cancelled TOGETHER and none continues — or retries — under
+     * user B's. Kept alongside [ownerUid] rather than folded into it because
+     * [clear] nulls [ownerUid] while this must persist until the upload's owner
+     * actually leaves.
      */
     private var uploadScope: CoroutineScope? = null
     private var uploadOwnerUid: String? = null
@@ -110,13 +113,18 @@ object SingleSessionRecording {
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
-        // A fresh per-session upload scope owned here (process-scoped, supervisor-
-        // jobbed) so this session's background upload can be cancelled on a later
-        // sign-out / account switch without touching any other session's. A prior
-        // owner's scope, if any is still referenced, always belonged to THIS same
-        // uid (a different owner would already have been cancelled by
-        // clearIfNotOwnedBy), so its in-flight upload is left to finish.
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // REUSE this uid's existing upload scope across sessions so every upload
+        // the user starts in one sign-in shares ONE cancellation handle: a later
+        // sign-out / account switch then cancels them ALL together (a prior
+        // drive's upload can still be retrying when the next drive is recorded).
+        // A live scope here always belongs to this same uid — a different owner
+        // would already have been cancelled + nulled by clearIfNotOwnedBy on the
+        // auth change — so only mint a fresh scope for a new owner (or when none
+        // is live). Process-scoped + supervisor-jobbed: one upload's failure
+        // can't cancel another, and the scope outlives the composition.
+        val scope =
+            uploadScope?.takeIf { uploadOwnerUid == uid && it.isActive }
+                ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val coordinator =
             DriveRecordingCoordinator(
                 repository,
