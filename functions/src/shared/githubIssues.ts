@@ -1,7 +1,7 @@
 /**
  * Shared GitHub REST helper — creates issues on the PUBLIC repo
  * SebMcCayen/carcommunity via the Node global `fetch` (functions run on
- * Node 22 — see functions/package.json engines; no octokit dependency).
+ * Node 22 — pinned by firebase.json functions[].runtime; no octokit dependency).
  *
  * Extracted so BOTH the authenticated feedback.reportIssue callable and the
  * unauthenticated-diagnostics-driven diagnostics-onSignInFailure trigger share

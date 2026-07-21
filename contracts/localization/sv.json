@@ -162,7 +162,14 @@
     "terms": "Användarvillkor",
     "version": "Version %1$s",
     "aboutSection": "Om appen",
-    "whatsNew": "Vad är nytt"
+    "whatsNew": "Vad är nytt",
+    "appearanceSection": "Utseende",
+    "themeAutomatic": "Automatiskt",
+    "themeAutomaticDescription": "Följer enhetens ljusa eller mörka läge",
+    "themeLight": "Ljust",
+    "themeLightDescription": "Alltid ljust, oavsett vad enheten gör",
+    "themeDark": "Mörkt",
+    "themeDarkDescription": "Alltid mörkt, oavsett vad enheten gör"
   },
   "privacySettings": {
     "title": "Integritet",
@@ -596,8 +603,8 @@
     "date": "Datum",
     "timeRange": "Tid",
     "shareAction": "Dela körning",
-    "shareSummary": "Körde %1$s på %2$s den %3$s — %4$s",
-    "shareSummaryNoDate": "Körde %1$s på %2$s — %3$s",
+    "shareSummary": "Jag använder appen %1$s och under min inspelade tur körde jag %2$s på %3$s.",
+    "shareTopSpeed": "Min högsta hastighet var %1$s.",
     "shareUnavailable": "Det finns ingen app att dela med",
     "startArea": "Startområde",
     "endArea": "Slutområde",
@@ -638,7 +645,19 @@
     "recordPermissionRationale": "Platsåtkomst krävs för att spela in en körning.",
     "recordPermissionDenied": "Platsåtkomst nekades. Tillåt plats för att spela in en körning.",
     "recordLocationUnavailable": "Plats är inte tillgänglig på den här enheten.",
-    "recordBack": "Tillbaka"
+    "recordBack": "Tillbaka",
+    "statsEntryTitle": "Din körning",
+    "statsEntrySubtitle": "Summering och rekord",
+    "statsTitle": "Din körning",
+    "statsEmpty": "Inga körningar att summera ännu.",
+    "statsAllTime": "Totalt",
+    "statsThisMonth": "Denna månad",
+    "statsTotalDrives": "Körningar",
+    "statsTotalDistance": "Distans",
+    "statsTotalTime": "Total tid",
+    "statsLongest": "Längsta körning",
+    "statsAverage": "Snittlängd",
+    "statsFastest": "Högsta snitthastighet"
   },
   "garage": {
     "screenTitle": "Mitt garage",
@@ -692,7 +711,12 @@
     "photoTooLarge": "Bilden är för stor.",
     "photoCropTitle": "Beskär bild",
     "photoCropHint": "Dra för att placera och nyp för att zooma. Det som syns i rutan är det andra ser.",
-    "photoCropConfirm": "Använd bilden"
+    "photoCropConfirm": "Använd bilden",
+    "photoNone": "Inga bilder ännu",
+    "photoCounter": "%1$d / %2$d",
+    "photoThumbnail": "Visa bild %1$d",
+    "photoAddMore": "Lägg till fler bilder",
+    "photoAddMoreUnavailable": "Du kan lägga till en bild per bil för tillfället. Ett komplett bildgalleri är på väg."
   },
   "badges": {
     "screenTitle": "Utmärkelser",

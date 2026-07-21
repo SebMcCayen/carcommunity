@@ -4,11 +4,11 @@
   "private": true,
   "main": "lib/index.js",
   "engines": {
-    "node": "22"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -171,7 +171,8 @@ describe('diagnostics-submitReport', () => {
       .where('userId', '==', uid)
       .get();
     expect(snap.size).toBe(DIAGNOSTICS_RATE_LIMIT_MAX);
-    const sample = snap.docs[0].data();
+    // size asserted === DIAGNOSTICS_RATE_LIMIT_MAX (> 0) above, so docs[0] is present.
+    const sample = snap.docs[0]!.data();
     expect(sample.rateLimitKey).toBe(`uid:${uid}`);
     expect(typeof sample.appCheckPresent).toBe('boolean');
   });

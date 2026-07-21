@@ -332,7 +332,8 @@ describe('events-create – member-created events', () => {
       .where('targetId', '==', eventId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
   });
 });
 
@@ -369,7 +370,8 @@ describe('events-create / events-update', () => {
       .where('targetId', '==', eventId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
   });
 
   it('rejects invalid create input with contract codes', async () => {
@@ -404,7 +406,8 @@ describe('events-create / events-update', () => {
       .where('targetId', '==', eventId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().details.changedFields.sort()).toEqual(['address', 'title']);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().details.changedFields.sort()).toEqual(['address', 'title']);
   });
 
   it('rejects updates to unknown events and empty updates', async () => {
@@ -468,7 +471,8 @@ describe('events lifecycle transitions', () => {
       .where('targetId', '==', eventId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().reason).toBe('Storm warning');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().reason).toBe('Storm warning');
   });
 
   it('completes published events only and freezes completed/cancelled events', async () => {
@@ -569,7 +573,8 @@ describe('events-complete – creator or admin', () => {
       .where('targetId', '==', eventId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
   });
 });
 

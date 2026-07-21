@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -51,6 +52,11 @@ fun GarageRoute(
     val scope = rememberCoroutineScope()
     var showForm by rememberSaveable { mutableStateOf(false) }
     var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The car whose full detail page is open (tapped from the list), or null on
+    // the list itself. Survives config changes; the form takes precedence over
+    // it (editing a car from its detail page opens the form on top, and closing
+    // the form lands back on the detail because this id is untouched).
+    var detailVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Photo state, hoisted above the form branch so an add-mode upload survives
     // the form closing on save (see pendingPhoto).
@@ -112,22 +118,37 @@ fun GarageRoute(
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
             .collectAsState(initial = VehicleSaveStatus.Idle)
 
-    // System/gesture Back leaves the add/edit form back to the list (mirrors the
-    // form's Cancel); at the list root it is disabled so the shell's BackHandler
-    // returns to Home. The photo coordinator now outlives the form branch (an
-    // add-mode upload starts as the form closes), so backing out must reset it
-    // explicitly rather than relying on it being discarded from composition.
-    // While cropping, Back cancels the CROP and returns to the form — losing a
-    // half-filled vehicle form because the user changed their mind about a photo
-    // would be a nasty surprise.
-    BackHandler(enabled = showForm) {
-        if (cropPreview != null) {
-            cancelCrop()
-        } else {
-            showForm = false
-            editingVehicleId = null
-            coordinator?.reset()
-            resetPhoto()
+    // The car whose detail page is open, resolved from the live list. Null when
+    // no detail is open OR when the id points at a car that no longer exists
+    // (e.g. just deleted); the effect below then clears the stale id so Back and
+    // the render branch agree.
+    val loaded = garageState as? GarageState.Loaded
+    val detailVehicle =
+        detailVehicleId?.let { id -> loaded?.vehicles?.firstOrNull { it.id == id } }
+    LaunchedEffect(loaded, detailVehicleId) {
+        if (detailVehicleId != null && loaded != null && detailVehicle == null) {
+            detailVehicleId = null
+        }
+    }
+
+    // System/gesture Back unwinds one level at a time: crop → form, form → the
+    // place it was opened from (list or detail), detail → list. At the list root
+    // it is disabled so the shell's BackHandler returns to Home. The photo
+    // coordinator now outlives the form branch (an add-mode upload starts as the
+    // form closes), so backing out must reset it explicitly rather than relying
+    // on it being discarded from composition. While cropping, Back cancels the
+    // CROP and returns to the form — losing a half-filled vehicle form because
+    // the user changed their mind about a photo would be a nasty surprise.
+    BackHandler(enabled = showForm || detailVehicleId != null) {
+        when {
+            showForm && cropPreview != null -> cancelCrop()
+            showForm -> {
+                showForm = false
+                editingVehicleId = null
+                coordinator?.reset()
+                resetPhoto()
+            }
+            else -> detailVehicleId = null
         }
     }
 
@@ -322,10 +343,62 @@ fun GarageRoute(
             )
         }
         }
+    } else if (detailVehicle != null) {
+        VehicleDetailScreen(
+            vehicle = detailVehicle,
+            onEdit = {
+                // Opens the SAME add/edit form on top of the detail page; because
+                // detailVehicleId is left set, closing the form (save or cancel)
+                // lands the user back on this car's detail page.
+                editingVehicleId = detailVehicle.id
+                coordinator?.reset()
+                pendingPhoto = null
+                photoSession++
+                showForm = true
+            },
+            onDelete = {
+                // Return to the list immediately; the delete runs in the
+                // background and the list observer reflects the result. Leaving
+                // the detail open would show a car that is being removed.
+                val id = detailVehicle.id
+                detailVehicleId = null
+                coordinator?.let { c ->
+                    scope.launch {
+                        try {
+                            c.delete(id)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation // never swallow coroutine cancellation
+                        } catch (failure: Exception) {
+                            // Fire-and-forget: the list observer reflects the result.
+                        }
+                    }
+                }
+            },
+            onSetMain = { isMain ->
+                val id = detailVehicle.id
+                coordinator?.let { c ->
+                    scope.launch {
+                        try {
+                            c.setMain(id, isMain)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation // never swallow coroutine cancellation
+                        } catch (failure: Exception) {
+                            // Fire-and-forget: the list observer reflects the result.
+                        }
+                    }
+                }
+            },
+            // onAddPhoto stays null: the data model stores a single photo today,
+            // so the detail page shows the "add more photos" affordance disabled
+            // with an explanation. Changing the single photo lives on the Edit
+            // form, which already routes through the crop/compress/EXIF-strip
+            // coordinator. See the PR body for the multi-photo backend contract.
+        )
     } else {
         GarageScreen(
             state = garageState,
             onRetry = onRetry,
+            onOpen = { vehicle -> detailVehicleId = vehicle.id },
             onAdd = {
                 editingVehicleId = null
                 coordinator?.reset()

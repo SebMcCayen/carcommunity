@@ -162,7 +162,14 @@
     "terms": "Terms of Service",
     "version": "Version %1$s",
     "aboutSection": "About the app",
-    "whatsNew": "What’s new"
+    "whatsNew": "What’s new",
+    "appearanceSection": "Appearance",
+    "themeAutomatic": "Automatic",
+    "themeAutomaticDescription": "Follows your device’s light or dark setting",
+    "themeLight": "Light",
+    "themeLightDescription": "Always light, whatever the device does",
+    "themeDark": "Dark",
+    "themeDarkDescription": "Always dark, whatever the device does"
   },
   "privacySettings": {
     "title": "Privacy",
@@ -596,8 +603,8 @@
     "date": "Date",
     "timeRange": "Time",
     "shareAction": "Share drive",
-    "shareSummary": "Drove %1$s in %2$s on %3$s — %4$s",
-    "shareSummaryNoDate": "Drove %1$s in %2$s — %3$s",
+    "shareSummary": "I've been using the %1$s app and on my recorded drive I covered %2$s in %3$s.",
+    "shareTopSpeed": "My top speed was %1$s.",
     "shareUnavailable": "No app available to share with",
     "startArea": "Start area",
     "endArea": "End area",
@@ -638,7 +645,19 @@
     "recordPermissionRationale": "Location access is required to record a drive.",
     "recordPermissionDenied": "Location access was denied. Allow location to record a drive.",
     "recordLocationUnavailable": "Location is not available on this device.",
-    "recordBack": "Back"
+    "recordBack": "Back",
+    "statsEntryTitle": "Your driving",
+    "statsEntrySubtitle": "Totals and records",
+    "statsTitle": "Your driving",
+    "statsEmpty": "No drives to summarise yet.",
+    "statsAllTime": "All time",
+    "statsThisMonth": "This month",
+    "statsTotalDrives": "Drives",
+    "statsTotalDistance": "Distance",
+    "statsTotalTime": "Total time",
+    "statsLongest": "Longest drive",
+    "statsAverage": "Average length",
+    "statsFastest": "Fastest average speed"
   },
   "garage": {
     "screenTitle": "My Garage",
@@ -692,7 +711,12 @@
     "photoTooLarge": "The image is too large.",
     "photoCropTitle": "Crop photo",
     "photoCropHint": "Drag to position and pinch to zoom. The area inside the frame is what others will see.",
-    "photoCropConfirm": "Use photo"
+    "photoCropConfirm": "Use photo",
+    "photoNone": "No photos yet",
+    "photoCounter": "%1$d / %2$d",
+    "photoThumbnail": "Show photo %1$d",
+    "photoAddMore": "Add more photos",
+    "photoAddMoreUnavailable": "You can add one photo per car for now. A full photo gallery is on the way."
   },
   "badges": {
     "screenTitle": "Awards",

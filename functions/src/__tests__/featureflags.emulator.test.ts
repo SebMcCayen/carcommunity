@@ -147,8 +147,9 @@ describe('admin-setFeatureFlag', () => {
       .where('targetId', '==', 'socialSharing')
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().reason).toBe('Delning pausad under granskning.');
-    expect(audit.docs[0].data().adminId).toBe(adminUser.uid);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().reason).toBe('Delning pausad under granskning.');
+    expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
 
     // Restore.
     await call('admin-setFeatureFlag', { key: 'socialSharing', enabled: true });

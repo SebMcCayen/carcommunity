@@ -300,6 +300,41 @@ object DriveSummary {
     }
 
     /**
+     * Highest instantaneous speed (m/s) implied by consecutive route points, or
+     * null when it cannot be derived (fewer than two points, or every segment is
+     * filtered out). Applies the SAME implausible-jump filter the backend uses
+     * for distance (functions/src/drives/drive-calculations.ts): a segment
+     * implying more than [MAX_PLAUSIBLE_SPEED_MPS] (~200 km/h) is treated as a
+     * GPS glitch and excluded, so a lone spike can never claim an absurd top
+     * speed in the share text. Non-positive time deltas are skipped exactly like
+     * the distance scan.
+     *
+     * Top speed is deliberately NOT persisted server-side (the drives privacy
+     * rule stores only average speed), so it is derived here purely client-side
+     * for the user-facing share text. Callers that have no loaded route points
+     * (e.g. the History read model, which never fetches them) get null and must
+     * omit the top-speed sentence rather than render 0.
+     */
+    fun topSpeedMetersPerSecond(points: List<RecordedPoint>): Double? {
+        if (points.size < 2) return null
+        var top: Double? = null
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val deltaMs = curr.timestampMs - prev.timestampMs
+            if (deltaMs <= 0) continue
+            val distance =
+                haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+            val impliedSpeed = distance / (deltaMs / 1000.0)
+            // Same >200 km/h GPS-glitch guard the distance total applies; also
+            // drop any non-finite result defensively.
+            if (!impliedSpeed.isFinite() || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
+            if (top == null || impliedSpeed > top) top = impliedSpeed
+        }
+        return top
+    }
+
+    /**
      * Elapsed millis → whole seconds, rounded (not floored) to match the
      * backend's `driveDurationSeconds` (`Math.round(ms / 1000)`). O(1), so the
      * summary dialog can render the duration immediately while the O(n)

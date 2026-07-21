@@ -663,7 +663,8 @@ describe('communityChat-post @mention notifications', () => {
     // Re-locking drops the non-member again (resolveMentions).
     expect(posted.mentionedUids.sort()).toEqual([free.uid, mentioned.uid].sort());
     const stored = await awaitCommunityMessage(posted.messageId);
-    expect(stored.mentionedUids.sort()).toEqual([free.uid, mentioned.uid].sort());
+    // Stored Firestore field is string[]; awaitCommunityMessage returns Record<string, unknown>.
+    expect((stored.mentionedUids as string[]).sort()).toEqual([free.uid, mentioned.uid].sort());
     expect(await inboxFor(free.uid, 'community_chat')).toHaveLength(1);
   });
 
