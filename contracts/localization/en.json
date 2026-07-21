@@ -526,6 +526,8 @@
     "barConfirmCancel": "Cancel",
     "barFocusMe": "Map follows you. Tap to keep the whole convoy in view",
     "barFocusConvoy": "Map keeps the whole convoy in view. Tap to follow you again",
+    "barExpand": "Show convoy controls",
+    "barCollapse": "Hide convoy controls",
     "awarenessMemberOnMap": "%1$s in the convoy",
     "awarenessArrowSingle": "%1$s is off the map, at %2$d o’clock, %3$s away",
     "awarenessArrowGroup": "%1$s and %2$d others are off the map, at %3$d o’clock, %4$s away",

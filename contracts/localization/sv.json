@@ -526,6 +526,8 @@
     "barConfirmCancel": "Avbryt",
     "barFocusMe": "Kartan följer dig. Tryck för att hålla hela konvojen i bild",
     "barFocusConvoy": "Kartan håller hela konvojen i bild. Tryck för att följa dig igen",
+    "barExpand": "Visa konvojkontroller",
+    "barCollapse": "Dölj konvojkontroller",
     "awarenessMemberOnMap": "%1$s i konvojen",
     "awarenessArrowSingle": "%1$s är utanför kartan, klockan %2$d, %3$s bort",
     "awarenessArrowGroup": "%1$s och %2$d till är utanför kartan, klockan %3$d, %4$s bort",

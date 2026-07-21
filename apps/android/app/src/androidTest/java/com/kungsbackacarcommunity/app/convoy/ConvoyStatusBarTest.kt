@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -17,6 +19,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -40,8 +43,8 @@ class ConvoyStatusBarTest {
      * `values-en/`, so a hard-coded English literal would only match on an
      * English-locale device.
      */
-    private fun string(id: Int): String =
-        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun string(id: Int, vararg args: Any): String =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
 
     private fun ownerState(convoyId: String) =
         ConvoyBarState(
@@ -300,5 +303,95 @@ class ConvoyStatusBarTest {
             "an enabled end-convoy icon should still read as destructive",
             undimmedErrorPixels() > 0,
         )
+    }
+
+    // --- compact inline pill (the map's search-row placement) ---------------
+
+    /**
+     * The complaint behind the relocation: sitting in a convoy, "I can't press any
+     * buttons except the location button". The bar's one always-operable control
+     * is the map-focus toggle (the crosshair a user reads as "location"); every
+     * other action is disabled until its backend callable ships. This asserts the
+     * focus toggle is genuinely clickable in the compact pill's new home INSIDE the
+     * search row — its callback fires on a tap — rather than merely rendered.
+     */
+    @Test
+    fun inlinePill_focusToggle_isClickable_andFiresItsCallback() {
+        var picked: ConvoyFocusMode? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBarInline(
+                    memberCount = 3,
+                    focusMode = ConvoyFocusMode.Me,
+                    onFocusModeChange = { picked = it },
+                    expandedContent = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_INLINE_FOCUS_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(
+            "tapping the inline focus toggle must reach its callback",
+            ConvoyFocusMode.Convoy,
+            picked,
+        )
+    }
+
+    /**
+     * The rest of the convoy actions live behind the pill's expand control, in the
+     * full [ConvoyStatusBar] rendered in a popup. This proves that path end-to-end:
+     * the full bar is not composed until expanded, and once it is, its owner End
+     * control is reachable and actually drives the confirm → callback. A popup that
+     * swallowed touches (the failure the relocation guards against) would fail here.
+     */
+    @Test
+    fun inlinePill_expand_opensTheFullBar_whoseEndControlActuallyFires() {
+        var ended: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBarInline(
+                    memberCount = 2,
+                    expandedContent = {
+                        ConvoyStatusBar(state = ownerState("c1"), onEndConvoy = { ended = it })
+                    },
+                )
+            }
+        }
+
+        // Collapsed: the full bar (and its controls) are not in the tree at all.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_TEST_TAG).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXPAND_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXPAND_POPUP_TAG).assertExists()
+
+        // The End control inside the popup receives the tap and runs the confirm.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barEndConfirmAction))
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("the expanded bar's End control must reach its callback", "c1", ended)
+    }
+
+    /**
+     * Icons and numbers only: the pill shows the bare member count, and the group
+     * glyph carries the full "N in the convoy" announcement so TalkBack does not
+     * read a context-free "3".
+     */
+    @Test
+    fun inlinePill_showsBareCount_withTheFullAnnouncementForTalkBack() {
+        composeTestRule.setContent {
+            KccTheme { ConvoyStatusBarInline(memberCount = 4, expandedContent = {}) }
+        }
+
+        composeTestRule.onNodeWithText("4").assertExists()
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barMembers, 4))
+            .assertExists()
     }
 }

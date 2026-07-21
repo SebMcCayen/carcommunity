@@ -222,14 +222,13 @@ fun MapHome(
      * getting an inert toggle.
      */
     nightModeOverrideState: MutableState<MapMode?>? = null,
-    // Optional convoy status bar, composed as the FIRST row of the top chrome
-    // column (above the search row) while — and only while — the caller is in a
-    // convoy. A slot rather than convoy parameters so the shell keeps knowing
-    // nothing about the convoy domain, and so "not in a convoy" is expressed by
-    // the host passing null: nothing is composed at all, rather than an empty bar.
-    // Sharing the existing top Column means the bar can never overlap the search
-    // bar or the profile button — they simply stack — and the right-side floating
-    // controls are bottom-aligned, so they are untouched either way.
+    // Optional convoy status bar, composed INSIDE the search row between the search
+    // control and the profile avatar (see [SearchBarRow]) while — and only while —
+    // the caller is in a convoy. A slot rather than convoy parameters so the shell
+    // keeps knowing nothing about the convoy domain, and so "not in a convoy" is
+    // expressed by the host passing null: nothing is composed at all, rather than
+    // an empty bar. Living in the same interactive Row as the search and profile
+    // controls means its buttons receive touches exactly like theirs do.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
     // arrows), composed directly ON the map and UNDER all the floating chrome,
@@ -445,13 +444,15 @@ fun MapHome(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            convoyBar?.invoke()
             SearchBarRow(
                 avatarUrl = avatarUrl,
                 onSearch = onSearch,
                 onOpenMore = { moreOpen = true },
                 searchExpanded = searchExpanded,
                 onExpandSearch = { searchExpanded = true },
+                // Composed between the search control and the avatar so the convoy
+                // pill sits in the gap the two frame, never overlapping either.
+                convoyBar = convoyBar,
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
@@ -1120,6 +1121,7 @@ private fun SearchBarRow(
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
     onDismissMore: () -> Unit,
+    convoyBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     Row(
@@ -1195,6 +1197,12 @@ private fun SearchBarRow(
             }
             Spacer(modifier = Modifier.weight(1f))
         }
+        // The convoy pill, wedged in the gap the search control and the avatar
+        // frame. The flexible element above (the expanded search bar's weight, or
+        // the collapsed state's Spacer) absorbs the slack, so the wrap-content pill
+        // keeps its size and never clips; the search field yields width first when
+        // the row gets tight.
+        convoyBar?.invoke()
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it
         // hands the button's real measured window bounds to the popup's
         // PopupPositionProvider, so the menu tracks the button wherever the
