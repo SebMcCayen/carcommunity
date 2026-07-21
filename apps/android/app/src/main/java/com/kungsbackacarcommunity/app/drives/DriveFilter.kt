@@ -78,7 +78,11 @@ object DriveFilters {
         weekStartMillis: Long,
         monthStartMillis: Long,
     ): List<SavedDrive> {
-        val query = criteria.query.trim().lowercase()
+        // Normalize the query ONCE (trim only): matching uses `ignoreCase = true`,
+        // whose case fold is locale-independent (unlike `lowercase()` with the
+        // default locale, which mis-folds e.g. Turkish I/i). No per-drive lowercased
+        // copy is allocated — see [matchesQuery].
+        val query = criteria.query.trim()
         val matched =
             drives.filter { drive ->
                 matchesQuery(drive, query) &&
@@ -103,10 +107,13 @@ object DriveFilters {
                 drives.sortedByDescending { sortableAverageSpeed(it) }
         }
 
-    private fun matchesQuery(drive: SavedDrive, loweredQuery: String): Boolean {
-        if (loweredQuery.isEmpty()) return true
-        val title = drive.title?.trim()?.lowercase()
-        return !title.isNullOrEmpty() && title.contains(loweredQuery)
+    private fun matchesQuery(drive: SavedDrive, normalizedQuery: String): Boolean {
+        if (normalizedQuery.isEmpty()) return true
+        // Trim once; do NOT lowercase — `ignoreCase = true` folds case
+        // locale-independently, so no lowercased copy of every title is allocated
+        // on each keystroke.
+        val title = drive.title?.trim()
+        return !title.isNullOrEmpty() && title.contains(normalizedQuery, ignoreCase = true)
     }
 
     private fun matchesDateRange(

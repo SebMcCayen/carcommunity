@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -69,6 +70,29 @@ class DriveFilterTest {
                 drive("c", title = ""),
             )
         assertEquals(emptyList<String>(), filter(drives, DriveFilterCriteria(query = "a")))
+    }
+
+    @Test
+    fun `lowercase query matches uppercase title`() {
+        val drives = listOf(drive("a", title = "MOUNTAIN PASS"))
+        assertEquals(listOf("a"), filter(drives, DriveFilterCriteria(query = "mountain")))
+    }
+
+    @Test
+    fun `case folding is locale-stable under a Turkish default locale`() {
+        // Under the Turkish locale, `lowercase()` maps 'I' to dotless 'ı', which
+        // would NOT match a dotted 'i' query — the exact locale-sensitivity bug the
+        // filter must avoid. `ignoreCase = true` folds locale-independently, so the
+        // capital-I title must still match the 'i' query with the default locale set
+        // to Turkish.
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale("tr", "TR"))
+            val drives = listOf(drive("a", title = "CITY DRIVE"))
+            assertEquals(listOf("a"), filter(drives, DriveFilterCriteria(query = "city")))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     @Test
