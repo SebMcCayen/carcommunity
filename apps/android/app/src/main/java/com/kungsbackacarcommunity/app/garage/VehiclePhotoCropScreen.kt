@@ -108,6 +108,11 @@ fun VehiclePhotoCropScreen(
     var offsetX by remember(bitmap, aspect) { mutableFloatStateOf(0f) }
     var offsetY by remember(bitmap, aspect) { mutableFloatStateOf(0f) }
     var boxSize by remember(bitmap) { mutableStateOf(Size.Zero) }
+    // False until the fully-zoomed-out image has been centred for the current
+    // shape. Reset with the gesture state on a shape change so each ratio starts
+    // framed on the CENTRE of the photo (not the top-left corner); once the user
+    // has pinched/panned we only clamp, never re-centre out from under them.
+    var centered by remember(bitmap, aspect) { mutableStateOf(false) }
 
     val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
     val cropHint = stringResource(R.string.garage_photoCropHint)
@@ -154,12 +159,22 @@ fun VehiclePhotoCropScreen(
                     .semantics { contentDescription = cropHint }
                     .onSizeChanged { size ->
                         boxSize = Size(size.width.toFloat(), size.height.toFloat())
-                        // Re-clamp against the new box so a rotation, shape change
-                        // or window resize cannot strand the image off-centre with
-                        // a gap.
                         val scale = effectiveScale(bitmap, boxSize, zoom)
-                        offsetX = ImageCrop.clampOffset(bitmap.width * scale, boxSize.width, offsetX)
-                        offsetY = ImageCrop.clampOffset(bitmap.height * scale, boxSize.height, offsetY)
+                        val scaledW = bitmap.width * scale
+                        val scaledH = bitmap.height * scale
+                        if (!centered && zoom == ImageCrop.MIN_ZOOM) {
+                            // First measure for this shape at full zoom-out: seed
+                            // the framing on the CENTRE of the photo so the default
+                            // confirmed window isn't a top-left corner-crop.
+                            offsetX = ImageCrop.centeredOffset(scaledW, boxSize.width)
+                            offsetY = ImageCrop.centeredOffset(scaledH, boxSize.height)
+                            centered = true
+                        } else {
+                            // Re-clamp against the new box so a rotation or window
+                            // resize cannot strand the image off-centre with a gap.
+                            offsetX = ImageCrop.clampOffset(scaledW, boxSize.width, offsetX)
+                            offsetY = ImageCrop.clampOffset(scaledH, boxSize.height, offsetY)
+                        }
                     }
                     .pointerInput(bitmap, aspect) {
                         detectTransformGestures { _, pan, gestureZoom, _ ->

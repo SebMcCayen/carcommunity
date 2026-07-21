@@ -181,6 +181,21 @@ object ImageCrop {
     }
 
     /**
+     * The offset that CENTRES a scaled image of [scaledSize] inside a box of
+     * [boxSize] on one axis: `(boxSize - scaledSize) / 2`. Negative when the
+     * image overhangs (so the box sits over the middle of the image) and positive
+     * when it is smaller (a centred gap) — either way the midpoint.
+     *
+     * Used to seed the DEFAULT framing so a fresh crop (or a shape switch) starts
+     * on the centre of the photo, not the top-left corner: [clampOffset] alone
+     * leaves an overhanging image pinned at offset 0 (its top-left), which would
+     * make the default confirmed window a corner-crop. The result is always inside
+     * [clampOffset]'s valid range, so later pans/zooms clamp from a centred start.
+     */
+    fun centeredOffset(scaledSize: Float, boxSize: Float): Float =
+        if (!scaledSize.isFinite() || !boxSize.isFinite()) 0f else (boxSize - scaledSize) / 2f
+
+    /**
      * The portion of the source image currently visible inside the crop box,
      * as a [NormalizedCropRect].
      *

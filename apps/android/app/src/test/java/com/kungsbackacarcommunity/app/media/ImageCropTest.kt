@@ -64,6 +64,19 @@ class ImageCropTest {
     }
 
     @Test
+    fun `centeredOffset puts the box over the middle of the image`() {
+        // Overhang: 640 wide in a 320 box → -160 centres the box on the image.
+        assertEquals(-160f, ImageCrop.centeredOffset(640f, 320f), 0f)
+        // Smaller than the box → a centred gap of +40.
+        assertEquals(40f, ImageCrop.centeredOffset(240f, 320f), 0f)
+        // Exact fit → no offset.
+        assertEquals(0f, ImageCrop.centeredOffset(320f, 320f), 0f)
+        // Non-finite input → 0 (never a NaN offset).
+        assertEquals(0f, ImageCrop.centeredOffset(Float.NaN, 320f), 0f)
+        assertEquals(0f, ImageCrop.centeredOffset(640f, Float.POSITIVE_INFINITY), 0f)
+    }
+
+    @Test
     fun `at minimum zoom the crop spans the full width and trims to 16 by 9`() {
         val rect = rectAt(ImageCrop.MIN_ZOOM)
         assertEquals(0f, rect.left, 1e-5f)

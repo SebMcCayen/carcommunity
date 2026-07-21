@@ -109,9 +109,10 @@ class VehiclePhotoCropScreenTest {
         val rect = requireNotNull(confirmed)
         assertTrue("the emitted window must be usable", rect.isValid())
         // Untouched gestures = the fully zoomed-out window at the DEFAULT shape
-        // (Square 1:1, which pairs with the round garage display). A 400x300 (4:3)
-        // preview keeps its full height and 3/4 of its width — a square region.
-        assertEquals(0f, rect.left, 1e-3f)
+        // (Square 1:1, which pairs with the round garage display), CENTRED on the
+        // photo. A 400x300 (4:3) preview keeps its full height and the middle 3/4
+        // of its width — the centre square, not a corner crop.
+        assertEquals(0.125f, rect.left, 1e-2f)
         assertEquals(0f, rect.top, 1e-3f)
         assertEquals(0.75f, rect.width, 1e-2f)
         assertEquals(1f, rect.height, 1e-3f)
@@ -142,8 +143,10 @@ class VehiclePhotoCropScreenTest {
 
         val rect = requireNotNull(confirmed)
         assertTrue("the emitted window must be usable", rect.isValid())
-        // 400x300 (4:3) framed to 16:9 keeps the full width and trims to 3/4 height.
+        // 400x300 (4:3) framed to 16:9 keeps the full width and trims to the
+        // middle 3/4 of the height (centred, so top is 0.125 not 0).
         assertEquals(0f, rect.left, 1e-3f)
+        assertEquals(0.125f, rect.top, 1e-2f)
         assertEquals(1f, rect.width, 1e-2f)
         assertEquals(0.75f, rect.height, 1e-2f)
         // Region ratio == 16:9, un-stretched.
