@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -410,7 +411,7 @@ private fun MessageBubble(
                                 // is the tap target (a comfortable hit region), and
                                 // the resend reuses the SAME idempotency key so it
                                 // never double-posts.
-                                Modifier.clickable(onClick = onRetry)
+                                Modifier.clickable(role = Role.Button, onClick = onRetry)
                                     .padding(vertical = KccSpacing.s2)
                             } else {
                                 Modifier
