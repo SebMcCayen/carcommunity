@@ -396,3 +396,151 @@ describe('garage-updateVehicle / garage-deleteVehicle', () => {
     expect(imageExists).toBe(false);
   });
 });
+
+describe('garage multi-photo (add / remove / reorder)', () => {
+  let owner: TestUser;
+  let vehicleId: string;
+
+  const path = (id: string) => `vehicleImages/${owner.uid}/${vehicleId}/${id}`;
+
+  beforeAll(async () => {
+    owner = await createProvisionedUser('garage-photos');
+    await adminDb.collection('users').doc(owner.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(owner);
+    vehicleId = ((await call('garage-addVehicle', { ...validAdd, model: 'Gallery' })).data as {
+      vehicleId: string;
+    }).vehicleId;
+  });
+
+  it('appends photos and mirrors the first as the cover (imagePath)', async () => {
+    await signInAs(owner);
+    await call('garage-addVehiclePhoto', { vehicleId, photoPath: path('a.jpg') });
+    let doc = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(doc.photoPaths).toEqual([path('a.jpg')]);
+    // First photo becomes the cover.
+    expect(doc.imagePath).toBe(path('a.jpg'));
+
+    await call('garage-addVehiclePhoto', { vehicleId, photoPath: path('b.jpg') });
+    doc = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(doc.photoPaths).toEqual([path('a.jpg'), path('b.jpg')]);
+    // Cover unchanged by a non-first append.
+    expect(doc.imagePath).toBe(path('a.jpg'));
+  });
+
+  it('rejects a foreign prefix, a duplicate and a foreign vehicle', async () => {
+    await signInAs(owner);
+    expect(
+      await callableErrorCode(
+        call('garage-addVehiclePhoto', {
+          vehicleId,
+          photoPath: `vehicleImages/${member.uid}/${vehicleId}/spoof.jpg`,
+        }),
+      ),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(call('garage-addVehiclePhoto', { vehicleId, photoPath: path('a.jpg') })),
+    ).toBe('functions/already-exists');
+
+    // A foreign caller must supply a path under THEIR OWN prefix so the
+    // own-prefix guard passes; the ownership check is then what rejects them —
+    // a foreign vehicle is not-found (never permission-denied, no existence
+    // probing). A path under the owner's prefix would trip invalid-argument
+    // first, before ownership is ever consulted.
+    await signInAs(otherMember);
+    expect(
+      await callableErrorCode(
+        call('garage-addVehiclePhoto', {
+          vehicleId,
+          photoPath: `vehicleImages/${otherMember.uid}/${vehicleId}/z.jpg`,
+        }),
+      ),
+    ).toBe('functions/not-found');
+  });
+
+  it('reorders photos (permutation only) and updates the cover', async () => {
+    await signInAs(owner);
+    await call('garage-reorderVehiclePhotos', {
+      vehicleId,
+      orderedPaths: [path('b.jpg'), path('a.jpg')],
+    });
+    const doc = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(doc.photoPaths).toEqual([path('b.jpg'), path('a.jpg')]);
+    expect(doc.imagePath).toBe(path('b.jpg'));
+
+    // A non-permutation (extra / missing member) is rejected.
+    expect(
+      await callableErrorCode(
+        call('garage-reorderVehiclePhotos', { vehicleId, orderedPaths: [path('b.jpg')] }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('removes a photo, promotes the next cover and deletes the Storage object', async () => {
+    // Upload a real object so the delete is observable.
+    await adminBucket
+      .file(path('b.jpg'))
+      .save(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), { contentType: 'image/jpeg' });
+
+    await signInAs(owner);
+    // Current order is [b, a] with b as cover; removing b promotes a.
+    await call('garage-removeVehiclePhoto', { vehicleId, photoPath: path('b.jpg') });
+    const doc = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(doc.photoPaths).toEqual([path('a.jpg')]);
+    expect(doc.imagePath).toBe(path('a.jpg'));
+    const [stillThere] = await adminBucket.file(path('b.jpg')).exists();
+    expect(stillThere).toBe(false);
+
+    // Removing a path not on the vehicle is not-found.
+    expect(
+      await callableErrorCode(call('garage-removeVehiclePhoto', { vehicleId, photoPath: path('z.jpg') })),
+    ).toBe('functions/not-found');
+  });
+
+  it('enforces the 10-photo cap', async () => {
+    const capOwner = await createProvisionedUser('garage-photo-cap');
+    await adminDb.collection('users').doc(capOwner.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(capOwner);
+    const capVehicleId = ((await call('garage-addVehicle', { ...validAdd, model: 'Cap' })).data as {
+      vehicleId: string;
+    }).vehicleId;
+    for (let i = 0; i < 10; i += 1) {
+      await call('garage-addVehiclePhoto', {
+        vehicleId: capVehicleId,
+        photoPath: `vehicleImages/${capOwner.uid}/${capVehicleId}/p${i}.jpg`,
+      });
+    }
+    expect(
+      await callableErrorCode(
+        call('garage-addVehiclePhoto', {
+          vehicleId: capVehicleId,
+          photoPath: `vehicleImages/${capOwner.uid}/${capVehicleId}/over.jpg`,
+        }),
+      ),
+    ).toBe('functions/failed-precondition');
+  });
+
+  it('reconciles photoPaths when the cover is changed via updateVehicle imagePath', async () => {
+    const editOwner = await createProvisionedUser('garage-photo-edit');
+    await adminDb.collection('users').doc(editOwner.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(editOwner);
+    const editId = ((await call('garage-addVehicle', { ...validAdd, model: 'Edit' })).data as {
+      vehicleId: string;
+    }).vehicleId;
+    const ep = (id: string) => `vehicleImages/${editOwner.uid}/${editId}/${id}`;
+
+    await call('garage-addVehiclePhoto', { vehicleId: editId, photoPath: ep('a.jpg') });
+    await call('garage-addVehiclePhoto', { vehicleId: editId, photoPath: ep('b.jpg') });
+
+    // Changing the single imagePath replaces the cover but keeps the rest.
+    await call('garage-updateVehicle', { vehicleId: editId, imagePath: ep('new.jpg') });
+    let doc = (await adminDb.collection('vehicles').doc(editId).get()).data()!;
+    expect(doc.imagePath).toBe(ep('new.jpg'));
+    expect(doc.photoPaths).toEqual([ep('new.jpg'), ep('b.jpg')]);
+
+    // Clearing imagePath empties the gallery.
+    await call('garage-updateVehicle', { vehicleId: editId, imagePath: null });
+    doc = (await adminDb.collection('vehicles').doc(editId).get()).data()!;
+    expect(doc.imagePath).toBeNull();
+    expect(doc.photoPaths).toEqual([]);
+  });
+});

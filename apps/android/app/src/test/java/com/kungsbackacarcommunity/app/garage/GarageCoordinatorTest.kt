@@ -20,6 +20,9 @@ class GarageCoordinatorTest {
         val deleted = mutableListOf<String>()
         val mainSet = mutableListOf<Pair<String, Boolean>>()
         val imagePaths = mutableListOf<Pair<String, String>>()
+        val addedPhotos = mutableListOf<Pair<String, String>>()
+        val removedPhotos = mutableListOf<Pair<String, String>>()
+        val reordered = mutableListOf<Pair<String, List<String>>>()
         var failWith: Exception? = null
 
         /** The id the fake garage-addVehicle mints for the next add. */
@@ -41,6 +44,21 @@ class GarageCoordinatorTest {
         override suspend fun updateVehicleImagePath(vehicleId: String, imagePath: String) {
             failWith?.let { throw it }
             imagePaths += vehicleId to imagePath
+        }
+
+        override suspend fun addVehiclePhoto(vehicleId: String, photoPath: String) {
+            failWith?.let { throw it }
+            addedPhotos += vehicleId to photoPath
+        }
+
+        override suspend fun removeVehiclePhoto(vehicleId: String, photoPath: String) {
+            failWith?.let { throw it }
+            removedPhotos += vehicleId to photoPath
+        }
+
+        override suspend fun reorderVehiclePhotos(vehicleId: String, orderedPaths: List<String>) {
+            failWith?.let { throw it }
+            reordered += vehicleId to orderedPaths
         }
 
         override suspend fun setMainVehicle(vehicleId: String, isMain: Boolean) {
@@ -164,5 +182,20 @@ class GarageCoordinatorTest {
         coordinator.setMain("v3", isMain = true)
         coordinator.setMain("v3", isMain = false)
         assertEquals(listOf("v3" to true, "v3" to false), repo.mainSet)
+    }
+
+    @Test
+    fun `addPhoto, removePhoto and reorderPhotos call through`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = GarageCoordinator(repo)
+        coordinator.addPhoto("v1", "vehicleImages/u/v1/a.jpg")
+        coordinator.removePhoto("v1", "vehicleImages/u/v1/a.jpg")
+        coordinator.reorderPhotos("v1", listOf("vehicleImages/u/v1/b.jpg", "vehicleImages/u/v1/a.jpg"))
+        assertEquals(listOf("v1" to "vehicleImages/u/v1/a.jpg"), repo.addedPhotos)
+        assertEquals(listOf("v1" to "vehicleImages/u/v1/a.jpg"), repo.removedPhotos)
+        assertEquals(
+            listOf("v1" to listOf("vehicleImages/u/v1/b.jpg", "vehicleImages/u/v1/a.jpg")),
+            repo.reordered,
+        )
     }
 }

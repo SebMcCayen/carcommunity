@@ -64,6 +64,29 @@ class GarageCoordinator(
     }
 
     /**
+     * Records an already-uploaded gallery photo (garage-addVehiclePhoto).
+     * Fire-and-forget like [delete]/[setMain] — the list observer reflects the
+     * new photoPaths once the callable resolves.
+     */
+    suspend fun addPhoto(vehicleId: String, photoPath: String) {
+        repository.addVehiclePhoto(vehicleId, photoPath)
+    }
+
+    /** Removes a gallery photo (garage-removeVehiclePhoto). Fire-and-forget. */
+    suspend fun removePhoto(vehicleId: String, photoPath: String) {
+        repository.removeVehiclePhoto(vehicleId, photoPath)
+    }
+
+    /**
+     * Sets [orderedPaths] as the full photo order / cover
+     * (garage-reorderVehiclePhotos). [orderedPaths] must be a permutation of the
+     * vehicle's current photos; the callable rejects anything else.
+     */
+    suspend fun reorderPhotos(vehicleId: String, orderedPaths: List<String>) {
+        repository.reorderVehiclePhotos(vehicleId, orderedPaths)
+    }
+
+    /**
      * Sets or clears [vehicleId] as the user's main car. Fire-and-forget like
      * [delete] — the list observer reflects the flip (and the max-1 clear of any
      * previous main car) once the callable resolves.

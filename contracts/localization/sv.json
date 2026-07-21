@@ -718,7 +718,12 @@
     "photoCounter": "%1$d / %2$d",
     "photoThumbnail": "Visa bild %1$d",
     "photoAddMore": "Lägg till fler bilder",
-    "photoAddMoreUnavailable": "Du kan lägga till en bild per bil för tillfället. Ett komplett bildgalleri är på väg."
+    "photoAddMoreUnavailable": "Du har nått bildgränsen för den här bilen.",
+    "photoSetCover": "Ange som omslagsbild",
+    "photoCoverBadge": "Omslag",
+    "photoRemove": "Ta bort bild",
+    "photoRemoveConfirm": "Vill du ta bort den här bilden från din bil?",
+    "photoRemoveConfirmButton": "Ta bort"
   },
   "badges": {
     "screenTitle": "Utmärkelser",

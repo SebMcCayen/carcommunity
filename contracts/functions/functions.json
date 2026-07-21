@@ -280,6 +280,33 @@
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
     },
     {
+      "name": "garage.addVehiclePhoto",
+      "domain": "garage",
+      "description": "Appends one already-uploaded photo path to an owned vehicle's photoPaths gallery (max 10; own vehicleImages/{uid}/{vehicleId}/ prefix validated like updateVehicle's imagePath). imagePath mirrors the cover (photoPaths[0]); a first photo becomes the cover. failed-precondition at the cap, already-exists for a duplicate, not-found for a foreign/missing vehicle. Deployed via grouped export as garage-addVehiclePhoto (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
+      "name": "garage.removeVehiclePhoto",
+      "domain": "garage",
+      "description": "Removes one photo path from an owned vehicle's photoPaths and deletes its Storage object; removing the cover promotes the next remaining photo. imagePath is kept in sync with photoPaths[0]. not-found when the path is not on the vehicle. Deployed via grouped export as garage-removeVehiclePhoto (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
+      "name": "garage.reorderVehiclePhotos",
+      "domain": "garage",
+      "description": "Sets the full display order of an owned vehicle's photos; orderedPaths must be a permutation of the current set and orderedPaths[0] becomes the cover (mirrored into imagePath). invalid-argument when not a permutation. Deployed via grouped export as garage-reorderVehiclePhotos (functions/src/garage/manageVehicle.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
+    },
+    {
       "name": "badges.awardHelpfulMember",
       "domain": "badges",
       "description": "Manually awards the helpful_member badge (the only manually awardable key). Requires a non-empty reason; writes an adminAuditEvents record on first award only; idempotent repeats never duplicate audit entries; suspended/deleted targets rejected. Deployed via grouped export as badges-awardHelpfulMember (functions/src/badges/awardHelpfulMember.ts).",

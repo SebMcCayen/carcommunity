@@ -669,7 +669,12 @@
     <string name="garage_photoCounter">%1$d / %2$d</string>
     <string name="garage_photoThumbnail">Visa bild %1$d</string>
     <string name="garage_photoAddMore">Lägg till fler bilder</string>
-    <string name="garage_photoAddMoreUnavailable">Du kan lägga till en bild per bil för tillfället. Ett komplett bildgalleri är på väg.</string>
+    <string name="garage_photoAddMoreUnavailable">Du har nått bildgränsen för den här bilen.</string>
+    <string name="garage_photoSetCover">Ange som omslagsbild</string>
+    <string name="garage_photoCoverBadge">Omslag</string>
+    <string name="garage_photoRemove">Ta bort bild</string>
+    <string name="garage_photoRemoveConfirm">Vill du ta bort den här bilden från din bil?</string>
+    <string name="garage_photoRemoveConfirmButton">Ta bort</string>
     <string name="badges_screenTitle">Utmärkelser</string>
     <string name="badges_loading">Laddar utmärkelser...</string>
     <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>

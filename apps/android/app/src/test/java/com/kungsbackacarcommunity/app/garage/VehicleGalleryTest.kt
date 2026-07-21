@@ -8,7 +8,7 @@ import org.junit.Test
 /** Pure-logic tests for the car-detail photo gallery ([VehicleGallery]). */
 class VehicleGalleryTest {
 
-    private fun vehicle(imagePath: String?) =
+    private fun vehicle(imagePath: String?, photoPaths: List<String> = emptyList()) =
         Vehicle(
             id = "v1",
             make = "Volvo",
@@ -17,10 +17,24 @@ class VehicleGalleryTest {
             powertrain = VehiclePowertrain.PETROL,
             engineDescription = "B230",
             imagePath = imagePath,
+            photoPaths = photoPaths,
         )
 
     @Test
-    fun `photoPaths yields the single image when present`() {
+    fun `photoPaths uses the real array when present, cover first`() {
+        val paths =
+            VehicleGallery.photoPaths(
+                vehicle(
+                    imagePath = "vehicleImages/u/v1/a.jpg",
+                    photoPaths = listOf("vehicleImages/u/v1/a.jpg", "vehicleImages/u/v1/b.jpg"),
+                ),
+            )
+        assertEquals(listOf("vehicleImages/u/v1/a.jpg", "vehicleImages/u/v1/b.jpg"), paths)
+    }
+
+    @Test
+    fun `photoPaths falls back to imagePath for a legacy single-photo car`() {
+        // No photoPaths array (legacy doc) → the single imagePath still shows.
         val paths = VehicleGallery.photoPaths(vehicle("vehicleImages/u/v1/a.jpg"))
         assertEquals(listOf("vehicleImages/u/v1/a.jpg"), paths)
     }
@@ -33,6 +47,32 @@ class VehicleGalleryTest {
     @Test
     fun `photoPaths drops a blank path`() {
         assertEquals(emptyList<String>(), VehicleGallery.photoPaths(vehicle("   ")))
+        assertEquals(
+            listOf("vehicleImages/u/v1/a.jpg"),
+            VehicleGallery.photoPaths(
+                vehicle(imagePath = null, photoPaths = listOf("  ", "vehicleImages/u/v1/a.jpg")),
+            ),
+        )
+    }
+
+    @Test
+    fun `isCover is true only for the first photo`() {
+        val paths = listOf("a", "b", "c")
+        assertTrue(VehicleGallery.isCover(paths, "a"))
+        assertFalse(VehicleGallery.isCover(paths, "b"))
+        assertFalse(VehicleGallery.isCover(emptyList(), "a"))
+    }
+
+    @Test
+    fun `moveToCover puts the chosen photo first and keeps the rest in order`() {
+        assertEquals(
+            listOf("c", "a", "b"),
+            VehicleGallery.moveToCover(listOf("a", "b", "c"), "c"),
+        )
+        // Already the cover → unchanged (still a valid permutation).
+        assertEquals(listOf("a", "b"), VehicleGallery.moveToCover(listOf("a", "b"), "a"))
+        // A path not in the gallery leaves the order untouched.
+        assertEquals(listOf("a", "b"), VehicleGallery.moveToCover(listOf("a", "b"), "z"))
     }
 
     @Test

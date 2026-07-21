@@ -64,11 +64,22 @@ data class Vehicle(
      */
     val modifications: String? = null,
     /**
-     * Cloud Storage path of the vehicle photo
-     * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. The path
-     * is stored; a URL is resolved lazily for rendering.
+     * Cloud Storage path of the COVER photo
+     * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. Kept as a
+     * denormalised mirror of the cover (`photoPaths[0]`) for the profile card
+     * and legacy clients. The path is stored; a URL is resolved lazily for
+     * rendering.
      */
     val imagePath: String? = null,
+    /**
+     * Ordered photo gallery paths (vehicles/{id}.photoPaths), cover first. The
+     * source of truth for the detail-page gallery. Empty for a vehicle with no
+     * photos, and for legacy documents that predate the field — the read path
+     * ([FirebaseGarageRepository]) falls back to `listOfNotNull(imagePath)` so
+     * those still show their single photo. Managed by the garage-addVehiclePhoto
+     * / removeVehiclePhoto / reorderVehiclePhotos callables.
+     */
+    val photoPaths: List<String> = emptyList(),
     /**
      * True for the user's single "main car" (at most one per user, enforced by
      * the garage-setMainVehicle callable). The main car's photo replaces the
@@ -112,6 +123,9 @@ enum class VehicleFieldError {
 
 object VehicleValidation {
     const val MIN_MODEL_YEAR = 1886
+
+    /** Backend cap (garage-core MAX_VEHICLE_PHOTOS): photos per vehicle. */
+    const val MAX_VEHICLE_PHOTOS = 10
 
     fun maxModelYear(currentYear: Int): Int = currentYear + 2
 

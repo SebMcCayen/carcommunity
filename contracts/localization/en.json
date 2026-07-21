@@ -718,7 +718,12 @@
     "photoCounter": "%1$d / %2$d",
     "photoThumbnail": "Show photo %1$d",
     "photoAddMore": "Add more photos",
-    "photoAddMoreUnavailable": "You can add one photo per car for now. A full photo gallery is on the way."
+    "photoAddMoreUnavailable": "You’ve reached the photo limit for this car.",
+    "photoSetCover": "Set as cover photo",
+    "photoCoverBadge": "Cover",
+    "photoRemove": "Remove photo",
+    "photoRemoveConfirm": "Remove this photo from your car?",
+    "photoRemoveConfirmButton": "Remove"
   },
   "badges": {
     "screenTitle": "Awards",

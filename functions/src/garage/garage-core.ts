@@ -22,6 +22,14 @@ import { z } from 'zod';
 
 /** Legacy limits (packages/shared/src/garage.ts). */
 export const MAX_VEHICLES_PER_USER = 5;
+/**
+ * Cap on photos per vehicle. Ten is generous for a car profile (exterior +
+ * interior + engine + detail shots) while bounding worst-case storage at
+ * 10 × 10 MB = 100 MB per vehicle and keeping the detail-page pager/thumbnail
+ * strip a manageable size. Matches the cap #506 proposed.
+ */
+export const MAX_VEHICLE_PHOTOS = 10;
+export const VEHICLE_IMAGE_PATH_MAX_LENGTH = 500;
 export const VEHICLE_MAKE_MODEL_MAX_LENGTH = 80;
 export const ENGINE_DESCRIPTION_MAX_LENGTH = 120;
 export const VEHICLE_DESCRIPTION_MAX_LENGTH = 500;
@@ -139,6 +147,19 @@ export type DeleteVehicleInput = { vehicleId: string };
  */
 export type SetMainVehicleInput = { vehicleId: string; isMain: boolean };
 
+/** Appends one uploaded photo path to a vehicle's gallery (garage.addVehiclePhoto). */
+export type AddVehiclePhotoInput = { vehicleId: string; photoPath: string };
+
+/** Removes one photo path from a vehicle's gallery (garage.removeVehiclePhoto). */
+export type RemoveVehiclePhotoInput = { vehicleId: string; photoPath: string };
+
+/**
+ * Sets the full display order of a vehicle's photos (garage.reorderVehiclePhotos).
+ * orderedPaths must be a permutation of the vehicle's current photo set; its
+ * first entry becomes the cover.
+ */
+export type ReorderVehiclePhotosInput = { vehicleId: string; orderedPaths: string[] };
+
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
@@ -210,6 +231,44 @@ export function parseSetMainVehicleInput(data: unknown): ParseResult<SetMainVehi
   );
 }
 
+// A single photo path on the wire: non-empty, bounded, but NOT yet validated
+// against the caller's own vehicleImages prefix — that check needs the uid and
+// vehicleId and lives in isValidVehicleImagePath at the callable.
+const photoPathSchema = z.string().min(1).max(VEHICLE_IMAGE_PATH_MAX_LENGTH);
+
+export function parseAddVehiclePhotoInput(data: unknown): ParseResult<AddVehiclePhotoInput> {
+  return parse(
+    z.object({ vehicleId: vehicleIdSchema, photoPath: photoPathSchema }).strict(),
+    data,
+    'Expected { vehicleId, photoPath } (contracts/schemas/garage.schema.json addVehiclePhotoRequest).',
+  );
+}
+
+export function parseRemoveVehiclePhotoInput(data: unknown): ParseResult<RemoveVehiclePhotoInput> {
+  return parse(
+    z.object({ vehicleId: vehicleIdSchema, photoPath: photoPathSchema }).strict(),
+    data,
+    'Expected { vehicleId, photoPath } (contracts/schemas/garage.schema.json removeVehiclePhotoRequest).',
+  );
+}
+
+export function parseReorderVehiclePhotosInput(
+  data: unknown,
+): ParseResult<ReorderVehiclePhotosInput> {
+  return parse(
+    z
+      .object({
+        vehicleId: vehicleIdSchema,
+        // At most the cap; the permutation check at the callable rejects any
+        // set that doesn't match the stored photos exactly (including length).
+        orderedPaths: z.array(photoPathSchema).min(1).max(MAX_VEHICLE_PHOTOS),
+      })
+      .strict(),
+    data,
+    'Expected { vehicleId, orderedPaths } (contracts/schemas/garage.schema.json reorderVehiclePhotosRequest).',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Canonical Cloud Storage paths (backend-domain-mapping.md Storage table)
 // ---------------------------------------------------------------------------
@@ -234,7 +293,105 @@ export function isValidVehicleImagePath(
     return false;
   }
   const imageId = imagePath.slice(prefix.length);
-  return imageId.length > 0 && !imageId.includes('/');
+  return imageId.trim().length > 0 && !imageId.includes('/');
+}
+
+// ---------------------------------------------------------------------------
+// Multi-photo gallery — pure list logic (garage.addVehiclePhoto /
+// removeVehiclePhoto / reorderVehiclePhotos + updateVehicle cover reconcile)
+// ---------------------------------------------------------------------------
+//
+// Cover-photo model: `photoPaths` is the ordered source of truth; the cover is
+// always photoPaths[0], and `vehicles/{id}.imagePath` is kept as a denormalised
+// mirror of that cover for backward compatibility (shipped clients and the
+// profile card still read imagePath). Every photo-mutating callable maintains
+// both fields together so `imagePath === photoPaths[0]` (or both null/empty).
+
+/**
+ * The vehicle's current photo set, migrating legacy single-photo documents on
+ * read: a doc that predates `photoPaths` (only `imagePath` set) is treated as a
+ * one-element gallery `[imagePath]`; a doc with a valid `photoPaths` array uses
+ * it verbatim (blanks/non-strings dropped defensively).
+ */
+export function readExistingPhotoPaths(data: {
+  photoPaths?: unknown;
+  imagePath?: unknown;
+}): string[] {
+  const raw = data.photoPaths;
+  if (Array.isArray(raw)) {
+    return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+  }
+  const imagePath = data.imagePath;
+  return typeof imagePath === 'string' && imagePath.trim().length > 0 ? [imagePath] : [];
+}
+
+/** The cover path for a gallery: its first entry, or null when empty. */
+export function coverPhotoPath(paths: string[]): string | null {
+  return paths[0] ?? null;
+}
+
+/** Why an append was rejected. */
+export type AppendPhotoError = 'duplicate' | 'cap';
+
+/**
+ * Appends [photoPath] to [existing], enforcing the cap and rejecting a
+ * duplicate (image ids are fresh UUIDs, so a duplicate means a double-record).
+ */
+export function appendPhotoPath(
+  existing: string[],
+  photoPath: string,
+): { ok: true; paths: string[] } | { ok: false; error: AppendPhotoError } {
+  if (existing.includes(photoPath)) {
+    return { ok: false, error: 'duplicate' };
+  }
+  if (existing.length >= MAX_VEHICLE_PHOTOS) {
+    return { ok: false, error: 'cap' };
+  }
+  return { ok: true, paths: [...existing, photoPath] };
+}
+
+/**
+ * Removes [photoPath] from [existing], preserving the order of the rest. The
+ * cover promotes automatically: when the removed path was photoPaths[0], the
+ * next remaining photo becomes the new first (cover). `found` is false when the
+ * path was not part of the gallery.
+ */
+export function removePhotoPath(
+  existing: string[],
+  photoPath: string,
+): { found: boolean; paths: string[] } {
+  const paths = existing.filter((p) => p !== photoPath);
+  return { found: paths.length !== existing.length, paths };
+}
+
+/** True when [candidate] is a reordering of [existing] (same multiset). */
+export function isPhotoPermutation(existing: string[], candidate: string[]): boolean {
+  if (existing.length !== candidate.length) return false;
+  const remaining = [...existing];
+  for (const path of candidate) {
+    const index = remaining.indexOf(path);
+    if (index === -1) return false;
+    remaining.splice(index, 1);
+  }
+  return remaining.length === 0;
+}
+
+/**
+ * Reconciles [existing] to reflect [newCover] set through updateVehicle's
+ * single `imagePath` field (the edit-form "change photo" flow and shipped
+ * clients), keeping the photoPaths array coherent with the cover mirror:
+ *  - null cover clears the whole gallery;
+ *  - a cover already in the gallery is promoted to the front (reorder);
+ *  - a brand-new cover replaces the current cover (photoPaths[0]) while
+ *    preserving any additional photos — matching "changed the one photo" for
+ *    single-photo clients, and never growing past the existing length.
+ */
+export function reconcileCoverPhotoPaths(existing: string[], newCover: string | null): string[] {
+  if (newCover === null) return [];
+  if (existing.includes(newCover)) {
+    return [newCover, ...existing.filter((p) => p !== newCover)];
+  }
+  return [newCover, ...existing.slice(1)];
 }
 
 // ---------------------------------------------------------------------------
@@ -257,6 +414,9 @@ export function buildVehicleDocument(
     description: input.description ?? null,
     color: input.color ?? null,
     imagePath: null,
+    // Ordered photo gallery (source of truth); imagePath mirrors photoPaths[0]
+    // as the cover. New vehicles start with no photos.
+    photoPaths: [],
     // Main-car flag (max 1 per user, enforced by garage.setMainVehicle). New
     // vehicles are never the main car until the owner marks them.
     isMainCar: false,

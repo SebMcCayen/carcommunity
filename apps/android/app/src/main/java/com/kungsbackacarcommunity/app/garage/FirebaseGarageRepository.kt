@@ -57,6 +57,18 @@ class FirebaseGarageRepository private constructor(
         call(UPDATE_VEHICLE, mapOf("vehicleId" to vehicleId, "imagePath" to imagePath))
     }
 
+    override suspend fun addVehiclePhoto(vehicleId: String, photoPath: String) {
+        call(ADD_VEHICLE_PHOTO, mapOf("vehicleId" to vehicleId, "photoPath" to photoPath))
+    }
+
+    override suspend fun removeVehiclePhoto(vehicleId: String, photoPath: String) {
+        call(REMOVE_VEHICLE_PHOTO, mapOf("vehicleId" to vehicleId, "photoPath" to photoPath))
+    }
+
+    override suspend fun reorderVehiclePhotos(vehicleId: String, orderedPaths: List<String>) {
+        call(REORDER_VEHICLE_PHOTOS, mapOf("vehicleId" to vehicleId, "orderedPaths" to orderedPaths))
+    }
+
     override suspend fun setMainVehicle(vehicleId: String, isMain: Boolean) {
         call(SET_MAIN_VEHICLE, mapOf("vehicleId" to vehicleId, "isMain" to isMain))
     }
@@ -86,6 +98,9 @@ class FirebaseGarageRepository private constructor(
         private const val UPDATE_VEHICLE = "garage-updateVehicle"
         private const val SET_MAIN_VEHICLE = "garage-setMainVehicle"
         private const val DELETE_VEHICLE = "garage-deleteVehicle"
+        private const val ADD_VEHICLE_PHOTO = "garage-addVehiclePhoto"
+        private const val REMOVE_VEHICLE_PHOTO = "garage-removeVehiclePhoto"
+        private const val REORDER_VEHICLE_PHOTOS = "garage-reorderVehiclePhotos"
 
         fun createIfAvailable(context: Context): GarageRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -126,6 +141,9 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         engineDescription = getString("engineDescription"),
         modifications = getString("description"),
         imagePath = getString("imagePath"),
+        // Ordered gallery; keep only string entries. Empty for legacy docs that
+        // predate the field — VehicleGallery falls back to imagePath for those.
+        photoPaths = (get("photoPaths") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
         isMainCar = getBoolean("isMainCar") ?: false,
     )
 }

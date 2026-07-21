@@ -60,15 +60,17 @@ import kotlinx.coroutines.launch
  * inset, gutters and title treatment); system Back returns to the list, handled
  * centrally in [GarageRoute].
  *
- * PHOTO COUNT: the gallery is built to page over N photos, but the data model
- * stores a single [Vehicle.imagePath] today, so [VehicleGallery.photoPaths]
- * yields at most one. The "add more photos" control is therefore rendered
- * DISABLED with an explanation (the #433 pattern) — the existing single-photo
- * pick stays on the Edit form and still runs through the crop/compress/EXIF
- * coordinator. See the PR body for the multi-photo backend contract.
+ * PHOTO GALLERY: the gallery pages over [VehicleGallery.photoPaths] (cover
+ * first). Adding a photo goes through the same pick -> crop -> compress ->
+ * EXIF/GPS-strip pipeline as the Edit form ([onAddPhoto]); each photo can be
+ * made the cover ([onSetCover]) or removed ([onRemovePhoto], confirmed). The
+ * cover is mirrored into [Vehicle.imagePath] server-side.
  *
- * @param onAddPhoto picker hook for additional photos; null (today) disables
- *   the affordance and shows the "one photo per car for now" hint.
+ * @param onAddPhoto picker hook for another photo; null hides the affordance
+ *   (config-less builds with no uploader). Disabled at the photo cap.
+ * @param onSetCover promotes the given photo path to cover; null hides the action.
+ * @param onRemovePhoto removes the given photo path (after confirm); null hides it.
+ * @param isUploadingPhoto true while an add-photo upload is in flight.
  */
 @Composable
 fun VehicleDetailScreen(
@@ -78,12 +80,19 @@ fun VehicleDetailScreen(
     onSetMain: (isMain: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onAddPhoto: (() -> Unit)? = null,
+    onSetCover: ((path: String) -> Unit)? = null,
+    onRemovePhoto: ((path: String) -> Unit)? = null,
+    isUploadingPhoto: Boolean = false,
 ) {
     val photoPaths = remember(vehicle) { VehicleGallery.photoPaths(vehicle) }
     var pendingDelete by remember { mutableStateOf(false) }
 
     AeroPage(title = stringResource(R.string.garage_detailTitle), modifier = modifier) {
-        VehicleGalleryPager(photoPaths)
+        VehicleGalleryPager(
+            photoPaths = photoPaths,
+            onSetCover = onSetCover,
+            onRemovePhoto = onRemovePhoto,
+        )
 
         Text(
             text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
@@ -109,7 +118,11 @@ fun VehicleDetailScreen(
             InfoRow(label = stringResource(R.string.garage_modifications), value = mods)
         }
 
-        AddMorePhotosAffordance(onAddPhoto = onAddPhoto)
+        AddMorePhotosAffordance(
+            onAddPhoto = onAddPhoto,
+            atCap = photoPaths.size >= VehicleValidation.MAX_VEHICLE_PHOTOS,
+            isUploading = isUploadingPhoto,
+        )
 
         // Manage actions, mirroring the list card so the detail page can stand on
         // its own. Main-car toggle first (its state is the most consequential),
@@ -165,22 +178,30 @@ internal const val VEHICLE_GALLERY_STRIP_TAG = "vehicleGalleryStrip"
 internal fun vehicleGalleryThumbnailTag(index: Int): String =
     "vehicleGalleryThumbnail_$index"
 
+/** Test tags for the per-photo gallery actions. */
+internal const val VEHICLE_GALLERY_SET_COVER_TAG = "vehicleGallerySetCover"
+internal const val VEHICLE_GALLERY_REMOVE_TAG = "vehicleGalleryRemove"
+
 /**
  * The swipeable photo gallery: a full-width 16:9 pager over [photoPaths], with a
  * "current / total" counter and a tappable thumbnail strip whenever there is
  * more than one photo. Falls back to a single empty placeholder tile when the
  * car has no photo yet, so the page layout is stable either way.
  *
- * Built for N photos even though the model yields at most one today (see
- * [VehicleGallery]): the pager, counter and thumbnails all read straight off the
- * list, so multi-photo support becomes a data change with no rework here.
+ * Reads straight off [photoPaths] (cover first), so the pager, counter and
+ * thumbnails all follow the data with no per-count rework.
  *
- * `internal` (not `private`) so the multi-photo strip can be exercised directly
- * in a UI test: today [VehicleGallery.photoPaths] yields at most one path, so
- * the strip is unreachable through the public [VehicleDetailScreen] entry point.
+ * When [onSetCover] / [onRemovePhoto] are supplied, an action row for the
+ * CURRENT photo (make cover / remove, with a confirm dialog) is shown below the
+ * pager. `internal` (not `private`) so the multi-photo strip + actions can be
+ * exercised directly in a UI test.
  */
 @Composable
-internal fun VehicleGalleryPager(photoPaths: List<String>) {
+internal fun VehicleGalleryPager(
+    photoPaths: List<String>,
+    onSetCover: ((path: String) -> Unit)? = null,
+    onRemovePhoto: ((path: String) -> Unit)? = null,
+) {
     if (photoPaths.isEmpty()) {
         GalleryPlaceholder()
         return
@@ -188,6 +209,7 @@ internal fun VehicleGalleryPager(photoPaths: List<String>) {
 
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(pageCount = { photoPaths.size })
+    var pendingPhotoRemoval by remember { mutableStateOf<String?>(null) }
 
     HorizontalPager(
         state = pagerState,
@@ -199,8 +221,13 @@ internal fun VehicleGalleryPager(photoPaths: List<String>) {
         GalleryPhoto(path = photoPaths[page], modifier = Modifier.fillMaxSize())
     }
 
+    // Safe index for the visible photo — used by the counter AND the per-photo
+    // actions below, so it must be computed for a single-photo gallery too.
+    val current = VehicleGallery.clampIndex(pagerState.currentPage, photoPaths.size)
+    val currentPath = photoPaths[current]
+    val currentIsCover = VehicleGallery.isCover(photoPaths, currentPath)
+
     if (VehicleGallery.hasMultiple(photoPaths.size)) {
-        val current = VehicleGallery.clampIndex(pagerState.currentPage, photoPaths.size)
         Text(
             text = stringResource(R.string.garage_photoCounter, current + 1, photoPaths.size),
             style = MaterialTheme.typography.labelMedium,
@@ -253,6 +280,63 @@ internal fun VehicleGalleryPager(photoPaths: List<String>) {
             }
         }
     }
+
+    // Per-photo actions for the visible photo. Shown only when the caller wired
+    // the callbacks (the detail page does; the strip UI test does not).
+    if (onSetCover != null || onRemovePhoto != null) {
+        if (currentIsCover) {
+            Text(
+                text = stringResource(R.string.garage_photoCoverBadge),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            if (onSetCover != null) {
+                // Making the already-cover photo the cover is a no-op, so disable it.
+                OutlinedButton(
+                    onClick = { onSetCover(currentPath) },
+                    enabled = !currentIsCover,
+                    modifier = Modifier.weight(1f).testTag(VEHICLE_GALLERY_SET_COVER_TAG),
+                ) {
+                    Text(text = stringResource(R.string.garage_photoSetCover))
+                }
+            }
+            if (onRemovePhoto != null) {
+                OutlinedButton(
+                    onClick = { pendingPhotoRemoval = currentPath },
+                    modifier = Modifier.weight(1f).testTag(VEHICLE_GALLERY_REMOVE_TAG),
+                ) {
+                    Text(text = stringResource(R.string.garage_photoRemove))
+                }
+            }
+        }
+    }
+
+    val removalTarget = pendingPhotoRemoval
+    if (removalTarget != null && onRemovePhoto != null) {
+        AlertDialog(
+            onDismissRequest = { pendingPhotoRemoval = null },
+            title = { Text(text = stringResource(R.string.garage_photoRemove)) },
+            text = { Text(text = stringResource(R.string.garage_photoRemoveConfirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingPhotoRemoval = null
+                    onRemovePhoto(removalTarget)
+                }) {
+                    Text(text = stringResource(R.string.garage_photoRemoveConfirmButton))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPhotoRemoval = null }) {
+                    Text(text = stringResource(R.string.garage_cancelButton))
+                }
+            },
+        )
+    }
 }
 
 /** One resolved gallery image (full page or thumbnail), cropped to fill. */
@@ -299,27 +383,40 @@ private fun GalleryPlaceholder() {
 }
 
 /**
- * "Add more photos" control. Enabled only once a picker hook is wired
- * ([onAddPhoto] non-null); until the backend can store more than one photo it
- * renders DISABLED with an explanatory hint (the #433 pattern) rather than being
- * hidden, so the capability is discoverable and its absence is explained.
+ * "Add more photos" control. Hidden entirely when no picker hook is wired
+ * ([onAddPhoto] null — e.g. a config-less build with no uploader). Enabled while
+ * below the photo cap; at the cap it renders DISABLED with an explanation, and
+ * while an upload is in flight it shows a progress label instead.
  */
 @Composable
-private fun AddMorePhotosAffordance(onAddPhoto: (() -> Unit)?) {
+private fun AddMorePhotosAffordance(
+    onAddPhoto: (() -> Unit)?,
+    atCap: Boolean,
+    isUploading: Boolean,
+) {
+    if (onAddPhoto == null) return
     OutlinedButton(
-        onClick = onAddPhoto ?: {},
-        enabled = onAddPhoto != null,
+        onClick = onAddPhoto,
+        enabled = !atCap && !isUploading,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(text = stringResource(R.string.garage_photoAddMore))
     }
-    if (onAddPhoto == null) {
-        Text(
-            text = stringResource(R.string.garage_photoAddMoreUnavailable),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Start,
-        )
+    when {
+        isUploading ->
+            Text(
+                text = stringResource(R.string.garage_photoUploading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+            )
+        atCap ->
+            Text(
+                text = stringResource(R.string.garage_photoAddMoreUnavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+            )
     }
 }
 

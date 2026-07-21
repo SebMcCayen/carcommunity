@@ -28,7 +28,13 @@
         "imagePath": {
           "type": ["string", "null"],
           "maxLength": 500,
-          "description": "Cloud Storage path under vehicleImages/{uid}/{vehicleId}/; null until an image is uploaded."
+          "description": "COVER photo: a denormalised mirror of photoPaths[0], kept for backward compatibility (shipped clients + the profile card read this). Cloud Storage path under vehicleImages/{uid}/{vehicleId}/; null when the vehicle has no photos. Maintained together with photoPaths by every garage.* photo callable."
+        },
+        "photoPaths": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "description": "Ordered photo gallery — the SOURCE OF TRUTH for the vehicle's photos; the cover is photoPaths[0] (mirrored into imagePath). Each entry is a Cloud Storage path that MUST lie under vehicleImages/{uid}/{vehicleId}/ (one segment below the prefix; validated server-side against the authenticated uid, so it is not expressible as a JSON-schema pattern). At most 10 photos. OPTIONAL and NOT in `required`: vehicles created before this field omit it and are read as [imagePath] (or [] when imagePath is null). Written only by garage.addVehiclePhoto/removeVehiclePhoto/reorderVehiclePhotos and the imagePath reconcile in garage.updateVehicle."
         },
         "isMainCar": {
           "type": "boolean",
@@ -70,7 +76,7 @@
     },
     "updateVehicleRequest": {
       "type": "object",
-      "description": "Input for garage.updateVehicle. imagePath must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (or null to clear).",
+      "description": "Input for garage.updateVehicle. imagePath sets the COVER photo and must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (or null to clear all photos); the callable reconciles photoPaths so imagePath === photoPaths[0]. Multi-photo add/remove/reorder go through the dedicated garage.addVehiclePhoto/removeVehiclePhoto/reorderVehiclePhotos callables.",
       "properties": {
         "vehicleId": {
           "type": "string",
@@ -117,6 +123,56 @@
         }
       },
       "required": ["vehicleId"],
+      "additionalProperties": false
+    },
+    "addVehiclePhotoRequest": {
+      "type": "object",
+      "description": "Input for garage.addVehiclePhoto. Records one already-uploaded photo on an owned vehicle: photoPath must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (one segment below it). Appended to photoPaths; becomes the cover (imagePath) when it is the first photo. Rejected when the vehicle already holds 10 photos (failed-precondition) or the path is already present (already-exists).",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "photoPath": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["vehicleId", "photoPath"],
+      "additionalProperties": false
+    },
+    "removeVehiclePhotoRequest": {
+      "type": "object",
+      "description": "Input for garage.removeVehiclePhoto. Removes photoPath from an owned vehicle's photoPaths and deletes its Storage object; removing the cover promotes the next remaining photo. not-found when the path is not part of the vehicle's gallery.",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "photoPath": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["vehicleId", "photoPath"],
+      "additionalProperties": false
+    },
+    "reorderVehiclePhotosRequest": {
+      "type": "object",
+      "description": "Input for garage.reorderVehiclePhotos. orderedPaths sets the full display order of an owned vehicle's photos and must be a permutation of its current photo set (same members and count); orderedPaths[0] becomes the cover (imagePath). Each path must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix. invalid-argument when it is not a permutation.",
+      "properties": {
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
+        },
+        "orderedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      },
+      "required": ["vehicleId", "orderedPaths"],
       "additionalProperties": false
     }
   }
