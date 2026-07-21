@@ -69,19 +69,39 @@ class RouteUploadRunner(
     private val backoffMillis: (attempt: Int) -> Long = ::defaultBackoffMillis,
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
 ) {
+    init {
+        // A programming constant, not user input: 0/negative would make the retry
+        // loop run zero times and return Failed(attempts = <= 0) without ever
+        // calling the uploader — a silent misconfiguration. Fail loud at
+        // construction instead. (Production uses DEFAULT_MAX_ATTEMPTS.)
+        require(maxAttempts >= 1) { "maxAttempts must be >= 1, was $maxAttempts" }
+    }
+
     /**
      * Encodes [points] and uploads the gzipped `route.bin` to [routePath],
      * retrying transient failures up to [maxAttempts] with backoff. Returns
      * [RouteUploadOutcome.Skipped] with no points (nothing to write),
      * [RouteUploadOutcome.Uploaded] on success, or [RouteUploadOutcome.Failed]
-     * once the attempts are exhausted. Cooperative cancellation is preserved
-     * (a [CancellationException] is rethrown, never counted as a failed attempt).
+     * once the attempts are exhausted (or if encoding fails, `attempts = 0`).
+     * Cooperative cancellation is preserved (a [CancellationException] is
+     * rethrown, never counted as a failed attempt).
      */
     suspend fun upload(routePath: String, points: List<RecordedPoint>): RouteUploadOutcome {
         if (points.isEmpty()) return RouteUploadOutcome.Skipped
         // Encode the SAME fixes the backend priced its stats from, so replay and
-        // top-speed match the stored summary.
-        val bytes = RouteCodec.encode(points.map { it.toRoutePoint() }, gzip = true)
+        // top-speed match the stored summary. Encoding is in-memory gzip and has
+        // no throw path for valid points, but this runs fire-and-forget on a
+        // background scope, so any unexpected failure is turned into a Failed
+        // outcome (attempts = 0, nothing was uploaded) rather than escaping the
+        // launch as an uncaught exception.
+        val bytes =
+            try {
+                RouteCodec.encode(points.map { it.toRoutePoint() }, gzip = true)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                return RouteUploadOutcome.Failed(attempts = 0, cause = error)
+            }
 
         var lastError: Throwable? = null
         var attempt = 0

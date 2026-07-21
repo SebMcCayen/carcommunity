@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -141,6 +142,18 @@ class RouteUploadTest {
         assertTrue("CancellationException must propagate", rethrown)
         // No retry loop swallowed it into a second attempt.
         assertEquals(1, uploader.calls)
+    }
+
+    @Test
+    fun `a non-positive maxAttempts is rejected at construction`() {
+        // 0/negative would make the retry loop run zero times and return
+        // Failed(attempts <= 0) without ever calling the uploader — fail loud.
+        assertThrows(IllegalArgumentException::class.java) {
+            RouteUploadRunner(RecordingUploader(), maxAttempts = 0)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            RouteUploadRunner(RecordingUploader(), maxAttempts = -1)
+        }
     }
 
     @Test
