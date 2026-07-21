@@ -1432,8 +1432,25 @@ fun AuthenticatedApp(
                 // for a convoy the user is in whether they STARTED it or JOINED it.
                 // load() never drops the status back to Loading, so this refreshes in
                 // place — the current bar does not flicker while the new list lands.
+                //
+                // Only reloads on an actual RETURN to the map — a transition from a
+                // covered state back to None — never on first composition. On entry
+                // `mapCover` is already None, and `LaunchedEffect(convoyBarCoordinator)`
+                // above has just run load() once; firing again here on that initial
+                // None would be a redundant second load (extra Firestore reads /
+                // listener churn) for no membership change. `mapWasCovered` gates it so
+                // the reload happens only after the map has actually been covered and
+                // uncovered at least once.
+                var mapWasCovered by remember { mutableStateOf(false) }
                 LaunchedEffect(mapCover) {
-                    if (mapCover == MapCover.None) convoyBarCoordinator?.load()
+                    if (mapCover == MapCover.None) {
+                        if (mapWasCovered) {
+                            mapWasCovered = false
+                            convoyBarCoordinator?.load()
+                        }
+                    } else {
+                        mapWasCovered = true
+                    }
                 }
                 // Live-watch the active convoy for as long as this screen exists.
                 // The coroutine suspends inside observeActiveConvoy, so its whole

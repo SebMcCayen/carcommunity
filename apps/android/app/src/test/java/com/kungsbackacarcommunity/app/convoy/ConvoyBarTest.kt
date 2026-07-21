@@ -126,10 +126,10 @@ class ConvoyBarTest {
 
     @Test
     fun `the bar shows for a convoy the user JOINED as an accepted member`() {
-        // Seb: "whether you have joined one or started one yourself you should
-        // always see the convoy bar". This is the JOINED half — an accepted,
-        // non-owner membership must surface the bar just like the owner's does, so
-        // the visibility rule is member-OR-leader, not leader-only.
+        // The bar must be visible whether the user joined a convoy or started one
+        // themselves. This is the JOINED half — an accepted, non-owner membership
+        // must surface the bar just like the owner's does, so the visibility rule
+        // is member-OR-leader, not leader-only.
         val joined =
             convoy(viewer = ConvoyViewer(ConvoyRole.Member, ConvoyInviteStatus.Accepted))
         val state = ConvoyBar.stateFor(loaded(joined))

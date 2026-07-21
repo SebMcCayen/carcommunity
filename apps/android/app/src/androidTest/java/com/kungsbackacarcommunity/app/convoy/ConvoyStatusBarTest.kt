@@ -203,14 +203,18 @@ class ConvoyStatusBarTest {
 
     /**
      * A flag flipped ahead of its handler leaves the controls disabled — so the
-     * accessibility labels and the explanation line must keep saying the actions
-     * are unavailable, because they still are. A disabled button that announces
-     * itself as "Invite more" / "Leave convoy" tells a screen-reader user, who
-     * has no visual disabled cue to fall back on, that something is available
-     * when it does nothing.
+     * accessibility labels must keep saying the actions are unavailable, because
+     * they still are. A disabled button that announces itself as "Invite more" /
+     * "Leave convoy" tells a screen-reader user, who has no visual disabled cue to
+     * fall back on, that something is available when it does nothing.
+     *
+     * The unavailability is carried ONLY by the controls' "…unavailable"
+     * contentDescriptions: there is no visible "not available yet" body-text
+     * notice line (it was removed as map clutter), so this also asserts the notice
+     * string is NOT rendered.
      */
     @Test
-    fun aWiredFlagWithoutItsHandler_stillAnnouncesAndExplainsAsUnavailable() {
+    fun aWiredFlagWithoutItsHandler_stillAnnouncesAsUnavailableWithNoVisibleNotice() {
         val wired = ConvoyBarActionAvailability.Wired
         // Both flags flipped, neither handler supplied — the mid-refactor state.
         val state =
@@ -225,9 +229,11 @@ class ConvoyStatusBarTest {
         composeTestRule
             .onNodeWithContentDescription(string(R.string.convoy_barLeaveUnavailable))
             .assertExists()
+        // The visible explanation line is gone — accessibility rides on the
+        // contentDescriptions above, not a separate paragraph.
         composeTestRule
             .onNodeWithText(string(R.string.convoy_barNoticeInviteAndLeave))
-            .assertIsDisplayed()
+            .assertDoesNotExist()
     }
 
     /**
