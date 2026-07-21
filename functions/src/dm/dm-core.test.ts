@@ -48,6 +48,10 @@ describe('dm-core parsing', () => {
     expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'x'.repeat(65) }).ok).toBe(
       false,
     );
+    // Validated VERBATIM: surrounding whitespace is rejected, never trimmed into
+    // a different id (which would break optimistic de-dupe against the doc id).
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: ' abc' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'abc ' }).ok).toBe(false);
   });
 
   it('parses getMessages with an optional ISO cursor', () => {

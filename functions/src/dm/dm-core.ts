@@ -109,11 +109,14 @@ const uidSchema = z.string().trim().min(1).max(128);
  * retry exactly-once (the callable detects the existing doc and skips the
  * unread bump). Optional for backward compatibility: an older client that omits
  * it gets an auto-id doc and the previous, non-idempotent behaviour.
+ *
+ * Validated VERBATIM (no `.trim()`): the key is used as-is for the doc id and
+ * echoed back as messageId, so it must equal the client's original key for
+ * optimistic de-dupe to match. The alphabet already forbids whitespace, so a
+ * key with surrounding spaces is rejected (invalid-argument) rather than
+ * silently normalized into a different id.
  */
-const clientMessageIdSchema = z
-  .string()
-  .trim()
-  .regex(/^[A-Za-z0-9_-]{1,64}$/);
+const clientMessageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
 const sendMessageSchema = z
   .object({
