@@ -22,6 +22,7 @@ import { suspendUser } from './admin/suspendUser';
 import { warnUser } from './admin/warnUser';
 import { cancel, complete, publish } from './events/eventLifecycle';
 import { autoClose } from './events/scheduled';
+import { remindUpcoming } from './events/eventReminders';
 import { create, update } from './events/manageEvent';
 import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
@@ -185,7 +186,8 @@ export const admin = {
  * `create` is member-or-admin and `complete` is creator-or-admin. Member
  * RSVPs are direct Security-Rules-gated writes to events/{eventId}/rsvps/{uid}
  * — no callable. events-autoClose completes finished events unattended
- * (events/scheduled.ts).
+ * (events/scheduled.ts), and events-remindUpcoming nudges going-RSVP attendees
+ * a couple of hours before an event starts (events/eventReminders.ts).
  */
 export const events = {
   create,
@@ -196,6 +198,9 @@ export const events = {
   onRsvpWrite,
   // Scheduled lifecycle: hourly sweep completing events past their end.
   autoClose,
+  // Scheduled RSVP reminder: every 15 min, one `event_reminder` in-app
+  // notification (push follows) to each going attendee ~2h before start.
+  remindUpcoming,
   // Chat (Phase 9c): member post/report callables + admin soft-removal.
   postChatMessage,
   reportChatMessage,
