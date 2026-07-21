@@ -70,6 +70,12 @@ data class DmMessage(
     val createdAtIso: String?,
     val clientId: String? = null,
     val deliveryState: DmDeliveryState = DmDeliveryState.Sent,
+    /**
+     * Why an optimistic send failed, set only on a [DmDeliveryState.Failed]
+     * bubble. Drives the specific failure reason shown under the bubble and
+     * whether a retry is offered ([DmSendError.isRetryable]). Null otherwise.
+     */
+    val sendError: DmSendError? = null,
 )
 
 /** Denormalized last-message preview shown on an inbox row. */
@@ -130,6 +136,16 @@ enum class DmSendError {
     CannotDeliver,
     Generic,
 }
+
+/**
+ * Whether re-sending the SAME message could plausibly succeed. Only [Generic]
+ * (a transient/network/unknown failure) is retryable; the rest are terminal for
+ * this message — signed out (needs re-auth), not an active member, invalid
+ * input, or cannot-deliver (not friends / blocked) — so the UI shows the reason
+ * WITHOUT a pointless "tap to retry" that would just fail the same way.
+ */
+val DmSendError.isRetryable: Boolean
+    get() = this == DmSendError.Generic
 
 /** Outcome of `dm-sendMessage`. */
 sealed interface DmSendResult {

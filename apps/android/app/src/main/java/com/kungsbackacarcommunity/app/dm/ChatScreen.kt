@@ -390,17 +390,45 @@ private fun MessageBubble(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                DmDeliveryState.Failed ->
+                DmDeliveryState.Failed -> {
+                    val retryable = message.sendError?.isRetryable ?: true
                     Text(
-                        text = stringResource(R.string.dm_statusFailedRetry),
+                        // Retryable (transient) failures invite a resend; terminal
+                        // ones (signed out / not a member / cannot deliver) show the
+                        // specific reason instead of a "retry" that would just fail.
+                        text =
+                            if (retryable) {
+                                stringResource(R.string.dm_statusFailedRetry)
+                            } else {
+                                stringResource(message.sendError!!.messageRes())
+                            },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
-                        // Tapping the failed line resends with the SAME idempotency
-                        // key, so a retry never double-posts.
-                        modifier = Modifier.clickable(onClick = onRetry),
+                        modifier =
+                            if (retryable) {
+                                // clickable BEFORE padding so the whole padded area
+                                // is the tap target (a comfortable hit region), and
+                                // the resend reuses the SAME idempotency key so it
+                                // never double-posts.
+                                Modifier.clickable(onClick = onRetry)
+                                    .padding(vertical = KccSpacing.s2)
+                            } else {
+                                Modifier
+                            },
                     )
+                }
                 DmDeliveryState.Sent -> Unit
             }
         }
     }
 }
+
+/** The specific `dm.*` reason string for a terminal (non-retryable) send failure. */
+private fun DmSendError.messageRes(): Int =
+    when (this) {
+        DmSendError.SignedOut -> R.string.dm_sendErrorSignedOut
+        DmSendError.NotMember -> R.string.dm_sendErrorNotMember
+        DmSendError.Invalid -> R.string.dm_sendErrorInvalid
+        DmSendError.CannotDeliver -> R.string.dm_sendErrorCannotDeliver
+        DmSendError.Generic -> R.string.dm_sendErrorGeneric
+    }

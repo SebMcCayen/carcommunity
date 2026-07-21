@@ -29,6 +29,17 @@ class DmTest {
     }
 
     @Test
+    fun `only a Generic send error is retryable`() {
+        // Transient/unknown → offer a resend.
+        assertTrue(DmSendError.Generic.isRetryable)
+        // Terminal → no pointless retry (would just fail the same way).
+        assertFalse(DmSendError.SignedOut.isRetryable)
+        assertFalse(DmSendError.NotMember.isRetryable)
+        assertFalse(DmSendError.Invalid.isRetryable)
+        assertFalse(DmSendError.CannotDeliver.isRetryable)
+    }
+
+    @Test
     fun `otherMember picks the member that is not the caller`() {
         assertEquals("b", DmMapper.otherMember(listOf("a", "b"), "a"))
         assertEquals("a", DmMapper.otherMember(listOf("a", "b"), "b"))

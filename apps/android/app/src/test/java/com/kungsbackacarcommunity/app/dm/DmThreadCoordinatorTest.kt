@@ -108,13 +108,19 @@ class DmThreadCoordinatorTest {
     }
 
     @Test
-    fun `a failed send marks the bubble Failed and does not bump sentCount`() = runTest {
-        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.CannotDeliver) }
-        val c = coordinator(repo)
-        c.send("hi")
-        assertEquals(DmDeliveryState.Failed, c.pendingMessages.value.single().deliveryState)
-        assertEquals(0, c.sentCount.value)
-    }
+    fun `a failed send marks the bubble Failed with the specific error and does not bump sentCount`() =
+        runTest {
+            val repo =
+                FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.CannotDeliver) }
+            val c = coordinator(repo)
+            c.send("hi")
+            val bubble = c.pendingMessages.value.single()
+            assertEquals(DmDeliveryState.Failed, bubble.deliveryState)
+            // The specific error is retained so the UI can explain why + decide
+            // whether a retry is worthwhile (CannotDeliver is terminal).
+            assertEquals(DmSendError.CannotDeliver, bubble.sendError)
+            assertEquals(0, c.sentCount.value)
+        }
 
     @Test
     fun `onLiveMessages reconciles the delivered doc away so it renders once`() = runTest {

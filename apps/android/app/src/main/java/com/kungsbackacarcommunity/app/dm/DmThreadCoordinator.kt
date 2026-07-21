@@ -113,36 +113,66 @@ class DmThreadCoordinator(
             pending.value.firstOrNull {
                 it.clientId == clientId && it.deliveryState == DmDeliveryState.Failed
             } ?: return
-        setState(clientId, DmDeliveryState.Sending)
+        // Back to Sending and clear the prior error while the resend is in flight.
+        pending.update { list ->
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = DmDeliveryState.Sending, sendError = null)
+                } else {
+                    it
+                }
+            }
+        }
         dispatch(clientId, target.text)
     }
 
     private suspend fun dispatch(clientId: String, text: String) {
         try {
-            when (repository.sendMessage(otherUid, text, clientId)) {
+            when (val result = repository.sendMessage(otherUid, text, clientId)) {
                 is DmSendResult.Sent -> {
                     // Flip to Sent so the "sending" affordance clears on the ack;
                     // the bubble is removed for good once the listener delivers the
                     // real doc ([onLiveMessages]), matched by clientId.
-                    setState(clientId, DmDeliveryState.Sent)
+                    markSent(clientId)
                     // Atomic: concurrent optimistic sends each resolve on their own
                     // coroutine, so a plain read-modify-write could drop increments.
                     sent.update { it + 1 }
                 }
-                is DmSendResult.Failed -> setState(clientId, DmDeliveryState.Failed)
+                // Keep the SPECIFIC error so the UI can explain why and offer a
+                // retry only when it could actually help ([DmSendError.isRetryable]).
+                is DmSendResult.Failed -> markFailed(clientId, result.error)
             }
         } catch (cancellation: CancellationException) {
             // Leaving the thread cancels the send; the bubble is dropped with the
             // coordinator. Don't mark it failed (it may well have been delivered).
             throw cancellation
         } catch (_: Exception) {
-            setState(clientId, DmDeliveryState.Failed)
+            // An unexpected throw is transient/unknown — a retryable Generic.
+            markFailed(clientId, DmSendError.Generic)
         }
     }
 
-    private fun setState(clientId: String, state: DmDeliveryState) {
+    private fun markSent(clientId: String) {
         pending.update { list ->
-            list.map { if (it.clientId == clientId) it.copy(deliveryState = state) else it }
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = DmDeliveryState.Sent, sendError = null)
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    private fun markFailed(clientId: String, error: DmSendError) {
+        pending.update { list ->
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = DmDeliveryState.Failed, sendError = error)
+                } else {
+                    it
+                }
+            }
         }
     }
 
