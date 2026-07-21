@@ -240,24 +240,26 @@ fun SavedDriveDetailScreen(
     var showConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // A real Mapbox token is required to render the GL map; the config-less / CI
+    // build has none and falls back to the placeholder card.
+    val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+
     // Load the driven route once per opened drive; cached in memory by the
     // repository so re-opening the same drive redraws without a refetch. Loading
     // starts pending and resolves to Ready (points) or Unavailable — the reader
-    // never throws.
+    // never throws. Gated on [hasMapboxToken] too: with no token the decoded
+    // route can never be drawn, so skip the Storage read + decode entirely.
     var routeState by remember(drive.rideId) {
         mutableStateOf<RouteReplayState>(RouteReplayState.Loading)
     }
-    LaunchedEffect(drive.rideId, routeRepository, uid) {
+    LaunchedEffect(drive.rideId, routeRepository, uid, hasMapboxToken) {
         routeState =
-            if (routeRepository != null && uid != null) {
+            if (routeRepository != null && uid != null && hasMapboxToken) {
                 routeRepository.loadRoute(uid, drive.rideId)
             } else {
                 RouteReplayState.Unavailable
             }
     }
-    // A real Mapbox token is required to render the GL map; the config-less / CI
-    // build has none and falls back to the placeholder card.
-    val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
 
     val dateText = formatDriveDate(drive.startedAtMillis ?: drive.createdAtMillis)
     val timeRangeText = formatDriveTimeRange(drive.startedAtMillis, drive.endedAtMillis)
@@ -275,8 +277,8 @@ fun SavedDriveDetailScreen(
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     if (dateText != null) {
                         StatRow(stringResource(R.string.savedDrives_date), dateText)
@@ -306,8 +308,8 @@ fun SavedDriveDetailScreen(
             // one-line explanation instead of a broken/empty map.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     Text(
                         text = stringResource(R.string.savedDrives_routeOverview),

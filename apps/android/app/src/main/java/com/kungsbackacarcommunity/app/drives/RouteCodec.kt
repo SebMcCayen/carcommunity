@@ -197,6 +197,10 @@ object RouteCodec {
             // forge a small in-range delta, so reject it outright (fail closed).
             if (dLat < 0L || dLat > MAX_COORD_DELTA_ZIGZAG) return null
             if (dLng < 0L || dLng > MAX_COORD_DELTA_ZIGZAG) return null
+            // Timestamp deltas are non-negative by contract; a varint read back as
+            // a negative Long (bit 63 set ⇒ ≥ 2^63) is corruption, and a delta that
+            // would overflow the running Long clock is too — reject both.
+            if (dTms < 0L || dTms > Long.MAX_VALUE - tms) return null
             latE5 += unZigZag(dLat)
             lngE5 += unZigZag(dLng)
             tms += dTms

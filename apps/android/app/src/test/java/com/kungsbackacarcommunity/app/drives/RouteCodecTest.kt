@@ -183,6 +183,20 @@ class RouteCodecTest {
     }
 
     @Test
+    fun `a negative timestamp delta decodes to null`() {
+        // Timestamp deltas are non-negative by the wire contract. A 10-byte varint
+        // with bit 63 set reads back as a negative Long; before the fix `tms +=
+        // dTms` accepted it and produced a bogus (backwards/overflowed) clock.
+        val out = ByteArrayOutputStream()
+        out.write(byteArrayOf(0x43, 0x43, 0x52, 0x42, 0x01, 0x00))
+        writeUVarint(out, 1L)
+        writeUVarint(out, 0x02L) // dLat = zig-zag(+1), in range
+        writeUVarint(out, 0x00L) // dLng
+        writeUVarint(out, -1L) // dTms: encodes 0xFFFF…FF, read back as a negative Long
+        assertNull(RouteCodec.decode(out.toByteArray()))
+    }
+
+    @Test
     fun `a decoded coordinate outside earthly range decodes to null`() {
         // A perfectly in-domain 32-bit delta whose accumulated coordinate lands
         // past the pole (latE5 = 9_000_001 ⇒ 90.00001°). The delta itself is legal,
