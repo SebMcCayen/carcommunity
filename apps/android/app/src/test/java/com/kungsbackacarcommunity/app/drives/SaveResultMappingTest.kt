@@ -41,6 +41,21 @@ class SaveResultMappingTest {
     }
 
     @Test
+    fun `blank routePath is normalized to null and skips the upload`() {
+        val result =
+            mapSaveResult(
+                mapOf(
+                    "rideId" to "ride-1",
+                    "routePath" to "   ",
+                ),
+            )
+
+        assertEquals("ride-1", result.rideId)
+        // Blank path is not a usable upload target: skip (null), never a doomed upload.
+        assertNull(result.routePath)
+    }
+
+    @Test
     fun `absent rideId fails fast rather than fake-succeeding`() {
         val error =
             assertThrows(DriveSaveException::class.java) {

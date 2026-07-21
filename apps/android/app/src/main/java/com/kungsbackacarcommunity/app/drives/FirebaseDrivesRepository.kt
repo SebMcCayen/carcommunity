@@ -130,6 +130,12 @@ private fun Throwable.callableStatusCode(): String? =
  *
  * `routePath` is left nullable on purpose — a null path is a documented,
  * tolerated case ([DriveSaveResult]) that just skips the upload, not a failure.
+ * A blank/whitespace-only `routePath` is normalized to null for the same reason:
+ * it is not a usable upload target, so it must be treated as "no route to upload"
+ * (the tolerated skip) rather than propagated as a non-null path that would send
+ * the uploader on a doomed upload and burn its retries/backoff. Note the
+ * intentional asymmetry with `rideId`: a blank rideId fails fast (throw), a blank
+ * routePath skips (null).
  */
 internal fun mapSaveResult(data: Map<*, *>?): DriveSaveResult {
     val rideId =
@@ -140,7 +146,7 @@ internal fun mapSaveResult(data: Map<*, *>?): DriveSaveResult {
             )
     return DriveSaveResult(
         rideId = rideId,
-        routePath = data["routePath"] as? String,
+        routePath = (data["routePath"] as? String)?.takeIf { it.isNotBlank() },
         alreadySaved = data["alreadySaved"] as? Boolean ?: false,
     )
 }
