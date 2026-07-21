@@ -39,8 +39,8 @@
     {
       "name": "live.startSession",
       "domain": "live",
-      "description": "Starts (or RESTARTS with a fresh id/expiry) the caller's live location session with a chosen duration (1h|2h|4h). Member-only; gated by the liveLocation flag. Session state lives at RTDB liveLocation/{uid}/session - backend-only writes; owner-only read. Deployed via grouped export as live-startSession (functions/src/live/session.ts).",
-      "access": "member",
+      "description": "Starts (or RESTARTS with a fresh id/expiry) the caller's live location session with a chosen duration (1h|2h|4h), and clears any stale nearby-discovery doc. Sharing your OWN location is FREE: enforced by requireActiveActor (any authenticated, non-suspended, non-deleted caller) — NOT requireMemberActor, so this stays free even when member gating is re-locked; only VIEWING others is the paid surface. Gated by the liveLocation feature flag. Session state lives at RTDB liveLocation/{uid}/session - backend-only writes; owner-only read. Deployed via grouped export as live-startSession (functions/src/live/session.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
@@ -48,8 +48,8 @@
     {
       "name": "live.updatePosition",
       "domain": "live",
-      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry) AND refreshes the queryable nearby-discovery doc liveSessions/{uid} (geoCell + last position + expiresAt TTL) that live.listNearby reads. Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by any non-suspended signed-in viewer who is not blocked by/blocking the sharer — the RTDB read rule encodes only suspended + blocking, NOT an activeMember gate (member gating is disabled repo-wide, shared/memberGating.ts; a paid-viewing gate is added to that rule when re-locked). Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
-      "access": "member",
+      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry) AND refreshes the queryable nearby-discovery doc liveSessions/{uid} (geoCell + last position + expiresAt TTL) that live.listNearby reads (the Firestore write is throttled to at most once per 60s, or immediately on a geoCell change, while the RTDB marker updates every sample). Sharing your own position is FREE: enforced by requireActiveActor (authenticated, non-suspended), NOT requireMemberActor. Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by any non-suspended signed-in viewer who is not blocked by/blocking the sharer — the RTDB read rule encodes only suspended + blocking, NOT an activeMember gate (member gating is disabled repo-wide, shared/memberGating.ts; a paid-viewing gate is added to that rule when re-locked). Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as updateLivePosition)"

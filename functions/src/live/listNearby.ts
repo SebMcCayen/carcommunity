@@ -148,9 +148,9 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
     }
   }
 
-  // Each cell-group query is individually capped at MAX_RESULTS, so a wide
-  // radius spanning several 30-cell chunks could yield more than MAX_RESULTS
-  // candidates in total. Sort by freshness and cap to MAX_RESULTS HERE, BEFORE
+  // Each cell-group query is capped at perChunkLimit (MAX_RESULTS divided across
+  // the chunks), so the combined candidate count is already ~MAX_RESULTS; this
+  // sort + slice makes that an exact ceiling and, crucially, applies it BEFORE
   // resolving the block matrix, so the (read-bearing) block work is bounded to
   // the size of the response the caller can actually receive rather than to the
   // raw in-cell count. The final response is at most this many anyway (the
