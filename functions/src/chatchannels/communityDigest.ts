@@ -129,7 +129,13 @@ export interface CommunityDigestSummary {
   alreadyDigested: number;
   /** Members with new-but-below-threshold activity (accumulating silently). */
   belowThreshold: number;
-  /** True when MAX_CANDIDATES_PER_RUN bound the scan (remainder next run). */
+  /**
+   * True when MAX_CANDIDATES_PER_RUN bound the scan this run. This is a SAFETY
+   * VALVE, not a progress guarantee: there is no persisted scan cursor, so a run
+   * always restarts from the oldest-behind candidates. It is not expected to bind
+   * (the audience is hundreds-scale, far below the cap) — see MAX_CANDIDATES_PER_RUN
+   * for why a cursor is deliberately not added, and what to add if it ever does.
+   */
   capped: boolean;
   /**
    * Highest number of members processed concurrently in any one chunk. The ONLY
@@ -408,7 +414,11 @@ export async function runCommunityChatDigest(
   }
 
   if (summary.capped) {
-    logger.warn('Community digest candidate cap reached; deferring remainder to next run', {
+    // No persisted cursor: the next run restarts from the oldest-behind candidates,
+    // so a cap that consistently binds would starve later candidates. Not expected to
+    // occur at this scale (see MAX_CANDIDATES_PER_RUN); if it ever does, the fix is a
+    // persisted cursor like account-cleanupInactive's.
+    logger.warn('Community digest candidate cap reached; later candidates not examined this run (no cursor persisted)', {
       maxCandidates: limits.maxCandidates,
     });
   }
