@@ -228,11 +228,10 @@ export async function startConvoyAutoSession(
     return 'flag-off';
   }
   const now = new Date();
+  // Cheap fast-path: skip the denormalization reads when a session is already
+  // active. NOT the authoritative check — that is the transaction below.
   const existing = (await sessionRef(uid).get()).val() as LiveSession | null;
   if (isSessionActive(existing, now)) {
-    // Already sharing — manual or a prior convoy-auto session. Do NOT replace
-    // it (that would reset a manual session's id/expiry) and do NOT tag it, so
-    // teardown never stops a session the convoy did not start.
     return 'skipped-existing';
   }
 
@@ -248,9 +247,23 @@ export async function startConvoyAutoSession(
     convoyAutoStarted: true,
     convoyId,
   };
-  // Mirror the manual startSession write: replace the (stopped/expired) session
-  // node and clear any leftover marker from a previous session.
-  await sessionRef(uid).set(session);
+  // ATOMIC check-and-set (not a plain read-then-set): the write only lands when
+  // there is STILL no active session at commit time, so a live.startSession that
+  // raced in between — a MANUAL share the user just began — is never clobbered
+  // by the convoy auto-start. Aborting (returning undefined) leaves that session
+  // untouched and untagged, preserving the "don't clobber / don't stop a manual
+  // session" guarantee even under the race. The denorm reads above are pure input
+  // to `session`; discarding them on an abort is a cheap, rare cost.
+  const { committed } = await sessionRef(uid).transaction((current) => {
+    if (isSessionActive(current as LiveSession | null, now)) {
+      return; // abort — keep the existing active (manual or prior) session
+    }
+    return session;
+  });
+  if (!committed) {
+    return 'skipped-existing';
+  }
+  // Only clear the stale marker once we actually took over the session node.
   await latestRef(uid).remove();
   return 'started';
 }

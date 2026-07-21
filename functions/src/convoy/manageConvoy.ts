@@ -501,7 +501,16 @@ export const respond = onCall(CALLABLE_OPTS, async (request): Promise<RespondCon
   // visible to the convoy without tapping "share live". Members who accept while
   // the convoy is still `forming` are auto-started later, by convoy.start.
   if (action === 'accept' && fresh.data()?.status === 'active') {
-    await startConvoyAutoSession(actor.uid, convoyId).catch(() => undefined);
+    // Best-effort (a live-share hiccup must not fail the accept), but logged —
+    // consistent with forEachAutoSession — so a missing auto-session is
+    // diagnosable rather than silently swallowed.
+    await startConvoyAutoSession(actor.uid, convoyId).catch((error) => {
+      logger.warn('convoy auto-session op failed', {
+        uid: actor.uid,
+        convoyId,
+        error: String(error),
+      });
+    });
   }
 
   return {
@@ -735,8 +744,15 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   // point. (The transaction either assigned this or threw, so it is defined.)
   // ITEM 2 lifecycle: leaving stops the live session the convoy auto-started for
   // this member (and only that — a manual session or one from another convoy is
-  // left running). Mirror of convoy.end, scoped to the single leaver.
-  await stopConvoyAutoSession(actor.uid, convoyId).catch(() => undefined);
+  // left running). Mirror of convoy.end, scoped to the single leaver. Best-effort
+  // but logged, so a partial teardown (member left broadcasting) is diagnosable.
+  await stopConvoyAutoSession(actor.uid, convoyId).catch((error) => {
+    logger.warn('convoy auto-session op failed', {
+      uid: actor.uid,
+      convoyId,
+      error: String(error),
+    });
+  });
 
   const settled = result!;
   return {
