@@ -182,6 +182,8 @@ export const NOT_FRIENDS_MESSAGE = 'You can only message your friends.';
 export const NOT_DELIVERABLE_MESSAGE = 'This message cannot be delivered right now.';
 export const CONVERSATION_NOT_FOUND_MESSAGE = 'Conversation not found.';
 export const EMPTY_MESSAGE_MESSAGE = 'Message cannot be empty.';
+export const MESSAGE_ID_CONFLICT_MESSAGE =
+  'A different message already exists with this id. Please retry with a new one.';
 
 /**
  * Canonical, order-independent conversation id for a pair of users:

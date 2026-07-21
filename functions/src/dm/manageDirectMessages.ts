@@ -44,6 +44,7 @@ import {
   DM_CONVERSATIONS_LIMIT,
   DM_MESSAGES_PAGE_SIZE,
   EMPTY_MESSAGE_MESSAGE,
+  MESSAGE_ID_CONFLICT_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   NOT_FRIENDS_MESSAGE,
   SELF_MESSAGE_MESSAGE,
@@ -202,9 +203,20 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
     // stay before any write, so the transaction contract holds. `priorUnread`
     // stays truthful (the recipient's real unread-before) even though the
     // notification is skipped on a duplicate via the `duplicate` flag.
+    //
+    // Only a resend BY THE SAME SENDER is an idempotent duplicate. A doc at this
+    // id authored by the OTHER member (an astronomically unlikely clientId
+    // collision, or a buggy client reusing a key across senders) must NOT be
+    // swallowed as a success — that would silently drop the intended message and
+    // surface the wrong content. Surface `already-exists` so the caller can
+    // regenerate the key. Same-sender text is intentionally not compared:
+    // first-write-wins is the idempotency guarantee.
     if (clientId !== undefined) {
       const existing = await tx.get(messageRef);
       if (existing.exists) {
+        if (existing.data()?.senderUid !== actor.uid) {
+          throw new HttpsError('already-exists', MESSAGE_ID_CONFLICT_MESSAGE);
+        }
         return { priorUnread: unreadBefore, duplicate: true };
       }
     }

@@ -362,6 +362,23 @@ describe('dm messaging lifecycle', () => {
       return found.length > 0 ? found : undefined;
     });
     expect(items).toHaveLength(1);
+
+    // Cross-sender collision guard: the OTHER member reusing the same clientId
+    // (an astronomically unlikely UUID collision) must NOT be swallowed as a
+    // duplicate success — that would silently drop their message. It surfaces
+    // already-exists, and the original message is untouched (still one doc).
+    await signInAs(vera);
+    expect(
+      await callableErrorCode(
+        call('dm-sendMessage', { toUid: uri.uid, text: 'collision', clientId }),
+      ),
+    ).toBe('functions/already-exists');
+    const afterCollision = (await call('dm-getMessages', { conversationId })).data as {
+      messages: Array<{ id: string; senderUid: string; text: string }>;
+    };
+    expect(afterCollision.messages).toHaveLength(1);
+    expect(afterCollision.messages[0]!.senderUid).toBe(uri.uid);
+    expect(afterCollision.messages[0]!.text).toBe('once');
   });
 
   it('getMessages is not-found for non-members', async () => {
