@@ -901,6 +901,8 @@
     <string name="dm_sendErrorInvalid">Skriv ett meddelande att skicka.</string>
     <string name="dm_sendErrorCannotDeliver">Det här meddelandet kan inte levereras just nu.</string>
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
+    <string name="dm_statusSending">Skickar…</string>
+    <string name="dm_statusFailedRetry">Skickades inte. Tryck för att försöka igen.</string>
     <string name="channel_inputPlaceholder">Skriv ett meddelande…</string>
     <string name="channel_send">Skicka</string>
     <string name="channel_loadOlder">Ladda tidigare meddelanden</string>

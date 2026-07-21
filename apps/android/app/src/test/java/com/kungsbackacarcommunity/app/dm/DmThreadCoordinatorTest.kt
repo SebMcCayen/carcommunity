@@ -1,7 +1,10 @@
 package com.kungsbackacarcommunity.app.dm
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -10,24 +13,30 @@ import org.junit.Test
 class DmThreadCoordinatorTest {
 
     private class FakeRepo : DmRepository {
-        var sendResult: DmSendResult = DmSendResult.Sent("me__friend", "m1")
-        var olderResult: DmOlderResult =
-            DmOlderResult.Loaded(DmMessagesPage(emptyList(), nextBefore = null, hasMore = false))
+        var sendResult: DmSendResult = DmSendResult.Sent("me__friend", "c-1")
         var sendCalls = 0
         var lastSendToUid: String? = null
         var lastSendText: String? = null
+        val sentClientIds = mutableListOf<String?>()
+        var olderResult: DmOlderResult =
+            DmOlderResult.Loaded(DmMessagesPage(emptyList(), nextBefore = null, hasMore = false))
         var markReadCalls = 0
         var loadOlderCalls = 0
         var lastBefore: String? = null
+
+        /** When set, [sendMessage] suspends on this until completed — models an in-flight callable. */
+        var gate: CompletableDeferred<Unit>? = null
 
         override fun observeConversations(uid: String): Flow<DmConversationsState> = emptyFlow()
 
         override fun observeThread(conversationId: String): Flow<DmThreadState> = emptyFlow()
 
-        override suspend fun sendMessage(toUid: String, text: String): DmSendResult {
+        override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult {
             sendCalls++
             lastSendToUid = toUid
             lastSendText = text
+            sentClientIds += clientId
+            gate?.await()
             return sendResult
         }
 
@@ -42,47 +51,116 @@ class DmThreadCoordinatorTest {
         }
     }
 
-    private fun coordinator(repo: DmRepository) =
-        DmThreadCoordinator(repo, otherUid = "friend", conversationId = "me__friend")
+    private fun coordinator(repo: DmRepository, ids: () -> String = { "cid-1" }) =
+        DmThreadCoordinator(
+            repo,
+            selfUid = "me",
+            otherUid = "friend",
+            conversationId = "me__friend",
+            clock = { 1000L },
+            idGenerator = ids,
+        )
 
     @Test
-    fun `send trims, succeeds, and increments sentCount`() = runTest {
+    fun `send appends an optimistic bubble immediately with a generated client id`() = runTest {
+        val repo = FakeRepo().apply { gate = CompletableDeferred() }
+        val c = coordinator(repo)
+
+        // Launch the send but hold the callable open, so we observe the state
+        // BEFORE the round-trip resolves — the optimistic bubble must already be
+        // there (that is the whole point: instant UI).
+        val job = launch { c.send("  hello ") }
+        runCurrent()
+
+        val pending = c.pendingMessages.value
+        assertEquals(1, pending.size)
+        val bubble = pending.single()
+        assertEquals("cid-1", bubble.id)
+        assertEquals("cid-1", bubble.clientId)
+        assertEquals("me", bubble.senderUid)
+        assertEquals("hello", bubble.text) // trimmed
+        assertEquals(DmDeliveryState.Sending, bubble.deliveryState)
+        // The callable was fired with the same client idempotency key.
+        assertEquals(listOf<String?>("cid-1"), repo.sentClientIds)
+        assertEquals("hello", repo.lastSendText)
+
+        repo.gate!!.complete(Unit)
+        job.join()
+    }
+
+    @Test
+    fun `a successful send flips the bubble to Sent and bumps sentCount`() = runTest {
         val repo = FakeRepo()
         val c = coordinator(repo)
-        c.send("  hello ")
-        assertEquals("friend", repo.lastSendToUid)
-        assertEquals("hello", repo.lastSendText)
-        assertEquals(DmSendStatus.Idle, c.sendStatus.value)
+        c.send("hi")
+        assertEquals(DmDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
         assertEquals(1, c.sentCount.value)
     }
 
     @Test
-    fun `blank message is not sent`() = runTest {
+    fun `blank message is not sent and adds no bubble`() = runTest {
         val repo = FakeRepo()
         val c = coordinator(repo)
         c.send("   ")
         assertEquals(0, repo.sendCalls)
-        assertEquals(DmSendStatus.Idle, c.sendStatus.value)
+        assertTrue(c.pendingMessages.value.isEmpty())
         assertEquals(0, c.sentCount.value)
     }
 
     @Test
-    fun `a failed send surfaces the mapped error and does not bump sentCount`() = runTest {
+    fun `a failed send marks the bubble Failed and does not bump sentCount`() = runTest {
         val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.CannotDeliver) }
         val c = coordinator(repo)
         c.send("hi")
-        assertEquals(DmSendStatus.Failed(DmSendError.CannotDeliver), c.sendStatus.value)
+        assertEquals(DmDeliveryState.Failed, c.pendingMessages.value.single().deliveryState)
         assertEquals(0, c.sentCount.value)
     }
 
     @Test
-    fun `resetSendError clears a failure`() = runTest {
-        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic) }
+    fun `onLiveMessages reconciles the delivered doc away so it renders once`() = runTest {
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Sent("me__friend", "cid-1") }
         val c = coordinator(repo)
         c.send("hi")
-        assertTrue(c.sendStatus.value is DmSendStatus.Failed)
-        c.resetSendError()
-        assertEquals(DmSendStatus.Idle, c.sendStatus.value)
+        // The bubble is present until the listener delivers the real doc.
+        assertEquals(1, c.pendingMessages.value.size)
+
+        // The live snapshot delivers the message whose doc id == the client id.
+        val delivered =
+            DmMessage(id = "cid-1", senderUid = "me", text = "hi", createdAtMillis = 1000L, createdAtIso = null)
+        c.onLiveMessages(listOf(delivered))
+
+        // Pending is now empty — merged display would show only the server doc.
+        assertTrue(c.pendingMessages.value.isEmpty())
+    }
+
+    @Test
+    fun `retry resends the SAME client id and does not double-count`() = runTest {
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic) }
+        val c = coordinator(repo)
+        c.send("oops")
+        assertEquals(DmDeliveryState.Failed, c.pendingMessages.value.single().deliveryState)
+
+        // Second attempt succeeds this time.
+        repo.sendResult = DmSendResult.Sent("me__friend", "cid-1")
+        c.retry("cid-1")
+
+        // Exactly one bubble throughout (no duplicate), now acked.
+        assertEquals(1, c.pendingMessages.value.size)
+        assertEquals(DmDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
+        // Both the original send and the retry used the SAME idempotency key, so
+        // the backend stays exactly-once.
+        assertEquals(listOf<String?>("cid-1", "cid-1"), repo.sentClientIds)
+        assertEquals(1, c.sentCount.value)
+    }
+
+    @Test
+    fun `retry is a no-op for an unknown or non-failed bubble`() = runTest {
+        val repo = FakeRepo()
+        val c = coordinator(repo)
+        c.send("hi") // succeeds → Sent, not Failed
+        c.retry("cid-1") // not in Failed state
+        c.retry("does-not-exist")
+        assertEquals(1, repo.sendCalls) // only the original send
     }
 
     @Test
@@ -124,12 +202,9 @@ class DmThreadCoordinatorTest {
         val repo = FakeRepo().apply { olderResult = DmOlderResult.Failed }
         val c = coordinator(repo)
         c.loadOlder("2026-07-11T00:00:03Z")
-        // A failure must NOT permanently end pagination.
         assertEquals(DmPageStatus.Error, c.pageStatus.value)
         assertTrue(c.olderMessages.value.isEmpty())
 
-        // The Error state is retryable: a second attempt actually calls through,
-        // and a now-successful page recovers to Idle (more remain).
         repo.olderResult =
             DmOlderResult.Loaded(
                 DmMessagesPage(listOf(msg("m1", 100L)), nextBefore = "cursor", hasMore = true),
@@ -169,8 +244,6 @@ class DmThreadCoordinatorTest {
     fun `markReadIfIncoming does NOT mark read for the caller's own message`() = runTest {
         val repo = FakeRepo()
         val c = coordinator(repo)
-        // "me" is the caller here (otherUid is "friend"); an own send must not
-        // trigger a needless markRead callable.
         c.markReadIfIncoming(msg("m1", 100L, sender = "me"))
         assertEquals(0, repo.markReadCalls)
     }

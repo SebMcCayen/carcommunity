@@ -116,8 +116,18 @@ class FirebaseDmRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override suspend fun sendMessage(toUid: String, text: String): DmSendResult =
-        callForData(SEND_MESSAGE, mapOf("toUid" to toUid, "text" to text.trim())).fold(
+    override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult =
+        callForData(
+            SEND_MESSAGE,
+            // Only include clientId when present, so the payload stays byte-identical
+            // to the legacy shape for a null (the strict backend schema rejects a
+            // literal null on the optional field).
+            buildMap {
+                put("toUid", toUid)
+                put("text", text.trim())
+                if (clientId != null) put("clientId", clientId)
+            },
+        ).fold(
             onSuccess = { DmResponseParser.parseSendSuccess(it) },
             onFailure = { DmSendResult.Failed(DmErrorMapper.mapSend(it.toDmErrorCode())) },
         )
@@ -232,6 +242,9 @@ private fun DocumentSnapshot.toMessage(): DmMessage? {
         text = getString("text") ?: "",
         createdAtMillis = millis,
         createdAtIso = millis?.let(::millisToIso),
+        // Echoed idempotency key: lets the live snapshot reconcile against the
+        // sender's optimistic bubble (doc id == clientId for optimistic sends).
+        clientId = getString("clientId"),
     )
 }
 

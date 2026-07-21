@@ -39,13 +39,37 @@ data class DmUser(
     val avatarPath: String?,
 )
 
-/** A single rendered DM. [createdAtIso] is the pagination cursor for older pages. */
+/**
+ * Delivery state of a rendered DM. Server-sourced messages (the live listener,
+ * paginated pages) are always [Sent]. Only the caller's own OPTIMISTIC bubble —
+ * shown instantly on tap before the `dm-sendMessage` round-trip resolves —
+ * carries [Sending] or [Failed]; it is reconciled away (by [DmMessage.clientId])
+ * the moment the real document arrives from the listener.
+ */
+enum class DmDeliveryState {
+    Sent,
+    Sending,
+    Failed,
+}
+
+/**
+ * A single rendered DM. [createdAtIso] is the pagination cursor for older pages.
+ *
+ * [clientId] is the send idempotency key: present on a message the caller sent
+ * with the optimistic path (both on the local optimistic bubble and, echoed
+ * back, on the delivered server document, whose doc [id] EQUALS the clientId).
+ * It is the join key that reconciles the optimistic bubble against the arriving
+ * snapshot so the message renders exactly once. Null on older messages and on
+ * incoming messages from the other party.
+ */
 data class DmMessage(
     val id: String,
     val senderUid: String,
     val text: String,
     val createdAtMillis: Long?,
     val createdAtIso: String?,
+    val clientId: String? = null,
+    val deliveryState: DmDeliveryState = DmDeliveryState.Sent,
 )
 
 /** Denormalized last-message preview shown on an inbox row. */
@@ -231,6 +255,30 @@ object DmThread {
         )
     }
 
+    /**
+     * Merges the server-sourced messages ([merge] of older + live) with the
+     * caller's still-[pending] optimistic bubbles for display. A pending bubble
+     * whose id (its clientId) has ALREADY arrived in the server set is dropped:
+     * the delivered document — whose doc id equals that clientId — supersedes it,
+     * so an optimistic send and its snapshot render as exactly ONE message, never
+     * two. The optimistic bubble's local timestamp slots it in the same
+     * (newest) position the real doc will take, so it doesn't jump on reconcile.
+     */
+    fun mergeWithPending(
+        older: List<DmMessage>,
+        live: List<DmMessage>,
+        pending: List<DmMessage>,
+    ): List<DmMessage> {
+        val real = merge(older, live)
+        if (pending.isEmpty()) return real
+        val realIds = real.mapTo(HashSet(real.size)) { it.id }
+        val stillPending = pending.filter { it.id !in realIds }
+        if (stillPending.isEmpty()) return real
+        return (real + stillPending).sortedWith(
+            compareBy({ it.createdAtMillis ?: Long.MAX_VALUE }, { it.id }),
+        )
+    }
+
     /** The pagination cursor for the next older page: the earliest message's ISO createdAt. */
     fun oldestCursor(messages: List<DmMessage>): String? =
         messages.minByOrNull { it.createdAtMillis ?: Long.MAX_VALUE }?.createdAtIso
@@ -277,6 +325,7 @@ object DmResponseParser {
             text = map["text"] as? String ?: "",
             createdAtMillis = iso?.let(::isoToMillisOrNull),
             createdAtIso = iso,
+            clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

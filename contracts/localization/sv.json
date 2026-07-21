@@ -969,7 +969,9 @@
     "sendErrorNotMember": "Direktmeddelanden är tillgängliga för aktiva medlemmar.",
     "sendErrorInvalid": "Skriv ett meddelande att skicka.",
     "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
-    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen."
+    "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen.",
+    "statusSending": "Skickar…",
+    "statusFailedRetry": "Skickades inte. Tryck för att försöka igen."
   },
   "channel": {
     "inputPlaceholder": "Skriv ett meddelande…",

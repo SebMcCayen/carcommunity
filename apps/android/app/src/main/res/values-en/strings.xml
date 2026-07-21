@@ -901,6 +901,8 @@
     <string name="dm_sendErrorInvalid">Enter a message to send.</string>
     <string name="dm_sendErrorCannotDeliver">This message can\'t be delivered right now.</string>
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
+    <string name="dm_statusSending">Sending…</string>
+    <string name="dm_statusFailedRetry">Not delivered. Tap to retry.</string>
     <string name="channel_inputPlaceholder">Write a message…</string>
     <string name="channel_send">Send</string>
     <string name="channel_loadOlder">Load earlier messages</string>

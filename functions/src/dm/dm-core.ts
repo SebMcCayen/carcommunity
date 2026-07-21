@@ -16,7 +16,10 @@
  *      unread: { [uid]: number }            (per-member unread counter)
  *      lastReadAt: { [uid]: Timestamp|null }
  *      createdAt / updatedAt: Timestamp
- *  - conversations/{pairId}/messages/{messageId}: { senderUid, text, createdAt }.
+ *  - conversations/{pairId}/messages/{messageId}: { senderUid, text, createdAt,
+ *    clientId? }. When a send carries a client idempotency key it is stored as
+ *    clientId AND used as the messageId, so a retry is exactly-once and the live
+ *    listener can reconcile the delivered doc against the optimistic bubble.
  *
  * A per-user TOTAL unread aggregate lives OFF this tree at
  * userPrivate/{uid}.dmUnreadTotal (owner-only readable) so the map-home chat
@@ -84,6 +87,12 @@ export interface MessageSummary {
   senderUid: string;
   text: string;
   createdAt: string;
+  /**
+   * The client-supplied idempotency key, echoed only when the stored message
+   * carries one. Lets a paginated older page reconcile against an optimistic
+   * bubble by the same key the live listener uses.
+   */
+  clientId?: string;
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
@@ -91,10 +100,26 @@ export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: stri
 /** Firebase Auth UIDs are opaque, non-empty, bounded strings. */
 const uidSchema = z.string().trim().min(1).max(128);
 
+/**
+ * A client-supplied idempotency key for a send. Used VERBATIM as the message
+ * document id (conversations/{pairId}/messages/{clientId}), so it is
+ * constrained to a Firestore-doc-id-safe alphabet (no `/`, `.`, or `..`) and a
+ * bounded length — a client-generated UUID fits. Two sends with the same
+ * clientId resolve to the same message doc, which is what makes an optimistic
+ * retry exactly-once (the callable detects the existing doc and skips the
+ * unread bump). Optional for backward compatibility: an older client that omits
+ * it gets an auto-id doc and the previous, non-idempotent behaviour.
+ */
+const clientMessageIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/);
+
 const sendMessageSchema = z
   .object({
     toUid: uidSchema,
     text: z.string().min(1).max(DM_MESSAGE_MAX_LENGTH),
+    clientId: clientMessageIdSchema.optional(),
   })
   .strict();
 
@@ -131,7 +156,8 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 }
 
 export const SEND_MESSAGE_EXPECTED = `Expected { toUid, text } with text 1..${DM_MESSAGE_MAX_LENGTH} characters.`;
-export const GET_MESSAGES_EXPECTED = 'Expected { conversationId, before? } where before is an ISO-8601 timestamp.';
+export const GET_MESSAGES_EXPECTED =
+  'Expected { conversationId, before? } where before is an ISO-8601 timestamp.';
 export const MARK_READ_EXPECTED = 'Expected { conversationId }.';
 
 export function parseSendMessageInput(data: unknown): ParseResult<SendMessageInput> {
@@ -188,16 +214,25 @@ export function messagePreview(text: string): string {
   return text.trim().slice(0, DM_MESSAGE_PREVIEW_LENGTH);
 }
 
-/** conversations/{pairId}/messages/{messageId} document body. */
+/**
+ * conversations/{pairId}/messages/{messageId} document body. When the send
+ * carried an idempotency key it is stored as `clientId` (also the doc id), so
+ * the live listener can reconcile the delivered doc against the sender's
+ * optimistic bubble. A key-less (legacy) send stores no `clientId` field.
+ */
 export function buildMessageDocument(
-  input: { senderUid: string; text: string },
+  input: { senderUid: string; text: string; clientId?: string },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  return {
+  const doc: Record<string, unknown> = {
     senderUid: input.senderUid,
     text: input.text.trim(),
     createdAt: serverTimestamp(),
   };
+  if (input.clientId !== undefined) {
+    doc.clientId = input.clientId;
+  }
+  return doc;
 }
 
 /**
@@ -260,7 +295,10 @@ export function toConversationSummary(
 ): ConversationSummary {
   const members = Array.isArray(data.members) ? (data.members as string[]) : [];
   const otherUid = members.find((uid) => uid !== callerUid) ?? '';
-  const profiles = (data.memberProfiles ?? {}) as Record<string, Record<string, unknown> | undefined>;
+  const profiles = (data.memberProfiles ?? {}) as Record<
+    string,
+    Record<string, unknown> | undefined
+  >;
   const otherProfile = toProfileProjection(profiles[otherUid]);
 
   const unreadMap = (data.unread ?? {}) as Record<string, unknown>;
@@ -299,12 +337,16 @@ export function toMessageSummary(
   data: Record<string, unknown>,
   createdAtIso: string,
 ): MessageSummary {
-  return {
+  const summary: MessageSummary = {
     id,
     senderUid: typeof data.senderUid === 'string' ? data.senderUid : '',
     text: typeof data.text === 'string' ? data.text : '',
     createdAt: createdAtIso,
   };
+  if (typeof data.clientId === 'string') {
+    summary.clientId = data.clientId;
+  }
+  return summary;
 }
 
 /** True when `callerUid` is one of the conversation's stored members. */

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.dm
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,8 +57,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 /**
  * A 1:1 DM thread: own vs other message bubbles (chronological, newest at the
  * bottom), an optional "load earlier" affordance at the top, and a text input +
- * send. Stateless apart from the message draft; the draft clears only once a
- * send actually succeeds ([sendStatus] returns to Idle after Sending).
+ * send. Stateless apart from the message draft.
+ *
+ * Send is optimistic: on tap the draft clears immediately and the message
+ * appears at once as a "sending" bubble (the caller-side [DmMessage] already
+ * carries [DmDeliveryState]) — there is no wait for the network round-trip. A
+ * bubble that fails to send shows a tappable "tap to retry" affordance ([onRetry]);
+ * the user's text is never lost.
  *
  * Rendered on the shared [AeroPage] chrome (title = the other member's name),
  * with the message list taking the remaining height so the input pins to the
@@ -81,12 +87,11 @@ fun ChatScreen(
     messages: List<DmMessage>,
     currentUid: String,
     threadLoading: Boolean,
-    sendStatus: DmSendStatus,
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onSend: (String) -> Unit,
+    onRetry: (DmMessage) -> Unit,
     onLoadOlder: () -> Unit,
-    onResetError: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: (() -> Unit)? = null,
     otherUid: String = "",
@@ -95,21 +100,10 @@ fun ChatScreen(
     onBlockDismiss: () -> Unit = {},
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
-    var awaitingSend by rememberSaveable { mutableStateOf(false) }
     // Held by message ID (Saveable, so the sheet survives rotation) and resolved
     // against the live list, so a sheet whose message vanished closes itself.
     var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmingBlock by rememberSaveable { mutableStateOf(false) }
-
-    // Clear the draft only once a send succeeds; keep it on failure.
-    LaunchedEffect(sendStatus) {
-        if (awaitingSend && sendStatus == DmSendStatus.Idle) {
-            draft = ""
-            awaitingSend = false
-        } else if (sendStatus is DmSendStatus.Failed) {
-            awaitingSend = false
-        }
-    }
 
     AeroPage(
         title = otherName ?: stringResource(R.string.dm_unknownMember),
@@ -146,6 +140,7 @@ fun ChatScreen(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
+                    onRetry = onRetry,
                     // Long-press opens the moderation sheet — never on your own
                     // message, and never when the thread has no resolvable other
                     // member to act on.
@@ -165,13 +160,6 @@ fun ChatScreen(
             }
         }
 
-        if (sendStatus is DmSendStatus.Failed) {
-            Text(
-                text = stringResource(sendStatus.error.messageRes()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
         if (blockStatus == BlockActionStatus.Failed) {
             Text(
                 text = stringResource(R.string.blocking_errorGeneric),
@@ -196,7 +184,6 @@ fun ChatScreen(
                 value = draft,
                 onValueChange = {
                     if (it.length <= DM_MESSAGE_MAX_LENGTH) draft = it
-                    if (sendStatus is DmSendStatus.Failed) onResetError()
                 },
                 placeholder = { Text(stringResource(R.string.dm_inputPlaceholder)) },
                 modifier = Modifier.weight(1f),
@@ -204,10 +191,13 @@ fun ChatScreen(
             )
             Button(
                 onClick = {
-                    awaitingSend = true
+                    // Optimistic: hand the draft off and clear the input at once.
+                    // The message appears immediately as a "sending" bubble; there
+                    // is no in-flight disabled/spinner state to wait through.
                     onSend(draft)
+                    draft = ""
                 },
-                enabled = sendStatus != DmSendStatus.Sending && DmThread.isSendable(draft),
+                enabled = DmThread.isSendable(draft),
             ) {
                 Text(stringResource(R.string.dm_send))
             }
@@ -252,6 +242,7 @@ private fun MessageList(
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
+    onRetry: (DmMessage) -> Unit,
     onMessageLongPress: (DmMessage) -> Unit,
 ) {
     val dates = rememberChatDateContext()
@@ -329,6 +320,7 @@ private fun MessageList(
                         // Your own bubble carries no long-press: you can neither
                         // block nor report yourself.
                         onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
+                        onRetry = { onRetry(message) },
                     )
                 }
             }
@@ -343,6 +335,7 @@ private fun MessageBubble(
     isOwn: Boolean,
     dates: ChatDateContext,
     onLongPress: (() -> Unit)?,
+    onRetry: () -> Unit,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -387,15 +380,27 @@ private fun MessageBubble(
                 modifier = Modifier.padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
             )
         }
+        // Delivery status sits under your OWN optimistic bubbles only. A delivered
+        // (server-sourced) message is [DmDeliveryState.Sent] and shows nothing.
+        if (isOwn) {
+            when (message.deliveryState) {
+                DmDeliveryState.Sending ->
+                    Text(
+                        text = stringResource(R.string.dm_statusSending),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                DmDeliveryState.Failed ->
+                    Text(
+                        text = stringResource(R.string.dm_statusFailedRetry),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        // Tapping the failed line resends with the SAME idempotency
+                        // key, so a retry never double-posts.
+                        modifier = Modifier.clickable(onClick = onRetry),
+                    )
+                DmDeliveryState.Sent -> Unit
+            }
+        }
     }
 }
-
-/** The `dm.*` send-error string for a mapped [DmSendError]. */
-private fun DmSendError.messageRes(): Int =
-    when (this) {
-        DmSendError.SignedOut -> R.string.dm_sendErrorSignedOut
-        DmSendError.NotMember -> R.string.dm_sendErrorNotMember
-        DmSendError.Invalid -> R.string.dm_sendErrorInvalid
-        DmSendError.CannotDeliver -> R.string.dm_sendErrorCannotDeliver
-        DmSendError.Generic -> R.string.dm_sendErrorGeneric
-    }
