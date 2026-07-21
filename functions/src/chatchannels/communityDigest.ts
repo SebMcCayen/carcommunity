@@ -239,15 +239,32 @@ export async function runCommunityChatDigest(
       const baseline = digestBaseline(lastReadAtMs, digestedUpToMs);
 
       // Gate the expensive count() aggregation: a member already digested past the
-      // newest message costs zero aggregation reads.
-      if (!hasNewSinceBaseline(latestMessageAtMs, baseline)) {
+      // newest message costs zero aggregation reads. The `baseline === null` arm is
+      // the defensive case: digestBaseline returns null only when NEITHER marker is a
+      // usable Timestamp, which for a doc the candidate query returned means a
+      // MALFORMED userPrivate.communityChatLastReadAt (Firestore's `<` can match a
+      // value that type-sorts before a Timestamp, e.g. a number) — markRead only ever
+      // writes a serverTimestamp, so this never happens with valid data. hasNewSince-
+      // Baseline treats null as -infinity (returns true), so without this arm we would
+      // fall through and count from the epoch on a bad type; skip the member instead.
+      // (It also narrows `baseline` to a number for fromMillis below — no cast, and no
+      // `undefined` can reach fromMillis, which is the only value that would throw.)
+      if (!hasNewSinceBaseline(latestMessageAtMs, baseline) || baseline === null) {
         return { counted: false, result: 'alreadyDigested' };
       }
 
       // Cheap unread COUNT (aggregation) — never fetch the messages themselves.
-      const baselineStamp = Timestamp.fromMillis(baseline as number);
+      // UPPER-BOUNDED to the same probed instant the marker advances to, so the count
+      // window (baseline, latestMessageStamp] is IDENTICAL to the window the marker
+      // will cover on notify. A message posted after the probe but before this count
+      // is therefore neither counted here nor marked as digested — the next run picks
+      // it up cleanly — so the count can never reach past the marker (which would let
+      // the same message be counted in two consecutive digests). Both range filters are
+      // on the single createdAt field, served by its automatic index — no composite.
+      const baselineStamp = Timestamp.fromMillis(baseline);
       const countSnap = await communityMessagesRef()
         .where('createdAt', '>', baselineStamp)
+        .where('createdAt', '<=', latestMessageStamp)
         .count()
         .get();
       const unreadCount = countSnap.data().count;

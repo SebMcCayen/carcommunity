@@ -214,6 +214,33 @@ describe('runCommunityChatDigest — query path', () => {
     }
   });
 
+  it('skips a candidate whose last-read is not a Timestamp, without aborting the run', async () => {
+    // A malformed userPrivate.communityChatLastReadAt (a number, which Firestore's `<`
+    // type-orders before any Timestamp, so the candidate query still returns it) has a
+    // null digest baseline. The run must SKIP it — never count it from the epoch, never
+    // throw — and still digest a well-formed member in the same run.
+    const malformedId = uid('malformed');
+    await adminDb
+      .collection('users')
+      .doc(malformedId)
+      .set({ displayName: 'malformed', role: 'user', activeMember: true, suspended: false, deleted: false });
+    // Raw write: a number where a Timestamp is expected. Below the newest instant.
+    await adminDb.collection('userPrivate').doc(malformedId).set({ communityChatLastReadAt: BASE_MS });
+
+    const wellFormed = await seedUser('alongside-malformed', { lastReadAtMs: BASE_MS });
+
+    // Must not throw despite the malformed candidate.
+    await expect(runCommunityChatDigest(now)).resolves.toBeDefined();
+
+    // Malformed member: skipped — no digest, marker untouched.
+    expect(await digestItems(malformedId)).toHaveLength(0);
+    const malformedPriv = (await adminDb.collection('userPrivate').doc(malformedId).get()).data()!;
+    expect(malformedPriv.communityChatDigestedUpTo).toBeUndefined();
+
+    // The run still processed the well-formed member alongside it.
+    expect(await digestItems(wellFormed)).toHaveLength(1);
+  });
+
   it('exposes the documented minimum-unread threshold', () => {
     expect(COMMUNITY_DIGEST_MIN_UNREAD).toBe(3);
   });
