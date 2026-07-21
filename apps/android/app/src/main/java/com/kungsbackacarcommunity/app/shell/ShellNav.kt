@@ -76,6 +76,8 @@ enum class ShellRoute {
     Feedback,
     Subscription,
     Settings,
+    /** The standalone "Saved places" management screen, reached from Settings. */
+    SavedPlaces,
     /** The "Vad är nytt" changelog page, reached from Settings. */
     WhatsNew,
 

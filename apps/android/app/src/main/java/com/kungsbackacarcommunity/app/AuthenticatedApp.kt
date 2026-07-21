@@ -196,6 +196,8 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
 import com.kungsbackacarcommunity.app.navigation.PrefsSavedPlacesStore
+import com.kungsbackacarcommunity.app.navigation.SavedPlacesScreen
+import com.kungsbackacarcommunity.app.navigation.SavedPlacesStore
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -1852,6 +1854,19 @@ fun AuthenticatedApp(
                                 memberGated = false,
                                 isActiveMember = profile?.activeMember == true,
                             ),
+                        // The SAME per-uid store the navigation search reads/writes,
+                        // so the Saved-places management screen and the inline save
+                        // flow share one source of truth.
+                        savedPlacesStore = savedPlacesStore,
+                        // "Add a place" / "Change address" on the management screen
+                        // reuse the existing address picker: close this route and
+                        // open the navigation search (search-first). route=null so
+                        // the picker returns to the map home, not to a stale
+                        // saved-places snapshot.
+                        onOpenAddressSearch = {
+                            route = null
+                            navSearchOpen = true
+                        },
                     )
                 } else {
                     // The shell's page frame. Deliberately a Box + bottom bar
@@ -2865,6 +2880,8 @@ private fun RouteHost(
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     partnerStatsEnabled: Boolean,
+    savedPlacesStore: SavedPlacesStore,
+    onOpenAddressSearch: () -> Unit,
 ) {
     val context = LocalContext.current
     // The one guarded profile-navigation callback every member-bearing surface
@@ -3286,6 +3303,17 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
+        ShellRoute.SavedPlaces ->
+            SavedPlacesScreen(
+                store = savedPlacesStore,
+                onAddPlace = onOpenAddressSearch,
+                // Re-pointing a shortcut reuses the same picker; the picked
+                // address is saved under the chosen kind via the search's own
+                // save dialog (NavigationController.savePlace), which sweeps the
+                // stale entry — so a re-located Home stays a single Home.
+                onChangeLocation = { onOpenAddressSearch() },
+            )
+
         ShellRoute.Settings ->
             SettingsScreen(
                 onManageSubscription =
@@ -3294,6 +3322,7 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                onSavedPlaces = { onOpenRoute(ShellRoute.SavedPlaces) },
                 onNotificationSettings =
                     if (notificationSettingsRepository != null) {
                         { onOpenRoute(ShellRoute.NotificationSettings) }
