@@ -192,6 +192,10 @@
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
     <string name="profile_points">Poäng</string>
+    <string name="profile_statsTitle">Min statistik</string>
+    <string name="profile_statsMemberSince">Medlem sedan</string>
+    <string name="profile_statsEmptyTitle">Kör för att bygga din statistik</string>
+    <string name="profile_statsEmptyBody">Dina körningar, utmärkelser och poäng visas här.</string>
     <string name="profile_displayNameLabel">Visningsnamn</string>
     <string name="profile_bioLabel">Presentation</string>
     <string name="profile_saveButton">Spara</string>

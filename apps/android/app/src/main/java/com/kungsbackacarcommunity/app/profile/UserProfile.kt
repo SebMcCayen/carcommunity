@@ -20,6 +20,14 @@ data class UserProfile(
      * the client-side member-feature gate; the backend still enforces it.
      */
     val activeMember: Boolean = false,
+    /**
+     * Epoch-millis of users/{uid}.createdAt (the account/profile creation
+     * server timestamp), or null when the field is absent (a partially-written
+     * doc, or an older account predating the field). Read from the SAME profile
+     * snapshot already observed — no extra query — and used only for the
+     * "member since" line on the owner's own stats. Never edited by the client.
+     */
+    val createdAtMillis: Long? = null,
 )
 
 /** Observed state of the profile document. */

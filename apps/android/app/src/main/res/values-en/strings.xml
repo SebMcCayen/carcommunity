@@ -192,6 +192,10 @@
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>
     <string name="profile_points">Points</string>
+    <string name="profile_statsTitle">My stats</string>
+    <string name="profile_statsMemberSince">Member since</string>
+    <string name="profile_statsEmptyTitle">Start driving to build your stats</string>
+    <string name="profile_statsEmptyBody">Your drives, awards and points will show up here.</string>
     <string name="profile_displayNameLabel">Display name</string>
     <string name="profile_bioLabel">Bio</string>
     <string name="profile_saveButton">Save</string>

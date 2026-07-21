@@ -41,6 +41,7 @@ class FirebaseProfileRepository private constructor(
                             avatarPath = snapshot.getString("avatarPath"),
                             onboardingComplete = snapshot.get("onboardingCompletedAt") != null,
                             activeMember = snapshot.getBoolean("activeMember") ?: false,
+                            createdAtMillis = snapshot.getTimestamp("createdAt")?.toDate()?.time,
                         )
                     } else {
                         null
