@@ -50,7 +50,6 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import java.text.DateFormat
-import java.util.Calendar
 import java.util.Date
 
 /** Saved-drives list (Phase 12 slice 12). Tap a drive for detail; share or delete inline. */
@@ -84,8 +83,8 @@ fun DrivesListScreen(
     // pure and deterministic. Recomputed each composition — cheap, and it lets a
     // week/month rollover correct itself on the next recomposition rather than
     // pinning to the boundary the screen opened in (mirrors [DriveStatsScreen]).
-    val weekStartMillis = startOfCurrentWeekMillis()
-    val monthStartMillis = startOfCurrentMonthMillis()
+    val weekStartMillis = DrivePeriodBoundaries.startOfCurrentWeekMillis()
+    val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
 
     // Filter over the FULL loaded list (an owner query with no limit — see
     // [DriveFilters]), so results are complete, never a partial page. Computed
@@ -396,31 +395,6 @@ private fun toggledRange(current: DriveDateRange, target: DriveDateRange): Drive
 /** Clicking the active distance chip returns to ALL; otherwise selects it. */
 private fun toggledBand(current: DriveDistanceBand, target: DriveDistanceBand): DriveDistanceBand =
     if (current == target) DriveDistanceBand.ALL else target
-
-/** Start of the current calendar month (local time zone) as epoch-millis. */
-private fun startOfCurrentMonthMillis(): Long =
-    Calendar.getInstance().apply {
-        set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-/**
- * Start of the current week (local time zone, honouring the locale's first day
- * of week) as epoch-millis. Truncates to midnight, then steps back to the
- * week's first day so it is correct regardless of today's position in the week.
- */
-private fun startOfCurrentWeekMillis(): Long =
-    Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-        val delta = (get(Calendar.DAY_OF_WEEK) - firstDayOfWeek + 7) % 7
-        add(Calendar.DAY_OF_YEAR, -delta)
-    }.timeInMillis
 
 @Composable
 private fun DriveCard(

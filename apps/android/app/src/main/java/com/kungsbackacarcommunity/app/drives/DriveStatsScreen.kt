@@ -16,7 +16,6 @@ import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
-import java.util.Calendar
 
 /**
  * "Your driving" personal stats (folded over the member's OWN saved drives).
@@ -40,16 +39,10 @@ fun DriveStatsScreen(
     // themselves rather than staying pinned to the month the screen opened in. The
     // value is deterministic within a month, so the keyed `stats` fold below still
     // only recomputes when the drives or the month change. The Calendar/time-zone
-    // concern lives here at the composable edge so the fold
+    // truncation lives in the shared [DrivePeriodBoundaries] (so History and this
+    // screen can't diverge) but is invoked here at the composable edge so the fold
     // ([DriveStatsCalculator.compute]) stays pure and deterministic.
-    val monthStartMillis =
-        Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+    val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
     val stats = remember(drives, monthStartMillis) { DriveStatsCalculator.compute(drives, monthStartMillis) }
 
     AeroPage(title = stringResource(R.string.savedDrives_statsTitle), modifier = modifier) {

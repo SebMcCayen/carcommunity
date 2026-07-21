@@ -309,7 +309,7 @@ class DriveFilterTest {
         assertFalse(DriveFilterCriteria().hasActiveFilters)
         assertFalse(DriveFilterCriteria(sort = DriveSort.LONGEST).hasActiveFilters)
         assertTrue(DriveFilterCriteria(query = "x").hasActiveFilters)
-        assertTrue(DriveFilterCriteria(query = "  ").hasActiveFilters.not())
+        assertFalse(DriveFilterCriteria(query = "  ").hasActiveFilters)
         assertTrue(DriveFilterCriteria(dateRange = DriveDateRange.THIS_WEEK).hasActiveFilters)
         assertTrue(DriveFilterCriteria(distanceBand = DriveDistanceBand.OVER_50_KM).hasActiveFilters)
     }
