@@ -683,6 +683,10 @@
     <string name="garage_photoTooLarge">The image is too large.</string>
     <string name="garage_photoCropTitle">Crop photo</string>
     <string name="garage_photoCropHint">Drag to position and pinch to zoom. The area inside the frame is what others will see.</string>
+    <string name="garage_photoCropRatioOriginal">Original</string>
+    <string name="garage_photoCropRatioSquare">Square</string>
+    <string name="garage_photoCropRatio43">4:3</string>
+    <string name="garage_photoCropRatio169">16:9</string>
     <string name="garage_photoCropConfirm">Use photo</string>
     <string name="garage_photoNone">No photos yet</string>
     <string name="garage_photoCounter">%1$d / %2$d</string>

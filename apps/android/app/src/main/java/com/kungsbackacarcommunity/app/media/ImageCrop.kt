@@ -74,6 +74,56 @@ data class NormalizedCropRect(
 data class CropPixels(val x: Int, val y: Int, val width: Int, val height: Int)
 
 /**
+ * The output SHAPE options the user picks on the vehicle-photo crop screen.
+ *
+ * The crop box is drawn at the selected aspect ratio and the image moves beneath
+ * it, so whichever option is chosen the crop stays a faithful, UN-STRETCHED cut
+ * of the source (a single uniform scale is applied to both axes — see
+ * [ImageCrop]); only the framing changes, never the proportions.
+ *
+ *  - [ORIGINAL] keeps the source's own ratio — no shape change at all, just the
+ *    downscale + sanitisation every path applies.
+ *  - [SQUARE] / [RATIO_4_3] / [RATIO_16_9] crop to that fixed ratio.
+ *
+ * [DEFAULT] is [SQUARE] because My Garage renders vehicle photos in a CIRCLE: a
+ * circle clip of a square fills it edge-to-edge with no surprise centre-crop,
+ * so the square option is what pairs cleanly with the round display.
+ */
+enum class CropAspect {
+    ORIGINAL,
+    SQUARE,
+    RATIO_4_3,
+    RATIO_16_9,
+    ;
+
+    /**
+     * The crop box aspect ratio (width / height) for a source of
+     * [sourceWidth] x [sourceHeight]. [ORIGINAL] returns the source's own ratio;
+     * the fixed ratios ignore the source. Falls back to 1f for a degenerate
+     * source so the box is always a measurable, finite ratio.
+     */
+    fun ratio(sourceWidth: Float, sourceHeight: Float): Float =
+        when (this) {
+            ORIGINAL ->
+                if (sourceWidth > 0f && sourceHeight > 0f && sourceWidth.isFinite() &&
+                    sourceHeight.isFinite()
+                ) {
+                    sourceWidth / sourceHeight
+                } else {
+                    1f
+                }
+            SQUARE -> 1f
+            RATIO_4_3 -> 4f / 3f
+            RATIO_16_9 -> ImageCrop.VEHICLE_ASPECT_RATIO
+        }
+
+    companion object {
+        /** Default shape: pairs with the circular render in My Garage. */
+        val DEFAULT: CropAspect = SQUARE
+    }
+}
+
+/**
  * Pure geometry behind the vehicle-photo crop UI. Kept free of Android and
  * Compose types so the gesture maths — the part that actually decides which
  * pixels get uploaded — is covered by fast JVM unit tests rather than only by an
@@ -88,12 +138,10 @@ data class CropPixels(val x: Int, val y: Int, val width: Int, val height: Int)
 object ImageCrop {
 
     /**
-     * Vehicle photos are rendered at 16:9 with `ContentScale.Crop` in BOTH the
-     * garage card and the public member-profile card, so cropping to anything
-     * else would just be re-cropped at render time — the user would arrange a
-     * composition and then watch the app cut it differently. Fixing the crop box
-     * to the render ratio makes the preview honest: what is inside the box is
-     * exactly what the cards show.
+     * The 16:9 crop option ([CropAspect.RATIO_16_9]) and the ratio the public
+     * member-profile card still renders at. The crop screen no longer FORCES this
+     * ratio — the user chooses a shape ([CropAspect]) — but 16:9 remains one of
+     * the offered options and the widescreen reference ratio, so it is named here.
      */
     const val VEHICLE_ASPECT_RATIO: Float = 16f / 9f
 

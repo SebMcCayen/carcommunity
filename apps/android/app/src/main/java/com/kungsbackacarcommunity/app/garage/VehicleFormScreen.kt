@@ -20,7 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,9 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.media.ImageCrop
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
@@ -222,13 +220,13 @@ private fun VehiclePhotoSection(
     val uploading = uploadStatus == ImageUploadStatus.Uploading
     val model: Any? = photoPreview ?: photoUrl
     Box(
-        // 16:9, matching the crop step AND the garage / member-profile cards.
-        // A fixed 180dp box would re-crop the user's 16:9 crop at a different
-        // ratio, so the tile they confirm would not be the tile they get.
+        // Round (circle-clipped) preview, matching how My Garage renders vehicle
+        // photos. A square (1:1) box centre-crops the pick into the circle, so the
+        // tile shown here is the round tile the garage will show.
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(ImageCrop.VEHICLE_ASPECT_RATIO)
-            .clip(RoundedCornerShape(KccRadius.md))
+            .aspectRatio(1f)
+            .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
