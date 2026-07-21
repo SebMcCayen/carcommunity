@@ -208,7 +208,8 @@ describe('admin-setAdminRole', () => {
       .where('action', '==', 'user.setAdminRole')
       .get();
     expect(audit.size).toBe(1);
-    const event = audit.docs[0].data();
+    // size asserted === 1 above, so docs[0] is present.
+    const event = audit.docs[0]!.data();
     expect(event.adminId).toBe(actor.uid);
     expect(event.reason).toBe('Trusted community moderator');
     expect(event.details).toEqual({ admin: true, role: 'admin' });
@@ -309,7 +310,8 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
       .where('targetUserId', '==', target.uid)
       .get();
     expect(actions.size).toBe(1);
-    const action = actions.docs[0].data();
+    // size asserted === 1 above, so docs[0] is present.
+    const action = actions.docs[0]!.data();
     expect(action.actorUserId).toBe(actor.uid);
     expect(action.actionType).toBe('permanent_suspension');
     expect(action.reason).toBe('Repeated harassment');
@@ -322,8 +324,9 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
       .where('action', '==', 'user.suspend')
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().adminId).toBe(actor.uid);
-    expect(audit.docs[0].data().reason).toBe('Repeated harassment');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().adminId).toBe(actor.uid);
+    expect(audit.docs[0]!.data().reason).toBe('Repeated harassment');
   });
 
   it('a suspended admin loses admin access (suspension overrides admin)', async () => {
@@ -367,7 +370,8 @@ describe('admin-suspendUser / admin-restoreAccess', () => {
       .where('actionType', '==', 'restore_access')
       .get();
     expect(actions.size).toBe(1);
-    expect(actions.docs[0].data().reason).toBe('Appeal approved');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(actions.docs[0]!.data().reason).toBe('Appeal approved');
   });
 
   it('admins cannot suspend themselves or owner accounts', async () => {

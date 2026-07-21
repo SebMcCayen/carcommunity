@@ -150,7 +150,8 @@ describe('partnerInsights-recordInteraction', () => {
       .where('companyId', '==', companyId)
       .get();
     expect(events.size).toBe(1);
-    const event = events.docs[0].data();
+    // size asserted === 1 above, so docs[0] is present.
+    const event = events.docs[0]!.data();
     // The stored reference is a 64-hex-char scoped hash and the raw UID
     // appears nowhere on the event. (Hash determinism itself is unit-tested
     // with literals in insights-core.test.ts — deliberately NOT re-derived
