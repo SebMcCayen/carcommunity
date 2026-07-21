@@ -49,6 +49,33 @@ data class SavedPlace(
 )
 
 /**
+ * The intent to RE-POINT an already-saved place at a new address, threaded from
+ * the Saved-places screen's "Change address" into the address picker
+ * ([NavigationSearchScreen]) so the save concludes as an **update** of that place
+ * rather than a brand-new Favourite.
+ *
+ * Without it the picker's save dialog defaults every fresh (not-yet-saved)
+ * address to [SavedPlaceKind.Favourite]: re-pointing Home would then fork a
+ * second entry (a Favourite at the new address) and leave the old Home untouched,
+ * instead of moving Home. This carries the missing context.
+ *
+ * @param kind the kind to pre-select in the save dialog — a re-pointed Home must
+ *   save back as Home (id "home"), which [SavedPlaces.upsert] replaces in place,
+ *   instead of defaulting to Favourite.
+ * @param label the place's current label, pre-filled so a re-pointed favourite
+ *   keeps its user-given name ("Mamma") rather than adopting the new street name.
+ * @param replacingId the id of the entry being re-pointed. Home/Work keep their
+ *   id ("home"/"work") so upsert updates them in place with nothing stranded; a
+ *   favourite's id encodes the OLD place, so once the address (and thus the id)
+ *   changes the old row must be swept — see [SavedPlaces.sweepIdFor].
+ */
+data class SavedPlaceEdit(
+    val kind: SavedPlaceKind,
+    val label: String,
+    val replacingId: String,
+)
+
+/**
  * Persistence seam for [SavedPlace]s, mirroring [RecentSearchesStore]: the
  * controller and its tests depend only on this interface — production injects
  * the prefs-backed [PrefsSavedPlacesStore], tests the in-memory fake.
@@ -133,6 +160,52 @@ object SavedPlaces {
             label = normalizeLabel(label).ifBlank { place.name },
             place = place,
         )
+
+    /** The re-point [SavedPlaceEdit] for [place] — its kind, label and id. */
+    fun editOf(place: SavedPlace): SavedPlaceEdit =
+        SavedPlaceEdit(kind = place.kind, label = place.label, replacingId = place.id)
+
+    /**
+     * The (kind, label) the save dialog should OPEN with for [place].
+     *
+     * A pending re-point [edit] wins: the user arrived from "Change Home address",
+     * so the dialog must start on Home (not the Favourite default) with Home's
+     * current label pre-filled. Absent an edit, an [existing] saved match at this
+     * address pre-fills edit-mode; absent both, it is a fresh Favourite named after
+     * the place — the original default.
+     *
+     * Pure so the precedence can't drift between the two remembered dialog fields
+     * (kind and label) that read it, and so it is unit-testable without Compose.
+     */
+    fun resolveSaveDefaults(
+        place: PlaceSuggestion,
+        existing: SavedPlace?,
+        edit: SavedPlaceEdit?,
+    ): Pair<SavedPlaceKind, String> {
+        val kind = edit?.kind ?: existing?.kind ?: SavedPlaceKind.Favourite
+        val label = edit?.label ?: existing?.label ?: place.name
+        return kind to label
+    }
+
+    /**
+     * The id to SWEEP once a re-point [edit] has saved [place] under [finalKind],
+     * or null when nothing is stranded.
+     *
+     * A re-pointed Home/Work keeps its id ("home"/"work"), so [upsert] already
+     * updated it in place — nothing to sweep. A favourite's id encodes the place,
+     * so a new address yields a new id and the OLD row would linger; its id is
+     * returned for removal. This also handles a kind change made in the dialog
+     * (e.g. a favourite re-pointed but switched to Home): the old id no longer
+     * matches the saved entry's id, so it is swept. Null with no pending [edit].
+     */
+    fun sweepIdFor(
+        edit: SavedPlaceEdit?,
+        place: PlaceSuggestion,
+        finalKind: SavedPlaceKind,
+    ): String? {
+        val replacing = edit?.replacingId ?: return null
+        return replacing.takeIf { it != idFor(finalKind, place) }
+    }
 
     /**
      * Returns [existing] with [saved] added or replaced.

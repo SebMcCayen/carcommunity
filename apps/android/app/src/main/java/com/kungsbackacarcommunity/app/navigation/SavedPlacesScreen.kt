@@ -177,20 +177,6 @@ fun SavedPlacesScreen(
     }
 }
 
-/**
- * Localized display name for a saved place — the singletons read "Home"/"Work"
- * from resources (their stored label is the raw street name and never shown),
- * favourites read the user's own label. Mirrors the same rule in the search
- * bar's saved-places card so a place reads identically in both surfaces.
- */
-@Composable
-private fun SavedPlace.displayLabel(): String =
-    when (kind) {
-        SavedPlaceKind.Home -> stringResource(R.string.addressSearch_savedHome)
-        SavedPlaceKind.Work -> stringResource(R.string.addressSearch_savedWork)
-        SavedPlaceKind.Favourite -> label
-    }
-
 private fun SavedPlaceKind.icon(): ImageVector =
     when (this) {
         SavedPlaceKind.Home -> Icons.Filled.Home
