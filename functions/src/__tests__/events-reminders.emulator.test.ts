@@ -32,6 +32,7 @@ import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/fir
 import { describe, expect, it } from 'vitest';
 import { claimEventReminder, runEventReminders } from '../events/eventReminders';
 import { EVENT_REMINDER_LEAD_MS, eventReminderNotificationId } from '../events/eventReminders-core';
+import { writeInAppNotification } from '../notifications/deliver';
 
 const PROJECT_ID = 'demo-test';
 
@@ -303,6 +304,44 @@ describe('reminder sweep – candidate cap paging (reduced final-page limit)', (
 
     expect(summary.capped).toBe(false);
     expect(summary.candidates).toBe(3);
+  });
+});
+
+describe('reminder sweep – one poison-pill event does not starve the rest', () => {
+  // A throw while processing one candidate (here: its fan-out) must not abort the
+  // sweep. Without per-event isolation the throw aborts the loop, and since a run
+  // always restarts from the oldest candidate, the LATER event would be starved
+  // on every sweep. Own far-future NOW so only these two events fall in-window.
+  const POISON_NOW = new Date('2028-09-12T09:00:00.000Z');
+
+  it('processes a later event after an earlier event throws during fan-out', async () => {
+    // Earlier startsAt => processed first in the startsAt-ordered page.
+    const poisonEventId = await seedEvent({ startsAt: new Date(POISON_NOW.getTime() + 30 * MINUTE) });
+    const goodEventId = await seedEvent({ startsAt: new Date(POISON_NOW.getTime() + 60 * MINUTE) });
+    const poisonAttendee = await seedUser('rem-poison');
+    const goodAttendee = await seedUser('rem-survivor');
+    await seedRsvp(poisonEventId, poisonAttendee, 'going');
+    await seedRsvp(goodEventId, goodAttendee, 'going');
+
+    // A deliver that throws (synchronously, escaping the fan-out's allSettled) only
+    // for the poison event; the good event delivers through the real writer.
+    const poisonDeliver: typeof writeInAppNotification = (recipientUid, input, notificationId) => {
+      if (input.relatedEntityId === poisonEventId) {
+        throw new Error('simulated fan-out failure');
+      }
+      return writeInAppNotification(recipientUid, input, notificationId);
+    };
+
+    const summary = await runEventReminders(POISON_NOW, undefined, { deliver: poisonDeliver });
+
+    // The later event was still reminded despite the earlier one throwing.
+    expect(await reminderItem(goodAttendee, goodEventId)).not.toBeNull();
+    expect(summary.remindedEvents).toBeGreaterThanOrEqual(1);
+
+    // Marker semantics: the poison event was CLAIMED before its fan-out threw, so
+    // it stays marked (at-most-once; an accepted missed reminder, not a duplicate).
+    expect((await readEvent(poisonEventId)).eventReminderSentAt).toBeDefined();
+    expect(await reminderItem(poisonAttendee, poisonEventId)).toBeNull();
   });
 });
 

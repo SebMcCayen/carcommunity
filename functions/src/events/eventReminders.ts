@@ -309,21 +309,42 @@ export async function runEventReminders(
         continue;
       }
 
-      const claimed = await claimEventReminder(doc.id, now, leadMs);
-      if (!claimed) {
-        summary.claimSkipped += 1;
-        continue;
-      }
+      // Isolate a poison-pill event: a throw from the claim transaction or the
+      // fan-out (e.g. a transient Firestore read failure) must NOT abort the whole
+      // sweep. Because a run always restarts from the oldest candidate with no
+      // cursor, an unisolated throw at a fixed position would permanently starve
+      // every LATER event of its reminder. Log and continue.
+      //
+      // Marker semantics are deliberately unchanged (file header: claim BEFORE
+      // fan-out = at-most-once). A fan-out that throws AFTER its claim leaves the
+      // event marked — the accepted MISSED reminder, never a duplicate. A claim
+      // that itself throws rolls its own transaction back (marker unset), so that
+      // event is naturally retried on the next sweep. The marker is never released
+      // in this catch: releasing it to force a retry would trade the invisible
+      // missed nudge for the notification-fatigue duplicate this sweep must avoid.
+      try {
+        const claimed = await claimEventReminder(doc.id, now, leadMs);
+        if (!claimed) {
+          summary.claimSkipped += 1;
+          continue;
+        }
 
-      const { delivered, skipped } = await fanOutEventReminder(
-        doc.id,
-        String(doc.get('title') ?? ''),
-        concurrency,
-        deps,
-      );
-      summary.remindedEvents += 1;
-      summary.notificationsDelivered += delivered;
-      summary.notificationsSkipped += skipped;
+        const { delivered, skipped } = await fanOutEventReminder(
+          doc.id,
+          String(doc.get('title') ?? ''),
+          concurrency,
+          deps,
+        );
+        summary.remindedEvents += 1;
+        summary.notificationsDelivered += delivered;
+        summary.notificationsSkipped += skipped;
+      } catch (error) {
+        // PII-free: only the event id and the stringified error, never attendee ids.
+        logger.error('Event reminder processing failed for one event; continuing sweep', {
+          eventId: doc.id,
+          error: String(error),
+        });
+      }
     }
 
     // Exhaustion is a page SHORTER than the limit we actually requested — not
