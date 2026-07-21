@@ -383,20 +383,23 @@ class ConvoyStatusBarTest {
     }
 
     /**
-     * Icons and numbers only: the pill shows the bare member count, and the count
-     * `Text` node carries the full "N in the convoy" contentDescription (the group
-     * glyph is decorative, `contentDescription = null`) so TalkBack announces the
-     * count in context rather than reading a context-free "3".
+     * Icons and numbers only: the pill renders the bare member count visually, but
+     * exposes the full "N in the convoy" contentDescription to accessibility — and
+     * ONLY that. The digit's own text node is cleared from the semantics tree
+     * (`clearAndSetSemantics`, mirroring the DM unread badge), so TalkBack announces
+     * the count in context instead of reading a context-free "4" as a second node.
      */
     @Test
-    fun inlinePill_showsBareCount_withTheFullAnnouncementForTalkBack() {
+    fun inlinePill_announcesCountInContext_withoutABareNumberA11yNode() {
         composeTestRule.setContent {
             KccTheme { ConvoyStatusBarInline(memberCount = 4, expandedContent = {}) }
         }
 
-        composeTestRule.onNodeWithText("4").assertExists()
         composeTestRule
             .onNodeWithContentDescription(string(R.string.convoy_barMembers, 4))
             .assertExists()
+        // The raw digit is NOT a separate accessibility text node — cleared so a
+        // screen reader does not announce "4" and then "4 in the convoy".
+        composeTestRule.onNodeWithText("4").assertDoesNotExist()
     }
 }

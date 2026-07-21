@@ -40,8 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -190,13 +190,18 @@ fun ConvoyStatusBarInline(
                 val membersDescription =
                     stringResource(R.string.convoy_barMembers, memberCount)
                 Text(
-                    // Shows the bare number, but announces "N in the convoy" — a
-                    // contentDescription overrides the visible "3" for TalkBack while
-                    // the digit stays visible (and findable by text).
+                    // Shows the bare number visually, but announces "N in the convoy"
+                    // to TalkBack — and ONLY that. clearAndSetSemantics (not a merging
+                    // `semantics {}`) drops the digit's own text node from the
+                    // semantics tree, so a screen reader reads the description alone
+                    // and never a context-free "3" as a second node alongside it —
+                    // the same pattern the DM unread badge uses. The digit stays
+                    // visually rendered; it is simply no longer a separate a11y node.
                     text = memberCount.toString(),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.semantics { contentDescription = membersDescription },
+                    modifier =
+                        Modifier.clearAndSetSemantics { contentDescription = membersDescription },
                 )
                 IconButton(
                     onClick = {
