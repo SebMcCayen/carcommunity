@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.garage
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -106,11 +107,19 @@ class VehicleDetailScreenTest {
         var removed: String? = null
         composeTestRule.setContent {
             KccTheme {
-                VehicleGalleryPager(
-                    photoPaths = photoPaths,
-                    onSetCover = { covered = it },
-                    onRemovePhoto = { removed = it },
-                )
+                // Match the production layout: VehicleGalleryPager renders inside
+                // AeroPage's Column, so its pager / counter / thumbnail strip /
+                // action row stack vertically. Without a Column they would all be
+                // placed at the setContent root origin and overlap, and a
+                // thumbnail tap would land on the set-cover button drawn on top of
+                // it instead of paging the gallery.
+                Column {
+                    VehicleGalleryPager(
+                        photoPaths = photoPaths,
+                        onSetCover = { covered = it },
+                        onRemovePhoto = { removed = it },
+                    )
+                }
             }
         }
         // The current photo starts on the cover (index 0), so "set as cover" is
