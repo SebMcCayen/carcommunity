@@ -1885,8 +1885,16 @@ class MapboxMapSurface : MapSurface {
         /**
          * Adds the breadcrumb GeoJSON source (line metrics ON, so the gradient
          * can be computed) + a hidden, round-capped line layer, in the "middle"
-         * slot so the tail sits under labels and under the route line. Idempotent:
-         * a no-op if the source already exists (e.g. after a style reload).
+         * slot so the tail sits under labels and under the route line.
+         *
+         * Idempotent on the source AND the layer INDEPENDENTLY: the source is
+         * added only if missing, the layer only if missing. This matters because
+         * the caller wraps this in `runCatching`, so a failure after
+         * [addSource] but before/while [addLayer] would otherwise leave the
+         * source present and the layer missing — and a source-only early return
+         * would then never create the layer, so the tail could never render
+         * until a full style reload. Guarding each half separately lets the next
+         * call finish the job.
          *
          * The per-vertex fade is a best-effort enhancement layered on a SOLID
          * green fallback: the layer is created with a solid [lineColor] first,
@@ -1895,23 +1903,26 @@ class MapboxMapSurface : MapSurface {
          * explicitly permits — rather than the whole layer being dropped.
          */
         fun addBreadcrumbLayer(style: Style) {
-            if (style.styleSourceExists(BREADCRUMB_SOURCE_ID)) return
-            style.addSource(
-                geoJsonSource(BREADCRUMB_SOURCE_ID) {
-                    lineMetrics(true)
-                    featureCollection(FeatureCollection.fromFeatures(emptyList()))
-                },
-            )
-            style.addLayer(
-                lineLayer(BREADCRUMB_LAYER_ID, BREADCRUMB_SOURCE_ID) {
-                    slot("middle")
-                    lineCap(LineCap.ROUND)
-                    lineJoin(LineJoin.ROUND)
-                    lineWidth(BREADCRUMB_LINE_WIDTH)
-                    lineColor(Expression.rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_HEAD_ALPHA))
-                    visibility(Visibility.NONE)
-                },
-            )
+            if (!style.styleSourceExists(BREADCRUMB_SOURCE_ID)) {
+                style.addSource(
+                    geoJsonSource(BREADCRUMB_SOURCE_ID) {
+                        lineMetrics(true)
+                        featureCollection(FeatureCollection.fromFeatures(emptyList()))
+                    },
+                )
+            }
+            if (!style.styleLayerExists(BREADCRUMB_LAYER_ID)) {
+                style.addLayer(
+                    lineLayer(BREADCRUMB_LAYER_ID, BREADCRUMB_SOURCE_ID) {
+                        slot("middle")
+                        lineCap(LineCap.ROUND)
+                        lineJoin(LineJoin.ROUND)
+                        lineWidth(BREADCRUMB_LINE_WIDTH)
+                        lineColor(Expression.rgba(BREADCRUMB_R, BREADCRUMB_G, BREADCRUMB_B, BREADCRUMB_HEAD_ALPHA))
+                        visibility(Visibility.NONE)
+                    },
+                )
+            }
             runCatching {
                 style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID)
                     ?.lineGradient(breadcrumbGradientExpression())
