@@ -33,12 +33,15 @@ fun DriveStatsScreen(
     modifier: Modifier = Modifier,
 ) {
     // Start of the current calendar month in the device's local time zone,
-    // recomputed each composition (deliberately NOT remembered) so the "this
-    // month" boundary follows a month rollover if the screen stays composed across
-    // midnight on the 1st. The value is deterministic within a month, so the keyed
-    // `stats` fold below still only recomputes when the drives or the month itself
-    // change. The Calendar/time-zone concern lives here at the composable edge so
-    // the fold ([DriveStatsCalculator.compute]) stays pure and deterministic.
+    // computed on each composition (deliberately NOT cached in an unkeyed
+    // remember). It is re-evaluated on the next recomposition after a month
+    // rollover — driven by a drives-snapshot update, navigation, or a config
+    // change, not spontaneously at midnight — so the "this month" totals correct
+    // themselves rather than staying pinned to the month the screen opened in. The
+    // value is deterministic within a month, so the keyed `stats` fold below still
+    // only recomputes when the drives or the month change. The Calendar/time-zone
+    // concern lives here at the composable edge so the fold
+    // ([DriveStatsCalculator.compute]) stays pure and deterministic.
     val monthStartMillis =
         Calendar.getInstance().apply {
             set(Calendar.DAY_OF_MONTH, 1)
