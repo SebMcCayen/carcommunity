@@ -31,6 +31,7 @@
  * creation (Phase 9f); a badge failure never fails the add itself.
  */
 
+import { logger } from 'firebase-functions';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminStorage, db } from '../firebase';
@@ -323,11 +324,23 @@ export const removeVehiclePhoto = onCall(
     // Document first (source of truth): if this best-effort object delete fails
     // the gallery is already correct and the orphan is cleaned when the whole
     // vehicleImages/{uid}/{vehicleId}/ prefix is removed by deleteVehicle.
+    // Never fail the callable on a delete miss — the doc update already
+    // succeeded and the leftover object is a cleanup concern, not user-facing.
+    // We still log it so a systemic delete failure (permissions/misconfig) is
+    // observable instead of silently accumulating orphans. Log only the
+    // vehicleId + error code/message; the storage path embeds the caller uid,
+    // so it is deliberately kept out of the log.
     await adminStorage
       .bucket()
       .file(photoPath)
       .delete({ ignoreNotFound: true })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        logger.warn('Vehicle photo storage delete failed; object may be orphaned', {
+          vehicleId,
+          code: (error as { code?: unknown })?.code,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
 
     return { vehicleId };
   },

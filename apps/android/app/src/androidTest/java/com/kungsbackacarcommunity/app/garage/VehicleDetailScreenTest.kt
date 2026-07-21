@@ -1,6 +1,5 @@
 package com.kungsbackacarcommunity.app.garage
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -113,11 +112,22 @@ class VehicleDetailScreenTest {
             }
         }
         // The current photo starts on the cover (index 0), so "set as cover" is
-        // disabled there; "remove" opens a confirm dialog then fires with the path.
+        // disabled there.
         composeTestRule.onNodeWithTag(VEHICLE_GALLERY_SET_COVER_TAG).assertIsNotEnabled()
+
+        // Navigate to the non-cover photo via its thumbnail; "set as cover" now
+        // becomes enabled and, when tapped, fires onSetCover with that photo.
+        composeTestRule.onNodeWithTag(vehicleGalleryThumbnailTag(1)).performClick()
+        composeTestRule.onNodeWithTag(VEHICLE_GALLERY_SET_COVER_TAG)
+            .assertIsEnabled()
+            .performClick()
+        assertEquals("vehicleImages/u/v1/b.jpg", covered)
+
+        // "remove" on the current (now second) photo opens a confirm dialog then
+        // fires onRemovePhoto with that path.
         composeTestRule.onNodeWithTag(VEHICLE_GALLERY_REMOVE_TAG).performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_photoRemoveConfirmButton)).performClick()
-        assertEquals("vehicleImages/u/v1/a.jpg", removed)
+        assertEquals("vehicleImages/u/v1/b.jpg", removed)
     }
 
     @Test
