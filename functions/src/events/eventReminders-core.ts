@@ -168,9 +168,10 @@ export function decideEventReminder(inputs: EventReminderInputs): EventReminderD
  * Stable for the life of the event so writeInAppNotification's create-if-absent
  * collapses any re-fan-out into one inbox item per recipient. No recipient
  * component is needed (the inbox is already per-recipient,
- * notifications/{uid}/items/{id}); the charset (a-z, digits, '-') is within what
- * the notifications.markRead callable accepts, and an event id is a Firestore
- * auto-id so the result stays well under the id length cap.
+ * notifications/{uid}/items/{id}); its charset — the literal `event-reminder-`
+ * prefix plus a Firestore auto-id (A-Za-z0-9) — stays within the
+ * `^[A-Za-z0-9._-]+$` the notifications.markRead callable accepts, and a
+ * Firestore auto-id keeps the result well under the id length cap.
  */
 export function eventReminderNotificationId(eventId: string): string {
   return `event-reminder-${eventId}`;
