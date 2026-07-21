@@ -120,6 +120,19 @@ enum class ConvoyActionError {
      * sends them looking for a membership problem that does not exist.
      */
     NotAllowed,
+
+    /**
+     * The caller is already an ACTIVE participant of another convoy (owner, or an
+     * accepted member of a non-ended convoy) and so cannot create or accept into
+     * a second one until they leave/end the first (backend rule: one convoy at a
+     * time). Surfaced primarily by the CLIENT guard before the call is made — the
+     * Create control and pending-invite Accept are disabled with this reason while
+     * the caller is in a convoy, so this is the friendly message shown there
+     * rather than a raw backend error (create/respond both return the overloaded
+     * `failed-precondition` for it, which the code-only mapper cannot tell apart
+     * from "no invitees"/"invite gone").
+     */
+    AlreadyInConvoy,
     Generic,
 }
 

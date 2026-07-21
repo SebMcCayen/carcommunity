@@ -200,6 +200,22 @@ export interface LiveSession {
    * next session start.
    */
   mainCar: LiveMainCar | null;
+  /**
+   * True when this session was auto-started BY a convoy (convoy.start /
+   * convoy.respond-accept) rather than by the user tapping "share live". Absent
+   * on manually-started sessions. Used purely for TEARDOWN: convoy.leave /
+   * convoy.end stop only the session they auto-started (this flag + a matching
+   * convoyId), so a live session the user started manually for their own reasons
+   * is never killed when a convoy tears down. NOT read by viewers — the marker
+   * (liveLocation/{uid}/latest) is unchanged, so it does not touch the read path.
+   */
+  convoyAutoStarted?: boolean;
+  /**
+   * The convoy that auto-started this session, when convoyAutoStarted is true.
+   * Scopes teardown to the RIGHT convoy and lets a future convoy-scoped audience
+   * filter markers by convoy WITHOUT changing anything today.
+   */
+  convoyId?: string;
 }
 
 export function buildSession(

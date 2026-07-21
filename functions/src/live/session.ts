@@ -37,6 +37,7 @@ import {
   parseUpdatePositionInput,
   toLiveMainCar,
   type LiveSession,
+  type LiveSessionDuration,
   type LiveStopReason,
 } from './live-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
@@ -51,10 +52,39 @@ const CALLABLE_OPTS = {
 const sessionRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}/session`);
 const latestRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}/latest`);
 
+/**
+ * The live-session duration a convoy-auto session is started with. A convoy has
+ * no fixed length, so the longest supported duration is used; the session is
+ * stopped explicitly when the user leaves/ends the convoy (stopConvoyAutoSession)
+ * and, as a backstop, expires via the TTL sweep after this window regardless.
+ */
+export const CONVOY_AUTO_SESSION_DURATION: LiveSessionDuration = '4h';
+
 export interface SessionResponse {
   sessionId: string;
   status: string;
   expiresAt?: string;
+}
+
+/**
+ * Loads the two fields a live session denormalizes at start — the caller's
+ * displayName and their main car — shared by the manual startSession callable
+ * and the convoy auto-start producer so both build identical sessions. The
+ * profile read and the vehicles query are independent, so they run in parallel.
+ * The garage is capped at MAX_VEHICLES_PER_USER, so the owner query (single-field
+ * userId index) is cheap and .limit() bounds it even against corrupt data.
+ */
+async function loadSessionDenorm(
+  uid: string,
+): Promise<{ displayName: string | null; mainCar: ReturnType<typeof toLiveMainCar> }> {
+  const [profile, ownedVehicles] = await Promise.all([
+    db.collection('users').doc(uid).get(),
+    db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
+  ]);
+  const mainCar = toLiveMainCar(
+    ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
+  );
+  return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
 }
 
 export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
@@ -72,30 +102,15 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
     throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
   }
 
-  // Denormalize the caller's main car onto the session so viewers of the live
-  // share see which car it is. The garage is capped at MAX_VEHICLES_PER_USER,
-  // so the owner query (single-field userId index — no composite index needed)
-  // is cheap; the main car is the one flagged isMainCar (max 1, enforced by
-  // garage.setMainVehicle). The .limit() bounds Firestore reads to the cap even
-  // if corrupt/legacy data ever leaves a user with more owned vehicles.
-  // The profile read and the vehicles query are independent, so fetch them in
-  // parallel to keep startSession latency low.
-  const [profile, ownedVehicles] = await Promise.all([
-    db.collection('users').doc(actor.uid).get(),
-    db
-      .collection('vehicles')
-      .where('userId', '==', actor.uid)
-      .limit(MAX_VEHICLES_PER_USER)
-      .get(),
-  ]);
-  const mainCar = toLiveMainCar(
-    ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
-  );
+  // Denormalize the caller's displayName + main car onto the session so viewers
+  // of the live share see who and which car it is (shared with the convoy
+  // auto-start producer below).
+  const { displayName, mainCar } = await loadSessionDenorm(actor.uid);
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
-    (profile.data()?.displayName as string | undefined) ?? null,
+    displayName,
     mainCar,
   );
   // Starting while a session is active RESTARTS it (fresh id + expiry).
@@ -172,3 +187,103 @@ export const hideMeNow = onCall(CALLABLE_OPTS, async (request): Promise<SessionR
   }
   return stopAndClear(uid, 'hide_me_now');
 });
+
+// ---------------------------------------------------------------------------
+// Convoy auto-started live sessions (item 2 — "starting a convoy auto-starts a
+// live session so everyone in the convoy can see you").
+//
+// These are the PRODUCER side of live-share, reused by the convoy callables
+// (functions/src/convoy/manageConvoy.ts). They write ONLY the backend-owned
+// liveLocation/{uid}/session node (plus clearing latest, exactly as the manual
+// startSession does) — never the marker read path or its rules. Visibility of
+// the resulting session is the EXISTING live-share audience: any non-suspended
+// activeMember (minus blocks) can read the marker, convoy members among them.
+// There is no per-convoy audience scoping in the read rules today; making the
+// auto-session visible ONLY to convoy members would require a scoped-audience
+// change to the marker read/rules path, which is owned by the separate
+// live-visibility (item 6) investigation. The convoyId is stamped on the session
+// so that scoping can filter on it later with no producer change.
+// ---------------------------------------------------------------------------
+
+export type ConvoyAutoStartOutcome = 'started' | 'skipped-existing' | 'flag-off';
+
+/**
+ * Auto-starts a convoy-scoped live session for `uid`, UNLESS they already have
+ * an active session — in which case it is left exactly as-is (the crucial rule
+ * that stops a convoy from clobbering, re-tagging, or later killing a session
+ * the user started MANUALLY: only sessions this function actually creates are
+ * tagged convoyAutoStarted, and only tagged sessions are torn down). An already
+ * active session — manual OR from this same convoy — already makes the user
+ * visible to the convoy, so there is nothing to do.
+ *
+ * Best-effort by contract: the caller (convoy.start / convoy.respond) treats a
+ * throw as non-fatal, because a convoy must still start even if live-share is
+ * unavailable. The liveLocation feature flag is honoured (flag-off → no session).
+ */
+export async function startConvoyAutoSession(
+  uid: string,
+  convoyId: string,
+): Promise<ConvoyAutoStartOutcome> {
+  if (!(await readFeatureFlag(LIVE_LOCATION_FLAG_KEY))) {
+    return 'flag-off';
+  }
+  const now = new Date();
+  const existing = (await sessionRef(uid).get()).val() as LiveSession | null;
+  if (isSessionActive(existing, now)) {
+    // Already sharing — manual or a prior convoy-auto session. Do NOT replace
+    // it (that would reset a manual session's id/expiry) and do NOT tag it, so
+    // teardown never stops a session the convoy did not start.
+    return 'skipped-existing';
+  }
+
+  const { displayName, mainCar } = await loadSessionDenorm(uid);
+  const session: LiveSession = {
+    ...buildSession(
+      db.collection('_ids').doc().id,
+      CONVOY_AUTO_SESSION_DURATION,
+      now,
+      displayName,
+      mainCar,
+    ),
+    convoyAutoStarted: true,
+    convoyId,
+  };
+  // Mirror the manual startSession write: replace the (stopped/expired) session
+  // node and clear any leftover marker from a previous session.
+  await sessionRef(uid).set(session);
+  await latestRef(uid).remove();
+  return 'started';
+}
+
+export type ConvoyAutoStopOutcome = 'stopped' | 'left-untouched';
+
+/**
+ * Stops the live session `uid` had auto-started FOR this convoy, and only that:
+ * the session must currently be active, flagged convoyAutoStarted, and carry the
+ * matching convoyId. A manually-started session (no flag), a session auto-started
+ * for a DIFFERENT convoy, or one already stopped/expired is left untouched. Like
+ * a normal stop it marks the session stopped and removes the marker immediately.
+ *
+ * Best-effort: a throw here must not fail convoy.leave / convoy.end.
+ */
+export async function stopConvoyAutoSession(
+  uid: string,
+  convoyId: string,
+): Promise<ConvoyAutoStopOutcome> {
+  const session = (await sessionRef(uid).get()).val() as LiveSession | null;
+  if (
+    session &&
+    session.status === 'active' &&
+    session.convoyAutoStarted === true &&
+    session.convoyId === convoyId
+  ) {
+    await sessionRef(uid).update({
+      status: 'stopped',
+      stoppedAt: new Date().toISOString(),
+      stopReason: 'user_stop' satisfies LiveStopReason,
+    });
+    await latestRef(uid).remove();
+    return 'stopped';
+  }
+  return 'left-untouched';
+}

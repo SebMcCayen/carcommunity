@@ -10,6 +10,7 @@ import {
   buildMemberEntry,
   computeConvoySummary,
   isAcceptedConvoyMember,
+  isActiveConvoyParticipant,
   isConvoyMember,
   liveLocationLatestPath,
   memberEntry,
@@ -342,6 +343,25 @@ describe('convoy-core accepted membership + leave', () => {
     expect(isAcceptedConvoyMember(doc, 'owner')).toBe(true);
     expect(isAcceptedConvoyMember(doc, 'stranger')).toBe(false);
     expect(isAcceptedConvoyMember(undefined, 'owner')).toBe(false);
+  });
+
+  it('treats only ACCEPTED members of a NON-ENDED convoy as active participants (item 1)', () => {
+    // Owner and accepted invitee count; invited/declined/stranger do not.
+    expect(isActiveConvoyParticipant(doc, 'owner')).toBe(true);
+    expect(isActiveConvoyParticipant(doc, 'i1')).toBe(true);
+    expect(isActiveConvoyParticipant(doc, 'i2')).toBe(false); // invited, not committed
+    expect(isActiveConvoyParticipant(doc, 'i3')).toBe(false); // declined
+    expect(isActiveConvoyParticipant(doc, 'stranger')).toBe(false);
+    expect(isActiveConvoyParticipant(undefined, 'owner')).toBe(false);
+
+    // A `forming` convoy still counts (the leader is already committed).
+    expect(isActiveConvoyParticipant({ ...doc, status: 'forming' }, 'owner')).toBe(true);
+    expect(isActiveConvoyParticipant({ ...doc, status: 'forming' }, 'i1')).toBe(true);
+
+    // An `ended` convoy is history — it never blocks a new convoy, not even for
+    // an accepted member or the owner.
+    expect(isActiveConvoyParticipant({ ...doc, status: 'ended' }, 'owner')).toBe(false);
+    expect(isActiveConvoyParticipant({ ...doc, status: 'ended' }, 'i1')).toBe(false);
   });
 
   it('removes the leaver from ALL THREE membership collections at once', () => {

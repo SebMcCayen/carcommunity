@@ -465,6 +465,9 @@
     <string name="convoy_errorAlreadyEnded">This convoy has already ended.</string>
     <string name="convoy_errorNotAllowed">Only the person who set the destination, or the convoy owner, can clear it.</string>
     <string name="convoy_errorGeneric">Something went wrong. Please try again.</string>
+    <string name="convoy_errorAlreadyInConvoy">You\'re already in a convoy. Leave or end it before joining another.</string>
+    <string name="convoy_alreadyInConvoyCreateHint">You\'re already in a convoy — leave or end it to start a new one.</string>
+    <string name="convoy_alreadyInConvoyAcceptHint">You\'re already in a convoy — leave or end it before joining another.</string>
     <string name="convoy_barMembers">%1$d in convoy</string>
     <string name="convoy_barInvite">Invite more</string>
     <string name="convoy_barLeave">Leave convoy</string>

@@ -56,6 +56,15 @@ import { z } from 'zod';
 export const CONVOY_STATUSES = ['forming', 'active', 'ended'] as const;
 export type ConvoyStatus = (typeof CONVOY_STATUSES)[number];
 
+/**
+ * The convoy statuses that count as "live" for the one-convoy-at-a-time rule:
+ * a convoy still being assembled (`forming`) or on the road (`active`). An
+ * `ended` convoy is history and never blocks a new one. This is the status set
+ * the "am I already in a convoy" query filters on (convoy.create /
+ * convoy.respond in manageConvoy.ts).
+ */
+export const ACTIVE_CONVOY_STATUSES = ['forming', 'active'] as const;
+
 export const CONVOY_MEMBER_ROLES = ['owner', 'member'] as const;
 export type ConvoyMemberRole = (typeof CONVOY_MEMBER_ROLES)[number];
 
@@ -322,6 +331,8 @@ export const NOT_ACCEPTED_MEMBER_MESSAGE = 'You have not joined this convoy.';
 export const CONVOY_FULL_MESSAGE = `A convoy can hold at most ${MAX_CONVOY_SIZE} people.`;
 export const DESTINATION_CLEAR_FORBIDDEN_MESSAGE =
   'Only the member who set the destination, or the convoy owner, can clear it.';
+export const ALREADY_IN_CONVOY_MESSAGE =
+  'You are already in a convoy. Leave or end it before joining another.';
 
 /**
  * Why a requested invitee was skipped by convoy.create. There is deliberately NO
@@ -565,6 +576,30 @@ export function isAcceptedConvoyMember(
   uid: string,
 ): boolean {
   return memberEntry(data, uid)?.inviteStatus === 'accepted';
+}
+
+/**
+ * True when `uid` is an ACTIVE PARTICIPANT of this convoy — the precise
+ * definition the one-convoy-at-a-time rule (item 1) gates on:
+ *
+ *  - the convoy is not `ended` (a finished convoy is history, never a conflict), AND
+ *  - the caller is an ACCEPTED member of it. The owner is seeded
+ *    members[owner]={role:'owner',inviteStatus:'accepted'}, so this covers "the
+ *    leader who started it"; an accepted invitee covers "a member who accepted
+ *    an invite". A merely-INVITED (still-pending) or DECLINED member is NOT an
+ *    active participant — they have not committed to this convoy, so it must not
+ *    stop them creating or accepting elsewhere.
+ *
+ * This is the per-document predicate; the callable pairs it with a query over
+ * convoys the caller belongs to (memberUids array-contains) filtered to
+ * ACTIVE_CONVOY_STATUSES, and runs both inside the membership-writing
+ * transaction so two concurrent creates/accepts cannot both slip through.
+ */
+export function isActiveConvoyParticipant(
+  data: Record<string, unknown> | undefined,
+  uid: string,
+): boolean {
+  return data?.status !== 'ended' && isAcceptedConvoyMember(data, uid);
 }
 
 /**

@@ -1023,3 +1023,162 @@ describe('convoy shared destination', () => {
     ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// ITEM 1 — one convoy at a time. A user who is an ACTIVE PARTICIPANT (owner, or
+// an accepted member) of a non-ended convoy cannot create OR accept into a
+// second one until they leave/end the first.
+// ---------------------------------------------------------------------------
+describe('convoy one-at-a-time enforcement', () => {
+  it('blocks the OWNER of an active convoy from creating another', async () => {
+    const owner = await newMember('OneOwnerC');
+    const f1 = await newMember('OneF1C');
+    const f2 = await newMember('OneF2C');
+    await makeFriends(owner, f1);
+    await makeFriends(owner, f2);
+
+    await signInAs(owner);
+    await call('convoy-create', { inviteeUids: [f1.uid] });
+    // Already the owner (accepted participant) of a forming convoy → the second
+    // create is refused.
+    expect(await callableErrorCode(call('convoy-create', { inviteeUids: [f2.uid] }))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('blocks an ACCEPTED member from creating their own convoy', async () => {
+    const { member } = await convoyWithAcceptedMember('OneAccOwnerC', 'OneAccMemberC');
+    const theirFriend = await newMember('OneAccFriendC');
+    await makeFriends(member, theirFriend);
+
+    // The member is an accepted participant of the first convoy, so they cannot
+    // spin up a second one of their own.
+    await signInAs(member);
+    expect(
+      await callableErrorCode(call('convoy-create', { inviteeUids: [theirFriend.uid] })),
+    ).toBe('functions/failed-precondition');
+  });
+
+  it('blocks accepting a SECOND convoy while already accepted in one (decline is fine)', async () => {
+    const { member, convoyId: firstConvoyId } = await convoyWithAcceptedMember(
+      'OneSecOwnerC',
+      'OneSecMemberC',
+    );
+    // A second owner invites the same member into a second convoy.
+    const owner2 = await newMember('OneSecOwner2C');
+    await makeFriends(owner2, member);
+    await signInAs(owner2);
+    const second = (await call('convoy-create', { inviteeUids: [member.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const secondConvoyId = second.convoy.convoyId;
+
+    // The member is already accepted in the first convoy → accepting the second
+    // is refused...
+    await signInAs(member);
+    expect(
+      await callableErrorCode(call('convoy-respond', { convoyId: secondConvoyId, action: 'accept' })),
+    ).toBe('functions/failed-precondition');
+    // ...but DECLINING it is always allowed (it commits to nothing).
+    const declined = (
+      await call('convoy-respond', { convoyId: secondConvoyId, action: 'decline' })
+    ).data as { inviteStatus: string };
+    expect(declined.inviteStatus).toBe('declined');
+    // The first convoy membership is untouched.
+    const stored = await adminDb.collection('convoys').doc(firstConvoyId).get();
+    expect(stored.data()!.members[member.uid].inviteStatus).toBe('accepted');
+  });
+
+  it('a still-PENDING invite does NOT count — the invitee may still create/accept', async () => {
+    const owner1 = await newMember('PendOwner1C');
+    const user = await newMember('PendUserC');
+    const theirFriend = await newMember('PendFriendC');
+    await makeFriends(owner1, user);
+    await makeFriends(user, theirFriend);
+
+    // owner1 invites `user`, who does NOT answer — a pending invite.
+    await signInAs(owner1);
+    await call('convoy-create', { inviteeUids: [user.uid] });
+
+    // `user` is only INVITED (not accepted) anywhere, so they can create their
+    // own convoy...
+    await signInAs(user);
+    const created = (await call('convoy-create', { inviteeUids: [theirFriend.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(created.convoy.ownerUid).toBe(user.uid);
+  });
+
+  it('LEAVING frees an accepted member to join another convoy', async () => {
+    const { member, convoyId } = await convoyWithAcceptedMember('LeaveFreeOwnerC', 'LeaveFreeMemberC');
+    const owner2 = await newMember('LeaveFreeOwner2C');
+    await makeFriends(owner2, member);
+    await signInAs(owner2);
+    const second = (await call('convoy-create', { inviteeUids: [member.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+
+    // Blocked while still in the first...
+    await signInAs(member);
+    expect(
+      await callableErrorCode(
+        call('convoy-respond', { convoyId: second.convoy.convoyId, action: 'accept' }),
+      ),
+    ).toBe('functions/failed-precondition');
+    // ...leave the first, and now accepting the second succeeds.
+    await call('convoy-leave', { convoyId });
+    const accepted = (
+      await call('convoy-respond', { convoyId: second.convoy.convoyId, action: 'accept' })
+    ).data as { inviteStatus: string };
+    expect(accepted.inviteStatus).toBe('accepted');
+  });
+
+  it('ENDING frees the owner to create another convoy', async () => {
+    const owner = await newMember('EndFreeOwnerC');
+    const f1 = await newMember('EndFreeF1C');
+    const f2 = await newMember('EndFreeF2C');
+    await makeFriends(owner, f1);
+    await makeFriends(owner, f2);
+
+    await signInAs(owner);
+    const first = (await call('convoy-create', { inviteeUids: [f1.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    // End it, then a fresh create is allowed.
+    await call('convoy-end', { convoyId: first.convoy.convoyId });
+    const second = (await call('convoy-create', { inviteeUids: [f2.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    expect(second.convoy.convoyId).not.toBe(first.convoy.convoyId);
+    expect(second.convoy.status).toBe('forming');
+  });
+
+  it('races two simultaneous creates — exactly ONE wins (transaction serializes them)', async () => {
+    const owner = await newMember('RaceOwnerC');
+    const f1 = await newMember('RaceF1C');
+    const f2 = await newMember('RaceF2C');
+    await makeFriends(owner, f1);
+    await makeFriends(owner, f2);
+
+    await signInAs(owner);
+    // Fire both creates concurrently. The "am I already in a convoy" check runs
+    // inside each create's transaction, so at most one can commit — the other
+    // sees the winner's convoy on retry and is rejected with failed-precondition.
+    const results = await Promise.allSettled([
+      call('convoy-create', { inviteeUids: [f1.uid] }),
+      call('convoy-create', { inviteeUids: [f2.uid] }),
+    ]);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    // Exactly one active convoy exists for this owner.
+    const active = await adminDb
+      .collection('convoys')
+      .where('memberUids', 'array-contains', owner.uid)
+      .where('status', 'in', ['forming', 'active'])
+      .get();
+    expect(active.docs).toHaveLength(1);
+  }, 60_000);
+});

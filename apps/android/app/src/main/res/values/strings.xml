@@ -465,6 +465,9 @@
     <string name="convoy_errorAlreadyEnded">Konvojen är redan avslutad.</string>
     <string name="convoy_errorNotAllowed">Bara den som satte destinationen, eller konvojens ägare, kan ta bort den.</string>
     <string name="convoy_errorGeneric">Något gick fel. Försök igen.</string>
+    <string name="convoy_errorAlreadyInConvoy">Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.</string>
+    <string name="convoy_alreadyInConvoyCreateHint">Du är redan med i en konvoj – lämna eller avsluta den för att starta en ny.</string>
+    <string name="convoy_alreadyInConvoyAcceptHint">Du är redan med i en konvoj – lämna eller avsluta den innan du går med i en annan.</string>
     <string name="convoy_barMembers">%1$d i konvojen</string>
     <string name="convoy_barInvite">Bjud in fler</string>
     <string name="convoy_barLeave">Lämna konvojen</string>
