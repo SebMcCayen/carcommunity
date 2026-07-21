@@ -659,7 +659,22 @@
     "statsTotalTime": "Total time",
     "statsLongest": "Longest drive",
     "statsAverage": "Average length",
-    "statsFastest": "Fastest average speed"
+    "statsFastest": "Fastest average speed",
+    "filterSearchLabel": "Search drives",
+    "filterPeriod": "Period",
+    "filterThisWeek": "This week",
+    "filterThisMonth": "This month",
+    "filterDistance": "Distance",
+    "filterUnder10": "< 10 km",
+    "filter10to50": "10–50 km",
+    "filterOver50": "50+ km",
+    "filterSort": "Sort",
+    "sortNewest": "Newest",
+    "sortLongest": "Longest",
+    "sortFastest": "Fastest",
+    "filterClear": "Clear filters",
+    "filterNoMatches": "No drives match your filters.",
+    "filterNoMatchesAction": "Clear filters"
   },
   "garage": {
     "screenTitle": "My Garage",

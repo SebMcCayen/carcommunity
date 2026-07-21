@@ -659,7 +659,22 @@
     "statsTotalTime": "Total tid",
     "statsLongest": "Längsta körning",
     "statsAverage": "Snittlängd",
-    "statsFastest": "Högsta snitthastighet"
+    "statsFastest": "Högsta snitthastighet",
+    "filterSearchLabel": "Sök körningar",
+    "filterPeriod": "Period",
+    "filterThisWeek": "Denna vecka",
+    "filterThisMonth": "Denna månad",
+    "filterDistance": "Distans",
+    "filterUnder10": "< 10 km",
+    "filter10to50": "10–50 km",
+    "filterOver50": "50+ km",
+    "filterSort": "Sortera",
+    "sortNewest": "Senaste",
+    "sortLongest": "Längst",
+    "sortFastest": "Snabbast",
+    "filterClear": "Rensa filter",
+    "filterNoMatches": "Inga körningar matchar dina filter.",
+    "filterNoMatchesAction": "Rensa filter"
   },
   "garage": {
     "screenTitle": "Mitt garage",

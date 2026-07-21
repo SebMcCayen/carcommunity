@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,11 +16,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,11 +34,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -58,6 +67,35 @@ fun DrivesListScreen(
     // instead, so the stats entry never leads to a page of zeroes.
     onShowStats: (() -> Unit)? = null,
 ) {
+    // Search/filter/sort state for the History list. Survives config changes
+    // (rememberSaveable): the query is a String and the three enums are
+    // Serializable, so the default autoSaver handles them. This is a pure UI
+    // concern of the list surface, so it is owned here rather than hoisted into
+    // DrivesRoute.
+    var query by rememberSaveable { mutableStateOf("") }
+    var dateRange by rememberSaveable { mutableStateOf(DriveDateRange.ALL) }
+    var distanceBand by rememberSaveable { mutableStateOf(DriveDistanceBand.ALL) }
+    var sort by rememberSaveable { mutableStateOf(DriveSort.NEWEST) }
+    val criteria = DriveFilterCriteria(query, dateRange, distanceBand, sort)
+
+    // Resolve the period presets to epoch-millis boundaries at the composable
+    // edge (a Calendar/time-zone concern) so the fold in [DriveFilters] stays
+    // pure and deterministic. Recomputed each composition — cheap, and it lets a
+    // week/month rollover correct itself on the next recomposition rather than
+    // pinning to the boundary the screen opened in (mirrors [DriveStatsScreen]).
+    val weekStartMillis = DrivePeriodBoundaries.startOfCurrentWeekMillis()
+    val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
+
+    // Filter over the FULL loaded list (an owner query with no limit — see
+    // [DriveFilters]), so results are complete, never a partial page. Computed
+    // unconditionally (empty in for a non-Loaded state) so the remember slot is
+    // stable across the Loading -> Loaded transition.
+    val allDrives = (state as? DrivesState.Loaded)?.drives ?: emptyList()
+    val filteredDrives =
+        remember(allDrives, criteria, weekStartMillis, monthStartMillis) {
+            DriveFilters.filterDrives(allDrives, criteria, weekStartMillis, monthStartMillis)
+        }
+
     // LazyColumn so an unbounded drive history only composes visible rows
     // (mirrors NotificationsScreen for durable lists).
     AeroLazyPage(modifier = modifier) {
@@ -114,16 +152,50 @@ fun DrivesListScreen(
                     if (state.drives.isEmpty()) {
                         item { EmptyDrives() }
                     } else {
+                        // The stats entry reflects ALL drives (all-time), never the
+                        // filtered set: "your driving" is a lifetime figure and would
+                        // be confusing if it changed as you typed a search. It is
+                        // shown whenever any drive exists, independent of the filter.
                         if (onShowStats != null) {
                             item { StatsEntryCard(onShowStats) }
                         }
-                        items(state.drives, key = { it.rideId }) { drive ->
-                            DriveCard(
-                                drive = drive,
-                                onSelect = onSelect,
-                                onDelete = onDelete,
-                                deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
+                        item {
+                            DriveFilterBar(
+                                criteria = criteria,
+                                onQueryChange = { query = it },
+                                onDateRangeChange = { dateRange = it },
+                                onDistanceBandChange = { distanceBand = it },
+                                onSortChange = { sort = it },
+                                onClear = {
+                                    query = ""
+                                    dateRange = DriveDateRange.ALL
+                                    distanceBand = DriveDistanceBand.ALL
+                                    sort = DriveSort.NEWEST
+                                },
                             )
+                        }
+                        if (filteredDrives.isEmpty()) {
+                            // Distinct from the "no saved drives yet" empty state:
+                            // drives exist, they just don't match the active filters.
+                            item {
+                                NoMatchingDrives(
+                                    onClear = {
+                                        query = ""
+                                        dateRange = DriveDateRange.ALL
+                                        distanceBand = DriveDistanceBand.ALL
+                                        sort = DriveSort.NEWEST
+                                    },
+                                )
+                            }
+                        } else {
+                            items(filteredDrives, key = { it.rideId }) { drive ->
+                                DriveCard(
+                                    drive = drive,
+                                    onSelect = onSelect,
+                                    onDelete = onDelete,
+                                    deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
+                                )
+                            }
                         }
                     }
             }
@@ -163,6 +235,166 @@ private fun EmptyDrives() {
         )
     }
 }
+
+/**
+ * Shown in place of the drive rows when at least one drive exists but none match
+ * the active filters. Distinct from [EmptyDrives] ("no saved drives yet") and
+ * carries a clear-filters affordance so the user is never stranded on an empty
+ * result they can't undo.
+ */
+@Composable
+private fun NoMatchingDrives(onClear: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            Text(
+                text = stringResource(R.string.savedDrives_filterNoMatches),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            TextButton(onClick = onClear) {
+                Text(text = stringResource(R.string.savedDrives_filterNoMatchesAction))
+            }
+        }
+    }
+}
+
+/**
+ * Search field + filter/sort chips at the top of the History list. Pure
+ * presentation over a [DriveFilterCriteria]; all matching lives in
+ * [DriveFilters]. Selecting an already-selected period or distance chip toggles
+ * it back off (to ALL); sort is single-select and always has exactly one active.
+ */
+@Composable
+private fun DriveFilterBar(
+    criteria: DriveFilterCriteria,
+    onQueryChange: (String) -> Unit,
+    onDateRangeChange: (DriveDateRange) -> Unit,
+    onDistanceBandChange: (DriveDistanceBand) -> Unit,
+    onSortChange: (DriveSort) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+    ) {
+        OutlinedTextField(
+            value = criteria.query,
+            onValueChange = onQueryChange,
+            label = { Text(stringResource(R.string.savedDrives_filterSearchLabel)) },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions =
+                androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+        )
+
+        ChipSection(stringResource(R.string.savedDrives_filterPeriod)) {
+            FilterChip(
+                selected = criteria.dateRange == DriveDateRange.THIS_WEEK,
+                onClick = {
+                    onDateRangeChange(
+                        toggledRange(criteria.dateRange, DriveDateRange.THIS_WEEK),
+                    )
+                },
+                label = { Text(stringResource(R.string.savedDrives_filterThisWeek)) },
+            )
+            FilterChip(
+                selected = criteria.dateRange == DriveDateRange.THIS_MONTH,
+                onClick = {
+                    onDateRangeChange(
+                        toggledRange(criteria.dateRange, DriveDateRange.THIS_MONTH),
+                    )
+                },
+                label = { Text(stringResource(R.string.savedDrives_filterThisMonth)) },
+            )
+        }
+
+        ChipSection(stringResource(R.string.savedDrives_filterDistance)) {
+            FilterChip(
+                selected = criteria.distanceBand == DriveDistanceBand.UNDER_10_KM,
+                onClick = {
+                    onDistanceBandChange(
+                        toggledBand(criteria.distanceBand, DriveDistanceBand.UNDER_10_KM),
+                    )
+                },
+                label = { Text(stringResource(R.string.savedDrives_filterUnder10)) },
+            )
+            FilterChip(
+                selected = criteria.distanceBand == DriveDistanceBand.FROM_10_TO_50_KM,
+                onClick = {
+                    onDistanceBandChange(
+                        toggledBand(criteria.distanceBand, DriveDistanceBand.FROM_10_TO_50_KM),
+                    )
+                },
+                label = { Text(stringResource(R.string.savedDrives_filter10to50)) },
+            )
+            FilterChip(
+                selected = criteria.distanceBand == DriveDistanceBand.OVER_50_KM,
+                onClick = {
+                    onDistanceBandChange(
+                        toggledBand(criteria.distanceBand, DriveDistanceBand.OVER_50_KM),
+                    )
+                },
+                label = { Text(stringResource(R.string.savedDrives_filterOver50)) },
+            )
+        }
+
+        ChipSection(stringResource(R.string.savedDrives_filterSort)) {
+            FilterChip(
+                selected = criteria.sort == DriveSort.NEWEST,
+                onClick = { onSortChange(DriveSort.NEWEST) },
+                label = { Text(stringResource(R.string.savedDrives_sortNewest)) },
+            )
+            FilterChip(
+                selected = criteria.sort == DriveSort.LONGEST,
+                onClick = { onSortChange(DriveSort.LONGEST) },
+                label = { Text(stringResource(R.string.savedDrives_sortLongest)) },
+            )
+            FilterChip(
+                selected = criteria.sort == DriveSort.FASTEST_AVERAGE,
+                onClick = { onSortChange(DriveSort.FASTEST_AVERAGE) },
+                label = { Text(stringResource(R.string.savedDrives_sortFastest)) },
+            )
+        }
+
+        // Only offered when something is actually filtering the list (sort alone
+        // never hides a drive, so it doesn't count — see hasActiveFilters).
+        if (criteria.hasActiveFilters) {
+            TextButton(onClick = onClear) {
+                Text(text = stringResource(R.string.savedDrives_filterClear))
+            }
+        }
+    }
+}
+
+/** A labelled, horizontally-scrollable row of filter chips. */
+@Composable
+private fun ChipSection(label: String, chips: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            chips()
+        }
+    }
+}
+
+/** Clicking the active period chip returns to ALL; otherwise selects it. */
+private fun toggledRange(current: DriveDateRange, target: DriveDateRange): DriveDateRange =
+    if (current == target) DriveDateRange.ALL else target
+
+/** Clicking the active distance chip returns to ALL; otherwise selects it. */
+private fun toggledBand(current: DriveDistanceBand, target: DriveDistanceBand): DriveDistanceBand =
+    if (current == target) DriveDistanceBand.ALL else target
 
 @Composable
 private fun DriveCard(
