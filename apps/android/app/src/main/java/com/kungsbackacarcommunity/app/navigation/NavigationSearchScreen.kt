@@ -376,7 +376,14 @@ fun NavigationSearchScreen(
             place = target,
             existing = SavedPlaces.find(state.savedPlaces, target),
             pendingEdit = pendingEdit,
-            onDismiss = { saveTarget = null },
+            onDismiss = {
+                // Abandoning the dialog abandons the re-point: consume it so a
+                // later save this session is a fresh place, not a stale change-
+                // address that would default to the old kind and sweep its id
+                // (e.g. remove "home" when saving an unrelated favourite).
+                pendingEdit = null
+                saveTarget = null
+            },
             onSave = { kind, label ->
                 // Sweep the old row FIRST (before adding the new one) so the brief
                 // over-cap moment can't make upsert evict an unrelated favourite.
@@ -391,6 +398,9 @@ fun NavigationSearchScreen(
             },
             onRemove = { id ->
                 controller.removeSavedPlace(id)
+                // Removing here also concludes any pending re-point, so it can't
+                // be re-applied to an unrelated later save. See onDismiss above.
+                pendingEdit = null
                 saveTarget = null
             },
         )

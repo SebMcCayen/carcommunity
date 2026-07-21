@@ -1883,6 +1883,13 @@ fun AuthenticatedApp(
                             // "Add a place": a fresh save, so no change-address
                             // context — clear it in case one lingered.
                             navSearchInitialEdit = null
+                            // Search-first: drop any lingering map-tap / post-
+                            // navigation target (TurnByTurnNavScreen.onExit leaves
+                            // navSearchTarget set) and convoy-pick so the picker
+                            // opens on the search field, not a stale place preview.
+                            navSearchTarget = null
+                            navSearchTargetName = null
+                            navSearchConvoyPick = false
                             route = null
                             navSearchOpen = true
                         },
@@ -1892,6 +1899,12 @@ fun AuthenticatedApp(
                         // Favourite. See SavePlaceDialog's use of initialSaveEdit.
                         onChangeSavedPlaceAddress = { place ->
                             navSearchInitialEdit = SavedPlaces.editOf(place)
+                            // The re-point is the only context this open carries;
+                            // clear any stale map-tap target / convoy-pick so it
+                            // can't override the search-first change-address flow.
+                            navSearchTarget = null
+                            navSearchTargetName = null
+                            navSearchConvoyPick = false
                             route = null
                             navSearchOpen = true
                         },

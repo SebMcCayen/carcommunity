@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -189,13 +190,19 @@ private fun SavedPlacesList(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             places.forEachIndexed { index, place ->
-                if (index > 0) HorizontalDivider()
-                SavedPlaceRow(
-                    place = place,
-                    onRename = { onRename(place) },
-                    onChangeAddress = { onChangeAddress(place) },
-                    onDelete = { onDelete(place) },
-                )
+                // Key each row by its stable place id: RowActions holds per-row
+                // remember state (the overflow-menu `expanded` flag), so without a
+                // key a deletion would shift composition slots and leave that menu
+                // state attached to the wrong row.
+                key(place.id) {
+                    if (index > 0) HorizontalDivider()
+                    SavedPlaceRow(
+                        place = place,
+                        onRename = { onRename(place) },
+                        onChangeAddress = { onChangeAddress(place) },
+                        onDelete = { onDelete(place) },
+                    )
+                }
             }
         }
     }
