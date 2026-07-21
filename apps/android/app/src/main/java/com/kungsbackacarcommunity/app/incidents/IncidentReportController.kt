@@ -4,6 +4,7 @@ import android.content.Context
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -166,7 +167,83 @@ class IncidentReportController(
         return true
     }
 
+    /**
+     * Keeps [nearbyIncidents] LIVE by refreshing around the user's current
+     * location on a cadence, until the coroutine is cancelled (the caller scopes
+     * it to the Map tab being shown and the layer enabled).
+     *
+     * This is the fix for "an incident someone else reports isn't visible to
+     * me". The incident layer is a SHARED, Waze-style map layer: the reporter's
+     * own pin is added optimistically from the write's response, but every OTHER
+     * user only ever learns of a report through [IncidentRepository.listNearby]
+     * (reached here via [refresh] / [refreshAroundCurrent]). A single fetch on
+     * tab-entry left those users looking at a stale layer — a report made while
+     * they were already on the map never appeared until they left and came back.
+     * Polling closes that gap.
+     *
+     * Two phases:
+     *  1. Cold-open acquisition — the fused last-known location is frequently
+     *     null right after launch, so the first few passes retry on a short
+     *     [initialRetryMs] backoff until a fix arrives (refreshAroundCurrent
+     *     returns true → a refresh ran), so the layer populates ASAP.
+     *  2. Steady state — refresh every [pollIntervalMs] so newly-reported
+     *     incidents from other users keep appearing. A pass with no fix is a
+     *     harmless no-op that the next tick retries, so GPS arriving late still
+     *     recovers (unlike the old give-up-after-N-attempts behaviour).
+     *
+     * Every pass is best-effort: [refreshAroundCurrent] no-ops without a fix and
+     * [refresh] swallows fetch failures, keeping the last-known markers — so a
+     * transient outage never blanks the map. Cancellation propagates.
+     *
+     * The delay inputs MUST be strictly positive: a zero/negative [pollIntervalMs]
+     * turns phase 2 into a `delay(0)` busy loop that hammers the callable and
+     * drains the battery, and a non-positive [initialRetryMs] does the same to
+     * the cold-open retry. Misuse fails fast rather than shipping a hot loop.
+     */
+    suspend fun pollNearby(
+        radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS,
+        pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
+        initialRetryMs: Long = DEFAULT_INITIAL_RETRY_MS,
+        initialAttempts: Int = DEFAULT_INITIAL_ATTEMPTS,
+    ) {
+        require(pollIntervalMs > 0) { "pollIntervalMs must be > 0, was $pollIntervalMs" }
+        require(initialRetryMs > 0) { "initialRetryMs must be > 0, was $initialRetryMs" }
+        // Phase 1: acquire the first fix quickly so the layer is not blank for
+        // the whole initial poll interval on a cold open.
+        var acquired = false
+        var attempt = 0
+        while (attempt < initialAttempts && !acquired) {
+            acquired = refreshAroundCurrent(radiusMeters)
+            attempt += 1
+            if (!acquired && attempt < initialAttempts) delay(initialRetryMs)
+        }
+        // Phase 2: keep the shared layer live for the lifetime of this coroutine.
+        while (true) {
+            delay(pollIntervalMs)
+            refreshAroundCurrent(radiusMeters)
+        }
+    }
+
     companion object {
+        /**
+         * Steady-state cadence for the live incident-layer poll. A shared
+         * traffic layer must feel current, but each pass costs a cheap
+         * last-known-location read plus one listNearby callable, so 30 s balances
+         * freshness against battery and read cost (incident TTLs are ≥ 1 h, so
+         * sub-minute latency to surface a fresh report is ample).
+         */
+        const val DEFAULT_POLL_INTERVAL_MS = 30_000L
+
+        /**
+         * Cold-open acquisition backoff + attempt budget: the fused last-known
+         * location is frequently null for the first second or two after launch,
+         * so retry a few times on a short delay before settling into the steady
+         * cadence. Exhausting these is NOT fatal — phase 2 keeps trying — it just
+         * bounds how eagerly we spin while waiting for the very first fix.
+         */
+        const val DEFAULT_INITIAL_RETRY_MS = 3_000L
+        const val DEFAULT_INITIAL_ATTEMPTS = 5
+
         /**
          * Wires a controller to the Firebase repository + the fused one-shot
          * location source, or returns null when Firebase is not configured (so
