@@ -166,6 +166,8 @@ describe('garage-core image path validation', () => {
     expect(vehicleImagePrefix('u1', 'v1')).toBe('vehicleImages/u1/v1/');
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/photo.jpg', 'u1', 'v1')).toBe(true);
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/', 'u1', 'v1')).toBe(false);
+    // A whitespace-only image id is blank, not a genuine path.
+    expect(isValidVehicleImagePath('vehicleImages/u1/v1/   ', 'u1', 'v1')).toBe(false);
     // Exactly one segment below the prefix — storage rules cannot serve
     // nested paths (vehicleImages/{userId}/{vehicleId}/{imageId}).
     expect(isValidVehicleImagePath('vehicleImages/u1/v1/subdir/photo.jpg', 'u1', 'v1')).toBe(
@@ -262,7 +264,12 @@ describe('garage-core photo gallery logic', () => {
     ]);
     // A present (even empty) array wins over the legacy imagePath fallback.
     expect(readExistingPhotoPaths({ photoPaths: [], imagePath: p('a.jpg') })).toEqual([]);
-    expect(readExistingPhotoPaths({ photoPaths: ['', 3, p('a.jpg')] })).toEqual([p('a.jpg')]);
+    // Blanks include whitespace-only strings — they must not survive as paths.
+    expect(readExistingPhotoPaths({ photoPaths: ['', '   ', 3, p('a.jpg')] })).toEqual([
+      p('a.jpg'),
+    ]);
+    // A whitespace-only legacy imagePath is also treated as no photo.
+    expect(readExistingPhotoPaths({ imagePath: '   ' })).toEqual([]);
   });
 
   it('appends a photo, rejecting duplicates and enforcing the cap', () => {

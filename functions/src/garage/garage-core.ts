@@ -293,7 +293,7 @@ export function isValidVehicleImagePath(
     return false;
   }
   const imageId = imagePath.slice(prefix.length);
-  return imageId.length > 0 && !imageId.includes('/');
+  return imageId.trim().length > 0 && !imageId.includes('/');
 }
 
 // ---------------------------------------------------------------------------
@@ -319,10 +319,10 @@ export function readExistingPhotoPaths(data: {
 }): string[] {
   const raw = data.photoPaths;
   if (Array.isArray(raw)) {
-    return raw.filter((p): p is string => typeof p === 'string' && p.length > 0);
+    return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
   }
   const imagePath = data.imagePath;
-  return typeof imagePath === 'string' && imagePath.length > 0 ? [imagePath] : [];
+  return typeof imagePath === 'string' && imagePath.trim().length > 0 ? [imagePath] : [];
 }
 
 /** The cover path for a gallery: its first entry, or null when empty. */
