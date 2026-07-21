@@ -548,6 +548,11 @@ fun AuthenticatedApp(
             // If you ever add a second way to reach ShellRoute.ChatHub, that
             // invariant dies and this must become a consume-and-clear.
             var pendingChatHubLink by remember { mutableStateOf<PushDeepLink?>(null) }
+            // Event id from an event-reminder push tap, opened by EventsRoute on
+            // entry and cleared the moment it consumes it (unlike ChatHub, the
+            // Events route is reachable by normal navigation too, so a lingering
+            // id would wrongly re-open the event on a later plain visit).
+            var pendingEventDeepLinkId by remember { mutableStateOf<String?>(null) }
             val pushLink by PushNavigator.pending.collectAsState()
             LaunchedEffect(pushLink) {
                 val link = PushNavigator.consume() ?: return@LaunchedEffect
@@ -568,7 +573,13 @@ fun AuthenticatedApp(
                     }
                     PushTarget.CONVOYS -> route = ShellRoute.Convoys
                     PushTarget.FRIENDS -> route = ShellRoute.Friends
-                    PushTarget.EVENT -> route = ShellRoute.Events
+                    PushTarget.EVENT -> {
+                        // The backend sends the reminder's event id as entityId;
+                        // open that event directly. Null (unknown event) falls
+                        // through to the events list, EventsRoute's own default.
+                        pendingEventDeepLinkId = link.entityId
+                        route = ShellRoute.Events
+                    }
                     PushTarget.SUBSCRIPTION -> route = ShellRoute.Subscription
                     PushTarget.NOTIFICATIONS -> route = ShellRoute.Notifications
                 }
@@ -1829,6 +1840,8 @@ fun AuthenticatedApp(
                         convoyRepository = convoyRepository,
                         convoyOpenCreate = convoyOpenCreate,
                         chatHubPushLink = pendingChatHubLink,
+                        eventDeepLinkId = pendingEventDeepLinkId,
+                        onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
@@ -2846,6 +2859,11 @@ private fun RouteHost(
     // Destination of the push tap that opened the chat hub, if that is why it is
     // open. Forwarded to ChatHubRoute, which owns tab/channel sub-navigation.
     chatHubPushLink: PushDeepLink?,
+    // Event id from an event-reminder push tap (null otherwise). Forwarded to
+    // EventsRoute to open that event on entry; [onEventDeepLinkConsumed] clears
+    // the shell's pending id once EventsRoute has taken it.
+    eventDeepLinkId: String?,
+    onEventDeepLinkConsumed: () -> Unit,
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
@@ -3015,6 +3033,8 @@ private fun RouteHost(
                     groupDriveRepository = groupDriveRepository,
                     groupDriveCoordinator = groupDriveCoordinator,
                     onShowOnMap = onShowOnMap,
+                    initialEventId = eventDeepLinkId,
+                    onInitialEventConsumed = onEventDeepLinkConsumed,
                     onBack = onClose,
                     blockingRepository = blockingRepository,
                     onViewProfile = openProfileIfWired,
