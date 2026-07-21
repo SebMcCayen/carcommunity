@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.garage
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -47,6 +49,10 @@ fun GarageScreen(
     onEdit: (Vehicle) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
+    // Opens the full car-detail page for a tapped car. Defaults to a no-op so
+    // existing preview/test call sites (and any screen that has no detail route)
+    // compile unchanged.
+    onOpen: (Vehicle) -> Unit = {},
     // Sets (true) or clears (false) a car as the user's main car; max 1 enforced
     // by the backend. No-op wiring in previews/tests when the coordinator is absent.
     onSetMain: (vehicleId: String, isMain: Boolean) -> Unit = { _, _ -> },
@@ -88,6 +94,7 @@ fun GarageScreen(
                         state.vehicles.forEach { vehicle ->
                             VehicleCard(
                                 vehicle = vehicle,
+                                onOpen = { onOpen(vehicle) },
                                 onEdit = { onEdit(vehicle) },
                                 onDelete = { pendingDelete = vehicle.id },
                                 onSetMain = { isMain -> onSetMain(vehicle.id, isMain) },
@@ -130,6 +137,7 @@ fun GarageScreen(
 @Composable
 private fun VehicleCard(
     vehicle: Vehicle,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onSetMain: (isMain: Boolean) -> Unit,
@@ -139,37 +147,48 @@ private fun VehicleCard(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
-            VehiclePhoto(vehicle.imagePath)
-            Text(
-                text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(vehicle.powertrain.labelRes()),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            if (vehicle.isMainCar) {
+            // The photo + summary is the tap target that opens the full
+            // car-detail page (announced as a button). The manage buttons below
+            // stay OUTSIDE this clickable region so a tap on Edit/Delete/Set-main
+            // is not also read as "open detail".
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button, onClick = onOpen),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+            ) {
+                VehiclePhoto(vehicle.imagePath)
                 Text(
-                    text = stringResource(R.string.garage_mainCarBadge),
+                    text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(vehicle.powertrain.labelRes()),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
-            }
-            vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
-                Text(
-                    text = engine,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
-                Text(
-                    text = mods,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (vehicle.isMainCar) {
+                    Text(
+                        text = stringResource(R.string.garage_mainCarBadge),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
+                    Text(
+                        text = engine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
+                    Text(
+                        text = mods,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             // Main-car toggle: filled when this car is the main car (tapping
             // clears it), outlined otherwise (tapping makes it the main car).

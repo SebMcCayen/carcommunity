@@ -648,6 +648,11 @@
     <string name="garage_photoCropTitle">Crop photo</string>
     <string name="garage_photoCropHint">Drag to position and pinch to zoom. The area inside the frame is what others will see.</string>
     <string name="garage_photoCropConfirm">Use photo</string>
+    <string name="garage_photoNone">No photos yet</string>
+    <string name="garage_photoCounter">%1$d / %2$d</string>
+    <string name="garage_photoThumbnail">Show photo %1$d</string>
+    <string name="garage_photoAddMore">Add more photos</string>
+    <string name="garage_photoAddMoreUnavailable">You can add one photo per car for now. A full photo gallery is on the way.</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>
