@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.drives
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -37,11 +39,13 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import java.text.DateFormat
 import java.util.Date
 
-/** Saved-drives list (Phase 12 slice 12). Read-only; tap a drive to see details. */
+/** Saved-drives list (Phase 12 slice 12). Tap a drive for detail; share or delete inline. */
 @Composable
 fun DrivesListScreen(
     state: DrivesState,
     onSelect: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    deleteStatus: DriveDeleteStatus,
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
@@ -56,6 +60,20 @@ fun DrivesListScreen(
         ) {
             item {
                 AeroPageTitle(stringResource(R.string.savedDrives_screenTitle))
+            }
+
+            // A delete launched from a row is reconciled by the Firestore
+            // snapshot listener (the row simply disappears on success); a
+            // failure leaves the row and is surfaced here so the user knows the
+            // drive was NOT removed.
+            if (deleteStatus == DriveDeleteStatus.Failed) {
+                item {
+                    Text(
+                        text = stringResource(R.string.savedDrives_deleteError),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
             when (state) {
@@ -89,7 +107,12 @@ fun DrivesListScreen(
                         item { EmptyDrives() }
                     } else {
                         items(state.drives, key = { it.rideId }) { drive ->
-                            DriveCard(drive, onSelect)
+                            DriveCard(
+                                drive = drive,
+                                onSelect = onSelect,
+                                onDelete = onDelete,
+                                deleteInFlight = deleteStatus == DriveDeleteStatus.Deleting,
+                            )
                         }
                     }
             }
@@ -110,7 +133,20 @@ private fun EmptyDrives() {
 }
 
 @Composable
-private fun DriveCard(drive: SavedDrive, onSelect: (String) -> Unit) {
+private fun DriveCard(
+    drive: SavedDrive,
+    onSelect: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    deleteInFlight: Boolean,
+) {
+    val context = LocalContext.current
+    // The History read model carries no route points (they live in member-gated
+    // Cloud Storage and are never fetched here), so top speed is unavailable and
+    // its sentence is omitted — never rendered as "0 km/h".
+    val shareText = driveShareText(drive, topSpeedMetersPerSecond = null)
+    val shareUnavailable = stringResource(R.string.savedDrives_shareUnavailable)
+    var showConfirm by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onSelect(drive.rideId) },
     ) {
@@ -130,11 +166,32 @@ private fun DriveCard(drive: SavedDrive, onSelect: (String) -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = { launchShareIntent(context, shareText, shareUnavailable) }) {
+                    Text(text = stringResource(R.string.savedDrives_shareAction))
+                }
+                TextButton(onClick = { showConfirm = true }, enabled = !deleteInFlight) {
+                    Text(text = stringResource(R.string.savedDrives_deleteAction))
+                }
+            }
         }
+    }
+
+    if (showConfirm) {
+        DeleteDriveConfirmDialog(
+            onConfirm = {
+                showConfirm = false
+                onDelete(drive.rideId)
+            },
+            onCancel = { showConfirm = false },
+        )
     }
 }
 
-/** Saved-drive detail (Phase 12 slice 12): server-computed stats + delete. */
+/** Saved-drive detail (Phase 12 slice 12): server-computed stats + share + delete. */
 @Composable
 fun SavedDriveDetailScreen(
     drive: SavedDrive,
@@ -155,28 +212,9 @@ fun SavedDriveDetailScreen(
             drive.durationSeconds,
         )
 
-    val appName = stringResource(R.string.app_name)
-    val distanceText = DriveFormatters.formatDistance(drive.distanceMeters)
-    val durationText = DriveFormatters.formatDuration(drive.durationSeconds)
-    // Drop the "on <date>" clause entirely when the drive has no timestamp,
-    // rather than emitting a bare em dash ("… on —").
-    val shareSummary =
-        if (dateText != null) {
-            stringResource(
-                R.string.savedDrives_shareSummary,
-                distanceText,
-                durationText,
-                dateText,
-                appName,
-            )
-        } else {
-            stringResource(
-                R.string.savedDrives_shareSummaryNoDate,
-                distanceText,
-                durationText,
-                appName,
-            )
-        }
+    // No loaded route points on the detail read model either, so the top-speed
+    // sentence degrades away rather than showing a bogus figure.
+    val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = null)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -239,25 +277,7 @@ fun SavedDriveDetailScreen(
 
             val shareUnavailable = stringResource(R.string.savedDrives_shareUnavailable)
             OutlinedButton(
-                onClick = {
-                    val sendIntent =
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, shareSummary)
-                        }
-                    val chooser = Intent.createChooser(sendIntent, null)
-                    // A non-Activity context (application) has no task to launch
-                    // into, so an Activity launch without FLAG_ACTIVITY_NEW_TASK
-                    // throws. Add it defensively; an Activity keeps same-task.
-                    if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    // Some devices have no app that handles ACTION_SEND; guard the
-                    // launch so a missing handler is a toast, not a hard crash.
-                    try {
-                        context.startActivity(chooser)
-                    } catch (_: ActivityNotFoundException) {
-                        Toast.makeText(context, shareUnavailable, Toast.LENGTH_SHORT).show()
-                    }
-                },
+                onClick = { launchShareIntent(context, shareSummary, shareUnavailable) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.savedDrives_shareAction))
@@ -273,27 +293,83 @@ fun SavedDriveDetailScreen(
     }
 
     if (showConfirm) {
-        AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            title = { Text(stringResource(R.string.savedDrives_deleteConfirmTitle)) },
-            text = { Text(stringResource(R.string.savedDrives_deleteConfirmBody)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showConfirm = false
-                        onDelete(drive.rideId)
-                    },
-                ) {
-                    Text(stringResource(R.string.savedDrives_deleteConfirmAction))
-                }
+        DeleteDriveConfirmDialog(
+            onConfirm = {
+                showConfirm = false
+                onDelete(drive.rideId)
             },
-            dismissButton = {
-                TextButton(onClick = { showConfirm = false }) {
-                    Text(stringResource(R.string.savedDrives_deleteConfirmCancel))
-                }
-            },
+            onCancel = { showConfirm = false },
         )
     }
+}
+
+/**
+ * Builds a shareable, natural-language summary of a recorded drive, composed from
+ * both locale strings (savedDrives_shareSummary + optional savedDrives_shareTopSpeed).
+ *
+ * @param topSpeedMetersPerSecond a client-side, GPS-glitch-filtered top speed
+ *   ([DriveSummary.topSpeedMetersPerSecond]) when route points are loaded, else
+ *   null. The extra sentence is appended only for a finite, non-negative value,
+ *   so a route-less or summary-only drive omits it rather than claiming 0 km/h.
+ */
+@Composable
+private fun driveShareText(
+    drive: SavedDrive,
+    topSpeedMetersPerSecond: Double?,
+): String {
+    val appName = stringResource(R.string.app_name)
+    val distanceText = DriveFormatters.formatDistance(drive.distanceMeters)
+    val durationText = DriveFormatters.formatDuration(drive.durationSeconds)
+    val base =
+        stringResource(R.string.savedDrives_shareSummary, appName, distanceText, durationText)
+    val speed = topSpeedMetersPerSecond?.takeIf { it.isFinite() && it >= 0 }
+    return if (speed != null) {
+        base + " " +
+            stringResource(R.string.savedDrives_shareTopSpeed, DriveFormatters.formatSpeed(speed))
+    } else {
+        base
+    }
+}
+
+/**
+ * Launches the system share sheet ([Intent.ACTION_SEND]) with [text]. Guards the
+ * two ways the launch can throw: a non-Activity context needs
+ * FLAG_ACTIVITY_NEW_TASK, and a device with no share target raises
+ * ActivityNotFoundException (surfaced as a toast, not a crash).
+ */
+private fun launchShareIntent(context: Context, text: String, unavailableMessage: String) {
+    val sendIntent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+    val chooser = Intent.createChooser(sendIntent, null)
+    if (context !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(chooser)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, unavailableMessage, Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Are-you-sure confirmation shared by the list row and the detail delete action. */
+@Composable
+private fun DeleteDriveConfirmDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.savedDrives_deleteConfirmTitle)) },
+        text = { Text(stringResource(R.string.savedDrives_deleteConfirmBody)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.savedDrives_deleteConfirmAction))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.savedDrives_deleteConfirmCancel))
+            }
+        },
+    )
 }
 
 @Composable

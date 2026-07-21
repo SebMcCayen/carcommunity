@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.drives
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -147,6 +151,47 @@ class SavedDriveTest {
         val coordinator = DrivesCoordinator(FakeDrivesRepository(shouldFail = true))
         coordinator.delete("r1")
         assertEquals(DriveDeleteStatus.Failed, coordinator.deleteStatus.value)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `coordinator ignores a second delete while one is in flight`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var deleteCalls = 0
+        val repo =
+            object : DrivesRepository {
+                override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                override suspend fun saveDrive(request: Map<String, Any?>) = Unit
+
+                override suspend fun deleteDrive(rideId: String) {
+                    deleteCalls++
+                    gate.await()
+                }
+            }
+        val coordinator = DrivesCoordinator(repo)
+
+        val job = launch { coordinator.delete("r1") }
+        // Run the launched delete up to its suspension point (the gated callable).
+        runCurrent()
+        assertEquals(DriveDeleteStatus.Deleting, coordinator.deleteStatus.value)
+
+        // A second delete while one is in flight must be a no-op, not a new call.
+        coordinator.delete("r1")
+        assertEquals(1, deleteCalls)
+
+        gate.complete(Unit)
+        job.join()
+        assertEquals(DriveDeleteStatus.Deleted, coordinator.deleteStatus.value)
+    }
+
+    @Test
+    fun `reset returns the coordinator to idle after a failure`() = runTest {
+        val coordinator = DrivesCoordinator(FakeDrivesRepository(shouldFail = true))
+        coordinator.delete("r1")
+        assertEquals(DriveDeleteStatus.Failed, coordinator.deleteStatus.value)
+        coordinator.reset()
+        assertEquals(DriveDeleteStatus.Idle, coordinator.deleteStatus.value)
     }
 }
 
