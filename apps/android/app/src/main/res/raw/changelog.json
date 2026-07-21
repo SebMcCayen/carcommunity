@@ -2,6 +2,24 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 17,
+      "versionName": "0.8.6",
+      "releaseDate": "2026-07-21",
+      "highlights": [
+        "Se dina körningar på kartan i Historik",
+        "Påminnelser inför träffar",
+        "Fler bilder per bil i garaget"
+      ],
+      "changes": [
+        "Historik visar nu rutten du körde på kartan, med toppfart",
+        "Sök och filtrera bland dina körningar i Historik",
+        "Få en påminnelse på telefonen innan en träff du anmält dig till börjar",
+        "Lägg till flera bilder på varje bil i garaget och välj omslagsbild",
+        "Hantera dina sparade platser (Hem, Jobb, Favoriter) på en egen sida",
+        "Din egen profil visar nu statistik: körningar, utmärkelser och poäng"
+      ]
+    },
+    {
       "versionCode": 16,
       "versionName": "0.8.5",
       "releaseDate": "2026-07-19",
