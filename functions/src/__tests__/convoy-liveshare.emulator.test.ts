@@ -282,4 +282,38 @@ describe('convoy auto-start live session (item 2)', () => {
     const ownerSession = await sessionOf(owner.uid);
     expect(ownerSession!.status).toBe('active');
   }, 60_000);
+
+  it('convoy.start LEAVES a pre-existing manual session untouched (auto-start aborts)', async () => {
+    // Start-path counterpart to the convoy.end test above: proves the guarantee
+    // at the auto-start boundary itself. The member already has a MANUAL session
+    // when the convoy rolls; startConvoyAutoSession must ABORT (the RTDB
+    // transaction's commit-time check finds an active session) and leave that
+    // session byte-for-byte as-is — same id, untagged, still active, its marker
+    // untouched — rather than clobbering it with a convoy-auto session.
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('KeepOwnerCL', 'KeepMemberCL');
+
+    // Manual session + a real marker (the member is actively broadcasting).
+    await signInAs(member);
+    const manual = (await call('live-startSession', { duration: '1h' })).data as {
+      sessionId: string;
+    };
+    await call('live-updatePosition', { coordinate: coordinate() });
+    expect(await latestExists(member.uid)).toBe(true);
+
+    // Convoy starts → owner auto-starts, but the member's manual session is kept.
+    await signInAs(owner);
+    await call('convoy-start', { convoyId });
+    await pollUntil(async () => {
+      const s = await sessionOf(owner.uid);
+      return s && s.status === 'active' && s.convoyAutoStarted ? true : undefined;
+    });
+
+    const kept = await sessionOf(member.uid);
+    expect(kept!.id).toBe(manual.sessionId); // not replaced by an auto session
+    expect(kept!.convoyAutoStarted).toBeFalsy(); // not tagged → teardown won't stop it
+    expect(kept!.status).toBe('active'); // still broadcasting
+    // The abort must NOT have run latestRef().remove() (only a committed take-over
+    // clears the marker) — the manual broadcast's marker survives.
+    expect(await latestExists(member.uid)).toBe(true);
+  }, 60_000);
 });
