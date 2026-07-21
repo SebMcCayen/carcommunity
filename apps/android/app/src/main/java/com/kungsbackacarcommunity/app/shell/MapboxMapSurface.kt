@@ -226,6 +226,13 @@ class MapboxMapSurface : MapSurface {
     // style. Touched only on the main-thread position callback.
     private val breadcrumbTrail = BreadcrumbTrail()
 
+    // Test seam: the breadcrumb tail's base ARGB (the brand yellow it is drawn
+    // in). Exposed so a pure JVM test can assert the tail is derived from the
+    // brand design token — the colour cannot be read off the GL layer off-device.
+    // The value itself lives on the private companion ([BREADCRUMB_COLOR]).
+    internal val breadcrumbColorArgb: Int
+        get() = BREADCRUMB_COLOR
+
     private var routeLineManager: PolylineAnnotationManager? = null
     private var destMarkerManager: CircleAnnotationManager? = null
     // Incidents are POINT annotations (an icon), not circles: the categories have
@@ -896,14 +903,30 @@ class MapboxMapSurface : MapSurface {
                                 },
                             )
                         } else {
-                            // Later fixes: glide the CENTRE only (leave zoom/pitch/
-                            // bearing as they are) with a short ease so following
-                            // reads smoothly and doesn't fight its own zoom. A
-                            // programmatic ease does not trigger the gesture
-                            // listeners, so this never disables follow.
-                            map.camera.easeTo(
+                            // Later fixes: snap the CENTRE straight onto the puck
+                            // (leave zoom/pitch/bearing untouched) so the screen
+                            // actually keeps up with the user while driving.
+                            //
+                            // This deliberately does NOT ease. This callback fires
+                            // for every INTERPOLATED frame of the location
+                            // component's own puck animation (many per second, not
+                            // once per GPS fix), and those frames are already
+                            // smooth. The previous code started a ~700ms easeTo on
+                            // each of them; because a fresh ease supersedes the
+                            // in-flight one every frame, the camera only ever
+                            // travelled a sliver of each 700ms glide before being
+                            // restarted — so at driving speed it fell ever further
+                            // behind and the map appeared frozen while the puck
+                            // drove off the edge. Matching the camera centre to the
+                            // (already-smoothed) puck position every frame keeps the
+                            // puck pinned with no queue of competing animations and
+                            // no animator cost — the pattern Mapbox documents for
+                            // simple location tracking. A programmatic setCamera
+                            // does not trigger the gesture listeners, so this never
+                            // disables follow; a manual pan still breaks follow via
+                            // the gesture hooks and the idle-return timer restores it.
+                            map.mapboxMap.setCamera(
                                 cameraOptions { center(point) },
-                                mapAnimationOptions { duration(FOLLOW_ANIMATION_MS) },
                             )
                         }
                     }
@@ -1673,15 +1696,6 @@ class MapboxMapSurface : MapSurface {
         const val RECENTER_ANIMATION_MS = 1000L
 
         /**
-         * Duration (ms) of the per-fix camera glide while "follow me" is active.
-         * Short — a fix arrives roughly every second — so the camera keeps pace
-         * with the user smoothly without a queue of long animations building up
-         * (each new ease supersedes the previous one on the camera-animations
-         * plugin).
-         */
-        const val FOLLOW_ANIMATION_MS = 700L
-
-        /**
          * Duration (ms) of the camera glide when the convoy fit is (re)applied.
          * Longer than a follow step: a fit can change the zoom as well as the
          * centre, and a slow reframe reads as the map thinking rather than
@@ -1857,14 +1871,28 @@ class MapboxMapSurface : MapSurface {
         const val BREADCRUMB_LAYER_ID = "kcc-breadcrumb-layer"
         const val BREADCRUMB_LINE_WIDTH = 5.0
 
-        // Drawn in the live-share green (matches the sharing puck) so the tail
-        // reads as "your own live path". Derived by splitting the single-source
-        // [LIVE_SHARE_PULSE_COLOR] ARGB into its R/G/B components, so the tail and
-        // the puck stay in lock-step if the token changes; the fade gradient then
-        // varies only the alpha.
-        private val BREADCRUMB_R: Double = ((LIVE_SHARE_PULSE_COLOR shr 16) and 0xFF).toDouble()
-        private val BREADCRUMB_G: Double = ((LIVE_SHARE_PULSE_COLOR shr 8) and 0xFF).toDouble()
-        private val BREADCRUMB_B: Double = (LIVE_SHARE_PULSE_COLOR and 0xFF).toDouble()
+        /**
+         * The breadcrumb tail's base colour: the brand yellow (the crownGold
+         * design token / semantic `brandPrimary`, 0xFFEAB54B). It was previously
+         * the live-share GREEN, which — tested only in daylight — melted into the
+         * green "low congestion" band of the traffic overlay (TrafficPalette.DAY
+         * low is 0xFF4CAF50). The brand yellow reads clearly against both the day
+         * and night basemaps and sits in a different hue family from the traffic
+         * greens/reds, so the user's own path is no longer lost in the road
+         * colouring.
+         *
+         * NOTE this is intentionally NOT [LIVE_SHARE_PULSE_COLOR]: the sharing
+         * puck's pulse stays green (that colour is unchanged), only the tail moves
+         * to the brand yellow.
+         */
+        val BREADCRUMB_COLOR: Int = KccPalette.crownGold.toArgb()
+
+        // Derived by splitting the single-source [BREADCRUMB_COLOR] ARGB into its
+        // R/G/B components, so the tail tracks the brand token if it ever changes;
+        // the fade gradient then varies only the alpha.
+        private val BREADCRUMB_R: Double = ((BREADCRUMB_COLOR shr 16) and 0xFF).toDouble()
+        private val BREADCRUMB_G: Double = ((BREADCRUMB_COLOR shr 8) and 0xFF).toDouble()
+        private val BREADCRUMB_B: Double = (BREADCRUMB_COLOR and 0xFF).toDouble()
         // Alpha at the NEWEST end; the oldest end fades to fully transparent.
         private const val BREADCRUMB_HEAD_ALPHA = 0.85
 
@@ -1897,7 +1925,7 @@ class MapboxMapSurface : MapSurface {
          * call finish the job.
          *
          * The per-vertex fade is a best-effort enhancement layered on a SOLID
-         * green fallback: the layer is created with a solid [lineColor] first,
+         * brand-yellow fallback: the layer is created with a solid [lineColor] first,
          * then [lineGradient] is applied separately. If the gradient is rejected
          * on the pinned SDK the line still draws solid — which the feature
          * explicitly permits — rather than the whole layer being dropped.
