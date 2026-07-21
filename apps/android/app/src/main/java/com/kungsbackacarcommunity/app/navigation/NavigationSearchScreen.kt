@@ -24,12 +24,9 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -516,13 +513,6 @@ private fun SuggestionsCard(
         }
     }
 }
-
-private fun SavedPlaceKind.icon() =
-    when (this) {
-        SavedPlaceKind.Home -> Icons.Filled.Home
-        SavedPlaceKind.Work -> Icons.Filled.Work
-        SavedPlaceKind.Favourite -> Icons.Filled.Star
-    }
 
 /**
  * The user's saved places in the empty search state. Tapping a row selects it as
