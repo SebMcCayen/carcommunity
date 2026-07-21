@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
@@ -49,6 +50,10 @@ fun DrivesListScreen(
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
+    // Opens the personal "your driving" stats page. The entry is rendered only
+    // when at least one drive is loaded — a zero-drive member sees the empty card
+    // instead, so the stats entry never leads to a page of zeroes.
+    onShowStats: (() -> Unit)? = null,
 ) {
     // LazyColumn so an unbounded drive history only composes visible rows
     // (mirrors NotificationsScreen for durable lists).
@@ -106,6 +111,9 @@ fun DrivesListScreen(
                     if (state.drives.isEmpty()) {
                         item { EmptyDrives() }
                     } else {
+                        if (onShowStats != null) {
+                            item { StatsEntryCard(onShowStats) }
+                        }
                         items(state.drives, key = { it.rideId }) { drive ->
                             DriveCard(
                                 drive = drive,
@@ -116,6 +124,27 @@ fun DrivesListScreen(
                         }
                     }
             }
+        }
+    }
+}
+
+@Composable
+private fun StatsEntryCard(onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        ) {
+            Text(
+                text = stringResource(R.string.savedDrives_statsEntryTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.savedDrives_statsEntrySubtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

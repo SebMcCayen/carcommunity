@@ -642,7 +642,19 @@
     "recordPermissionRationale": "Platsåtkomst krävs för att spela in en körning.",
     "recordPermissionDenied": "Platsåtkomst nekades. Tillåt plats för att spela in en körning.",
     "recordLocationUnavailable": "Plats är inte tillgänglig på den här enheten.",
-    "recordBack": "Tillbaka"
+    "recordBack": "Tillbaka",
+    "statsEntryTitle": "Din körning",
+    "statsEntrySubtitle": "Summering och rekord",
+    "statsTitle": "Din körning",
+    "statsEmpty": "Inga körningar att summera ännu.",
+    "statsAllTime": "Totalt",
+    "statsThisMonth": "Denna månad",
+    "statsTotalDrives": "Körningar",
+    "statsTotalDistance": "Distans",
+    "statsTotalTime": "Total tid",
+    "statsLongest": "Längsta körning",
+    "statsAverage": "Snittlängd",
+    "statsFastest": "Högsta snitthastighet"
   },
   "garage": {
     "screenTitle": "Mitt garage",
