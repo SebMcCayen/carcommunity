@@ -291,6 +291,15 @@ import kotlinx.coroutines.withContext
 private const val NEARBY_LIVE_POLL_MS = 20_000L
 
 /**
+ * Max nearby standalone sharers subscribed at once. live.listNearby can return
+ * up to 200 (sorted by freshness); opening one RTDB observeLatest() stream per
+ * uid in a dense area is real bandwidth/battery + backend load for markers the
+ * overlay only draws while on-screen. Capping to the freshest N bounds the
+ * concurrent listener count without a visible loss on a normal viewport.
+ */
+private const val MAX_NEARBY_LIVE_MARKERS = 50
+
+/**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
  * auto-filed issues on this plus the error code, so it must not drift).
  */
@@ -1648,7 +1657,15 @@ fun AuthenticatedApp(
                 // the layer.
                 LaunchedEffect(selectedTab, nearbyLiveController, mapSurface) {
                     val controller = nearbyLiveController ?: return@LaunchedEffect
-                    if (selectedTab != ShellTab.Map) return@LaunchedEffect
+                    if (selectedTab != ShellTab.Map) {
+                        // Off the Map tab: drop the seeds so nearbyUids empties and
+                        // the per-uid RTDB observeLatest listeners below are torn
+                        // down — no background bandwidth/battery while the map is
+                        // not on screen (the same selectedTab-gating other listeners
+                        // in this shell use).
+                        controller.clear()
+                        return@LaunchedEffect
+                    }
                     while (true) {
                         mapSurface.cameraSnapshot.value?.let { camera ->
                             controller.refresh(
@@ -1669,7 +1686,13 @@ fun AuthenticatedApp(
                 // Discovery uids to draw: drop self and anyone already drawn by
                 // the convoy layer (a convoy member who is ALSO broadcasting must
                 // not appear twice, once per layer). The backend already excludes
-                // self + blocked, but self is dropped again defensively.
+                // self + blocked, but self is dropped again defensively. Capped at
+                // MAX_NEARBY_LIVE_MARKERS: the backend can return up to 200 sorted
+                // by freshness, and eagerly opening one RTDB observeLatest() stream
+                // per uid in a dense area is real bandwidth/battery + backend load
+                // for markers the overlay only draws while on-screen anyway. Taking
+                // the freshest N bounds the concurrent listener count; distant/older
+                // sharers simply aren't subscribed.
                 val nearbyUids =
                     remember(nearbySeeds, convoyLiveUids, uid) {
                         val convoySet = convoyLiveUids.toSet()
@@ -1677,6 +1700,7 @@ fun AuthenticatedApp(
                             .map { it.uid }
                             .filter { it.isNotBlank() && it != uid && it !in convoySet }
                             .distinct()
+                            .take(MAX_NEARBY_LIVE_MARKERS)
                     }
 
                 // One per-uid RTDB read each, combined — the SAME

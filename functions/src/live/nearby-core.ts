@@ -53,6 +53,49 @@ export const LIVE_SESSION_ACTIVE_STATUS = 'active' as const;
  */
 export const DISCOVERY_TTL_MS = LATEST_STALE_MINUTES * 60 * 1000;
 
+/**
+ * Minimum interval between Firestore discovery-doc refreshes, in ms.
+ *
+ * `updatePosition` fires as fast as the client streams GPS (potentially every
+ * few seconds), but each refresh is a Firestore WRITE — the expensive operation.
+ * The RTDB `latest` marker still updates on EVERY sample (that is the
+ * high-frequency stream); the Firestore discovery doc only needs to stay
+ * geo-accurate and unexpired, so it is throttled to at most once per this
+ * interval (plus an immediate refresh whenever the geoCell changes, so a
+ * fast-moving sharer crossing a cell boundary is never indexed in the wrong
+ * cell).
+ *
+ * MUST be comfortably below {@link DISCOVERY_TTL_MS}: the doc's expiresAt is
+ * pushed out on each refresh, so a refresh cadence slower than the TTL would let
+ * an actively-sharing-but-stationary user expire out of discovery between
+ * writes. 60s against a 15-minute TTL leaves a wide margin.
+ */
+export const MIN_DISCOVERY_REFRESH_MS = 60 * 1000;
+
+/**
+ * Whether `updatePosition` should (re)write the discovery doc this sample.
+ *
+ * Pure decision so it is unit-testable without the emulator. Refreshes when:
+ *  - there is no prior refresh state (the first sample of a session — startSession
+ *    deletes the doc, so it must be re-created);
+ *  - the geoCell changed (the sharer crossed a cell boundary — the index MUST
+ *    move with them, regardless of the throttle);
+ *  - the prior refresh timestamp is missing/unparseable (fail toward refreshing);
+ *  - at least {@link MIN_DISCOVERY_REFRESH_MS} has elapsed since the last refresh.
+ * Otherwise the write is skipped and only the RTDB marker updates.
+ */
+export function shouldRefreshDiscovery(
+  prev: { refreshedAtIso?: string | null; geoCell?: string | null } | null | undefined,
+  currentGeoCell: string,
+  now: Date,
+): boolean {
+  if (!prev) return true;
+  if (prev.geoCell !== currentGeoCell) return true;
+  const last = prev.refreshedAtIso ? Date.parse(prev.refreshedAtIso) : NaN;
+  if (!Number.isFinite(last)) return true;
+  return now.getTime() - last >= MIN_DISCOVERY_REFRESH_MS;
+}
+
 // ---------------------------------------------------------------------------
 // listNearby input (mirrors incidents.listNearby)
 // ---------------------------------------------------------------------------

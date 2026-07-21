@@ -180,6 +180,23 @@ describe('live.listNearby discovery', () => {
     expect(far.some((s) => s.uid === userA.uid)).toBe(false);
   });
 
+  it('throttles the discovery write: a rapid second sample in the same cell does not rewrite it', async () => {
+    // userA is sharing from the first test at HERE. Read the current discovery
+    // doc's updatedAt, push another sample in the SAME cell immediately, and it
+    // must NOT be rewritten (throttled to <= once per MIN_DISCOVERY_REFRESH_MS).
+    await signInAs(userA);
+    const before = (await adminDb.collection('liveSessions').doc(userA.uid).get()).data();
+    const beforeUpdatedAt = (before?.updatedAt as { toMillis(): number }).toMillis();
+
+    await call('live-updatePosition', {
+      coordinate: coordinateAt(HERE.latitude + 0.0005, HERE.longitude + 0.0005),
+    });
+
+    const after = (await adminDb.collection('liveSessions').doc(userA.uid).get()).data();
+    const afterUpdatedAt = (after?.updatedAt as { toMillis(): number }).toMillis();
+    expect(afterUpdatedAt).toBe(beforeUpdatedAt); // no rewrite
+  });
+
   it('never returns the caller their own session', async () => {
     // userA is still sharing from the previous test; querying as userA near
     // their own position must exclude self.

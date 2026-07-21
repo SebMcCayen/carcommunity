@@ -50,7 +50,7 @@ import {
   type LiveSession,
   type LiveStopReason,
 } from './live-core';
-import { buildDiscoveryFields, discoveryExpiresAt } from './nearby-core';
+import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from './nearby-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 
 const CALLABLE_OPTS = {
@@ -160,17 +160,38 @@ export const updatePosition = onCall(
     // actively-moving sharer never expires mid-drive, while a silent one ages
     // out on the same clock the RTDB marker does. displayName is the session's
     // start-time snapshot — no extra read on this hot path.
+    //
+    // THROTTLED: the RTDB marker above updates every sample, but the Firestore
+    // discovery doc is a WRITE, so it is rewritten at most once per
+    // MIN_DISCOVERY_REFRESH_MS (or immediately when the geoCell changes). The
+    // throttle state lives on the RTDB session node we already read, so the
+    // decision costs no extra Firestore read. Skipping the write is safe because
+    // the doc's expiresAt is refreshed well inside its TTL on each write.
     const discoveryFields = buildDiscoveryFields({
       uid: actor.uid,
       latitude: parsed.input.coordinate.latitude,
       longitude: parsed.input.coordinate.longitude,
       displayName: session!.displayName ?? null,
     });
-    await discoveryRef(actor.uid).set({
-      ...discoveryFields,
-      updatedAt: FieldValue.serverTimestamp(),
-      expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
-    });
+    const refreshDiscovery = shouldRefreshDiscovery(
+      { refreshedAtIso: session!.discoveryRefreshedAt, geoCell: session!.discoveryGeoCell },
+      discoveryFields.geoCell,
+      now,
+    );
+    if (refreshDiscovery) {
+      await discoveryRef(actor.uid).set({
+        ...discoveryFields,
+        updatedAt: FieldValue.serverTimestamp(),
+        expiresAt: Timestamp.fromDate(discoveryExpiresAt(session!.expiresAt, now)),
+      });
+      // Record the throttle state on the session node (cheap RTDB update) so the
+      // next samples can skip the Firestore write until the interval elapses or
+      // the cell changes.
+      await sessionRef(actor.uid).update({
+        discoveryRefreshedAt: now.toISOString(),
+        discoveryGeoCell: discoveryFields.geoCell,
+      });
+    }
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );

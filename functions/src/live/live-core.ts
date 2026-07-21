@@ -205,6 +205,15 @@ export interface LiveSession {
    * next session start.
    */
   mainCar: LiveMainCar | null;
+  /**
+   * Throttle state for the Firestore nearby-discovery doc (see
+   * shouldRefreshDiscovery in nearby-core.ts). Written by updatePosition when it
+   * refreshes the discovery doc; absent until the first refresh. Not a session
+   * lifecycle field — purely bookkeeping so the (frequent) position-update path
+   * can skip a Firestore write without an extra read.
+   */
+  discoveryRefreshedAt?: string | null;
+  discoveryGeoCell?: string | null;
 }
 
 export function buildSession(

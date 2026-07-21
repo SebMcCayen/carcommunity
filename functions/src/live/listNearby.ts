@@ -96,7 +96,16 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
   // One `geoCell in [...]` query per chunk of covering cells, in parallel.
   // Bound reads to ACTIVE, still-unexpired docs — needs the composite index
   // liveSessions(geoCell, status, expiresAt) in firebase/firestore.indexes.json.
-  // Bounded by the covering cells — never a full-collection scan.
+  //
+  // The per-query `.limit` is DIVIDED across the chunks (ceil so it is >= 1),
+  // so the TOTAL documents read across all chunks stays ~MAX_RESULTS rather than
+  // MAX_RESULTS × chunkCount — a wide radius spanning several 30-cell chunks
+  // therefore does not multiply the read cost (or the downstream block-matrix
+  // work). The trade-off: if every sharer clusters in a single chunk we read at
+  // most that chunk's share, but a nearby map viewport does not need more than
+  // MAX_RESULTS markers in total, and the freshest are kept by the sort+cap
+  // below. Bounded by the covering cells — never a full-collection scan.
+  const perChunkLimit = Math.max(1, Math.ceil(MAX_RESULTS / cellChunks.length));
   const snapshots = await Promise.all(
     cellChunks.map((cellGroup) =>
       db
@@ -104,7 +113,7 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         .where('geoCell', 'in', cellGroup)
         .where('status', '==', LIVE_SESSION_ACTIVE_STATUS)
         .where('expiresAt', '>', now)
-        .limit(MAX_RESULTS)
+        .limit(perChunkLimit)
         .get(),
     ),
   );
@@ -139,18 +148,27 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
     }
   }
 
+  // Each cell-group query is individually capped at MAX_RESULTS, so a wide
+  // radius spanning several 30-cell chunks could yield more than MAX_RESULTS
+  // candidates in total. Sort by freshness and cap to MAX_RESULTS HERE, BEFORE
+  // resolving the block matrix, so the (read-bearing) block work is bounded to
+  // the size of the response the caller can actually receive rather than to the
+  // raw in-cell count. The final response is at most this many anyway (the
+  // block filter only removes rows), so nothing visible is lost.
+  candidates.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  const capped = candidates.slice(0, MAX_RESULTS);
+
   // Second pass: drop anyone in a block relationship with the caller in EITHER
-  // direction. peers = [caller], candidates = the nearby uids — the same
-  // matrix the convoy invite path uses, resolved in reads that grow with the
-  // candidate count, not with candidate×peer.
-  const candidateUids = candidates.map((c) => c.uid);
+  // direction. peers = [caller], candidates = the (capped) nearby uids — the
+  // same matrix the convoy invite path uses, resolved in reads that grow with
+  // the candidate count, not with candidate×peer.
+  const candidateUids = capped.map((c) => c.uid);
   const blockPairs = await resolvePeerBlockPairs(candidateUids, [actor.uid], queryBlockedSubset);
-  const results = candidates.filter(
+  const results = capped.filter(
     (c) => !isBlockedAgainstAnyPeer(c.uid, [actor.uid], blockPairs),
   );
 
-  results.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
-  return { sessions: results.slice(0, MAX_RESULTS) };
+  return { sessions: results };
 });
 
 function tsToIso(value: unknown): string | null {

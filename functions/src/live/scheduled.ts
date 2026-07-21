@@ -30,23 +30,45 @@ const DISCOVERY_SWEEP_LIMIT = 400;
 /**
  * Deletes nearby-discovery docs (liveSessions) whose expiresAt has passed, plus
  * any explicitly named uids (sessions the RTDB sweep just expired/removed).
- * Returns the number deleted. Bounded per run.
+ * Returns the number deleted.
+ *
+ * HARD-CAPPED at DISCOVERY_SWEEP_LIMIT deletes per run so a single sweep can
+ * never fan out into an unbounded number of Firestore writes, even if
+ * liveLocation/ ever accumulates a large backlog of stale nodes. Anything over
+ * the cap is left for the next run: an over-cap expired doc is already HIDDEN by
+ * live.listNearby (which filters expiresAt > now), so nothing stale is
+ * discoverable in the meantime — it just isn't physically deleted until the
+ * 5-minute cadence catches up. Named-uid deletes (sessions the RTDB sweep just
+ * removed) are prioritised over the expiresAt backlog by being added first.
  */
 export async function sweepDiscoveryDocs(now: Date, removedUids: Iterable<string>): Promise<number> {
-  const toDelete = new Set<string>(removedUids);
+  // Named uids first, capped to the per-run limit. These are sessions the RTDB
+  // sweep just expired/removed, so they take priority over the expiry backlog.
+  const toDelete = new Set<string>();
+  for (const uid of removedUids) {
+    if (toDelete.size >= DISCOVERY_SWEEP_LIMIT) break;
+    toDelete.add(uid);
+  }
 
-  // Firestore-side TTL: docs past their own expiresAt. Bounded by the query
-  // limit; the 5-minute cadence drains any backlog over successive runs.
-  const expired = await db
-    .collection('liveSessions')
-    .where('expiresAt', '<=', Timestamp.fromDate(now))
-    .limit(DISCOVERY_SWEEP_LIMIT)
-    .get();
-  for (const doc of expired.docs) toDelete.add(doc.id);
+  // Firestore-side TTL: docs past their own expiresAt, but only up to the
+  // REMAINING capacity — so the query itself never reads more than the run can
+  // delete. Anything over the cap waits for the next 5-minute run; it is already
+  // HIDDEN by live.listNearby (expiresAt > now) in the meantime, so nothing
+  // stale is discoverable, it just isn't physically deleted yet.
+  const remaining = DISCOVERY_SWEEP_LIMIT - toDelete.size;
+  if (remaining > 0) {
+    const expired = await db
+      .collection('liveSessions')
+      .where('expiresAt', '<=', Timestamp.fromDate(now))
+      .limit(remaining)
+      .get();
+    for (const doc of expired.docs) toDelete.add(doc.id);
+  }
 
   if (toDelete.size === 0) return 0;
   // Chunk into batches (Firestore caps a write batch at 500). delete() on a
-  // missing doc is a no-op, so naming an already-gone uid is harmless.
+  // missing doc is a no-op, so naming an already-gone uid is harmless. The set
+  // is already <= DISCOVERY_SWEEP_LIMIT, so this is bounded per run.
   const ids = [...toDelete];
   for (let i = 0; i < ids.length; i += 400) {
     const batch = db.batch();
@@ -55,7 +77,7 @@ export async function sweepDiscoveryDocs(now: Date, removedUids: Iterable<string
     }
     await batch.commit();
   }
-  return toDelete.size;
+  return ids.length;
 }
 
 interface LiveUserNode {
