@@ -1,4 +1,9 @@
 {
+  "appActive": {
+    "notificationChannel": "App status",
+    "notificationChannelDescription": "Shows an ongoing notice while the app is open, so you can see it is still active in the background.",
+    "notificationText": "Active — tap to return to the app."
+  },
   "app": {
     "name": "Kungsbacka Car Community"
   },
