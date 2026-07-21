@@ -55,6 +55,13 @@ fun EventsRoute(
     groupDriveRepository: GroupDriveRepository?,
     groupDriveCoordinator: GroupDriveCoordinator?,
     onShowOnMap: ((List<String>) -> Unit)? = null,
+    // A specific event to open on entry, carried by an event-reminder push tap
+    // (the backend sends the event id as the deep link's entityId). Consumed
+    // exactly once via [onInitialEventConsumed]; null on every normal entry,
+    // where the list is the honest landing. Reuses the same list ↔ detail
+    // selection the list rows drive — no second navigation path into detail.
+    initialEventId: String? = null,
+    onInitialEventConsumed: () -> Unit = {},
     onBack: () -> Unit,
     // Blocking-in-context: null-safe. When null, chat offers no block action
     // and does no blocked-author filtering (config-less builds pass unchanged).
@@ -81,6 +88,20 @@ fun EventsRoute(
     var listTab by rememberSaveable { mutableStateOf(EventsListTab.UPCOMING) }
     // Bumped by the "try again" affordance to re-subscribe the observe flows.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+
+    // Seed the detail view from a deep link (event-reminder push) exactly once,
+    // then have the shell clear its pending id so the same tap can't re-open the
+    // event after the user backs out to the list, and a later plain tab open
+    // lands on the list. Keyed on the id: a second reminder for a DIFFERENT event
+    // re-seeds; rotation (same id) does not, because the shell has already
+    // cleared it back to null by then and selectedEventId is itself saveable.
+    LaunchedEffect(initialEventId) {
+        if (initialEventId != null) {
+            selectedEventId = initialEventId
+            onInitialEventConsumed()
+        }
+    }
+
     val selected = selectedEventId
 
     // Owns the create-event write status; built here (a thin wrapper over the
