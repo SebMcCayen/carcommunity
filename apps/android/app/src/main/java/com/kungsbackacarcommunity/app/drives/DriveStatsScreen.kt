@@ -32,19 +32,21 @@ fun DriveStatsScreen(
     drives: List<SavedDrive>,
     modifier: Modifier = Modifier,
 ) {
-    // Start of the current calendar month in the device's local time zone. The
-    // Calendar/time-zone concern lives here at the composable edge so the fold
-    // ([DriveStatsCalculator.compute]) stays pure and deterministic.
+    // Start of the current calendar month in the device's local time zone,
+    // recomputed each composition (deliberately NOT remembered) so the "this
+    // month" boundary follows a month rollover if the screen stays composed across
+    // midnight on the 1st. The value is deterministic within a month, so the keyed
+    // `stats` fold below still only recomputes when the drives or the month itself
+    // change. The Calendar/time-zone concern lives here at the composable edge so
+    // the fold ([DriveStatsCalculator.compute]) stays pure and deterministic.
     val monthStartMillis =
-        remember {
-            Calendar.getInstance().apply {
-                set(Calendar.DAY_OF_MONTH, 1)
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-        }
+        Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     val stats = remember(drives, monthStartMillis) { DriveStatsCalculator.compute(drives, monthStartMillis) }
 
     AeroPage(title = stringResource(R.string.savedDrives_statsTitle), modifier = modifier) {
