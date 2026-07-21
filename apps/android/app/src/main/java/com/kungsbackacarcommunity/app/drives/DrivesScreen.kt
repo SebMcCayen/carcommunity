@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
@@ -108,8 +109,8 @@ fun DrivesListScreen(
 private fun StatsEntryCard(onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
             Text(
                 text = stringResource(R.string.savedDrives_statsEntryTitle),
