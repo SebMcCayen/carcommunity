@@ -13,6 +13,7 @@ import {
   decideEventReminder,
   eventReminderNotificationId,
   eventReminderPreview,
+  normalizeEventReminderLimits,
   reminderWindowEnd,
   reminderWindowStart,
   type EventReminderInputs,
@@ -52,6 +53,25 @@ describe('reminder window bounds', () => {
   it('honours a custom lead width', () => {
     const now = new Date(NOW_MS);
     expect(reminderWindowEnd(now, 30 * 60 * 1000).getTime()).toBe(NOW_MS + 30 * 60 * 1000);
+  });
+});
+
+describe('normalizeEventReminderLimits', () => {
+  const sane = { leadMs: 1000, pageSize: 50, maxCandidates: 200, concurrency: 5 };
+
+  it('passes already-valid limits through unchanged', () => {
+    expect(normalizeEventReminderLimits(sane)).toEqual(sane);
+  });
+
+  it('clamps maxCandidates to at least 1 (guards Firestore .limit(0)/negative)', () => {
+    expect(normalizeEventReminderLimits({ ...sane, maxCandidates: 0 }).maxCandidates).toBe(1);
+    expect(normalizeEventReminderLimits({ ...sane, maxCandidates: -5 }).maxCandidates).toBe(1);
+  });
+
+  it('clamps every limit to at least 1', () => {
+    expect(
+      normalizeEventReminderLimits({ leadMs: 0, pageSize: -1, maxCandidates: -10, concurrency: 0 }),
+    ).toEqual({ leadMs: 1, pageSize: 1, maxCandidates: 1, concurrency: 1 });
   });
 });
 

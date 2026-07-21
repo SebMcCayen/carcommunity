@@ -85,6 +85,34 @@ export function reminderWindowEnd(now: Date, leadMs: number = EVENT_REMINDER_LEA
   return new Date(now.getTime() + leadMs);
 }
 
+/**
+ * Per-run scale/bounds for one reminder sweep. `runEventReminders` accepts these
+ * so a test can seed a small scale; production uses the module constants. Lives
+ * in the pure core so the clamp below is unit-testable without the emulator.
+ */
+export interface EventReminderLimits {
+  leadMs: number;
+  pageSize: number;
+  maxCandidates: number;
+  /** Attendees notified concurrently per event (FANOUT_CONCURRENCY in prod). */
+  concurrency: number;
+}
+
+/**
+ * Clamps every limit to at least 1. A caller-supplied 0/negative would otherwise
+ * make Firestore throw on `.limit(...)` (maxCandidates, pageSize), collapse the
+ * lead window, or break the fan-out chunking (concurrency). Pure, so it is
+ * unit-tested directly; the runner calls it once before any I/O.
+ */
+export function normalizeEventReminderLimits(limits: EventReminderLimits): EventReminderLimits {
+  return {
+    leadMs: Math.max(1, limits.leadMs),
+    pageSize: Math.max(1, limits.pageSize),
+    maxCandidates: Math.max(1, limits.maxCandidates),
+    concurrency: Math.max(1, limits.concurrency),
+  };
+}
+
 export interface EventReminderInputs {
   /** The stored events/{eventId}.status. */
   status: string;

@@ -56,9 +56,11 @@ import { writeInAppNotification } from '../notifications/deliver';
 import {
   EVENT_REMINDER_LEAD_MS,
   EVENT_REMINDER_TITLE,
+  type EventReminderLimits,
   decideEventReminder,
   eventReminderNotificationId,
   eventReminderPreview,
+  normalizeEventReminderLimits,
   reminderWindowEnd,
   reminderWindowStart,
 } from './eventReminders-core';
@@ -115,14 +117,6 @@ export interface EventReminderSummary {
   notificationsSkipped: number;
   /** True when MAX_CANDIDATES_PER_RUN bound the scan (see its note). */
   capped: boolean;
-}
-
-export interface EventReminderLimits {
-  leadMs: number;
-  pageSize: number;
-  maxCandidates: number;
-  /** Attendees notified concurrently per event (FANOUT_CONCURRENCY in prod). */
-  concurrency: number;
 }
 
 /**
@@ -258,9 +252,7 @@ export async function runEventReminders(
     capped: false,
   };
 
-  const leadMs = Math.max(1, limits.leadMs);
-  const pageSize = Math.max(1, limits.pageSize);
-  const concurrency = Math.max(1, limits.concurrency);
+  const { leadMs, pageSize, maxCandidates, concurrency } = normalizeEventReminderLimits(limits);
   const windowStart = Timestamp.fromDate(reminderWindowStart(now));
   const windowEnd = Timestamp.fromDate(reminderWindowEnd(now, leadMs));
 
@@ -271,7 +263,7 @@ export async function runEventReminders(
   let cursor: { startsAt: Timestamp; id: string } | null = null;
 
   for (;;) {
-    if (summary.candidates >= limits.maxCandidates) {
+    if (summary.candidates >= maxCandidates) {
       summary.capped = true;
       break;
     }
@@ -282,7 +274,7 @@ export async function runEventReminders(
       .where('startsAt', '<=', windowEnd)
       .orderBy('startsAt', 'asc')
       .orderBy(FieldPath.documentId())
-      .limit(Math.min(pageSize, limits.maxCandidates - summary.candidates));
+      .limit(Math.min(pageSize, maxCandidates - summary.candidates));
     if (cursor !== null) {
       query = query.startAfter(cursor.startsAt, cursor.id);
     }
@@ -339,7 +331,7 @@ export async function runEventReminders(
 
   if (summary.capped) {
     logger.warn('Event reminder candidate cap reached; later candidates not examined this run', {
-      maxCandidates: limits.maxCandidates,
+      maxCandidates,
     });
   }
   logger.info('Event reminder sweep complete', { ...summary });
