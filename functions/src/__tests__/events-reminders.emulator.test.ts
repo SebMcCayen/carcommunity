@@ -257,6 +257,55 @@ describe('event reminder sweep', () => {
   });
 });
 
+describe('reminder sweep – candidate cap paging (reduced final-page limit)', () => {
+  // Each test uses its OWN far-future NOW so only its seeded events fall inside
+  // the 2h window — the sweep scans the whole `events` collection, so a shared
+  // window would let sibling fixtures perturb these summary-count assertions.
+  const baseLimits = { leadMs: EVENT_REMINDER_LEAD_MS, concurrency: 15 };
+
+  async function seedWindowEvents(now: Date, count: number): Promise<void> {
+    for (let i = 0; i < count; i += 1) {
+      // Distinct startsAt inside (now, now+2h] so the ordered page is stable.
+      await seedEvent({ startsAt: new Date(now.getTime() + (i + 1) * MINUTE) });
+    }
+  }
+
+  it('flags capped + logs when the cap binds via a reduced final-page limit', async () => {
+    // 5 candidates, pageSize 2, cap 3. The final page limit is reduced to the
+    // remaining budget (3 - 2 = 1); Firestore returns a FULL page of 1. That
+    // short page must NOT be misread as exhaustion: the cap was hit and events
+    // 4-5 were never examined, so `capped` must be true.
+    const CAP_NOW = new Date('2028-03-15T09:00:00.000Z');
+    await seedWindowEvents(CAP_NOW, 5);
+
+    const summary = await runEventReminders(CAP_NOW, {
+      ...baseLimits,
+      pageSize: 2,
+      maxCandidates: 3,
+    });
+
+    expect(summary.capped).toBe(true);
+    expect(summary.candidates).toBe(3);
+  });
+
+  it('does NOT flag capped when a reduced final page is genuine exhaustion', async () => {
+    // 3 candidates, pageSize 2, cap 100. The second page requests 2 and gets 1
+    // (all that remain) — a short page shorter than the requested limit, i.e.
+    // real end-of-results, not the cap. `capped` must stay false.
+    const EXH_NOW = new Date('2028-06-20T09:00:00.000Z');
+    await seedWindowEvents(EXH_NOW, 3);
+
+    const summary = await runEventReminders(EXH_NOW, {
+      ...baseLimits,
+      pageSize: 2,
+      maxCandidates: 100,
+    });
+
+    expect(summary.capped).toBe(false);
+    expect(summary.candidates).toBe(3);
+  });
+});
+
 describe('claimEventReminder – concurrent change between query and claim', () => {
   // The sweep reads candidates, then claims each in its own transaction. These
   // exercise the window BETWEEN those two steps, which runEventReminders cannot

@@ -267,6 +267,10 @@ export async function runEventReminders(
       summary.capped = true;
       break;
     }
+    // The page limit is capped by the REMAINING candidate budget so a run never
+    // reads past maxCandidates. Near the cap this reduces the limit below
+    // pageSize, which the termination check below must account for.
+    const effectiveLimit = Math.min(pageSize, maxCandidates - summary.candidates);
     let query = db
       .collection('events')
       .where('status', '==', 'published')
@@ -274,7 +278,7 @@ export async function runEventReminders(
       .where('startsAt', '<=', windowEnd)
       .orderBy('startsAt', 'asc')
       .orderBy(FieldPath.documentId())
-      .limit(Math.min(pageSize, maxCandidates - summary.candidates));
+      .limit(effectiveLimit);
     if (cursor !== null) {
       query = query.startAfter(cursor.startsAt, cursor.id);
     }
@@ -322,7 +326,13 @@ export async function runEventReminders(
       summary.notificationsSkipped += skipped;
     }
 
-    if (page.size < pageSize) {
+    // Exhaustion is a page SHORTER than the limit we actually requested — not
+    // shorter than pageSize. When the limit was reduced toward the cap, a full
+    // reduced page (page.size === effectiveLimit < pageSize) is the cap binding,
+    // NOT end-of-results: it must fall through to the top-of-loop cap check so
+    // `capped` is set and the warning is logged, rather than be misread here as
+    // exhaustion and silently drop the remaining candidates.
+    if (page.size < effectiveLimit) {
       break;
     }
     const lastDoc = page.docs[page.docs.length - 1]!;
