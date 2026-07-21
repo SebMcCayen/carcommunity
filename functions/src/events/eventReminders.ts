@@ -213,9 +213,12 @@ async function fanOutEventReminder(
         // A per-attendee delivery failure must not abort the event's fan-out or
         // the sweep; the marker is already claimed, so this attendee simply
         // misses the nudge (the accepted failure mode, see the file header).
+        // Logged PII-free: the attendee's position in the going-list (not their
+        // uid) is enough to correlate the failure without writing personal data
+        // into logs/alerts.
         logger.error('Event reminder delivery failed for attendee', {
           eventId,
-          uid: chunk[index]?.id,
+          attendeeIndex: i + index,
           error: String(result.reason),
         });
       }
