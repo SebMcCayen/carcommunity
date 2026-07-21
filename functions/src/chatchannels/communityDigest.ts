@@ -84,6 +84,24 @@ const CANDIDATE_PAGE_SIZE = 400;
  */
 const MAX_CANDIDATES_PER_RUN = 20_000;
 
+/**
+ * Behind-members processed CONCURRENTLY within a page. The per-member work is a
+ * count() aggregation plus (on notify) a marker write and a delivery — several
+ * independent network round-trips against per-member documents. Running a page
+ * strictly serially makes a run's wall-clock scale with the behind set B and can
+ * push a busy day past the 300s timeout; a small bounded fan-out makes it scale
+ * with this concurrency instead. NOT an unbounded `Promise.all` over the whole
+ * page — that would open B simultaneous streams and hammer Firestore (same
+ * reasoning and chunked idiom as incidents-cleanup's DELETE_CONCURRENCY and the
+ * event auto-close sweep's ATTENDANCE_CREDIT_CONCURRENCY). Each member's decision
+ * is fully independent — a distinct userPrivate doc and a distinct notification
+ * inbox, over a shared read-only count() — so parallelism cannot change any
+ * outcome; only log lines interleave. count() aggregation throughput is the real
+ * ceiling, so this caps the fan-out rather than eliminating the bound: it lowers
+ * the wall-clock from O(B) round-trips to O(B / concurrency).
+ */
+const MEMBER_CONCURRENCY = 15;
+
 /** Per-user last-read + digest marker doc. */
 function userPrivateRef(uid: string) {
   return db.collection('userPrivate').doc(uid);
@@ -113,12 +131,20 @@ export interface CommunityDigestSummary {
   belowThreshold: number;
   /** True when MAX_CANDIDATES_PER_RUN bound the scan (remainder next run). */
   capped: boolean;
+  /**
+   * Highest number of members processed concurrently in any one chunk. The ONLY
+   * way to observe that the per-member fan-out stayed bounded (never exceeds the
+   * `concurrency` limit); exposed like incidents-cleanup's peakConcurrency.
+   */
+  peakConcurrency: number;
 }
 
 export interface CommunityDigestLimits {
   threshold: number;
   maxCandidates: number;
   pageSize: number;
+  /** Max members processed concurrently per chunk (MEMBER_CONCURRENCY in prod). */
+  concurrency: number;
 }
 
 /**
@@ -142,6 +168,7 @@ export async function runCommunityChatDigest(
     threshold: COMMUNITY_DIGEST_MIN_UNREAD,
     maxCandidates: MAX_CANDIDATES_PER_RUN,
     pageSize: CANDIDATE_PAGE_SIZE,
+    concurrency: MEMBER_CONCURRENCY,
   },
   deps: CommunityDigestDeps = { deliver: writeInAppNotification },
 ): Promise<CommunityDigestSummary> {
@@ -153,6 +180,7 @@ export async function runCommunityChatDigest(
     alreadyDigested: 0,
     belowThreshold: 0,
     capped: false,
+    peakConcurrency: 0,
   };
 
   // ONE probe for the newest message instant, shared by every member this run.
@@ -173,6 +201,12 @@ export async function runCommunityChatDigest(
   const latestMessageStamp = latestMessageTs as Timestamp;
 
   const pageSize = Math.max(1, limits.pageSize);
+  const concurrency = Math.max(1, limits.concurrency);
+  // Live count of in-flight per-member tasks, tracked ONLY to expose the bound via
+  // summary.peakConcurrency (same pattern as incidents-cleanup). Safe as a plain
+  // counter: JS is single-threaded, so the increment and the peak comparison are
+  // atomic between awaits.
+  let inFlight = 0;
   // Cursor carries BOTH the ordering value and the doc id tiebreaker: digested
   // members keep their (unchanged) communityChatLastReadAt, so several candidates
   // can share an identical timestamp — a single-field startAfter could skip or
@@ -180,31 +214,25 @@ export async function runCommunityChatDigest(
   // account-cleanupInactive).
   let cursor: { lastReadAt: Timestamp; uid: string } | null = null;
 
-  // CANDIDATE SET: only members who HAVE a last-read marker OLDER than the newest
-  // message can possibly be behind. This single-field range query (auto-indexed —
-  // no composite index) is the hard cost bound: caught-up members and members who
-  // never opened the chat are never read. Paged oldest-behind first.
-  for (;;) {
-    if (summary.candidates >= limits.maxCandidates) {
-      summary.capped = true;
-      break;
-    }
-    let query = db
-      .collection('userPrivate')
-      .where('communityChatLastReadAt', '<', latestMessageStamp)
-      .orderBy('communityChatLastReadAt', 'asc')
-      .orderBy(FieldPath.documentId())
-      .limit(Math.min(pageSize, limits.maxCandidates - summary.candidates));
-    if (cursor !== null) {
-      query = query.startAfter(cursor.lastReadAt, cursor.uid);
-    }
-    const page = await query.get();
-    if (page.empty) {
-      break;
-    }
-
-    for (const doc of page.docs) {
-      summary.candidates += 1;
+  // Per-member decision + I/O for ONE candidate. Returns what happened so the
+  // caller can fold it into `summary` AFTER a chunk settles — the loop must not
+  // mutate shared counters from parallel tasks (only inFlight/peakConcurrency,
+  // which are the bound's own instrumentation). `counted` is true iff the count()
+  // aggregation actually ran (the gate passed). Every member's target docs are
+  // distinct, so tasks in a chunk never race each other's writes. This throws ONLY
+  // if the count() aggregation itself fails (marker + delivery failures are caught
+  // here); an unguarded count() failure rejects the chunk and aborts the run, the
+  // same fail-and-retry-next-run behaviour the serial version had.
+  type MemberOutcome = {
+    counted: boolean;
+    result: 'alreadyDigested' | 'belowThreshold' | 'notified' | 'markerFailed';
+  };
+  const processMember = async (
+    doc: FirebaseFirestore.QueryDocumentSnapshot,
+  ): Promise<MemberOutcome> => {
+    inFlight += 1;
+    summary.peakConcurrency = Math.max(summary.peakConcurrency, inFlight);
+    try {
       const data = doc.data();
       const lastReadAtMs = toMillis(data.communityChatLastReadAt);
       const digestedUpToMs = toMillis(data.communityChatDigestedUpTo);
@@ -213,8 +241,7 @@ export async function runCommunityChatDigest(
       // Gate the expensive count() aggregation: a member already digested past the
       // newest message costs zero aggregation reads.
       if (!hasNewSinceBaseline(latestMessageAtMs, baseline)) {
-        summary.alreadyDigested += 1;
-        continue;
+        return { counted: false, result: 'alreadyDigested' };
       }
 
       // Cheap unread COUNT (aggregation) — never fetch the messages themselves.
@@ -224,7 +251,6 @@ export async function runCommunityChatDigest(
         .count()
         .get();
       const unreadCount = countSnap.data().count;
-      summary.counted += 1;
 
       const decision = decideMemberDigest({
         latestMessageAtMs,
@@ -235,9 +261,10 @@ export async function runCommunityChatDigest(
       });
 
       if (!decision.notify) {
-        if (decision.reason === 'below_threshold') summary.belowThreshold += 1;
-        else summary.alreadyDigested += 1;
-        continue;
+        return {
+          counted: true,
+          result: decision.reason === 'below_threshold' ? 'belowThreshold' : 'alreadyDigested',
+        };
       }
 
       // PRIMARY idempotency guard, written BEFORE delivery. The two writes (marker +
@@ -266,9 +293,8 @@ export async function runCommunityChatDigest(
           uid: doc.id,
           error: String(error),
         });
-        continue;
+        return { counted: true, result: 'markerFailed' };
       }
-      summary.notified += 1;
 
       try {
         // Opt-out / suspended / deleted eligibility is OWNED by this call — not
@@ -292,6 +318,65 @@ export async function runCommunityChatDigest(
           uid: doc.id,
           error: String(error),
         });
+      }
+      return { counted: true, result: 'notified' };
+    } finally {
+      inFlight -= 1;
+    }
+  };
+
+  // CANDIDATE SET: only members who HAVE a last-read marker OLDER than the newest
+  // message can possibly be behind. This single-field range query (auto-indexed —
+  // no composite index) is the hard cost bound: caught-up members and members who
+  // never opened the chat are never read. Paged oldest-behind first.
+  for (;;) {
+    if (summary.candidates >= limits.maxCandidates) {
+      summary.capped = true;
+      break;
+    }
+    let query = db
+      .collection('userPrivate')
+      .where('communityChatLastReadAt', '<', latestMessageStamp)
+      .orderBy('communityChatLastReadAt', 'asc')
+      .orderBy(FieldPath.documentId())
+      .limit(Math.min(pageSize, limits.maxCandidates - summary.candidates));
+    if (cursor !== null) {
+      query = query.startAfter(cursor.lastReadAt, cursor.uid);
+    }
+    const page = await query.get();
+    if (page.empty) {
+      break;
+    }
+
+    // Every doc in the page is a candidate examined this run (the query already
+    // limited the page to the remaining maxCandidates budget, so this can't overrun
+    // it). Counted up front; the per-member outcomes below only fold into the finer
+    // buckets.
+    summary.candidates += page.docs.length;
+
+    // Process the page in bounded-concurrency CHUNKS (see MEMBER_CONCURRENCY), then
+    // fold each chunk's outcomes into the shared summary AFTER it settles — parallel
+    // tasks never touch the counters themselves, so there is no race on them.
+    for (let i = 0; i < page.docs.length; i += concurrency) {
+      const chunk = page.docs.slice(i, i + concurrency);
+      const outcomes = await Promise.all(chunk.map((doc) => processMember(doc)));
+      for (const outcome of outcomes) {
+        if (outcome.counted) summary.counted += 1;
+        switch (outcome.result) {
+          case 'alreadyDigested':
+            summary.alreadyDigested += 1;
+            break;
+          case 'belowThreshold':
+            summary.belowThreshold += 1;
+            break;
+          case 'notified':
+            summary.notified += 1;
+            break;
+          case 'markerFailed':
+            // Counted (the gate passed) but neither notified nor bucketed elsewhere —
+            // the marker write failed and this member is retried next run.
+            break;
+        }
       }
     }
 

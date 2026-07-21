@@ -162,7 +162,7 @@ describe('runCommunityChatDigest — query path', () => {
     // Run 1: delivery throws AFTER the marker advanced.
     const summary = await runCommunityChatDigest(
       now,
-      { threshold: COMMUNITY_DIGEST_MIN_UNREAD, maxCandidates: 20_000, pageSize: 400 },
+      { threshold: COMMUNITY_DIGEST_MIN_UNREAD, maxCandidates: 20_000, pageSize: 400, concurrency: 15 },
       { deliver: throwingDeliver as never },
     );
     expect(summary.notified).toBeGreaterThanOrEqual(1);
@@ -177,6 +177,41 @@ describe('runCommunityChatDigest — query path', () => {
     // NO duplicate is delivered for the same backlog.
     await runCommunityChatDigest(now);
     expect(await digestItems(flaky)).toHaveLength(0);
+  });
+
+  it('processes members with bounded concurrency (never exceeds the limit, still parallel)', async () => {
+    // Seed several fresh behind members that all PASS the count() gate (each does a
+    // real aggregation round-trip). They share an identical lastReadAt, so they sort
+    // contiguously in the candidate query and land within one page — the fan-out is
+    // then chunked at `concurrency`. peakConcurrency is the only observable of the
+    // bound: it must never exceed the limit, and must exceed 1 to prove the work is
+    // actually running in parallel rather than serially.
+    const CONCURRENCY = 3;
+    const behindMembers = await Promise.all(
+      [0, 1, 2, 3, 4, 5].map((i) => seedUser(`conc-${i}`, { lastReadAtMs: BASE_MS })),
+    );
+    expect(behindMembers).toHaveLength(6);
+
+    const summary = await runCommunityChatDigest(now, {
+      threshold: COMMUNITY_DIGEST_MIN_UNREAD,
+      maxCandidates: 20_000,
+      pageSize: 400,
+      concurrency: CONCURRENCY,
+    });
+
+    // The bound held...
+    expect(summary.peakConcurrency).toBeLessThanOrEqual(CONCURRENCY);
+    // ...and work genuinely overlapped (6 contiguous gate-passing members chunked by
+    // 3 guarantees some chunk ran >= 2 count() aggregations at once).
+    expect(summary.peakConcurrency).toBeGreaterThan(1);
+
+    // Correctness survived the parallel rewrite: each fresh member got exactly one
+    // digest and had its marker advanced to the newest instant.
+    for (const uidStr of behindMembers) {
+      expect(await digestItems(uidStr)).toHaveLength(1);
+      const priv = (await adminDb.collection('userPrivate').doc(uidStr).get()).data()!;
+      expect((priv.communityChatDigestedUpTo as Timestamp).toMillis()).toBe(NEWEST_MS);
+    }
   });
 
   it('exposes the documented minimum-unread threshold', () => {
