@@ -1,9 +1,13 @@
 package com.kungsbackacarcommunity.app.drives
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Orchestrates a single drive recording lifecycle (Phase 12 slice 12, write
@@ -18,6 +22,23 @@ class DriveRecordingCoordinator(
     private val repository: DrivesRepository,
     private val sourceSessionId: String,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Uploads the recorded route to `route.bin` after the save. Null in a
+     * config-less / CI build (no Cloud Storage) — the drive still saves, it just
+     * has no route file, exactly as it did before any uploader existed.
+     */
+    private val routeUploadRunner: RouteUploadRunner? = null,
+    /**
+     * Scope the background route upload runs on. In production
+     * [SingleSessionRecording] injects a PER-SESSION process-scoped scope that it
+     * owns and cancels on sign-out / account switch, so an upload started under
+     * one user's auth can never continue under another's, while still outliving
+     * the composition (dismissing the save prompt or navigating away the instant
+     * "Saved" appears cannot cancel an in-flight upload and silently lose the
+     * route). Defaults to a shared process-scoped [processUploadScope] for tests
+     * / direct construction; injectable so tests can drive it deterministically.
+     */
+    private val uploadScope: CoroutineScope = processUploadScope,
 ) {
     private val stateFlow = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
@@ -103,12 +124,26 @@ class DriveRecordingCoordinator(
         val endedAt = stoppedAtMillis ?: clock()
         stateFlow.value = RecordingState.Saving
         try {
-            repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            val result = repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            // Snapshot the fixes for the background upload only now that the save
+            // succeeded, and only when an upload can actually run: snapshot()
+            // copies up to ~20k points, so this skips that copy on a failed save,
+            // on a summary-only / no-route save, and in a config-less build (no
+            // uploader). Taken BEFORE the recorder is released just below, so it
+            // is the exact set of fixes the backend just priced its stats from
+            // (replay + top-speed then match the summary).
+            val points =
+                if (routeUploadRunner != null && result.routePath != null) {
+                    recorder.snapshot()
+                } else {
+                    emptyList()
+                }
             // Release the recorder (and its up-to-20k points) now that the save
             // succeeded; the UI renders the terminal state from RecordingState.
             this.recorder = null
             stoppedAtMillis = null
             stateFlow.value = RecordingState.Saved
+            uploadRoute(result, points)
         } catch (cancellation: CancellationException) {
             // Cancellation (navigation away / scope cancellation) is not a save
             // failure; restore the prompt so a retry is possible if the scope
@@ -133,6 +168,26 @@ class DriveRecordingCoordinator(
     }
 
     /**
+     * Kicks off the route-file upload AFTER a successful save, on the
+     * process-scoped [uploadScope] so it survives the prompt leaving the screen.
+     *
+     * This runs as a fire-and-forget SECOND step, deliberately decoupled from
+     * the save's success: the drive doc already exists and the UI is already in
+     * [RecordingState.Saved], so the upload must never block or reverse that.
+     * The runner retries transient failures internally; if it still fails the
+     * drive keeps its (empty) route reference and the reader degrades to "route
+     * unavailable" — a tolerated state, not a broken save. A no-op when there is
+     * no uploader (config-less build), no route path (defensive), or no points
+     * (a summary-only save has nothing to upload).
+     */
+    private fun uploadRoute(result: DriveSaveResult, points: List<RecordedPoint>) {
+        val runner = routeUploadRunner ?: return
+        val routePath = result.routePath ?: return
+        if (points.isEmpty()) return
+        uploadScope.launch { runner.upload(routePath, points) }
+    }
+
+    /**
      * Snapshot of the accumulated fixes, used only to compute the client-side
      * [DriveSummary] preview shown in the end-of-session save prompt. Empty once
      * the recorder has been released (after a successful save / discard / reset).
@@ -152,5 +207,25 @@ class DriveRecordingCoordinator(
         recorder = null
         stoppedAtMillis = null
         stateFlow.value = RecordingState.Idle
+    }
+
+    private companion object {
+        /**
+         * Fallback scope for background route uploads when none is injected
+         * (tests / direct construction): process-scoped and supervisor-jobbed so
+         * one upload's failure can't cancel another, and so the upload outlives
+         * the composition that triggered the save. The save prompt is dismissed
+         * the moment "Saved" appears (SingleSessionRecording clears the
+         * recording), which would cancel a composition-scoped upload mid-flight
+         * and lose the route with no retry — the exact half-state this avoids.
+         * IO dispatcher: the actual work is a network putBytes.
+         *
+         * Production does NOT use this default: [SingleSessionRecording] injects
+         * a per-session scope it can cancel on sign-out / account switch, so this
+         * shared process-wide scope is never the one carrying a real user's
+         * upload across an auth change.
+         */
+        private val processUploadScope: CoroutineScope =
+            CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }

@@ -1,6 +1,11 @@
 package com.kungsbackacarcommunity.app.drives
 
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +69,29 @@ object SingleSessionRecording {
     private var ownerUid: String? = null
 
     /**
+     * The scope background route uploads run on, and the uid they are attributed
+     * to. ONE scope PER SIGNED-IN uid, reused across every session that uid
+     * records (see [start]), so all of a user's uploads share a single
+     * cancellation handle. It is passed to each session's coordinator so the
+     * upload is PROCESS-scoped (survives Activity recreation and the composition
+     * that triggered the save) — the same lifetime the recording itself has, and
+     * the reason the upload cannot live in `remember`.
+     *
+     * It deliberately OUTLIVES a normal [clear]: the fire-and-forget upload is
+     * kicked off the instant the drive reaches "Saved", which is the very state
+     * that triggers [clear], so cancelling it there would lose the route with no
+     * retry — the exact half-state this whole writer avoids. Instead it is
+     * cancelled ONLY by [clearIfNotOwnedBy] when the signed-in user stops being
+     * [uploadOwnerUid] (sign-out or account switch): every upload started under
+     * user A's auth is cancelled TOGETHER and none continues — or retries — under
+     * user B's. Kept alongside [ownerUid] rather than folded into it because
+     * [clear] nulls [ownerUid] while this must persist until the upload's owner
+     * actually leaves.
+     */
+    private var uploadScope: CoroutineScope? = null
+    private var uploadOwnerUid: String? = null
+
+    /**
      * Begins recording for a newly-started session owned by [uid]. A no-op when
      * a recording is already in flight (including one still awaiting its
      * save/discard choice), so an effect that re-runs after a config change
@@ -73,16 +101,40 @@ object SingleSessionRecording {
      * the location permission are unavailable — the session then yields a
      * duration-only summary); it is a parameter so this holder stays free of
      * Android types and JVM-unit-testable.
+     *
+     * [routeUploadRunner] uploads the recorded `route.bin` after the save
+     * succeeds (null in a config-less build — the drive saves without a route
+     * file). Passed through to the coordinator, which runs it in the background.
      */
     fun start(
         uid: String,
         repository: DrivesRepository,
+        routeUploadRunner: RouteUploadRunner? = null,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
+        // REUSE this uid's existing upload scope across sessions so every upload
+        // the user starts in one sign-in shares ONE cancellation handle: a later
+        // sign-out / account switch then cancels them ALL together (a prior
+        // drive's upload can still be retrying when the next drive is recorded).
+        // A live scope here always belongs to this same uid — a different owner
+        // would already have been cancelled + nulled by clearIfNotOwnedBy on the
+        // auth change — so only mint a fresh scope for a new owner (or when none
+        // is live). Process-scoped + supervisor-jobbed: one upload's failure
+        // can't cancel another, and the scope outlives the composition.
+        val scope =
+            uploadScope?.takeIf { uploadOwnerUid == uid && it.isActive }
+                ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val coordinator =
-            DriveRecordingCoordinator(repository, "single-" + UUID.randomUUID().toString())
+            DriveRecordingCoordinator(
+                repository,
+                "single-" + UUID.randomUUID().toString(),
+                routeUploadRunner = routeUploadRunner,
+                uploadScope = scope,
+            )
         ownerUid = uid
+        uploadScope = scope
+        uploadOwnerUid = uid
         activeState.value = coordinator
         coordinator.start()
         val controller = controllerFactory()
@@ -146,6 +198,21 @@ object SingleSessionRecording {
      * This never fires on rotation, so it cannot silently lose a drive there.
      */
     fun clearIfNotOwnedBy(signedInUid: String?) {
+        // Cancel a still-running background route upload the moment its owner is
+        // no longer the signed-in user — even after the recording itself was
+        // already released at "Saved" (ownerUid null) while the upload runs on.
+        // This is the ONLY place the upload scope is cancelled: a same-uid
+        // rotation re-runs this with the SAME uid (uploadOwner == signedInUid, no
+        // cancel), while a real sign-out (null) or account switch (a different
+        // uid) cancels it, so an upload started under user A's auth can never
+        // continue — or retry — under user B's. A benign backgrounding never
+        // calls this at all.
+        val uploadOwner = uploadOwnerUid
+        if (uploadOwner != null && uploadOwner != signedInUid) {
+            uploadScope?.cancel()
+            uploadScope = null
+            uploadOwnerUid = null
+        }
         val owner = ownerUid ?: return
         if (owner == signedInUid) return
         clear()

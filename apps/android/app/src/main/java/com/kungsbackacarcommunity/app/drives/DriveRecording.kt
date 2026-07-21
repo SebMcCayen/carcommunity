@@ -315,16 +315,58 @@ object DriveSummary {
      * (e.g. the History read model, which never fetches them) get null and must
      * omit the top-speed sentence rather than render 0.
      */
-    fun topSpeedMetersPerSecond(points: List<RecordedPoint>): Double? {
-        if (points.size < 2) return null
+    fun topSpeedMetersPerSecond(points: List<RecordedPoint>): Double? =
+        topSpeedOverPoints(
+            size = points.size,
+            latitude = { points[it].latitude },
+            longitude = { points[it].longitude },
+            timestampMs = { points[it].timestampMs },
+        )
+
+    /**
+     * [RoutePoint] overload of [topSpeedMetersPerSecond] for the History share
+     * text, which feeds the DECODED route points ([RouteReplayState.Ready]) in
+     * directly. It computes the identical figure WITHOUT first `.map`-ing every
+     * point to a parallel `List<RecordedPoint>`: a long route is up to
+     * [DriveRecorder.MAX_ROUTE_POINTS] (~20k) points and that intermediate
+     * allocation ran on the UI thread the moment the route loaded. The two point
+     * types are the same latitude/longitude/timestamp triple ([RoutePoint] ⇄
+     * [RecordedPoint]), so the same filter over the same values yields the same
+     * result — verified in DriveSummaryTest.
+     *
+     * `@JvmName` disambiguates the JVM signature: both overloads erase to
+     * `topSpeedMetersPerSecond(List)`, so one needs a distinct JVM name. Kotlin
+     * callers still resolve the right one by argument type.
+     */
+    @JvmName("topSpeedMetersPerSecondRoute")
+    fun topSpeedMetersPerSecond(points: List<RoutePoint>): Double? =
+        topSpeedOverPoints(
+            size = points.size,
+            latitude = { points[it].latitude },
+            longitude = { points[it].longitude },
+            timestampMs = { points[it].timestampMs },
+        )
+
+    /**
+     * Shared core for both [topSpeedMetersPerSecond] overloads: the highest
+     * plausible instantaneous speed (m/s) over [size] ordered points addressed
+     * by index. `inline`, so the accessors are inlined and no intermediate list
+     * (nor lambda) is allocated — the RecordedPoint and RoutePoint overloads
+     * fold straight over their own backing list.
+     */
+    private inline fun topSpeedOverPoints(
+        size: Int,
+        latitude: (Int) -> Double,
+        longitude: (Int) -> Double,
+        timestampMs: (Int) -> Long,
+    ): Double? {
+        if (size < 2) return null
         var top: Double? = null
-        for (i in 1 until points.size) {
-            val prev = points[i - 1]
-            val curr = points[i]
-            val deltaMs = curr.timestampMs - prev.timestampMs
+        for (i in 1 until size) {
+            val deltaMs = timestampMs(i) - timestampMs(i - 1)
             if (deltaMs <= 0) continue
             val distance =
-                haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+                haversineMetres(latitude(i - 1), longitude(i - 1), latitude(i), longitude(i))
             val impliedSpeed = distance / (deltaMs / 1000.0)
             // Same >200 km/h GPS-glitch guard the distance total applies; also
             // drop any non-finite result defensively.

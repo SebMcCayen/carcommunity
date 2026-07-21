@@ -1,7 +1,11 @@
 package com.kungsbackacarcommunity.app.drives
 
+import com.kungsbackacarcommunity.app.media.MediaUploader
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -444,12 +448,102 @@ class DriveRecordingTest {
         assertNull(repo.lastRequest)
         assertEquals(RecordingState.Discarded, c.state.value)
     }
+
+    // ---------------------------------------------------------------------
+    // Route upload wiring: on a successful save the recorded route is uploaded
+    // to the path the callable returned, in the background, using the SAME fixes.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `successful save uploads the recorded route to the returned path`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false) // routePath = rideRoutes/uid/ride/route.bin
+        val uploader = CapturingUploader()
+        val c =
+            DriveRecordingCoordinator(
+                repository = repo,
+                sourceSessionId = "sess",
+                routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
+                uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            )
+        c.start()
+        c.addFix(57.0, 12.0, 1_000L)
+        c.addFix(57.001, 12.0, 2_000L)
+        c.stop()
+        c.save(title = "Trip")
+        advanceUntilIdle()
+
+        assertEquals(RecordingState.Saved, c.state.value)
+        assertEquals("rideRoutes/uid/ride/route.bin", uploader.lastPath)
+        // The uploaded bytes decode back to the two fixes the backend priced.
+        val decoded = RouteCodec.decode(uploader.lastBytes)
+        assertEquals(2, decoded?.size)
+    }
+
+    @Test
+    fun `save still succeeds and skips upload when there are no route points`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        val uploader = CapturingUploader()
+        val c =
+            DriveRecordingCoordinator(
+                repository = repo,
+                sourceSessionId = "sess",
+                routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
+                uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            )
+        c.start()
+        // Summary-only: no fixes, so there is no route.bin to upload.
+        c.stop()
+        c.save(title = null)
+        advanceUntilIdle()
+
+        assertEquals(RecordingState.Saved, c.state.value)
+        assertEquals(0, uploader.attempts)
+    }
+
+    @Test
+    fun `a failed upload does not affect the completed save`() = runTest {
+        val repo = RecordingFakeRepository(shouldFail = false)
+        // Uploader always fails; the drive doc already exists, so Saved must stand.
+        val uploader = CapturingUploader(alwaysFail = true)
+        val c =
+            DriveRecordingCoordinator(
+                repository = repo,
+                sourceSessionId = "sess",
+                routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
+                uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            )
+        c.start()
+        c.addFix(57.0, 12.0, 1_000L)
+        c.addFix(57.001, 12.0, 2_000L)
+        c.stop()
+        c.save(title = "Trip")
+        advanceUntilIdle()
+
+        // Save is complete despite the route upload exhausting its retries.
+        assertEquals(RecordingState.Saved, c.state.value)
+        assertEquals(RouteUploadRunner.DEFAULT_MAX_ATTEMPTS, uploader.attempts)
+    }
+}
+
+/** Fake [MediaUploader] for coordinator wiring tests. */
+private class CapturingUploader(private val alwaysFail: Boolean = false) : MediaUploader {
+    var attempts = 0
+    var lastPath: String? = null
+    var lastBytes: ByteArray? = null
+
+    override suspend fun upload(path: String, bytes: ByteArray, contentType: String): String {
+        attempts++
+        if (alwaysFail) throw IllegalStateException("upload failed")
+        lastPath = path
+        lastBytes = bytes
+        return path
+    }
 }
 
 private class CancellingFakeRepository : DrivesRepository {
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>): Unit =
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
         throw CancellationException("scope cancelled")
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
@@ -465,10 +559,11 @@ private class RetryFakeRepository : DrivesRepository {
 
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>) {
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
         lastRequest = request
         attempts++
         if (attempts == 1) throw IllegalStateException("save failed")
+        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
     }
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
@@ -478,7 +573,7 @@ private class RetryFakeRepository : DrivesRepository {
 private class FailingRepository(private val failure: Exception) : DrivesRepository {
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>): Unit = throw failure
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult = throw failure
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
 }
@@ -488,9 +583,14 @@ private class RecordingFakeRepository(private val shouldFail: Boolean) : DrivesR
 
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>) {
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
         if (shouldFail) throw IllegalStateException("save failed")
         lastRequest = request
+        return DriveSaveResult(
+            rideId = "ride",
+            routePath = "rideRoutes/uid/ride/route.bin",
+            alreadySaved = false,
+        )
     }
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()

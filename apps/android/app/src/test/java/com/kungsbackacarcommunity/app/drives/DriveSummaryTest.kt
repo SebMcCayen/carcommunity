@@ -101,7 +101,7 @@ class DriveSummaryTest {
 
     @Test
     fun `top speed is null for fewer than two points`() {
-        assertNull(DriveSummary.topSpeedMetersPerSecond(emptyList()))
+        assertNull(DriveSummary.topSpeedMetersPerSecond(emptyList<RecordedPoint>()))
         assertNull(DriveSummary.topSpeedMetersPerSecond(listOf(point(57.0, 12.0, 0L))))
     }
 
@@ -161,5 +161,57 @@ class DriveSummaryTest {
                 point(57.0 + latOffsetForMetres(100.0), 12.0, 5_000L),
             )
         assertNull(DriveSummary.topSpeedMetersPerSecond(points))
+    }
+
+    // --- topSpeedMetersPerSecond(List<RoutePoint>) overload ---
+    // The History share text folds top speed straight over the DECODED route
+    // points, so it no longer allocates a parallel List<RecordedPoint> (~20k
+    // objects) on the UI thread as the route loads. The overload MUST return the
+    // identical figure the old `.map { it.toRecordedPoint() }` path produced, or
+    // the displayed top speed would silently change.
+
+    private fun routePoint(lat: Double, lon: Double, ts: Long) = RoutePoint(lat, lon, ts)
+
+    @Test
+    fun `RoutePoint overload yields the identical value as the RecordedPoint path`() {
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(200.0)
+        val lat2 = lat1 + latOffsetForMetres(300.0)
+        val route =
+            listOf(
+                routePoint(lat0, 12.0, 0L),
+                routePoint(lat1, 12.0, 10_000L),
+                routePoint(lat2, 12.0, 20_000L),
+            )
+        // Old path: map every RoutePoint to a RecordedPoint, then fold.
+        val viaRecordedList = DriveSummary.topSpeedMetersPerSecond(route.map { it.toRecordedPoint() })
+        // New path: fold straight over the RoutePoints, no intermediate list.
+        val viaRouteOverload = DriveSummary.topSpeedMetersPerSecond(route)
+        assertEquals(viaRecordedList, viaRouteOverload)
+        assertEquals(30.0, viaRouteOverload!!, 0.2)
+    }
+
+    @Test
+    fun `RoutePoint overload is null for fewer than two points`() {
+        assertNull(DriveSummary.topSpeedMetersPerSecond(emptyList<RoutePoint>()))
+        assertNull(DriveSummary.topSpeedMetersPerSecond(listOf(routePoint(57.0, 12.0, 0L))))
+    }
+
+    @Test
+    fun `RoutePoint overload applies the same spike filter as the RecordedPoint path`() {
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(200.0)
+        val lat2 = lat1 + latOffsetForMetres(300.0)
+        val route =
+            listOf(
+                routePoint(lat0, 12.0, 0L),
+                routePoint(lat1, 12.0, 10_000L),
+                routePoint(lat2, 12.0, 11_000L), // ~300 m/s glitch, must be dropped
+            )
+        val viaRecordedList = DriveSummary.topSpeedMetersPerSecond(route.map { it.toRecordedPoint() })
+        val viaRouteOverload = DriveSummary.topSpeedMetersPerSecond(route)
+        assertEquals(viaRecordedList, viaRouteOverload)
+        // The spike is dropped either way, so the plausible 20 m/s leg wins.
+        assertEquals(20.0, viaRouteOverload!!, 0.2)
     }
 }

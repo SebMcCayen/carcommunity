@@ -162,7 +162,8 @@ class SavedDriveTest {
             object : DrivesRepository {
                 override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-                override suspend fun saveDrive(request: Map<String, Any?>) = Unit
+                override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+                    DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
 
                 override suspend fun deleteDrive(rideId: String) {
                     deleteCalls++
@@ -198,8 +199,9 @@ class SavedDriveTest {
 private class FakeDrivesRepository(private val shouldFail: Boolean) : DrivesRepository {
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>) {
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
         if (shouldFail) throw IllegalStateException("save failed")
+        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
     }
 
     override suspend fun deleteDrive(rideId: String) {
