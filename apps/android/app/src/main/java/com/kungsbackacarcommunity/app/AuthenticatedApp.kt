@@ -2970,17 +2970,21 @@ private fun RouteHost(
                     .collectAsState(initial = null)
             // Start of the current calendar month (device time zone) — required by
             // the shared fold; the profile summary reads only its all-time fields,
-            // but the value is kept correct rather than faked.
+            // but the value is kept correct rather than faked. Computed on each
+            // composition (deliberately NOT cached in an unkeyed remember, matching
+            // DriveStatsScreen) so it re-evaluates on the next recomposition after a
+            // month rollover rather than staying pinned to the month the Profile
+            // route first composed in. The value is deterministic within a month, so
+            // the keyed statsSummary fold below still only recomputes when the drives,
+            // badges, points, or the month change.
             val statsMonthStart =
-                remember {
-                    Calendar.getInstance().apply {
-                        set(Calendar.DAY_OF_MONTH, 1)
-                        set(Calendar.HOUR_OF_DAY, 0)
-                        set(Calendar.MINUTE, 0)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }.timeInMillis
-                }
+                Calendar.getInstance().apply {
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
             val statsSummary =
                 remember(drivesState, badgesState, pointsBalance, profile?.createdAtMillis, statsMonthStart) {
                     val loadedDrives = (drivesState as? DrivesState.Loaded)?.drives
