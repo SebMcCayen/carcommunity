@@ -85,13 +85,16 @@ import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
+import com.kungsbackacarcommunity.app.badges.BadgesState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
 import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
+import com.kungsbackacarcommunity.app.drives.DriveStatsCalculator
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
+import com.kungsbackacarcommunity.app.drives.DrivesState
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
@@ -213,6 +216,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileEditStatus
 import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileScreen
 import com.kungsbackacarcommunity.app.profile.ProfileState
+import com.kungsbackacarcommunity.app.profile.ProfileStatsSummary
 import com.kungsbackacarcommunity.app.profile.authedDestination
 import com.kungsbackacarcommunity.app.auth.LoginRecordCoordinator
 import com.kungsbackacarcommunity.app.push.ActiveChat
@@ -264,6 +268,7 @@ import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
+import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1879,6 +1884,7 @@ fun AuthenticatedApp(
                         dmChatOtherName = dmChatOtherName,
                         onOpenChat = openChat,
                         pointsRepository = pointsRepository,
+                        drivesRepository = drivesRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
                         accountDeletionCoordinator = accountDeletionCoordinator,
@@ -2942,6 +2948,9 @@ private fun RouteHost(
     dmChatOtherName: String?,
     onOpenChat: (String, String?) -> Unit,
     pointsRepository: PointsRepository?,
+    // Owner drives list, folded into the profile's "my stats" summary (same
+    // owner query the History tab uses). Null in a config-less build.
+    drivesRepository: DrivesRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
     accountDeletionCoordinator: AccountDeletionCoordinator?,
@@ -3023,6 +3032,67 @@ private fun RouteHost(
                     avatarCoordinator?.reset()
                 }
             }
+
+            // "My stats" summary — assembled entirely from owner reads the app
+            // already knows how to make, and scoped to THIS route: the three
+            // listeners below only exist while the Profile route is composed and
+            // tear down on leaving it. No new query or index is added.
+            //   • drives  → the same owner list the History tab folds, run through
+            //     the shared DriveStatsCalculator (from the drive-stats page);
+            //   • badges  → the owner users/{uid}/badges list (count only here);
+            //   • points  → the single pointsLedger/{uid}.balance doc;
+            //   • member since → users/{uid}.createdAt, already on `profile`.
+            val drivesState by
+                remember(drivesRepository, uid) {
+                    drivesRepository?.observeDrives(uid) ?: flowOf(DrivesState.Loading)
+                }
+                    .collectAsState(initial = DrivesState.Loading)
+            val badgesState by
+                remember(badgesRepository, uid) {
+                    badgesRepository?.observeBadges(uid) ?: flowOf(BadgesState.Loading)
+                }
+                    .collectAsState(initial = BadgesState.Loading)
+            val pointsBalance by
+                remember(pointsRepository, uid) {
+                    pointsRepository?.observeBalance(uid) ?: flowOf<Long?>(null)
+                }
+                    .collectAsState(initial = null)
+            // Start of the current calendar month (device time zone) — required by
+            // the shared fold; the profile summary reads only its all-time fields,
+            // but the value is kept correct rather than faked. Computed on each
+            // composition (deliberately NOT cached in an unkeyed remember, matching
+            // DriveStatsScreen) so it re-evaluates on the next recomposition after a
+            // month rollover rather than staying pinned to the month the Profile
+            // route first composed in. The value is deterministic within a month, so
+            // the keyed statsSummary fold below still only recomputes when the drives,
+            // badges, points, or the month change.
+            val statsMonthStart =
+                Calendar.getInstance().apply {
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+            val statsSummary =
+                remember(drivesState, badgesState, pointsBalance, profile?.createdAtMillis, statsMonthStart) {
+                    val loadedDrives = (drivesState as? DrivesState.Loaded)?.drives
+                    val loadedBadges = (badgesState as? BadgesState.Loaded)?.badges
+                    // Hold the section back until the two activity signals have
+                    // both resolved, so a member with drives never flashes the
+                    // "start driving" empty state before the drives list loads.
+                    if (loadedDrives == null || loadedBadges == null) {
+                        null
+                    } else {
+                        ProfileStatsSummary.from(
+                            driveStats = DriveStatsCalculator.compute(loadedDrives, statsMonthStart),
+                            badgeCount = loadedBadges.size,
+                            pointsBalance = pointsBalance,
+                            memberSinceMillis = profile?.createdAtMillis,
+                        )
+                    }
+                }
+
             ProfileScreen(
                 profile = profile,
                 saveStatus = saveStatus,
@@ -3042,6 +3112,7 @@ private fun RouteHost(
                     } else {
                         null
                     },
+                statsSummary = statsSummary,
             )
         }
 

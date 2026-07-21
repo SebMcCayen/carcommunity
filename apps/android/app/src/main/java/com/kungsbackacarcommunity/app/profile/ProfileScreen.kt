@@ -62,6 +62,10 @@ fun ProfileScreen(
     avatarUrl: String? = null,
     avatarUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
     onChangeAvatar: (() -> Unit)? = null,
+    // At-a-glance "my stats" summary (own profile only). Null while the owner
+    // reads it aggregates are still loading, or in a config-less build — the
+    // section simply doesn't render. Shown only in view mode, not while editing.
+    statsSummary: ProfileStatsSummary? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     var editing by remember { mutableStateOf(false) }
@@ -166,6 +170,8 @@ fun ProfileScreen(
                 ) {
                     Text(stringResource(R.string.auth_signOut))
                 }
+
+                ProfileStatsSection(summary = statsSummary)
             }
     }
 }
@@ -258,6 +264,15 @@ private fun ProfileScreenPreview() {
             onSave = { _, _ -> },
             onBack = {},
             onSignOut = {},
+            statsSummary =
+                ProfileStatsSummary(
+                    totalDrives = 42,
+                    totalDistanceMeters = 1_234_000.0,
+                    totalDurationSeconds = 90_000,
+                    badgeCount = 3,
+                    pointsBalance = 150,
+                    memberSinceMillis = 1_700_000_000_000L,
+                ),
         )
     }
 }
