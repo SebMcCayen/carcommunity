@@ -93,6 +93,7 @@ import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.drives.RecordingState
+import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
@@ -182,6 +183,7 @@ import com.kungsbackacarcommunity.app.map.ConvoyFocusStore
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
+import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
 import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
@@ -1012,6 +1014,16 @@ fun AuthenticatedApp(
             val driveSavedText = stringResource(R.string.savedDrives_saveSuccess)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
+            // Uploads the recorded route.bin to Cloud Storage after drives-save
+            // creates the drive doc (the callable returns the path but does not
+            // write the file). Null in a config-less / CI build — the drive then
+            // saves without a route file, exactly as before an uploader existed.
+            // Reuses the shared Storage upload boundary (FirebaseMediaUploader).
+            val routeUploadRunner =
+                remember(context) {
+                    FirebaseMediaUploader.createIfAvailable(context)?.let { RouteUploadRunner(it) }
+                }
+
             // Only record a drive the user could actually SAVE. drives-save is
             // member-gated (requireMemberActor) while live sharing is free, so
             // gating the recording on canShareLive — as v0.8.0 did — handed a
@@ -1044,7 +1056,7 @@ fun AuthenticatedApp(
                         // Owned by this uid: signing out (or switching account)
                         // tears the recording down — see clearIfNotOwnedBy,
                         // driven from MainActivity's auth state.
-                        SingleSessionRecording.start(uid, drivesRepository) {
+                        SingleSessionRecording.start(uid, drivesRepository, routeUploadRunner) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way
                             // no fixes can arrive and the session yields an

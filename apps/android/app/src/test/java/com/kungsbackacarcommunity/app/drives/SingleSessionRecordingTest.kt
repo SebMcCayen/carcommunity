@@ -303,17 +303,17 @@ class SingleSessionRecordingTest {
         var factoryCalls = 0
         val factory = { factoryCalls++; null }
 
-        SingleSessionRecording.start(UID, repository, factory)
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(1, factoryCalls)
         // A re-run within the SAME session must not re-consult it.
-        SingleSessionRecording.start(UID, repository, factory)
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(1, factoryCalls)
 
         SingleSessionRecording.stop()
         SingleSessionRecording.clear()
 
         // A NEW session re-evaluates: a permission granted meanwhile now counts.
-        SingleSessionRecording.start(UID, repository, factory)
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(2, factoryCalls)
     }
 }
@@ -323,8 +323,9 @@ private class SingleSessionFakeRepository : DrivesRepository {
 
     override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 
-    override suspend fun saveDrive(request: Map<String, Any?>) {
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
         lastRequest = request
+        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
     }
 
     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()

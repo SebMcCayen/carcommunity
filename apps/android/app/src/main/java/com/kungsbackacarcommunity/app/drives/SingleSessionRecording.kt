@@ -73,15 +73,24 @@ object SingleSessionRecording {
      * the location permission are unavailable — the session then yields a
      * duration-only summary); it is a parameter so this holder stays free of
      * Android types and JVM-unit-testable.
+     *
+     * [routeUploadRunner] uploads the recorded `route.bin` after the save
+     * succeeds (null in a config-less build — the drive saves without a route
+     * file). Passed through to the coordinator, which runs it in the background.
      */
     fun start(
         uid: String,
         repository: DrivesRepository,
+        routeUploadRunner: RouteUploadRunner? = null,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
         val coordinator =
-            DriveRecordingCoordinator(repository, "single-" + UUID.randomUUID().toString())
+            DriveRecordingCoordinator(
+                repository,
+                "single-" + UUID.randomUUID().toString(),
+                routeUploadRunner = routeUploadRunner,
+            )
         ownerUid = uid
         activeState.value = coordinator
         coordinator.start()

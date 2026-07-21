@@ -270,9 +270,18 @@ fun SavedDriveDetailScreen(
             drive.durationSeconds,
         )
 
-    // No loaded route points on the detail read model either, so the top-speed
-    // sentence degrades away rather than showing a bogus figure.
-    val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = null)
+    // Top speed for the share text is derived from the decoded route points once
+    // the route.bin loads (the write side now uploads it and the reader decodes
+    // it): DriveSummary applies the same GPS-glitch filter the backend uses for
+    // distance, so a lone spike can't claim an absurd figure. Null while the
+    // route is Loading/Unavailable or a summary-only drive, and the sentence
+    // degrades away rather than showing a bogus 0.
+    val topSpeed =
+        (routeState as? RouteReplayState.Ready)
+            ?.points
+            ?.map { it.toRecordedPoint() }
+            ?.let { DriveSummary.topSpeedMetersPerSecond(it) }
+    val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -327,12 +336,9 @@ fun SavedDriveDetailScreen(
                             RouteNote(stringResource(R.string.savedDrives_routeLoading))
 
                         // A drawable route (≥ 2 points): draw it on the replay map.
+                        // The same decoded points also feed the share-text top
+                        // speed (computed into [topSpeed] above).
                         ready != null && ready.points.size >= 2 -> {
-                            // #504's top-speed sentence is a ONE-LINER away here
-                            // once that PR lands on main:
-                            //   DriveSummary.topSpeedMetersPerSecond(ready.points)
-                            // is already implemented + tested; feed it these
-                            // decoded points to render the share-text top speed.
                             DriveRouteMap(
                                 points = ready.points,
                                 modifier = Modifier.fillMaxWidth().height(ROUTE_MAP_HEIGHT),

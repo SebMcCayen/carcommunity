@@ -39,7 +39,7 @@ class FirebaseDrivesRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override suspend fun saveDrive(request: Map<String, Any?>): Unit =
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
         suspendCancellableCoroutine { continuation ->
             functions
                 .getHttpsCallable(SAVE_DRIVE)
@@ -47,7 +47,17 @@ class FirebaseDrivesRepository private constructor(
                 .addOnCompleteListener { task ->
                     if (!continuation.isActive) return@addOnCompleteListener
                     if (task.isSuccessful) {
-                        continuation.resume(Unit)
+                        // The callable returns { rideId, routePath, previewImagePath,
+                        // alreadySaved, ...stats }. We only need rideId + routePath
+                        // (where the client uploads route.bin) + alreadySaved.
+                        val data = task.result?.getData() as? Map<*, *>
+                        continuation.resume(
+                            DriveSaveResult(
+                                rideId = data?.get("rideId") as? String ?: "",
+                                routePath = data?.get("routePath") as? String,
+                                alreadySaved = data?.get("alreadySaved") as? Boolean ?: false,
+                            ),
+                        )
                     } else {
                         val cause =
                             task.exception
