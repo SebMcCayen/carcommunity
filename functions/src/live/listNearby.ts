@@ -101,10 +101,15 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
   // so the TOTAL documents read across all chunks stays ~MAX_RESULTS rather than
   // MAX_RESULTS × chunkCount — a wide radius spanning several 30-cell chunks
   // therefore does not multiply the read cost (or the downstream block-matrix
-  // work). The trade-off: if every sharer clusters in a single chunk we read at
-  // most that chunk's share, but a nearby map viewport does not need more than
-  // MAX_RESULTS markers in total, and the freshest are kept by the sort+cap
-  // below. Bounded by the covering cells — never a full-collection scan.
+  // work). The queries are NOT ordered, so each `.limit(perChunkLimit)` returns
+  // a bounded but ARBITRARY sample of that chunk's sharers (not necessarily the
+  // freshest — an orderBy is deliberately avoided to keep the query on the plain
+  // (geoCell, status, expiresAt) index). The in-memory sort+cap below then
+  // orders the RESPONSE freshest-first among what was read; it does not promise
+  // the globally-freshest sharers survived the per-chunk limit. That is an
+  // acceptable trade for a nearby map viewport, which does not need more than
+  // MAX_RESULTS markers and treats them as a live snapshot, not a ranking.
+  // Bounded by the covering cells — never a full-collection scan.
   const perChunkLimit = Math.max(1, Math.ceil(MAX_RESULTS / cellChunks.length));
   const snapshots = await Promise.all(
     cellChunks.map((cellGroup) =>
