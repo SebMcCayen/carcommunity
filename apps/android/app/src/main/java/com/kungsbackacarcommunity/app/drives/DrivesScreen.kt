@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.map.DriveRouteMap
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
@@ -228,9 +231,35 @@ fun SavedDriveDetailScreen(
     onDelete: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Reads + decodes the drive's route.bin for the replay map; null in a
+    // config-less / CI build (no Firebase), which degrades to the placeholder.
+    routeRepository: RouteReplayRepository? = null,
+    // Owner uid, needed for the member-gated rideRoutes/{uid}/{rideId} read.
+    uid: String? = null,
 ) {
     var showConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // A real Mapbox token is required to render the GL map; the config-less / CI
+    // build has none and falls back to the placeholder card.
+    val hasMapboxToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+
+    // Load the driven route once per opened drive; cached in memory by the
+    // repository so re-opening the same drive redraws without a refetch. Loading
+    // starts pending and resolves to Ready (points) or Unavailable — the reader
+    // never throws. Gated on [hasMapboxToken] too: with no token the decoded
+    // route can never be drawn, so skip the Storage read + decode entirely.
+    var routeState by remember(drive.rideId) {
+        mutableStateOf<RouteReplayState>(RouteReplayState.Loading)
+    }
+    LaunchedEffect(drive.rideId, routeRepository, uid, hasMapboxToken) {
+        routeState =
+            if (routeRepository != null && uid != null && hasMapboxToken) {
+                routeRepository.loadRoute(uid, drive.rideId)
+            } else {
+                RouteReplayState.Unavailable
+            }
+    }
 
     val dateText = formatDriveDate(drive.startedAtMillis ?: drive.createdAtMillis)
     val timeRangeText = formatDriveTimeRange(drive.startedAtMillis, drive.endedAtMillis)
@@ -248,8 +277,8 @@ fun SavedDriveDetailScreen(
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     if (dateText != null) {
                         StatRow(stringResource(R.string.savedDrives_date), dateText)
@@ -272,27 +301,52 @@ fun SavedDriveDetailScreen(
                 }
             }
 
-            // Map replay is FLAGGED: the recorded route path/GPS points are NOT
-            // in the SavedDrive read model (they live in member-gated Cloud
-            // Storage and the `rides` doc carries no coordinates), so there is
-            // nothing to draw on MapboxMapSurface here. Wiring a real route
-            // replay needs a backend/recording follow-up to expose the path to
-            // the client; until then a placeholder card explains the gap.
+            // Route replay: the actual driven route drawn on a static map. The
+            // route points are read + decoded from member-gated Cloud Storage
+            // (`rideRoutes/{uid}/{rideId}/route.bin`) by [routeRepository] and
+            // rendered by [DriveRouteMap]. Every non-happy path degrades to a
+            // one-line explanation instead of a broken/empty map.
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     Text(
                         text = stringResource(R.string.savedDrives_routeOverview),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Text(
-                        text = stringResource(R.string.savedDrives_routeOverviewPlaceholder),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    val ready = routeState as? RouteReplayState.Ready
+                    when {
+                        // No token / no reader (config-less or CI build): the GL
+                        // map cannot render, so explain rather than draw nothing.
+                        !hasMapboxToken || routeRepository == null ->
+                            RouteNote(stringResource(R.string.savedDrives_routeOverviewPlaceholder))
+
+                        routeState is RouteReplayState.Loading ->
+                            RouteNote(stringResource(R.string.savedDrives_routeLoading))
+
+                        // A drawable route (≥ 2 points): draw it on the replay map.
+                        ready != null && ready.points.size >= 2 -> {
+                            // #504's top-speed sentence is a ONE-LINER away here
+                            // once that PR lands on main:
+                            //   DriveSummary.topSpeedMetersPerSecond(ready.points)
+                            // is already implemented + tested; feed it these
+                            // decoded points to render the share-text top speed.
+                            DriveRouteMap(
+                                points = ready.points,
+                                modifier = Modifier.fillMaxWidth().height(ROUTE_MAP_HEIGHT),
+                            )
+                        }
+
+                        // Ready but too few points to draw (a summary-only drive).
+                        ready != null ->
+                            RouteNote(stringResource(R.string.savedDrives_routeEmpty))
+
+                        // Missing file / denied read / network / decode failure.
+                        else ->
+                            RouteNote(stringResource(R.string.savedDrives_routeUnavailable))
+                    }
                 }
             }
 
@@ -330,6 +384,19 @@ fun SavedDriveDetailScreen(
             onCancel = { showConfirm = false },
         )
     }
+}
+
+/** Fixed height for the embedded route replay map. */
+private val ROUTE_MAP_HEIGHT = 240.dp
+
+/** One-line muted explanation shown in place of the route map when it can't draw. */
+@Composable
+private fun RouteNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /**
