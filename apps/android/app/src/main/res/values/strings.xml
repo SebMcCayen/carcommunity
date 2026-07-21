@@ -3,6 +3,9 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="appActive_notificationChannel">Appstatus</string>
+    <string name="appActive_notificationChannelDescription">Visar en pågående avisering medan appen är öppen, så att du ser att den fortfarande är aktiv i bakgrunden.</string>
+    <string name="appActive_notificationText">Aktiv – tryck för att återgå till appen.</string>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="navigation_home">Hem</string>
     <string name="navigation_map">Karta</string>
