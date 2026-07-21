@@ -449,6 +449,27 @@ class IncidentReportControllerTest {
     }
 
     /**
+     * A zero/negative interval would make the poll a `delay(0)` busy loop that
+     * hammers the backend and drains the battery, so misuse must fail fast
+     * rather than ship a hot loop.
+     */
+    @Test
+    fun `pollNearby rejects a non-positive poll interval`() = runTest {
+        val controller = IncidentReportController(FakeIncidentRepository()) { here }
+        val zero = catchCancellation { controller.pollNearby(pollIntervalMs = 0L) }
+        assertTrue("zero interval must be rejected", zero is IllegalArgumentException)
+        val negative = catchCancellation { controller.pollNearby(pollIntervalMs = -1L) }
+        assertTrue("negative interval must be rejected", negative is IllegalArgumentException)
+    }
+
+    @Test
+    fun `pollNearby rejects a non-positive initial retry`() = runTest {
+        val controller = IncidentReportController(FakeIncidentRepository()) { here }
+        val thrown = catchCancellation { controller.pollNearby(initialRetryMs = 0L) }
+        assertTrue("zero retry must be rejected", thrown is IllegalArgumentException)
+    }
+
+    /**
      * A transient fetch failure mid-poll must NOT blank the shared map or kill
      * the loop: the previous markers stay, and the next tick recovers.
      */

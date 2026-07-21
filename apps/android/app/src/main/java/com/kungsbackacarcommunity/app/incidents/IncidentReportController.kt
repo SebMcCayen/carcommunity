@@ -175,7 +175,8 @@ class IncidentReportController(
      * This is the fix for "an incident someone else reports isn't visible to
      * me". The incident layer is a SHARED, Waze-style map layer: the reporter's
      * own pin is added optimistically from the write's response, but every OTHER
-     * user only ever learns of a report through [listNearby]. A single fetch on
+     * user only ever learns of a report through [IncidentRepository.listNearby]
+     * (reached here via [refresh] / [refreshAroundCurrent]). A single fetch on
      * tab-entry left those users looking at a stale layer — a report made while
      * they were already on the map never appeared until they left and came back.
      * Polling closes that gap.
@@ -193,6 +194,11 @@ class IncidentReportController(
      * Every pass is best-effort: [refreshAroundCurrent] no-ops without a fix and
      * [refresh] swallows fetch failures, keeping the last-known markers — so a
      * transient outage never blanks the map. Cancellation propagates.
+     *
+     * The delay inputs MUST be strictly positive: a zero/negative [pollIntervalMs]
+     * turns phase 2 into a `delay(0)` busy loop that hammers the callable and
+     * drains the battery, and a non-positive [initialRetryMs] does the same to
+     * the cold-open retry. Misuse fails fast rather than shipping a hot loop.
      */
     suspend fun pollNearby(
         radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS,
@@ -200,6 +206,8 @@ class IncidentReportController(
         initialRetryMs: Long = DEFAULT_INITIAL_RETRY_MS,
         initialAttempts: Int = DEFAULT_INITIAL_ATTEMPTS,
     ) {
+        require(pollIntervalMs > 0) { "pollIntervalMs must be > 0, was $pollIntervalMs" }
+        require(initialRetryMs > 0) { "initialRetryMs must be > 0, was $initialRetryMs" }
         // Phase 1: acquire the first fix quickly so the layer is not blank for
         // the whole initial poll interval on a cold open.
         var acquired = false
