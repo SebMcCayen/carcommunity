@@ -3,9 +3,11 @@ package com.kungsbackacarcommunity.app.garage
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -99,5 +101,27 @@ class VehicleDetailScreenTest {
         composeTestRule.onNodeWithText(str(R.string.garage_deleteVehicle)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_deleteConfirmButton)).performClick()
         assertEquals(1, deleted)
+    }
+
+    /**
+     * The thumbnail strip is built to scale to N photos. With a strip wider than
+     * the screen, a thumbnail past the visible width must still be reachable —
+     * this fails against a non-scrollable Row (it can't scroll to the tile) and
+     * passes with the LazyRow. Driven through the [VehicleGalleryPager] seam
+     * because the single-photo data model never yields a multi-photo strip via
+     * the public screen today.
+     */
+    @Test
+    fun thumbnailStrip_scrollsToReachLateThumbnails() {
+        val photoPaths = List(10) { "vehicleImages/u/v1/photo_$it.jpg" }
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleGalleryPager(photoPaths = photoPaths)
+            }
+        }
+        // A late thumbnail past the screen width is unreachable without a
+        // scrollable strip; scrolling the LazyRow brings it into view.
+        composeTestRule.onNodeWithTag(VEHICLE_GALLERY_STRIP_TAG).performScrollToIndex(9)
+        composeTestRule.onNodeWithTag(vehicleGalleryThumbnailTag(9)).assertIsDisplayed()
     }
 }

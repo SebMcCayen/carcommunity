@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -153,6 +158,13 @@ fun VehicleDetailScreen(
     }
 }
 
+/** Test tag on the scrollable thumbnail strip (used by the strip UI test). */
+internal const val VEHICLE_GALLERY_STRIP_TAG = "vehicleGalleryStrip"
+
+/** Test tag for the gallery thumbnail at [index] (used by the strip UI test). */
+internal fun vehicleGalleryThumbnailTag(index: Int): String =
+    "vehicleGalleryThumbnail_$index"
+
 /**
  * The swipeable photo gallery: a full-width 16:9 pager over [photoPaths], with a
  * "current / total" counter and a tappable thumbnail strip whenever there is
@@ -162,9 +174,13 @@ fun VehicleDetailScreen(
  * Built for N photos even though the model yields at most one today (see
  * [VehicleGallery]): the pager, counter and thumbnails all read straight off the
  * list, so multi-photo support becomes a data change with no rework here.
+ *
+ * `internal` (not `private`) so the multi-photo strip can be exercised directly
+ * in a UI test: today [VehicleGallery.photoPaths] yields at most one path, so
+ * the strip is unreachable through the public [VehicleDetailScreen] entry point.
  */
 @Composable
-private fun VehicleGalleryPager(photoPaths: List<String>) {
+internal fun VehicleGalleryPager(photoPaths: List<String>) {
     if (photoPaths.isEmpty()) {
         GalleryPlaceholder()
         return
@@ -190,11 +206,23 @@ private fun VehicleGalleryPager(photoPaths: List<String>) {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
+        // Horizontally scrollable strip: the gallery is built for N photos, so a
+        // fixed Row would clip (and make unreachable) any thumbnail past the
+        // screen width once the backend stores more than a screenful. LazyRow
+        // only composes the visible tiles and lets every thumbnail be reached.
+        val thumbnailListState = rememberLazyListState()
+        // Keep the highlighted thumbnail on-screen as the pager moves — LazyRow
+        // won't auto-scroll to the selected item, so on a long strip the border
+        // highlight would otherwise drift off-screen.
+        LaunchedEffect(current) {
+            thumbnailListState.animateScrollToItem(current)
+        }
+        LazyRow(
+            state = thumbnailListState,
+            modifier = Modifier.fillMaxWidth().testTag(VEHICLE_GALLERY_STRIP_TAG),
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            photoPaths.forEachIndexed { index, path ->
+            itemsIndexed(photoPaths) { index, path ->
                 val selected = index == current
                 GalleryPhoto(
                     path = path,
@@ -204,6 +232,7 @@ private fun VehicleGalleryPager(photoPaths: List<String>) {
                     // matching AeroPageTitle and the other clickable sites.
                     contentDescription = stringResource(R.string.garage_photoThumbnail, index + 1),
                     modifier = Modifier
+                        .testTag(vehicleGalleryThumbnailTag(index))
                         .size(KccSpacing.s12)
                         .clip(RoundedCornerShape(KccRadius.sm))
                         .then(
