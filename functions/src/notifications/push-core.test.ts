@@ -18,7 +18,7 @@ import {
 import type { UserAccessState } from '../shared/access';
 
 const active: UserAccessState = {
-  role: 'member',
+  role: 'user',
   activeMember: true,
   suspended: false,
   deleted: false,

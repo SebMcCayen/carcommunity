@@ -181,7 +181,8 @@ describe('billboards lifecycle and the safety gate', () => {
       .where('targetId', '==', created.billboardId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().reason).toBe(allConfirmations.approvalReason);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().reason).toBe(allConfirmations.approvalReason);
 
     // Active billboards are edit-locked; pause unlocks; end is terminal.
     expect(
@@ -245,7 +246,8 @@ describe('billboards-recordInteraction → insights bridge', () => {
       .where('interactionType', '==', 'profile_view')
       .get();
     expect(events.size).toBe(1);
-    expect(JSON.stringify(events.docs[0].data())).not.toContain(user.uid);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(JSON.stringify(events.docs[0]!.data())).not.toContain(user.uid);
 
     // Same-day repeat dedupes through the same pipeline.
     const dupe = (

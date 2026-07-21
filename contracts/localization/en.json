@@ -162,7 +162,14 @@
     "terms": "Terms of Service",
     "version": "Version %1$s",
     "aboutSection": "About the app",
-    "whatsNew": "What’s new"
+    "whatsNew": "What’s new",
+    "appearanceSection": "Appearance",
+    "themeAutomatic": "Automatic",
+    "themeAutomaticDescription": "Follows your device’s light or dark setting",
+    "themeLight": "Light",
+    "themeLightDescription": "Always light, whatever the device does",
+    "themeDark": "Dark",
+    "themeDarkDescription": "Always dark, whatever the device does"
   },
   "privacySettings": {
     "title": "Privacy",

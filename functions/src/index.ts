@@ -5,7 +5,8 @@
  * Federation — no service account JSON file is committed to this repository.
  *
  * Region: europe-west1 (EU, low-latency for Swedish users)
- * Runtime: Node.js 22 (see engines.node in package.json)
+ * Runtime: Node.js 22 (pinned by firebase.json functions[].runtime;
+ *   engines.node in package.json is only the local tooling floor)
  * Generation: 2nd gen (firebase-functions v2 sub-path)
  */
 

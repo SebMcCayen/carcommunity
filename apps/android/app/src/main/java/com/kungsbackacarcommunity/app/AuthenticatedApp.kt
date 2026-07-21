@@ -61,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -215,6 +216,7 @@ import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.push.PushTarget
 import com.kungsbackacarcommunity.app.push.RequestPushPermissionEffect
 import com.kungsbackacarcommunity.app.shell.HubEntry
+import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
@@ -448,6 +450,30 @@ fun AuthenticatedApp(
             // same Activity/process re-scopes the route to their own
             // pendingWelcomeRoute instead of inheriting the previous user's saved one.
             var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
+
+            // The map's manual day/night override (null = follow the app theme).
+            //
+            // Owned HERE, not inside MapHome, precisely because [route] above can
+            // unmount MapHome: opening any full-screen route swaps the shell's
+            // `else` branch away, disposing MapHome and — when this state lived
+            // there — silently discarding the user's Day choice, so returning to
+            // the map snapped it back to Night on a dark-themed device. This
+            // scope survives every route change, so the override sticks for the
+            // session. rememberSaveable additionally carries it across rotation
+            // and process death, matching the old in-MapHome behaviour.
+            val mapNightModeOverride =
+                rememberSaveable(
+                    stateSaver = Saver(
+                        save = { it?.name },
+                        // Safe parse: valueOf THROWS on an unknown constant (enum
+                        // renamed by an update, corrupt saved state), which would
+                        // crash the restore; find falls back to "follow the app
+                        // theme".
+                        restore = { saved ->
+                            (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } }
+                        },
+                    ),
+                ) { mutableStateOf<MapMode?>(null) }
 
             // Defensive migration: selectedTab is rememberSaveable, so a session
             // saved by an older app version (when Create was a real content
@@ -1892,6 +1918,9 @@ fun AuthenticatedApp(
                             ) {
                                 MapHome(
                                     mapSurface = mapSurface,
+                                    // Shell-owned so it survives route changes
+                                    // (see the declaration for the bug this fixes).
+                                    nightModeOverrideState = mapNightModeOverride,
                                     // Derived from the same [mapCover] that stands
                                     // the surface down: a map home that isn't the
                                     // page in front must not keep intercepting Back
@@ -2566,11 +2595,21 @@ internal fun ShellBottomBar(
         NavigationBarItem(
             selected = !isSharing && selected == ShellTab.Create,
             onClick = { if (isSharing) onStopLiveShare() else onSelect(ShellTab.Create) },
-            // Standout action: a WHITE glyph on a filled disc so it reads as a
-            // distinct button and stays high-contrast against the
-            // semi-transparent nav bar in both light and dark (a bare white tint
-            // would wash out over the light 50%-alpha surface). The disc turns
-            // error-red while sharing so the stop affordance is unmistakable.
+            // Standout action: a glyph on a filled disc so it reads as a distinct
+            // button rather than another tab, in both light and dark. The disc
+            // turns error-red while sharing so the stop affordance is
+            // unmistakable. The FILLED DISC is the deliberate part and is kept —
+            // it is what stops the control washing out over the 50%-alpha bar.
+            //
+            // The glyph tint, however, is now taken from the theme instead of a
+            // hardcoded Color.White. The disc is brandPrimary gold (#EAB54B) in
+            // BOTH themes, and white-on-gold measures 1.87:1 — below the 3:1
+            // WCAG minimum for graphical objects — so the old white glyph was
+            // low-contrast in light AND dark, not just one of them. onPrimary is
+            // inkBlack (the token system's own documented "dark text on gold"
+            // decision, see KccTheme) and measures 10.97:1. The red stop disc
+            // keeps a near-white glyph via onError (warmIvory, 5.36:1), so the
+            // stop state is unchanged.
             icon = {
                 Box(
                     modifier =
@@ -2592,7 +2631,12 @@ internal fun ShellBottomBar(
                             stringResource(
                                 if (isSharing) R.string.liveLocation_stop else R.string.shell_tabCreate,
                             ),
-                        tint = Color.White,
+                        tint =
+                            if (isSharing) {
+                                MaterialTheme.colorScheme.onError
+                            } else {
+                                MaterialTheme.colorScheme.onPrimary
+                            },
                     )
                 }
             },

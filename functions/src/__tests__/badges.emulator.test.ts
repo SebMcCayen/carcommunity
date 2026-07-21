@@ -249,7 +249,8 @@ describe('badges-awardHelpfulMember', () => {
       .where('targetId', '==', member.uid)
       .get();
     expect(audits.size).toBe(1);
-    expect(audits.docs[0].data().reason).toBe('Organiserade träffen');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audits.docs[0]!.data().reason).toBe('Organiserade träffen');
   });
 });
 

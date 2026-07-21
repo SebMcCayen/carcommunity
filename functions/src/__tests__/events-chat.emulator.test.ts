@@ -245,8 +245,9 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       .where('messageId', '==', reportedMessageId)
       .get();
     expect(reports.size).toBe(1);
-    expect(reports.docs[0].data().details).toBe('second (should overwrite silently)');
-    expect(reports.docs[0].data().status).toBe('new');
+    // size asserted === 1 above, so docs[0] is present.
+    expect(reports.docs[0]!.data().details).toBe('second (should overwrite silently)');
+    expect(reports.docs[0]!.data().status).toBe('new');
 
     // Own message: find the member's own message from the previous suite.
     const own = await adminDb
@@ -256,11 +257,13 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       .where('authorUserId', '==', memberGoing.uid)
       .limit(1)
       .get();
+    // The member's own message must exist (posted in the previous suite).
+    expect(own.size).toBe(1);
     expect(
       await callableErrorCode(
         call('events-reportChatMessage', {
           eventId,
-          messageId: own.docs[0].id,
+          messageId: own.docs[0]!.id,
           reason: 'other',
         }),
       ),
@@ -311,8 +314,10 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       .collection('messageReports')
       .where('messageId', '==', reportedMessageId)
       .get();
-    expect(reports.docs[0].data().status).toBe('resolved');
-    expect(reports.docs[0].data().reviewedByUserId).toBe(adminUser.uid);
+    expect(reports.size).toBe(1);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(reports.docs[0]!.data().status).toBe('resolved');
+    expect(reports.docs[0]!.data().reviewedByUserId).toBe(adminUser.uid);
 
     const audit = await adminDb
       .collection('adminAuditEvents')
@@ -320,8 +325,9 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       .where('targetId', '==', reportedMessageId)
       .get();
     expect(audit.size).toBe(1);
-    expect(audit.docs[0].data().details.originalMessage).toBe('reportable message');
-    expect(audit.docs[0].data().details.resolvedReports).toBe(1);
+    // size asserted === 1 above, so docs[0] is present.
+    expect(audit.docs[0]!.data().details.originalMessage).toBe('reportable message');
+    expect(audit.docs[0]!.data().details.resolvedReports).toBe(1);
 
     // Re-removal is a failed precondition.
     expect(
@@ -351,7 +357,8 @@ describe('events-reportChatMessage / events-removeChatMessage', () => {
       .where('messageId', '==', reportedMessageId)
       .get();
     expect(reports.size).toBe(1);
-    const report = reports.docs[0].data();
+    // size asserted === 1 above, so docs[0] is present.
+    const report = reports.docs[0]!.data();
     expect(report.details).toBe('third — filed after moderation resolved it');
     // Review metadata survives the repeat report.
     expect(report.status).toBe('resolved');

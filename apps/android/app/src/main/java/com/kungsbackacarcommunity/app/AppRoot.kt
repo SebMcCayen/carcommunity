@@ -1,12 +1,16 @@
 package com.kungsbackacarcommunity.app
 
 import android.content.res.Configuration
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.tooling.preview.Preview
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.SignInScreen
 import com.kungsbackacarcommunity.app.auth.SignInStatus
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.design.LocalThemeController
+import com.kungsbackacarcommunity.app.design.ThemeController
 import com.kungsbackacarcommunity.app.home.HomeScreen
 
 /**
@@ -33,18 +37,37 @@ fun AppRoot(
     // and pure UI tests need no repositories.
     signedInContent: @Composable (uid: String, displayName: String?) -> Unit =
         { _, displayName -> HomeScreen(displayName = displayName, onSignOut = onSignOutClick) },
+    // The resolved app-wide darkness: the user's ThemePreference applied to the
+    // current system setting (see MainActivity). Passed in rather than computed
+    // here so there is exactly ONE place the app decides light vs. dark.
+    // Defaults to the system value so previews and UI tests that don't wire a
+    // preference behave as before.
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Read/write access to the theme preference for the Settings screen, which
+    // sits several levels down inside the shell's route host. Provided here
+    // because this composable is already the app's theme boundary; null (the
+    // default, used by previews and UI tests) leaves the no-op controller from
+    // LocalThemeController in place.
+    themeController: ThemeController? = null,
 ) {
-    KccTheme {
-        when (authState) {
-            AuthState.SignedOut ->
-                SignInScreen(status = signInStatus, onSignInClick = onSignInClick)
+    val content: @Composable () -> Unit = {
+        KccTheme(darkTheme = darkTheme) {
+            when (authState) {
+                AuthState.SignedOut ->
+                    SignInScreen(status = signInStatus, onSignInClick = onSignInClick)
 
-            is AuthState.SignedIn ->
-                signedInContent(authState.uid, authState.displayName)
+                is AuthState.SignedIn ->
+                    signedInContent(authState.uid, authState.displayName)
 
-            AuthState.Unavailable ->
-                HomeScreen(displayName = null, onSignOut = null)
+                AuthState.Unavailable ->
+                    HomeScreen(displayName = null, onSignOut = null)
+            }
         }
+    }
+    if (themeController == null) {
+        content()
+    } else {
+        CompositionLocalProvider(LocalThemeController provides themeController, content = content)
     }
 }
 
