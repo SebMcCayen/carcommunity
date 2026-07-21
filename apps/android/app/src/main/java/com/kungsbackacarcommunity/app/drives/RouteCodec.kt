@@ -89,6 +89,40 @@ object RouteCodec {
      */
     private const val MAX_DECODABLE_POINTS = 1_000_000
 
+    /**
+     * The largest a single coordinate delta varint may be: [encode] masks every
+     * zig-zag delta to a 32-bit unsigned value (`and 0xFFFFFFFF`), so any varint
+     * above this — or one whose 64-bit value comes back negative — is corruption.
+     * Rejecting it prevents a large delta from silently truncating in
+     * `unZigZag().toInt()` and forging a small, in-range delta.
+     */
+    private const val MAX_COORD_DELTA_ZIGZAG = 0xFFFFFFFFL
+
+    /**
+     * Fixed-point bounds for a valid decoded coordinate, at [COORD_SCALE] (1e5):
+     * latitude ∈ [-90°, 90°] ⇒ ±9e6, longitude ∈ [-180°, 180°] ⇒ ±1.8e7. Both fit
+     * comfortably in `Int` (« Int.MAX ≈ 2.1e9), so the accumulators stay `Int`; a
+     * point that walks outside these bounds is corruption and fails closed. The
+     * check also catches any `Int`-accumulator wrap: a wrap displaces the value by
+     * ~2^32, so a wrapped result always lands ≥ ~2.1e9 in magnitude — far outside
+     * these bounds — rather than sneaking back into range.
+     */
+    private const val LAT_E5_LIMIT = 9_000_000 // 90° * 1e5
+    private const val LNG_E5_LIMIT = 18_000_000 // 180° * 1e5
+
+    /**
+     * Hard ceiling on the INFLATED size of a gzipped route payload. The compressed
+     * download is already capped upstream
+     * (FirebaseRouteReplayRepository.MAX_ROUTE_BYTES, 16 MiB), but that does NOT
+     * bound the inflated size — a few-KB gzip bomb can inflate to gigabytes — so
+     * [gunzipOrNull] enforces this cap while decompressing and fails closed if it
+     * is exceeded. Sized just above the largest payload the parser would ever
+     * accept: HEADER_SIZE + MAX_DECODABLE_POINTS (1e6) points at up to 20 varint
+     * bytes each (two 5-byte 32-bit coord deltas + a 10-byte 64-bit timestamp
+     * delta) ≈ 20 MiB.
+     */
+    private const val MAX_INFLATED_BYTES = 24 * 1024 * 1024 // 24 MiB
+
     private const val GZIP_MAGIC_0 = 0x1f.toByte()
     private const val GZIP_MAGIC_1 = 0x8b.toByte()
 
@@ -157,9 +191,20 @@ object RouteCodec {
             val dLat = cursor.readUVarint() ?: return null
             val dLng = cursor.readUVarint() ?: return null
             val dTms = cursor.readUVarint() ?: return null
+            // A legit coordinate delta is a 32-bit unsigned zig-zag (see
+            // MAX_COORD_DELTA_ZIGZAG). A larger varint — or one read back as a
+            // negative Long — would silently truncate in unZigZag().toInt() and
+            // forge a small in-range delta, so reject it outright (fail closed).
+            if (dLat < 0L || dLat > MAX_COORD_DELTA_ZIGZAG) return null
+            if (dLng < 0L || dLng > MAX_COORD_DELTA_ZIGZAG) return null
             latE5 += unZigZag(dLat)
             lngE5 += unZigZag(dLng)
             tms += dTms
+            // Range-check the decoded point: anything outside earthly coordinate
+            // bounds is corruption (this also catches an Int-accumulator wrap — a
+            // wrap lands ≥ ~2.1e9 in magnitude, far outside these limits).
+            if (latE5 < -LAT_E5_LIMIT || latE5 > LAT_E5_LIMIT) return null
+            if (lngE5 < -LNG_E5_LIMIT || lngE5 > LNG_E5_LIMIT) return null
             points.add(
                 RoutePoint(
                     latitude = latE5 / COORD_SCALE,
@@ -215,8 +260,27 @@ object RouteCodec {
         return out.toByteArray()
     }
 
+    /**
+     * Inflates a gzipped payload, streaming with a hard cap ([MAX_INFLATED_BYTES])
+     * on the inflated size so an attacker-controlled gzip bomb can never force an
+     * unbounded allocation. Returns null on any I/O error OR the moment the
+     * inflated output would exceed the cap (fail closed, matching the codec's
+     * convention). Deliberately does NOT `readBytes()` the whole stream first.
+     */
     private fun gunzipOrNull(bytes: ByteArray): ByteArray? =
         runCatching {
-            GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+            GZIPInputStream(ByteArrayInputStream(bytes)).use { input ->
+                val out = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    if (total > MAX_INFLATED_BYTES) return@runCatching null
+                    out.write(buffer, 0, read)
+                }
+                out.toByteArray()
+            }
         }.getOrNull()
 }
