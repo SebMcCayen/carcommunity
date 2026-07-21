@@ -220,11 +220,22 @@ export type ConvoyAutoStartOutcome = 'started' | 'skipped-existing' | 'flag-off'
  * throw as non-fatal, because a convoy must still start even if live-share is
  * unavailable. The liveLocation feature flag is honoured (flag-off → no session).
  */
+/** Whether the live-location feature is enabled (single flag read). */
+export function isLiveShareEnabled(): Promise<boolean> {
+  return readFeatureFlag(LIVE_LOCATION_FLAG_KEY);
+}
+
 export async function startConvoyAutoSession(
   uid: string,
   convoyId: string,
+  // Pre-resolved flag decision. convoy.start fans out to up to MAX_CONVOY_SIZE
+  // members, so it reads the flag ONCE and passes it here rather than paying a
+  // Firestore read of config/featureFlags per member. Omitted on the single-call
+  // path (convoy.respond late-join), where reading it here is one read.
+  liveEnabled?: boolean,
 ): Promise<ConvoyAutoStartOutcome> {
-  if (!(await readFeatureFlag(LIVE_LOCATION_FLAG_KEY))) {
+  const enabled = liveEnabled ?? (await isLiveShareEnabled());
+  if (!enabled) {
     return 'flag-off';
   }
   const now = new Date();

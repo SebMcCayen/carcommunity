@@ -46,7 +46,11 @@ import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
-import { startConvoyAutoSession, stopConvoyAutoSession } from '../live/session';
+import {
+  isLiveShareEnabled,
+  startConvoyAutoSession,
+  stopConvoyAutoSession,
+} from '../live/session';
 import {
   ACTIVE_CONVOY_STATUSES,
   ALREADY_IN_CONVOY_MESSAGE,
@@ -556,9 +560,16 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
   // convoy can see everyone" from the moment it goes active. startConvoyAutoSession
   // is best-effort and leaves any member's pre-existing MANUAL session untouched.
   // Late joiners (accept after this point) auto-start via convoy.respond.
-  await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
-    startConvoyAutoSession(uid, parsed.input.convoyId),
-  );
+  //
+  // The live-share feature flag is read ONCE here and passed into the fan-out,
+  // not re-read per member — a convoy of MAX_CONVOY_SIZE would otherwise cost one
+  // config/featureFlags read per member for a single convoy.start.
+  const liveEnabled = await isLiveShareEnabled();
+  if (liveEnabled) {
+    await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
+      startConvoyAutoSession(uid, parsed.input.convoyId, true),
+    );
+  }
 
   return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
 });
