@@ -49,15 +49,16 @@ class FirebaseDrivesRepository private constructor(
                     if (task.isSuccessful) {
                         // The callable returns { rideId, routePath, previewImagePath,
                         // alreadySaved, ...stats }. We only need rideId + routePath
-                        // (where the client uploads route.bin) + alreadySaved.
+                        // (where the client uploads route.bin) + alreadySaved. A
+                        // transport success with a malformed body (no rideId) is NOT
+                        // a real save, so mapSaveResult throws rather than resume a
+                        // fake success — surfaced here as a save failure.
                         val data = task.result?.getData() as? Map<*, *>
-                        continuation.resume(
-                            DriveSaveResult(
-                                rideId = data?.get("rideId") as? String ?: "",
-                                routePath = data?.get("routePath") as? String,
-                                alreadySaved = data?.get("alreadySaved") as? Boolean ?: false,
-                            ),
-                        )
+                        try {
+                            continuation.resume(mapSaveResult(data))
+                        } catch (invalid: DriveSaveException) {
+                            continuation.resumeWithException(invalid)
+                        }
                     } else {
                         val cause =
                             task.exception
@@ -114,6 +115,35 @@ class FirebaseDrivesRepository private constructor(
  */
 private fun Throwable.callableStatusCode(): String? =
     (this as? FirebaseFunctionsException)?.code?.name
+
+/**
+ * Maps a `drives-save` callable response body to a [DriveSaveResult], or throws
+ * [DriveSaveException] when the body carries no usable `rideId`.
+ *
+ * The callback treats a transport-successful task as a saved drive, but a
+ * missing/blank `rideId` means the callable did not actually return a created
+ * drive. Defaulting it to `""` (the old behaviour) fake-succeeded the save in the
+ * UI while silently SKIPPING the route upload (which needs a non-empty path) and
+ * leaving the list to disagree with reality. We fail fast instead so the save
+ * surfaces as a failure the UX already handles. [code] is null (unclassified)
+ * because the failure is a malformed success, not a callable-status refusal.
+ *
+ * `routePath` is left nullable on purpose — a null path is a documented,
+ * tolerated case ([DriveSaveResult]) that just skips the upload, not a failure.
+ */
+internal fun mapSaveResult(data: Map<*, *>?): DriveSaveResult {
+    val rideId =
+        (data?.get("rideId") as? String)?.takeIf { it.isNotBlank() }
+            ?: throw DriveSaveException(
+                code = null,
+                cause = IllegalStateException("drives-save returned no rideId"),
+            )
+    return DriveSaveResult(
+        rideId = rideId,
+        routePath = data["routePath"] as? String,
+        alreadySaved = data["alreadySaved"] as? Boolean ?: false,
+    )
+}
 
 private fun DocumentSnapshot.toSavedDrive(): SavedDrive? {
     if (!exists()) return null

@@ -276,11 +276,15 @@ fun SavedDriveDetailScreen(
     // distance, so a lone spike can't claim an absurd figure. Null while the
     // route is Loading/Unavailable or a summary-only drive, and the sentence
     // degrades away rather than showing a bogus 0.
+    // Keyed on routeState so the map+filter (up to ~20k points) only runs when
+    // the decoded route actually changes, not on every unrelated recomposition.
     val topSpeed =
-        (routeState as? RouteReplayState.Ready)
-            ?.points
-            ?.map { it.toRecordedPoint() }
-            ?.let { DriveSummary.topSpeedMetersPerSecond(it) }
+        remember(routeState) {
+            (routeState as? RouteReplayState.Ready)
+                ?.points
+                ?.map { it.toRecordedPoint() }
+                ?.let { DriveSummary.topSpeedMetersPerSecond(it) }
+        }
     val shareSummary = driveShareText(drive, topSpeedMetersPerSecond = topSpeed)
 
     AeroPage(title = stringResource(R.string.savedDrives_detailTitle), modifier = modifier) {
