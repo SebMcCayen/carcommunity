@@ -8,9 +8,11 @@ import kotlinx.coroutines.delay
  * [RecordedPoint] (the recorder's fix) and [RoutePoint] (the codec's decoded
  * fix) are the SAME triple — latitude, longitude, timestampMs — living in two
  * layers so neither the recorder nor the reader depends on the other. These
- * conversions are the single, obvious bridge between them, so the write side
- * (encode recorded fixes) and the read side (top-speed from decoded fixes) each
- * cross exactly once.
+ * conversions are the single, obvious bridge between them: the write side
+ * encodes recorded fixes via [toRoutePoint]. The read side derives top speed
+ * straight off the decoded [RoutePoint]s (DriveSummary has a [RoutePoint]
+ * overload, so it needs no conversion); [toRecordedPoint] remains the inverse
+ * bridge, pinned by the round-trip test.
  */
 fun RecordedPoint.toRoutePoint(): RoutePoint = RoutePoint(latitude, longitude, timestampMs)
 

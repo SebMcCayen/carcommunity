@@ -1,6 +1,10 @@
 package com.kungsbackacarcommunity.app.drives
 
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,6 +68,27 @@ object SingleSessionRecording {
     private var ownerUid: String? = null
 
     /**
+     * The scope this session's background route upload runs on, and the uid that
+     * upload is attributed to. Created fresh per [start] and passed to the
+     * coordinator so the upload is PROCESS-scoped (survives Activity recreation
+     * and the composition that triggered the save) — the same lifetime the
+     * recording itself has, and the reason the upload cannot live in `remember`.
+     *
+     * It deliberately OUTLIVES a normal [clear]: the fire-and-forget upload is
+     * kicked off the instant the drive reaches "Saved", which is the very state
+     * that triggers [clear], so cancelling it there would lose the route with no
+     * retry — the exact half-state this whole writer avoids. Instead it is
+     * cancelled ONLY by [clearIfNotOwnedBy] when the signed-in user stops being
+     * [uploadOwnerUid] (sign-out or account switch): an upload started under
+     * user A's auth must never continue — and retry — under user B's. Kept
+     * alongside [ownerUid] rather than folded into it because [clear] nulls
+     * [ownerUid] while this must persist until the upload's owner actually
+     * leaves.
+     */
+    private var uploadScope: CoroutineScope? = null
+    private var uploadOwnerUid: String? = null
+
+    /**
      * Begins recording for a newly-started session owned by [uid]. A no-op when
      * a recording is already in flight (including one still awaiting its
      * save/discard choice), so an effect that re-runs after a config change
@@ -85,13 +110,23 @@ object SingleSessionRecording {
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
+        // A fresh per-session upload scope owned here (process-scoped, supervisor-
+        // jobbed) so this session's background upload can be cancelled on a later
+        // sign-out / account switch without touching any other session's. A prior
+        // owner's scope, if any is still referenced, always belonged to THIS same
+        // uid (a different owner would already have been cancelled by
+        // clearIfNotOwnedBy), so its in-flight upload is left to finish.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val coordinator =
             DriveRecordingCoordinator(
                 repository,
                 "single-" + UUID.randomUUID().toString(),
                 routeUploadRunner = routeUploadRunner,
+                uploadScope = scope,
             )
         ownerUid = uid
+        uploadScope = scope
+        uploadOwnerUid = uid
         activeState.value = coordinator
         coordinator.start()
         val controller = controllerFactory()
@@ -155,6 +190,21 @@ object SingleSessionRecording {
      * This never fires on rotation, so it cannot silently lose a drive there.
      */
     fun clearIfNotOwnedBy(signedInUid: String?) {
+        // Cancel a still-running background route upload the moment its owner is
+        // no longer the signed-in user — even after the recording itself was
+        // already released at "Saved" (ownerUid null) while the upload runs on.
+        // This is the ONLY place the upload scope is cancelled: a same-uid
+        // rotation re-runs this with the SAME uid (uploadOwner == signedInUid, no
+        // cancel), while a real sign-out (null) or account switch (a different
+        // uid) cancels it, so an upload started under user A's auth can never
+        // continue — or retry — under user B's. A benign backgrounding never
+        // calls this at all.
+        val uploadOwner = uploadOwnerUid
+        if (uploadOwner != null && uploadOwner != signedInUid) {
+            uploadScope?.cancel()
+            uploadScope = null
+            uploadOwnerUid = null
+        }
         val owner = ownerUid ?: return
         if (owner == signedInUid) return
         clear()

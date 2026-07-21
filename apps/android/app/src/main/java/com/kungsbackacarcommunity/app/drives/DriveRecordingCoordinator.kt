@@ -29,11 +29,14 @@ class DriveRecordingCoordinator(
      */
     private val routeUploadRunner: RouteUploadRunner? = null,
     /**
-     * Scope the background route upload runs on. Defaults to a PROCESS-scoped
-     * scope ([processUploadScope]) that outlives composition, so dismissing the
-     * save prompt or navigating away the instant "Saved" appears cannot cancel
-     * an in-flight upload and silently lose the route. Injectable so tests can
-     * drive it deterministically.
+     * Scope the background route upload runs on. In production
+     * [SingleSessionRecording] injects a PER-SESSION process-scoped scope that it
+     * owns and cancels on sign-out / account switch, so an upload started under
+     * one user's auth can never continue under another's, while still outliving
+     * the composition (dismissing the save prompt or navigating away the instant
+     * "Saved" appears cannot cancel an in-flight upload and silently lose the
+     * route). Defaults to a shared process-scoped [processUploadScope] for tests
+     * / direct construction; injectable so tests can drive it deterministically.
      */
     private val uploadScope: CoroutineScope = processUploadScope,
 ) {
@@ -199,13 +202,19 @@ class DriveRecordingCoordinator(
 
     private companion object {
         /**
-         * Default scope for background route uploads: process-scoped and
-         * supervisor-jobbed so one upload's failure can't cancel another, and so
-         * the upload outlives the composition that triggered the save. The save
-         * prompt is dismissed the moment "Saved" appears (SingleSessionRecording
-         * clears the recording), which would cancel a composition-scoped upload
-         * mid-flight and lose the route with no retry — the exact half-state this
-         * avoids. IO dispatcher: the actual work is a network putBytes.
+         * Fallback scope for background route uploads when none is injected
+         * (tests / direct construction): process-scoped and supervisor-jobbed so
+         * one upload's failure can't cancel another, and so the upload outlives
+         * the composition that triggered the save. The save prompt is dismissed
+         * the moment "Saved" appears (SingleSessionRecording clears the
+         * recording), which would cancel a composition-scoped upload mid-flight
+         * and lose the route with no retry — the exact half-state this avoids.
+         * IO dispatcher: the actual work is a network putBytes.
+         *
+         * Production does NOT use this default: [SingleSessionRecording] injects
+         * a per-session scope it can cancel on sign-out / account switch, so this
+         * shared process-wide scope is never the one carrying a real user's
+         * upload across an auth change.
          */
         private val processUploadScope: CoroutineScope =
             CoroutineScope(SupervisorJob() + Dispatchers.IO)

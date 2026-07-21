@@ -1,6 +1,13 @@
 package com.kungsbackacarcommunity.app.drives
 
+import com.kungsbackacarcommunity.app.media.MediaUploader
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,10 +33,12 @@ class SingleSessionRecordingTest {
 
     private val repository = SingleSessionFakeRepository()
 
-    // The holder is a process singleton: reset around every test.
-    @Before fun setUp() = SingleSessionRecording.clear()
+    // The holder is a process singleton: reset around every test. Use the
+    // sign-out path (uid null) rather than clear() so a leftover background
+    // upload scope from a prior test is cancelled too, not just the recording.
+    @Before fun setUp() = SingleSessionRecording.clearIfNotOwnedBy(null)
 
-    @After fun tearDown() = SingleSessionRecording.clear()
+    @After fun tearDown() = SingleSessionRecording.clearIfNotOwnedBy(null)
 
     /** Stands in for the effect the UI runs whenever `isSharing` is true. */
     private fun onSharing(uid: String = UID) = SingleSessionRecording.start(uid, repository) { null }
@@ -231,6 +240,107 @@ class SingleSessionRecordingTest {
         SingleSessionRecording.clearIfNotOwnedBy(UID)
         assertNull(SingleSessionRecording.active.value)
         assertFalse(SingleSessionRecording.promptPending.value)
+    }
+
+    // -------------------------------------------------------------------
+    // Background route upload lifetime. The upload is process-scoped so it
+    // survives the composition (and the post-save clear() the "Saved" state
+    // triggers), but it must be TORN DOWN on a real auth change: an upload
+    // started under user A's auth must never continue — or retry — under user
+    // B's. These drive a real, gated upload through the holder's own scope.
+    // -------------------------------------------------------------------
+
+    /** Drives a genuinely in-flight upload: it signals start, then suspends. */
+    private class GatedUploader : MediaUploader {
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+
+        override suspend fun upload(path: String, bytes: ByteArray, contentType: String): String {
+            started.complete(Unit)
+            try {
+                awaitCancellation()
+            } catch (c: CancellationException) {
+                cancelled.complete(Unit)
+                throw c
+            }
+        }
+    }
+
+    /** Repository whose save returns a real routePath, so the upload launches. */
+    private class UploadingFakeRepository : DrivesRepository {
+        override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+        override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+            DriveSaveResult(
+                rideId = "ride",
+                routePath = "rideRoutes/$UID/ride/route.bin",
+                alreadySaved = false,
+            )
+
+        override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+    }
+
+    /** Starts a session and drives it to a saved drive with an in-flight upload. */
+    private suspend fun startWithInFlightUpload(uploader: GatedUploader) {
+        val runner = RouteUploadRunner(uploader, delayFn = {})
+        SingleSessionRecording.start(UID, UploadingFakeRepository(), routeUploadRunner = runner) {
+            null
+        }
+        val coordinator = SingleSessionRecording.active.value
+        coordinator?.addFix(57.0, 12.0, 1_000L)
+        coordinator?.addFix(57.001, 12.0, 2_000L)
+        SingleSessionRecording.stop()
+        coordinator?.save(title = null)
+        // Wait until the upload has actually entered the uploader on the scope.
+        withTimeout(5_000) { uploader.started.await() }
+    }
+
+    @Test
+    fun `an account switch cancels the in-flight route upload`() = runBlocking {
+        val uploader = GatedUploader()
+        startWithInFlightUpload(uploader)
+
+        // The post-save clear() the "Saved" state triggers must NOT cancel the
+        // same user's upload — that is the exact half-state this writer avoids.
+        SingleSessionRecording.clear()
+        delay(50)
+        assertFalse(
+            "post-save clear() must not cancel the same user's upload",
+            uploader.cancelled.isCompleted,
+        )
+
+        // A different account signs in: the upload started under UID must be
+        // cancelled so it cannot continue or retry under the new user's auth.
+        SingleSessionRecording.clearIfNotOwnedBy("uid-someone-else")
+        withTimeout(5_000) { uploader.cancelled.await() }
+        assertTrue(uploader.cancelled.isCompleted)
+    }
+
+    @Test
+    fun `sign-out cancels the in-flight route upload`() = runBlocking {
+        val uploader = GatedUploader()
+        startWithInFlightUpload(uploader)
+
+        // Sign-out (uid null) is an auth change too: cancel the upload.
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+        withTimeout(5_000) { uploader.cancelled.await() }
+        assertTrue(uploader.cancelled.isCompleted)
+    }
+
+    @Test
+    fun `a same-uid rotation does not cancel the in-flight route upload`() = runBlocking {
+        val uploader = GatedUploader()
+        startWithInFlightUpload(uploader)
+
+        // Rotation re-runs the effect with the SAME signed-in uid: the upload
+        // must keep running (only a genuine auth change tears it down).
+        SingleSessionRecording.clearIfNotOwnedBy(UID)
+        delay(50)
+        assertFalse(uploader.cancelled.isCompleted)
+
+        // Cleanup: a real sign-out cancels the scope so no thread leaks.
+        SingleSessionRecording.clearIfNotOwnedBy(null)
+        withTimeout(5_000) { uploader.cancelled.await() }
     }
 
     // -------------------------------------------------------------------
