@@ -190,22 +190,25 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
     duplicate: boolean;
   }>(async (tx) => {
     const convSnap = await tx.get(convRef);
+    const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
+    const rawUnread = unreadMap[toUid];
+    const unreadBefore = typeof rawUnread === 'number' && rawUnread > 0 ? rawUnread : 0;
+
     // Idempotency: when the caller supplied a clientId, a message doc already at
     // that id means this exact send committed on an earlier attempt (the client
     // just didn't see the ack, e.g. a dropped connection). Return it WITHOUT
     // re-bumping unread / the aggregate or rewriting lastMessage — exactly-once
     // regardless of how many times the optimistic client retries. All reads
-    // stay before any write, so the transaction contract holds.
+    // stay before any write, so the transaction contract holds. `priorUnread`
+    // stays truthful (the recipient's real unread-before) even though the
+    // notification is skipped on a duplicate via the `duplicate` flag.
     if (clientId !== undefined) {
       const existing = await tx.get(messageRef);
       if (existing.exists) {
-        return { priorUnread: 0, duplicate: true };
+        return { priorUnread: unreadBefore, duplicate: true };
       }
     }
     const ts = FieldValue.serverTimestamp();
-    const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
-    const rawUnread = unreadMap[toUid];
-    const unreadBefore = typeof rawUnread === 'number' && rawUnread > 0 ? rawUnread : 0;
 
     if (!convSnap.exists) {
       tx.set(

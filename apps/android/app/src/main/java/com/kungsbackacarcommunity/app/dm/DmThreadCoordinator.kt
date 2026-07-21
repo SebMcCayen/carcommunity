@@ -125,7 +125,9 @@ class DmThreadCoordinator(
                     // the bubble is removed for good once the listener delivers the
                     // real doc ([onLiveMessages]), matched by clientId.
                     setState(clientId, DmDeliveryState.Sent)
-                    sent.value += 1
+                    // Atomic: concurrent optimistic sends each resolve on their own
+                    // coroutine, so a plain read-modify-write could drop increments.
+                    sent.update { it + 1 }
                 }
                 is DmSendResult.Failed -> setState(clientId, DmDeliveryState.Failed)
             }

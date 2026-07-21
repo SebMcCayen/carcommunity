@@ -155,7 +155,7 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
-export const SEND_MESSAGE_EXPECTED = `Expected { toUid, text } with text 1..${DM_MESSAGE_MAX_LENGTH} characters.`;
+export const SEND_MESSAGE_EXPECTED = `Expected { toUid, text, clientId? } with text 1..${DM_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const GET_MESSAGES_EXPECTED =
   'Expected { conversationId, before? } where before is an ISO-8601 timestamp.';
 export const MARK_READ_EXPECTED = 'Expected { conversationId }.';
