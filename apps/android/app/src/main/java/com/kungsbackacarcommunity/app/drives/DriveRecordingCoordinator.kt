@@ -122,13 +122,22 @@ class DriveRecordingCoordinator(
         // Both resumable states are only reachable via stop(), so the captured
         // stop moment is always present; fall back defensively.
         val endedAt = stoppedAtMillis ?: clock()
-        // Capture the fixes BEFORE the recorder is released on success, so the
-        // background route upload encodes the SAME points the backend just
-        // priced its stats from (replay + top-speed then match the summary).
-        val points = recorder.snapshot()
         stateFlow.value = RecordingState.Saving
         try {
             val result = repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            // Snapshot the fixes for the background upload only now that the save
+            // succeeded, and only when an upload can actually run: snapshot()
+            // copies up to ~20k points, so this skips that copy on a failed save,
+            // on a summary-only / no-route save, and in a config-less build (no
+            // uploader). Taken BEFORE the recorder is released just below, so it
+            // is the exact set of fixes the backend just priced its stats from
+            // (replay + top-speed then match the summary).
+            val points =
+                if (routeUploadRunner != null && result.routePath != null) {
+                    recorder.snapshot()
+                } else {
+                    emptyList()
+                }
             // Release the recorder (and its up-to-20k points) now that the save
             // succeeded; the UI renders the terminal state from RecordingState.
             this.recorder = null
