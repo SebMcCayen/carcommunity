@@ -108,7 +108,7 @@ describe('runCommunityChatDigest — query path', () => {
 
   it('does NOT notify a member below the threshold', async () => {
     // Read after message #3 → only 2 unread (< 3).
-    const nearlyCaught = await seedUser('below', { lastReadAtMs: MESSAGE_MS[2] });
+    const nearlyCaught = await seedUser('below', { lastReadAtMs: MESSAGE_MS[2]! });
 
     await runCommunityChatDigest(now);
 
