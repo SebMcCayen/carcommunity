@@ -87,10 +87,12 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 - Live location är en kärnfeature.
 - Delning måste vara opt-in, manuellt startad, tidsbegränsad, tydligt synlig och enkel att stoppa.
-- **"Dölj mig nu"** måste stoppa delning och omedelbart ta bort senaste backend-position.
-- Ingen automatisk publik positionshistorik.
+- **"Dölj mig nu"** måste stoppa delning och omedelbart ta bort senaste backend-position — och samtidigt ta bort användaren ur närhetsupptäckt (discovery-dokumentet raderas direkt), så att en delare försvinner för alla på en gång.
+- **Publik närhetsupptäckt (beslut 2026-07-21):** en fristående ("Single") live-delning är synlig för andra användare i närheten medan sessionen är aktiv — vald PUBLIK/NÄRHET-modell, inte enbart vänner eller konvoj. En delare hittas via `live.listNearby` (samma närhetsmönster som incidents). Detta gäller ENDAST aktiva, opt-in-startade sessioner: ingen delas automatiskt, och delningen upphör omedelbart vid stopp/"dölj mig nu" eller när sessionen/positionen åldras ut.
+- Ingen automatisk publik positionshistorik: endast den aktuella positionen under en aktiv session exponeras — ingen historik lagras eller visas publikt, och en stoppad session lämnar inget publikt spår.
+- Egen delning exkluderar blockerade relationer (bägge riktningar) och suspenderade konton; en delare kan aldrig upptäckas av någon de blockerat eller som blockerat dem.
 - Gratisanvändare kan dela sin egen live location.
-- Aktiv subscription krävs för att se andras live positioner.
+- Aktiv subscription krävs för att se andras live positioner (avsedd framtida grind; medlemsgrindning är för närvarande avstängd i backend, så alla inloggade icke-suspenderade användare kan se just nu).
 - Gratisanvändare kan se begränsad community-status men inte exakta live positioner.
 
 ## Blocking and suspension

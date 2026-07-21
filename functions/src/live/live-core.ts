@@ -8,12 +8,17 @@
  * - `liveLocation/{uid}/session` — backend-owned session state (id,
  *   status active|stopped|expired, duration 1h|2h|4h, startedAt,
  *   expiresAt, stoppedAt, stopReason). NO client writes.
- * - `liveLocation/{uid}/latest` — the marker node read by entitled
- *   members (activeMember claim, non-suspended). Kept lean; carries the
- *   denormalized displayName and session expiry so clients can render
- *   markers without extra reads. NO client writes — positions flow
- *   through live.updatePosition, which enforces the active session and
- *   the contract's 60-second staleness threshold.
+ * - `liveLocation/{uid}/latest` — the marker node read by any signed-in,
+ *   non-suspended VIEWER who is not blocked by (or blocking) the sharer.
+ *   The read rule does NOT currently require an activeMember claim: member
+ *   gating is disabled repo-wide (shared/memberGating.ts) and the RTDB rule
+ *   (database.rules.json) deliberately encodes only the suspended + blocking
+ *   checks — a paid-viewing gate is added to that rule when viewing is
+ *   re-locked. Kept lean; carries the denormalized displayName and session
+ *   expiry so clients can render markers without extra reads. NO client
+ *   writes — positions flow through live.updatePosition, which enforces the
+ *   active session and the contract's 60-second staleness threshold, and
+ *   also refreshes the queryable nearby-discovery index (see nearby-core.ts).
  * - Presence lives at the top-level `/presence/{uid}` (client-managed
  *   onDisconnect), as implemented since Phase 3 and documented in the
  *   data model; the mapping's `liveLocation/{uid}/presence` sketch line

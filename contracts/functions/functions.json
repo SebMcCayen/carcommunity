@@ -48,7 +48,7 @@
     {
       "name": "live.updatePosition",
       "domain": "live",
-      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry). Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by non-suspended activeMember claims only. Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
+      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry) AND refreshes the queryable nearby-discovery doc liveSessions/{uid} (geoCell + last position + expiresAt TTL) that live.listNearby reads. Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by any non-suspended signed-in viewer who is not blocked by/blocking the sharer — the RTDB read rule encodes only suspended + blocking, NOT an activeMember gate (member gating is disabled repo-wide, shared/memberGating.ts; a paid-viewing gate is added to that rule when re-locked). Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -66,8 +66,17 @@
     {
       "name": "live.hideMeNow",
       "domain": "live",
-      "description": "Immediately stops the caller's session (reason hide_me_now) and removes the latest marker. signedIn access: works while SUSPENDED — removing your own position is a privacy action that must always be available. Deployed via grouped export as live-hideMeNow (functions/src/live/session.ts).",
+      "description": "Immediately stops the caller's session (reason hide_me_now), removes the latest marker AND deletes the nearby-discovery doc liveSessions/{uid} — so 'hide me now' removes the sharer from live.listNearby discovery at once, not just from the per-uid marker read. signedIn access: works while SUSPENDED — removing your own position is a privacy action that must always be available. Deployed via grouped export as live-hideMeNow (functions/src/live/session.ts).",
       "access": "signedIn",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "live.listNearby",
+      "domain": "live",
+      "description": "Bounded read of ACTIVE, unexpired live sharers near a point ({ latitude, longitude, radiusMeters? }, radius clamped to 100..50000 m, default 15000), so a STANDALONE ('Single') live sharer is discoverable by users nearby even with no convoy/group roster carrying their uid. Open to ANY active signed-in user (requireActiveActor), mirroring incidents.listNearby: enumerates the grid cells covering the radius and reads only those from the queryable Firestore index liveSessions/{uid} (written/refreshed by live.updatePosition) via chunked `geoCell in [...]` queries (+ status=='active' and expiresAt>now), then filters to the exact server-computed Haversine radius. EXCLUSIONS: the caller's own session (self); anyone the caller has blocked or who has blocked the caller (block matrix resolved in both directions, reusing the convoy resolvePeerBlockPairs helper); expired docs; suspended users (enforced at write time — updatePosition requires a non-suspended actor, so a suspended user cannot refresh a discovery doc and ages out within the discovery TTL). Returns { sessions: [{ uid, latitude, longitude, displayName, updatedAt, expiresAt }] }, capped at 200; the client subscribes each returned uid's existing RTDB liveLocation/{uid}/latest observeLatest stream for live updates (which itself re-enforces blocking + suspension on the viewer). The high-frequency position stream stays in RTDB; only the geo index is in Firestore. Deployed via grouped export as live-listNearby (functions/src/live/listNearby.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"

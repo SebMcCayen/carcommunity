@@ -705,6 +705,28 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // liveSessions – nearby live-sharer DISCOVERY index (live location)
+    // A lightweight, geo-cell-indexed Firestore doc per ACTIVE standalone
+    // sharer (liveSessions/{uid}), written ONLY by the live.* callables via the
+    // Admin SDK (live.updatePosition writes/refreshes it; startSession /
+    // stopSession / hideMeNow / the TTL sweep delete it). The high-frequency
+    // position STREAM stays in RTDB (liveLocation/{uid}/latest); this doc is
+    // only the queryable index.
+    //
+    // NO client access at all. Discovery is served by live.listNearby (a
+    // callable — the Admin SDK bypasses these rules), which applies the
+    // self / blocked / expired exclusions server-side; a raw client listener
+    // would leak every nearby sharer's coordinate with none of those checks and
+    // is not needed, since the viewer streams live updates through the existing
+    // per-uid RTDB liveLocation/{uid}/latest read (which DOES enforce blocking +
+    // suspension). Reads and writes are both denied here (defence in depth; the
+    // deny-all catch-all would cover it, but the intent is stated explicitly).
+    // -------------------------------------------------------------------------
+    match /liveSessions/{sharerUid} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // crownHuntPoints – Kronjakt reward points (Phase 9h)
     // Members read ACTIVE points (map display); drafts/paused/ended are
     // admin-territory via the Admin SDK. All writes go through the
