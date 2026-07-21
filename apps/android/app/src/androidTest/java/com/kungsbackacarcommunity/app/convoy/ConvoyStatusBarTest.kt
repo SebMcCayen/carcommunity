@@ -383,9 +383,10 @@ class ConvoyStatusBarTest {
     }
 
     /**
-     * Icons and numbers only: the pill shows the bare member count, and the group
-     * glyph carries the full "N in the convoy" announcement so TalkBack does not
-     * read a context-free "3".
+     * Icons and numbers only: the pill shows the bare member count, and the count
+     * `Text` node carries the full "N in the convoy" contentDescription (the group
+     * glyph is decorative, `contentDescription = null`) so TalkBack announces the
+     * count in context rather than reading a context-free "3".
      */
     @Test
     fun inlinePill_showsBareCount_withTheFullAnnouncementForTalkBack() {
