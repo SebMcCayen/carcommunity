@@ -100,19 +100,29 @@ export interface EventReminderSummary {
   candidates: number;
   /** Events skipped in memory because their marker was already set. */
   alreadyReminded: number;
-  /** Events this run CLAIMED and fanned out (one reminder set delivered each). */
+  /**
+   * Events this run CLAIMED and ATTEMPTED a fan-out for. Counts the attempt, not
+   * successful delivery: an event is still counted when every recipient is
+   * declined (opted out / suspended / deleted / de-duplicated) or when it has no
+   * `going` attendees at all, so this can exceed the number of events that
+   * produced any notificationsDelivered.
+   */
   remindedEvents: number;
   /**
    * Events that passed the in-memory pre-filter but whose transactional claim
    * declined (a concurrent claim, cancel/complete, or a start-time edit moved
-   * them out of the window between the query and the claim).
+   * them out of the window between the query and the claim). Only counts a claim
+   * that RETURNED false; a claim that throws is caught, logged, and skipped
+   * without incrementing any counter.
    */
   claimSkipped: number;
   /** In-app notifications actually written across all reminded events. */
   notificationsDelivered: number;
   /**
-   * Recipients writeInAppNotification declined (opted out / suspended / deleted /
-   * a deterministic-id duplicate) — folded across events for observability.
+   * Recipients writeInAppNotification DECLINED (opted out / suspended / deleted /
+   * a deterministic-id duplicate) — folded across events for observability. A
+   * delivery that THROWS is logged per attendee, not counted here, so
+   * notificationsDelivered + notificationsSkipped need not equal the going count.
    */
   notificationsSkipped: number;
   /** True when MAX_CANDIDATES_PER_RUN bound the scan (see its note). */
