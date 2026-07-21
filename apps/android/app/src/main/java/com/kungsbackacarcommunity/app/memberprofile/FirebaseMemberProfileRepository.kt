@@ -128,6 +128,7 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         engineDescription = getString("engineDescription"),
         modifications = getString("description"),
         imagePath = getString("imagePath"),
+        photoPaths = (get("photoPaths") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
         isMainCar = getBoolean("isMainCar") ?: false,
     )
 }

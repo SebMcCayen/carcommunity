@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.garage
 
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -56,7 +58,7 @@ class VehicleDetailScreenTest {
     }
 
     @Test
-    fun detailPage_showsAllInfoAndDisabledAddMore() {
+    fun detailPage_showsAllInfo_andHidesAddMoreWithoutUploader() {
         composeTestRule.setContent {
             KccTheme {
                 VehicleDetailScreen(
@@ -64,21 +66,58 @@ class VehicleDetailScreenTest {
                     onEdit = {},
                     onDelete = {},
                     onSetMain = {},
-                    // onAddPhoto left null: single-photo model today.
+                    // onAddPhoto left null: no uploader wired (config-less build).
                 )
             }
         }
         composeTestRule.onNodeWithText("Volvo 240 (1988)").assertIsDisplayed()
         composeTestRule.onNodeWithText("B230").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Lowered on Bilstein").performScrollTo().assertIsDisplayed()
-        // The "add more photos" affordance is present but disabled, with its
-        // explanation, until the backend can store more than one photo.
+        // With no uploader the "add more photos" affordance is hidden entirely.
+        composeTestRule.onNodeWithText(str(R.string.garage_photoAddMore)).assertDoesNotExist()
+    }
+
+    @Test
+    fun detailPage_addMore_isEnabledAndInvokesPicker_whenUploaderWired() {
+        var picks = 0
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleDetailScreen(
+                    vehicle = vehicle(),
+                    onEdit = {},
+                    onDelete = {},
+                    onSetMain = {},
+                    onAddPhoto = { picks++ },
+                )
+            }
+        }
         composeTestRule.onNodeWithText(str(R.string.garage_photoAddMore))
             .performScrollTo()
-            .assertIsNotEnabled()
-        composeTestRule.onNodeWithText(str(R.string.garage_photoAddMoreUnavailable))
-            .performScrollTo()
-            .assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
+        assertEquals(1, picks)
+    }
+
+    @Test
+    fun galleryActions_setCoverAndRemove_invokeCallbacks() {
+        val photoPaths = listOf("vehicleImages/u/v1/a.jpg", "vehicleImages/u/v1/b.jpg")
+        var covered: String? = null
+        var removed: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleGalleryPager(
+                    photoPaths = photoPaths,
+                    onSetCover = { covered = it },
+                    onRemovePhoto = { removed = it },
+                )
+            }
+        }
+        // The current photo starts on the cover (index 0), so "set as cover" is
+        // disabled there; "remove" opens a confirm dialog then fires with the path.
+        composeTestRule.onNodeWithTag(VEHICLE_GALLERY_SET_COVER_TAG).assertIsNotEnabled()
+        composeTestRule.onNodeWithTag(VEHICLE_GALLERY_REMOVE_TAG).performClick()
+        composeTestRule.onNodeWithText(str(R.string.garage_photoRemoveConfirmButton)).performClick()
+        assertEquals("vehicleImages/u/v1/a.jpg", removed)
     }
 
     @Test

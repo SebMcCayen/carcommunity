@@ -6,16 +6,26 @@
 import { describe, expect, it } from 'vitest';
 import {
   LEGACY_VEHICLE_POWERTRAINS,
+  MAX_VEHICLE_PHOTOS,
   SELECTABLE_VEHICLE_POWERTRAINS,
   VEHICLE_POWERTRAINS,
+  appendPhotoPath,
   buildVehicleDocument,
   buildVehicleUpdate,
+  coverPhotoPath,
+  isPhotoPermutation,
   isValidVehicleImagePath,
   maxModelYear,
   parseAddVehicleInput,
+  parseAddVehiclePhotoInput,
   parseDeleteVehicleInput,
+  parseReorderVehiclePhotosInput,
+  parseRemoveVehiclePhotoInput,
   parseSetMainVehicleInput,
   parseUpdateVehicleInput,
+  readExistingPhotoPaths,
+  reconcileCoverPhotoPaths,
+  removePhotoPath,
   vehicleImagePrefix,
 } from '../garage/garage-core';
 
@@ -176,6 +186,8 @@ describe('garage-core document builders', () => {
     expect(docData.engineDescription).toBeNull();
     expect(docData.color).toBeNull();
     expect(docData.imagePath).toBeNull();
+    // New vehicles start with an empty gallery.
+    expect(docData.photoPaths).toEqual([]);
     // New vehicles are never the main car until the owner marks one.
     expect(docData.isMainCar).toBe(false);
     expect(docData.createdAt).toBe('SERVER_TS');
@@ -196,5 +208,114 @@ describe('garage-core document builders', () => {
     const empty = parseUpdateVehicleInput({ vehicleId: 'v1' }, NOW);
     if (!empty.ok) throw new Error('expected ok');
     expect(buildVehicleUpdate(empty.input, serverTimestamp).changedFields).toHaveLength(0);
+  });
+});
+
+const PREFIX = 'vehicleImages/u1/v1/';
+const p = (id: string) => `${PREFIX}${id}`;
+
+describe('garage-core multi-photo input parsing', () => {
+  it('parses addVehiclePhoto / removeVehiclePhoto and rejects malformed input', () => {
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: p('a.jpg') }).ok).toBe(true);
+    expect(parseRemoveVehiclePhotoInput({ vehicleId: 'v1', photoPath: p('a.jpg') }).ok).toBe(true);
+    // Missing/blank photoPath, a foreign extra field, and a bad vehicleId are rejected.
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'v1' }).ok).toBe(false);
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: '' }).ok).toBe(false);
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: p('a.jpg'), x: 1 }).ok).toBe(
+      false,
+    );
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'vehicles/other', photoPath: p('a.jpg') }).ok).toBe(
+      false,
+    );
+    // Prefix validity is NOT enforced here (needs uid+vehicleId at the callable):
+    // a well-formed but foreign-looking string still parses.
+    expect(parseAddVehiclePhotoInput({ vehicleId: 'v1', photoPath: 'anything' }).ok).toBe(true);
+  });
+
+  it('parses reorderVehiclePhotos and bounds the array', () => {
+    expect(
+      parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [p('a.jpg'), p('b.jpg')] }).ok,
+    ).toBe(true);
+    // Empty array, over-cap array, and non-string entries are rejected.
+    expect(parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [] }).ok).toBe(false);
+    expect(
+      parseReorderVehiclePhotosInput({
+        vehicleId: 'v1',
+        orderedPaths: Array.from({ length: MAX_VEHICLE_PHOTOS + 1 }, (_, i) => p(`${i}.jpg`)),
+      }).ok,
+    ).toBe(false);
+    expect(parseReorderVehiclePhotosInput({ vehicleId: 'v1', orderedPaths: [1] }).ok).toBe(false);
+  });
+});
+
+describe('garage-core photo gallery logic', () => {
+  it('reads a legacy single-photo doc as a one-element gallery', () => {
+    expect(readExistingPhotoPaths({ imagePath: p('a.jpg') })).toEqual([p('a.jpg')]);
+    expect(readExistingPhotoPaths({ imagePath: null })).toEqual([]);
+    expect(readExistingPhotoPaths({})).toEqual([]);
+  });
+
+  it('reads a photoPaths array verbatim, dropping blanks/non-strings', () => {
+    expect(readExistingPhotoPaths({ photoPaths: [p('a.jpg'), p('b.jpg')] })).toEqual([
+      p('a.jpg'),
+      p('b.jpg'),
+    ]);
+    // A present (even empty) array wins over the legacy imagePath fallback.
+    expect(readExistingPhotoPaths({ photoPaths: [], imagePath: p('a.jpg') })).toEqual([]);
+    expect(readExistingPhotoPaths({ photoPaths: ['', 3, p('a.jpg')] })).toEqual([p('a.jpg')]);
+  });
+
+  it('appends a photo, rejecting duplicates and enforcing the cap', () => {
+    expect(appendPhotoPath([], p('a.jpg'))).toEqual({ ok: true, paths: [p('a.jpg')] });
+    expect(appendPhotoPath([p('a.jpg')], p('a.jpg'))).toEqual({ ok: false, error: 'duplicate' });
+
+    const full = Array.from({ length: MAX_VEHICLE_PHOTOS }, (_, i) => p(`${i}.jpg`));
+    expect(appendPhotoPath(full, p('extra.jpg'))).toEqual({ ok: false, error: 'cap' });
+    // One below the cap still appends.
+    expect(appendPhotoPath(full.slice(0, -1), p('extra.jpg')).ok).toBe(true);
+  });
+
+  it('removes a photo and promotes the next to cover', () => {
+    // Removing the cover (index 0) promotes b.jpg to the new cover.
+    const removedCover = removePhotoPath([p('a.jpg'), p('b.jpg'), p('c.jpg')], p('a.jpg'));
+    expect(removedCover.found).toBe(true);
+    expect(removedCover.paths).toEqual([p('b.jpg'), p('c.jpg')]);
+    expect(coverPhotoPath(removedCover.paths)).toBe(p('b.jpg'));
+
+    // Removing a non-cover keeps the cover, preserves order.
+    expect(removePhotoPath([p('a.jpg'), p('b.jpg')], p('b.jpg')).paths).toEqual([p('a.jpg')]);
+    // Removing the last photo empties the gallery (cover null).
+    expect(coverPhotoPath(removePhotoPath([p('a.jpg')], p('a.jpg')).paths)).toBeNull();
+    // A path not on the vehicle is reported as not found.
+    expect(removePhotoPath([p('a.jpg')], p('z.jpg')).found).toBe(false);
+  });
+
+  it('validates a reorder as a permutation of the existing set', () => {
+    const existing = [p('a.jpg'), p('b.jpg'), p('c.jpg')];
+    expect(isPhotoPermutation(existing, [p('c.jpg'), p('a.jpg'), p('b.jpg')])).toBe(true);
+    // Wrong count, missing member, or an extra member all fail.
+    expect(isPhotoPermutation(existing, [p('a.jpg'), p('b.jpg')])).toBe(false);
+    expect(isPhotoPermutation(existing, [p('a.jpg'), p('b.jpg'), p('z.jpg')])).toBe(false);
+    expect(isPhotoPermutation(existing, [...existing, p('a.jpg')])).toBe(false);
+    // A duplicate that pretends to be a reorder is rejected (multiset compare).
+    expect(isPhotoPermutation([p('a.jpg'), p('b.jpg')], [p('a.jpg'), p('a.jpg')])).toBe(false);
+  });
+
+  it('reconciles the cover mirror set through updateVehicle imagePath', () => {
+    // Null clears the whole gallery.
+    expect(reconcileCoverPhotoPaths([p('a.jpg'), p('b.jpg')], null)).toEqual([]);
+    // A cover already present is promoted to the front (reorder).
+    expect(reconcileCoverPhotoPaths([p('a.jpg'), p('b.jpg'), p('c.jpg')], p('c.jpg'))).toEqual([
+      p('c.jpg'),
+      p('a.jpg'),
+      p('b.jpg'),
+    ]);
+    // A brand-new cover replaces the old cover, preserving the rest.
+    expect(reconcileCoverPhotoPaths([p('a.jpg'), p('b.jpg')], p('new.jpg'))).toEqual([
+      p('new.jpg'),
+      p('b.jpg'),
+    ]);
+    // First photo on an empty gallery.
+    expect(reconcileCoverPhotoPaths([], p('a.jpg'))).toEqual([p('a.jpg')]);
   });
 });

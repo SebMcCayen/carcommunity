@@ -3,28 +3,28 @@ package com.kungsbackacarcommunity.app.garage
 /**
  * Pure, JVM-testable helpers for the car-detail photo gallery.
  *
- * The gallery UI ([VehicleDetailScreen]) is written to render N photos, but the
- * backend today stores only ONE (vehicles/{id}.imagePath — a single nullable
- * Storage path; see contracts/schemas/garage.schema.json). [photoPaths]
- * therefore yields at most one entry now, and is the single seam that changes
- * the day the model gains a multi-photo array field: point it at that array and
- * the pager, thumbnails and counter all follow with no further UI change.
+ * The gallery renders N photos off [Vehicle.photoPaths] (cover first). Legacy
+ * documents that predate that array carry only [Vehicle.imagePath]; [photoPaths]
+ * falls back to `listOfNotNull(imagePath)` for them, so a single-photo car still
+ * shows its photo. The cover is always the first entry.
  *
  * Keeping the derivation here (not inline in the composable) makes the
  * empty/blank/single/N handling unit-testable without a device — the gallery
  * index clamping in particular is easy to get subtly wrong when the photo list
- * shrinks (e.g. a future remove-photo) underneath a remembered pager position.
+ * shrinks (a remove-photo) underneath a remembered pager position.
  */
 object VehicleGallery {
     /**
-     * The vehicle's photo Storage paths, in display order, blanks dropped.
-     *
-     * Today this is `listOfNotNull(imagePath)` because the data model holds a
-     * single photo; it is deliberately shaped to return N so the gallery is
-     * already correct once a photoPaths array exists on the wire.
+     * The vehicle's photo Storage paths, in display order (cover first), blanks
+     * dropped. Uses [Vehicle.photoPaths] when present; for a legacy document
+     * that only has [Vehicle.imagePath] it falls back to that single photo.
      */
-    fun photoPaths(vehicle: Vehicle): List<String> =
-        listOfNotNull(vehicle.imagePath?.takeIf { it.isNotBlank() })
+    fun photoPaths(vehicle: Vehicle): List<String> {
+        val explicit = vehicle.photoPaths.filter { it.isNotBlank() }
+        return explicit.ifEmpty {
+            listOfNotNull(vehicle.imagePath?.takeIf { it.isNotBlank() })
+        }
+    }
 
     /**
      * A safe current-photo index for a gallery of [count] photos.
@@ -38,4 +38,18 @@ object VehicleGallery {
 
     /** True when the gallery should show its thumbnail strip + "x / n" counter. */
     fun hasMultiple(count: Int): Boolean = count > 1
+
+    /** True when [path] is already the cover (first) photo of [paths]. */
+    fun isCover(paths: List<String>, path: String): Boolean = paths.firstOrNull() == path
+
+    /**
+     * The order to send to garage.reorderVehiclePhotos to make [path] the cover:
+     * [path] first, every other photo kept in its current relative order. Always
+     * a permutation of [paths] (the callable rejects anything else). Returns
+     * [paths] unchanged when [path] is not part of the gallery.
+     */
+    fun moveToCover(paths: List<String>, path: String): List<String> {
+        if (!paths.contains(path)) return paths
+        return listOf(path) + paths.filter { it != path }
+    }
 }

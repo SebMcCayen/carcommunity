@@ -1,9 +1,20 @@
 /**
  * garage.addVehicle / garage.updateVehicle / garage.setMainVehicle /
- * garage.deleteVehicle — garage callables (contracts/functions/functions.json).
+ * garage.deleteVehicle / garage.addVehiclePhoto / garage.removeVehiclePhoto /
+ * garage.reorderVehiclePhotos — garage callables
+ * (contracts/functions/functions.json).
  *
  * Deployed via the `garage` export group as `garage-addVehicle`,
- * `garage-updateVehicle`, `garage-setMainVehicle`, and `garage-deleteVehicle`.
+ * `garage-updateVehicle`, `garage-setMainVehicle`, `garage-deleteVehicle`,
+ * `garage-addVehiclePhoto`, `garage-removeVehiclePhoto`, and
+ * `garage-reorderVehiclePhotos`.
+ *
+ * Multi-photo model: `photoPaths` is the ordered source of truth; the cover is
+ * photoPaths[0], and `imagePath` is kept as a denormalised mirror of the cover
+ * for backward compatibility (shipped clients + the profile card read
+ * imagePath). Every photo-mutating callable maintains both fields together so
+ * `imagePath === photoPaths[0]` (or both empty/null). Legacy vehicles created
+ * before photoPaths are read as `[imagePath]` (readExistingPhotoPaths).
  *
  * All four require a signed-in, non-suspended, non-deleted caller acting on
  * their OWN cars (requireActiveActor). Managing your own garage is NOT
@@ -27,13 +38,23 @@ import { requireActiveActor } from '../shared/memberActor';
 import { tryAutomaticAward } from '../badges/awards';
 import {
   MAX_VEHICLES_PER_USER,
+  MAX_VEHICLE_PHOTOS,
+  appendPhotoPath,
   buildVehicleDocument,
   buildVehicleUpdate,
+  coverPhotoPath,
+  isPhotoPermutation,
   isValidVehicleImagePath,
   parseAddVehicleInput,
+  parseAddVehiclePhotoInput,
   parseDeleteVehicleInput,
+  parseRemoveVehiclePhotoInput,
+  parseReorderVehiclePhotosInput,
   parseSetMainVehicleInput,
   parseUpdateVehicleInput,
+  readExistingPhotoPaths,
+  reconcileCoverPhotoPaths,
+  removePhotoPath,
   vehicleImagePrefix,
 } from './garage-core';
 
@@ -119,6 +140,15 @@ export const updateVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
     if (changedFields.length === 0) {
       throw new HttpsError('invalid-argument', 'No vehicle fields to update.');
     }
+    // The single-photo `imagePath` path (edit-form "change photo" + shipped
+    // clients) must keep the photoPaths gallery coherent with the cover mirror.
+    // Reconcile from the current stored gallery so imagePath === photoPaths[0].
+    if (changedFields.includes('imagePath')) {
+      const existing = readExistingPhotoPaths(snap.data() ?? {});
+      const reconciled = reconcileCoverPhotoPaths(existing, input.imagePath ?? null);
+      update.photoPaths = reconciled;
+      update.imagePath = coverPhotoPath(reconciled);
+    }
     tx.update(vehicleRef, update);
   });
 
@@ -195,3 +225,160 @@ export const deleteVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
 
   return { vehicleId };
 });
+
+/**
+ * garage.addVehiclePhoto — appends one already-uploaded photo path to an owned
+ * vehicle's gallery. The photo bytes are uploaded to
+ * vehicleImages/{uid}/{vehicleId}/{imageId} directly by the client (storage
+ * rules gate the write); this callable RECORDS the path after enforcing the
+ * per-vehicle cap and the own-prefix validation exactly like updateVehicle's
+ * imagePath. When it is the first photo, it also becomes the cover (imagePath).
+ */
+export const addVehiclePhoto = onCall(CALLABLE_OPTS, async (request): Promise<VehicleIdResponse> => {
+  const actor = await requireActiveActor(request);
+
+  const parsed = parseAddVehiclePhotoInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { vehicleId, photoPath } = parsed.input;
+
+  if (!isValidVehicleImagePath(photoPath, actor.uid, vehicleId)) {
+    throw new HttpsError(
+      'invalid-argument',
+      'photoPath must lie under your own vehicleImages prefix for this vehicle.',
+    );
+  }
+
+  const vehicleRef = db.collection('vehicles').doc(vehicleId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(vehicleRef);
+    if (!snap.exists || snap.data()?.userId !== actor.uid) {
+      throw new HttpsError('not-found', 'Vehicle not found.');
+    }
+    const existing = readExistingPhotoPaths(snap.data() ?? {});
+    const result = appendPhotoPath(existing, photoPath);
+    if (!result.ok) {
+      if (result.error === 'cap') {
+        throw new HttpsError(
+          'failed-precondition',
+          `A vehicle can have at most ${MAX_VEHICLE_PHOTOS} photos.`,
+        );
+      }
+      throw new HttpsError('already-exists', 'That photo is already on this vehicle.');
+    }
+    // imagePath mirrors the cover (photoPaths[0]); appending never changes the
+    // existing cover, and sets it when this is the first photo.
+    tx.update(vehicleRef, {
+      photoPaths: result.paths,
+      imagePath: coverPhotoPath(result.paths),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { vehicleId };
+});
+
+/**
+ * garage.removeVehiclePhoto — removes one photo path from an owned vehicle's
+ * gallery and deletes its Storage object. Removing the cover promotes the next
+ * remaining photo to cover automatically (photoPaths order is preserved).
+ */
+export const removeVehiclePhoto = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<VehicleIdResponse> => {
+    const actor = await requireActiveActor(request);
+
+    const parsed = parseRemoveVehiclePhotoInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { vehicleId, photoPath } = parsed.input;
+
+    if (!isValidVehicleImagePath(photoPath, actor.uid, vehicleId)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'photoPath must lie under your own vehicleImages prefix for this vehicle.',
+      );
+    }
+
+    const vehicleRef = db.collection('vehicles').doc(vehicleId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(vehicleRef);
+      if (!snap.exists || snap.data()?.userId !== actor.uid) {
+        throw new HttpsError('not-found', 'Vehicle not found.');
+      }
+      const existing = readExistingPhotoPaths(snap.data() ?? {});
+      const { found, paths } = removePhotoPath(existing, photoPath);
+      if (!found) {
+        throw new HttpsError('not-found', 'Photo not found on this vehicle.');
+      }
+      tx.update(vehicleRef, {
+        photoPaths: paths,
+        imagePath: coverPhotoPath(paths),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    // Document first (source of truth): if this best-effort object delete fails
+    // the gallery is already correct and the orphan is cleaned when the whole
+    // vehicleImages/{uid}/{vehicleId}/ prefix is removed by deleteVehicle.
+    await adminStorage
+      .bucket()
+      .file(photoPath)
+      .delete({ ignoreNotFound: true })
+      .catch(() => undefined);
+
+    return { vehicleId };
+  },
+);
+
+/**
+ * garage.reorderVehiclePhotos — sets the full display order of an owned
+ * vehicle's photos. orderedPaths must be a permutation of the vehicle's current
+ * photo set (same members, same count); its first entry becomes the cover
+ * (mirrored into imagePath).
+ */
+export const reorderVehiclePhotos = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<VehicleIdResponse> => {
+    const actor = await requireActiveActor(request);
+
+    const parsed = parseReorderVehiclePhotosInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { vehicleId, orderedPaths } = parsed.input;
+
+    for (const path of orderedPaths) {
+      if (!isValidVehicleImagePath(path, actor.uid, vehicleId)) {
+        throw new HttpsError(
+          'invalid-argument',
+          'Every path must lie under your own vehicleImages prefix for this vehicle.',
+        );
+      }
+    }
+
+    const vehicleRef = db.collection('vehicles').doc(vehicleId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(vehicleRef);
+      if (!snap.exists || snap.data()?.userId !== actor.uid) {
+        throw new HttpsError('not-found', 'Vehicle not found.');
+      }
+      const existing = readExistingPhotoPaths(snap.data() ?? {});
+      if (!isPhotoPermutation(existing, orderedPaths)) {
+        throw new HttpsError(
+          'invalid-argument',
+          'orderedPaths must be a reordering of the vehicle\'s existing photos.',
+        );
+      }
+      tx.update(vehicleRef, {
+        photoPaths: orderedPaths,
+        imagePath: coverPhotoPath(orderedPaths),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    return { vehicleId };
+  },
+);

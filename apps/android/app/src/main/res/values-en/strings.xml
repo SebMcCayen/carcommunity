@@ -668,7 +668,12 @@
     <string name="garage_photoCounter">%1$d / %2$d</string>
     <string name="garage_photoThumbnail">Show photo %1$d</string>
     <string name="garage_photoAddMore">Add more photos</string>
-    <string name="garage_photoAddMoreUnavailable">You can add one photo per car for now. A full photo gallery is on the way.</string>
+    <string name="garage_photoAddMoreUnavailable">You’ve reached the photo limit for this car.</string>
+    <string name="garage_photoSetCover">Set as cover photo</string>
+    <string name="garage_photoCoverBadge">Cover</string>
+    <string name="garage_photoRemove">Remove photo</string>
+    <string name="garage_photoRemoveConfirm">Remove this photo from your car?</string>
+    <string name="garage_photoRemoveConfirmButton">Remove</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_loading">Loading awards...</string>
     <string name="badges_error">Could not load awards. Please try again.</string>

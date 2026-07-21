@@ -31,7 +31,15 @@ import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
-import { addVehicle, deleteVehicle, setMainVehicle, updateVehicle } from './garage/manageVehicle';
+import {
+  addVehicle,
+  addVehiclePhoto,
+  deleteVehicle,
+  removeVehiclePhoto,
+  reorderVehiclePhotos,
+  setMainVehicle,
+  updateVehicle,
+} from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
 import { adminAdjust, adminReverse } from './points/adminPoints';
@@ -238,18 +246,24 @@ export const blocking = {
 
 /**
  * Garage domain (grouped export → deployed as `garage-addVehicle`,
- * `garage-updateVehicle`, `garage-setMainVehicle`, `garage-deleteVehicle`).
+ * `garage-updateVehicle`, `garage-setMainVehicle`, `garage-deleteVehicle`,
+ * `garage-addVehiclePhoto`, `garage-removeVehiclePhoto`,
+ * `garage-reorderVehiclePhotos`).
  *
- * Member-only vehicle management (contracts/functions/functions.json:
- * garage.addVehicle/updateVehicle/setMainVehicle/deleteVehicle). Vehicles are
- * authenticated-readable; all writes go through these callables (per-user
- * cap, strict no-plate/no-VIN schemas, storage cleanup on delete).
+ * Vehicle management + multi-photo gallery (contracts/functions/functions.json:
+ * garage.addVehicle/updateVehicle/setMainVehicle/deleteVehicle/addVehiclePhoto/
+ * removeVehiclePhoto/reorderVehiclePhotos). Vehicles are authenticated-readable;
+ * all writes go through these callables (per-user cap, strict no-plate/no-VIN
+ * schemas, per-vehicle photo cap + own-prefix validation, storage cleanup).
  */
 export const garage = {
   addVehicle,
   updateVehicle,
   setMainVehicle,
   deleteVehicle,
+  addVehiclePhoto,
+  removeVehiclePhoto,
+  reorderVehiclePhotos,
 };
 
 /**

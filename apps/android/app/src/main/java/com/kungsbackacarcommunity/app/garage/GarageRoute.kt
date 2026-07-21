@@ -114,6 +114,34 @@ fun GarageRoute(
         photoCoordinator?.reset()
     }
 
+    // Detail-page "add more photos" pipeline — independent of the form's, so the
+    // two never contend on one coordinator. The vehicle already exists on the
+    // detail page, so an added photo uploads immediately (no pending-photo dance
+    // like the add form): a single coordinator is reused across sequential adds,
+    // reset before each pick. Same crop -> compress -> EXIF/GPS-strip route.
+    val detailPhotoCoordinator =
+        remember(mediaUploader) {
+            mediaUploader?.let { ImageUploadCoordinator(it, MediaUpload.VEHICLE_IMAGE_MAX_BYTES) }
+        }
+    val detailPhotoStatus by
+        (detailPhotoCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
+            .collectAsState(initial = ImageUploadStatus.Idle)
+    // The pick being cropped for the detail gallery, and its display-only decode
+    // (same inert/raw handling as the form's cropCandidate/cropPreview).
+    var detailCropCandidate by remember { mutableStateOf<PickedImage?>(null) }
+    var detailCropPreview by remember { mutableStateOf<Bitmap?>(null) }
+    val cancelDetailCrop = {
+        detailCropCandidate = null
+        detailCropPreview = null
+    }
+    // Drop any in-progress detail crop + upload status when the open car changes
+    // (or the detail closes), so a pick abandoned on one car can never surface a
+    // stale (recycled) bitmap on the next, and the "Uploading…" state resets.
+    LaunchedEffect(detailVehicleId) {
+        cancelDetailCrop()
+        detailPhotoCoordinator?.reset()
+    }
+
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(VehicleSaveStatus.Idle))
             .collectAsState(initial = VehicleSaveStatus.Idle)
@@ -148,6 +176,9 @@ fun GarageRoute(
                 coordinator?.reset()
                 resetPhoto()
             }
+            // Cropping a detail-page "add more photos" pick: Back cancels the
+            // crop and returns to the detail page, not all the way to the list.
+            detailCropPreview != null -> cancelDetailCrop()
             else -> detailVehicleId = null
         }
     }
@@ -344,56 +375,161 @@ fun GarageRoute(
         }
         }
     } else if (detailVehicle != null) {
-        VehicleDetailScreen(
-            vehicle = detailVehicle,
-            onEdit = {
-                // Opens the SAME add/edit form on top of the detail page; because
-                // detailVehicleId is left set, closing the form (save or cancel)
-                // lands the user back on this car's detail page.
-                editingVehicleId = detailVehicle.id
-                coordinator?.reset()
-                pendingPhoto = null
-                photoSession++
-                showForm = true
-            },
-            onDelete = {
-                // Return to the list immediately; the delete runs in the
-                // background and the list observer reflects the result. Leaving
-                // the detail open would show a car that is being removed.
-                val id = detailVehicle.id
-                detailVehicleId = null
-                coordinator?.let { c ->
-                    scope.launch {
-                        try {
-                            c.delete(id)
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation // never swallow coroutine cancellation
-                        } catch (failure: Exception) {
-                            // Fire-and-forget: the list observer reflects the result.
+        // THE one route from a detail-page "add more photos" pick to Storage:
+        // pick -> crop -> compressForPublicUpload (crop + downscale + EXIF/GPS
+        // strip, from #407/#479) -> putBytes -> garage-addVehiclePhoto records
+        // the path. Never a raw upload — same guarantee as the single-photo edit.
+        val detailSanitizeAndUpload: suspend (PickedImage, NormalizedCropRect) -> Unit =
+            { picked, crop ->
+                if (detailPhotoCoordinator != null) {
+                    val sanitized =
+                        ImageCompressor.compressForPublicUpload(
+                            picked,
+                            maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                            crop = crop,
+                        )
+                    if (sanitized != null) {
+                        val imageId = MediaUpload.newImageId(sanitized.contentType)
+                        val path = MediaUpload.vehicleImagePath(uid, detailVehicle.id, imageId)
+                        detailPhotoCoordinator.upload(sanitized, path) { storedPath ->
+                            repository.addVehiclePhoto(detailVehicle.id, storedPath)
                         }
+                    } else {
+                        // Sanitisation failed → nothing uploaded; surface it.
+                        detailPhotoCoordinator.markFailed()
                     }
                 }
-            },
-            onSetMain = { isMain ->
-                val id = detailVehicle.id
-                coordinator?.let { c ->
-                    scope.launch {
-                        try {
-                            c.setMain(id, isMain)
-                        } catch (cancellation: CancellationException) {
-                            throw cancellation // never swallow coroutine cancellation
-                        } catch (failure: Exception) {
-                            // Fire-and-forget: the list observer reflects the result.
-                        }
+            }
+
+        val detailPhotoPicker =
+            rememberImagePickLauncher(
+                maxBytes = MediaUpload.VEHICLE_IMAGE_READ_MAX_BYTES,
+            ) { picked ->
+                if (picked != null && detailPhotoCoordinator != null) {
+                    val preview =
+                        ImageCompressor.decodeForCrop(
+                            picked,
+                            maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                        )
+                    if (preview != null) {
+                        detailCropCandidate = picked
+                        detailCropPreview = preview
+                    } else {
+                        detailPhotoCoordinator.markFailed()
                     }
                 }
-            },
-            // onAddPhoto stays null: the data model stores a single photo today,
-            // so the detail page shows the "add more photos" affordance disabled
-            // with an explanation. Changing the single photo lives on the Edit
-            // form, which already routes through the crop/compress/EXIF-strip
-            // coordinator. See the PR body for the multi-photo backend contract.
-        )
+            }
+
+        val detailCropping = detailCropPreview
+        val detailCandidate = detailCropCandidate
+        if (detailCropping != null && detailCandidate != null) {
+            // Release the preview's pixels once it can no longer be drawn (same
+            // onDispose rationale as the form crop).
+            DisposableEffect(detailCropping) {
+                onDispose { detailCropping.recycle() }
+            }
+            // The crop step REPLACES the detail page while open; Back cancels it
+            // (handled in the BackHandler) and returns here.
+            VehiclePhotoCropScreen(
+                bitmap = detailCropping,
+                onConfirm = { crop ->
+                    cancelDetailCrop()
+                    scope.launch { detailSanitizeAndUpload(detailCandidate, crop) }
+                },
+                onCancel = cancelDetailCrop,
+            )
+        } else {
+            VehicleDetailScreen(
+                vehicle = detailVehicle,
+                onEdit = {
+                    // Opens the SAME add/edit form on top of the detail page; because
+                    // detailVehicleId is left set, closing the form (save or cancel)
+                    // lands the user back on this car's detail page.
+                    editingVehicleId = detailVehicle.id
+                    coordinator?.reset()
+                    pendingPhoto = null
+                    photoSession++
+                    showForm = true
+                },
+                onDelete = {
+                    // Return to the list immediately; the delete runs in the
+                    // background and the list observer reflects the result. Leaving
+                    // the detail open would show a car that is being removed.
+                    val id = detailVehicle.id
+                    detailVehicleId = null
+                    coordinator?.let { c ->
+                        scope.launch {
+                            try {
+                                c.delete(id)
+                            } catch (cancellation: CancellationException) {
+                                throw cancellation // never swallow coroutine cancellation
+                            } catch (failure: Exception) {
+                                // Fire-and-forget: the list observer reflects the result.
+                            }
+                        }
+                    }
+                },
+                onSetMain = { isMain ->
+                    val id = detailVehicle.id
+                    coordinator?.let { c ->
+                        scope.launch {
+                            try {
+                                c.setMain(id, isMain)
+                            } catch (cancellation: CancellationException) {
+                                throw cancellation // never swallow coroutine cancellation
+                            } catch (failure: Exception) {
+                                // Fire-and-forget: the list observer reflects the result.
+                            }
+                        }
+                    }
+                },
+                // Add more photos through the crop/compress/EXIF-strip pipeline
+                // above. Null (button hidden) when there is no uploader.
+                onAddPhoto =
+                    if (detailPhotoCoordinator != null) {
+                        {
+                            detailPhotoCoordinator.reset()
+                            detailPhotoPicker.pickImage()
+                        }
+                    } else {
+                        null
+                    },
+                onSetCover = { path ->
+                    // Reorder the current gallery so the chosen photo is first
+                    // (cover). moveToCover yields a permutation, which the
+                    // reorderVehiclePhotos callable requires.
+                    val id = detailVehicle.id
+                    val ordered =
+                        VehicleGallery.moveToCover(VehicleGallery.photoPaths(detailVehicle), path)
+                    coordinator?.let { c ->
+                        scope.launch {
+                            try {
+                                c.reorderPhotos(id, ordered)
+                            } catch (cancellation: CancellationException) {
+                                throw cancellation // never swallow coroutine cancellation
+                            } catch (failure: Exception) {
+                                // Fire-and-forget: the list observer reflects the result.
+                            }
+                        }
+                    }
+                },
+                onRemovePhoto = { path ->
+                    val id = detailVehicle.id
+                    coordinator?.let { c ->
+                        scope.launch {
+                            try {
+                                c.removePhoto(id, path)
+                            } catch (cancellation: CancellationException) {
+                                throw cancellation // never swallow coroutine cancellation
+                            } catch (failure: Exception) {
+                                // Fire-and-forget: the list observer reflects the result.
+                            }
+                        }
+                    }
+                },
+                isUploadingPhoto = detailPhotoStatus == ImageUploadStatus.Uploading,
+            )
+        }
     } else {
         GarageScreen(
             state = garageState,
