@@ -120,14 +120,15 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  * same way `members[].displayName` already is, so the bar can say who set it
  * without a profile fetch per render.
  *
- * One caveat the backend lane must take seriously: today's convoy read path is
- * *polled* (`convoy-list` re-fetched after each mutation — see
- * [ConvoyCoordinator]), not live. A destination set by another member therefore
- * appears on the next refresh, not instantly. For the destination to feel shared
- * it wants a push: either the existing convoy push-notification path fanned out
- * on set/clear, or promoting the convoy read to a Firestore listener. That is a
- * backend decision; the client here is written against the summary field and
- * works either way, just faster with the push.
+ * One caveat this originally flagged has since been ADDRESSED on the client: the
+ * management `convoy-list` read is still polled (re-fetched after each mutation —
+ * see [ConvoyCoordinator]), but the ACTIVE convoy — the one the bar drives — is
+ * now watched live via a Firestore snapshot listener
+ * ([ConvoyRepository.observeConvoy] / [ConvoyCoordinator.observeActiveConvoy]). A
+ * destination another member sets therefore reaches the bar without a re-fetch,
+ * over the same summary field, once `convoy-setDestination` writes it. A push on
+ * set/clear would still let a BACKGROUNDED app react, but is no longer needed for
+ * a foregrounded member to see the shared destination promptly.
  *
  * ### Does a destination survive `convoy.end`?
  * Yes — it is left on the document, untouched, as a record of where the convoy

@@ -446,6 +446,7 @@
     <string name="convoy_summaryParticipants">Deltagare</string>
     <string name="convoy_summaryDistance">Sträcka</string>
     <string name="convoy_summaryDistanceUnavailable">Ej tillgänglig</string>
+    <string name="convoy_summaryWho">Vilka var med</string>
     <string name="convoy_untitled">Konvoj</string>
     <string name="convoy_unknownMember">Medlem</string>
     <string name="convoy_close">Stäng</string>

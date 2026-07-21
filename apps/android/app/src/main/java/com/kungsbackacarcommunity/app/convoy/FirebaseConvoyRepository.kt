@@ -2,9 +2,15 @@ package com.kungsbackacarcommunity.app.convoy
 
 import android.content.Context
 import com.google.firebase.FirebaseApp
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import java.time.Instant
 import kotlin.coroutines.resume
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
@@ -19,7 +25,50 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  */
 class FirebaseConvoyRepository private constructor(
     private val functions: FirebaseFunctions,
+    private val firestore: FirebaseFirestore,
 ) : ConvoyRepository {
+
+    /**
+     * Live single-convoy read. Attaches a Firestore snapshot listener to
+     * `convoys/{convoyId}` (the firestore.rules already permit any member in
+     * `memberUids` to read it) and maps each raw document to [ConvoySummary] via
+     * the Firebase-free [ConvoyDocument.toSummary], injecting the
+     * `Timestamp`→ISO conversion.
+     *
+     * The listener's lifetime IS the collection's: `addSnapshotListener` on
+     * attach, `registration.remove()` in [awaitClose] when collection stops — so a
+     * leaked listener is impossible as long as the collecting scope is bounded
+     * (it is: the coordinator collects inside a `collectLatest` keyed on the
+     * active convoy, and the whole collection runs in a screen-scoped
+     * `LaunchedEffect`). Mirrors [FirebaseGroupDriveRepository.observeParticipants]
+     * and the live-location value listeners.
+     *
+     * On an error (read denied after leaving, or a transient failure) it emits
+     * null rather than closing the flow, so a later successful read self-corrects
+     * and the merge simply keeps the previous value until then.
+     */
+    override fun observeConvoy(convoyId: String, callerUid: String?): Flow<ConvoySummary?> =
+        callbackFlow {
+            val registration =
+                firestore
+                    .collection(CONVOYS)
+                    .document(convoyId)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            trySend(null)
+                            return@addSnapshotListener
+                        }
+                        trySend(
+                            ConvoyDocument.toSummary(
+                                convoyId = convoyId,
+                                data = snapshot?.data,
+                                callerUid = callerUid,
+                                toIso = ::timestampToIso,
+                            ),
+                        )
+                    }
+            awaitClose { registration.remove() }
+        }
 
     override suspend fun list(): ConvoyListResult =
         callForData(LIST, emptyMap()).fold(
@@ -67,6 +116,7 @@ class FirebaseConvoyRepository private constructor(
 
     companion object {
         private const val REGION = "europe-west1"
+        private const val CONVOYS = "convoys"
         private const val LIST = "convoy-list"
         private const val CREATE = "convoy-create"
         private const val RESPOND = "convoy-respond"
@@ -75,10 +125,29 @@ class FirebaseConvoyRepository private constructor(
 
         fun createIfAvailable(context: Context): ConvoyRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseConvoyRepository(FirebaseFunctions.getInstance(REGION))
+            return FirebaseConvoyRepository(
+                FirebaseFunctions.getInstance(REGION),
+                FirebaseFirestore.getInstance(),
+            )
         }
     }
 }
+
+/**
+ * Converts a stored convoy timestamp to an ISO-8601 string for [ConvoySummary],
+ * matching the callable path's already-ISO strings so the two convoy read paths
+ * produce structurally identical summaries (which lets the coordinator dedupe an
+ * unchanged live update against the polled value). A Firebase `Timestamp` is
+ * rendered via [Instant]; an already-ISO string passes through; anything else is
+ * null. These fields are display-best-effort — the summary's authoritative
+ * duration is the precomputed `durationSeconds`, never parsed back from these.
+ */
+private fun timestampToIso(value: Any?): String? =
+    when (value) {
+        is Timestamp -> Instant.ofEpochMilli(value.toDate().time).toString()
+        is String -> value.takeIf { it.isNotBlank() }
+        else -> null
+    }
 
 /**
  * Invokes a convoy callable and unwraps its `Map` payload. Shared by

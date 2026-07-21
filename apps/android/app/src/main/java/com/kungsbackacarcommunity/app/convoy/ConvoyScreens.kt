@@ -472,7 +472,7 @@ fun ConvoyDetailScreen(
         }
 
         if (convoy.status == ConvoyStatus.Ended) {
-            convoy.summary?.let { SummaryCard(it) }
+            ConvoyRecap.stateFor(convoy)?.let { ConvoyRecapCard(it) }
         }
 
         SectionHeader(stringResource(R.string.convoy_membersTitle))
@@ -506,8 +506,15 @@ fun ConvoyDetailScreen(
     }
 }
 
+/**
+ * The ended-convoy recap shown to ALL members: how long it ran, how far (when the
+ * backend populated it — otherwise an honest "not available", never a fake 0 km),
+ * how many were in it, and — the part a bare summary lacked — WHO came along, with
+ * their faces and names from the roster. Driven by the pure [ConvoyRecapState] so
+ * the present/partial/absent-field logic stays testable off the Composable.
+ */
 @Composable
-private fun SummaryCard(summary: ConvoySummaryStats) {
+private fun ConvoyRecapCard(recap: ConvoyRecapState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -520,18 +527,44 @@ private fun SummaryCard(summary: ConvoySummaryStats) {
             )
             SummaryStatRow(
                 label = stringResource(R.string.convoy_summaryDuration),
-                value = ConvoyFormat.duration(summary.durationSeconds),
+                value = ConvoyFormat.duration(recap.durationSeconds),
             )
             SummaryStatRow(
                 label = stringResource(R.string.convoy_summaryParticipants),
-                value = summary.participantCount.toString(),
+                value = recap.participantCount.toString(),
             )
             SummaryStatRow(
                 label = stringResource(R.string.convoy_summaryDistance),
                 value =
-                    summary.distanceMeters?.let { ConvoyFormat.distance(it) }
+                    recap.distanceMeters?.let { ConvoyFormat.distance(it) }
                         ?: stringResource(R.string.convoy_summaryDistanceUnavailable),
             )
+            // The roster of who was actually in it. Only when we can name at least
+            // one — an empty list (uids not populated) leaves the count row to tell
+            // the honest total rather than showing an empty "who" header.
+            if (recap.participants.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.convoy_summaryWho))
+                recap.participants.forEach { participant ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    ) {
+                        MemberAvatar(
+                            avatarPath = participant.avatarPath,
+                            size = KccSpacing.s8,
+                            accepted = false,
+                        )
+                        Text(
+                            text =
+                                participant.displayName
+                                    ?: stringResource(R.string.convoy_unknownMember),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -446,6 +446,7 @@
     <string name="convoy_summaryParticipants">Participants</string>
     <string name="convoy_summaryDistance">Distance</string>
     <string name="convoy_summaryDistanceUnavailable">Not available</string>
+    <string name="convoy_summaryWho">Who came along</string>
     <string name="convoy_untitled">Convoy</string>
     <string name="convoy_unknownMember">Member</string>
     <string name="convoy_close">Close</string>

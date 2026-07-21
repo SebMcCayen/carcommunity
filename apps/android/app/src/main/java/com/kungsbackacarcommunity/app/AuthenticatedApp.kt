@@ -1355,11 +1355,13 @@ fun AuthenticatedApp(
                 // in-flight guard — instead of each fetching its own. A null
                 // repository (config-less build) yields no coordinator and no bar.
                 //
-                // There is no live listener on the convoy tree (the callable set is
-                // re-fetched after each mutation — see ConvoyCoordinator), so this
-                // loads once. Someone joining or leaving elsewhere therefore shows
-                // up on the next refresh rather than instantly; acceptable for a
-                // head-count, and the alternative is a second source of truth.
+                // The caller's convoy SET is loaded once via the callable and
+                // re-fetched after each mutation. On TOP of that, the ONE active
+                // convoy is watched live (observeActiveConvoy below): a shared
+                // destination, or a member joining/leaving, set by someone else
+                // then reaches this bar/map instantly rather than on the next
+                // refresh — the live-position markers were already realtime (RTDB),
+                // this closes the same gap for the convoy document itself.
 
                 // The SHARED-destination repository. Deliberately the "no backend"
                 // one: `convoy-setDestination` / `convoy-clearDestination` are not
@@ -1389,6 +1391,15 @@ fun AuthenticatedApp(
                         }
                     }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
+                // Live-watch the active convoy for as long as this screen exists.
+                // The coroutine suspends inside observeActiveConvoy, so its whole
+                // lifetime (and thus the Firestore listener's) is bounded by this
+                // LaunchedEffect: leaving the composition cancels it and detaches
+                // the listener. The listener re-targets itself when the active
+                // convoy changes and attaches nothing when the caller is in none.
+                LaunchedEffect(convoyBarCoordinator, uid) {
+                    convoyBarCoordinator?.observeActiveConvoy(uid)
+                }
                 val convoyBarStatus: ConvoyListStatus =
                     convoyBarCoordinator?.status?.collectAsState()?.value
                         ?: ConvoyListStatus.Loading
