@@ -73,6 +73,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "live.extendSession",
+      "domain": "live",
+      "description": "Extends the caller's ACTIVE, not-yet-expired live location session ({} input — takes no client-controlled fields) by pushing expiresAt forward to a FRESH capped window (now + LIVE_SESSION_MAX_MS = 6h). This is the server side of the client's pre-expiry 'still sharing? continue?' prompt (shown 15 min before expiry). The new expiry is server-computed and server-clamped to the 6h hard cap, so a client can never obtain a longer window; only expiresAt changes (session id/displayName/mainCar carry forward, so no marker flicker). A session already past expiry (or stopped/expired) is failed-precondition — once expiry passes the extend path is closed and the client stop / 5-minute sweep stands. Free like startSession (sharing your own position needs no subscription); gated by the liveLocation flag. Deployed via grouped export as live-extendSession (functions/src/live/session.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "drives.save",
       "domain": "drives",
       "description": "Saves a completed drive: computes distanceMeters/durationSeconds/averageSpeed server-side from the submitted route points (implausible GPS jumps filtered), writes rides/{rideId}, and returns the canonical member-gated Cloud Storage paths (rideRoutes/{uid}/{rideId}/) for the client route/preview upload. Idempotent per sourceSessionId. No top-speed is ever stored. Deployed via grouped export as drives-save (functions/src/drives/saveDrive.ts).",

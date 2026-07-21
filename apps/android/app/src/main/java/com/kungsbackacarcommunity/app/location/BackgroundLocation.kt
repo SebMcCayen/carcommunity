@@ -34,8 +34,23 @@ object BackgroundLocation {
     /**
      * Publish at least this often even when stationary, so viewers can tell a
      * parked friend from a dead phone and the marker never looks stale.
+     *
+     * The single biggest data/cost saver in live sharing: a parked phone used to
+     * write a heartbeat every 30 s; at 3 min it writes 6× less while parked. A
+     * moving phone is unaffected — movement past [MOVEMENT_THRESHOLD_METERS]
+     * publishes at the ordinary fix cadence regardless of this interval.
+     *
+     * ### Reader-staleness reconciliation (the subtle part)
+     * A viewer that treats an old marker as offline must tolerate a 3-min gap.
+     * The convoy planner's freshness window
+     * ([com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner.STALE_AFTER_MS]) is
+     * kept STRICTLY GREATER than this interval so a parked, still-alive member on
+     * the 3-min heartbeat is never dropped as stale between heartbeats. The
+     * server sweep's own silent-stale window (LATEST_STALE_MINUTES = 15 min) is
+     * far larger, so it is unaffected. If this interval is ever raised, raise
+     * STALE_AFTER_MS to stay above it (a unit test asserts the ordering).
      */
-    const val STATIONARY_HEARTBEAT_MS = 30_000L
+    const val STATIONARY_HEARTBEAT_MS = 3 * 60 * 1000L // 3 minutes
 
     /** How often the service re-checks the clock against the session expiry. */
     const val EXPIRY_TICK_MS = 15_000L

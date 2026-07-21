@@ -411,19 +411,19 @@ private val EDGE_INSET = 36.dp
 /**
  * How often the overlay re-asks the planner purely because time has passed.
  *
- * A QUARTER of [ConvoyArrowPlanner.STALE_AFTER_MS] (so: 30s against the 2-minute
+ * A QUARTER of [ConvoyArrowPlanner.STALE_AFTER_MS] (so: 1 min against the 4-minute
  * staleness window), derived rather than hard-coded so the two cannot drift.
  *
  * The interval sets the worst-case overshoot: a position that crosses the
  * staleness threshold immediately after a tick keeps its arrow until the next
  * one, so a stale member is visible for at most
- * `STALE_AFTER_MS + STALE_TICK_MS` — **2.5 minutes**, against a 2-minute bound.
+ * `STALE_AFTER_MS + STALE_TICK_MS` — **5 minutes**, against a 4-minute bound.
  * That slack is deliberate. Tightening it buys accuracy nobody can perceive (the
- * arrow is already two minutes wrong at the moment it is due to vanish; the
- * argument for removing it does not get materially stronger in the following 30
- * seconds) and costs a wakeup and a full replan every few seconds for the whole
- * time a convoy is on screen. 30s keeps the guarantee honest — the arrow always
- * goes, and goes soon — at four replans a minute, each O(n log n) over at most
+ * arrow is already four minutes wrong at the moment it is due to vanish; the
+ * argument for removing it does not get materially stronger in the following
+ * minute) and costs a wakeup and a full replan every minute for the whole time a
+ * convoy is on screen. One minute keeps the guarantee honest — the arrow always
+ * goes, and goes soon — at one replan a minute, each O(n log n) over at most
  * MAX_CONVOY_INVITEES members of cheap trigonometry.
  */
 internal val STALE_TICK_MS: Long = ConvoyArrowPlanner.STALE_AFTER_MS / 4

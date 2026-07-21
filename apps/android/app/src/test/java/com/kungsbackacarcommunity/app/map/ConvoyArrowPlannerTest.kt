@@ -170,6 +170,34 @@ class ConvoyArrowPlannerTest {
     }
 
     @Test
+    fun `the staleness window stays above the stationary heartbeat so parked members survive`() {
+        // The subtle failure mode: the stationary publish heartbeat is 3 min, so a
+        // parked-but-alive member only republishes every 3 min. If STALE_AFTER_MS
+        // were at or below that, they would be dropped as "stale" in the gap
+        // between heartbeats. It MUST stay strictly greater. Assert the invariant so
+        // the two constants (different packages) cannot drift into a regression.
+        assertTrue(
+            "STALE_AFTER_MS (${ConvoyArrowPlanner.STALE_AFTER_MS}) must exceed the 3-min " +
+                "stationary heartbeat (${com.kungsbackacarcommunity.app.location.BackgroundLocation.STATIONARY_HEARTBEAT_MS})",
+            ConvoyArrowPlanner.STALE_AFTER_MS >
+                com.kungsbackacarcommunity.app.location.BackgroundLocation.STATIONARY_HEARTBEAT_MS,
+        )
+    }
+
+    @Test
+    fun `a member on the 3-minute heartbeat is NOT treated as stale`() {
+        // Exactly one heartbeat old: still live (well inside STALE_AFTER_MS).
+        val justBeat =
+            member(
+                "parked",
+                latitude = cameraLat + 0.5,
+                updatedAtMillis =
+                    now - com.kungsbackacarcommunity.app.location.BackgroundLocation.STATIONARY_HEARTBEAT_MS,
+            )
+        assertEquals(1, planWith(listOf(justBeat)).offScreen.size)
+    }
+
+    @Test
     fun `an undated position is shown rather than assumed stale`() {
         val undated = member("undated", latitude = cameraLat + 0.5, updatedAtMillis = null)
         assertEquals(1, planWith(listOf(undated)).offScreen.size)

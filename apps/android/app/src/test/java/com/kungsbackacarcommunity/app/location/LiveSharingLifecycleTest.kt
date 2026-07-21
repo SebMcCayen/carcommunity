@@ -157,15 +157,42 @@ class LiveSharingLifecycleTest {
     }
 
     @Test
-    fun `an unparseable expiry still cannot share past the four-hour ceiling`() {
+    fun `an unparseable expiry still cannot share past the six-hour ceiling`() {
         val lifecycle = LiveSharingLifecycle()
         val noExpiry = session(expiresAtMillis = null)
         lifecycle.onObservation(true, noExpiry, now)
 
-        assertContinue(lifecycle.onObservation(true, noExpiry, now + 4 * ONE_HOUR))
+        // Well inside the raised ceiling (the old 4h05m limit no longer stops it).
+        assertContinue(lifecycle.onObservation(true, noExpiry, now + 5 * ONE_HOUR))
         assertStopped(
             LiveSharingStopReason.EXPIRED,
             lifecycle.onObservation(true, noExpiry, now + LiveSharingLifecycle.MAX_RUNTIME_MILLIS),
+        )
+    }
+
+    @Test
+    fun `MAX_RUNTIME_MILLIS is the 6h cap plus slack`() {
+        assertEquals(
+            com.kungsbackacarcommunity.app.live.LiveLocation.LIVE_SESSION_MAX_MS + 5 * 60_000L,
+            LiveSharingLifecycle.MAX_RUNTIME_MILLIS,
+        )
+    }
+
+    @Test
+    fun `a parseable session extended past the old ceiling keeps sharing to its new expiry`() {
+        // Regression for the extend flow: a session whose expiry was pushed forward
+        // by extendSession (parseable, up to 6h out) must NOT be force-stopped at
+        // the old 4h05m runtime ceiling. Parseable expiry is the ONLY bound.
+        val lifecycle = LiveSharingLifecycle()
+        val extended = session(expiresAtMillis = now + 6 * ONE_HOUR)
+        lifecycle.onObservation(true, extended, now)
+
+        // 5h in — past the old ceiling, still inside the (extended) expiry.
+        assertContinue(lifecycle.onTick(true, now + 5 * ONE_HOUR))
+        // At the new expiry it stops on expiry, as normal.
+        assertStopped(
+            LiveSharingStopReason.EXPIRED,
+            lifecycle.onTick(true, now + 6 * ONE_HOUR),
         )
     }
 

@@ -155,24 +155,34 @@ class LiveSharingLifecycle(
         // connection can never extend the user's chosen window.
         val known = lastSession
 
-        // Hard ceiling. The longest session a user can pick is 4 hours, so a
-        // service that has been publishing for longer than that plus slack is
-        // running on state it should not trust — most plausibly a session whose
-        // expiry could not be parsed, which would otherwise share forever. Ending
-        // sharing that the user did not ask to continue is always the safe error.
+        // Hard ceiling — the BACKSTOP for a session with no usable expiry.
         //
-        // Anchored to the SESSION via [anchorStore], not to this service
-        // instance: an instance-local anchor resets on process death, and
-        // START_REDELIVER_INTENT would then hand a restarted service a fresh
-        // budget — so repeated kills could extend sharing without limit. Before
-        // any session has been read there is no id to key on, so fall back to
-        // the instance clock.
-        val startedAt =
-            known?.let { anchorStore.anchorFor(it.sessionId, nowMillis) }
-                ?: startedAtMillis
-                ?: nowMillis.also { startedAtMillis = it }
-        if (nowMillis - startedAt >= maxRuntimeMillis) {
-            return stop(LiveSharingStopReason.EXPIRED)
+        // When the expiry parses (the normal case, INCLUDING a session that was
+        // extended: extendSession just pushes expiresAt forward to a fresh capped
+        // window ≤ 6h out), the expiry check below is the real bound and this
+        // ceiling must NOT fire — otherwise a legitimately-extended session would
+        // be force-stopped at the old runtime limit despite a valid future expiry.
+        //
+        // When the expiry is null/unparseable, [LiveLocation.isSharing] treats the
+        // session as still sharing, so nothing else would ever stop it. The ceiling
+        // exists for exactly that case: a service publishing longer than the 6h cap
+        // plus slack is running on state it should not trust, and ending sharing the
+        // user did not ask to continue is the safe error.
+        //
+        // Anchored to the SESSION via [anchorStore], not to this service instance:
+        // an instance-local anchor resets on process death, and
+        // START_REDELIVER_INTENT would then hand a restarted service a fresh budget —
+        // so repeated kills could extend sharing without limit. Before any session
+        // has been read there is no id to key on, so fall back to the instance clock.
+        val expiryUnknown = known == null || known.expiresAtMillis == null
+        if (expiryUnknown) {
+            val startedAt =
+                known?.let { anchorStore.anchorFor(it.sessionId, nowMillis) }
+                    ?: startedAtMillis
+                    ?: nowMillis.also { startedAtMillis = it }
+            if (nowMillis - startedAt >= maxRuntimeMillis) {
+                return stop(LiveSharingStopReason.EXPIRED)
+            }
         }
 
         if (known != null) {
@@ -180,8 +190,8 @@ class LiveSharingLifecycle(
                 return stop(LiveSharingStopReason.SESSION_ENDED)
             }
             if (!LiveLocation.isSharing(known, nowMillis)) {
-                // ACTIVE but past its expiry: the backend has not swept it yet,
-                // so the client enforces its own 1h/2h/4h window.
+                // ACTIVE but past its (parseable) expiry: the backend may not have
+                // swept it yet, so the client enforces its own capped window.
                 return stop(LiveSharingStopReason.EXPIRED)
             }
         }
@@ -228,10 +238,12 @@ class LiveSharingLifecycle(
         const val ABSENT_GRACE_MILLIS = 60_000L
 
         /**
-         * Absolute ceiling on one service run: the longest pickable session
-         * (4 hours) plus five minutes of slack for clock skew and a late
-         * backend sweep.
+         * Absolute ceiling on one service run when the expiry cannot be trusted
+         * (null/unparseable): the 6h hard cap ([LiveLocation.LIVE_SESSION_MAX_MS])
+         * plus five minutes of slack for clock skew and a late backend sweep. A
+         * session with a usable expiry is bounded by that expiry instead (see
+         * [evaluate]); this only backstops the no-usable-expiry case.
          */
-        const val MAX_RUNTIME_MILLIS = 4 * 60 * 60_000L + 5 * 60_000L
+        const val MAX_RUNTIME_MILLIS = LiveLocation.LIVE_SESSION_MAX_MS + 5 * 60_000L
     }
 }

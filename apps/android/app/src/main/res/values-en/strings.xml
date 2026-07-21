@@ -98,6 +98,17 @@
     <string name="liveLocation_backgroundNotificationBody">Live location is on. Tap to open the app.</string>
     <string name="liveLocation_backgroundNotificationBodyRemaining">Live location is on · %1$d min left. Tap to open the app.</string>
     <string name="liveLocation_backgroundNotificationStop">Stop sharing</string>
+    <string name="liveLocation_extendPromptTitle">Still sharing your location?</string>
+    <string name="liveLocation_extendPromptBody">Your sharing session is about to end. Keep sharing?</string>
+    <string name="liveLocation_extendPromptBodyRemaining">Your sharing session ends in %1$d min. Keep sharing?</string>
+    <string name="liveLocation_extendAction">Keep sharing</string>
+    <string name="liveLocation_extendInAppTitle">Keep sharing your location?</string>
+    <string name="liveLocation_extendInAppBody">Your sharing session is about to end. You can continue for another period, or let it stop.</string>
+    <string name="liveLocation_extendInAppExtend">Keep sharing</string>
+    <string name="liveLocation_extendInAppLetStop">Let it stop</string>
+    <string name="liveLocation_stationaryPromptTitle">Still sharing your location?</string>
+    <string name="liveLocation_stationaryPromptBody">You have been in the same spot for a while. If you have finished, sharing will stop on its own shortly. Tap to keep sharing.</string>
+    <string name="liveLocation_stillSharingAction">Yes, still sharing</string>
     <string name="liveLocation_accessLimitedByModeration">Your access may be limited if you are suspended or break the rules.</string>
     <string name="liveLocation_shareOwnFree">You can share your own position for free.</string>
     <string name="liveLocation_viewOthersMemberOnly">An active membership is required to view other members\' live locations.</string>

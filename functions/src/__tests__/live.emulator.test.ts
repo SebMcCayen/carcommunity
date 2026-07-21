@@ -248,6 +248,55 @@ describe('live session lifecycle', () => {
     const session = (await adminRtdb.ref(`liveLocation/${sharer.uid}/session`).get()).val();
     expect(session.stopReason).toBe('hide_me_now');
   });
+
+  it('extendSession pushes expiry to a fresh capped window, never past 6h', async () => {
+    const sharer = await createProvisionedUser('live-extend');
+    await makeMember(sharer);
+    await signInAs(sharer);
+
+    const started = (await call('live-startSession', { duration: '1h' })).data as {
+      sessionId: string;
+      expiresAt: string;
+    };
+    const startedExpiry = Date.parse(started.expiresAt);
+
+    const before = Date.now();
+    const extended = (await call('live-extendSession', {})).data as {
+      sessionId: string;
+      status: string;
+      expiresAt: string;
+    };
+    const after = Date.now();
+
+    // Same session (id/marker unchanged) — a seamless extend, not a restart.
+    expect(extended.sessionId).toBe(started.sessionId);
+    expect(extended.status).toBe('active');
+
+    // Fresh window: pushed forward past the original 1h expiry...
+    const newExpiry = Date.parse(extended.expiresAt);
+    expect(newExpiry).toBeGreaterThan(startedExpiry);
+    // ...and exactly a 6h cap from "now" (bounded by the call's wall-clock window).
+    const SIX_H = 6 * 60 * 60 * 1000;
+    expect(newExpiry).toBeGreaterThanOrEqual(before + SIX_H - 5_000);
+    expect(newExpiry).toBeLessThanOrEqual(after + SIX_H + 5_000);
+
+    // The session node itself carries the new expiry.
+    const node = (await adminRtdb.ref(`liveLocation/${sharer.uid}/session`).get()).val();
+    expect(node.expiresAt).toBe(extended.expiresAt);
+    expect(node.id).toBe(started.sessionId);
+
+    await call('live-stopSession', {});
+  });
+
+  it('extendSession refuses a session that has no active session (must restart)', async () => {
+    const sharer = await createProvisionedUser('live-extend-none');
+    await makeMember(sharer);
+    await signInAs(sharer);
+    // No session started (or already stopped): extend is failed-precondition.
+    expect(await callableErrorCode(call('live-extendSession', {}))).toBe(
+      'functions/failed-precondition',
+    );
+  });
 });
 
 describe('live TTL sweep', () => {

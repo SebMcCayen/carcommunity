@@ -30,8 +30,10 @@ import {
   LIVE_LOCATION_FLAG_KEY,
   buildLatestNode,
   buildSession,
+  extendedExpiryIso,
   guardPositionFreshness,
   isSessionActive,
+  parseExtendSessionInput,
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
@@ -139,6 +141,39 @@ export const updatePosition = onCall(
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );
+
+export const extendSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
+  // Extending is the "yes, keep sharing" answer to the client's pre-expiry
+  // prompt. Free like startSession (sharing your OWN position needs no
+  // subscription); the liveLocation flag still gates it.
+  const actor = await requireActiveActor(request);
+  const parsed = parseExtendSessionInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  if (!(await readFeatureFlag(LIVE_LOCATION_FLAG_KEY))) {
+    throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
+  }
+
+  const now = new Date();
+  const session = (await sessionRef(actor.uid).get()).val() as LiveSession | null;
+  // Only an ACTIVE, not-yet-expired session can be extended. A session already
+  // past expiry (or stopped/expired) must be restarted, not resurrected — this
+  // is exactly the "no answer by expiry → it stops" rule: once expiry passes,
+  // the extend path is closed and the client's/​sweep's stop stands.
+  if (!isSessionActive(session, now)) {
+    throw new HttpsError('failed-precondition', 'No active live location session to extend.');
+  }
+
+  // A fresh capped window — server-computed and server-clamped, so the client
+  // can never obtain more than LIVE_SESSION_MAX_MS. Only expiresAt changes; the
+  // session id, denormalized displayName and mainCar all carry forward, so the
+  // extend is seamless (no marker flicker, unlike a restart).
+  const expiresAt = extendedExpiryIso(now);
+  await sessionRef(actor.uid).update({ expiresAt });
+
+  return { sessionId: session!.id, status: 'active', expiresAt };
+});
 
 async function stopAndClear(uid: string, reason: LiveStopReason): Promise<SessionResponse> {
   const session = (await sessionRef(uid).get()).val() as LiveSession | null;

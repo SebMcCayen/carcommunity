@@ -53,6 +53,12 @@ class FirebaseLiveLocationRepository private constructor(
         call(STOP_SESSION, mapOf("reason" to "user_stop"))
     }
 
+    override suspend fun extendSession() {
+        // Extend takes no client-controlled fields — the server computes and
+        // clamps the fresh window, so the client cannot request a longer one.
+        call(EXTEND_SESSION, emptyMap())
+    }
+
     override suspend fun hideMeNow() {
         call(HIDE_ME_NOW, emptyMap())
     }
@@ -106,6 +112,7 @@ class FirebaseLiveLocationRepository private constructor(
         private const val START_SESSION = "live-startSession"
         private const val UPDATE_POSITION = "live-updatePosition"
         private const val STOP_SESSION = "live-stopSession"
+        private const val EXTEND_SESSION = "live-extendSession"
         private const val HIDE_ME_NOW = "live-hideMeNow"
 
         fun createIfAvailable(context: Context): LiveLocationRepository? {

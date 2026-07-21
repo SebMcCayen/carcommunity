@@ -46,6 +46,7 @@ class LiveLocationScreenTest {
                     canShare = true,
                     onStart = { started = it },
                     onStop = {},
+                    onExtend = {},
                     onHideMeNow = {},
                 )
             }
@@ -68,6 +69,7 @@ class LiveLocationScreenTest {
                     canShare = true,
                     onStart = {},
                     onStop = { stopped++ },
+                    onExtend = {},
                     onHideMeNow = {},
                 )
             }
@@ -92,6 +94,7 @@ class LiveLocationScreenTest {
                     canShare = false,
                     onStart = {},
                     onStop = { stopped++ },
+                    onExtend = {},
                     onHideMeNow = {},
                 )
             }
@@ -114,6 +117,7 @@ class LiveLocationScreenTest {
                     canShare = false,
                     onStart = { started = it },
                     onStop = {},
+                    onExtend = {},
                     onHideMeNow = { hidden++ },
                 )
             }

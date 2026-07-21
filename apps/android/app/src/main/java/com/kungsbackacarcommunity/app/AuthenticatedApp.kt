@@ -3125,6 +3125,12 @@ private fun RouteHost(
                     liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
                     BackgroundLocationController.stop(context)
                 },
+                onExtend = {
+                    // Keep sharing: a fresh capped window (never past 6h). The
+                    // foreground service and drive recording continue untouched —
+                    // only the session's expiry is pushed forward server-side.
+                    liveLocationCoordinator?.let { c -> scope.launch { c.extend() } }
+                },
                 onHideMeNow = {
                     liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
                     BackgroundLocationController.stop(context)

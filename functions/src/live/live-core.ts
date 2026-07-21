@@ -41,6 +41,55 @@ import { MIN_MODEL_YEAR, maxModelYear } from '../garage/garage-core';
 export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4 } as const;
 export type LiveSessionDuration = keyof typeof LIVE_SESSION_DURATIONS;
 
+/**
+ * Cost/data control constants for live-location sessions — the SERVER copies of
+ * the shared timeframes. The Android client keeps its own copies
+ * (`LiveLocation.LIVE_SESSION_MAX_MS` / `LIVE_SESSION_EXTEND_PROMPT_MS` and the
+ * `location/` service constants); the two boundaries cannot literally share a
+ * constant across the TS/Kotlin line, so each side documents the other and the
+ * agreement is asserted by tests (functions/src/live/live-core.test.ts here,
+ * `LiveLocationTest` on the client). Seb-approved values, kept as named
+ * constants so they stay retunable in one place.
+ *
+ * LIVE_SESSION_MAX_MS is the ABSOLUTE ceiling on any one sharing window (single
+ * AND convoy — a convoy member shares through the very same session node). No
+ * `expiresAt` this backend ever writes — at start OR on extend — may be more
+ * than this far past `now`. A forgotten phone therefore always stops within one
+ * window; continuing past it requires a deliberate human "yes" (see
+ * `extendSession`), which grants a fresh capped window.
+ */
+export const LIVE_SESSION_MAX_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+/**
+ * How long before `expiresAt` the client shows the "still sharing? continue?"
+ * extend prompt. Server-side only in that the server documents it and the client
+ * mirrors it; the prompt itself is a client concern. 15 min before a 6h window
+ * is the "5h45" checkpoint Seb specified.
+ */
+export const LIVE_SESSION_EXTEND_PROMPT_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Clamps a proposed expiry (epoch millis) to the 6h hard cap measured from
+ * `nowMs`. The one place the ceiling is enforced numerically, so start AND
+ * extend agree and a client can never request a longer window than the cap.
+ */
+export function clampExpiryToCap(nowMs: number, requestedExpiryMs: number): number {
+  return Math.min(requestedExpiryMs, nowMs + LIVE_SESSION_MAX_MS);
+}
+
+/**
+ * The expiry an extend grants: a FRESH full capped window from `now` (exactly
+ * `now + LIVE_SESSION_MAX_MS`), as an ISO string. Extending resets the clock to
+ * a new 6h window rather than nudging the old expiry, so (a) each extended
+ * window re-prompts 15 min before its own end — the "5h45 → prompt, 6h → stop"
+ * cadence — and (b) "no unbounded session" holds because every 6h a human must
+ * reconfirm. Passed through {@link clampExpiryToCap} defensively; it is already
+ * the cap.
+ */
+export function extendedExpiryIso(now: Date): string {
+  return new Date(clampExpiryToCap(now.getTime(), now.getTime() + LIVE_SESSION_MAX_MS)).toISOString();
+}
+
 export const LIVE_SESSION_STATUSES = ['active', 'stopped', 'expired'] as const;
 export type LiveSessionStatus = (typeof LIVE_SESSION_STATUSES)[number];
 
@@ -82,10 +131,16 @@ const stopSessionInputSchema = z
   .object({ reason: z.enum(LIVE_STOP_REASONS).optional() })
   .strict();
 
+// Extending takes no client-controlled fields: the server computes the new
+// expiry as a fresh capped window (see extendedExpiryIso), so the client cannot
+// request a longer one. Strict rejects any stray payload.
+const extendSessionInputSchema = z.object({}).strict();
+
 export type LiveCoordinate = z.infer<typeof coordinateSchema>;
 export type StartSessionInput = z.infer<typeof startSessionInputSchema>;
 export type UpdatePositionInput = z.infer<typeof updatePositionInputSchema>;
 export type StopSessionInput = z.infer<typeof stopSessionInputSchema>;
+export type ExtendSessionInput = z.infer<typeof extendSessionInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -107,6 +162,8 @@ export const parseUpdatePositionInput = (d: unknown) =>
   );
 export const parseStopSessionInput = (d: unknown) =>
   parse(stopSessionInputSchema, d, 'Expected { reason?: user_stop|hide_me_now|admin_stop }.');
+export const parseExtendSessionInput = (d: unknown) =>
+  parse(extendSessionInputSchema, d, 'Expected {} (extend takes no arguments).');
 
 // ---------------------------------------------------------------------------
 // Guards and builders
@@ -209,8 +266,12 @@ export function buildSession(
   displayName: string | null,
   mainCar: LiveMainCar | null = null,
 ): LiveSession {
+  // The chosen 1h/2h/4h window, clamped to the 6h hard cap. Today every pickable
+  // duration is already under the cap, so this is a no-op for real inputs, but it
+  // keeps the invariant "no expiresAt is ever more than LIVE_SESSION_MAX_MS past
+  // now" true at the one place expiries are minted — matching extendSession.
   const expires = new Date(
-    now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000,
+    clampExpiryToCap(now.getTime(), now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000),
   );
   return {
     id,
