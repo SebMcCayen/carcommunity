@@ -240,25 +240,12 @@ class FirebaseEventsRepository private constructor(
                     }
                 }
 
-        @Suppress("UNCHECKED_CAST")
-        val data = response.data as? Map<String, Any?>
-        val rawAttendees = data?.get("attendees") as? List<*> ?: emptyList<Any?>()
-        val attendees =
-            rawAttendees.mapNotNull { item ->
-                val row = item as? Map<*, *> ?: return@mapNotNull null
-                val uid = row["userId"] as? String ?: return@mapNotNull null
-                // A row whose status is not one of the three canonical answers is
-                // dropped rather than shown ungrouped — the server only ever emits
-                // canonical statuses, so this is belt-and-braces.
-                val status = RsvpStatus.fromWire(row["status"] as? String) ?: return@mapNotNull null
-                EventAttendee(
-                    uid = uid,
-                    displayName = row["displayName"] as? String,
-                    avatarPath = row["avatarPath"] as? String,
-                    status = status,
-                )
-            }
-        return EventAttendeesResult.Loaded(attendees)
+        // A missing/malformed payload (non-map, or absent/non-list `attendees`)
+        // is a backend/serialization failure, NOT an empty roster — it folds to
+        // the retryable Unknown state rather than a fabricated "nobody answered".
+        // Only a present, well-formed (possibly empty) list loads. See
+        // EventAttendees.parseAttendeesPayload.
+        return EventAttendees.parseAttendeesPayload(response.data)
     }
 
     companion object {

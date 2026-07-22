@@ -77,6 +77,45 @@ object EventAttendees {
     private val STATUS_ORDER = listOf(RsvpStatus.GOING, RsvpStatus.MAYBE, RsvpStatus.NOT_GOING)
 
     /**
+     * Folds the raw `events-listAttendees` callable payload into a result,
+     * distinguishing a genuinely-empty roster from a MISSING or MALFORMED
+     * payload.
+     *
+     * A backend/serialization bug that yields a non-map payload, or a payload
+     * whose `attendees` field is absent or not a list, must NOT masquerade as
+     * "nobody answered" — that would silently hide who is going and give the
+     * viewer no way to retry. Those shapes fold to [EventAttendeesResult.Unknown]
+     * (the retryable error state; the UI offers "couldn't load, try again"),
+     * mirroring how the non-permission callable failure is surfaced. Only a
+     * PRESENT, well-formed `attendees` list maps to [EventAttendeesResult.Loaded]
+     * — an empty list being the honest "nobody has answered yet".
+     *
+     * Individual malformed ROWS inside a well-formed list are still dropped
+     * (missing uid / non-canonical status): the server only ever emits canonical
+     * rows, so a bad row is belt-and-braces, not a reason to fail the whole read.
+     *
+     * `data` is typed [Any] so this stays Firebase-free and unit-testable; the
+     * repository passes `HttpsCallableResult.data` straight through.
+     */
+    fun parseAttendeesPayload(data: Any?): EventAttendeesResult {
+        val map = data as? Map<*, *> ?: return EventAttendeesResult.Unknown
+        val rawAttendees = map["attendees"] as? List<*> ?: return EventAttendeesResult.Unknown
+        val attendees =
+            rawAttendees.mapNotNull { item ->
+                val row = item as? Map<*, *> ?: return@mapNotNull null
+                val uid = row["userId"] as? String ?: return@mapNotNull null
+                val status = RsvpStatus.fromWire(row["status"] as? String) ?: return@mapNotNull null
+                EventAttendee(
+                    uid = uid,
+                    displayName = row["displayName"] as? String,
+                    avatarPath = row["avatarPath"] as? String,
+                    status = status,
+                )
+            }
+        return EventAttendeesResult.Loaded(attendees)
+    }
+
+    /**
      * Folds a repository [result] into the UI state, dropping anyone the viewer
      * has blocked ([blockedUids]). The `events-listAttendees` callable already
      * filters blocks server-side, so this is a defensive second pass — belt and

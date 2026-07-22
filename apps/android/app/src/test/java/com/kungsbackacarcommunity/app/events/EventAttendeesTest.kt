@@ -40,6 +40,61 @@ class EventAttendeesTest {
         assertEquals(3, Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY)
     }
 
+    // -- callable payload parsing ----------------------------------------------
+
+    @Test
+    fun `a well-formed attendees payload loads, dropping malformed rows`() {
+        val payload =
+            mapOf(
+                "attendees" to
+                    listOf(
+                        mapOf("userId" to "u1", "displayName" to "Alice", "avatarPath" to "a/u1.jpg", "status" to "going"),
+                        mapOf("userId" to "u2", "displayName" to null, "avatarPath" to null, "status" to "maybe"),
+                        // Malformed rows: no uid, non-canonical status, wrong type — all dropped.
+                        mapOf("displayName" to "No Uid", "status" to "going"),
+                        mapOf("userId" to "u3", "status" to "definitely"),
+                        "not-a-row",
+                    ),
+            )
+        val result = EventAttendees.parseAttendeesPayload(payload)
+        assertEquals(
+            EventAttendeesResult.Loaded(
+                listOf(
+                    EventAttendee("u1", "Alice", "a/u1.jpg", RsvpStatus.GOING),
+                    attendee("u2", null, RsvpStatus.MAYBE),
+                ),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `a present empty attendees array is an empty roster, not an error`() {
+        // The read succeeded and nobody has answered — Loaded(empty), which the
+        // state model then folds to Empty. This is the ONLY empty-roster path.
+        assertEquals(
+            EventAttendeesResult.Loaded(emptyList()),
+            EventAttendees.parseAttendeesPayload(mapOf("attendees" to emptyList<Any?>())),
+        )
+    }
+
+    @Test
+    fun `a missing or malformed payload is Unknown, never a fabricated empty roster`() {
+        // A backend/serialization bug must surface as a retryable error, not as
+        // "nobody answered" — otherwise a broken read silently hides the roster.
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload(null))
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload("unexpected-string"))
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload(emptyMap<String, Any?>()))
+        assertEquals(
+            EventAttendeesResult.Unknown,
+            EventAttendees.parseAttendeesPayload(mapOf("other" to 1)),
+        )
+        assertEquals(
+            EventAttendeesResult.Unknown,
+            EventAttendees.parseAttendeesPayload(mapOf("attendees" to "not-a-list")),
+        )
+    }
+
     // -- attendee state model --------------------------------------------------
 
     @Test
