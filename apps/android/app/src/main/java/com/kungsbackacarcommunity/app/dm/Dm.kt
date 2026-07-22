@@ -55,12 +55,18 @@ enum class DmDeliveryState {
 /**
  * A single rendered DM. [createdAtIso] is the pagination cursor for older pages.
  *
- * [clientId] is the send idempotency key: present on a message the caller sent
- * with the optimistic path (both on the local optimistic bubble and, echoed
- * back, on the delivered server document, whose doc [id] EQUALS the clientId).
- * It is the join key that reconciles the optimistic bubble against the arriving
- * snapshot so the message renders exactly once. Null on older messages and on
- * incoming messages from the other party.
+ * [clientId] is the idempotency key the SENDER attached on the optimistic path.
+ * It is persisted on the message document — as both the `clientId` field and the
+ * doc [id] — and the tree is member-readable, so it is visible to BOTH
+ * participants: a delivered message carries the clientId its sender used whether
+ * the caller sent it OR received it from the other party. Locally it is only the
+ * join key that reconciles the caller's OWN pending optimistic bubble against the
+ * arriving snapshot so the message renders exactly once ([DmThread.mergeWithPending],
+ * whose doc [id] EQUALS the clientId); an incoming message's clientId simply
+ * never matches a pending bubble, so it is inert. Consumers should treat it as an
+ * optimistic-bubble correlation id ONLY — it is NOT a security/identity signal
+ * and must never be used for authorization or to attribute a message to a user
+ * (use [senderUid] for that). Null only on legacy messages sent without a key.
  */
 data class DmMessage(
     val id: String,
