@@ -36,7 +36,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -64,6 +64,8 @@ const adminRtdb = getAdminDatabase(adminApp);
 let app: FirebaseApp;
 let auth: Auth;
 let functions: Functions;
+/** The config/featureFlags.liveLocation value before this file forced it on. */
+let priorLiveLocation: boolean | undefined;
 
 interface TestUser {
   uid: string;
@@ -149,12 +151,27 @@ beforeAll(async () => {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
   functions = getFunctions(app, REGION);
   connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
-  // The auto-session honours the liveLocation flag; make sure it is on (another
-  // file may have toggled it — it restores in a finally, but be defensive).
+  // The auto-session honours the liveLocation flag; force it on for this file,
+  // but CAPTURE the prior value first and RESTORE it in afterAll so this file
+  // does not couple the shared-Firestore emulator suite (another file may rely
+  // on the flag being absent/false).
+  const priorFlags = (await adminDb.collection('config').doc('featureFlags').get()).data();
+  priorLiveLocation = Object.hasOwn(priorFlags ?? {}, 'liveLocation')
+    ? (priorFlags!.liveLocation as boolean)
+    : undefined;
   await adminDb.collection('config').doc('featureFlags').set({ liveLocation: true }, { merge: true });
 }, 120_000);
 
 afterAll(async () => {
+  // Restore the flag to exactly what it was (delete it if it was absent), so the
+  // next file in the suite sees the state it expects.
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set(
+      { liveLocation: priorLiveLocation === undefined ? FieldValue.delete() : priorLiveLocation },
+      { merge: true },
+    );
   await deleteApp(app);
 });
 

@@ -288,24 +288,44 @@ export type ConvoyAutoStopOutcome = 'stopped' | 'left-untouched';
  * for a DIFFERENT convoy, or one already stopped/expired is left untouched. Like
  * a normal stop it marks the session stopped and removes the marker immediately.
  *
+ * ATOMIC check-and-update (an RTDB transaction, not a read-then-update): the
+ * stop only applies to a session that STILL matches (active + convoyAutoStarted +
+ * this convoyId) at commit time, so a manual live.startSession — or a different
+ * convoy's auto-session — that raced in between the read and the write is never
+ * mutated to 'stopped'. Mirror of startConvoyAutoSession's atomic write.
+ *
  * Best-effort: a throw here must not fail convoy.leave / convoy.end.
  */
 export async function stopConvoyAutoSession(
   uid: string,
   convoyId: string,
 ): Promise<ConvoyAutoStopOutcome> {
-  const session = (await sessionRef(uid).get()).val() as LiveSession | null;
-  if (
-    session &&
-    session.status === 'active' &&
-    session.convoyAutoStarted === true &&
-    session.convoyId === convoyId
-  ) {
-    await sessionRef(uid).update({
-      status: 'stopped',
-      stoppedAt: new Date().toISOString(),
-      stopReason: 'user_stop' satisfies LiveStopReason,
-    });
+  const { committed, snapshot } = await sessionRef(uid).transaction((current) => {
+    const s = current as (LiveSession & { convoyAutoStarted?: boolean }) | null;
+    // NULL is returned unchanged rather than aborted: RTDB runs the update
+    // function optimistically (it may see null before the server value loads),
+    // and returning `undefined` there would ABORT before ever seeing the real
+    // session. Returning null instead forces a compare-and-set that retries with
+    // the server value when a session actually exists. `undefined` (abort) is
+    // reached ONLY for a REAL, non-matching session — so a manual live session
+    // that raced in is left exactly as-is, never mutated to 'stopped'.
+    if (s === null) {
+      return null;
+    }
+    if (s.status === 'active' && s.convoyAutoStarted === true && s.convoyId === convoyId) {
+      return {
+        ...s,
+        status: 'stopped',
+        stoppedAt: new Date().toISOString(),
+        stopReason: 'user_stop' satisfies LiveStopReason,
+      };
+    }
+    return; // abort — a real non-matching session (manual / other convoy / already stopped)
+  });
+  // We stopped it only when the commit wrote our stopped session; an abort or a
+  // no-op on a raced-in manual session leaves the node untouched.
+  const after = snapshot.val() as (LiveSession & { convoyAutoStarted?: boolean }) | null;
+  if (committed && after?.status === 'stopped' && after?.convoyAutoStarted === true) {
     await latestRef(uid).remove();
     return 'stopped';
   }
