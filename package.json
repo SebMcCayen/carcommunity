@@ -40,8 +40,7 @@
     "overrides": {
       "uuid@<11.1.1": "^11.1.1",
       "@opentelemetry/core@<2.8.0": "^2.8.0",
-      "fast-xml-parser@<5.10.1": "^5.10.1",
-      "@hono/node-server@<2.0.5": "^2.0.5"
+      "fast-xml-parser@<5.10.1": "^5.10.1"
     }
   },
   "engines": {
