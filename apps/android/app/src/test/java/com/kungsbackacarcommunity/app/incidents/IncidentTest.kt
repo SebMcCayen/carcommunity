@@ -22,6 +22,10 @@ private class FakeIncidentRepository(
     var listNearbyCalls = 0
         private set
 
+    /** The centre of the most recent [listNearby], so tests can pin WHERE the poll queried. */
+    var lastCenter: LatLng? = null
+        private set
+
     override suspend fun report(type: IncidentType, location: LatLng, note: String?): Incident {
         reportError?.let { throw it }
         reported += Triple(type, location, note)
@@ -38,6 +42,7 @@ private class FakeIncidentRepository(
 
     override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
         listNearbyCalls += 1
+        lastCenter = center
         return nearby
     }
 
@@ -446,6 +451,76 @@ class IncidentReportControllerTest {
         advanceTimeBy(30_000L)
         runCurrent()
         assertEquals(2, fake.listNearbyCalls)
+    }
+
+    /**
+     * THE FIX for "I see no incidents at all": the live poll queries around the
+     * centre [pollNearby]'s [centerProvider] yields — the map wires it to the
+     * CAMERA centre — NOT only around a GPS fix. So even when the GPS provider
+     * never yields a fix (permission denied, indoors, emulator), the shared
+     * layer still populates around the visible map area, and it queries at
+     * exactly that centre.
+     */
+    @Test
+    fun `pollNearby queries the provided centre even when the GPS provider never yields`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        // GPS never resolves — the OLD behaviour would have polled nothing at all.
+        val controller = IncidentReportController(fake) { null }
+        // The map camera centre (here: the Kungsbacka default the map opens on).
+        val cameraCentre = LatLng(longitude = 12.0757, latitude = 57.4874)
+
+        backgroundScope.launch {
+            controller.pollNearby(
+                pollIntervalMs = 30_000L,
+                initialRetryMs = 3_000L,
+                initialAttempts = 5,
+                centerProvider = { cameraCentre },
+            )
+        }
+
+        // Phase 1 acquires the camera centre immediately — a fetch happens
+        // despite the absent GPS fix — and it queries AT that centre.
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+        assertEquals(cameraCentre, fake.lastCenter)
+
+        // Steady state keeps the layer live around the camera.
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+        assertEquals(cameraCentre, fake.lastCenter)
+    }
+
+    /**
+     * The map wires [pollNearby]'s centre to "camera, else GPS", so the query
+     * follows the camera as the user pans — a pan to a new area re-queries
+     * around the new centre on the next tick, not the old one.
+     */
+    @Test
+    fun `pollNearby follows the provided centre as it moves`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { null }
+        val kungsbacka = LatLng(longitude = 12.0757, latitude = 57.4874)
+        val goteborg = LatLng(longitude = 11.9746, latitude = 57.7089)
+        var centre = kungsbacka
+
+        backgroundScope.launch {
+            controller.pollNearby(
+                pollIntervalMs = 30_000L,
+                initialRetryMs = 3_000L,
+                initialAttempts = 5,
+                centerProvider = { centre },
+            )
+        }
+
+        runCurrent()
+        assertEquals(kungsbacka, fake.lastCenter)
+
+        // User pans north; the next tick queries around the NEW centre.
+        centre = goteborg
+        advanceTimeBy(30_000L)
+        runCurrent()
+        assertEquals(goteborg, fake.lastCenter)
     }
 
     /**

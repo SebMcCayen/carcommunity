@@ -154,16 +154,33 @@ class IncidentReportController(
      */
     suspend fun refreshAroundCurrent(
         radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS
+    ): Boolean = refreshAround(radiusMeters, locationProvider)
+
+    /**
+     * Refreshes [nearbyIncidents] around whatever [centerProvider] yields.
+     * Returns `true` when a centre was available and a refresh was performed,
+     * `false` (a no-op) when the provider yielded null. Cancellation from the
+     * provider propagates; any other provider failure degrades to `false`.
+     *
+     * This is the generalisation behind both [refreshAroundCurrent] (centre =
+     * the GPS fix) and the map's live poll (centre = the map camera). Keeping
+     * the centre a provider is what lets the layer query around the VISIBLE map
+     * area rather than being hostage to a GPS fix that may never arrive — see
+     * [pollNearby].
+     */
+    private suspend fun refreshAround(
+        radiusMeters: Double,
+        centerProvider: suspend () -> LatLng?,
     ): Boolean {
-        val here =
+        val center =
             try {
-                locationProvider()
+                centerProvider()
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {
                 null
             } ?: return false
-        refresh(here, radiusMeters)
+        refresh(center, radiusMeters)
         return true
     }
 
@@ -176,22 +193,37 @@ class IncidentReportController(
      * me". The incident layer is a SHARED, Waze-style map layer: the reporter's
      * own pin is added optimistically from the write's response, but every OTHER
      * user only ever learns of a report through [IncidentRepository.listNearby]
-     * (reached here via [refresh] / [refreshAroundCurrent]). A single fetch on
+     * (reached here via [refresh] / [refreshAround]). A single fetch on
      * tab-entry left those users looking at a stale layer — a report made while
      * they were already on the map never appeared until they left and came back.
      * Polling closes that gap.
      *
-     * Two phases:
-     *  1. Cold-open acquisition — the fused last-known location is frequently
-     *     null right after launch, so the first few passes retry on a short
-     *     [initialRetryMs] backoff until a fix arrives (refreshAroundCurrent
-     *     returns true → a refresh ran), so the layer populates ASAP.
-     *  2. Steady state — refresh every [pollIntervalMs] so newly-reported
-     *     incidents from other users keep appearing. A pass with no fix is a
-     *     harmless no-op that the next tick retries, so GPS arriving late still
-     *     recovers (unlike the old give-up-after-N-attempts behaviour).
+     * ## Centre = the VISIBLE map, not only a GPS fix
      *
-     * Every pass is best-effort: [refreshAroundCurrent] no-ops without a fix and
+     * [centerProvider] supplies the point each pass queries around. It defaults
+     * to [locationProvider] (the GPS fix), but the map wires it to the CAMERA
+     * CENTRE. That distinction is the fix for "I see no incidents at all": the
+     * layer used to poll ONLY around a GPS fix, so a session that never got one
+     * — location permission denied, indoors, an emulator, or simply the first
+     * seconds after launch — issued NO `listNearby` at all and the layer stayed
+     * blank, even though the shared incidents (including the Trafikverket
+     * imports) exist in the DB around the area on screen. The map opens on a
+     * fixed default camera and pans/follows the user from there, so its centre
+     * is ALWAYS available; querying around it means the layer populates for the
+     * area the user is actually looking at, GPS or not.
+     *
+     * Two phases:
+     *  1. Cold-open acquisition — the centre can be momentarily null right after
+     *     launch (the camera's first change event, or the fused last-known fix,
+     *     has not landed yet), so the first few passes retry on a short
+     *     [initialRetryMs] backoff until one is available (refreshAround returns
+     *     true → a refresh ran), so the layer populates ASAP.
+     *  2. Steady state — refresh every [pollIntervalMs] so newly-reported
+     *     incidents from other users keep appearing AND the query follows the
+     *     camera as the user pans to a new area. A pass with no centre is a
+     *     harmless no-op that the next tick retries.
+     *
+     * Every pass is best-effort: [refreshAround] no-ops without a centre and
      * [refresh] swallows fetch failures, keeping the last-known markers — so a
      * transient outage never blanks the map. Cancellation propagates.
      *
@@ -205,22 +237,23 @@ class IncidentReportController(
         pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
         initialRetryMs: Long = DEFAULT_INITIAL_RETRY_MS,
         initialAttempts: Int = DEFAULT_INITIAL_ATTEMPTS,
+        centerProvider: suspend () -> LatLng? = locationProvider,
     ) {
         require(pollIntervalMs > 0) { "pollIntervalMs must be > 0, was $pollIntervalMs" }
         require(initialRetryMs > 0) { "initialRetryMs must be > 0, was $initialRetryMs" }
-        // Phase 1: acquire the first fix quickly so the layer is not blank for
+        // Phase 1: acquire the first centre quickly so the layer is not blank for
         // the whole initial poll interval on a cold open.
         var acquired = false
         var attempt = 0
         while (attempt < initialAttempts && !acquired) {
-            acquired = refreshAroundCurrent(radiusMeters)
+            acquired = refreshAround(radiusMeters, centerProvider)
             attempt += 1
             if (!acquired && attempt < initialAttempts) delay(initialRetryMs)
         }
         // Phase 2: keep the shared layer live for the lifetime of this coroutine.
         while (true) {
             delay(pollIntervalMs)
-            refreshAroundCurrent(radiusMeters)
+            refreshAround(radiusMeters, centerProvider)
         }
     }
 
