@@ -116,7 +116,7 @@ class ShellNavTest {
         assertEquals(true, rows.showAudienceEntry)
         // Not a start surface while already sharing.
         assertEquals(false, rows.showStart)
-        assertEquals(false, rows.showMemberTeaser)
+        assertEquals(false, rows.showUnavailableNotice)
     }
 
     @Test
@@ -137,17 +137,20 @@ class ShellNavTest {
         assertEquals(true, rows.showStart)
         assertEquals(false, rows.showHideNow)
         assertEquals(false, rows.showStop)
-        assertEquals(false, rows.showMemberTeaser)
+        assertEquals(false, rows.showUnavailableNotice)
         // Who-can-see-me is reachable in every state, sharing or not.
         assertEquals(true, rows.showAudienceEntry)
     }
 
     @Test
-    fun `manage sheet when idle and not permitted shows the teaser and audience only`() {
+    fun `manage sheet when idle and flag off shows the unavailable notice and audience only`() {
+        // canShareLive false = LIVE_LOCATION flag OFF (flag-gated, NOT
+        // member-gated). The sheet must explain it's unavailable, never claim a
+        // membership is required.
         val rows =
             LiveManageSheet.actions(isSharing = false, canShareLive = false, hasStop = true)
         assertEquals(false, rows.showStart)
-        assertEquals(true, rows.showMemberTeaser)
+        assertEquals(true, rows.showUnavailableNotice)
         assertEquals(false, rows.showStop)
         assertEquals(false, rows.showHideNow)
         assertEquals(true, rows.showAudienceEntry)

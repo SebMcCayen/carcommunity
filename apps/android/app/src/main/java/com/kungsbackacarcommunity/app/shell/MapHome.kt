@@ -807,11 +807,14 @@ private fun LayerToggleRow(
  *   duration choice is NOT here — [onStart] hands off to the single-session start
  *   flow (shared with the "+" Create → Single session), which is where the
  *   duration is picked.
- * - Not sharing and not [canShareLive]: the membership teaser (starting is
- *   member-gated on the backend); Hide stays reachable in the sharing state.
- * A "More options" row always opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
+ * - Not sharing and not [canShareLive]: an "unavailable" notice (starting is
+ *   FLAG-gated by LIVE_LOCATION, NOT member-gated — sharing your own position is
+ *   free); Hide stays reachable in the sharing state.
+ * A "More options" row opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
  * for the complete controls + privacy details — the audience screen where the
- * caller sees and manages exactly who can see them. Each action closes the popup.
+ * caller sees and manages exactly who can see them. Every row, including this
+ * one, is driven by [LiveManageSheet.actions] so the model is the single source
+ * of truth for what the sheet shows. Each action closes the popup.
  *
  * @param onStop optional stop-sharing handler. When null (turn-by-turn
  *   navigation) NO Stop row is shown, keeping stopping to the map's single stop
@@ -950,29 +953,34 @@ internal fun LiveSharePopup(
                         Text(text = stringResource(R.string.liveLocation_start))
                     }
                 }
-                if (rows.showMemberTeaser) {
+                if (rows.showUnavailableNotice) {
                     // Reached only when the LIVE_LOCATION flag is off (the
-                    // server-side kill switch) — starting is NOT member-gated.
-                    // TODO: the teaser string still says "membership
-                    // required", which is not why the control is hidden.
+                    // server-side kill switch). Starting is FLAG-gated here, NOT
+                    // member-gated — sharing your own position is free — so the
+                    // message says the feature is unavailable, not that a
+                    // membership is required.
                     Text(
-                        text = stringResource(R.string.liveLocation_memberRequiredToShare),
+                        text = stringResource(R.string.liveLocation_shareUnavailable),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                // Always offer the full live-location screen for the complete
-                // controls + privacy details — this is the "Who can see me" /
-                // audience-management entry point (the second capability relocated
-                // off the removed right-side broadcast button).
-                TextButton(
-                    onClick = {
-                        onOpenDetails()
-                        onDismiss()
-                    },
-                    modifier = Modifier.align(Alignment.End),
-                ) {
-                    Text(text = stringResource(R.string.shell_liveDetails))
+                if (rows.showAudienceEntry) {
+                    // The full live-location screen for the complete controls +
+                    // privacy details — this is the "Who can see me" /
+                    // audience-management entry point (the second capability
+                    // relocated off the removed right-side broadcast button).
+                    // Driven by the model so a single source of truth decides
+                    // when it appears, matching what the ShellNavTest asserts.
+                    TextButton(
+                        onClick = {
+                            onOpenDetails()
+                            onDismiss()
+                        },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text(text = stringResource(R.string.shell_liveDetails))
+                    }
                 }
             }
         }

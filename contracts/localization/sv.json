@@ -121,7 +121,8 @@
     "stationaryPromptTitle": "Delar du fortfarande din position?",
     "stationaryPromptBody": "Du har stått på samma plats en stund. Om du är klar avslutas delningen automatiskt strax. Tryck för att fortsätta dela.",
     "stillSharingAction": "Ja, jag delar fortfarande",
-    "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning."
+    "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning.",
+    "shareUnavailable": "Delning av live-position är inte tillgänglig just nu."
   },
   "onboarding": {
     "title": "Välkommen",

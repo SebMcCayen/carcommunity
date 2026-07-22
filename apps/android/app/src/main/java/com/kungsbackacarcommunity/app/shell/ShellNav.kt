@@ -237,16 +237,21 @@ object LiveShareToggle {
  * @property showStop the prominent Stop-sharing action (only when a session is
  *   running AND a stop handler is wired — see [LiveManageSheet.actions]).
  * @property showHideNow the immediate privacy escape hatch ("Hide me now").
- * @property showStart the one-tap start action (member-gated, not sharing).
- * @property showMemberTeaser the "starting is gated" fallback text.
- * @property showAudienceEntry the always-present "More options" row into the full
- *   live-location screen, where the caller sees and manages who can see them.
+ * @property showStart the one-tap start action (flag on, not sharing).
+ * @property showUnavailableNotice the "live location sharing isn't available
+ *   right now" fallback text, shown when starting is blocked by the
+ *   LIVE_LOCATION feature flag being OFF. This is a FLAG gate, not a membership
+ *   gate — sharing your own position is free — so the notice must not claim a
+ *   membership is required.
+ * @property showAudienceEntry the "More options" / "Who can see me" row into the
+ *   full live-location screen, where the caller sees and manages who can see
+ *   them. Reachable in every state while the sheet is up.
  */
 data class LiveManageRows(
     val showStop: Boolean,
     val showHideNow: Boolean,
     val showStart: Boolean,
-    val showMemberTeaser: Boolean,
+    val showUnavailableNotice: Boolean,
     val showAudienceEntry: Boolean,
 )
 
@@ -279,10 +284,11 @@ object LiveManageSheet {
             showStop = isSharing && hasStop,
             // Hide-me-now is the never-gated privacy escape; offered while sharing.
             showHideNow = isSharing,
-            // One-tap start only when idle and permitted to start.
+            // One-tap start only when idle and the LIVE_LOCATION flag is on.
             showStart = !isSharing && canShareLive,
-            // Idle + not permitted → explain instead of offering start.
-            showMemberTeaser = !isSharing && !canShareLive,
+            // Idle + flag off → explain it's unavailable instead of offering
+            // start. This is flag-gated, NOT member-gated (own sharing is free).
+            showUnavailableNotice = !isSharing && !canShareLive,
             // "Who can see me" (the full live-location screen) is ALWAYS reachable,
             // in every state — it is the relocated audience-management entry point.
             showAudienceEntry = true,

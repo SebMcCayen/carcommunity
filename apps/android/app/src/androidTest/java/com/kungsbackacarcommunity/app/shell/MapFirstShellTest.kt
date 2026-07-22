@@ -666,6 +666,41 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertIsDisplayed()
     }
 
+    /**
+     * Idle + LIVE_LOCATION flag OFF (canShareLive = false). Starting is
+     * FLAG-gated, not member-gated, so the sheet must show the "not available"
+     * notice — NOT the old message claiming an active membership is required —
+     * while still offering the audience ("More options") entry. Guards Copilot's
+     * misleading-message finding and proves the row is driven by the model.
+     */
+    @Test
+    fun liveManageSheet_whenFlagOff_showsUnavailableNoticeNotMemberMessage() {
+        composeTestRule.setContent {
+            KccTheme {
+                LiveSharePopup(
+                    isSharing = false,
+                    canShareLive = false,
+                    onStart = {},
+                    onHideMeNow = {},
+                    onOpenDetails = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
+        // The accurate feature-unavailable notice is shown...
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_shareUnavailable))
+            .assertIsDisplayed()
+        // ...and the misleading membership message is NOT.
+        composeTestRule
+            .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
+            .assertDoesNotExist()
+        // No Start row while the flag is off; audience entry stays reachable.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_start)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertIsDisplayed()
+    }
+
     @Test
     fun chatBubble_opensAndDismissesChatHub() {
         setShell()
