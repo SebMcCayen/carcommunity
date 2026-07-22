@@ -1,6 +1,15 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.flow.Flow
+
+/**
+ * Default nearby-discovery radius (metres) — the same 15 km default the backend
+ * clamps to (functions/src/incidents/incidents-core.ts DEFAULT_RADIUS_METERS,
+ * shared by live.listNearby). Covers a comfortable map viewport without asking
+ * for the whole country.
+ */
+const val DEFAULT_NEARBY_RADIUS_METERS: Double = 15_000.0
 
 /** One GPS sample to publish via live.updatePosition. */
 data class LiveCoordinate(
@@ -58,6 +67,20 @@ data class LiveMarker(
 )
 
 /**
+ * One nearby STANDALONE live sharer, as `live.listNearby` returns them. The
+ * viewer uses [uid] to subscribe the existing per-uid [LiveLocationRepository.observeLatest]
+ * stream (the live source of truth); [latitude]/[longitude]/[displayName] seed
+ * the initial marker before the first RTDB frame arrives. Mirrors the backend
+ * `LiveNearbyView` (functions/src/live/nearby-core.ts).
+ */
+data class NearbyLiveSession(
+    val uid: String,
+    val latitude: Double,
+    val longitude: Double,
+    val displayName: String? = null,
+)
+
+/**
  * Live-location session operations (Phase 12 slice 5). Firebase-free interface
  * so the coordinator and screen logic are JVM-unit-testable with fakes.
  *
@@ -68,7 +91,8 @@ data class LiveMarker(
  * read per-uid ([observeLatest]) from `liveLocation/{uid}/latest`. There is NO
  * collection scan — the RTDB rules grant only per-uid reads — so viewing other
  * members' markers is done by combining explicit per-uid [observeLatest] flows
- * (e.g. a group-drive roster) in the Map layer.
+ * (a group-drive/convoy roster, or the [listNearby] discovery result) in the
+ * Map layer.
  */
 interface LiveLocationRepository {
     /** live.startSession — (re)starts the caller's session with a duration. */
@@ -90,6 +114,18 @@ interface LiveLocationRepository {
 
     /** live.hideMeNow — privacy stop; always available, even while suspended. */
     suspend fun hideMeNow()
+
+    /**
+     * live.listNearby — active standalone sharers within [radiusMeters] of
+     * [center], EXCLUDING the caller and blocked relationships (enforced
+     * server-side). Returns the discovery seeds; the caller subscribes each
+     * uid's [observeLatest] for live updates. A bounded, one-round-trip geo
+     * query (mirrors incidents.listNearby) — never a collection scan.
+     */
+    suspend fun listNearby(
+        center: LatLng,
+        radiusMeters: Double = DEFAULT_NEARBY_RADIUS_METERS,
+    ): List<NearbyLiveSession>
 
     /** Live view of the caller's own session node; emits null when none. */
     fun observeOwnSession(uid: String): Flow<LiveSessionInfo?>

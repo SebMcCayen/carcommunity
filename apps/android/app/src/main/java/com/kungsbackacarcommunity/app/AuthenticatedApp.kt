@@ -170,6 +170,9 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
+import com.kungsbackacarcommunity.app.live.NearbyLiveController
+import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
+import com.kungsbackacarcommunity.app.live.NearbyLiveSession
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.location.LocationAccess
 import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
@@ -277,6 +280,24 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * How often the map re-polls live.listNearby for nearby standalone sharers while
+ * the Map tab is showing. Sharers move and start/stop, so unlike incidents this
+ * is a steady poll rather than a cold-open one-shot. 20s balances freshness
+ * against callable cost; each poll is one bounded geo query, and a sharer's
+ * position between polls still streams live through their per-uid RTDB marker.
+ */
+private const val NEARBY_LIVE_POLL_MS = 20_000L
+
+/**
+ * Max nearby standalone sharers subscribed at once. live.listNearby can return
+ * up to 200 (sorted by freshness); opening one RTDB observeLatest() stream per
+ * uid in a dense area is real bandwidth/battery + backend load for markers the
+ * overlay only draws while on-screen. Capping to the freshest N bounds the
+ * concurrent listener count without a visible loss on a normal viewport.
+ */
+private const val MAX_NEARBY_LIVE_MARKERS = 50
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -605,6 +626,16 @@ fun AuthenticatedApp(
             // nav PR reuses (report at current location + nearby list).
             val incidentController =
                 remember(context) { IncidentReportController.createIfAvailable(context) }
+
+            // Nearby-public live-sharer discovery (live.listNearby). Built on the
+            // existing live-location repository (null in a config-less/CI build →
+            // no controller → no nearby layer). Holds only the discovery SEEDS
+            // (uid + last position); the live stream comes from each uid's
+            // per-uid RTDB observeLatest below, exactly like the convoy layer.
+            val nearbyLiveController =
+                remember(liveLocationRepository) {
+                    liveLocationRepository?.let { NearbyLiveController(it) }
+                }
             val incidentsFlow =
                 remember(incidentController) {
                     incidentController?.nearbyIncidents ?: MutableStateFlow(emptyList<Incident>())
@@ -1617,6 +1648,93 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // --- Nearby-public live sharers (live.listNearby discovery) ---
+                // Poll the discovery callable around the current map centre while
+                // the Map tab is showing. Each poll is one bounded geo query; a
+                // sharer's motion between polls still streams live through their
+                // per-uid RTDB marker below. A failed poll leaves the last list
+                // intact (the controller swallows it), so a blip does not clear
+                // the layer.
+                LaunchedEffect(selectedTab, nearbyLiveController, mapSurface) {
+                    val controller = nearbyLiveController ?: return@LaunchedEffect
+                    if (selectedTab != ShellTab.Map) {
+                        // Off the Map tab: drop the seeds so nearbyUids empties and
+                        // the per-uid RTDB observeLatest listeners below are torn
+                        // down — no background bandwidth/battery while the map is
+                        // not on screen (the same selectedTab-gating other listeners
+                        // in this shell use).
+                        controller.clear()
+                        return@LaunchedEffect
+                    }
+                    while (true) {
+                        mapSurface.cameraSnapshot.value?.let { camera ->
+                            controller.refresh(
+                                LatLng(longitude = camera.longitude, latitude = camera.latitude),
+                            )
+                        }
+                        delay(NEARBY_LIVE_POLL_MS)
+                    }
+                }
+
+                val nearbySeedsFlow =
+                    remember(nearbyLiveController) {
+                        nearbyLiveController?.nearbySharers
+                            ?: MutableStateFlow(emptyList<NearbyLiveSession>())
+                    }
+                val nearbySeeds by nearbySeedsFlow.collectAsState()
+
+                // Discovery uids to draw: drop self and anyone already drawn by
+                // the convoy layer (a convoy member who is ALSO broadcasting must
+                // not appear twice, once per layer). The backend already excludes
+                // self + blocked, but self is dropped again defensively. Capped at
+                // MAX_NEARBY_LIVE_MARKERS: the backend can return up to 200 sorted
+                // by freshness, and eagerly opening one RTDB observeLatest() stream
+                // per uid in a dense area is real bandwidth/battery + backend load
+                // for markers the overlay only draws while on-screen anyway. Taking
+                // the freshest N bounds the concurrent listener count; distant/older
+                // sharers simply aren't subscribed.
+                val nearbyUids =
+                    remember(nearbySeeds, convoyLiveUids, uid) {
+                        val convoySet = convoyLiveUids.toSet()
+                        nearbySeeds
+                            .map { it.uid }
+                            .filter { it.isNotBlank() && it != uid && it !in convoySet }
+                            .distinct()
+                            .take(MAX_NEARBY_LIVE_MARKERS)
+                    }
+
+                // One per-uid RTDB read each, combined — the SAME
+                // no-collection-scan shape the convoy layer uses (the rules grant
+                // per-uid reads only), so a returned uid renders from the live
+                // stream, not the poll's stale seed.
+                val nearbyMarkersFlow: Flow<List<LiveMarker?>> =
+                    remember(liveLocationRepository, nearbyUids) {
+                        if (liveLocationRepository == null || nearbyUids.isEmpty()) {
+                            flowOf(emptyList())
+                        } else {
+                            combine(
+                                nearbyUids.map { liveLocationRepository.observeLatest(it) },
+                            ) { it.toList() }
+                        }
+                    }
+                val nearbyMarkers by nearbyMarkersFlow.collectAsState(initial = emptyList())
+                val nearbyLiveMarkers =
+                    remember(nearbyMarkers) { nearbyMarkers.filterNotNull() }
+
+                // Composes nothing at all unless somebody nearby is actually
+                // sharing (and visible), so an empty neighbourhood adds no layer.
+                val nearbyOverlaySlot: (@Composable () -> Unit)? =
+                    if (nearbyLiveMarkers.isNotEmpty()) {
+                        {
+                            NearbyLiveOverlay(
+                                mapSurface = mapSurface,
+                                sharers = nearbyLiveMarkers,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 val convoyBarSlot: (@Composable (Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {
                         { compact ->
@@ -2109,6 +2227,7 @@ fun AuthenticatedApp(
                                     // Convoy member markers + off-screen direction
                                     // arrows, drawn on the map under the chrome.
                                     convoyOverlay = convoyOverlaySlot,
+                                    nearbyOverlay = nearbyOverlaySlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its

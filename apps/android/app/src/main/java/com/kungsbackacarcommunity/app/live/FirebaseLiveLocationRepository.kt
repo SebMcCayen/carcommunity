@@ -9,6 +9,7 @@ import com.google.firebase.database.ValueEventListener
 import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import com.kungsbackacarcommunity.app.garage.VehicleValidation
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import java.time.Instant
 import java.time.Year
 import kotlinx.coroutines.channels.awaitClose
@@ -63,6 +64,24 @@ class FirebaseLiveLocationRepository private constructor(
         call(HIDE_ME_NOW, emptyMap())
     }
 
+    override suspend fun listNearby(
+        center: LatLng,
+        radiusMeters: Double,
+    ): List<NearbyLiveSession> {
+        val result =
+            functions.getHttpsCallable(LIST_NEARBY)
+                .call(
+                    mapOf(
+                        "latitude" to center.latitude,
+                        "longitude" to center.longitude,
+                        "radiusMeters" to radiusMeters,
+                    ),
+                )
+                .awaitOrThrow { "$LIST_NEARBY failed without a cause" }
+        // Parsing is delegated so the SDK->model mapping stays unit-testable.
+        return NearbyLiveParser.parse(result.data)
+    }
+
     override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = callbackFlow {
         val ref = database.getReference("liveLocation/$uid/session")
         val listener =
@@ -114,6 +133,7 @@ class FirebaseLiveLocationRepository private constructor(
         private const val STOP_SESSION = "live-stopSession"
         private const val EXTEND_SESSION = "live-extendSession"
         private const val HIDE_ME_NOW = "live-hideMeNow"
+        private const val LIST_NEARBY = "live-listNearby"
 
         fun createIfAvailable(context: Context): LiveLocationRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

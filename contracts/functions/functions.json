@@ -39,8 +39,8 @@
     {
       "name": "live.startSession",
       "domain": "live",
-      "description": "Starts (or RESTARTS with a fresh id/expiry) the caller's live location session with a chosen duration (1h|2h|4h). Member-only; gated by the liveLocation flag. Session state lives at RTDB liveLocation/{uid}/session - backend-only writes; owner-only read. Deployed via grouped export as live-startSession (functions/src/live/session.ts).",
-      "access": "member",
+      "description": "Starts (or RESTARTS with a fresh id/expiry) the caller's live location session with a chosen duration (1h|2h|4h), and clears any stale nearby-discovery doc. Sharing your OWN location is FREE: enforced by requireActiveActor (any authenticated, non-suspended, non-deleted caller) — NOT requireMemberActor, so this stays free even when member gating is re-locked; only VIEWING others is the paid surface. Gated by the liveLocation feature flag. Session state lives at RTDB liveLocation/{uid}/session - backend-only writes; owner-only read. Deployed via grouped export as live-startSession (functions/src/live/session.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
@@ -48,8 +48,8 @@
     {
       "name": "live.updatePosition",
       "domain": "live",
-      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry). Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by non-suspended activeMember claims only. Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
-      "access": "member",
+      "description": "Writes the caller's latest position to RTDB liveLocation/{uid}/latest (lean marker node with denormalized displayName and session expiry) AND refreshes the queryable nearby-discovery doc liveSessions/{uid} (geoCell + last position + expiresAt TTL) that live.listNearby reads (the Firestore write is throttled to at most once per 60s, or immediately on a geoCell change, while the RTDB marker updates every sample). Sharing your own position is FREE: enforced by requireActiveActor (authenticated, non-suspended), NOT requireMemberActor. Requires an ACTIVE unexpired session; enforces the contract's 60-second staleness threshold. Markers are readable by any non-suspended signed-in viewer who is not blocked by/blocking the sharer — the RTDB read rule encodes only suspended + blocking, NOT an activeMember gate (member gating is disabled repo-wide, shared/memberGating.ts; a paid-viewing gate is added to that rule when re-locked). Deployed via grouped export as live-updatePosition (functions/src/live/session.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (documented as updateLivePosition)"
@@ -66,7 +66,7 @@
     {
       "name": "live.hideMeNow",
       "domain": "live",
-      "description": "Immediately stops the caller's session (reason hide_me_now) and removes the latest marker. signedIn access: works while SUSPENDED — removing your own position is a privacy action that must always be available. Deployed via grouped export as live-hideMeNow (functions/src/live/session.ts).",
+      "description": "Immediately stops the caller's session (reason hide_me_now), removes the latest marker AND deletes the nearby-discovery doc liveSessions/{uid} — so 'hide me now' removes the sharer from live.listNearby discovery at once, not just from the per-uid marker read. signedIn access: works while SUSPENDED — removing your own position is a privacy action that must always be available. Deployed via grouped export as live-hideMeNow (functions/src/live/session.ts).",
       "access": "signedIn",
       "appCheck": true,
       "status": "implemented",
@@ -76,7 +76,16 @@
       "name": "live.extendSession",
       "domain": "live",
       "description": "Extends the caller's ACTIVE, not-yet-expired live location session ({} input — takes no client-controlled fields) by pushing expiresAt forward to a FRESH capped window (now + LIVE_SESSION_MAX_MS = 6h). This is the server side of the client's pre-expiry 'still sharing? continue?' prompt (shown 15 min before expiry). The new expiry is server-computed and server-clamped to the 6h hard cap, so a client can never obtain a longer window; only expiresAt changes (session id/displayName/mainCar carry forward, so no marker flicker). A session already past expiry (or stopped/expired) is failed-precondition — once expiry passes the extend path is closed and the client stop / 5-minute sweep stands. Free like startSession (sharing your own position needs no subscription); gated by the liveLocation flag. Deployed via grouped export as live-extendSession (functions/src/live/session.ts).",
-      "access": "member",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "live.listNearby",
+      "domain": "live",
+      "description": "Bounded read of ACTIVE, unexpired live sharers near a point ({ latitude, longitude, radiusMeters? }, radius clamped to 100..50000 m, default 15000), so a STANDALONE ('Single') live sharer is discoverable by users nearby even with no convoy/group roster carrying their uid. Open to ANY active signed-in user (requireActiveActor), mirroring incidents.listNearby: enumerates the grid cells covering the radius and reads only those from the queryable Firestore index liveSessions/{uid} (written/refreshed by live.updatePosition) via chunked `geoCell in [...]` queries (+ status=='active' and expiresAt>now), then filters to the exact server-computed Haversine radius. EXCLUSIONS: the caller's own session (self); anyone the caller has blocked or who has blocked the caller (block matrix resolved in both directions, reusing the convoy resolvePeerBlockPairs helper); expired docs; suspended users (enforced at write time — updatePosition requires a non-suspended actor, so a suspended user cannot refresh a discovery doc and ages out within the discovery TTL). Returns { sessions: [{ uid, latitude, longitude, displayName, updatedAt, expiresAt }] }, capped at 200; the client subscribes each returned uid's existing RTDB liveLocation/{uid}/latest observeLatest stream for live updates (which itself re-enforces blocking + suspension on the viewer). The high-frequency position stream stays in RTDB; only the geo index is in Firestore. Deployed via grouped export as live-listNearby (functions/src/live/listNearby.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"

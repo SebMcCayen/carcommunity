@@ -474,6 +474,10 @@
     "errorTemporarilyUnavailable": "Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.",
     "errorGeneric": "Något gick fel. Försök igen."
   },
+  "nearby": {
+    "liveSharerOnMap": "%1$s delar live i närheten",
+    "unknownSharer": "Någon i närheten"
+  },
   "convoy": {
     "title": "Konvojer",
     "createAction": "Skapa en konvoj",

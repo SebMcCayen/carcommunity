@@ -474,6 +474,10 @@
     "errorTemporarilyUnavailable": "Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.",
     "errorGeneric": "Something went wrong. Please try again."
   },
+  "nearby": {
+    "liveSharerOnMap": "%1$s is sharing live nearby",
+    "unknownSharer": "Someone nearby"
+  },
   "convoy": {
     "title": "Convoys",
     "createAction": "Create a convoy",

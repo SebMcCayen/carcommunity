@@ -5,6 +5,8 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionInfo
+import com.kungsbackacarcommunity.app.live.NearbyLiveSession
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +49,9 @@ class MapMarkerFeedTest {
         override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
 
         override fun observeLatest(uid: String): Flow<LiveMarker?> = flowFor(uid)
+
+        override suspend fun listNearby(center: LatLng, radiusMeters: Double) =
+            emptyList<NearbyLiveSession>()
     }
 
     /** Mirrors MapRoute's combine: own + per-uid others → drawn marker list. */

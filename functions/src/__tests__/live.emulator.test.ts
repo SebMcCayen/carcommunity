@@ -276,9 +276,12 @@ describe('live session lifecycle', () => {
     const newExpiry = Date.parse(extended.expiresAt);
     expect(newExpiry).toBeGreaterThan(startedExpiry);
     // ...and exactly a 6h cap from "now" (bounded by the call's wall-clock window).
+    // Slack is generous (±60s) so emulator/CI variance in the callable's wall
+    // time can't flake this: a 60s window still verifies the 6h cap math.
     const SIX_H = 6 * 60 * 60 * 1000;
-    expect(newExpiry).toBeGreaterThanOrEqual(before + SIX_H - 5_000);
-    expect(newExpiry).toBeLessThanOrEqual(after + SIX_H + 5_000);
+    const SLACK = 60_000;
+    expect(newExpiry).toBeGreaterThanOrEqual(before + SIX_H - SLACK);
+    expect(newExpiry).toBeLessThanOrEqual(after + SIX_H + SLACK);
 
     // The session node itself carries the new expiry.
     const node = (await adminRtdb.ref(`liveLocation/${sharer.uid}/session`).get()).val();

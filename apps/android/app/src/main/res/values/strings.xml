@@ -432,6 +432,8 @@
     <string name="friends_errorRequestGone">Förfrågan är inte längre tillgänglig.</string>
     <string name="friends_errorTemporarilyUnavailable">Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.</string>
     <string name="friends_errorGeneric">Något gick fel. Försök igen.</string>
+    <string name="nearby_liveSharerOnMap">%1$s delar live i närheten</string>
+    <string name="nearby_unknownSharer">Någon i närheten</string>
     <string name="convoy_title">Konvojer</string>
     <string name="convoy_createAction">Skapa en konvoj</string>
     <string name="convoy_invitesTitle">Konvoj-inbjudningar</string>

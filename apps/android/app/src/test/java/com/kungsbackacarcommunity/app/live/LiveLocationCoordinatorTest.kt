@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -42,6 +43,9 @@ class LiveLocationCoordinatorTest {
         override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
 
         override fun observeLatest(uid: String): Flow<LiveMarker?> = flowOf(null)
+
+        override suspend fun listNearby(center: LatLng, radiusMeters: Double) =
+            emptyList<NearbyLiveSession>()
     }
 
     @Test
