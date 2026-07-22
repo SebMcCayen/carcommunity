@@ -39,13 +39,49 @@ data class DmUser(
     val avatarPath: String?,
 )
 
-/** A single rendered DM. [createdAtIso] is the pagination cursor for older pages. */
+/**
+ * Delivery state of a rendered DM. Server-sourced messages (the live listener,
+ * paginated pages) are always [Sent]. Only the caller's own OPTIMISTIC bubble —
+ * shown instantly on tap before the `dm-sendMessage` round-trip resolves —
+ * carries [Sending] or [Failed]; it is reconciled away (by [DmMessage.clientId])
+ * the moment the real document arrives from the listener.
+ */
+enum class DmDeliveryState {
+    Sent,
+    Sending,
+    Failed,
+}
+
+/**
+ * A single rendered DM. [createdAtIso] is the pagination cursor for older pages.
+ *
+ * [clientId] is the idempotency key the SENDER attached on the optimistic path.
+ * It is persisted on the message document — as both the `clientId` field and the
+ * doc [id] — and the tree is member-readable, so it is visible to BOTH
+ * participants: a delivered message carries the clientId its sender used whether
+ * the caller sent it OR received it from the other party. Locally it is only the
+ * join key that reconciles the caller's OWN pending optimistic bubble against the
+ * arriving snapshot so the message renders exactly once ([DmThread.mergeWithPending],
+ * whose doc [id] EQUALS the clientId); an incoming message's clientId simply
+ * never matches a pending bubble, so it is inert. Consumers should treat it as an
+ * optimistic-bubble correlation id ONLY — it is NOT a security/identity signal
+ * and must never be used for authorization or to attribute a message to a user
+ * (use [senderUid] for that). Null only on legacy messages sent without a key.
+ */
 data class DmMessage(
     val id: String,
     val senderUid: String,
     val text: String,
     val createdAtMillis: Long?,
     val createdAtIso: String?,
+    val clientId: String? = null,
+    val deliveryState: DmDeliveryState = DmDeliveryState.Sent,
+    /**
+     * Why an optimistic send failed, set only on a [DmDeliveryState.Failed]
+     * bubble. Drives the specific failure reason shown under the bubble and
+     * whether a retry is offered ([DmSendError.isRetryable]). Null otherwise.
+     */
+    val sendError: DmSendError? = null,
 )
 
 /** Denormalized last-message preview shown on an inbox row. */
@@ -106,6 +142,16 @@ enum class DmSendError {
     CannotDeliver,
     Generic,
 }
+
+/**
+ * Whether re-sending the SAME message could plausibly succeed. Only [Generic]
+ * (a transient/network/unknown failure) is retryable; the rest are terminal for
+ * this message — signed out (needs re-auth), not an active member, invalid
+ * input, or cannot-deliver (not friends / blocked) — so the UI shows the reason
+ * WITHOUT a pointless "tap to retry" that would just fail the same way.
+ */
+val DmSendError.isRetryable: Boolean
+    get() = this == DmSendError.Generic
 
 /** Outcome of `dm-sendMessage`. */
 sealed interface DmSendResult {
@@ -231,6 +277,30 @@ object DmThread {
         )
     }
 
+    /**
+     * Merges the server-sourced messages ([merge] of older + live) with the
+     * caller's still-[pending] optimistic bubbles for display. A pending bubble
+     * whose id (its clientId) has ALREADY arrived in the server set is dropped:
+     * the delivered document — whose doc id equals that clientId — supersedes it,
+     * so an optimistic send and its snapshot render as exactly ONE message, never
+     * two. The optimistic bubble's local timestamp slots it in the same
+     * (newest) position the real doc will take, so it doesn't jump on reconcile.
+     */
+    fun mergeWithPending(
+        older: List<DmMessage>,
+        live: List<DmMessage>,
+        pending: List<DmMessage>,
+    ): List<DmMessage> {
+        val real = merge(older, live)
+        if (pending.isEmpty()) return real
+        val realIds = real.mapTo(HashSet(real.size)) { it.id }
+        val stillPending = pending.filter { it.id !in realIds }
+        if (stillPending.isEmpty()) return real
+        return (real + stillPending).sortedWith(
+            compareBy({ it.createdAtMillis ?: Long.MAX_VALUE }, { it.id }),
+        )
+    }
+
     /** The pagination cursor for the next older page: the earliest message's ISO createdAt. */
     fun oldestCursor(messages: List<DmMessage>): String? =
         messages.minByOrNull { it.createdAtMillis ?: Long.MAX_VALUE }?.createdAtIso
@@ -277,6 +347,7 @@ object DmResponseParser {
             text = map["text"] as? String ?: "",
             createdAtMillis = iso?.let(::isoToMillisOrNull),
             createdAtIso = iso,
+            clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

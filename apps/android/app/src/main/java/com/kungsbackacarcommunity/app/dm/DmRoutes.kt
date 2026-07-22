@@ -104,7 +104,7 @@ fun ChatRoute(
             .collectAsState(initial = BlockActionStatus.Idle)
     val coordinator =
         remember(repository, uid, otherUid, conversationId) {
-            DmThreadCoordinator(repository, otherUid, conversationId)
+            DmThreadCoordinator(repository, selfUid = uid, otherUid = otherUid, conversationId = conversationId)
         }
 
     var threadKey by remember(conversationId) { mutableStateOf(0) }
@@ -114,10 +114,20 @@ fun ChatRoute(
     val liveMessages = (threadState as? DmThreadState.Loaded)?.messages ?: emptyList()
 
     val older by coordinator.olderMessages.collectAsState()
-    val displayed = remember(older, liveMessages) { DmThread.merge(older, liveMessages) }
-    val sendStatus by coordinator.sendStatus.collectAsState()
+    val pending by coordinator.pendingMessages.collectAsState()
+    // Server messages merged with the caller's optimistic bubbles; a bubble whose
+    // delivered doc has arrived (matched by clientId == doc id) is dropped, so an
+    // optimistic send and its snapshot render as exactly one message.
+    val displayed =
+        remember(older, liveMessages, pending) {
+            DmThread.mergeWithPending(older, liveMessages, pending)
+        }
     val pageStatus by coordinator.pageStatus.collectAsState()
     val sentCount by coordinator.sentCount.collectAsState()
+
+    // Reconcile the optimistic bubbles against every live snapshot: once the real
+    // document lands, drop the matching pending bubble.
+    LaunchedEffect(liveMessages) { coordinator.onLiveMessages(liveMessages) }
 
     // Mark read on open, and again whenever a NEW INCOMING message lands while
     // the thread is open. A newest message that is the caller's own send carries
@@ -146,12 +156,13 @@ fun ChatRoute(
         messages = displayed,
         currentUid = uid,
         threadLoading = threadState is DmThreadState.Loading,
-        sendStatus = sendStatus,
         canLoadOlder = pageStatus != DmPageStatus.End && displayed.size >= DM_MESSAGES_PAGE_SIZE,
         isLoadingOlder = pageStatus == DmPageStatus.Loading,
         onSend = { text -> scope.launch { coordinator.send(text) } },
+        onRetry = { message ->
+            message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
+        },
         onLoadOlder = { scope.launch { coordinator.loadOlder(DmThread.oldestCursor(displayed)) } },
-        onResetError = { coordinator.resetSendError() },
         // Guarded on a resolvable target: a blank otherUid would open a dead
         // profile route (dmPairId can be derived from a malformed conversation).
         onViewProfile =

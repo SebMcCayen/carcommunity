@@ -104,7 +104,10 @@ async function newMember(displayName: string): Promise<TestUser> {
   await adminDb
     .collection('users')
     .doc(uid)
-    .set({ activeMember: true, displayName, avatarPath: `profileImages/${uid}/a.jpg` }, { merge: true });
+    .set(
+      { activeMember: true, displayName, avatarPath: `profileImages/${uid}/a.jpg` },
+      { merge: true },
+    );
   return { uid, email, password };
 }
 
@@ -317,6 +320,67 @@ describe('dm messaging lifecycle', () => {
     expect(await dmUnreadTotal(bob.uid)).toBe(0);
   });
 
+  it('is idempotent for a repeated clientId — one message, unread bumped once', async () => {
+    const uri = await newMember('IdempSender');
+    const vera = await newMember('IdempRecipient');
+    await makeFriends(uri, vera);
+    const conversationId = pairId(uri.uid, vera.uid);
+    const clientId = `optimistic-${Date.now()}`;
+
+    await signInAs(uri);
+    // First send with the client idempotency key.
+    const first = (await call('dm-sendMessage', { toUid: vera.uid, text: 'once', clientId }))
+      .data as {
+      conversationId: string;
+      messageId: string;
+    };
+    // The client key IS the message doc id.
+    expect(first.messageId).toBe(clientId);
+
+    // A retry of the SAME send (same clientId) — e.g. the client missed the ack.
+    const retry = (await call('dm-sendMessage', { toUid: vera.uid, text: 'once', clientId }))
+      .data as {
+      messageId: string;
+    };
+    expect(retry.messageId).toBe(clientId);
+
+    // Exactly one message doc, and the recipient's unread bumped exactly once —
+    // the retry did NOT double-post or double-count.
+    await pollUntil(async () => ((await dmUnreadTotal(vera.uid)) >= 1 ? true : undefined));
+    expect(await dmUnreadTotal(vera.uid)).toBe(1);
+    const page = (await call('dm-getMessages', { conversationId })).data as {
+      messages: Array<{ id: string; text: string; clientId?: string }>;
+    };
+    expect(page.messages).toHaveLength(1);
+    expect(page.messages[0]!.id).toBe(clientId);
+    // getMessages echoes the stored idempotency key back to the client.
+    expect(page.messages[0]!.clientId).toBe(clientId);
+
+    // The recipient is notified only once (the duplicate wrote nothing).
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(vera.uid, 'direct_message');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+
+    // Cross-sender collision guard: the OTHER member reusing the same clientId
+    // (an astronomically unlikely UUID collision) must NOT be swallowed as a
+    // duplicate success — that would silently drop their message. It surfaces
+    // already-exists, and the original message is untouched (still one doc).
+    await signInAs(vera);
+    expect(
+      await callableErrorCode(
+        call('dm-sendMessage', { toUid: uri.uid, text: 'collision', clientId }),
+      ),
+    ).toBe('functions/already-exists');
+    const afterCollision = (await call('dm-getMessages', { conversationId })).data as {
+      messages: Array<{ id: string; senderUid: string; text: string }>;
+    };
+    expect(afterCollision.messages).toHaveLength(1);
+    expect(afterCollision.messages[0]!.senderUid).toBe(uri.uid);
+    expect(afterCollision.messages[0]!.text).toBe('once');
+  });
+
   it('getMessages is not-found for non-members', async () => {
     const carol = await newMember('CarolDM');
     const dave = await newMember('DaveDM');
@@ -351,7 +415,9 @@ describe('conversations Firestore rules', () => {
     // Both members read the conversation doc + messages subcollection.
     const asMona = await getDoc(doc(firestore, 'conversations', conversationId));
     expect(asMona.exists()).toBe(true);
-    const monaMsgs = await getDocs(collection(firestore, 'conversations', conversationId, 'messages'));
+    const monaMsgs = await getDocs(
+      collection(firestore, 'conversations', conversationId, 'messages'),
+    );
     expect(monaMsgs.docs.length).toBe(1);
 
     await signInAs(nils);

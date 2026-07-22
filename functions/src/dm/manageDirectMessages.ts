@@ -44,6 +44,7 @@ import {
   DM_CONVERSATIONS_LIMIT,
   DM_MESSAGES_PAGE_SIZE,
   EMPTY_MESSAGE_MESSAGE,
+  MESSAGE_ID_CONFLICT_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   NOT_FRIENDS_MESSAGE,
   SELF_MESSAGE_MESSAGE,
@@ -103,10 +104,7 @@ function toIso(value: unknown): string | null {
 
 /** True when either party has blocked the other (block honoured both ways). */
 async function isBlockedEitherWay(a: string, b: string): Promise<boolean> {
-  const [aBlockedB, bBlockedA] = await Promise.all([
-    blockRef(a, b).get(),
-    blockRef(b, a).get(),
-  ]);
+  const [aBlockedB, bBlockedA] = await Promise.all([blockRef(a, b).get(), blockRef(b, a).get()]);
   return aBlockedB.exists || bBlockedA.exists;
 }
 
@@ -138,7 +136,7 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { toUid, text } = parsed.input;
+  const { toUid, text, clientId } = parsed.input;
 
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
@@ -172,20 +170,57 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
 
   const pairId = dmPairId(actor.uid, toUid);
   const convRef = conversationRef(pairId);
-  const messageRef = convRef.collection('messages').doc();
+  // A client-supplied idempotency key is used verbatim as the message doc id, so
+  // a retry of the SAME send lands on the SAME document (idempotent). Without a
+  // key we fall back to an auto-id (legacy, never-a-retry) doc.
+  const messageRef =
+    clientId !== undefined
+      ? convRef.collection('messages').doc(clientId)
+      : convRef.collection('messages').doc();
   const recipientAggRef = unreadAggregateRef(toUid);
 
   // Returns the recipient's unread count for this conversation BEFORE this
   // message, read straight off the transaction's existing conversation get (no
-  // extra I/O). Drives the notify-once-per-unread-run rule below. Returned from
-  // the transaction rather than captured in a closure variable so a Firestore
-  // retry can't leave a stale value behind.
-  const priorUnread = await db.runTransaction<number>(async (tx) => {
+  // extra I/O). Drives the notify-once-per-unread-run rule below. Also reports
+  // whether the write was a DUPLICATE (a retry whose message doc already
+  // existed) so the notification is not re-sent. Returned from the transaction
+  // rather than captured in a closure variable so a Firestore retry can't leave
+  // a stale value behind.
+  const { priorUnread, duplicate } = await db.runTransaction<{
+    priorUnread: number;
+    duplicate: boolean;
+  }>(async (tx) => {
     const convSnap = await tx.get(convRef);
-    const ts = FieldValue.serverTimestamp();
     const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
     const rawUnread = unreadMap[toUid];
     const unreadBefore = typeof rawUnread === 'number' && rawUnread > 0 ? rawUnread : 0;
+
+    // Idempotency: when the caller supplied a clientId, a message doc already at
+    // that id means this exact send committed on an earlier attempt (the client
+    // just didn't see the ack, e.g. a dropped connection). Return it WITHOUT
+    // re-bumping unread / the aggregate or rewriting lastMessage — exactly-once
+    // regardless of how many times the optimistic client retries. All reads
+    // stay before any write, so the transaction contract holds. `priorUnread`
+    // stays truthful (the recipient's real unread-before) even though the
+    // notification is skipped on a duplicate via the `duplicate` flag.
+    //
+    // Only a resend BY THE SAME SENDER is an idempotent duplicate. A doc at this
+    // id authored by the OTHER member (an astronomically unlikely clientId
+    // collision, or a buggy client reusing a key across senders) must NOT be
+    // swallowed as a success — that would silently drop the intended message and
+    // surface the wrong content. Surface `already-exists` so the caller can
+    // regenerate the key. Same-sender text is intentionally not compared:
+    // first-write-wins is the idempotency guarantee.
+    if (clientId !== undefined) {
+      const existing = await tx.get(messageRef);
+      if (existing.exists) {
+        if (existing.data()?.senderUid !== actor.uid) {
+          throw new HttpsError('already-exists', MESSAGE_ID_CONFLICT_MESSAGE);
+        }
+        return { priorUnread: unreadBefore, duplicate: true };
+      }
+    }
+    const ts = FieldValue.serverTimestamp();
 
     if (!convSnap.exists) {
       tx.set(
@@ -216,12 +251,15 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
       );
     }
 
-    tx.set(messageRef, buildMessageDocument({ senderUid: actor.uid, text }, () => ts));
+    tx.set(
+      messageRef,
+      buildMessageDocument({ senderUid: actor.uid, text, clientId }, () => ts),
+    );
 
     // Keep the per-user aggregate in lock-step (owner-only readable badge source).
     tx.set(recipientAggRef, { dmUnreadTotal: FieldValue.increment(1) }, { merge: true });
 
-    return unreadBefore;
+    return { priorUnread: unreadBefore, duplicate: false };
   });
 
   // Best-effort in-app notification for the recipient (never fails the send).
@@ -237,7 +275,9 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
   // Blocking needs no check here: a blocked pair can't reach this point (the
   // both-ways block gate above rejects the send outright). The 'direct_message'
   // preference is honored per-recipient inside writeInAppNotification.
-  if (priorUnread === 0) {
+  //
+  // A duplicate (idempotent retry) writes nothing and must not re-notify.
+  if (!duplicate && priorUnread === 0) {
     const senderName = senderProfile.displayName ?? 'En vän';
     await writeInAppNotification(toUid, {
       category: 'direct_message',
@@ -342,7 +382,8 @@ export const getMessages = onCall(CALLABLE_OPTS, async (request): Promise<GetMes
     return toMessageSummary(doc.id, doc.data(), createdAtIso);
   });
 
-  const nextBefore = hasMore && messages.length > 0 ? messages[messages.length - 1]!.createdAt : null;
+  const nextBefore =
+    hasMore && messages.length > 0 ? messages[messages.length - 1]!.createdAt : null;
 
   return { conversationId, messages, nextBefore, hasMore };
 });

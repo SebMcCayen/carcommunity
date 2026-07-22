@@ -29,6 +29,17 @@ class DmTest {
     }
 
     @Test
+    fun `only a Generic send error is retryable`() {
+        // Transient/unknown → offer a resend.
+        assertTrue(DmSendError.Generic.isRetryable)
+        // Terminal → no pointless retry (would just fail the same way).
+        assertFalse(DmSendError.SignedOut.isRetryable)
+        assertFalse(DmSendError.NotMember.isRetryable)
+        assertFalse(DmSendError.Invalid.isRetryable)
+        assertFalse(DmSendError.CannotDeliver.isRetryable)
+    }
+
+    @Test
     fun `otherMember picks the member that is not the caller`() {
         assertEquals("b", DmMapper.otherMember(listOf("a", "b"), "a"))
         assertEquals("a", DmMapper.otherMember(listOf("a", "b"), "b"))
@@ -109,6 +120,56 @@ class DmTest {
         val live = listOf(message("m2", 200L), message("m3", 300L))
         val merged = DmThread.merge(older, live)
         assertEquals(listOf("m1", "m2", "m3"), merged.map { it.id })
+    }
+
+    @Test
+    fun `mergeWithPending appends an optimistic bubble at the end while it is in-flight`() {
+        val live = listOf(message("m1", 100L))
+        val pending =
+            DmMessage(
+                id = "cid-1",
+                senderUid = "me",
+                text = "hi",
+                createdAtMillis = 200L,
+                createdAtIso = null,
+                clientId = "cid-1",
+                deliveryState = DmDeliveryState.Sending,
+            )
+        val display = DmThread.mergeWithPending(emptyList(), live, listOf(pending))
+        assertEquals(listOf("m1", "cid-1"), display.map { it.id })
+        assertEquals(DmDeliveryState.Sending, display.last().deliveryState)
+    }
+
+    @Test
+    fun `mergeWithPending renders the optimistic message and its delivered doc as ONE`() {
+        // The delivered document's id equals the optimistic bubble's clientId,
+        // so once it arrives in the live window the bubble must NOT also show —
+        // exactly one message, not two.
+        val delivered = message("cid-1", 200L).copy(clientId = "cid-1")
+        val pending =
+            DmMessage(
+                id = "cid-1",
+                senderUid = "me",
+                text = "hi",
+                createdAtMillis = 200L,
+                createdAtIso = null,
+                clientId = "cid-1",
+                deliveryState = DmDeliveryState.Sent,
+            )
+        val display = DmThread.mergeWithPending(emptyList(), listOf(delivered), listOf(pending))
+        assertEquals(1, display.size)
+        assertEquals("cid-1", display.single().id)
+        // The server copy wins (it is [DmDeliveryState.Sent] with no local flag).
+        assertEquals("friend", display.single().senderUid)
+    }
+
+    @Test
+    fun `mergeWithPending with no pending is just the server merge`() {
+        val live = listOf(message("m1", 100L), message("m2", 200L))
+        assertEquals(
+            listOf("m1", "m2"),
+            DmThread.mergeWithPending(emptyList(), live, emptyList()).map { it.id },
+        )
     }
 
     @Test

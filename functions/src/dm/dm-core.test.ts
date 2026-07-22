@@ -25,9 +25,33 @@ describe('dm-core parsing', () => {
     });
     expect(parseSendMessageInput({ toUid: '', text: 'hi' }).ok).toBe(false);
     expect(parseSendMessageInput({ toUid: 'u-2', text: '' }).ok).toBe(false);
-    expect(parseSendMessageInput({ toUid: 'u-2', text: 'x'.repeat(DM_MESSAGE_MAX_LENGTH + 1) }).ok).toBe(false);
+    expect(
+      parseSendMessageInput({ toUid: 'u-2', text: 'x'.repeat(DM_MESSAGE_MAX_LENGTH + 1) }).ok,
+    ).toBe(false);
     expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', extra: 1 }).ok).toBe(false);
     expect(parseSendMessageInput(null).ok).toBe(false);
+  });
+
+  it('accepts an optional client idempotency key and rejects malformed ones', () => {
+    // A UUID-shaped key is accepted and carried through.
+    const uuid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: uuid })).toEqual({
+      ok: true,
+      input: { toUid: 'u-2', text: 'hi', clientId: uuid },
+    });
+    // Omitted is fine (legacy path).
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi' }).ok).toBe(true);
+    // A `/` would break the doc-id use; `..`/empty/over-long are rejected too.
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'a/b' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: '..' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: '' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'x'.repeat(65) }).ok).toBe(
+      false,
+    );
+    // Validated VERBATIM: surrounding whitespace is rejected, never trimmed into
+    // a different id (which would break optimistic de-dupe against the doc id).
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: ' abc' }).ok).toBe(false);
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'abc ' }).ok).toBe(false);
   });
 
   it('parses getMessages with an optional ISO cursor', () => {
@@ -69,7 +93,10 @@ describe('dm-core projections + preview', () => {
       avatarPath: 'p',
     });
     expect(toProfileProjection(undefined)).toEqual({ displayName: null, avatarPath: null });
-    expect(toProfileProjection({ displayName: 42 })).toEqual({ displayName: null, avatarPath: null });
+    expect(toProfileProjection({ displayName: 42 })).toEqual({
+      displayName: null,
+      avatarPath: null,
+    });
   });
 
   it('trims + truncates the preview', () => {
@@ -87,6 +114,16 @@ describe('dm-core builders', () => {
       text: 'hi',
       createdAt: 'TS',
     });
+  });
+
+  it('stores the clientId on the message doc only when supplied', () => {
+    expect(
+      buildMessageDocument({ senderUid: 'a', text: 'hi', clientId: 'c-1' }, () => 'TS'),
+    ).toEqual({ senderUid: 'a', text: 'hi', createdAt: 'TS', clientId: 'c-1' });
+    // Legacy send: no clientId field at all.
+    expect(buildMessageDocument({ senderUid: 'a', text: 'hi' }, () => 'TS')).not.toHaveProperty(
+      'clientId',
+    );
   });
 
   it('builds a new conversation with recipient unread seeded to 1', () => {
@@ -120,7 +157,10 @@ describe('dm-core summaries', () => {
       'a__b',
       {
         members: ['a', 'b'],
-        memberProfiles: { a: { displayName: 'Alice', avatarPath: 'pa' }, b: { displayName: 'Bob', avatarPath: null } },
+        memberProfiles: {
+          a: { displayName: 'Alice', avatarPath: 'pa' },
+          b: { displayName: 'Bob', avatarPath: null },
+        },
         lastMessage: { text: 'hey', senderUid: 'b', createdAt: 'T1' },
         unread: { a: 3, b: 0 },
         lastReadAt: { a: null, b: 'T0' },
@@ -155,6 +195,16 @@ describe('dm-core summaries', () => {
       senderUid: 'a',
       text: 'hi',
       createdAt: 'T1',
+    });
+  });
+
+  it('echoes the clientId on a message summary when the doc carries one', () => {
+    expect(toMessageSummary('c-1', { senderUid: 'a', text: 'hi', clientId: 'c-1' }, 'T1')).toEqual({
+      id: 'c-1',
+      senderUid: 'a',
+      text: 'hi',
+      createdAt: 'T1',
+      clientId: 'c-1',
     });
   });
 });

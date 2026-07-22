@@ -44,8 +44,15 @@ interface DmRepository {
     /** Live newest-window of a thread, chronological. Empty until the first message exists. */
     fun observeThread(conversationId: String): Flow<DmThreadState>
 
-    /** `dm-sendMessage` — sends to [toUid], creating the conversation on the first message. */
-    suspend fun sendMessage(toUid: String, text: String): DmSendResult
+    /**
+     * `dm-sendMessage` — sends to [toUid], creating the conversation on the first
+     * message. [clientId] is the send idempotency key: it is used verbatim as the
+     * message document id, so a resend of the SAME clientId (an optimistic retry)
+     * is exactly-once server-side and the delivered document reconciles against
+     * the local optimistic bubble by that key. Null keeps the legacy (auto-id,
+     * non-idempotent) behaviour.
+     */
+    suspend fun sendMessage(toUid: String, text: String, clientId: String? = null): DmSendResult
 
     /**
      * `dm-getMessages` — an older page before the [before] ISO cursor (page 30).
