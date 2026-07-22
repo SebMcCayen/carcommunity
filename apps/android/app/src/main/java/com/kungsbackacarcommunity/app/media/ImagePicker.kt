@@ -19,8 +19,10 @@ import kotlinx.coroutines.withContext
  * A remembered image-pick launcher backed by the Photo Picker
  * ([ActivityResultContracts.PickVisualMedia]) — no runtime permission needed on
  * any supported API level. Reads the picked image's bytes + content type off the
- * main thread and hands a [PickedImage] (or null when the user cancelled / the
- * read failed) to [onPicked].
+ * main thread and hands a [PickedImage] to `onPicked`; a user cancel is
+ * `onPicked(null)` and a chosen-but-unreadable pick routes to `onPickFailed`
+ * when one is provided, otherwise falling back to `onPicked(null)` (see
+ * [rememberImagePickLauncher]).
  */
 class ImagePickLauncher internal constructor(
     private val launch: () -> Unit,
@@ -29,16 +31,60 @@ class ImagePickLauncher internal constructor(
 }
 
 /**
+ * The three distinct outcomes of a photo pick, so a caller can tell a CANCEL
+ * (nothing chosen — stay silent) apart from a READ FAILURE (a photo was chosen
+ * but its bytes could not be read — surface an error). Collapsing both into a
+ * single `null` — as the picker did before — made a real pick that could not be
+ * read (a cloud-only Google Photos item that never finished downloading, an
+ * unreadable/oversized file, a content-resolver error) indistinguishable from a
+ * cancel, so the caller stayed silent and the user saw "nothing happens" after
+ * choosing a photo.
+ */
+internal sealed interface PickOutcome {
+    /** The user dismissed the picker without choosing anything. */
+    data object Cancelled : PickOutcome
+
+    /** A photo WAS chosen but its bytes could not be read (see above). */
+    data object Failed : PickOutcome
+
+    /** A photo was chosen and read successfully. */
+    data class Picked(val image: PickedImage) : PickOutcome
+}
+
+/**
+ * Pure mapping from a raw pick [source] (the picker's nullable result) to a
+ * [PickOutcome], extracted from the Compose launcher so the cancel-vs-failure
+ * decision is unit-testable without an Android [Uri]/[Context]. A null [source]
+ * is a cancel; otherwise [read] runs and a null read is a genuine failure.
+ */
+internal suspend fun <T : Any> resolvePickOutcome(
+    source: T?,
+    read: suspend (T) -> PickedImage?,
+): PickOutcome =
+    if (source == null) {
+        PickOutcome.Cancelled
+    } else {
+        read(source)?.let { PickOutcome.Picked(it) } ?: PickOutcome.Failed
+    }
+
+/**
  * @param maxBytes hard byte cap for the read. A pick whose size is known to
  *   exceed the cap is rejected before any bytes are read; an unknown-size
  *   stream is read with a bound of `maxBytes` and rejected if it overflows, so
  *   an oversized pick can never materialize an unbounded byte array (OOM).
  *   Defaults to the largest media cap ([MediaUpload.VEHICLE_IMAGE_MAX_BYTES]).
  *   The per-flow cap is still enforced exactly by the upload precheck.
+ * @param onPickFailed invoked when a photo WAS chosen but could not be read, so
+ *   the caller can surface a failure instead of silently doing nothing. When
+ *   null (the default), a failed read falls back to `onPicked(null)` — matching
+ *   the historical behaviour — so existing callers are unaffected. A genuine
+ *   user cancel is ALWAYS routed to `onPicked(null)`, never to this, so backing
+ *   out of the picker never shows an error.
  */
 @Composable
 fun rememberImagePickLauncher(
     maxBytes: Long = MediaUpload.VEHICLE_IMAGE_MAX_BYTES,
+    onPickFailed: (() -> Unit)? = null,
     onPicked: suspend (PickedImage?) -> Unit,
 ): ImagePickLauncher {
     val context = LocalContext.current
@@ -46,8 +92,11 @@ fun rememberImagePickLauncher(
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
             scope.launch {
-                val picked = uri?.let { readPickedImage(context, it, maxBytes) }
-                onPicked(picked)
+                when (val outcome = resolvePickOutcome(uri) { readPickedImage(context, it, maxBytes) }) {
+                    PickOutcome.Cancelled -> onPicked(null)
+                    PickOutcome.Failed -> if (onPickFailed != null) onPickFailed() else onPicked(null)
+                    is PickOutcome.Picked -> onPicked(outcome.image)
+                }
             }
         }
     return remember(launcher) {
