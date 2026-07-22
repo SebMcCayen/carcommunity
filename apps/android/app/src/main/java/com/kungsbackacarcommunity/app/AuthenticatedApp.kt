@@ -11,8 +11,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -2746,11 +2750,16 @@ fun AuthenticatedApp(
 
 
 /**
- * Height of [ShellBottomBar]. Mirrors the Material3 [NavigationBar] container
- * height (its own token is not public), so overlays that need to sit above the
- * bar can derive their offset from this single source instead of hard-coding it.
+ * Height of [ShellBottomBar]'s icon row (ABOVE the system navigation-bar inset
+ * the bar reserves below itself). [ShellBottomBar] enforces this height on the
+ * Material3 [NavigationBar] explicitly, so it is the single source of truth: it
+ * is shorter than the M3 default 80dp container so the icons sit lower — closer
+ * to the system bar with less dead space — while the bar still reserves the full
+ * system inset below them. Overlays that must sit above the bar derive their
+ * offset from this value (see the body padding in the shell), so changing it here
+ * moves the bar and those overlays together and they cannot drift apart.
  */
-internal val ShellBottomBarHeight = 80.dp
+internal val ShellBottomBarHeight = 64.dp
 
 /**
  * The 5-tab bottom navigation; Map is the default, highlighted home tab.
@@ -2773,7 +2782,20 @@ internal fun ShellBottomBar(
 ) {
     // 50%-alpha surface container so the map shows through the bar; icon-only
     // items (no labels) keep the tabs compact over the semi-transparent map.
+    //
+    // The Material3 NavigationBar hardcodes an 80dp icon row and reserves the
+    // system navigation-bar inset BELOW it. Left at the default that 80dp centres
+    // the icons high, leaving a wide dead band above the system bar. We pin the
+    // total bar height to ShellBottomBarHeight (the icon row) PLUS that same
+    // bottom inset, which shrinks the row from 80dp to ShellBottomBarHeight so the
+    // icons drop lower — while windowInsetsPadding still reserves the FULL inset,
+    // so the icons never slide under the system nav buttons. On gesture-nav phones
+    // the inset is near-zero (bar sits low, tight gap); on 3-button-nav phones it
+    // is large (bar floats above the buttons with clearance intact) — correct on
+    // both because the reserved height tracks the device's real inset.
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     NavigationBar(
+        modifier = Modifier.height(ShellBottomBarHeight + bottomInset),
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
     ) {
         NavigationBarItem(
