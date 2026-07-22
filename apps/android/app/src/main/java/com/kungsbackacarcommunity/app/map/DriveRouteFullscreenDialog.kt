@@ -20,15 +20,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.drives.RoutePoint
 import com.mapbox.common.MapboxOptions
 import com.mapbox.maps.MapView
@@ -126,7 +125,7 @@ fun DriveRouteFullscreenDialog(
                 modifier =
                     Modifier
                         .align(Alignment.TopStart)
-                        .padding(16.dp)
+                        .padding(KccSpacing.s4)
                         .semantics { contentDescription = closeDesc },
             ) {
                 Icon(Icons.Filled.Close, contentDescription = null)
@@ -138,8 +137,8 @@ fun DriveRouteFullscreenDialog(
                 modifier =
                     Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                        .padding(KccSpacing.s4),
+                verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
                 FilledIconButton(
                     onClick = { mapViewRef?.let { nudgeZoom(it, ZOOM_STEP) } },

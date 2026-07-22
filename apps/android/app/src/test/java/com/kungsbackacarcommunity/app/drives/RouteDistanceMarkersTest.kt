@@ -16,7 +16,8 @@ import org.junit.Test
  */
 class RouteDistanceMarkersTest {
 
-    // Degrees of longitude per metre at the equator, from the util's own model.
+    // Metres per one degree of longitude at the equator (≈ 111 195 m), from the
+    // util's own Haversine model so the fixtures track the code under test.
     private val metersPerDegree = RouteDistanceMarkers.haversineMeters(0.0, 0.0, 0.0, 1.0)
 
     private fun lngForMeters(meters: Double): Double = meters / metersPerDegree
