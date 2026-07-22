@@ -146,4 +146,29 @@ class ConvoyInviteCandidatesTest {
         val friends = listOf(friend("alice"), friend("bob"))
         assertEquals(friends, invitableFriends(friends, emptySet()))
     }
+
+    // --- selection reconciliation (the open-picker roster race) -----------
+
+    @Test
+    fun `a selected friend who becomes excluded is dropped from the selection`() {
+        val selected = setOf("alice", "bob")
+        // 'alice' just joined the convoy while the picker was open.
+        val convoy =
+            convoy(listOf(member("owner", ConvoyRole.Owner), member("me"), member("alice")))
+        val stillInvitable = invitableSelection(selected, convoy.inviteExcludedUids("me"))
+        // The invite payload / enabled-state carries only the still-invitable pick.
+        assertEquals(setOf("bob"), stillInvitable)
+    }
+
+    @Test
+    fun `selection survives untouched when nothing is excluded`() {
+        val selected = setOf("alice", "bob")
+        assertEquals(selected, invitableSelection(selected, emptySet()))
+    }
+
+    @Test
+    fun `all selected friends excluded yields an empty invite payload`() {
+        val selected = setOf("alice", "bob")
+        assertTrue(invitableSelection(selected, setOf("alice", "bob", "carol")).isEmpty())
+    }
 }

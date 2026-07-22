@@ -125,6 +125,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
+import com.kungsbackacarcommunity.app.convoy.invitableSelection
 import com.kungsbackacarcommunity.app.convoy.messageRes
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -1669,6 +1670,16 @@ fun AuthenticatedApp(
                         ?.convoy(convoyInviteConvoyId ?: "")
                         ?.inviteExcludedUids(uid)
                         ?: emptySet()
+                // Reconcile the selection against the LIVE exclusion set: if a chosen
+                // friend joins the convoy (or is invited elsewhere) while the picker
+                // is open, drop them from the selection so Submit's enabled-state and
+                // the `convoy-invite` payload never carry a uid that's now already in
+                // the convoy. Keyed on the excluded set (a structurally-equal set does
+                // not re-fire), mirroring the convoyId-keying discipline of this flow.
+                LaunchedEffect(convoyInviteExcludedUids) {
+                    val pruned = invitableSelection(convoyInviteSelected, convoyInviteExcludedUids)
+                    if (pruned != convoyInviteSelected) convoyInviteSelected = pruned
+                }
                 // (Re)load the friends snapshot each time the picker opens, so a
                 // previously failed load is re-attempted rather than left stuck.
                 LaunchedEffect(convoyInviteConvoyId, convoyInviteFriendsCoordinator) {
@@ -2193,11 +2204,16 @@ fun AuthenticatedApp(
                                 { scope.launch { c.load() } }
                             },
                         onSubmit = {
+                            // Send only the still-invitable selection: guards the exact
+                            // frame where a chosen friend was just excluded but the
+                            // pruning effect above hasn't run yet.
+                            val payload =
+                                invitableSelection(
+                                    convoyInviteSelected,
+                                    convoyInviteExcludedUids,
+                                ).toList()
                             scope.launch {
-                                convoyBarCoordinator.invite(
-                                    inviteConvoyId,
-                                    convoyInviteSelected.toList(),
-                                )
+                                convoyBarCoordinator.invite(inviteConvoyId, payload)
                             }
                         },
                         onCancel = closeInvite,

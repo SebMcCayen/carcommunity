@@ -117,6 +117,20 @@ fun invitableFriends(
 ): List<FriendSummary> = friends.filterNot { it.uid in excludeUids }
 
 /**
+ * The still-invitable subset of a picker selection: the chosen uids minus those
+ * now in [excludeUids] (already in the convoy, or the caller). The invite-picker
+ * uses this both to prune its selection as the LIVE roster changes and to build
+ * the `convoy-invite` payload, so a friend who joins the convoy (or is invited
+ * elsewhere) while the picker is open can neither keep Submit enabled on their
+ * behalf nor be submitted — the client never offers or sends a uid the backend
+ * would skip as already_member.
+ */
+fun invitableSelection(
+    selected: Set<String>,
+    excludeUids: Set<String>,
+): Set<String> = selected - excludeUids
+
+/**
  * Why a requested invitee was skipped by `convoy-create` / `convoy-invite`
  * (neutral reasons — a block edge either way surfaces as [NotFound], never as who
  * blocked whom). [AlreadyMember] is only produced by `convoy-invite` (a uid
