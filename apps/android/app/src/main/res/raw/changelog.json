@@ -2,6 +2,21 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 19,
+      "versionName": "0.8.8",
+      "releaseDate": "2026-07-22",
+      "highlights": [
+        "Trafikverkets vägarbeten och händelser visas på kartan",
+        "Konvoj-fältet fyller nu hela bredden och knapparna fungerar"
+      ],
+      "changes": [
+        "Trafikverkets vägarbeten, olyckor och avstängningar visas nu som skyltar på kartan runt dig",
+        "Konvoj-fältet högst upp är bredare, alla knappar syns direkt och du kan nu lämna konvojen och bjuda in fler",
+        "Chattfönstret kan stängas genom att dra det nedåt; krysset är borttaget",
+        "Live-position-knappen till höger på kartan är borttagen – hantera delningen via knappen i mitten"
+      ]
+    },
+    {
       "versionCode": 18,
       "versionName": "0.8.7",
       "releaseDate": "2026-07-22",
