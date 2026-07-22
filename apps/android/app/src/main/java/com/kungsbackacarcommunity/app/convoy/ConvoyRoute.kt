@@ -122,19 +122,26 @@ fun ConvoyRoute(
     //
     // Only a SUCCESS navigates (see postCreateNav): a create FAILURE keeps the
     // create screen up with its inline error, never dropping to the map as if it
-    // had worked. resetCreate() clears the sub-state first so a later re-entry into
-    // the route starts clean. A null host (config-less/test) has no map to land on,
-    // so it falls back to the new convoy's detail rather than dead-ending.
+    // had worked. A null host (config-less/test) has no map to land on, so it falls
+    // back to the new convoy's detail rather than dead-ending.
+    //
+    // Navigate FIRST, then resetCreate(). resetCreate flips createState back to Idle,
+    // which would make the create screen's `handingOff` guard false and RE-ENABLE the
+    // picker/submit. Tearing the route/view down before the reset means the create
+    // screen is already gone by the time Idle lands, so its controls can never become
+    // interactive again in the window between Created and the route dismissing — no
+    // second convoy.create is possible. The reset still runs, so a later re-entry into
+    // the route starts from a clean Idle sub-state.
     LaunchedEffect(createState) {
         if (postCreateNav(createState) == PostCreateNav.GoToMap) {
             val newConvoyId = (createState as CreateConvoyState.Created).convoyId
-            coordinator.resetCreate()
             if (onConvoyCreated != null) {
                 onConvoyCreated()
             } else {
                 detailConvoyId = newConvoyId
                 view = ConvoyView.Detail
             }
+            coordinator.resetCreate()
         }
     }
 
