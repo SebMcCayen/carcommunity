@@ -44,10 +44,17 @@ class ConvoyStatusBarTest {
     private fun string(id: Int, vararg args: Any): String =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
 
+    private val twoMembers =
+        listOf(
+            ConvoyBarMember(uid = "u1", displayName = "Alice", avatarPath = null),
+            ConvoyBarMember(uid = "u2", displayName = "Bob", avatarPath = null),
+        )
+
     private fun ownerState(convoyId: String) =
         ConvoyBarState(
             convoyId = convoyId,
-            memberCount = 2,
+            memberCount = twoMembers.size,
+            members = twoMembers,
             viewerIsOwner = true,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
@@ -57,7 +64,8 @@ class ConvoyStatusBarTest {
     private fun memberState(convoyId: String) =
         ConvoyBarState(
             convoyId = convoyId,
-            memberCount = 2,
+            memberCount = twoMembers.size,
+            members = twoMembers,
             viewerIsOwner = false,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
@@ -352,5 +360,60 @@ class ConvoyStatusBarTest {
         composeTestRule.onNodeWithTag(CONVOY_BAR_FOCUS_TAG).performClick()
         composeTestRule.waitForIdle()
         assertEquals(ConvoyFocusMode.Convoy, picked)
+    }
+
+    /**
+     * The member count starts as a tappable control that opens a member-list
+     * popup (previously nothing happened on tap). Tapping it must reveal the
+     * popup listing every accepted member by name — here both `twoMembers`.
+     */
+    @Test
+    fun tappingMemberCount_opensMemberListWithEveryMember() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        // Closed to start: no member list on screen.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LIST_TAG).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // The popup is up and lists both members by display name.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LIST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Bob").assertIsDisplayed()
+    }
+
+    /**
+     * The tappable count keeps the full "%d in convoy" phrase as its
+     * contentDescription (accessibility) even though only the bare number is
+     * shown, so TalkBack still announces the whole thing.
+     */
+    @Test
+    fun memberCount_keepsFullPhraseAsContentDescription() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barMembers, twoMembers.size))
+            .assertIsDisplayed()
     }
 }

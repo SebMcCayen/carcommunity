@@ -47,6 +47,39 @@ class DriveRecordingTest {
         assertTrue(recorder.isFull)
     }
 
+    @Test
+    fun `running distance matches the bulk total and starts at zero`() {
+        val recorder = DriveRecorder(sourceSessionId = "s1", startedAtMillis = 0L)
+        assertEquals(0.0, recorder.distanceMetres, 0.0)
+
+        val points =
+            listOf(
+                RecordedPoint(57.0000, 12.0000, 0L),
+                RecordedPoint(57.0010, 12.0000, 10_000L),
+                RecordedPoint(57.0020, 12.0000, 20_000L),
+            )
+        points.forEach { recorder.addPoint(it) }
+
+        // The incremental accumulator must equal a bulk recompute over the same
+        // points (single source of truth via DriveSummary.segmentDistanceMetres).
+        assertEquals(
+            DriveSummary.totalDistanceMetres(points),
+            recorder.distanceMetres,
+            0.0001,
+        )
+        assertTrue("expected a positive distance", recorder.distanceMetres > 0.0)
+    }
+
+    @Test
+    fun `running distance excludes implausible GPS jumps like the bulk total`() {
+        val recorder = DriveRecorder(sourceSessionId = "s1", startedAtMillis = 0L)
+        // A ~1 km hop in 1 ms implies an absurd speed — the backend jump filter
+        // drops it, so the running total must ignore it too.
+        recorder.addPoint(RecordedPoint(57.0000, 12.0000, 0L))
+        recorder.addPoint(RecordedPoint(57.0100, 12.0000, 1L))
+        assertEquals(0.0, recorder.distanceMetres, 0.0001)
+    }
+
     // ---------------------------------------------------------------------
     // buildSaveRequest — exact payload shape.
     // ---------------------------------------------------------------------

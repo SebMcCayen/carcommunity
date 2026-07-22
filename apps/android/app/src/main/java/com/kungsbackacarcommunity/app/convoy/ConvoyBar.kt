@@ -74,13 +74,30 @@ enum class ConvoyBarNotice {
 }
 
 /**
+ * One accepted member as the bar's member-list popup needs them: a display name
+ * (nullable — resolved server-side, absent until a profile lands) and the raw
+ * avatar storage path (nullable). Deliberately a slimmed-down projection of
+ * [ConvoyMember] so the bar's popup depends on just what it shows, not the whole
+ * membership record.
+ */
+data class ConvoyBarMember(
+    val uid: String,
+    val displayName: String?,
+    val avatarPath: String?,
+)
+
+/**
  * Everything the convoy status bar renders. `null` (rather than an empty
  * instance) is how "not in a convoy" is expressed, so the bar cannot accidentally
  * render as a blank strip or a placeholder.
  *
  * @param memberCount ACCEPTED members only — the people actually in the convoy.
  *   Invited-but-unanswered and declined people are not in it, and counting them
- *   would overstate the group to a driver glancing at the bar.
+ *   would overstate the group to a driver glancing at the bar. Equals
+ *   `members.size`.
+ * @param members the ACCEPTED members, in roster order, for the tap-to-open
+ *   member-list popup. Same population rule as [memberCount] (accepted only), so
+ *   the count on the bar and the list behind it can never disagree.
  * @param viewerIsOwner drives the leave-vs-end split: the owner has no "leave",
  *   only "end this convoy for everyone".
  * @param busy true while a mutation for this convoy is in flight, so the actions
@@ -89,6 +106,7 @@ enum class ConvoyBarNotice {
 data class ConvoyBarState(
     val convoyId: String,
     val memberCount: Int,
+    val members: List<ConvoyBarMember> = emptyList(),
     val viewerIsOwner: Boolean,
     val busy: Boolean,
     val inviteAvailability: ConvoyBarActionAvailability,
@@ -166,6 +184,12 @@ object ConvoyBar {
         return joined.firstOrNull { it.status == ConvoyStatus.Active } ?: joined.firstOrNull()
     }
 
+    /** Accepted members only — the people actually in [convoy], in roster order. */
+    fun acceptedMembers(convoy: ConvoySummary): List<ConvoyBarMember> =
+        convoy.members
+            .filter { it.inviteStatus == ConvoyInviteStatus.Accepted }
+            .map { ConvoyBarMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
+
     /** Accepted members only — the people actually in [convoy]. */
     fun memberCount(convoy: ConvoySummary): Int =
         convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }
@@ -182,9 +206,11 @@ object ConvoyBar {
         viewerUid: String? = null,
     ): ConvoyBarState? {
         val convoy = activeConvoy(status) ?: return null
+        val accepted = acceptedMembers(convoy)
         return ConvoyBarState(
             convoyId = convoy.convoyId,
-            memberCount = memberCount(convoy),
+            memberCount = accepted.size,
+            members = accepted,
             viewerIsOwner = convoy.viewerIsOwner,
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,

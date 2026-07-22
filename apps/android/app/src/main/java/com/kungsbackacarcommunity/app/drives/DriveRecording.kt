@@ -36,6 +36,13 @@ sealed interface RecordingState {
     data class Recording(
         val pointCount: Int,
         val elapsedMillis: Long,
+        /**
+         * Running distance in metres over the accepted fixes so far (backend
+         * jump filter applied). Drives the map's live-session distance readout.
+         * Defaults to 0 so existing constructions (and the initial "just
+         * started, no fixes yet" state) stay valid.
+         */
+        val distanceMeters: Double = 0.0,
     ) : RecordingState
 
     /** Recording stopped; the explicit save/discard prompt is shown. */
@@ -145,8 +152,21 @@ class DriveRecorder(
     /** Millis of the last accepted fix, used to derive elapsed time. */
     private var lastPointMillis: Long = startedAtMillis
 
+    /**
+     * Running distance in metres, accumulated segment-by-segment as fixes arrive
+     * with the SAME jump/backwards-time filter [DriveSummary.totalDistanceMetres]
+     * applies in bulk. Kept incrementally so a live readout (the map's
+     * live-session bar) can show "km driven this session" without recomputing
+     * over up to 20k points on every tick.
+     */
+    private var accumulatedDistanceMetres: Double = 0.0
+
     val pointCount: Int
         get() = points.size
+
+    /** Running distance in metres over the accepted fixes so far. */
+    val distanceMetres: Double
+        get() = accumulatedDistanceMetres
 
     /** True once the cap is reached and further points are dropped. */
     val isFull: Boolean
@@ -160,6 +180,11 @@ class DriveRecorder(
     fun addPoint(point: RecordedPoint) {
         if (isFull) return
         if (points.isNotEmpty() && point.timestampMs < points.last().timestampMs) return
+        // Accumulate the new segment BEFORE appending, using the previous last
+        // fix, so the running total mirrors totalDistanceMetres exactly.
+        if (points.isNotEmpty()) {
+            accumulatedDistanceMetres += DriveSummary.segmentDistanceMetres(points.last(), point)
+        }
         points.add(point)
         if (point.timestampMs > lastPointMillis) lastPointMillis = point.timestampMs
     }
@@ -279,6 +304,24 @@ object DriveSummary {
     }
 
     /**
+     * Distance in metres contributed by ONE ordered segment (prev → curr),
+     * applying the same filters the backend uses: a non-positive time delta or an
+     * implied speed above [MAX_PLAUSIBLE_SPEED_MPS] (a GPS jump) contributes 0.
+     *
+     * Extracted so a live recorder can accumulate distance incrementally as each
+     * fix arrives (see [DriveRecorder]) using the EXACT rule
+     * [totalDistanceMetres] applies in bulk, rather than a second, drifting copy.
+     */
+    fun segmentDistanceMetres(prev: RecordedPoint, curr: RecordedPoint): Double {
+        val deltaMs = curr.timestampMs - prev.timestampMs
+        if (deltaMs <= 0) return 0.0
+        val distance = haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+        val impliedSpeed = distance / (deltaMs / 1000.0)
+        if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) return 0.0
+        return distance
+    }
+
+    /**
      * Total distance in metres over ordered points, excluding implausible jumps
      * and non-positive time deltas exactly like the backend. Returns 0 for
      * fewer than two points.
@@ -287,14 +330,7 @@ object DriveSummary {
         if (points.size < 2) return 0.0
         var total = 0.0
         for (i in 1 until points.size) {
-            val prev = points[i - 1]
-            val curr = points[i]
-            val deltaMs = curr.timestampMs - prev.timestampMs
-            if (deltaMs <= 0) continue
-            val distance = haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
-            val impliedSpeed = distance / (deltaMs / 1000.0)
-            if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
-            total += distance
+            total += segmentDistanceMetres(points[i - 1], points[i])
         }
         return total
     }

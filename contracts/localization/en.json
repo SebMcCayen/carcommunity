@@ -122,7 +122,8 @@
     "shareOwnFree": "You can share your own position for free.",
     "viewOthersMemberOnly": "An active membership is required to view other members' live locations.",
     "memberRequiredToShare": "An active membership is required to share your live location. You can always stop sharing.",
-    "shareUnavailable": "Live location sharing isn't available right now."
+    "shareUnavailable": "Live location sharing isn't available right now.",
+    "sessionBar": "Live session: %1$s, %2$s driven"
   },
   "onboarding": {
     "title": "Welcome",
@@ -532,6 +533,8 @@
     "alreadyInConvoyCreateHint": "You're already in a convoy — leave or end it to start a new one.",
     "alreadyInConvoyAcceptHint": "You're already in a convoy — leave or end it before joining another.",
     "barMembers": "%1$d in convoy",
+    "barMemberListTitle": "In this convoy",
+    "barMemberUnnamed": "Member",
     "barInvite": "Invite more",
     "barLeave": "Leave convoy",
     "barEnd": "End convoy",

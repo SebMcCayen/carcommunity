@@ -122,7 +122,8 @@
     "stationaryPromptBody": "Du har stått på samma plats en stund. Om du är klar avslutas delningen automatiskt strax. Tryck för att fortsätta dela.",
     "stillSharingAction": "Ja, jag delar fortfarande",
     "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning.",
-    "shareUnavailable": "Delning av live-position är inte tillgänglig just nu."
+    "shareUnavailable": "Delning av live-position är inte tillgänglig just nu.",
+    "sessionBar": "Live-session: %1$s, %2$s kört"
   },
   "onboarding": {
     "title": "Välkommen",
@@ -532,6 +533,8 @@
     "alreadyInConvoyCreateHint": "Du är redan med i en konvoj – lämna eller avsluta den för att starta en ny.",
     "alreadyInConvoyAcceptHint": "Du är redan med i en konvoj – lämna eller avsluta den innan du går med i en annan.",
     "barMembers": "%1$d i konvojen",
+    "barMemberListTitle": "I den här konvojen",
+    "barMemberUnnamed": "Medlem",
     "barInvite": "Bjud in fler",
     "barLeave": "Lämna konvojen",
     "barEnd": "Avsluta konvojen",

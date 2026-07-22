@@ -1,14 +1,23 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Clear
@@ -33,10 +42,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -45,6 +67,12 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole convoy status bar. */
 const val CONVOY_BAR_TEST_TAG = "convoy_bar"
+
+/** Test tag on the tappable member-count control (people icon + number). */
+const val CONVOY_BAR_MEMBERS_TAG = "convoy_bar_members"
+
+/** Test tag on the member-list popup opened by tapping the member count. */
+const val CONVOY_BAR_MEMBER_LIST_TAG = "convoy_bar_member_list"
 
 /** Test tag on the bar's map-focus toggle (me vs the whole convoy). */
 const val CONVOY_BAR_FOCUS_TAG = "convoy_bar_focus"
@@ -157,6 +185,9 @@ fun ConvoyStatusBar(
     var pendingEndConvoyId by remember { mutableStateOf<String?>(null) }
     var pendingLeaveConvoyId by remember { mutableStateOf<String?>(null) }
 
+    // Whether the member-list popup (opened by tapping the member count) is up.
+    var showMembers by remember { mutableStateOf(false) }
+
     // Whether the "set destination" tap is currently waiting on the overwrite
     // confirmation (only raised when the current destination was set by someone
     // else — see ConvoyDestinations.requiresOverwriteConfirmation).
@@ -199,20 +230,51 @@ fun ConvoyStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Group,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    text = stringResource(R.string.convoy_barMembers, state.memberCount),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Member count: people glyph + the bare NUMBER (no trailing
+                // "in convoy" text — that would only ever truncate to "2 i…" in
+                // the width this bar gets). The full "%d in convoy" phrase is kept
+                // as the control's contentDescription so TalkBack still announces
+                // it in full. Tapping opens the member-list popup below.
+                //
+                // The whole control merges to ONE node reading that description +
+                // a Button role + the open action: the glyph is decorative and the
+                // number's own semantics are cleared, so nothing double-announces.
+                val membersLabel = stringResource(R.string.convoy_barMembers, state.memberCount)
+                Box(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+                        modifier =
+                            Modifier
+                                .testTag(CONVOY_BAR_MEMBERS_TAG)
+                                .clickable(role = Role.Button) { showMembers = true }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = membersLabel
+                                    role = Role.Button
+                                },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Group,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = state.memberCount.toString(),
+                            modifier = Modifier.clearAndSetSemantics {},
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (showMembers) {
+                        ConvoyMemberListPopup(
+                            members = state.members,
+                            onDismiss = { showMembers = false },
+                        )
+                    }
+                }
 
                 // Map focus: follow ME (the default) or keep the WHOLE convoy
                 // framed. One button rather than a segmented control — a two-state
@@ -651,6 +713,104 @@ private fun ConvoyDestinationNavigationBanner(
             }
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.convoy_barDestinationDismissNotice))
+            }
+        }
+    }
+}
+
+/**
+ * The list of people in the convoy, shown when the member count is tapped.
+ *
+ * A [Popup] (not a Dialog) so there is no dimming scrim — the map stays visible,
+ * matching the profile menu's idiom on the map home. It anchors just below the
+ * member-count control, start-aligned, and dismisses on an outside tap or Back
+ * (`focusable = true`). Names come straight off [ConvoyBarState.members] (the
+ * accepted roster the bar already carries); a member whose display name has not
+ * resolved yet falls back to a generic label rather than showing a raw uid.
+ */
+@Composable
+private fun ConvoyMemberListPopup(
+    members: List<ConvoyBarMember>,
+    onDismiss: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val positionProvider =
+        remember(density) {
+            val gapPx = with(density) { KccSpacing.s2.roundToPx() }
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset {
+                    // Start-align to the count and drop just below it. anchorBounds
+                    // is in physical window coordinates; leading edge is the
+                    // physical left in LTR, the physical right in RTL. Clamped so
+                    // the card never leaves the window on a narrow screen.
+                    val x =
+                        when (layoutDirection) {
+                            LayoutDirection.Ltr -> anchorBounds.left
+                            LayoutDirection.Rtl -> anchorBounds.right - popupContentSize.width
+                        }.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
+                    val y =
+                        (anchorBounds.bottom + gapPx)
+                            .coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
+                    return IntOffset(x, y)
+                }
+            }
+        }
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                Modifier
+                    .widthIn(min = 180.dp, max = 280.dp)
+                    .testTag(CONVOY_BAR_MEMBER_LIST_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier =
+                    Modifier
+                        .padding(KccSpacing.s3)
+                        // Long rosters scroll rather than run off the screen.
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = stringResource(R.string.convoy_barMemberListTitle),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(KccSpacing.s2))
+                val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
+                members.forEach { member ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s1),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AccountCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp),
+                        )
+                        Text(
+                            text = member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     }

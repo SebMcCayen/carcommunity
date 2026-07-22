@@ -245,6 +245,7 @@ import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
+import com.kungsbackacarcommunity.app.shell.LiveSessionBar
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveSharePopup
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
@@ -1187,6 +1188,57 @@ fun AuthenticatedApp(
                     else -> Unit
                 }
             }
+
+            // --- Live-session bar (map top strip) --------------------------
+            // While a live session runs, the top of the map shows a compact pill
+            // with the session's elapsed time and the distance driven this session.
+            // Both values are derived here and handed to a dumb [LiveSessionBar].
+            //
+            // Elapsed ticks from the session's START. The drive recorder captures
+            // that moment (startedAtMillis) the instant sharing begins; when there
+            // is no recording (config-less build, or a caller who can't record)
+            // fall back to deriving it from the live session itself — its expiry
+            // minus the chosen duration. The clock is re-read once a second, so the
+            // timer keeps advancing even while the car (and the GPS stream feeding
+            // the recorder) is stationary — unlike RecordingState.elapsedMillis,
+            // which is frozen at the last accepted fix.
+            val liveSessionStartMillis: Long? =
+                activeRecording?.startedAtMillis
+                    ?: liveSession?.let { session ->
+                        val expiry = session.expiresAtMillis
+                        val durationMs =
+                            session.duration?.let { it.hours.toLong() * 60L * 60L * 1000L }
+                        if (expiry != null && durationMs != null) expiry - durationMs else null
+                    }
+            val liveSessionElapsedMillis by
+                produceState(0L, isSharing, liveSessionStartMillis) {
+                    val start = liveSessionStartMillis
+                    if (!isSharing || start == null) {
+                        value = 0L
+                        return@produceState
+                    }
+                    while (true) {
+                        value = (nowMillis() - start).coerceAtLeast(0L)
+                        delay(1000L)
+                    }
+                }
+            // Distance driven this session, straight off the recorder's running
+            // total (0 before the first fix / when nothing is recording).
+            val liveSessionDistanceMeters =
+                (recordingState as? RecordingState.Recording)?.distanceMeters ?: 0.0
+            // Composed only while a session is actually sharing; null otherwise
+            // composes nothing at all (no empty pill in the search strip).
+            val liveSessionBarSlot: (@Composable () -> Unit)? =
+                if (isSharing) {
+                    {
+                        LiveSessionBar(
+                            elapsedMillis = liveSessionElapsedMillis,
+                            distanceMeters = liveSessionDistanceMeters,
+                        )
+                    }
+                } else {
+                    null
+                }
 
             fun showComingSoon() {
                 scope.launch {
@@ -2428,13 +2480,17 @@ fun AuthenticatedApp(
                                     // both call sites go through one lambda.
                                     incidentReportingEnabled = incidentReportingEnabled,
                                     onReportIncident = reportIncident,
-                                    // Convoy status bar, wedged full-width INTO the
-                                    // search row between the search control and the
-                                    // avatar. Every control (member count, focus,
-                                    // invite, leave/End) is inline — no expand, no
-                                    // popup. The shared-destination row is omitted in
-                                    // this single-line band (showDestination = false);
-                                    // it appears in the taller turn-by-turn variant.
+                                    // Live-session pill in the top search strip
+                                    // (between the search icon and the avatar) while
+                                    // a session runs: elapsed time + distance driven.
+                                    liveSessionBar = liveSessionBarSlot,
+                                    // Convoy status bar, now on its OWN full-width row
+                                    // directly BELOW the search strip. Every control
+                                    // (member count, focus, invite, leave/End) is
+                                    // inline — no expand step. The member count opens
+                                    // a member-list popup; the shared-destination row
+                                    // is omitted in this band (showDestination = false)
+                                    // and appears in the taller turn-by-turn variant.
                                     convoyBar =
                                         convoyBarSlot?.let { bar -> { bar(false, false) } },
                                     // Convoy member markers + off-screen direction
