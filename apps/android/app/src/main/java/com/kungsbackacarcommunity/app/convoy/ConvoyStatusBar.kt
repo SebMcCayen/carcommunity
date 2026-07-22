@@ -1,17 +1,21 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AddLocationAlt
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Navigation
@@ -33,27 +37,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import com.kungsbackacarcommunity.app.navigation.LatLng
-
-/**
- * A usable/not-usable boolean as the availability it corresponds to, so the
- * bar's explanation line can be derived from the same booleans that decide
- * enablement and the accessibility labels instead of a parallel rule.
- */
-private fun availability(usable: Boolean): ConvoyBarActionAvailability =
-    if (usable) {
-        ConvoyBarActionAvailability.Wired
-    } else {
-        ConvoyBarActionAvailability.BackendMissing
-    }
 
 /** Test tag on the whole convoy status bar. */
 const val CONVOY_BAR_TEST_TAG = "convoy_bar"
@@ -76,6 +78,200 @@ const val CONVOY_BAR_DESTINATION_CLEAR_TAG = "convoy_bar_destination_clear"
 /** Test tag on the bar's "start navigation to the shared destination" control. */
 const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate"
 
+/** Test tag on the compact in-row convoy pill (member count + quick controls). */
+const val CONVOY_BAR_INLINE_TAG = "convoy_bar_inline"
+
+/** Test tag on the compact pill's map-focus toggle (me vs the whole convoy). */
+const val CONVOY_BAR_INLINE_FOCUS_TAG = "convoy_bar_inline_focus"
+
+/** Test tag on the compact pill's expand/collapse control. */
+const val CONVOY_BAR_EXPAND_TAG = "convoy_bar_expand"
+
+/** Test tag on the popup that the compact pill's expand control opens. */
+const val CONVOY_BAR_EXPAND_POPUP_TAG = "convoy_bar_expand_popup"
+
+/**
+ * The COMPACT convoy pill shown inline in the map's top row, wedged between the
+ * search control and the profile avatar (see `SearchBarRow`). That slot is narrow,
+ * so this shows ICONS AND A NUMBER ONLY — no text labels:
+ *
+ *  - a group glyph + the bare accepted-member count (the count carries the full
+ *    "N in the convoy" announcement for TalkBack, so the raw number is not read
+ *    out on its own);
+ *  - the map-focus toggle — the one always-operable control (follow me vs. keep
+ *    the whole convoy framed), and the icon a member sees respond when every other
+ *    action is still backend-gated;
+ *  - an expand control that opens the FULL [ConvoyStatusBar] in a popup for
+ *    everything that does not fit inline (leave/end, invite, and the shared
+ *    destination row).
+ *
+ * ## Why the actions live behind the expand, not inline
+ * The full bar's leave/invite/destination controls are mostly DISABLED today
+ * because their callables are not deployed (see [ConvoyBar]); only the owner's End
+ * and the focus toggle actually do anything. Cramming disabled buttons into the
+ * pill would put dead controls in a permanently-visible strip — exactly the "I
+ * can't press any of these" complaint. Instead the pill surfaces the one live
+ * quick control (focus) and defers the rest to the popup, where each disabled
+ * control keeps its "…unavailable" contentDescription for accessibility (there is
+ * no visible "not available yet" body text — see [ConvoyStatusBar]). Nothing is
+ * lost: the full bar — with all its confirmations, routing and accessibility
+ * labels — is rendered verbatim in the popup via [expandedContent], so there is
+ * still ONE set of convoy-bar rules.
+ *
+ * @param memberCount accepted members only — the number shown next to the glyph.
+ * @param focusMode what the map camera is currently framing; drives the toggle.
+ * @param onFocusModeChange invoked with the mode the user just picked.
+ * @param expandedContent the full [ConvoyStatusBar] for this convoy, rendered in
+ *   the expand popup. Passed as a slot so the pill does not re-thread every convoy
+ *   callback and there is no second copy of the bar's action logic.
+ */
+@Composable
+fun ConvoyStatusBarInline(
+    memberCount: Int,
+    modifier: Modifier = Modifier,
+    focusMode: ConvoyFocusMode = ConvoyFocusMode.Me,
+    onFocusModeChange: (ConvoyFocusMode) -> Unit = {},
+    expandedContent: @Composable () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val convoyFocused = focusMode == ConvoyFocusMode.Convoy
+    val density = LocalDensity.current
+    // Drop the expand popup just BELOW the pill vertically (anchored to the pill's
+    // bottom edge), but HORIZONTALLY CENTRED IN THE WINDOW — not aligned to the
+    // pill's x. The popup is a near-full-width card (see the widthIn cap below), so
+    // pinning its left edge under a pill that sits near the right of the top row
+    // would push it off-screen; centring keeps it on screen at any pill position.
+    // Both axes are clamped so the card can never leave the screen — the same
+    // proven pattern the profile menu uses, so it can't spill off a narrow phone.
+    val positionProvider =
+        remember(density) {
+            val gapPx = with(density) { KccSpacing.s1.roundToPx() }
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset {
+                    val x =
+                        ((windowSize.width - popupContentSize.width) / 2)
+                            .coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
+                    val y =
+                        (anchorBounds.bottom + gapPx)
+                            .coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
+                    return IntOffset(x, y)
+                }
+            }
+        }
+
+    Box {
+        Surface(
+            modifier = modifier.testTag(CONVOY_BAR_INLINE_TAG),
+            shape = RoundedCornerShape(KccRadius.full),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 3.dp,
+            shadowElevation = 3.dp,
+        ) {
+            Row(
+                // The IconButtons carry the 48dp touch target, so the pill lands at
+                // the same height as the search button and avatar it sits between.
+                modifier = Modifier.padding(start = KccSpacing.s3, end = KccSpacing.s1),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+            ) {
+                Icon(
+                    // Decorative: the count's own node carries the full "N in the
+                    // convoy" announcement (below), so the glyph is not read too.
+                    imageVector = Icons.Filled.Groups,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                val membersDescription =
+                    stringResource(R.string.convoy_barMembers, memberCount)
+                Text(
+                    // Shows the bare number visually, but announces "N in the convoy"
+                    // to TalkBack — and ONLY that. clearAndSetSemantics (not a merging
+                    // `semantics {}`) drops the digit's own text node from the
+                    // semantics tree, so a screen reader reads the description alone
+                    // and never a context-free "3" as a second node alongside it —
+                    // the same pattern the DM unread badge uses. The digit stays
+                    // visually rendered; it is simply no longer a separate a11y node.
+                    text = memberCount.toString(),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier =
+                        Modifier.clearAndSetSemantics { contentDescription = membersDescription },
+                )
+                IconButton(
+                    onClick = {
+                        onFocusModeChange(
+                            if (convoyFocused) ConvoyFocusMode.Me else ConvoyFocusMode.Convoy,
+                        )
+                    },
+                    modifier = Modifier.testTag(CONVOY_BAR_INLINE_FOCUS_TAG),
+                ) {
+                    Icon(
+                        imageVector =
+                            if (convoyFocused) Icons.Filled.Groups else Icons.Filled.CenterFocusStrong,
+                        contentDescription =
+                            stringResource(
+                                if (convoyFocused) {
+                                    R.string.convoy_barFocusConvoy
+                                } else {
+                                    R.string.convoy_barFocusMe
+                                },
+                            ),
+                        tint =
+                            if (convoyFocused) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    )
+                }
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.testTag(CONVOY_BAR_EXPAND_TAG),
+                ) {
+                    Icon(
+                        imageVector =
+                            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription =
+                            stringResource(
+                                if (expanded) R.string.convoy_barCollapse else R.string.convoy_barExpand,
+                            ),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+
+        if (expanded) {
+            Popup(
+                popupPositionProvider = positionProvider,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                // No frosted card of its own: the full bar is already a rounded,
+                // tonally-elevated Surface, so wrapping it in a second Surface would
+                // double the chrome. Fill the window width (capped) so the bar keeps
+                // its normal full-width layout.
+                Box(
+                    modifier =
+                        Modifier
+                            .padding(KccSpacing.s2)
+                            .fillMaxWidth()
+                            .widthIn(max = 400.dp)
+                            .testTag(CONVOY_BAR_EXPAND_POPUP_TAG),
+                ) {
+                    expandedContent()
+                }
+            }
+        }
+    }
+}
+
 /**
  * A compact, full-width bar describing the convoy the user is currently in:
  * how many people are in it, an invite affordance, and a leave (member) or end
@@ -97,19 +293,22 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * never fall through to `convoy-end`, since a member tapping "leave" and silently
  * ending everyone's convoy would be a genuinely harmful bug.
  *
- * Actions with no backend stay VISIBLE but disabled and are explained in one
- * short line under the row (see [ConvoyBarNotice] and this file's sibling
- * [ConvoyBar] KDoc, which carries the exact callable contracts still needed).
+ * Actions with no backend stay VISIBLE but disabled. There is NO visible
+ * "not available yet" notice line: each disabled control carries its own
+ * "…unavailable" contentDescription instead, so the unavailability is announced to
+ * screen-reader users without a body-text paragraph cluttering the bar over the
+ * map. (See this file's sibling [ConvoyBar] KDoc for the exact callable contracts
+ * still needed.)
  *
  * Styled from the same frosted, rounded, tonally-elevated `surface` language as
  * the map's search bar and floating controls, so it reads as one more piece of
  * the map chrome rather than a foreign banner.
  *
- * @param compact drops the explanation line and tightens the padding — used in
+ * @param compact tightens the padding and hides the map-focus toggle — used in
  *   turn-by-turn navigation, where vertical space next to safety-critical
- *   maneuver instructions is at a premium. The explanation is not lost, only
- *   deferred: it is still shown on the map home, and the disabled controls keep
- *   their explanatory content descriptions here for accessibility.
+ *   maneuver instructions is at a premium and the navigation SDK owns the camera.
+ *   The disabled controls keep their "…unavailable" content descriptions in both
+ *   variants, so accessibility is unchanged by [compact].
  * @param onEndConvoy invoked (after the user confirms) when the OWNER ends the
  *   convoy. Never invoked for a member.
  * @param onInvite invites people into THIS convoy (by id). Null today, because
@@ -184,10 +383,10 @@ fun ConvoyStatusBar(
 
     // Whether each action is actually USABLE, which needs both halves: the state
     // flag says a callable exists, the handler says this host has wired it up.
-    // Every downstream decision — enablement, the accessibility label, and the
-    // explanation line — reads these two booleans and nothing else, so the
-    // control cannot end up disabled while announcing itself as available, or
-    // enabled while the line underneath still says the feature is missing.
+    // Both downstream decisions — enablement and the accessibility label — read
+    // these two booleans and nothing else, so the control cannot end up disabled
+    // while announcing itself as available, or enabled while its "…unavailable"
+    // label still says the feature is missing.
     //
     // `state.busy` is deliberately NOT part of them: it is a transient in-flight
     // state, so it must disable the buttons without rewriting their labels into
@@ -200,15 +399,6 @@ fun ConvoyStatusBar(
             // The owner's control is `convoy-end`, whose handler is non-null by
             // signature; only a member's leave depends on the optional handler.
             (state.viewerIsOwner || onLeaveConvoy != null)
-
-    // The explanation line is recomputed from usability rather than read off
-    // `state.notice`, for the same reason: a flag flipped ahead of its handler
-    // must keep saying the action is unavailable, because it still is.
-    val effectiveNotice =
-        state.copy(
-            inviteAvailability = availability(inviteUsable),
-            leaveAvailability = availability(leaveUsable),
-        ).notice
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
@@ -299,7 +489,7 @@ fun ConvoyStatusBar(
                 // handler, never hard-coded: `enabled = false` with an empty
                 // `onClick` would let `inviteAvailability` be flipped to `Wired`
                 // — the one-line change this is all waiting on — while the button
-                // stayed silently dead, and the explanation line underneath
+                // stayed silently dead, and the "…unavailable" contentDescription
                 // stopped saying why. Requiring [onInvite] as well means flipping
                 // the flag alone cannot produce an ENABLED button that does
                 // nothing either; both halves have to be done deliberately.
@@ -416,37 +606,16 @@ fun ConvoyStatusBar(
                 onNavigateToNew = onNavigateToDestination,
             )
 
-            // The honest one-liner for whatever is disabled above. Dropped in the
-            // navigation variant, where the top of the screen belongs to the
-            // maneuver instructions.
-            val noticeRes =
-                when (effectiveNotice) {
-                    ConvoyBarNotice.None -> null
-                    ConvoyBarNotice.InviteMissing -> R.string.convoy_barNoticeInvite
-                    ConvoyBarNotice.LeaveMissing -> R.string.convoy_barNoticeLeave
-                    ConvoyBarNotice.InviteAndLeaveMissing ->
-                        R.string.convoy_barNoticeInviteAndLeave
-                }
-            if (!compact && noticeRes != null) {
-                Text(
-                    text = stringResource(noticeRes),
-                    modifier = Modifier.padding(bottom = KccSpacing.s1),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // The destination's own explanation line, kept separate from the
-            // invite/leave one above because it is waiting on a DIFFERENT pair of
-            // callables and will stop being true at a different time.
-            if (!compact && ConvoyDestinations.notice == ConvoyDestinationNotice.BackendMissing) {
-                Text(
-                    text = stringResource(R.string.convoy_barDestinationNotice),
-                    modifier = Modifier.padding(bottom = KccSpacing.s1),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            // No visible "not available yet" notice line. The invite/leave and
+            // shared-destination controls that have no callable yet stay VISIBLE
+            // but disabled, and each carries its own "…unavailable"
+            // contentDescription (see the IconButtons above and in
+            // [ConvoyDestinationRow]) so a screen-reader user is still told the
+            // action is unavailable. The body-text explanations were removed:
+            // they read as clutter over the map, and the leave/invite/destination
+            // callables are actively being wired, so a standing "isn't available
+            // yet" line is becoming false. Accessibility is carried by the control
+            // labels, not a separate paragraph.
         }
     }
 
@@ -532,10 +701,9 @@ fun ConvoyStatusBar(
  *
  * Always rendered, including in the compact navigation variant — a driver
  * following a convoy is precisely the person who needs "where are we going" and
- * "take me there" within reach. What the compact variant drops is the
- * explanation LINE, not the controls, and the disabled controls keep their
- * explanatory content descriptions either way so the honesty survives for
- * screen-reader users.
+ * "take me there" within reach. The disabled controls carry their "…unavailable"
+ * content descriptions in every variant, so the unavailability survives for
+ * screen-reader users without a visible explanation line.
  */
 @Composable
 private fun ConvoyDestinationRow(

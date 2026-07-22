@@ -122,6 +122,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
+import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBarInline
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
@@ -1450,6 +1451,42 @@ fun AuthenticatedApp(
                         }
                     }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }
+                // Refresh the convoy snapshot whenever the map returns to the front.
+                //
+                // The bar's list is loaded once on entry and then live-watches only
+                // the convoy that is ALREADY active (observeActiveConvoy derives its
+                // target from the current snapshot), so a convoy the user JOINS — or
+                // starts — from a screen layered over the map (the convoy list, a
+                // chat invite) never reaches this bar: the snapshot that decides
+                // whether the bar shows is simply stale. That is the "I can't see it
+                // when I join another convoy" gap — the visibility RULE already
+                // covers any accepted member (owner or not; see
+                // [ConvoyBar.activeConvoy]), but it is fed month-old data. Re-loading
+                // on every return to the map (mapCover -> None) picks up whatever
+                // membership changed while the map was covered, so the bar appears
+                // for a convoy the user is in whether they STARTED it or JOINED it.
+                // load() never drops the status back to Loading, so this refreshes in
+                // place — the current bar does not flicker while the new list lands.
+                //
+                // Only reloads on an actual RETURN to the map — a transition from a
+                // covered state back to None — never on first composition. On entry
+                // `mapCover` is already None, and `LaunchedEffect(convoyBarCoordinator)`
+                // above has just run load() once; firing again here on that initial
+                // None would be a redundant second load (extra Firestore reads /
+                // listener churn) for no membership change. `mapWasCovered` gates it so
+                // the reload happens only after the map has actually been covered and
+                // uncovered at least once.
+                var mapWasCovered by remember { mutableStateOf(false) }
+                LaunchedEffect(mapCover) {
+                    if (mapCover == MapCover.None) {
+                        if (mapWasCovered) {
+                            mapWasCovered = false
+                            convoyBarCoordinator?.load()
+                        }
+                    } else {
+                        mapWasCovered = true
+                    }
+                }
                 // Live-watch the active convoy for as long as this screen exists.
                 // The coroutine suspends inside observeActiveConvoy, so its whole
                 // lifetime (and thus the Firestore listener's) is bounded by this
@@ -2225,9 +2262,30 @@ fun AuthenticatedApp(
                                     // both call sites go through one lambda.
                                     incidentReportingEnabled = incidentReportingEnabled,
                                     onReportIncident = reportIncident,
-                                    // Convoy status bar above the search row (full
-                                    // variant, with the explanation line).
-                                    convoyBar = convoyBarSlot?.let { bar -> { bar(false) } },
+                                    // Convoy status bar, wedged INTO the search row
+                                    // between the search control and the avatar. The
+                                    // narrow slot gets the compact pill (icons +
+                                    // count); its expand control opens the full bar
+                                    // ([convoyBarSlot]) in a popup, so all of the
+                                    // convoy actions and explanations are still one
+                                    // tap away and share one implementation.
+                                    convoyBar =
+                                        if (convoyBarState != null && convoyBarCoordinator != null) {
+                                            {
+                                                ConvoyStatusBarInline(
+                                                    memberCount = convoyBarState.memberCount,
+                                                    focusMode = convoyFocusMode,
+                                                    onFocusModeChange = {
+                                                        convoyFocusStore.setMode(it)
+                                                    },
+                                                    expandedContent = {
+                                                        convoyBarSlot?.invoke(false)
+                                                    },
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        },
                                     // Convoy member markers + off-screen direction
                                     // arrows, drawn on the map under the chrome.
                                     convoyOverlay = convoyOverlaySlot,

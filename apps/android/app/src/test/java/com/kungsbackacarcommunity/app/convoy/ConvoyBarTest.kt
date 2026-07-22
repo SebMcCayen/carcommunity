@@ -124,6 +124,35 @@ class ConvoyBarTest {
         assertEquals("active", state?.convoyId)
     }
 
+    @Test
+    fun `the bar shows for a convoy the user JOINED as an accepted member`() {
+        // The bar must be visible whether the user joined a convoy or started one
+        // themselves. This is the JOINED half — an accepted, non-owner membership
+        // must surface the bar just like the owner's does, so the visibility rule
+        // is member-OR-leader, not leader-only.
+        val joined =
+            convoy(viewer = ConvoyViewer(ConvoyRole.Member, ConvoyInviteStatus.Accepted))
+        val state = ConvoyBar.stateFor(loaded(joined))
+        assertNotNull(state)
+        assertEquals(false, state!!.viewerIsOwner)
+    }
+
+    @Test
+    fun `the bar shows for a convoy the user STARTED as its owner`() {
+        // The STARTED half — the owner is always accepted, so the same non-ended
+        // membership rule surfaces the bar. Paired with the JOINED test above, this
+        // pins the "member OR leader" visibility the bar must never narrow back to
+        // owner-only.
+        val started =
+            convoy(
+                viewer = ConvoyViewer(ConvoyRole.Owner, ConvoyInviteStatus.Accepted),
+                members = listOf(member("me", ConvoyRole.Owner)),
+            )
+        val state = ConvoyBar.stateFor(loaded(started))
+        assertNotNull(state)
+        assertEquals(true, state!!.viewerIsOwner)
+    }
+
     // --- member count -----------------------------------------------------
 
     @Test
