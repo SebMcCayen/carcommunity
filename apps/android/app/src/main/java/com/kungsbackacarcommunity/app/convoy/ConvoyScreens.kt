@@ -285,8 +285,11 @@ private fun PendingInviteRow(
  * Create-a-convoy: a multi-select picker over the caller's friends (from the
  * shared FriendsRepository), wired to `convoy-create`. Convoys are unnamed —
  * there is no title input; the list/detail render a neutral fallback label.
- * After creation any skipped invitees (non-friends/blocked) are surfaced before
- * the caller continues into the new convoy.
+ *
+ * On success there is NO confirmation page: the host observes
+ * [CreateConvoyState.Created] and dismisses the whole convoy surface to the map,
+ * where the convoy bar shows the new convoy. This screen only renders the picker
+ * (and, inline, a create FAILURE) — a success just leaves it.
  */
 @Composable
 fun CreateConvoyScreen(
@@ -296,15 +299,8 @@ fun CreateConvoyScreen(
     onToggleFriend: (String) -> Unit,
     onRetryFriends: (() -> Unit)?,
     onSubmit: () -> Unit,
-    onDone: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val created = createState as? CreateConvoyState.Created
-    if (created != null) {
-        CreatedResult(created = created, onContinue = { onDone(created.convoyId) }, modifier = modifier)
-        return
-    }
-
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -421,43 +417,6 @@ private fun SelectableFriendRow(
             // accessibility semantics (Role.Checkbox), avoiding a duplicate toggle
             // target. Mirrors the app's established selectable-row pattern.
             Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
-        }
-    }
-}
-
-@Composable
-private fun CreatedResult(
-    created: CreateConvoyState.Created,
-    onContinue: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    AeroPage(title = stringResource(R.string.convoy_createdTitle), modifier = modifier) {
-        Text(
-            text = stringResource(R.string.convoy_createdBody),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (created.skipped.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                ) {
-                    Text(
-                        text = stringResource(R.string.convoy_skippedTitle, created.skipped.size),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(R.string.convoy_skippedBody),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.convoy_openConvoy))
         }
     }
 }

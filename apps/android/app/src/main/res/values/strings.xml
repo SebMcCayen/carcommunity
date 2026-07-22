@@ -449,11 +449,6 @@
     <string name="convoy_friendsRetry">Försök igen</string>
     <string name="convoy_noFriends">Lägg till några vänner först för att bjuda in dem till en konvoj.</string>
     <string name="convoy_createSubmit">Skapa konvoj</string>
-    <string name="convoy_createdTitle">Konvoj skapad</string>
-    <string name="convoy_createdBody">Din konvoj är klar. Inbjudna vänner kan nu acceptera.</string>
-    <string name="convoy_skippedTitle">Kunde inte bjuda in %1$d</string>
-    <string name="convoy_skippedBody">Några kunde inte läggas till – de kanske inte är dina vänner.</string>
-    <string name="convoy_openConvoy">Öppna konvoj</string>
     <string name="convoy_membersTitle">Medlemmar</string>
     <string name="convoy_start">Starta konvoj</string>
     <string name="convoy_end">Avsluta konvoj</string>

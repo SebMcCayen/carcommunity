@@ -44,8 +44,11 @@ sealed interface CreateConvoyState {
     data object Working : CreateConvoyState
 
     /**
-     * The convoy was created. [convoyId] lets the screen navigate straight into
-     * the new detail; [skipped] surfaces any invitees that couldn't be added.
+     * The convoy was created. [convoyId] identifies the new convoy; [skipped]
+     * carries any invitees that couldn't be added. The create flow no longer shows
+     * a confirmation page — on success it dismisses straight to the map (see
+     * [postCreateNav]), where the convoy bar reflects the new convoy — so [skipped]
+     * is retained on the state but not currently surfaced.
      */
     data class Created(
         val convoyId: String,
@@ -54,6 +57,33 @@ sealed interface CreateConvoyState {
 
     data class Error(val error: ConvoyActionError) : CreateConvoyState
 }
+
+/**
+ * Where the create-convoy flow goes once [ConvoyCoordinator.create] settles. Pure
+ * so the post-create navigation is unit-testable off the Composable.
+ */
+enum class PostCreateNav {
+    /** Nothing settled yet, or it FAILED — stay on the create screen. On failure
+     *  the mapped error is shown there; the map must NOT be entered as if creation
+     *  had succeeded. */
+    Stay,
+
+    /** The convoy was created — leave the whole convoy surface for the MAP, where
+     *  the convoy bar now reflects the new (active) convoy. No confirmation page. */
+    GoToMap,
+}
+
+/**
+ * The navigation decision for a given create sub-state. ONLY a success
+ * ([CreateConvoyState.Created]) leaves for the map; Idle/Working/Error all stay,
+ * so an error is never mistaken for a success that drops the user onto the map.
+ */
+fun postCreateNav(state: CreateConvoyState): PostCreateNav =
+    when (state) {
+        is CreateConvoyState.Created -> PostCreateNav.GoToMap
+        CreateConvoyState.Idle, CreateConvoyState.Working, is CreateConvoyState.Error ->
+            PostCreateNav.Stay
+    }
 
 /**
  * Sub-state of the "invite more people into an existing convoy" flow, driven from
