@@ -66,11 +66,17 @@ sealed interface InviteConvoyState {
     data object Working : InviteConvoyState
 
     /**
-     * The invites were sent. [skipped] surfaces any requested invitee that
-     * couldn't be added (not a friend / already in / blocked), with the same
-     * neutral reasons as create.
+     * The invites were sent. [invited] is the list of invitees the backend
+     * actually added (so the confirmation can say how many were invited);
+     * [skipped] surfaces any requested invitee that couldn't be added (not a
+     * friend / already in / blocked), with the same neutral reasons as create.
+     * The confirmation snackbar is built from both counts so it reflects
+     * reality — all invited, all skipped, or a mix.
      */
-    data class Done(val skipped: List<SkippedInvitee>) : InviteConvoyState
+    data class Done(
+        val invited: List<String>,
+        val skipped: List<SkippedInvitee>,
+    ) : InviteConvoyState
 
     data class Error(val error: ConvoyActionError) : InviteConvoyState
 }
@@ -277,7 +283,7 @@ class ConvoyCoordinator(
         try {
             inviteStateFlow.value =
                 when (val result = repository.invite(convoyId, invitees)) {
-                    is CreateConvoyResult.Created -> InviteConvoyState.Done(result.skipped)
+                    is CreateConvoyResult.Created -> InviteConvoyState.Done(result.invited, result.skipped)
                     is CreateConvoyResult.Failed -> InviteConvoyState.Error(result.error)
                 }
             // New members change the snapshot — refresh so the count/roster update.

@@ -505,7 +505,9 @@
     <string name="convoy_inviteTitle">Invite to convoy</string>
     <string name="convoy_inviteSubmit">Send invites</string>
     <string name="convoy_inviteCancel">Cancel</string>
-    <string name="convoy_inviteSent">Invitations sent.</string>
+    <string name="convoy_inviteConfirmInvited">Invited %1$d</string>
+    <string name="convoy_inviteConfirmMixed">Invited %1$d · %2$d couldn\'t be added</string>
+    <string name="convoy_inviteConfirmNoneAdded">No one new was added</string>
     <string name="convoy_awarenessMemberOnMap">%1$s in the convoy</string>
     <string name="convoy_awarenessArrowSingle">%1$s is off the map, at %2$d o’clock, %3$s away</string>
     <string name="convoy_awarenessArrowGroup">%1$s and %2$d others are off the map, at %3$d o’clock, %4$s away</string>

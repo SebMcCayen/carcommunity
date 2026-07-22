@@ -1548,7 +1548,32 @@ fun AuthenticatedApp(
                 LaunchedEffect(convoyInviteConvoyId, convoyInviteFriendsCoordinator) {
                     if (convoyInviteConvoyId != null) convoyInviteFriendsCoordinator?.load()
                 }
-                val convoyInviteSentText = stringResource(R.string.convoy_inviteSent)
+                // The confirmation reflects reality via the backend's counts: how
+                // many were actually invited and how many were skipped (already in /
+                // not a friend / …) — one clear line for all-invited, all-skipped,
+                // and mixed outcomes. Resolved composably (stringResource) so the
+                // effect below only shows it.
+                val convoyInviteDone = convoyInviteState as? InviteConvoyState.Done
+                val convoyInviteConfirmText: String? =
+                    when {
+                        convoyInviteDone == null -> null
+                        // None added — every requested invitee was skipped.
+                        convoyInviteDone.invited.isEmpty() ->
+                            stringResource(R.string.convoy_inviteConfirmNoneAdded)
+                        // All requested invitees were added, nothing skipped.
+                        convoyInviteDone.skipped.isEmpty() ->
+                            stringResource(
+                                R.string.convoy_inviteConfirmInvited,
+                                convoyInviteDone.invited.size,
+                            )
+                        // Some in, some skipped.
+                        else ->
+                            stringResource(
+                                R.string.convoy_inviteConfirmMixed,
+                                convoyInviteDone.invited.size,
+                                convoyInviteDone.skipped.size,
+                            )
+                    }
                 // On a successful invite, close the picker, confirm, and reset the
                 // sub-state so a later open starts clean.
                 LaunchedEffect(convoyInviteState) {
@@ -1556,7 +1581,7 @@ fun AuthenticatedApp(
                         convoyInviteConvoyId = null
                         convoyInviteSelected = emptySet()
                         convoyBarCoordinator?.resetInvite()
-                        snackbarHostState.showSnackbar(convoyInviteSentText)
+                        convoyInviteConfirmText?.let { snackbarHostState.showSnackbar(it) }
                     }
                 }
                 // Opens the invite picker for [convoyId] with a fresh selection.

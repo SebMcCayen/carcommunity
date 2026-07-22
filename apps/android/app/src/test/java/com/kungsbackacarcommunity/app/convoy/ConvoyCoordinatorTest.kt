@@ -204,10 +204,60 @@ class ConvoyCoordinatorTest {
         coordinator.invite("c1", listOf("a", "a", "x"))
         val state = coordinator.inviteState.value
         assertTrue(state is InviteConvoyState.Done)
-        assertEquals(listOf(ConvoySkipReason.AlreadyMember), (state as InviteConvoyState.Done).skipped.map { it.reason })
+        // Mixed outcome: the backend's invited AND skipped lists both flow through
+        // Done, so the confirmation can report both counts ("Invited 1 · 1 …").
+        state as InviteConvoyState.Done
+        assertEquals(listOf("a"), state.invited)
+        assertEquals(listOf(ConvoySkipReason.AlreadyMember), state.skipped.map { it.reason })
         assertEquals("c1", repo.lastInviteConvoyId)
         assertEquals(listOf("a", "x"), repo.lastInviteeUids)
         assertEquals(1, repo.listCalls) // reloaded after a successful invite
+    }
+
+    @Test
+    fun `invite reports Done with the full invited list when nobody is skipped`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                inviteResult =
+                    CreateConvoyResult.Created(
+                        (respondResult as ConvoyMutationResult.Updated).convoy,
+                        invited = listOf("a", "b"),
+                        skipped = emptyList(),
+                    )
+            }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", listOf("a", "b"))
+        val state = coordinator.inviteState.value
+        assertTrue(state is InviteConvoyState.Done)
+        // All invited, nothing skipped → confirmation says only "Invited 2".
+        state as InviteConvoyState.Done
+        assertEquals(listOf("a", "b"), state.invited)
+        assertTrue(state.skipped.isEmpty())
+    }
+
+    @Test
+    fun `invite reports Done with no invited when everyone is skipped`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                inviteResult =
+                    CreateConvoyResult.Created(
+                        (respondResult as ConvoyMutationResult.Updated).convoy,
+                        invited = emptyList(),
+                        skipped =
+                            listOf(
+                                SkippedInvitee("x", ConvoySkipReason.AlreadyMember),
+                                SkippedInvitee("y", ConvoySkipReason.Duplicate),
+                            ),
+                    )
+            }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", listOf("x", "y"))
+        val state = coordinator.inviteState.value
+        assertTrue(state is InviteConvoyState.Done)
+        // Nobody added → invited is empty so the confirmation says "no one new".
+        state as InviteConvoyState.Done
+        assertTrue(state.invited.isEmpty())
+        assertEquals(2, state.skipped.size)
     }
 
     @Test

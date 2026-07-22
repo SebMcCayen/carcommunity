@@ -505,7 +505,9 @@
     <string name="convoy_inviteTitle">Bjud in till konvojen</string>
     <string name="convoy_inviteSubmit">Skicka inbjudningar</string>
     <string name="convoy_inviteCancel">Avbryt</string>
-    <string name="convoy_inviteSent">Inbjudningar skickade.</string>
+    <string name="convoy_inviteConfirmInvited">Bjöd in %1$d</string>
+    <string name="convoy_inviteConfirmMixed">Bjöd in %1$d · %2$d kunde inte läggas till</string>
+    <string name="convoy_inviteConfirmNoneAdded">Ingen ny lades till</string>
     <string name="convoy_awarenessMemberOnMap">%1$s i konvojen</string>
     <string name="convoy_awarenessArrowSingle">%1$s är utanför kartan, klockan %2$d, %3$s bort</string>
     <string name="convoy_awarenessArrowGroup">%1$s och %2$d till är utanför kartan, klockan %3$d, %4$s bort</string>
