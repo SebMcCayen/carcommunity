@@ -18,15 +18,19 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import {
   FIRESTORE_IN_CHUNK,
   INCIDENT_ACTIVE_STATUS,
+  INCIDENT_LIST_RATE_LIMIT_COLLECTION,
   chunk,
   clampRadiusMeters,
   geoCellsForRadius,
+  incidentListRateLimitDocId,
+  incidentListRateLimitExpiry,
+  isUnderIncidentListRateLimit,
   isWithinRadius,
   parseListNearbyInput,
   readConfirmationCount,
@@ -50,7 +54,14 @@ export interface ListNearbyResponse {
 }
 
 export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNearbyResponse> => {
-  await requireActiveActor(request);
+  const actor = await requireActiveActor(request);
+
+  // Per-user rate limit BEFORE any of the expensive geoCell reads below, so a
+  // throttled call (client hot loop, or a valid-token abuser) costs ~one
+  // counter get, not up to 200 doc reads. On exceed we throw resource-exhausted;
+  // the Android client keeps its previous markers on a failed listNearby, so a
+  // throttled user just misses one refresh tick — no crash, no blank map.
+  await enforceListNearbyRateLimit(actor.uid);
 
   const parsed = parseListNearbyInput(request.data);
   if (!parsed.ok) {
@@ -128,3 +139,60 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
 function tsToIso(value: unknown): string | null {
   return value instanceof Timestamp ? value.toDate().toISOString() : null;
 }
+
+/**
+ * Fixed-window per-user rate limit for `incidents.listNearby`.
+ *
+ * Reads the deterministic counter doc for (uid, current minute) BY ID — no
+ * query, no composite index — and throws `resource-exhausted` once the uid has
+ * already made INCIDENT_LIST_RATE_LIMIT_MAX calls in this window. Otherwise it
+ * bumps the counter with FieldValue.increment(1) (a commutative, contention-free
+ * server op — no transaction) and stamps `expireAt` so a Firestore TTL policy
+ * reaps the spent window. A rejected call performs the single get and NO write.
+ *
+ * Deliberately not a transactional windowed count() (the shape used by the
+ * lower-frequency feedback / error / moderation limiters): on this hot read path
+ * that would add a composite index and hot-single-doc transaction contention.
+ * The pure admit/reject decision lives in incidents-core
+ * (isUnderIncidentListRateLimit) and is unit-tested there. Under concurrency a
+ * handful of calls may read the same pre-increment count and slip through at the
+ * window boundary; that is fine — the goal is to stop a runaway (hundreds–
+ * thousands/min), not to be exact at the 60/61 boundary.
+ */
+async function enforceListNearbyRateLimit(uid: string): Promise<void> {
+  const nowMs = Date.now();
+  const ref = db
+    .collection(INCIDENT_LIST_RATE_LIMIT_COLLECTION)
+    .doc(incidentListRateLimitDocId(uid, nowMs));
+
+  const snap = await ref.get();
+  const currentCount = snap.get('count');
+  if (!isUnderIncidentListRateLimit(typeof currentCount === 'number' ? currentCount : 0)) {
+    throw new HttpsError(
+      'resource-exhausted',
+      'Too many nearby-incident refreshes — please slow down and try again shortly.',
+    );
+  }
+
+  await ref.set(
+    {
+      count: FieldValue.increment(1),
+      uid,
+      // Firestore TTL policy on `expireAt` reaps spent windows (deploy note
+      // below). Idempotent within a window: every write in the same minute sets
+      // the same instant, so the merge is stable.
+      expireAt: Timestamp.fromDate(incidentListRateLimitExpiry(nowMs)),
+    },
+    { merge: true },
+  );
+}
+
+// One-time deploy step for the counter's TTL (spent windows self-delete so the
+// incidentListRateLimits collection never accumulates):
+//
+//   gcloud firestore fields ttls update expireAt \
+//     --collection-group=incidentListRateLimits --enable-ttl
+//
+// The collection is backend-only: written here via the Admin SDK and denied to
+// all clients by firebase/firestore.rules. It needs no composite index (the
+// counter is read by document id) and no client-readable rule.

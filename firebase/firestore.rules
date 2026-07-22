@@ -705,6 +705,21 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // incidentListRateLimits – per-user fixed-window counter for
+    // incidents.listNearby (runaway / abuse guard). Deterministic doc id
+    // `{uid}_{epochMinute}`; incidents.listNearby reads it by id and bumps it
+    // with FieldValue.increment via the Admin SDK before doing the geoCell
+    // reads. Fully backend-only: never client-readable or client-writable, so a
+    // member cannot inspect or reset their own throttle. `expireAt` carries a
+    // Firestore TTL policy so spent windows self-delete. (The deny-all default
+    // would already cover it; the intent is stated explicitly, mirroring
+    // liveSessions / crownHuntAwardGuards.)
+    // -------------------------------------------------------------------------
+    match /incidentListRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // liveSessions – nearby live-sharer DISCOVERY index (live location)
     // A lightweight, geo-cell-indexed Firestore doc per ACTIVE standalone
     // sharer (liveSessions/{uid}), written ONLY by the live.* callables via the
