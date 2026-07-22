@@ -22,6 +22,7 @@ import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
 import com.mapbox.maps.extension.style.layers.properties.generated.TextAnchor
 import com.mapbox.maps.plugin.compass.compass
+import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.scalebar.scalebar
 
 /**
@@ -55,6 +56,16 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 fun DriveRouteMap(
     points: List<RoutePoint>,
     modifier: Modifier = Modifier,
+    // Whether the map's own pan/pinch/rotate gestures are live. Defaults to OFF:
+    // the embedded History thumbnail is a STATIC preview wrapped in a parent
+    // `clickable` that opens the full-screen popup, and a gesture-enabled MapView
+    // would consume those touches — making the tap-to-expand unreliable and
+    // letting the user pan/zoom a thumbnail that has no controls. The full-screen
+    // popup (which owns its own MapView) is where interaction lives, so it does
+    // NOT use this composable. Kept as a parameter (rather than hard-off) so the
+    // thumbnail renderer stays reusable if an interactive inline map is ever
+    // wanted.
+    interactive: Boolean = false,
 ) {
     // The route is drawn ONCE, in the factory, from the points captured when the
     // map enters composition. The caller only composes this once the route has
@@ -74,6 +85,22 @@ fun DriveRouteMap(
             MapView(context).apply {
                 runCatching { scalebar.updateSettings { enabled = false } }
                 runCatching { compass.updateSettings { enabled = false } }
+                // Turn the MapView's touch handling OFF for the static thumbnail so
+                // the parent `clickable` reliably receives the tap-to-expand (an
+                // AndroidView-hosted MapView otherwise swallows the gesture).
+                if (!interactive) {
+                    runCatching {
+                        gestures.updateSettings {
+                            scrollEnabled = false
+                            pinchToZoomEnabled = false
+                            rotateEnabled = false
+                            pitchEnabled = false
+                            doubleTapToZoomInEnabled = false
+                            doubleTouchToZoomOutEnabled = false
+                            quickZoomEnabled = false
+                        }
+                    }
+                }
                 mapboxMap.loadStyle(Style.STANDARD) { _ ->
                     drawRoute(this, points)
                 }

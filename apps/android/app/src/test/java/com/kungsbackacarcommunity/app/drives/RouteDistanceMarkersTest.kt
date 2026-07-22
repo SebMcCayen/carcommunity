@@ -106,4 +106,53 @@ class RouteDistanceMarkersTest {
         val markers = RouteDistanceMarkers.markers(route)
         assertEquals(listOf(1, 2), markers.map { it.kilometer })
     }
+
+    /** A single equator segment [meters] long (two points), for the cap tests. */
+    private fun longEquatorSegment(meters: Double): List<RoutePoint> =
+        listOf(
+            RoutePoint(0.0, 0.0, 0),
+            RoutePoint(0.0, lngForMeters(meters), 1000),
+        )
+
+    @Test
+    fun routeJustUnderCap_keepsOneKmInterval() {
+        // 450 km: 450 per-km markers is under the 500 cap, so the interval stays
+        // at 1 km (markers at 1, 2, 3, …).
+        val markers = RouteDistanceMarkers.markers(longEquatorSegment(450_000.0))
+        assertEquals(1, markers.first().kilometer)
+        assertEquals(2, markers[1].kilometer)
+        assertTrue("expected ~450 markers, got ${markers.size}", markers.size in 449..450)
+    }
+
+    @Test
+    fun routeOverCap_coarsensIntervalButStaysEvenlySpaced() {
+        // 600 km: 600 per-km markers would exceed the 500 cap, so the interval
+        // steps up to 2 km — markers at 2, 4, 6, … km, ~300 of them.
+        val markers = RouteDistanceMarkers.markers(longEquatorSegment(600_000.0))
+        assertTrue("count must stay within the cap", markers.size <= 500)
+        val kms = markers.map { it.kilometer }
+        // Evenly spaced on round kilometres, coarser than 1 km.
+        val interval = kms.first()
+        assertTrue("interval should have coarsened past 1 km", interval > 1)
+        assertEquals(interval, 2)
+        for (i in 1 until kms.size) {
+            assertEquals(interval, kms[i] - kms[i - 1])
+        }
+    }
+
+    @Test
+    fun globeSpanningCorruptRoute_staysUnderCapAndEvenlySpaced() {
+        // ~19 900 km (near half the equator): a pathological/corrupt length. The
+        // interval coarsens hard so the drawable count never explodes, yet the
+        // markers stay evenly spaced rather than abruptly stopping.
+        val markers = RouteDistanceMarkers.markers(longEquatorSegment(19_900_000.0))
+        assertTrue("must never exceed the drawable cap", markers.size <= 500)
+        assertTrue("a long route should still produce markers", markers.isNotEmpty())
+        val kms = markers.map { it.kilometer }
+        val interval = kms.first()
+        assertTrue("interval must coarsen well past 1 km", interval > 1)
+        for (i in 1 until kms.size) {
+            assertEquals(interval, kms[i] - kms[i - 1])
+        }
+    }
 }
