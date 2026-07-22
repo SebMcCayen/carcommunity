@@ -366,6 +366,37 @@ describe('incidents.listNearby rate limit', () => {
     expect(snaps.every((s) => !s.exists)).toBe(true);
   });
 
+  it('self-heals a corrupt (non-numeric) count without throwing — fail-open resets to 1', async () => {
+    const user = await createProvisionedUser('inc-rl-corrupt');
+    await signInAs(user);
+    // Seed a NON-numeric `count` for the caller's current window. The read side
+    // treats a non-numeric count as 0 (admits), and FieldValue.increment(1)
+    // OVERWRITES a non-numeric field with the operand rather than throwing — so
+    // a corrupt counter doc must NOT become a persistent internal error: the
+    // call succeeds and the counter self-heals to a numeric 1.
+    const nowMs = Date.now();
+    await rateLimits()
+      .doc(incidentListRateLimitDocId(user.uid, nowMs))
+      .set({ uid: user.uid, count: 'corrupt' });
+    const result = await call('incidents-listNearby', {
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      radiusMeters: 5000,
+    });
+    // Did not throw resource-exhausted / internal — returned a normal payload.
+    expect(Array.isArray((result.data as { incidents: unknown[] }).incidents)).toBe(true);
+    // The window listNearby wrote is now a numeric 1 (increment overwrote the
+    // corrupt string). Check current AND next window ids so a minute-boundary
+    // crossing between the seed and the call cannot flake the assertion.
+    const counts = await Promise.all(
+      [nowMs, nowMs + INCIDENT_LIST_RATE_LIMIT_WINDOW_MS].map(async (ms) => {
+        const snap = await rateLimits().doc(incidentListRateLimitDocId(user.uid, ms)).get();
+        return snap.data()?.count;
+      }),
+    );
+    expect(counts.some((c) => c === 1)).toBe(true);
+  });
+
   it('resets across windows: a prior-window cap does not throttle the current window', async () => {
     const user = await createProvisionedUser('inc-rl-reset');
     await signInAs(user);
