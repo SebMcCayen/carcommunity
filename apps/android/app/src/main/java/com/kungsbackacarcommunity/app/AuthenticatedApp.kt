@@ -1194,14 +1194,14 @@ fun AuthenticatedApp(
             // with the session's elapsed time and the distance driven this session.
             // Both values are derived here and handed to a dumb [LiveSessionBar].
             //
-            // Elapsed ticks from the session's START. The drive recorder captures
-            // that moment (startedAtMillis) the instant sharing begins; when there
-            // is no recording (config-less build, or a caller who can't record)
-            // fall back to deriving it from the live session itself — its expiry
-            // minus the chosen duration. The clock is re-read once a second, so the
-            // timer keeps advancing even while the car (and the GPS stream feeding
-            // the recorder) is stationary — unlike RecordingState.elapsedMillis,
-            // which is frozen at the last accepted fix.
+            // Elapsed is derived from the session's START. The drive recorder
+            // captures that moment (startedAtMillis) the instant sharing begins;
+            // when there is no recording (config-less build, or a caller who can't
+            // record) fall back to deriving it from the live session itself — its
+            // expiry minus the chosen duration. This value is STABLE (changes only
+            // when a session starts), NOT per-second: the once-a-second ticker
+            // lives inside [LiveSessionBar], so a running session recomposes only
+            // the small bar rather than this whole (very large) composable.
             val liveSessionStartMillis: Long? =
                 activeRecording?.startedAtMillis
                     ?: liveSession?.let { session ->
@@ -1210,29 +1210,21 @@ fun AuthenticatedApp(
                             session.duration?.let { it.hours.toLong() * 60L * 60L * 1000L }
                         if (expiry != null && durationMs != null) expiry - durationMs else null
                     }
-            val liveSessionElapsedMillis by
-                produceState(0L, isSharing, liveSessionStartMillis) {
-                    val start = liveSessionStartMillis
-                    if (!isSharing || start == null) {
-                        value = 0L
-                        return@produceState
-                    }
-                    while (true) {
-                        value = (nowMillis() - start).coerceAtLeast(0L)
-                        delay(1000L)
-                    }
-                }
             // Distance driven this session, straight off the recorder's running
-            // total (0 before the first fix / when nothing is recording).
+            // total (0 before the first fix / when nothing is recording). Only
+            // changes on GPS fixes, which the shell already observes via
+            // recordingState — so it adds no extra recomposition.
             val liveSessionDistanceMeters =
                 (recordingState as? RecordingState.Recording)?.distanceMeters ?: 0.0
-            // Composed only while a session is actually sharing; null otherwise
-            // composes nothing at all (no empty pill in the search strip).
+            // Composed only while a session is actually sharing AND we have a start
+            // to tick from; null otherwise composes nothing at all (no empty pill
+            // in the search strip).
+            val liveSessionStart = liveSessionStartMillis
             val liveSessionBarSlot: (@Composable () -> Unit)? =
-                if (isSharing) {
+                if (isSharing && liveSessionStart != null) {
                     {
                         LiveSessionBar(
-                            elapsedMillis = liveSessionElapsedMillis,
+                            sessionStartMillis = liveSessionStart,
                             distanceMeters = liveSessionDistanceMeters,
                         )
                     }

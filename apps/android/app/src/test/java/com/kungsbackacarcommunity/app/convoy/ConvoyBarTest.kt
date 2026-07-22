@@ -249,7 +249,7 @@ class ConvoyBarTest {
         val state =
             ConvoyBarState(
                 convoyId = "c1",
-                memberCount = 2,
+                members = emptyList(),
                 viewerIsOwner = true,
                 busy = false,
                 inviteAvailability = ConvoyBarActionAvailability.Wired,
@@ -274,7 +274,7 @@ class ConvoyBarTest {
             leave: ConvoyBarActionAvailability,
         ) = ConvoyBarState(
             convoyId = "c1",
-            memberCount = 2,
+            members = emptyList(),
             viewerIsOwner = false,
             busy = false,
             inviteAvailability = invite,

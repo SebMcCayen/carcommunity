@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -25,6 +27,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.drives.DriveFormatters
+import kotlinx.coroutines.delay
 
 /** Test tag on the live-session bar. */
 const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
@@ -43,22 +46,42 @@ const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
  * The full sentence is kept as the pill's [contentDescription] for TalkBack.
  *
  * ## Where the two numbers come from
- * Both are hoisted so this stays a dumb, testable renderer:
- * - [elapsedMillis] ticks up from the session's start (see the host, which
- *   derives it from the drive recorder's start moment and re-reads the clock once
- *   a second, so the timer advances even while the car is stationary), and
+ * - Elapsed is derived from [sessionStartMillis] (the drive recorder's start
+ *   moment, or the session's expiry−duration). The per-second ticker lives HERE,
+ *   inside the bar, on purpose: reading a once-a-second state up in the large host
+ *   composable would recompose the whole shell every second, so only this small
+ *   bar re-reads the clock. The timer advances even while the car (and the GPS
+ *   stream) is stationary, because it re-reads [now] rather than the last fix.
  * - [distanceMeters] is the drive recorder's running total for THIS session —
- *   the same value History would save — formatted with [DriveFormatters].
+ *   the same value History would save — formatted with [DriveFormatters]. It is
+ *   hoisted (it changes only on GPS fixes, which the host already observes).
  *
  * The host composes this only while a session is active; there is no "idle"
  * variant, so it never renders a zeroed-out placeholder.
+ *
+ * @param now the clock the ticker reads, injectable so the elapsed readout is
+ *   deterministic in tests. Defaults to the wall clock.
  */
 @Composable
 fun LiveSessionBar(
-    elapsedMillis: Long,
+    sessionStartMillis: Long,
     distanceMeters: Double,
     modifier: Modifier = Modifier,
+    now: () -> Long = { System.currentTimeMillis() },
 ) {
+    // The once-a-second tick is scoped to THIS composable, so a running session
+    // recomposes only the bar, not the whole shell. Re-keyed on the start moment
+    // so a new session restarts the count from zero.
+    val elapsedMillis by
+        produceState(
+            initialValue = (now() - sessionStartMillis).coerceAtLeast(0L),
+            sessionStartMillis,
+        ) {
+            while (true) {
+                value = (now() - sessionStartMillis).coerceAtLeast(0L)
+                delay(1000L)
+            }
+        }
     val elapsedText = LiveSessionFormat.elapsedLabel(elapsedMillis)
     val distanceText = DriveFormatters.formatDistance(distanceMeters)
     val description =

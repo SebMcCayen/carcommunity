@@ -53,7 +53,6 @@ class ConvoyStatusBarTest {
     private fun ownerState(convoyId: String) =
         ConvoyBarState(
             convoyId = convoyId,
-            memberCount = twoMembers.size,
             members = twoMembers,
             viewerIsOwner = true,
             busy = false,
@@ -64,7 +63,6 @@ class ConvoyStatusBarTest {
     private fun memberState(convoyId: String) =
         ConvoyBarState(
             convoyId = convoyId,
-            memberCount = twoMembers.size,
             members = twoMembers,
             viewerIsOwner = false,
             busy = false,
