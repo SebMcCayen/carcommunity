@@ -238,6 +238,8 @@
     "statsEmptyBody": "Dina körningar, utmärkelser och poäng visas här.",
     "displayNameLabel": "Visningsnamn",
     "bioLabel": "Presentation",
+    "emptyNickname": "Inget smeknamn ännu",
+    "emptyBio": "Ingen presentation ännu",
     "saveButton": "Spara",
     "editButton": "Redigera",
     "cancelButton": "Avbryt",
