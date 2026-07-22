@@ -968,6 +968,14 @@
     <string name="chatHub_convoysRetry">Försök igen</string>
     <string name="chatHub_convoyUntitled">Konvoj</string>
     <string name="chatHub_convoyMembers">Medlemmar: %1$d</string>
+    <string name="chatHub_convoyOngoingHeader">Pågår nu</string>
+    <string name="chatHub_convoyHistoryHeader">Historik</string>
+    <string name="chatHub_convoyActiveBadge">Aktiv</string>
+    <string name="chatHub_convoyFormingBadge">Samlas</string>
+    <string name="chatHub_convoyEndedBadge">Avslutad</string>
+    <string name="chatHub_convoyCreated">Skapad %1$s</string>
+    <string name="chatHub_convoyMemberOverflow">+%1$d</string>
+    <string name="chatHub_convoyDatePattern">d MMM</string>
     <string name="chatTime_today">Idag</string>
     <string name="chatTime_yesterday">Igår</string>
     <string name="chatTime_daySeparatorFormat">EEEE d MMMM</string>

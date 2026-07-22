@@ -968,6 +968,14 @@
     <string name="chatHub_convoysRetry">Try again</string>
     <string name="chatHub_convoyUntitled">Convoy</string>
     <string name="chatHub_convoyMembers">Members: %1$d</string>
+    <string name="chatHub_convoyOngoingHeader">Ongoing</string>
+    <string name="chatHub_convoyHistoryHeader">History</string>
+    <string name="chatHub_convoyActiveBadge">Active</string>
+    <string name="chatHub_convoyFormingBadge">Forming</string>
+    <string name="chatHub_convoyEndedBadge">Ended</string>
+    <string name="chatHub_convoyCreated">Created %1$s</string>
+    <string name="chatHub_convoyMemberOverflow">+%1$d</string>
+    <string name="chatHub_convoyDatePattern">d MMM</string>
     <string name="chatTime_today">Today</string>
     <string name="chatTime_yesterday">Yesterday</string>
     <string name="chatTime_daySeparatorFormat">EEEE, d MMMM</string>

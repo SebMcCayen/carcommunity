@@ -1044,7 +1044,15 @@
     "convoysError": "Couldn't load your convoys.",
     "convoysRetry": "Try again",
     "convoyUntitled": "Convoy",
-    "convoyMembers": "Members: %1$d"
+    "convoyMembers": "Members: %1$d",
+    "convoyOngoingHeader": "Ongoing",
+    "convoyHistoryHeader": "History",
+    "convoyActiveBadge": "Active",
+    "convoyFormingBadge": "Forming",
+    "convoyEndedBadge": "Ended",
+    "convoyCreated": "Created %1$s",
+    "convoyMemberOverflow": "+%1$d",
+    "convoyDatePattern": "d MMM"
   },
   "chatTime": {
     "today": "Today",
