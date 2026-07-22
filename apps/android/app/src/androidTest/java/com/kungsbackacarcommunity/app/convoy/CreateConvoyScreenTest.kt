@@ -5,12 +5,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
-import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,15 +63,21 @@ class CreateConvoyScreenTest {
     }
 
     /**
-     * Once the create has SUCCEEDED (Created), the submit button is disabled and a
-     * click does not fire a second submit, and the friend picker is inert too — so
-     * nothing can start a second `convoy.create` or change the selection during the
-     * brief window before the host dismisses to the map.
+     * Once the create has SUCCEEDED (Created), the submit button AND the friend rows
+     * are disabled — so nothing can start a second `convoy.create` or change the
+     * selection during the brief window before the host dismisses to the map.
+     *
+     * Both are asserted with [assertIsNotEnabled] (the repo convention for a disabled
+     * button — see e.g. VehicleDetailScreenTest / EventChatScreenTest), which checks
+     * the Disabled semantics flag directly and is therefore NON-vacuous: a disabled
+     * control cannot invoke its onClick/onToggle. We deliberately do NOT click-and-
+     * assert-nothing (that passes even on a live control that merely no-ops), nor use
+     * assertHasNoClickAction — a disabled Compose Button/toggleable still exposes a
+     * DISABLED OnClick action (assertHasNoClickAction is for truly non-clickable rows,
+     * like the caller's own "Me" row), so that assertion would spuriously fail here.
      */
     @Test
     fun submitAndPickerInertOnceCreated() {
-        var submits = 0
-        var toggles = 0
         composeTestRule.setContent {
             KccTheme {
                 CreateConvoyScreen(
@@ -81,24 +85,15 @@ class CreateConvoyScreenTest {
                     createState =
                         CreateConvoyState.Created(convoyId = "c1", skipped = emptyList()),
                     selectedUids = setOf("u2"),
-                    onToggleFriend = { toggles++ },
+                    onToggleFriend = {},
                     onRetryFriends = null,
-                    onSubmit = { submits++ },
+                    onSubmit = {},
                 )
             }
         }
 
-        val submit = composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG)
-        submit.assertIsNotEnabled()
-        submit.performClick()
-
-        // The friend row is inert as well: tapping it must not change the selection.
-        composeTestRule.onNodeWithText("Alice").performClick()
-
-        composeTestRule.runOnIdle {
-            assertEquals("no second create may fire during hand-off", 0, submits)
-            assertEquals("selection is frozen during hand-off", 0, toggles)
-        }
+        composeTestRule.onNodeWithTag(CONVOY_CREATE_SUBMIT_TAG).assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Alice").assertIsNotEnabled()
     }
 
     /** While the create is in flight (Working), the button is likewise disabled. */
