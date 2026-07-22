@@ -81,6 +81,8 @@ import com.mapbox.maps.plugin.gestures.OnRotateListener
 import com.mapbox.maps.plugin.gestures.OnScaleListener
 import com.mapbox.maps.plugin.gestures.OnShoveListener
 import com.mapbox.maps.plugin.gestures.gestures
+import com.mapbox.maps.plugin.PuckBearing
+import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
@@ -215,6 +217,21 @@ class MapboxMapSurface : MapSurface {
     // onRelease). Touched on the main thread from Compose callbacks.
     private var mapViewRef: MapView? = null
     private var lastPoint: Point? = null
+
+    // How the map is oriented while following (see [MapCompassMode]) — the
+    // compass control's two modes. north-up pins the camera bearing at 0;
+    // course-up rotates the camera to [lastBearing] (the puck's heading) on every
+    // position/heading update. Fed into the ONE follow path (the position/bearing
+    // listeners + easeToUser) rather than a second camera loop. A preference, so
+    // it survives a MapView recreate on a tab round-trip; the shell also re-pushes
+    // it on a surface swap.
+    private var compassMode: MapCompassMode = MapCompassMode.NorthUp
+
+    // The puck's most recent COURSE bearing (degrees, direction of travel), fed by
+    // the OnIndicatorBearingChangedListener. Read by the follow path to rotate the
+    // camera in course-up. Reset on MapView release so a fresh map does not rotate
+    // to a stale heading before its first fix.
+    private var lastBearing: Double = 0.0
 
     // The private "past ~1 km" breadcrumb tail of the user's OWN travel, drawn
     // only while THIS user is live-sharing (see [BreadcrumbTrail] for the rolling
@@ -595,6 +612,11 @@ class MapboxMapSurface : MapSurface {
                 enabled = true
                 pulsingEnabled = true
                 pulsingColor = pulseColorFor(userMarkerFlow.value)
+                // Re-assert course-bearing computation so the heading listener keeps
+                // firing after a permission grant / reactivate (course-up depends
+                // on it). Matches the style-load settings above.
+                puckBearingEnabled = true
+                puckBearing = PuckBearing.COURSE
             }
         }
     }
@@ -645,6 +667,27 @@ class MapboxMapSurface : MapSurface {
      * pitch + bearing(0) cannot fight itself.
      */
     override fun recenterNorthUp() = userRequestedRecenter(resetBearingToNorth = true)
+
+    /**
+     * The compass toggle's two orientation modes (see [MapCompassMode]).
+     *
+     * Storing the mode is what makes the SINGLE follow path apply the right
+     * bearing: the position/heading listeners and [easeToUser] all read
+     * [compassMode], so north-up keeps the camera at 0 and course-up rotates it to
+     * the puck's heading — no second camera owner.
+     *
+     * A real CHANGE is applied at once as one user-requested re-centre (resume
+     * follow, cancel any idle-return, ease to the user): north-up folds bearing(0)
+     * into that move; course-up rotates to the current heading, since
+     * [compassMode] is updated first so [easeToUser] picks it up. Re-setting the
+     * SAME mode is a no-op, so the shell can safely re-push the saved mode on a
+     * surface swap without a spurious camera move on open.
+     */
+    override fun setCompassMode(mode: MapCompassMode) {
+        if (mode == compassMode) return
+        compassMode = mode
+        userRequestedRecenter(resetBearingToNorth = mode == MapCompassMode.NorthUp)
+    }
 
     /**
      * A re-centre the USER asked for, by the my-location control or the compass:
@@ -700,9 +743,21 @@ class MapboxMapSurface : MapSurface {
                     }
                     // Keep the 3D tilt when the camera re-centres.
                     pitch(this@MapboxMapSurface.pitch)
-                    // North-up folded into the SAME options — see the KDoc: this
+                    // Bearing, folded into the SAME options — see the KDoc: this
                     // is why the compass does not issue its own second easeTo.
-                    if (resetBearingToNorth) bearing(0.0)
+                    // - [resetBearingToNorth] (the compass switching to north-up,
+                    //   or recenterNorthUp) always wins: bearing(0).
+                    // - otherwise, in course-up, re-centring keeps the map facing
+                    //   the current heading (so my-location / idle-return don't
+                    //   silently drop course-up orientation).
+                    // - in north-up (not an explicit reset) the bearing is left
+                    //   untouched, preserving any manual rotation, exactly as
+                    //   the my-location control always has.
+                    when {
+                        resetBearingToNorth -> bearing(0.0)
+                        compassMode == MapCompassMode.CourseUp ->
+                            bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                    }
                 }
             // Smoothly glide to the target rather than jumping instantly, via the
             // camera-animations plugin. A pleasant ~1s ease reads as intentional
@@ -900,6 +955,12 @@ class MapboxMapSurface : MapSurface {
                                     center(point)
                                     zoom(MapMarkers.OWN_MARKER_ZOOM)
                                     pitch(this@MapboxMapSurface.pitch)
+                                    // Open already facing the direction of travel
+                                    // when the user chose course-up; north-up
+                                    // leaves the bearing at 0.
+                                    if (compassMode == MapCompassMode.CourseUp) {
+                                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                                    }
                                 },
                             )
                         } else {
@@ -925,10 +986,61 @@ class MapboxMapSurface : MapSurface {
                             // does not trigger the gesture listeners, so this never
                             // disables follow; a manual pan still breaks follow via
                             // the gesture hooks and the idle-return timer restores it.
+                            //
+                            // In course-up the bearing rides along with the centre
+                            // so the map stays rotated to the direction of travel as
+                            // the user moves (the bearing listener also rotates it in
+                            // place while turning). north-up sets only the centre,
+                            // leaving the bearing untouched (0, or a manual rotation).
                             map.mapboxMap.setCamera(
-                                cameraOptions { center(point) },
+                                cameraOptions {
+                                    center(point)
+                                    if (compassMode == MapCompassMode.CourseUp) {
+                                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                                    }
+                                },
                             )
                         }
+                    }
+                }
+            }
+
+        // Puck-heading listener for course-up. It records the latest COURSE
+        // bearing (used by the position listener + easeToUser) and, while in
+        // course-up and following, rotates the camera IN PLACE so the map keeps
+        // turning to the direction of travel even when the user is barely moving
+        // (e.g. rounding a bend). Position-follow is untouched — this only ever
+        // sets the bearing.
+        val bearingListener =
+            remember {
+                OnIndicatorBearingChangedListener { heading ->
+                    lastBearing = heading
+                    // north-up ignores the heading entirely (the map stays at 0).
+                    if (compassMode != MapCompassMode.CourseUp) {
+                        return@OnIndicatorBearingChangedListener
+                    }
+                    // Same follow gate as the position listener: a manual gesture
+                    // (or a route preview) owns the camera, so a heading update
+                    // must not fight it — the idle-return timer resumes course-up
+                    // rotation once the user stops interacting.
+                    if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                        return@OnIndicatorBearingChangedListener
+                    }
+                    // A convoy fit deliberately keeps the user's current bearing
+                    // while framing the group (see applyConvoyFit), so don't spin
+                    // the map out from under it here.
+                    if (convoyFitPoints != null) return@OnIndicatorBearingChangedListener
+                    val map = mapViewRef ?: return@OnIndicatorBearingChangedListener
+                    // Rotate in place: only the bearing is set, so centre/zoom/
+                    // pitch stay exactly as the position listener maintains them.
+                    // A programmatic setCamera does not fire the gesture listeners,
+                    // so this never disables follow.
+                    runCatching {
+                        map.mapboxMap.setCamera(
+                            cameraOptions {
+                                bearing(CompassCamera.followBearing(compassMode, heading))
+                            },
+                        )
                     }
                 }
             }
@@ -1240,8 +1352,18 @@ class MapboxMapSurface : MapSurface {
                                 // flow's current value to apply the latest
                                 // live-sharing state when the puck is enabled.
                                 pulsingColor = pulseColorFor(userMarkerFlow.value)
+                                // Compute the puck's COURSE bearing (direction of
+                                // travel) so the OnIndicatorBearingChangedListener
+                                // below actually emits — the source of the heading
+                                // course-up rotates the camera to. COURSE (GPS
+                                // travel direction), not HEADING (device compass):
+                                // this is a driving map, so the direction the car is
+                                // moving is what should point up.
+                                puckBearingEnabled = true
+                                puckBearing = PuckBearing.COURSE
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
+                            location.addOnIndicatorBearingChangedListener(bearingListener)
                         }
                     }
                 }
@@ -1292,6 +1414,14 @@ class MapboxMapSurface : MapSurface {
                 runCatching {
                     mapView.location.removeOnIndicatorPositionChangedListener(positionListener)
                 }
+                runCatching {
+                    mapView.location.removeOnIndicatorBearingChangedListener(bearingListener)
+                }
+                // Drop the stale heading so a recreated map (tab round-trip) does
+                // not rotate to an old bearing before its first fresh fix. The
+                // compass MODE itself is a preference and deliberately kept across
+                // the recreate — the fresh map's listeners re-apply it.
+                lastBearing = 0.0
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }

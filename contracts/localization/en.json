@@ -1121,6 +1121,8 @@
     "layersNightMode": "Night mode",
     "layers3d": "3D buildings",
     "compass": "Reset to north",
+    "compassNorthUp": "North up",
+    "compassCourseUp": "Follow your direction",
     "searchExpand": "Search",
     "liveTitle": "Live location",
     "liveClose": "Close live location",

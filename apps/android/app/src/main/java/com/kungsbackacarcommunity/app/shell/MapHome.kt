@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Navigation
@@ -320,6 +321,33 @@ fun MapHome(
         mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
+    // Compass orientation: north-up (default) vs course-up (the map follows the
+    // user's direction of travel). rememberSaveable so the choice survives
+    // recomposition AND activity recreation (rotation) for the session; a
+    // name-based Saver keeps restore crash-safe if a future rename ever drops an
+    // enum constant (MapCompassMode.valueOf would throw; entries.find returns null
+    // and we fall back to north-up).
+    var compassMode by rememberSaveable(
+        stateSaver =
+            Saver(
+                save = { it.name },
+                restore = { saved ->
+                    (saved as? String)?.let { name -> MapCompassMode.entries.find { it.name == name } }
+                        ?: MapCompassMode.NorthUp
+                },
+            ),
+    ) { mutableStateOf(MapCompassMode.NorthUp) }
+
+    // Keep the surface's follow orientation in sync with the chosen mode (mirrors
+    // the day/night desiredMapMode effect). Keyed on mapSurface too so a surface
+    // swap (Stub -> real Mapbox) re-applies the saved mode. setCompassMode is a
+    // no-op when the mode is unchanged, so this never forces a camera move on
+    // open — only a genuine change (a tap, or restoring course-up after a swap)
+    // eases the camera.
+    LaunchedEffect(mapSurface, compassMode) {
+        mapSurface.setCompassMode(compassMode)
+    }
+
     // Push the incident markers onto the surface whenever they change (or the
     // surface instance is swapped), so every user sees them — but ONLY while the
     // "Traffic alerts" layer is enabled. When it is off we push an empty set so
@@ -539,20 +567,56 @@ fun MapHome(
                 onClick = { layersOpen = true },
                 modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
             )
-            // 4. Compass — a north-arrow rotated by the current map bearing so it
-            //    keeps pointing at true north as the map rotates. Tapping it eases
-            //    the map back to north-up AND re-centres on the user in ONE camera
-            //    move (MapSurface.recenterNorthUp) — resetting bearing alone left
-            //    the user looking north at wherever they had panned to, which read
-            //    as the button half-working. Sits directly ABOVE the my-location
-            //    control because the two now do overlapping things and belong
-            //    together as a pair. The built-in Mapbox compass is disabled in
-            //    MapboxMapSurface so this is the only compass shown.
+            // 4. Compass — a TWO-MODE orientation toggle:
+            //    - NORTH-UP (default): true north stays at the top. The glyph is a
+            //      compass rose rotated by the live map bearing so it keeps
+            //      pointing at true north as the user rotates the map.
+            //    - COURSE-UP: the map rotates so the user's direction of travel
+            //      points up. The glyph is the navigation arrow, fixed "up" (your
+            //      heading is always up), so it does NOT rotate.
+            //    Tapping toggles the two and applies it immediately — rotate to
+            //    north-up, or to the current heading — while re-centring on the
+            //    user, so the old "reset to north AND re-centre" behaviour is not
+            //    regressed (it is now the north-up half of the toggle). Only the
+            //    ICON differs between modes; the button keeps CircleControl's
+            //    DEFAULT container/content colours in BOTH modes (no colour or
+            //    container change), exactly like the layers/recenter controls. The
+            //    built-in Mapbox compass stays disabled so this is the only compass.
+            //    Sits directly ABOVE the my-location control, the pair they form.
             CircleControl(
-                icon = Icons.Filled.Navigation,
-                contentDescription = stringResource(R.string.shell_compass),
-                onClick = { mapSurface.recenterNorthUp() },
-                iconRotationDegrees = -bearing,
+                icon =
+                    when (compassMode) {
+                        MapCompassMode.NorthUp -> Icons.Filled.Explore
+                        MapCompassMode.CourseUp -> Icons.Filled.Navigation
+                    },
+                contentDescription =
+                    stringResource(
+                        when (compassMode) {
+                            MapCompassMode.NorthUp -> R.string.shell_compassNorthUp
+                            MapCompassMode.CourseUp -> R.string.shell_compassCourseUp
+                        },
+                    ),
+                onClick = {
+                    val next =
+                        when (compassMode) {
+                            MapCompassMode.NorthUp -> MapCompassMode.CourseUp
+                            MapCompassMode.CourseUp -> MapCompassMode.NorthUp
+                        }
+                    compassMode = next
+                    // Apply now for immediacy (the LaunchedEffect above re-syncs a
+                    // frame later, and setCompassMode is idempotent for the same
+                    // mode, so this direct call is what makes the rotation feel
+                    // instant). setCompassMode eases to the new orientation and
+                    // re-centres.
+                    mapSurface.setCompassMode(next)
+                },
+                // north-up: rotate the rose by the map bearing to keep it pointing
+                // north. course-up: no rotation (heading is always screen-up).
+                iconRotationDegrees =
+                    when (compassMode) {
+                        MapCompassMode.NorthUp -> -bearing
+                        MapCompassMode.CourseUp -> 0f
+                    },
                 modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
             )
             // 5. Recenter / my-location — calls MapSurface.recenter(). Re-centres
