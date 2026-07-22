@@ -186,7 +186,16 @@ fun ConvoyStatusBar(
     var pendingLeaveConvoyId by remember { mutableStateOf<String?>(null) }
 
     // Whether the member-list popup (opened by tapping the member count) is up.
-    var showMembers by remember { mutableStateOf(false) }
+    //
+    // Keyed to the convoy id — UNLIKE the destructive end/leave dialogs above,
+    // which deliberately capture their id and stay open under a refresh so a
+    // considered decision is never silently cancelled. This is a passive info
+    // popup with no decision to protect: if the bar switches to a DIFFERENT convoy
+    // while it is open (the coordinator re-fetches and `activeConvoy` re-picks),
+    // leaving it open would silently swap it to the new convoy's roster under the
+    // count the user tapped. Keying it resets the flag to false on that switch, so
+    // the popup closes rather than misrepresenting which convoy it is listing.
+    var showMembers by remember(state.convoyId) { mutableStateOf(false) }
 
     // Whether the "set destination" tap is currently waiting on the overwrite
     // confirmation (only raised when the current destination was set by someone

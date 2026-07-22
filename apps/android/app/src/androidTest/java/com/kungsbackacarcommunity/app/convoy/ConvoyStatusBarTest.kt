@@ -394,6 +394,39 @@ class ConvoyStatusBarTest {
     }
 
     /**
+     * The member-list popup is a passive info surface, so — unlike the destructive
+     * end/leave dialogs — it must NOT linger across a convoy switch showing the new
+     * convoy's roster under the count the user tapped. Its visibility flag is keyed
+     * to the convoy id, so a background refresh that swaps the bar to a different
+     * convoy closes the popup.
+     */
+    @Test
+    fun switchingConvoyUnderTheOpenMemberList_closesIt() {
+        var current by mutableStateOf(memberState("c1"))
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = current,
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LIST_TAG).assertIsDisplayed()
+
+        // A refresh swaps the bar to a different convoy under the open popup.
+        current = memberState("c2")
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LIST_TAG).assertDoesNotExist()
+    }
+
+    /**
      * The tappable count keeps the full "%d in convoy" phrase as its
      * contentDescription (accessibility) even though only the bare number is
      * shown, so TalkBack still announces the whole thing.
