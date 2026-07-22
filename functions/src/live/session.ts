@@ -95,9 +95,12 @@ async function loadSessionDenorm(
     db.collection('users').doc(uid).get(),
     db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
   ]);
-  const mainCar = toLiveMainCar(
-    ownedVehicles.docs.find((doc) => doc.data().isMainCar === true)?.data(),
-  );
+  // Decode each vehicle doc once, then pick the main car — no double .data() on
+  // the matched doc.
+  const mainCarData = ownedVehicles.docs
+    .map((doc) => doc.data())
+    .find((data) => data.isMainCar === true);
+  const mainCar = toLiveMainCar(mainCarData);
   return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
 }
 
