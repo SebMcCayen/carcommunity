@@ -378,7 +378,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         // Exercise the compass's tap action and prove it doesn't crash the
         // stubbed shell — matching how the other controls are driven. What the
-        // tap DOES is asserted by compassControl_recentresOnTheUserAndResetsNorth.
+        // tap DOES is asserted by compassControl_togglesOrientation_andRecentresEachTap.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
@@ -477,7 +477,9 @@ class MapFirstShellTest {
         val byTag = composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).getUnclippedBoundsInRoot()
         val byDescription =
             composeTestRule
-                .onNodeWithContentDescription(str(R.string.shell_compass))
+                // The compass opens in its default north-up mode, whose
+                // description is shell_compassNorthUp (the two-mode toggle).
+                .onNodeWithContentDescription(str(R.string.shell_compassNorthUp))
                 .getUnclippedBoundsInRoot()
         assertEquals(byTag.top.value.toDouble(), byDescription.top.value.toDouble(), 0.01)
         assertEquals(byTag.left.value.toDouble(), byDescription.left.value.toDouble(), 0.01)
@@ -552,25 +554,59 @@ class MapFirstShellTest {
     }
 
     /**
-     * THE REGRESSION: tapping the compass must re-centre on the user as well as
-     * reset north. It used to call resetNorth() alone, which reset the bearing
-     * and left the camera wherever the user had panned to — "the north arrow
-     * points north but doesn't bring me back to me".
+     * The compass is now a TWO-MODE orientation toggle (north-up ⇄ course-up),
+     * and each tap must still RE-CENTRE on the user — the old regression ("the
+     * north arrow points north but doesn't bring me back to me") must not creep
+     * back in either mode.
      *
-     * [StubMapSurface.recenterCount] is the assertion that bites: a compass
-     * wired only to resetNorth leaves it at 0, so this test fails against the
-     * unfixed code. [StubMapSurface.resetNorthCount] guards the other half, so a
-     * compass "fixed" into a plain recenter that forgot north also fails.
+     * Default is north-up. Tap 1 → course-up: re-centres ([recenterCount] bumps)
+     * but does NOT reset north (course-up faces the heading), so
+     * [StubMapSurface.resetNorthCount] stays 0. Tap 2 → back to north-up:
+     * re-centres AGAIN and NOW resets north. [compassMode] tracks the toggle
+     * itself. A compass wired only to a bearing change (no re-centre) leaves
+     * recenterCount at 0 and fails; a toggle that forgot to reset north on the way
+     * back fails on resetNorthCount.
      */
     @Test
-    fun compassControl_recentresOnTheUserAndResetsNorth() {
+    fun compassControl_togglesOrientation_andRecentresEachTap() {
         val surface = StubMapSurface()
         setMapHome(trafikverketDataShown = false, surface = surface)
+
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.runOnIdle {
-            assertEquals("compass must re-centre on the user", 1, surface.recenterCount)
-            assertEquals("compass must reset the map to north-up", 1, surface.resetNorthCount)
+            assertEquals("first tap switches to course-up", MapCompassMode.CourseUp, surface.compassMode)
+            assertEquals("course-up must still re-centre on the user", 1, surface.recenterCount)
+            assertEquals("course-up must NOT reset north", 0, surface.resetNorthCount)
         }
+
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
+        composeTestRule.runOnIdle {
+            assertEquals("second tap returns to north-up", MapCompassMode.NorthUp, surface.compassMode)
+            assertEquals("north-up must re-centre on the user", 2, surface.recenterCount)
+            assertEquals("returning to north-up must reset north", 1, surface.resetNorthCount)
+        }
+    }
+
+    /**
+     * The compass ICON changes with the mode, so its (localized) content
+     * description flips too: north-up by default, course-up after one tap, and
+     * back. Only the icon/description changes — the control keeps its default
+     * container/content colours in both modes (a colour change would be a visual
+     * regression, and there is nothing here that changes them).
+     */
+    @Test
+    fun compassControl_iconReflectsTheMode() {
+        setMapHome(trafikverketDataShown = false)
+        // Default: north-up.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassNorthUp)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassCourseUp)).assertDoesNotExist()
+        // Tap → course-up.
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassCourseUp)).assertExists()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassNorthUp)).assertDoesNotExist()
+        // Tap → back to north-up.
+        composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_compassNorthUp)).assertExists()
     }
 
     @Test

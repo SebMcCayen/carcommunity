@@ -49,6 +49,29 @@ enum class MapMode {
 }
 
 /**
+ * How the map is ORIENTED while it follows the user — toggled by the floating
+ * compass control.
+ *
+ * - [NorthUp] (default): the camera bearing stays at 0 so true north is always
+ *   at the top of the screen, exactly as the map has always behaved. Following
+ *   the user's POSITION continues; only the rotation is pinned.
+ * - [CourseUp]: the camera rotates so the user's travel direction (the puck's
+ *   COURSE bearing) points up — a "follow your direction" driving view. Position
+ *   following is unchanged; only the bearing now tracks the heading.
+ *
+ * This is a first-class part of the [MapSurface] seam (like [MapMode]) so the
+ * shell can drive it and the real surface can feed the chosen bearing into its
+ * SINGLE follow path rather than spinning up a second, competing camera loop.
+ */
+enum class MapCompassMode {
+    /** North stays at the top (default); the camera follows position only. */
+    NorthUp,
+
+    /** The map rotates to keep the user's heading pointing up (course-up). */
+    CourseUp,
+}
+
+/**
  * The caller's own marker state. [label] is the display name; [isLiveSharing]
  * is true while the user is actively live-sharing their location (drives the
  * green puck pulse), false otherwise.
@@ -374,6 +397,26 @@ interface MapSurface {
     fun recenterNorthUp()
 
     /**
+     * Choose how the map is ORIENTED while following the user (see
+     * [MapCompassMode]) — the compass control's two modes.
+     *
+     * Stores the chosen mode so the surface's EXISTING follow path applies the
+     * right bearing on every position/heading update: north-up pins the bearing
+     * at 0, course-up rotates the camera to the puck's heading. Deliberately fed
+     * into the one follow controller rather than a second camera owner (two
+     * camera loops fighting is the documented failure mode here).
+     *
+     * When the mode actually CHANGES, the surface applies it immediately as ONE
+     * user-requested re-centre — resuming follow, cancelling any pending
+     * idle-return, and easing to the user with the new orientation (north-up eases
+     * the bearing back to 0; course-up rotates to the current heading). Re-setting
+     * the SAME mode is a no-op, so the shell can re-push it on a surface swap
+     * without forcing a spurious camera move on open. On the stub this only records
+     * the mode (and mirrors the re-centre in [StubMapSurface.recenterCount]).
+     */
+    fun setCompassMode(mode: MapCompassMode)
+
+    /**
      * Re-apply the device-location component after the runtime fine-location
      * permission is granted, so the blue puck appears without recreating the
      * map (the component is enabled at style-load, before the grant, and the
@@ -629,6 +672,39 @@ class StubMapSurface(
     override fun recenterNorthUp() {
         recenterCount += 1
         resetNorthCount += 1
+    }
+
+    /**
+     * The compass orientation mode last applied via [setCompassMode]. Starts
+     * north-up (the shell's default); observable so tests can assert the compass
+     * toggles it.
+     */
+    var compassMode: MapCompassMode = MapCompassMode.NorthUp
+        private set
+
+    /**
+     * How many times [setCompassMode] actually CHANGED the mode — observable so a
+     * test can assert a tap flipped it exactly once (and that a redundant re-push
+     * of the same mode did nothing).
+     */
+    var compassModeChanges: Int = 0
+        private set
+
+    /**
+     * No rotatable camera on the stub, so a mode change only records the new mode
+     * — and MIRRORS the real surface's user-requested re-centre so the "the
+     * compass still re-centres on the user, and returning to north still resets
+     * north" guarantees stay assertable off-device: a real change bumps
+     * [recenterCount], and switching to north-up also bumps [resetNorthCount].
+     * Re-setting the same mode is a no-op (matches the real surface not forcing a
+     * camera move when the shell re-pushes an unchanged mode).
+     */
+    override fun setCompassMode(mode: MapCompassMode) {
+        if (mode == compassMode) return
+        compassMode = mode
+        compassModeChanges += 1
+        recenterCount += 1
+        if (mode == MapCompassMode.NorthUp) resetNorthCount += 1
     }
 
     /** No device/GPS on the stub, so there is no location component to refresh. */

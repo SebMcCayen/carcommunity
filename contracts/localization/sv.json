@@ -1120,6 +1120,8 @@
     "layersNightMode": "Nattläge",
     "layers3d": "3D-byggnader",
     "compass": "Återställ till norr",
+    "compassNorthUp": "Norr uppåt",
+    "compassCourseUp": "Följ din riktning",
     "searchExpand": "Sök",
     "liveTitle": "Liveplats",
     "liveClose": "Stäng liveplats",

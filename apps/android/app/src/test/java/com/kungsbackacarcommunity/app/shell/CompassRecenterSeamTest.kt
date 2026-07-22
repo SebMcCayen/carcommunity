@@ -6,11 +6,12 @@ import org.junit.Test
 /**
  * The seam the compass regression test leans on.
  *
- * `MapFirstShellTest.compassControl_recentresOnTheUserAndResetsNorth` asserts
- * that tapping the compass bumps [StubMapSurface.recenterCount]. That assertion
- * is only worth anything if the OLD wiring — `resetNorth()` alone — would leave
- * that counter at zero, and instrumentation tests are `continue-on-error` in CI
- * so a silent rot there would not turn the build red.
+ * `MapFirstShellTest.compassControl_togglesOrientation_andRecentresEachTap`
+ * asserts that tapping the compass bumps [StubMapSurface.recenterCount]. That
+ * assertion is only worth anything if a bearing-only wiring would leave that
+ * counter at zero, and instrumentation tests are `continue-on-error` in CI so a
+ * silent rot there would not turn the build red. (The compass is now a two-mode
+ * orientation toggle; see [CompassModeSeamTest] for that seam.)
  *
  * These run in the BLOCKING unit-test job and pin the discriminating property
  * directly: the two calls are distinguishable, and `recenterNorthUp` is the only

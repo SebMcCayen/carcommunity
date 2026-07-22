@@ -1039,6 +1039,8 @@
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
     <string name="shell_compass">Återställ till norr</string>
+    <string name="shell_compassNorthUp">Norr uppåt</string>
+    <string name="shell_compassCourseUp">Följ din riktning</string>
     <string name="shell_searchExpand">Sök</string>
     <string name="shell_liveTitle">Liveplats</string>
     <string name="shell_liveClose">Stäng liveplats</string>
