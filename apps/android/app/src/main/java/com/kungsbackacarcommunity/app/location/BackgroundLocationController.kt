@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.location
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.content.ContextCompat
 
 /**
@@ -29,18 +30,32 @@ object BackgroundLocationController {
             }
         try {
             ContextCompat.startForegroundService(context, intent)
-        } catch (_: IllegalStateException) {
-            // Android 12+ forbids starting a foreground service while the app is
-            // in the background (ForegroundServiceStartNotAllowedException, a
-            // subclass of IllegalStateException). The manual Start paths always
-            // run in the foreground, but the session-bound start (a convoy
-            // auto-started session — see AuthenticatedApp) can fire while the app
-            // is backgrounded, e.g. when the convoy OWNER starts the group while
-            // this member's app is not on screen. Swallow it rather than crash:
-            // the member simply begins publishing the next time a start runs in
-            // the foreground (opening the app / the map, or tapping Start). This
-            // is defence in depth — dropping a foreground-service start can never
-            // be worth taking the app down.
+        } catch (e: IllegalStateException) {
+            // A foreground-service start is refused when the app is in the
+            // background. The manual Start paths always run in the foreground,
+            // but the session-bound start (a convoy auto-started session — see
+            // AuthenticatedApp) can legitimately fire while backgrounded, e.g.
+            // when the convoy OWNER starts the group while this member's app is
+            // off screen. Swallow ONLY that background-start refusal rather than
+            // crash — the member begins publishing the next time a start runs in
+            // the foreground (opening the app / the map, or tapping Start) — and
+            // RETHROW any other IllegalStateException so a genuine misconfig
+            // still surfaces loudly instead of being hidden:
+            //   - API 31+: the refusal is the specific
+            //     ForegroundServiceStartNotAllowedException (a subclass of ISE),
+            //     matched precisely so unrelated ISEs on modern devices propagate.
+            //   - API 26-30: there is no dedicated type; the platform raises a
+            //     bare IllegalStateException for the same background-start
+            //     restriction, and it is the only ISE startForegroundService
+            //     throws there, so it is swallowed too.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                e !is android.app.ForegroundServiceStartNotAllowedException
+            ) {
+                // Modern device, and NOT the background-start refusal — a real
+                // fault. Rethrow so it is not hidden. (On API 26-30 the class
+                // reference is never reached, so its absence there is moot.)
+                throw e
+            }
         }
     }
 
