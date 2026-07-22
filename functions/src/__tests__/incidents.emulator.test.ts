@@ -342,6 +342,30 @@ describe('incidents.listNearby rate limit', () => {
     expect(code).toBe('functions/resource-exhausted');
   });
 
+  it('does not consume the window on an invalid-argument call (validate before rate limit)', async () => {
+    const user = await createProvisionedUser('inc-rl-badinput');
+    await signInAs(user);
+    // A malformed call must be rejected with invalid-argument BEFORE the rate
+    // limiter runs, so it neither reads nor writes the counter doc.
+    const code = await callableErrorCode(
+      call('incidents-listNearby', {
+        latitude: 200, // out of range → parseListNearbyInput rejects
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      }),
+    );
+    expect(code).toBe('functions/invalid-argument');
+    // No counter was created/incremented for either the current or previous
+    // window (boundary-safe), i.e. the bad input did not burn the user's window.
+    const nowMs = Date.now();
+    const snaps = await Promise.all(
+      [nowMs, nowMs - INCIDENT_LIST_RATE_LIMIT_WINDOW_MS].map((ms) =>
+        rateLimits().doc(incidentListRateLimitDocId(user.uid, ms)).get(),
+      ),
+    );
+    expect(snaps.every((s) => !s.exists)).toBe(true);
+  });
+
   it('resets across windows: a prior-window cap does not throttle the current window', async () => {
     const user = await createProvisionedUser('inc-rl-reset');
     await signInAs(user);

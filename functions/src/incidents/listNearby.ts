@@ -56,17 +56,21 @@ export interface ListNearbyResponse {
 export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNearbyResponse> => {
   const actor = await requireActiveActor(request);
 
-  // Per-user rate limit BEFORE any of the expensive geoCell reads below, so a
-  // throttled call (client hot loop, or a valid-token abuser) costs ~one
+  // Validate/parse BEFORE the rate limit so a malformed call is rejected with
+  // invalid-argument without touching Firestore at all — it neither pays for the
+  // counter get + write nor burns the caller's rate-limit window on a bad input.
+  const parsed = parseListNearbyInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+
+  // Per-user rate limit immediately before the expensive geoCell reads below, so
+  // a throttled call (client hot loop, or a valid-token abuser) costs ~one
   // counter get, not up to 200 doc reads. On exceed we throw resource-exhausted;
   // the Android client keeps its previous markers on a failed listNearby, so a
   // throttled user just misses one refresh tick — no crash, no blank map.
   await enforceListNearbyRateLimit(actor.uid);
 
-  const parsed = parseListNearbyInput(request.data);
-  if (!parsed.ok) {
-    throw new HttpsError('invalid-argument', parsed.message);
-  }
   const { latitude, longitude } = parsed.input;
   const radius = clampRadiusMeters(parsed.input.radiusMeters);
   const now = Timestamp.now();
