@@ -19,8 +19,9 @@ import kotlinx.coroutines.withContext
  * A remembered image-pick launcher backed by the Photo Picker
  * ([ActivityResultContracts.PickVisualMedia]) — no runtime permission needed on
  * any supported API level. Reads the picked image's bytes + content type off the
- * main thread and hands a [PickedImage] (or null when the user cancelled / the
- * read failed) to [onPicked].
+ * main thread and hands a [PickedImage] to `onPicked`; a user cancel is
+ * `onPicked(null)` and a chosen-but-unreadable pick routes to `onPickFailed`
+ * (see [rememberImagePickLauncher]).
  */
 class ImagePickLauncher internal constructor(
     private val launch: () -> Unit,
