@@ -2,6 +2,22 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 20,
+      "versionName": "0.8.9",
+      "releaseDate": "2026-07-22",
+      "highlights": [
+        "Kompassen kan följa körriktningen",
+        "Förbättringar för konvoj och live-position"
+      ],
+      "changes": [
+        "Kompassen har två lägen: norr uppåt eller körriktning uppåt",
+        "Bekräfta att en rapporterad händelse fortfarande finns kvar direkt från kartan",
+        "Konvoj: bjud-in-listan visar bara vänner som inte redan är med",
+        "Live-position delas nu korrekt även för konvojer som startas automatiskt",
+        "Tydligare besked om en profilbild inte kunde läsas in vid uppladdning"
+      ]
+    },
+    {
       "versionCode": 19,
       "versionName": "0.8.8",
       "releaseDate": "2026-07-22",
