@@ -2212,8 +2212,14 @@ fun AuthenticatedApp(
                                     convoyInviteSelected,
                                     convoyInviteExcludedUids,
                                 ).toList()
-                            scope.launch {
-                                convoyBarCoordinator.invite(inviteConvoyId, payload)
+                            // If every chosen friend was excluded in the meantime the
+                            // payload is empty; `convoy-invite` rejects an empty
+                            // inviteeUids list (schema 1..MAX), so skip the call
+                            // rather than surface an avoidable server error.
+                            if (payload.isNotEmpty()) {
+                                scope.launch {
+                                    convoyBarCoordinator.invite(inviteConvoyId, payload)
+                                }
                             }
                         },
                         onCancel = closeInvite,
