@@ -929,6 +929,7 @@ internal fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.InviteGone -> R.string.convoy_errorInviteGone
         ConvoyActionError.CannotStart -> R.string.convoy_errorCannotStart
         ConvoyActionError.AlreadyEnded -> R.string.convoy_errorAlreadyEnded
+        ConvoyActionError.LeaveFailed -> R.string.convoy_errorLeaveFailed
         ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
         ConvoyActionError.AlreadyInConvoy -> R.string.convoy_errorAlreadyInConvoy
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric

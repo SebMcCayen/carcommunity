@@ -524,6 +524,7 @@
     "errorInviteGone": "That invite is no longer available.",
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
+    "errorLeaveFailed": "Couldn't leave the convoy. Refresh and try again.",
     "errorNotAllowed": "Only the person who set the destination, or the convoy owner, can clear it.",
     "errorGeneric": "Something went wrong. Please try again.",
     "errorAlreadyInConvoy": "You're already in a convoy. Leave or end it before joining another.",

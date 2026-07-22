@@ -524,6 +524,7 @@
     "errorInviteGone": "Inbjudan är inte längre tillgänglig.",
     "errorCannotStart": "Konvojen kan inte längre startas.",
     "errorAlreadyEnded": "Konvojen är redan avslutad.",
+    "errorLeaveFailed": "Det gick inte att lämna konvojen. Uppdatera och försök igen.",
     "errorNotAllowed": "Bara den som satte destinationen, eller konvojens ägare, kan ta bort den.",
     "errorGeneric": "Något gick fel. Försök igen.",
     "errorAlreadyInConvoy": "Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.",

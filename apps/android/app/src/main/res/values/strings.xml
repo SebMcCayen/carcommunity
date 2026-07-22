@@ -479,6 +479,7 @@
     <string name="convoy_errorInviteGone">Inbjudan är inte längre tillgänglig.</string>
     <string name="convoy_errorCannotStart">Konvojen kan inte längre startas.</string>
     <string name="convoy_errorAlreadyEnded">Konvojen är redan avslutad.</string>
+    <string name="convoy_errorLeaveFailed">Det gick inte att lämna konvojen. Uppdatera och försök igen.</string>
     <string name="convoy_errorNotAllowed">Bara den som satte destinationen, eller konvojens ägare, kan ta bort den.</string>
     <string name="convoy_errorGeneric">Något gick fel. Försök igen.</string>
     <string name="convoy_errorAlreadyInConvoy">Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.</string>

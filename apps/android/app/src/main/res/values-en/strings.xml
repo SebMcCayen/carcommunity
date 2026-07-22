@@ -479,6 +479,7 @@
     <string name="convoy_errorInviteGone">That invite is no longer available.</string>
     <string name="convoy_errorCannotStart">This convoy can no longer be started.</string>
     <string name="convoy_errorAlreadyEnded">This convoy has already ended.</string>
+    <string name="convoy_errorLeaveFailed">Couldn\'t leave the convoy. Refresh and try again.</string>
     <string name="convoy_errorNotAllowed">Only the person who set the destination, or the convoy owner, can clear it.</string>
     <string name="convoy_errorGeneric">Something went wrong. Please try again.</string>
     <string name="convoy_errorAlreadyInConvoy">You\'re already in a convoy. Leave or end it before joining another.</string>

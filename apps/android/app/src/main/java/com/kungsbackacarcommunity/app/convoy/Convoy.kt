@@ -116,6 +116,20 @@ enum class ConvoyActionError {
     AlreadyEnded,
 
     /**
+     * A `convoy-leave` precondition failure that the code-only client cannot pin
+     * to a cause. The backend throws `failed-precondition` for THREE distinct
+     * situations — the convoy has ended, the owner tried to leave (they must End),
+     * or the caller is not an accepted member — and distinguishes them only by the
+     * HttpsError message text, which the client deliberately never reads (it
+     * branches on the code alone; see [ConvoyErrorCode]). With no discriminator on
+     * the code, asserting any one specific cause (e.g. [AlreadyEnded]) would be a
+     * guess that is wrong two times out of three, so this maps to a neutral
+     * "couldn't leave" message instead. All three are defensive: the UI routes an
+     * owner to End and only offers Leave to an accepted member.
+     */
+    LeaveFailed,
+
+    /**
      * The caller IS a member, but is not permitted to do this particular thing —
      * today only clearing a shared destination someone else set when you are not
      * the convoy owner (see [ConvoyErrorMapper.mapClearDestination]).
@@ -219,11 +233,13 @@ object ConvoyErrorMapper {
 
     /**
      * For `convoy-leave`. A non-member / unknown convoy is `not-found`. A
-     * precondition failure here means the convoy already ended, or the caller is
-     * no longer an accepted member (an owner would be refused, but the UI never
-     * offers a member's Leave to the owner) — both map to [AlreadyEnded], "this
-     * convoy has already ended", which is the honest reason the leave no longer
-     * applies.
+     * precondition failure here is overloaded across THREE backend cases — the
+     * convoy has ended, the owner tried to leave (they must End instead), or the
+     * caller is not an accepted member — separated on the backend only by message
+     * text, which this code-only mapper never reads. Since the code alone cannot
+     * tell them apart, it maps to the neutral [LeaveFailed] ("couldn't leave the
+     * convoy") rather than asserting a single cause like [AlreadyEnded] that would
+     * be wrong for the other two.
      */
     fun mapLeave(code: ConvoyErrorCode): ConvoyActionError =
         when (code) {
@@ -231,7 +247,7 @@ object ConvoyErrorMapper {
             ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
-            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.LeaveFailed
             else -> ConvoyActionError.Generic
         }
 
