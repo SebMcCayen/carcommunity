@@ -1,9 +1,11 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -88,9 +90,16 @@ class ConvoyCoordinatorTest {
         var lastInviteConvoyId: String? = null
         var lastInviteeUids: List<String>? = null
 
+        // When set, invite() suspends here until the test completes it — lets a
+        // test hold an invite mid-flight (coordinator state == Working).
+        var inviteGate: CompletableDeferred<Unit>? = null
+        var inviteCalls = 0
+
         override suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult {
+            inviteCalls++
             lastInviteConvoyId = convoyId
             lastInviteeUids = inviteeUids
+            inviteGate?.await()
             return inviteResult
         }
 
@@ -219,6 +228,38 @@ class ConvoyCoordinatorTest {
         coordinator.resetInvite()
         assertEquals(InviteConvoyState.Idle, coordinator.inviteState.value)
     }
+
+    @Test
+    fun `opening or closing the picker while an invite is in flight cannot start a second invite or clear Working`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val gate = CompletableDeferred<Unit>()
+            val repo = FakeRepo().apply { inviteGate = gate }
+            val coordinator = ConvoyCoordinator(repo)
+
+            // First invite runs eagerly up to the repo's gate: state is Working and
+            // the overlap guard is armed.
+            backgroundScope.launch { coordinator.invite("c1", listOf("a")) }
+            assertEquals(InviteConvoyState.Working, coordinator.inviteState.value)
+            assertEquals(1, repo.inviteCalls)
+
+            // The picker being (re)opened or dismissed mid-flight calls resetInvite();
+            // it must NOT clear Working, or the guard is lost.
+            coordinator.resetInvite()
+            assertEquals(InviteConvoyState.Working, coordinator.inviteState.value)
+
+            // A second invite while Working is a no-op — the backend is not hit again
+            // and the recorded payload is still the first invite's.
+            coordinator.invite("c2", listOf("b"))
+            assertEquals(1, repo.inviteCalls)
+            assertEquals("c1", repo.lastInviteConvoyId)
+            assertEquals(listOf("a"), repo.lastInviteeUids)
+
+            // Letting the in-flight invite finish resolves it normally, exactly as if
+            // the picker had never been touched.
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(coordinator.inviteState.value is InviteConvoyState.Done)
+        }
 
     @Test
     fun `leave calls the backend for the convoy and re-fetches`() = runTest {

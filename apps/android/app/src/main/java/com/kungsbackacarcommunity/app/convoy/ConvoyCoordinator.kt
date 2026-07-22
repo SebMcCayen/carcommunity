@@ -290,8 +290,20 @@ class ConvoyCoordinator(
         }
     }
 
-    /** Clears the invite sub-state (e.g. after dismissing the picker/result). */
+    /**
+     * Clears the invite sub-state (e.g. after dismissing the picker/result) back
+     * to [InviteConvoyState.Idle].
+     *
+     * Deliberately a no-op while an invite is [InviteConvoyState.Working]: the
+     * `convoy-invite` call is in flight and [invite] relies on the `Working`
+     * state as its overlap guard (it early-returns while `Working`). Clearing it
+     * here — as happens when the picker is opened or dismissed mid-flight — would
+     * drop the guard and let a second concurrent invite start on top of the first.
+     * The in-flight coroutine owns the transition out of `Working` (→ Done/Error),
+     * so callers dismissing the UI can safely leave the sub-state intact.
+     */
     fun resetInvite() {
+        if (inviteStateFlow.value == InviteConvoyState.Working) return
         inviteStateFlow.value = InviteConvoyState.Idle
     }
 

@@ -140,12 +140,12 @@ object ConvoyBar {
      * Both are now [Wired]: the OWNER's control is `convoy-end` (ends the convoy
      * for everyone — labelled "End convoy" and confirmed first), and a MEMBER's
      * "leave" is the deployed `convoy-leave` callable (removes only the caller).
-     * The bar still routes the trailing control on `viewerIsOwner`, NOT on this
-     * flag, so a member's tap reaches `onLeaveConvoy` and can never fall through
-     * to the owner-only, group-wide `convoy-end`.
+     * The bar still routes the trailing control on `viewerIsOwner`, so a member's
+     * tap reaches `onLeaveConvoy` and can never fall through to the owner-only,
+     * group-wide `convoy-end`. Because both roles are `Wired`, this is a constant
+     * (like [inviteAvailability]) — it takes no role argument.
      */
-    fun leaveAvailability(viewerIsOwner: Boolean): ConvoyBarActionAvailability =
-        ConvoyBarActionAvailability.Wired
+    val leaveAvailability: ConvoyBarActionAvailability = ConvoyBarActionAvailability.Wired
 
     /**
      * The convoy the bar should describe, or null when the caller is not in one
@@ -188,7 +188,7 @@ object ConvoyBar {
             viewerIsOwner = convoy.viewerIsOwner,
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,
-            leaveAvailability = leaveAvailability(convoy.viewerIsOwner),
+            leaveAvailability = leaveAvailability,
             destinationState = ConvoyDestinations.stateFor(convoy.destination, viewerUid),
             canClearDestination =
                 ConvoyDestinations.canClear(

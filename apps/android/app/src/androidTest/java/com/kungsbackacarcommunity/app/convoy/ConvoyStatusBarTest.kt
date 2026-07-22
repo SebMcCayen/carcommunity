@@ -51,7 +51,7 @@ class ConvoyStatusBarTest {
             viewerIsOwner = true,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
-            leaveAvailability = ConvoyBar.leaveAvailability(viewerIsOwner = true),
+            leaveAvailability = ConvoyBar.leaveAvailability,
         )
 
     private fun memberState(convoyId: String) =
@@ -61,7 +61,7 @@ class ConvoyStatusBarTest {
             viewerIsOwner = false,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
-            leaveAvailability = ConvoyBar.leaveAvailability(viewerIsOwner = false),
+            leaveAvailability = ConvoyBar.leaveAvailability,
         )
 
     /**

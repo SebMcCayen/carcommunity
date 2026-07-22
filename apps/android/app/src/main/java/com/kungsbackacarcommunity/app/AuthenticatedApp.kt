@@ -1560,6 +1560,9 @@ fun AuthenticatedApp(
                     }
                 }
                 // Opens the invite picker for [convoyId] with a fresh selection.
+                // resetInvite() clears any leftover Done/Error sub-state but is a
+                // no-op while an invite is still Working, so re-opening cannot
+                // clobber an in-flight invite's overlap guard.
                 val openConvoyInvite: (String) -> Unit = { convoyId ->
                     convoyBarCoordinator?.resetInvite()
                     convoyInviteSelected = emptySet()
@@ -2008,6 +2011,14 @@ fun AuthenticatedApp(
                     // without inviting; a successful invite closes it via the
                     // LaunchedEffect(convoyInviteState) above.
                     val inviteConvoyId = convoyInviteConvoyId!!
+                    // Back / Cancel dismisses the picker UI. resetInvite() clears a
+                    // terminal Done/Error sub-state, but is a no-op while an invite
+                    // is Working: dismissing mid-flight only closes the UI — the
+                    // in-flight coroutine and its overlap guard stay intact and the
+                    // invite runs to completion (its Done then fires the snackbar via
+                    // LaunchedEffect(convoyInviteState) above). Blocking Back while
+                    // Working would instead strand the user on a spinner for a
+                    // fire-and-forget network call, so we let the UI close.
                     val closeInvite = {
                         convoyInviteConvoyId = null
                         convoyBarCoordinator.resetInvite()

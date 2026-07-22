@@ -1183,8 +1183,27 @@ private fun SearchBarRow(
                 // The convoy bar fills the whole gap at full width (never a
                 // wrap-content pill); a Spacer holds the gap open when there is no
                 // convoy so the avatar stays pinned right, exactly as before.
+                //
+                // While the search is expanded the opaque overlay below is drawn
+                // OVER this bar, so it is visually covered but still composed here.
+                // clearAndSetSemantics pulls the covered bar out of the a11y tree
+                // (mirroring the map's own covered-while-expanded handling above),
+                // so TalkBack can't focus controls hidden under the search field.
+                // It stays composed — not skipped — so the overlay still has the
+                // full-width region to draw over (the whole point of #536).
                 if (convoyBar != null) {
-                    Box(modifier = Modifier.weight(1f)) { convoyBar() }
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .then(
+                                    if (searchExpanded) {
+                                        Modifier.clearAndSetSemantics {}
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                    ) { convoyBar() }
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                 }
