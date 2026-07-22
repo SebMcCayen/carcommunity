@@ -35,6 +35,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -142,6 +143,7 @@ fun ProfileScreen(
                         ?: stringResource(R.string.common_placeholder),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
                 Text(
                     text = profile?.bio?.takeIf { it.isNotBlank() }
@@ -183,7 +185,11 @@ private fun AvatarSection(
     onChangeAvatar: (() -> Unit)?,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
         Box(
             modifier = Modifier
                 .size(96.dp)
