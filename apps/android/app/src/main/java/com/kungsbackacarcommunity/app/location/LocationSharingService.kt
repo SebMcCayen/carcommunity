@@ -213,6 +213,16 @@ class LocationSharingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Record the most recent startId on EVERY path, before any early return.
+        // The stationary auto-stop tears down via stopSelf(latestStartId), and
+        // stopSelf(id) only stops the service when `id` is the latest start the
+        // system delivered. The extend / "still sharing" / repeat-start branches
+        // below all return early without reaching the full-start path, so if this
+        // were set only there, a notification-action start would leave
+        // latestStartId stale and the auto-stop's stopSelf(staleId) would be a
+        // no-op (the service would keep running / the wrong delivery would stop).
+        latestStartId = startId
+
         if (intent?.action == ACTION_STOP_SHARING) {
             // The notification's "Stop sharing" action: end the session on the
             // backend too, so stopping from the shade is a real stop and not
@@ -268,10 +278,6 @@ class LocationSharingService : Service() {
         }
         repository = repo
         ownerUid = uid
-        // Remembered so the stationary auto-stop can reuse stopSharingAndSelf's
-        // safe deferred teardown (stopSelf(startId)), which stops only while this
-        // remains the most recent start — a newer start wins.
-        latestStartId = startId
 
         // Reset the per-run throttle and notification state. stopSelf() is
         // asynchronous, so a fresh start can land on this SAME instance before
