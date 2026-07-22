@@ -39,13 +39,22 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
+import { FieldPath, FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
+  isLiveShareEnabled,
+  startConvoyAutoSession,
+  stopConvoyAutoSession,
+} from '../live/session';
+import {
+  ACTIVE_CONVOY_STATUSES,
+  ALREADY_IN_CONVOY_MESSAGE,
+  isActiveConvoyParticipant,
   CONVOY_ALREADY_ENDED_MESSAGE,
   CONVOY_ENDED_MESSAGE,
   CONVOY_NOT_FORMING_MESSAGE,
@@ -113,6 +122,63 @@ function blockRef(blockerUid: string, blockedUid: string) {
 /** Converts a stored Firestore value to an ISO string, or null. */
 function toIso(value: unknown): string | null {
   return value instanceof Timestamp ? value.toDate().toISOString() : null;
+}
+
+/**
+ * ITEM 1 — one convoy at a time. Throws failed-precondition (ALREADY_IN_CONVOY)
+ * when `uid` is already an ACTIVE PARTICIPANT (owner or accepted member — see
+ * isActiveConvoyParticipant) of any non-ended convoy OTHER than `excludeConvoyId`.
+ *
+ * The check runs as a transaction READ (tx.get on the query) so it is done
+ * inside the SAME transaction that writes the new membership, closing the race
+ * where two simultaneous creates/accepts both read "not in a convoy" and both
+ * commit: Firestore's serializable isolation aborts and retries the second
+ * transaction once the first commits a convoy that enters this query's result
+ * set, and on retry the query sees it and rejects. (Being merely INVITED to a
+ * forming convoy does NOT count — only accepted participation does — so a normal
+ * pending invite never blocks acting elsewhere.)
+ *
+ * The query filters to ACTIVE_CONVOY_STATUSES on the server, so it reads only
+ * the caller's live convoys, not their whole ended history. Needs the composite
+ * index [memberUids ARRAY_CONTAINS, status] (firebase/firestore.indexes.json).
+ */
+async function assertNotAlreadyInConvoy(
+  tx: Transaction,
+  uid: string,
+  excludeConvoyId?: string,
+): Promise<void> {
+  const activeConvoys = db
+    .collection('convoys')
+    .where('memberUids', 'array-contains', uid)
+    .where('status', 'in', [...ACTIVE_CONVOY_STATUSES]);
+  const snap = await tx.get(activeConvoys);
+  const alreadyIn = snap.docs.some(
+    (doc) => doc.id !== excludeConvoyId && isActiveConvoyParticipant(doc.data(), uid),
+  );
+  if (alreadyIn) {
+    throw new HttpsError('failed-precondition', ALREADY_IN_CONVOY_MESSAGE);
+  }
+}
+
+/**
+ * ITEM 2 lifecycle — best-effort fan-out of the convoy live-session producer
+ * over a set of uids. Every call is independently caught so one failure (or an
+ * absent live-share flag) can never fail the convoy mutation that triggered it,
+ * and so a partial fan-out still starts/stops everyone it can.
+ */
+async function forEachAutoSession(
+  uids: string[],
+  op: (uid: string) => Promise<unknown>,
+): Promise<void> {
+  await Promise.all(
+    uids.map((uid) =>
+      op(uid).catch((error) => {
+        // A swallowed best-effort op is logged (not silently dropped) so a
+        // convoy that fails to auto-start/stop a live session is diagnosable.
+        logger.warn('convoy auto-session op failed', { uid, error: String(error) });
+      }),
+    ),
+  );
 }
 
 /** Converts a stored Firestore value to a Date, or null (summary computation). */
@@ -343,7 +409,14 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
     { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
     () => FieldValue.serverTimestamp(),
   );
-  await ref.set(document);
+  // ITEM 1: the create is done inside a transaction whose ONLY read is the
+  // "am I already in a convoy" check, so the check and the membership write are
+  // one atomic unit — two simultaneous creates by the same user cannot both land
+  // (the second aborts + retries, sees the first convoy, and is rejected).
+  await db.runTransaction(async (tx) => {
+    await assertNotAlreadyInConvoy(tx, actor.uid);
+    tx.set(ref, document);
+  });
 
   // Best-effort in-app invite notifications (never fail the create) — the same
   // single path convoy.invite uses.
@@ -401,6 +474,13 @@ export const respond = onCall(CALLABLE_OPTS, async (request): Promise<RespondCon
     if (entry.inviteStatus !== 'invited') {
       throw new HttpsError('failed-precondition', INVITE_ALREADY_HANDLED_MESSAGE);
     }
+    // ITEM 1: accepting is JOINING a second convoy, so it is gated exactly like
+    // create — but declining is always allowed (it commits to nothing). The
+    // check reads inside this transaction, before the membership write, so a
+    // concurrent accept into another convoy cannot both succeed.
+    if (action === 'accept') {
+      await assertNotAlreadyInConvoy(tx, actor.uid, convoyId);
+    }
 
     const ts = FieldValue.serverTimestamp();
     const newStatus = action === 'accept' ? 'accepted' : 'declined';
@@ -419,6 +499,24 @@ export const respond = onCall(CALLABLE_OPTS, async (request): Promise<RespondCon
   });
 
   const fresh = await ref.get();
+
+  // ITEM 2: a LATE joiner — someone accepting into a convoy that is ALREADY
+  // active — auto-starts their own live session on accept, so they become
+  // visible to the convoy without tapping "share live". Members who accept while
+  // the convoy is still `forming` are auto-started later, by convoy.start.
+  if (action === 'accept' && fresh.data()?.status === 'active') {
+    // Best-effort (a live-share hiccup must not fail the accept), but logged —
+    // consistent with forEachAutoSession — so a missing auto-session is
+    // diagnosable rather than silently swallowed.
+    await startConvoyAutoSession(actor.uid, convoyId).catch((error) => {
+      logger.warn('convoy auto-session op failed', {
+        uid: actor.uid,
+        convoyId,
+        error: String(error),
+      });
+    });
+  }
+
   return {
     convoy: toConvoySummary(convoyId, fresh.data() ?? {}, actor.uid, toIso),
     inviteStatus: action === 'accept' ? 'accepted' : 'declined',
@@ -456,6 +554,23 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
   });
 
   const fresh = await ref.get();
+
+  // ITEM 2: starting the convoy auto-starts a live session for EVERY accepted
+  // member (owner + accepted invitees), not just the leader, so "everyone in the
+  // convoy can see everyone" from the moment it goes active. startConvoyAutoSession
+  // is best-effort and leaves any member's pre-existing MANUAL session untouched.
+  // Late joiners (accept after this point) auto-start via convoy.respond.
+  //
+  // The live-share feature flag is read ONCE here and passed into the fan-out,
+  // not re-read per member — a convoy of MAX_CONVOY_SIZE would otherwise cost one
+  // config/featureFlags read per member for a single convoy.start.
+  const liveEnabled = await isLiveShareEnabled();
+  if (liveEnabled) {
+    await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
+      startConvoyAutoSession(uid, parsed.input.convoyId, true),
+    );
+  }
+
   return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
 });
 
@@ -489,6 +604,16 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
   });
 
   const fresh = await ref.get();
+
+  // ITEM 2 lifecycle: ending the convoy stops the live session it auto-started
+  // for each member — but ONLY that session (stopConvoyAutoSession matches the
+  // convoyAutoStarted flag + this convoyId), so a member's own MANUAL live
+  // session keeps running. Members remain in the doc after end, so the accepted
+  // set is still readable here.
+  await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
+    stopConvoyAutoSession(uid, parsed.input.convoyId),
+  );
+
   return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
 });
 
@@ -628,6 +753,18 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   // be a read of a convoy they can no longer see. The summary is still built
   // with the caller's uid, which now yields viewer: null — correct, and the
   // point. (The transaction either assigned this or threw, so it is defined.)
+  // ITEM 2 lifecycle: leaving stops the live session the convoy auto-started for
+  // this member (and only that — a manual session or one from another convoy is
+  // left running). Mirror of convoy.end, scoped to the single leaver. Best-effort
+  // but logged, so a partial teardown (member left broadcasting) is diagnosable.
+  await stopConvoyAutoSession(actor.uid, convoyId).catch((error) => {
+    logger.warn('convoy auto-session op failed', {
+      uid: actor.uid,
+      convoyId,
+      error: String(error),
+    });
+  });
+
   const settled = result!;
   return {
     convoy: toConvoySummary(convoyId, settled.snapshot, actor.uid, toIso),

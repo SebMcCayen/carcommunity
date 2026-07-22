@@ -166,6 +166,15 @@ class ConvoyCoordinator(
 
     suspend fun create(inviteeUids: List<String>, title: String?) {
         if (createStateFlow.value == CreateConvoyState.Working) return
+        // ITEM 1 client guard: the caller is already an active participant of a
+        // convoy, so a new one is refused. Fail locally with the correct reason
+        // instead of calling the backend, whose overloaded failed-precondition the
+        // code-only mapper would render as the misleading "no one could be added".
+        // The backend transaction remains the authoritative gate.
+        if (ConvoyBar.activeConvoy(statusState.value) != null) {
+            createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.AlreadyInConvoy)
+            return
+        }
         val invitees = inviteeUids.filter { it.isNotBlank() }.distinct()
         if (invitees.isEmpty()) {
             createStateFlow.value = CreateConvoyState.Error(ConvoyActionError.NoInvitees)
@@ -189,7 +198,17 @@ class ConvoyCoordinator(
         }
     }
 
-    suspend fun accept(convoyId: String) = respond(convoyId, accept = true)
+    suspend fun accept(convoyId: String) {
+        // ITEM 1 client guard: accepting JOINS a second convoy, refused while the
+        // caller is already an active participant of another (ConvoyBar.activeConvoy
+        // only ever returns a convoy the caller has ACCEPTED, never this pending
+        // invite). Declining stays available. Backend re-checks authoritatively.
+        if (ConvoyBar.activeConvoy(statusState.value) != null) {
+            rowError.value = ConvoyActionError.AlreadyInConvoy
+            return
+        }
+        respond(convoyId, accept = true)
+    }
 
     suspend fun decline(convoyId: String) = respond(convoyId, accept = false)
 
