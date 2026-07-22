@@ -248,6 +248,84 @@ describe('live session lifecycle', () => {
     const session = (await adminRtdb.ref(`liveLocation/${sharer.uid}/session`).get()).val();
     expect(session.stopReason).toBe('hide_me_now');
   });
+
+  it('extendSession pushes expiry to a fresh capped window, never past 6h', async () => {
+    const sharer = await createProvisionedUser('live-extend');
+    await makeMember(sharer);
+    await signInAs(sharer);
+
+    const started = (await call('live-startSession', { duration: '1h' })).data as {
+      sessionId: string;
+      expiresAt: string;
+    };
+    const startedExpiry = Date.parse(started.expiresAt);
+
+    const before = Date.now();
+    const extended = (await call('live-extendSession', {})).data as {
+      sessionId: string;
+      status: string;
+      expiresAt: string;
+    };
+    const after = Date.now();
+
+    // Same session (id/marker unchanged) — a seamless extend, not a restart.
+    expect(extended.sessionId).toBe(started.sessionId);
+    expect(extended.status).toBe('active');
+
+    // Fresh window: pushed forward past the original 1h expiry...
+    const newExpiry = Date.parse(extended.expiresAt);
+    expect(newExpiry).toBeGreaterThan(startedExpiry);
+    // ...and exactly a 6h cap from "now" (bounded by the call's wall-clock window).
+    // Slack is generous (±60s) so emulator/CI variance in the callable's wall
+    // time can't flake this: a 60s window still verifies the 6h cap math.
+    const SIX_H = 6 * 60 * 60 * 1000;
+    const SLACK = 60_000;
+    expect(newExpiry).toBeGreaterThanOrEqual(before + SIX_H - SLACK);
+    expect(newExpiry).toBeLessThanOrEqual(after + SIX_H + SLACK);
+
+    // The session node itself carries the new expiry.
+    const node = (await adminRtdb.ref(`liveLocation/${sharer.uid}/session`).get()).val();
+    expect(node.expiresAt).toBe(extended.expiresAt);
+    expect(node.id).toBe(started.sessionId);
+
+    await call('live-stopSession', {});
+  });
+
+  it('extendSession refuses a session that has no active session (must restart)', async () => {
+    const sharer = await createProvisionedUser('live-extend-none');
+    await makeMember(sharer);
+    await signInAs(sharer);
+    // No session started (or already stopped): extend is failed-precondition.
+    expect(await callableErrorCode(call('live-extendSession', {}))).toBe(
+      'functions/failed-precondition',
+    );
+  });
+
+  it('extendSession does NOT resurrect a session that expired before commit', async () => {
+    const sharer = await createProvisionedUser('live-extend-expired');
+    await makeMember(sharer);
+    await signInAs(sharer);
+
+    await call('live-startSession', { duration: '1h' });
+
+    // Simulate the session crossing its expiresAt boundary between the client's
+    // read and the extend's commit: push expiresAt into the PAST directly on the
+    // RTDB node while status stays 'active'. The atomic check-and-extend must
+    // evaluate liveness at commit time and ABORT — a naive unconditional write
+    // would resurrect it with a fresh 6h window.
+    const sessionNodeRef = adminRtdb.ref(`liveLocation/${sharer.uid}/session`);
+    const expiredIso = new Date(Date.now() - 60_000).toISOString();
+    await sessionNodeRef.update({ expiresAt: expiredIso });
+
+    expect(await callableErrorCode(call('live-extendSession', {}))).toBe(
+      'functions/failed-precondition',
+    );
+
+    // The transaction aborted, so nothing was written: expiresAt is unchanged
+    // (still in the past), NOT pushed forward to a fresh capped window.
+    const after = (await sessionNodeRef.get()).val();
+    expect(after.expiresAt).toBe(expiredIso);
+  });
 });
 
 describe('live TTL sweep', () => {

@@ -14,6 +14,7 @@ class LiveLocationCoordinatorTest {
     private class FakeRepo : LiveLocationRepository {
         val started = mutableListOf<LiveSessionDuration>()
         var stops = 0
+        var extends = 0
         var hides = 0
         var failWith: Exception? = null
 
@@ -27,6 +28,11 @@ class LiveLocationCoordinatorTest {
         override suspend fun stopSession() {
             failWith?.let { throw it }
             stops++
+        }
+
+        override suspend fun extendSession() {
+            failWith?.let { throw it }
+            extends++
         }
 
         override suspend fun hideMeNow() {
@@ -59,6 +65,15 @@ class LiveLocationCoordinatorTest {
         coordinator.hideMeNow()
         assertEquals(1, repo.stops)
         assertEquals(1, repo.hides)
+        assertEquals(LiveActionStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `extend calls through and ends Idle`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = LiveLocationCoordinator(repo)
+        coordinator.extend()
+        assertEquals(1, repo.extends)
         assertEquals(LiveActionStatus.Idle, coordinator.status.value)
     }
 

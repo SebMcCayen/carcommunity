@@ -119,6 +119,28 @@ class BackgroundLocationTest {
     }
 
     @Test
+    fun `the stationary heartbeat is throttled to 3 minutes`() {
+        // The main data saver: a parked phone writes once every 3 min, not 30 s.
+        assertEquals(3 * 60 * 1000L, BackgroundLocation.STATIONARY_HEARTBEAT_MS)
+    }
+
+    @Test
+    fun `a stationary car does NOT publish before the 3-minute heartbeat`() {
+        // 30 s after the last submitted fix, no movement: the old cadence would
+        // have published here; the throttled one waits for the 3-min heartbeat.
+        assertFalse(
+            BackgroundLocation.shouldPublish(
+                lastSubmittedAtMillis = 1_000L,
+                lastSubmittedLatitude = kungsbacka.first,
+                lastSubmittedLongitude = kungsbacka.second,
+                latitude = kungsbacka.first,
+                longitude = kungsbacka.second,
+                nowMillis = 1_000L + 30_000L,
+            ),
+        )
+    }
+
+    @Test
     fun `a moving car publishes every fix`() {
         // 50 km/h for the 5 s nominal interval is ~69 m — far past the threshold,
         // so convoy arrows and focus mode keep getting fresh positions.

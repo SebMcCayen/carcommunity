@@ -132,8 +132,24 @@ object ConvoyArrowPlanner {
     /** Most edge arrows drawn at once, however many members are off screen. */
     const val MAX_ARROWS: Int = 4
 
-    /** Positions older than this are dropped rather than pointed at. */
-    const val STALE_AFTER_MS: Long = 2 * 60 * 1000L
+    /**
+     * Positions older than this are dropped rather than pointed at.
+     *
+     * MUST stay strictly greater than the stationary publish heartbeat
+     * ([com.kungsbackacarcommunity.app.location.BackgroundLocation.STATIONARY_HEARTBEAT_MS],
+     * 3 min): a parked but still-alive member republishes only once per heartbeat,
+     * so a window at or below the heartbeat would drop them as "stale" in the gap
+     * between beats even though they are present — the convoy arrow would vanish
+     * and reappear every few minutes. At 4 min there is a full minute of margin
+     * over the 3-min heartbeat for publish jitter. The ordering is asserted by a
+     * unit test (ConvoyArrowPlannerTest) so the two constants cannot drift.
+     *
+     * The trade-off runs the other way for a MOVING member who loses signal: their
+     * last position now lingers up to 4 min (was 2) before the arrow drops. That is
+     * the accepted cost of the 3-min stationary heartbeat's data saving; a stale
+     * arrow is still dropped well before it becomes dangerously wrong at road speed.
+     */
+    const val STALE_AFTER_MS: Long = 4 * 60 * 1000L
 
     /**
      * A member closer than this to the camera centre never gets an arrow: at

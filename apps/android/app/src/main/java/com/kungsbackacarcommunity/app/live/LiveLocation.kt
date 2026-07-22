@@ -50,6 +50,25 @@ data class LiveSessionInfo(
 
 object LiveLocation {
     /**
+     * Absolute hard cap on any one live-sharing window (single AND convoy — a
+     * convoy member shares through the same session node). The CLIENT copy of the
+     * server's `LIVE_SESSION_MAX_MS` (functions/src/live/live-core.ts). The two
+     * cannot literally share a constant across the Kotlin/TS boundary, so they are
+     * defined on each side and their agreement is asserted by tests
+     * ([com.kungsbackacarcommunity.app.live.LiveLocationTest] here,
+     * live-core.test.ts on the server). Retune in BOTH places.
+     */
+    const val LIVE_SESSION_MAX_MS: Long = 6 * 60 * 60 * 1000L // 6 hours
+
+    /**
+     * How long before `expiresAt` the client shows the "still sharing? continue?"
+     * extend prompt. Mirror of the server's `LIVE_SESSION_EXTEND_PROMPT_MS`. 15
+     * min before a 6h window is the "5h45" checkpoint; before a shorter chosen
+     * window it is simply 15 min before that window's end.
+     */
+    const val LIVE_SESSION_EXTEND_PROMPT_MS: Long = 15 * 60 * 1000L // 15 minutes
+
+    /**
      * Whether the caller is currently sharing: an active session that has not
      * passed its expiry. Mirrors the backend isSessionActive check. A null
      * (unparseable) expiry does not hide an active session.
@@ -58,6 +77,23 @@ object LiveLocation {
         session != null &&
             session.status == LiveSessionStatus.ACTIVE &&
             (session.expiresAtMillis == null || session.expiresAtMillis > nowMillis)
+
+    /**
+     * Whether the session is inside its final [LIVE_SESSION_EXTEND_PROMPT_MS]
+     * before expiry — the window in which the app asks the user to extend.
+     *
+     * Requires a currently-sharing session with a PARSEABLE expiry: an
+     * unparseable/absent expiry has no known deadline to count down to, so there
+     * is nothing to prompt about (the hard-ceiling backstop handles that case).
+     * Already-expired sessions return false — the moment to extend has passed and
+     * the stop path takes over.
+     */
+    fun isExpiringSoon(session: LiveSessionInfo?, nowMillis: Long): Boolean {
+        if (!isSharing(session, nowMillis)) return false
+        val expires = session?.expiresAtMillis ?: return false
+        val remaining = expires - nowMillis
+        return remaining in 1..LIVE_SESSION_EXTEND_PROMPT_MS
+    }
 
     /** Whole seconds remaining until expiry, floored at 0; null if unknown. */
     fun remainingSeconds(session: LiveSessionInfo?, nowMillis: Long): Long? {

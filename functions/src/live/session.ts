@@ -41,8 +41,10 @@ import {
   LIVE_LOCATION_FLAG_KEY,
   buildLatestNode,
   buildSession,
+  extendedExpiryIso,
   guardPositionFreshness,
   isSessionActive,
+  parseExtendSessionInput,
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
@@ -213,6 +215,74 @@ export const updatePosition = onCall(
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );
+
+export const extendSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
+  // Extending is the "yes, keep sharing" answer to the client's pre-expiry
+  // prompt. Free like startSession (sharing your OWN position needs no
+  // subscription); the liveLocation flag still gates it.
+  const actor = await requireActiveActor(request);
+  const parsed = parseExtendSessionInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  if (!(await readFeatureFlag(LIVE_LOCATION_FLAG_KEY))) {
+    throw new HttpsError('failed-precondition', 'Live location feature is disabled.');
+  }
+
+  const now = new Date();
+  // A fresh capped window — server-computed and server-clamped, so the client
+  // can never obtain more than LIVE_SESSION_MAX_MS. Only expiresAt changes; the
+  // session id, denormalized displayName and mainCar all carry forward, so the
+  // extend is seamless (no marker flicker, unlike a restart).
+  const expiresAt = extendedExpiryIso(now);
+
+  // Only an ACTIVE, not-yet-expired session can be extended. A session already
+  // past expiry (or stopped/expired) must be restarted, not resurrected — this
+  // is exactly the "no answer by expiry → it stops" rule: once expiry passes,
+  // the extend path is closed and the client's/​sweep's stop stands.
+  //
+  // Fast path + existence check: if there is no session at all (never started),
+  // fail before touching the transaction. The session node is never DELETED once
+  // started — stop/sweep only transition its `status` (to stopped/expired) — so a
+  // null here means "never started", and a non-null node is what the atomic guard
+  // below re-validates.
+  const preRead = (await sessionRef(actor.uid).get()).val() as LiveSession | null;
+  if (!isSessionActive(preRead, now)) {
+    throw new HttpsError('failed-precondition', 'No active live location session to extend.');
+  }
+
+  // ATOMIC check-and-extend: a plain read-then-write would race — if the session
+  // crossed its expiresAt boundary between the check and the write, an
+  // unconditional write would RESURRECT a just-expired session. So the
+  // active-check and the expiresAt write happen inside a single RTDB transaction,
+  // re-evaluated against the node's value at COMMIT time: if it is no longer
+  // active then, the handler returns undefined to ABORT and nothing is written.
+  //
+  // The handler is first invoked optimistically with the LOCALLY-CACHED value —
+  // null on a cold connection. Returning undefined on that speculative null pass
+  // would abort before the server value is ever fetched (extend would never
+  // succeed), so instead we return a candidate built from preRead: that forces
+  // the SDK to compare against the server, find the real node, and re-invoke the
+  // handler with it — where the real active-check runs. Because a started
+  // session's node is never null server-side, that candidate is never the value
+  // that actually commits.
+  const result = await sessionRef(actor.uid).transaction((current: LiveSession | null) => {
+    if (current === null) {
+      return { ...preRead, expiresAt };
+    }
+    if (!isSessionActive(current, now)) {
+      return undefined; // abort — never revive an expired/stopped session
+    }
+    return { ...current, expiresAt };
+  });
+
+  if (!result.committed) {
+    throw new HttpsError('failed-precondition', 'No active live location session to extend.');
+  }
+
+  const session = result.snapshot.val() as LiveSession;
+  return { sessionId: session.id, status: 'active', expiresAt };
+});
 
 async function stopAndClear(uid: string, reason: LiveStopReason): Promise<SessionResponse> {
   const session = (await sessionRef(uid).get()).val() as LiveSession | null;

@@ -42,6 +42,8 @@ class MapMarkerFeedTest {
 
         override suspend fun stopSession() = Unit
 
+        override suspend fun extendSession() = Unit
+
         override suspend fun hideMeNow() = Unit
 
         override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)

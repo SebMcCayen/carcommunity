@@ -64,7 +64,13 @@ import { registerPushToken, unregisterPushToken } from './notifications/pushToke
 import { onNotificationCreated } from './notifications/sendPush';
 import { adminSend as notificationsAdminSend } from './notifications/adminSend';
 import { cleanupExpired as cleanupExpiredNotifications } from './notifications/scheduled';
-import { hideMeNow, startSession, stopSession, updatePosition } from './live/session';
+import {
+  extendSession,
+  hideMeNow,
+  startSession,
+  stopSession,
+  updatePosition,
+} from './live/session';
 import { listNearby as listNearbyLive } from './live/listNearby';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
@@ -537,20 +543,23 @@ export const account = {
 
 /**
  * Live location domain (grouped export → deployed as `live-startSession`,
- * `live-updatePosition`, `live-stopSession`, `live-hideMeNow`,
- * `live-listNearby`, and the scheduled `live-cleanupExpired`) — Phase 10, the
- * first RTDB domain.
+ * `live-updatePosition`, `live-stopSession`, `live-extendSession`,
+ * `live-hideMeNow`, `live-listNearby`, and the scheduled
+ * `live-cleanupExpired`) — Phase 10, the first RTDB domain.
  *
  * All liveLocation/ writes are backend-only (RTDB rules deny every client
  * write); a non-suspended, non-blocked signed-in VIEWER reads
  * liveLocation/{uid}/latest markers via RTDB listeners (the read rule does NOT
  * currently encode an activeMember gate — member gating is disabled repo-wide,
  * shared/memberGating.ts; a paid-viewing gate is added to that rule when it is
- * re-locked). Sessions expire per their 1h/2h/4h duration; the 5-minute sweep
- * also removes markers whose positions went silent for 15 minutes, and deletes
- * expired nearby-discovery docs. hideMeNow works while suspended (privacy
- * action). Also completes the Phase 9h Kronjakt jump-detection seam, which reads
- * liveLocation/{uid}/latest.
+ * re-locked). Sessions expire per their 1h/2h/4h duration, never past the 6h
+ * hard cap (LIVE_SESSION_MAX_MS); extendSession grants a fresh capped window on
+ * the user's pre-expiry "keep sharing" confirmation. The 5-minute sweep expires
+ * sessions past expiresAt server-side (so an offline device cannot linger past
+ * the cap), removes markers whose positions went silent for 15 minutes, and
+ * deletes expired nearby-discovery docs. hideMeNow works while suspended
+ * (privacy action). Also completes the Phase 9h Kronjakt jump-detection seam,
+ * which reads liveLocation/{uid}/latest.
  *
  * live.listNearby is the DISCOVERY path (mirrors incidents.listNearby): it
  * returns active, unexpired sharers near the caller from the queryable Firestore
@@ -565,6 +574,7 @@ export const live = {
   startSession,
   updatePosition,
   stopSession,
+  extendSession,
   hideMeNow,
   listNearby: listNearbyLive,
   cleanupExpired: cleanupExpiredLive,
