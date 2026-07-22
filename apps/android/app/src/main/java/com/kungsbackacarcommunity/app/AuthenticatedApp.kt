@@ -3383,6 +3383,13 @@ private fun RouteHost(
                     // upload cap). Still bounded to avoid OOM; the upload precheck
                     // on the compressed result enforces PROFILE_IMAGE_MAX_BYTES.
                     maxBytes = MediaUpload.PROFILE_IMAGE_READ_MAX_BYTES,
+                    // A photo WAS chosen but could not be read (cloud-only item
+                    // that never downloaded, unreadable/oversized file, resolver
+                    // error). Previously this was dropped silently, so the user
+                    // saw nothing happen after picking; surface it as a failure so
+                    // the change-avatar section shows the retry error. A plain
+                    // cancel routes to onPicked(null) below and stays silent.
+                    onPickFailed = { avatarCoordinator?.markFailed() },
                 ) { picked ->
                     val repo = profileRepository
                     if (picked != null && avatarCoordinator != null && repo != null) {
