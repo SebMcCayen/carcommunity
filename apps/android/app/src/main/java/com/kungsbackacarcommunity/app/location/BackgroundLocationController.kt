@@ -27,7 +27,21 @@ object BackgroundLocationController {
             Intent(context, LocationSharingService::class.java).apply {
                 putExtra(LocationSharingService.EXTRA_UID, uid)
             }
-        ContextCompat.startForegroundService(context, intent)
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (_: IllegalStateException) {
+            // Android 12+ forbids starting a foreground service while the app is
+            // in the background (ForegroundServiceStartNotAllowedException, a
+            // subclass of IllegalStateException). The manual Start paths always
+            // run in the foreground, but the session-bound start (a convoy
+            // auto-started session — see AuthenticatedApp) can fire while the app
+            // is backgrounded, e.g. when the convoy OWNER starts the group while
+            // this member's app is not on screen. Swallow it rather than crash:
+            // the member simply begins publishing the next time a start runs in
+            // the foreground (opening the app / the map, or tapping Start). This
+            // is defence in depth — dropping a foreground-service start can never
+            // be worth taking the app down.
+        }
     }
 
     fun stop(context: Context) {

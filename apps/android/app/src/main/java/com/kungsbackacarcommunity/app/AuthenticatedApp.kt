@@ -1152,6 +1152,28 @@ fun AuthenticatedApp(
                 }
             }
 
+            // Bind the foreground POSITION PUBLISHER to the session itself, not
+            // just to the manual Start button. A convoy auto-started session
+            // (PR #527) flips isSharing true WITHOUT any manual start — that is
+            // the whole point: accepting/starting a convoy is meant to make you
+            // visible to the group without tapping "share live". But the only
+            // writer of liveLocation/{uid}/latest is LocationSharingService, and
+            // it used to be started ONLY from the manual single-session paths.
+            // So an auto-started member had a live SESSION node server-side yet
+            // never published a POSITION: every convoy member subscribing
+            // observeLatest(uid) saw nothing, and no one appeared on the map.
+            // Starting the publisher here — keyed on the session, not the button
+            // — covers the manual AND the convoy-auto path with one rule. The
+            // service is idempotent (a repeat start for the same uid is a no-op),
+            // observes the session node, and self-terminates when the session
+            // ends, so there is nothing to stop here. Keyed on uid too so an
+            // account switch that keeps a session active re-targets the publisher.
+            LaunchedEffect(isSharing, uid) {
+                if (isSharing && uid.isNotBlank()) {
+                    BackgroundLocationController.start(context, uid)
+                }
+            }
+
             // Auto-file the drive-save failure the moment the user is shown it.
             // Keyed on the failure's code so ONE issue is filed per distinct
             // failure per prompt, not one per recomposition; the backend dedups
