@@ -452,11 +452,6 @@
     <string name="convoy_friendsRetry">Try again</string>
     <string name="convoy_noFriends">Add some friends first to invite them to a convoy.</string>
     <string name="convoy_createSubmit">Create convoy</string>
-    <string name="convoy_createdTitle">Convoy created</string>
-    <string name="convoy_createdBody">Your convoy is ready. Invited friends can now accept.</string>
-    <string name="convoy_skippedTitle">Couldn\'t invite %1$d</string>
-    <string name="convoy_skippedBody">Some people couldn\'t be added — they may not be your friend.</string>
-    <string name="convoy_openConvoy">Open convoy</string>
     <string name="convoy_membersTitle">Members</string>
     <string name="convoy_start">Start convoy</string>
     <string name="convoy_end">End convoy</string>

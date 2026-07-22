@@ -2317,6 +2317,15 @@ fun AuthenticatedApp(
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
                         convoyOpenCreate = convoyOpenCreate,
+                        // A newly created convoy shows no confirmation page: close the
+                        // convoy overlay and land on the map, where the bar reflects
+                        // the new (active) convoy. Clear the deep-link flag so a later
+                        // re-entry from the Social hub opens list-first as normal.
+                        onConvoyCreated = {
+                            convoyOpenCreate = false
+                            route = null
+                            selectedTab = ShellTab.Map
+                        },
                         chatHubPushLink = pendingChatHubLink,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
@@ -3461,6 +3470,10 @@ private fun RouteHost(
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
     convoyOpenCreate: Boolean,
+    // Invoked once a convoy is successfully created: the create flow shows no
+    // confirmation page — it dismisses the convoy surface and lands on the Map
+    // tab, where the convoy bar shows the new (active) convoy.
+    onConvoyCreated: () -> Unit,
     // Destination of the push tap that opened the chat hub, if that is why it is
     // open. Forwarded to ChatHubRoute, which owns tab/channel sub-navigation.
     chatHubPushLink: PushDeepLink?,
@@ -3840,6 +3853,7 @@ private fun RouteHost(
                     // read-only profile; the caller's own row never navigates.
                     onViewMember = openProfileIfWired,
                     viewerUid = uid,
+                    onConvoyCreated = onConvoyCreated,
                 )
             } else {
                 LoadingScreen()

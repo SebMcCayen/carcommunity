@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +50,10 @@ import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
+
+/** Test tag on the create-convoy submit button, so a UI test can assert it goes
+ *  inert (disabled) during the create + post-create hand-off to the map. */
+const val CONVOY_CREATE_SUBMIT_TAG = "convoy-create-submit"
 
 // ---------------------------------------------------------------------------
 // Convoy list
@@ -285,8 +290,11 @@ private fun PendingInviteRow(
  * Create-a-convoy: a multi-select picker over the caller's friends (from the
  * shared FriendsRepository), wired to `convoy-create`. Convoys are unnamed —
  * there is no title input; the list/detail render a neutral fallback label.
- * After creation any skipped invitees (non-friends/blocked) are surfaced before
- * the caller continues into the new convoy.
+ *
+ * On success there is NO confirmation page: the host observes
+ * [CreateConvoyState.Created] and dismisses the whole convoy surface to the map,
+ * where the convoy bar shows the new convoy. This screen only renders the picker
+ * (and, inline, a create FAILURE) — a success just leaves it.
  */
 @Composable
 fun CreateConvoyScreen(
@@ -296,15 +304,16 @@ fun CreateConvoyScreen(
     onToggleFriend: (String) -> Unit,
     onRetryFriends: (() -> Unit)?,
     onSubmit: () -> Unit,
-    onDone: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val created = createState as? CreateConvoyState.Created
-    if (created != null) {
-        CreatedResult(created = created, onContinue = { onDone(created.convoyId) }, modifier = modifier)
-        return
-    }
-
+    // Inert while the create is in flight (Working) AND once it succeeds (Created):
+    // on success this screen no longer swaps to a confirmation page, so without this
+    // the picker + submit button would re-enable (Created is not Working, and the
+    // selection is still non-empty) during the brief hand-off window before the host
+    // navigates to the map — allowing a second `convoy.create` / a selection change.
+    // Blocking both states keeps the surface interaction-proof until it leaves.
+    val handingOff =
+        createState is CreateConvoyState.Working || createState is CreateConvoyState.Created
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -350,7 +359,7 @@ fun CreateConvoyScreen(
                             SelectableFriendRow(
                                 friend = friend,
                                 selected = friend.uid in selectedUids,
-                                enabled = createState !is CreateConvoyState.Working,
+                                enabled = !handingOff,
                                 onToggle = { onToggleFriend(friend.uid) },
                             )
                         }
@@ -368,13 +377,15 @@ fun CreateConvoyScreen(
             }
 
             item(key = "submit") {
-                val working = createState is CreateConvoyState.Working
+                // Disabled (and showing the spinner) both while Working and once
+                // Created, so no second submit can fire during the hand-off to the
+                // map. The spinner reads as a brief blocking state until navigation.
                 Button(
                     onClick = onSubmit,
-                    enabled = !working && selectedUids.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !handingOff && selectedUids.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_CREATE_SUBMIT_TAG),
                 ) {
-                    if (working) {
+                    if (handingOff) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(KccSpacing.s6),
                             color = MaterialTheme.colorScheme.onPrimary,
@@ -421,43 +432,6 @@ private fun SelectableFriendRow(
             // accessibility semantics (Role.Checkbox), avoiding a duplicate toggle
             // target. Mirrors the app's established selectable-row pattern.
             Checkbox(checked = selected, onCheckedChange = null, enabled = enabled)
-        }
-    }
-}
-
-@Composable
-private fun CreatedResult(
-    created: CreateConvoyState.Created,
-    onContinue: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    AeroPage(title = stringResource(R.string.convoy_createdTitle), modifier = modifier) {
-        Text(
-            text = stringResource(R.string.convoy_createdBody),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (created.skipped.isNotEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-                    verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-                ) {
-                    Text(
-                        text = stringResource(R.string.convoy_skippedTitle, created.skipped.size),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(R.string.convoy_skippedBody),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.convoy_openConvoy))
         }
     }
 }

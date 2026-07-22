@@ -42,6 +42,13 @@ private enum class ConvoyView { List, Create, Detail }
  *
  * [onViewMember] opens a detail-roster member's read-only profile (null leaves
  * the rows inert); [viewerUid] is the caller, whose own row never navigates.
+ *
+ * [onConvoyCreated] is invoked once a convoy is successfully created. The create
+ * flow no longer shows a "Convoy created" confirmation page: on success the host
+ * dismisses this whole surface and lands on the MAP tab, where the convoy bar
+ * shows the new (active) convoy. A FAILURE does NOT call it — the error stays on
+ * the create screen. Null (a config-less/test host with no map to land on) falls
+ * back to opening the new convoy's detail so the flow never dead-ends.
  */
 @Composable
 fun ConvoyRoute(
@@ -50,6 +57,7 @@ fun ConvoyRoute(
     openCreateOnEntry: Boolean = false,
     onViewMember: ((String) -> Unit)? = null,
     viewerUid: String? = null,
+    onConvoyCreated: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator = remember(repository) { ConvoyCoordinator(repository) }
@@ -106,6 +114,37 @@ fun ConvoyRoute(
         }
     }
 
+    // Once a convoy is created, do NOT show a confirmation page: dismiss the whole
+    // convoy surface and land on the map, where the convoy bar now shows the new
+    // (active) convoy's info (member count, invite, leave, focus). The map's own
+    // bar coordinator re-loads on return and picks the new convoy up as active, so
+    // no state is threaded across — closing to the map is enough.
+    //
+    // Only a SUCCESS navigates (see postCreateNav): a create FAILURE keeps the
+    // create screen up with its inline error, never dropping to the map as if it
+    // had worked. A null host (config-less/test) has no map to land on, so it falls
+    // back to the new convoy's detail rather than dead-ending.
+    //
+    // Navigate FIRST, then resetCreate(). resetCreate flips createState back to Idle,
+    // which would make the create screen's `handingOff` guard false and RE-ENABLE the
+    // picker/submit. Tearing the route/view down before the reset means the create
+    // screen is already gone by the time Idle lands, so its controls can never become
+    // interactive again in the window between Created and the route dismissing — no
+    // second convoy.create is possible. The reset still runs, so a later re-entry into
+    // the route starts from a clean Idle sub-state.
+    LaunchedEffect(createState) {
+        if (postCreateNav(createState) == PostCreateNav.GoToMap) {
+            val newConvoyId = (createState as CreateConvoyState.Created).convoyId
+            if (onConvoyCreated != null) {
+                onConvoyCreated()
+            } else {
+                detailConvoyId = newConvoyId
+                view = ConvoyView.Detail
+            }
+            coordinator.resetCreate()
+        }
+    }
+
     // Pop internal navigation before the shell closes the route. Disabled on the
     // list root so the shell's handler then returns to the Social hub.
     BackHandler(enabled = view != ConvoyView.List) { view = ConvoyView.List }
@@ -151,11 +190,8 @@ fun ConvoyRoute(
                     // list/detail fall back to the neutral "untitled" label.
                     scope.launch { coordinator.create(selectedUids.toList(), null) }
                 },
-                onDone = { convoyId ->
-                    coordinator.resetCreate()
-                    detailConvoyId = convoyId
-                    view = ConvoyView.Detail
-                },
+                // No onDone: a successful create is handled by the
+                // LaunchedEffect(createState) above, which dismisses to the map.
             )
 
         ConvoyView.Detail -> {
