@@ -1658,6 +1658,17 @@ fun AuthenticatedApp(
                 val convoyInviteState: InviteConvoyState =
                     convoyBarCoordinator?.inviteState?.collectAsState()?.value
                         ?: InviteConvoyState.Idle
+                // Who the picker must NOT offer: the target convoy's current members
+                // (owner + every invited/accepted/declined invitee) plus the caller,
+                // so only friends actually addable via `convoy-invite` are shown.
+                // Derived from the LIVE bar status (observeActiveConvoy), so it
+                // recomputes as the roster changes — a friend who joins while the
+                // picker is open drops out of the candidate list.
+                val convoyInviteExcludedUids: Set<String> =
+                    (convoyBarStatus as? ConvoyListStatus.Loaded)
+                        ?.convoy(convoyInviteConvoyId ?: "")
+                        ?.inviteExcludedUids(uid)
+                        ?: emptySet()
                 // (Re)load the friends snapshot each time the picker opens, so a
                 // previously failed load is re-attempted rather than left stuck.
                 LaunchedEffect(convoyInviteConvoyId, convoyInviteFriendsCoordinator) {
@@ -2168,6 +2179,7 @@ fun AuthenticatedApp(
                         friendsStatus = convoyInviteFriendsStatus,
                         inviteState = convoyInviteState,
                         selectedUids = convoyInviteSelected,
+                        excludedUids = convoyInviteExcludedUids,
                         onToggleFriend = { friendUid ->
                             convoyInviteSelected =
                                 if (friendUid in convoyInviteSelected) {

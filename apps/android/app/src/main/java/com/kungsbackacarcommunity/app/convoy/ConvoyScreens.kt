@@ -482,6 +482,12 @@ fun ConvoyInvitePickerScreen(
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    // Uids to hide from the candidate list: this convoy's current members plus
+    // the caller (see ConvoySummary.inviteExcludedUids). Only friends NOT already
+    // in the convoy are offered, so tapping a row always adds someone new. Derived
+    // from the live convoy roster, so a friend who joins while the picker is open
+    // drops out on the next recomposition.
+    excludedUids: Set<String> = emptySet(),
 ) {
     val working = inviteState is InviteConvoyState.Working
     AeroLazyPage(modifier = modifier) {
@@ -511,21 +517,35 @@ fun ConvoyInvitePickerScreen(
                         }
                     }
 
-                is FriendsStatus.Loaded ->
-                    if (friendsStatus.friends.isEmpty()) {
-                        item(key = "friends-empty") {
-                            InfoNoticeCard(text = stringResource(R.string.convoy_noFriends))
-                        }
-                    } else {
-                        items(friendsStatus.friends, key = { "f-${it.uid}" }) { friend ->
-                            SelectableFriendRow(
-                                friend = friend,
-                                selected = friend.uid in selectedUids,
-                                enabled = !working,
-                                onToggle = { onToggleFriend(friend.uid) },
-                            )
-                        }
+                is FriendsStatus.Loaded -> {
+                    val candidates = invitableFriends(friendsStatus.friends, excludedUids)
+                    when {
+                        // No friends at all — the same "add friends first" nudge the
+                        // create-convoy picker shows.
+                        friendsStatus.friends.isEmpty() ->
+                            item(key = "friends-empty") {
+                                InfoNoticeCard(text = stringResource(R.string.convoy_noFriends))
+                            }
+                        // Has friends, but every one is already in this convoy — a
+                        // distinct empty state so the picker never looks broken (an
+                        // empty list with no explanation).
+                        candidates.isEmpty() ->
+                            item(key = "friends-all-in-convoy") {
+                                InfoNoticeCard(
+                                    text = stringResource(R.string.convoy_inviteNoInvitable),
+                                )
+                            }
+                        else ->
+                            items(candidates, key = { "f-${it.uid}" }) { friend ->
+                                SelectableFriendRow(
+                                    friend = friend,
+                                    selected = friend.uid in selectedUids,
+                                    enabled = !working,
+                                    onToggle = { onToggleFriend(friend.uid) },
+                                )
+                            }
                     }
+                }
             }
 
             if (inviteState is InviteConvoyState.Error) {

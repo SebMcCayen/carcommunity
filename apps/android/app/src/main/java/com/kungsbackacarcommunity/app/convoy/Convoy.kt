@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.friends.FriendSummary
+
 /**
  * Convoy domain (member-gated grouped drives). The backend (europe-west1
  * callables `convoy-create` / `convoy-respond` / `convoy-start` / `convoy-end` /
@@ -84,7 +86,35 @@ data class ConvoySummary(
 ) {
     /** True when the caller owns this convoy (drives the Start/End controls). */
     val viewerIsOwner: Boolean get() = viewer?.role == ConvoyRole.Owner
+
+    /**
+     * The uids that must NOT be offered as invite candidates for this convoy —
+     * everyone `convoy-invite` would silently skip as [ConvoySkipReason.AlreadyMember]
+     * plus the caller. That skip set is exactly [memberUids] (the owner plus every
+     * invitee, whether their invite is invited/accepted/declined — see the backend's
+     * `already_member` rule), and [viewerUid] covers the caller in the degenerate
+     * case where they somehow aren't in [memberUids]. Offering any of these would be
+     * a dead choice the invite call drops, which is precisely the "people already in
+     * the convoy show up in the picker" bug this removes.
+     */
+    fun inviteExcludedUids(viewerUid: String?): Set<String> =
+        buildSet {
+            addAll(memberUids)
+            viewerUid?.let { add(it) }
+        }
 }
+
+/**
+ * The friends the convoy invite-picker may actually offer: every friend whose uid
+ * is NOT in [excludeUids] (the current convoy's members plus the caller — see
+ * [ConvoySummary.inviteExcludedUids]). Ordering is preserved. An empty result when
+ * [friends] was non-empty means every friend is already in the convoy, which the
+ * picker renders as a distinct empty state rather than a bare list.
+ */
+fun invitableFriends(
+    friends: List<FriendSummary>,
+    excludeUids: Set<String>,
+): List<FriendSummary> = friends.filterNot { it.uid in excludeUids }
 
 /**
  * Why a requested invitee was skipped by `convoy-create` / `convoy-invite`
