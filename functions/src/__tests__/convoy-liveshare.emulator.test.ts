@@ -141,6 +141,9 @@ const sessionOf = (uid: string) =>
   sessionNodeRef(uid).get().then((s) => s.val() as LiveSessionNode | null);
 const latestExists = (uid: string) =>
   adminRtdb.ref(`liveLocation/${uid}/latest`).get().then((s) => s.exists());
+/** The queryable nearby-discovery doc (Firestore) refreshed by updatePosition. */
+const discoveryExists = (uid: string) =>
+  adminDb.collection('liveSessions').doc(uid).get().then((s) => s.exists);
 
 const coordinate = () => ({
   latitude: 59.334,
@@ -292,8 +295,14 @@ describe('convoy auto-start live session (item 2)', () => {
       return s && s.status === 'active' && s.convoyAutoStarted ? true : undefined;
     });
 
-    // ...leaving stops it.
+    // The member pushes a position on the auto session, which makes them
+    // discoverable in live.listNearby (creates liveSessions/{uid}).
     await signInAs(member);
+    await call('live-updatePosition', { coordinate: coordinate() });
+    expect(await discoveryExists(member.uid)).toBe(true);
+
+    // ...leaving stops it — and clears BOTH the RTDB marker and the Firestore
+    // discovery doc, so the leaver drops out of nearby discovery at once.
     await call('convoy-leave', { convoyId });
     const stopped = await pollUntil(async () => {
       const s = await sessionOf(member.uid);
@@ -301,6 +310,7 @@ describe('convoy auto-start live session (item 2)', () => {
     });
     expect(stopped.status).toBe('stopped');
     expect(await latestExists(member.uid)).toBe(false);
+    expect(await discoveryExists(member.uid)).toBe(false);
 
     // The owner is still broadcasting (they did not leave).
     const ownerSession = await sessionOf(owner.uid);
@@ -372,16 +382,21 @@ describe('stopConvoyAutoSession stop-path atomicity (item 2 teardown)', () => {
     mainCar: null,
   });
 
-  it('stops a matching convoy-auto session when nothing races in', async () => {
+  it('stops a matching convoy-auto session and clears its discovery doc', async () => {
     const uid = `stop-atomic-plain-${Date.now()}`;
     const convoyId = 'convoy-plain';
     await sessionNodeRef(uid).set(autoNode('auto-1', convoyId));
+    // A stale nearby-discovery doc from the auto session's position updates.
+    await adminDb.collection('liveSessions').doc(uid).set({ uid, geoCell: 'x' });
+    expect(await discoveryExists(uid)).toBe(true);
 
     const outcome = await stopConvoyAutoSession(uid, convoyId);
 
     expect(outcome).toBe('stopped');
     const after = await sessionOf(uid);
     expect(after!.status).toBe('stopped');
+    // Teardown removes the discovery doc too — the user leaves live.listNearby.
+    expect(await discoveryExists(uid)).toBe(false);
   }, 30_000);
 
   it('leaves a manual session that raced in between the stop’s read and commit', async () => {

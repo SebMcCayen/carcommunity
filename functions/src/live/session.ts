@@ -335,8 +335,14 @@ export async function startConvoyAutoSession(
   if (!committed) {
     return 'skipped-existing';
   }
-  // Only clear the stale marker once we actually took over the session node.
+  // Only clear the stale state once we actually took over the session node. Both
+  // the RTDB marker AND the Firestore nearby-discovery doc are cleared — exactly
+  // as the manual startSession does — so a take-over from a prior (expired)
+  // session cannot leave the user discoverable at the OLD position in
+  // live.listNearby until the first fresh updatePosition of the new session
+  // re-creates the doc.
   await latestRef(uid).remove();
+  await discoveryRef(uid).delete();
   return 'started';
 }
 
@@ -387,7 +393,12 @@ export async function stopConvoyAutoSession(
   // no-op on a raced-in manual session leaves the node untouched.
   const after = snapshot.val() as (LiveSession & { convoyAutoStarted?: boolean }) | null;
   if (committed && after?.status === 'stopped' && after?.convoyAutoStarted === true) {
+    // Mirror the manual stop/hide teardown: remove BOTH the RTDB marker and the
+    // Firestore nearby-discovery doc so ending/leaving the convoy takes the user
+    // out of live.listNearby at once, rather than leaving them discoverable at a
+    // stale position until the discovery doc's TTL sweep.
     await latestRef(uid).remove();
+    await discoveryRef(uid).delete();
     return 'stopped';
   }
   return 'left-untouched';
