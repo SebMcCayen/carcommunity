@@ -156,9 +156,16 @@ export function assembleRoster(
     // Deleted / never-provisioned account: no identity to show → skip.
     if (!profile) continue;
     seen.add(entry.userId);
+    // A blank / whitespace-only displayName is normalised to null so the
+    // exposed shape matches the header contract (blank → null, client renders
+    // its own fallback) and the sort below treats every blank uniformly. A
+    // genuinely-present name is forwarded untouched.
+    const rawName = profile.displayName;
+    const displayName =
+      typeof rawName === 'string' && rawName.trim().length > 0 ? rawName : null;
     attendees.push({
       userId: entry.userId,
-      displayName: typeof profile.displayName === 'string' ? profile.displayName : null,
+      displayName,
       avatarPath: typeof profile.avatarPath === 'string' ? profile.avatarPath : null,
       status: entry.status,
     });

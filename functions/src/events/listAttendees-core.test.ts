@@ -130,6 +130,40 @@ describe('assembleRoster', () => {
     ]);
   });
 
+  it('normalises an empty or whitespace-only displayName to null (header contract)', () => {
+    const entries: RsvpEntry[] = [
+      { userId: 'u1', status: 'going' },
+      { userId: 'u2', status: 'going' },
+    ];
+    const profiles = new Map([
+      ['u1', profile('')],
+      ['u2', profile('   ')],
+    ]);
+    expect(assembleRoster(entries, profiles, noBlocks).map((a) => a.displayName)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('forwards a genuinely-present name untouched, blanks sort uniformly first', () => {
+    // A real name is passed through verbatim; every blank variant collapses to
+    // null so the status-group sort ranks them consistently (all before names).
+    const entries: RsvpEntry[] = [
+      { userId: 'u1', status: 'going' },
+      { userId: 'u2', status: 'going' },
+      { userId: 'u3', status: 'going' },
+    ];
+    const profiles = new Map([
+      ['u1', profile('Zoe')],
+      ['u2', profile('  ')], // whitespace → null
+      ['u3', profile('')], // empty → null
+    ]);
+    const roster = assembleRoster(entries, profiles, noBlocks);
+    // Blanks (null) sort ahead of 'Zoe'; among the two nulls userId breaks the tie.
+    expect(roster.map((a) => a.userId)).toEqual(['u2', 'u3', 'u1']);
+    expect(roster.map((a) => a.displayName)).toEqual([null, null, 'Zoe']);
+  });
+
   it('de-duplicates a repeated userId, keeping the first entry', () => {
     const entries: RsvpEntry[] = [
       { userId: 'u1', status: 'going' },
