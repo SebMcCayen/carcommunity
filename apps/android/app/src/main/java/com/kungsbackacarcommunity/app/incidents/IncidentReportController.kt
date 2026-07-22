@@ -185,9 +185,10 @@ class IncidentReportController(
     }
 
     /**
-     * Keeps [nearbyIncidents] LIVE by refreshing around the user's current
-     * location on a cadence, until the coroutine is cancelled (the caller scopes
-     * it to the Map tab being shown and the layer enabled).
+     * Keeps [nearbyIncidents] LIVE by refreshing around a provided centre on a
+     * cadence — the map camera centre in the app wiring, falling back to the
+     * user's current GPS location — until the coroutine is cancelled (the caller
+     * scopes it to the Map tab being shown and the layer enabled).
      *
      * This is the fix for "an incident someone else reports isn't visible to
      * me". The incident layer is a SHARED, Waze-style map layer: the reporter's

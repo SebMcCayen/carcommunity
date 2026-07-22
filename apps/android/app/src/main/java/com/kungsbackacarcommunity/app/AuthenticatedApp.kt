@@ -913,8 +913,10 @@ fun AuthenticatedApp(
             // previous markers intact on failure. Scoped to this effect, so it is
             // cancelled when the tab changes or the layer is toggled off; keyed on
             // incidentsLayerEnabled so toggling the layer back on re-fetches
-            // immediately.
-            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled) {
+            // immediately. Also keyed on mapSurface so a surface swap (token-driven
+            // surface recreation, previews/tests) re-subscribes the poll to the
+            // CURRENT surface instead of polling a stale, detached camera snapshot.
+            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
                 val controller = incidentController ?: return@LaunchedEffect
                 if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
                 // Query around the MAP CAMERA CENTRE, not only a GPS fix. The map
