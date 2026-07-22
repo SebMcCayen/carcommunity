@@ -952,7 +952,6 @@
     <string name="channel_mentionLimit">Du kan nämna högst %1$d medlemmar i ett meddelande.</string>
     <string name="channel_mentionsNotDelivered">Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.</string>
     <string name="chatHub_title">Chatt</string>
-    <string name="chatHub_close">Stäng chatt</string>
     <string name="chatHub_back">Tillbaka</string>
     <string name="chatHub_tabCommunity">Gemenskap</string>
     <string name="chatHub_tabConvoys">Konvojer</string>

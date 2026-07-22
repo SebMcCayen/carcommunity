@@ -1029,7 +1029,6 @@
   },
   "chatHub": {
     "title": "Chat",
-    "close": "Close chat",
     "back": "Back",
     "tabCommunity": "Community",
     "tabConvoys": "Convoys",
