@@ -113,6 +113,7 @@
     <string name="liveLocation_shareOwnFree">You can share your own position for free.</string>
     <string name="liveLocation_viewOthersMemberOnly">An active membership is required to view other members\' live locations.</string>
     <string name="liveLocation_memberRequiredToShare">An active membership is required to share your live location. You can always stop sharing.</string>
+    <string name="liveLocation_shareUnavailable">Live location sharing isn\'t available right now.</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
     <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>
@@ -1039,6 +1040,7 @@
     <string name="shell_liveTitle">Live location</string>
     <string name="shell_liveClose">Close live location</string>
     <string name="shell_liveDetails">More options</string>
+    <string name="shell_liveControls">Live location controls</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>

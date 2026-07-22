@@ -17,7 +17,8 @@ import org.junit.runner.RunWith
 
 /**
  * Compose UI tests for the bottom bar's dual-purpose centre control: "+" when
- * idle, STOP while a live session runs.
+ * idle, and — while a live session runs — the live-session disc that raises the
+ * manage sheet (Stop / Hide me now / Who can see me).
  *
  * Tested against [ShellBottomBar] directly rather than the whole shell, because
  * the sharing state needs a live-location repository the shell test has no way
@@ -34,7 +35,7 @@ class ShellBottomBarStopTest {
     private fun setBar(
         isSharing: Boolean,
         onSelect: (ShellTab) -> Unit = {},
-        onStop: () -> Unit = {},
+        onManage: () -> Unit = {},
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -42,7 +43,7 @@ class ShellBottomBarStopTest {
                     selected = ShellTab.Map,
                     onSelect = onSelect,
                     isSharing = isSharing,
-                    onStopLiveShare = onStop,
+                    onManageLiveShare = onManage,
                 )
             }
         }
@@ -53,39 +54,40 @@ class ShellBottomBarStopTest {
         setBar(isSharing = false)
 
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription(str(R.string.liveLocation_stop)).assertDoesNotExist()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveControls)).assertDoesNotExist()
     }
 
     @Test
-    fun sharing_centreControlBecomesTheStopSign() {
+    fun sharing_centreControlBecomesTheLiveControl() {
         setBar(isSharing = true)
 
-        // The whole point of the change: while a session runs there is no "+".
-        composeTestRule.onNodeWithContentDescription(str(R.string.liveLocation_stop)).assertIsDisplayed()
+        // The whole point of the change: while a session runs there is no "+";
+        // the centre control opens the live controls instead.
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveControls)).assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).assertDoesNotExist()
     }
 
     @Test
     fun notSharing_tappingTheCentreControlRaisesCreate() {
         var selected: ShellTab? = null
-        var stopped = false
-        setBar(isSharing = false, onSelect = { selected = it }, onStop = { stopped = true })
+        var managed = false
+        setBar(isSharing = false, onSelect = { selected = it }, onManage = { managed = true })
 
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabCreate)).performClick()
 
         assertEquals(ShellTab.Create, selected)
-        assertEquals(false, stopped)
+        assertEquals(false, managed)
     }
 
     @Test
-    fun sharing_tappingTheStopSignStopsTheSessionAndNeverOpensCreate() {
+    fun sharing_tappingTheLiveControlRaisesManageAndNeverOpensCreate() {
         var selected: ShellTab? = null
-        var stopped = 0
-        setBar(isSharing = true, onSelect = { selected = it }, onStop = { stopped += 1 })
+        var managed = 0
+        setBar(isSharing = true, onSelect = { selected = it }, onManage = { managed += 1 })
 
-        composeTestRule.onNodeWithContentDescription(str(R.string.liveLocation_stop)).performClick()
+        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveControls)).performClick()
 
-        assertEquals(1, stopped)
-        assertNull("Stopping must not raise the create chooser", selected)
+        assertEquals(1, managed)
+        assertNull("Raising the live controls must not open the create chooser", selected)
     }
 }

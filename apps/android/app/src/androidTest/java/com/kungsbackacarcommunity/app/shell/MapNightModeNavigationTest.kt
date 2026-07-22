@@ -96,13 +96,9 @@ class MapNightModeNavigationTest {
                             mapSurface = surface,
                             nightModeOverrideState = if (hoisted) override else null,
                             isLiveSharing = false,
-                            canShareLive = false,
                             participantCount = 0,
                             userLabel = "Tester",
                             onSearch = {},
-                            onStartLiveShare = {},
-                            onHideMeNow = {},
-                            onOpenLiveShareDetails = {},
                             onRecenter = {},
                             moreMenuEntries = emptyList(),
                         )
@@ -194,13 +190,9 @@ class MapNightModeNavigationTest {
                 MapHome(
                     mapSurface = surface,
                     isLiveSharing = false,
-                    canShareLive = false,
                     participantCount = 0,
                     userLabel = "Tester",
                     onSearch = {},
-                    onStartLiveShare = {},
-                    onHideMeNow = {},
-                    onOpenLiveShareDetails = {},
                     onRecenter = {},
                     moreMenuEntries = emptyList(),
                 )

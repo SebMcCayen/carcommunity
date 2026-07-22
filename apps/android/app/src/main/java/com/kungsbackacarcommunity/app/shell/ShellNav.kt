@@ -228,3 +228,69 @@ object LiveShareToggle {
             else -> LiveShareAction.OpenScreen
         }
 }
+
+/**
+ * Which rows the live-share manage sheet ([com.kungsbackacarcommunity.app.shell.LiveSharePopup])
+ * shows for a given session state. Pulled out as pure data so the "everything
+ * still reachable" guarantee can be unit-tested without Compose.
+ *
+ * @property showStop the prominent Stop-sharing action (only when a session is
+ *   running AND a stop handler is wired — see [LiveManageSheet.actions]).
+ * @property showHideNow the immediate privacy escape hatch ("Hide me now").
+ * @property showStart the one-tap start action (flag on, not sharing).
+ * @property showUnavailableNotice the "live location sharing isn't available
+ *   right now" fallback text, shown when starting is blocked by the
+ *   LIVE_LOCATION feature flag being OFF. This is a FLAG gate, not a membership
+ *   gate — sharing your own position is free — so the notice must not claim a
+ *   membership is required.
+ * @property showAudienceEntry the "More options" / "Who can see me" row into the
+ *   full live-location screen, where the caller sees and manages who can see
+ *   them. Reachable in every state while the sheet is up.
+ */
+data class LiveManageRows(
+    val showStop: Boolean,
+    val showHideNow: Boolean,
+    val showStart: Boolean,
+    val showUnavailableNotice: Boolean,
+    val showAudienceEntry: Boolean,
+)
+
+/**
+ * The single source of truth for what the live-share manage sheet exposes.
+ *
+ * This is the surface the map's centre live-control (bottom-bar STOP/live disc)
+ * opens while sharing, and it is where the two capabilities that used to live
+ * ONLY behind the right-side broadcast button now live: **Hide me now** and
+ * **Who can see me** (the audience screen, via [showAudienceEntry]). Both are
+ * reachable for the whole life of a session, so removing that right-side button
+ * loses neither.
+ */
+object LiveManageSheet {
+    /**
+     * @param isSharing an active session is running.
+     * @param canShareLive the caller may START (the LIVE_LOCATION flag is on).
+     * @param hasStop a Stop handler is wired. The shell's centre-control sheet
+     *   passes one (so Stop leads the sheet); turn-by-turn navigation reuses the
+     *   same sheet WITHOUT a stop handler, keeping stopping to the map's single
+     *   stop affordance there.
+     */
+    fun actions(
+        isSharing: Boolean,
+        canShareLive: Boolean,
+        hasStop: Boolean,
+    ): LiveManageRows =
+        LiveManageRows(
+            // Stop only while a session runs and the caller wired a stop handler.
+            showStop = isSharing && hasStop,
+            // Hide-me-now is the never-gated privacy escape; offered while sharing.
+            showHideNow = isSharing,
+            // One-tap start only when idle and the LIVE_LOCATION flag is on.
+            showStart = !isSharing && canShareLive,
+            // Idle + flag off → explain it's unavailable instead of offering
+            // start. This is flag-gated, NOT member-gated (own sharing is free).
+            showUnavailableNotice = !isSharing && !canShareLive,
+            // "Who can see me" (the full live-location screen) is ALWAYS reachable,
+            // in every state — it is the relocated audience-management entry point.
+            showAudienceEntry = true,
+        )
+}

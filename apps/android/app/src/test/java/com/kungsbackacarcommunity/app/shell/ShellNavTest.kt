@@ -100,6 +100,62 @@ class ShellNavTest {
         )
     }
 
+    // --- Live-share manage sheet rows -----------------------------------
+    // Guards the promise made when the map's right-side broadcast button was
+    // removed: while a session runs, Stop, Hide me now, and Who can see me
+    // (the audience screen) are ALL reachable from the sheet the centre live
+    // control opens.
+
+    @Test
+    fun `manage sheet while sharing exposes stop, hide-now and audience`() {
+        val rows =
+            LiveManageSheet.actions(isSharing = true, canShareLive = true, hasStop = true)
+        // The three relocated capabilities are all present.
+        assertEquals(true, rows.showStop)
+        assertEquals(true, rows.showHideNow)
+        assertEquals(true, rows.showAudienceEntry)
+        // Not a start surface while already sharing.
+        assertEquals(false, rows.showStart)
+        assertEquals(false, rows.showUnavailableNotice)
+    }
+
+    @Test
+    fun `manage sheet without a stop handler still keeps hide-now and audience`() {
+        // Turn-by-turn navigation reuses the sheet WITHOUT wiring stop, so no
+        // Stop row appears there — but the privacy controls must not vanish.
+        val rows =
+            LiveManageSheet.actions(isSharing = true, canShareLive = true, hasStop = false)
+        assertEquals(false, rows.showStop)
+        assertEquals(true, rows.showHideNow)
+        assertEquals(true, rows.showAudienceEntry)
+    }
+
+    @Test
+    fun `manage sheet when idle and permitted offers start plus the audience entry`() {
+        val rows =
+            LiveManageSheet.actions(isSharing = false, canShareLive = true, hasStop = true)
+        assertEquals(true, rows.showStart)
+        assertEquals(false, rows.showHideNow)
+        assertEquals(false, rows.showStop)
+        assertEquals(false, rows.showUnavailableNotice)
+        // Who-can-see-me is reachable in every state, sharing or not.
+        assertEquals(true, rows.showAudienceEntry)
+    }
+
+    @Test
+    fun `manage sheet when idle and flag off shows the unavailable notice and audience only`() {
+        // canShareLive false = LIVE_LOCATION flag OFF (flag-gated, NOT
+        // member-gated). The sheet must explain it's unavailable, never claim a
+        // membership is required.
+        val rows =
+            LiveManageSheet.actions(isSharing = false, canShareLive = false, hasStop = true)
+        assertEquals(false, rows.showStart)
+        assertEquals(true, rows.showUnavailableNotice)
+        assertEquals(false, rows.showStop)
+        assertEquals(false, rows.showHideNow)
+        assertEquals(true, rows.showAudienceEntry)
+    }
+
     // --- MapSurface traffic toggle (stub wiring) -------------------------
 
     @Test

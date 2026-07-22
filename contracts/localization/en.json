@@ -121,7 +121,8 @@
     "accessLimitedByModeration": "Your access may be limited if you are suspended or break the rules.",
     "shareOwnFree": "You can share your own position for free.",
     "viewOthersMemberOnly": "An active membership is required to view other members' live locations.",
-    "memberRequiredToShare": "An active membership is required to share your live location. You can always stop sharing."
+    "memberRequiredToShare": "An active membership is required to share your live location. You can always stop sharing.",
+    "shareUnavailable": "Live location sharing isn't available right now."
   },
   "onboarding": {
     "title": "Welcome",
@@ -1119,7 +1120,8 @@
     "searchExpand": "Search",
     "liveTitle": "Live location",
     "liveClose": "Close live location",
-    "liveDetails": "More options"
+    "liveDetails": "More options",
+    "liveControls": "Live location controls"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",

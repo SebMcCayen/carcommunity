@@ -246,6 +246,7 @@ import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
+import com.kungsbackacarcommunity.app.shell.LiveSharePopup
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.Incident
 import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
@@ -1214,6 +1215,18 @@ fun AuthenticatedApp(
             // both the map's broadcast Start and the "+" Create → Single session,
             // so the duration is always chosen when a Single session is started.
             var showSingleSessionStart by rememberSaveable { mutableStateOf(false) }
+
+            // Whether the live-share MANAGE sheet is shown. Raised by the centre
+            // live control while a session runs (the bottom bar's live disc), it is
+            // the new home for the three session controls that the removed
+            // right-side broadcast button used to own: Stop, Hide me now, and Who
+            // can see me (the audience screen). Only meaningful while sharing, so
+            // it is force-closed the instant a session ends (expiry, sign-out, or
+            // Stop from inside the sheet) by the effect below.
+            var liveManageOpen by remember { mutableStateOf(false) }
+            LaunchedEffect(isSharing) {
+                if (!isSharing) liveManageOpen = false
+            }
 
             // Ask for the session duration before starting: raise the picker
             // dialog when a start is actually possible, otherwise fall back to
@@ -2341,8 +2354,12 @@ fun AuthenticatedApp(
                                     // page in front must not keep intercepting Back
                                     // or hold its transient UI open.
                                     covered = mapCover != MapCover.None,
+                                    // Only drives the map puck now: the map home has
+                                    // no live-share control of its own. Starting,
+                                    // stopping, Hide-me-now and the audience screen
+                                    // are reached through the centre live control
+                                    // (see the shell's live-manage sheet below).
                                     isLiveSharing = isSharing,
-                                    canShareLive = canShareLive,
                                     participantCount = mapParticipantUids.size,
                                     avatarUrl = mapAvatarUrl,
                                     userLabel =
@@ -2350,30 +2367,6 @@ fun AuthenticatedApp(
                                     // Tapping "Where to?" opens the address
                                     // search + directions overlay.
                                     onSearch = { navSearchOpen = true },
-                                    // The broadcast control opens the transparent
-                                    // live-location popup (over the map, no scrim)
-                                    // with the session options, wired to the same
-                                    // LiveLocationCoordinator as the full screen.
-                                    // Broadcast Start no longer picks a
-                                    // duration inline: it raises the
-                                    // single-session start flow (the 1h/2h/4h
-                                    // picker), shared with the "+" Create →
-                                    // Single session. Unwired (no coordinator):
-                                    // fall back to the live screen rather than
-                                    // silently no-op'ing.
-                                    onStartLiveShare = { requestStartSingleSession() },
-                                    onHideMeNow = {
-                                        val c = liveLocationCoordinator
-                                        if (c != null) {
-                                            scope.launch { c.hideMeNow() }
-                                        } else {
-                                            openLiveShareFallback()
-                                        }
-                                        BackgroundLocationController.stop(context)
-                                    },
-                                    // "More options" opens the full live screen;
-                                    // unavailable (no Firebase) → a snackbar.
-                                    onOpenLiveShareDetails = { openLiveShareFallback() },
                                     // The layers control opens the map-layers
                                     // popup (traffic / day-night / 3D toggles),
                                     // handled internally by MapHome against the
@@ -2768,9 +2761,15 @@ fun AuthenticatedApp(
                                     }
                                 },
                                 // While a session runs the centre "+" becomes the
-                                // STOP sign - the one way to end a session.
+                                // live-session disc: tapping it raises the manage
+                                // sheet (Stop / Hide me now / Who can see me) rather
+                                // than stopping outright, so the two privacy
+                                // controls that lived only on the removed right-side
+                                // broadcast button are reachable here. Stop is the
+                                // sheet's prominent first action, so ending a
+                                // session is still one flow through this one control.
                                 isSharing = isSharing,
-                                onStopLiveShare = { stopLiveShare() },
+                                onManageLiveShare = { liveManageOpen = true },
                             )
                         }
                     }
@@ -2870,6 +2869,38 @@ fun AuthenticatedApp(
                     SingleSessionStartDialog(
                         onStart = { duration -> startSingleSession(duration) },
                         onDismiss = { showSingleSessionStart = false },
+                    )
+                }
+
+                // Live-share MANAGE sheet: the transparent [LiveSharePopup] the
+                // centre live control raises while a session runs. This is where
+                // the two capabilities the removed right-side broadcast button used
+                // to solely own now live — Hide me now, and Who can see me (the
+                // full LiveLocationScreen via "More options") — alongside a
+                // prominent Stop. Rendered at the shell (not in MapHome) so it is
+                // reachable from every tab the bottom bar is on, and gated on
+                // isSharing so it only ever appears for a live session. Wired to
+                // the SAME stop/hide/details handlers as before, so nothing about
+                // what these actions do changed — only where they are reached.
+                if (liveManageOpen && isSharing) {
+                    LiveSharePopup(
+                        isSharing = true,
+                        canShareLive = canShareLive,
+                        // Unused while sharing (no Start row), kept non-null for the
+                        // shared signature.
+                        onStart = {},
+                        onStop = { stopLiveShare() },
+                        onHideMeNow = {
+                            val c = liveLocationCoordinator
+                            if (c != null) {
+                                scope.launch { c.hideMeNow() }
+                            } else {
+                                openLiveShareFallback()
+                            }
+                            BackgroundLocationController.stop(context)
+                        },
+                        onOpenDetails = { openLiveShareFallback() },
+                        onDismiss = { liveManageOpen = false },
                     )
                 }
 
@@ -2981,20 +3012,29 @@ internal val ShellBottomBarHeight = 64.dp
  * The 5-tab bottom navigation; Map is the default, highlighted home tab.
  *
  * The centre item is dual-purpose: a "+" that raises the create chooser, and —
- * while [isSharing] — the STOP sign that ends the running live session
- * ([onStopLiveShare]). It is the app's only stop affordance.
+ * while [isSharing] — the live-session disc that raises the live-share manage
+ * sheet ([onManageLiveShare]). That sheet is the single home for the whole
+ * session's controls — Stop (its prominent first action), Hide me now, and Who
+ * can see me — so this control still owns ending a session, and the two privacy
+ * capabilities that used to live only on the map's now-removed right-side
+ * broadcast button are reachable through it.
  *
- * `internal` rather than private so the "+"→STOP swap can be tested against this
- * composable directly: the swap needs a RUNNING session, which the whole-shell
- * test cannot reach (it renders the no-Firebase configuration, where there is no
- * live-location repository and `isSharing` is always false).
+ * The disc keeps its error-red fill while sharing (an active session drawing
+ * attention); tapping it opens the sheet rather than stopping outright, so
+ * stopping is one flow-through-one-control away instead of a single tap. The
+ * content description reflects that it opens the live controls.
+ *
+ * `internal` rather than private so the "+"→live-disc swap can be tested against
+ * this composable directly: the swap needs a RUNNING session, which the
+ * whole-shell test cannot reach (it renders the no-Firebase configuration, where
+ * there is no live-location repository and `isSharing` is always false).
  */
 @Composable
 internal fun ShellBottomBar(
     selected: ShellTab,
     onSelect: (ShellTab) -> Unit,
     isSharing: Boolean,
-    onStopLiveShare: () -> Unit,
+    onManageLiveShare: () -> Unit,
 ) {
     // 50%-alpha surface container so the map shows through the bar; icon-only
     // items (no labels) keep the tabs compact over the semi-transparent map.
@@ -3026,15 +3066,16 @@ internal fun ShellBottomBar(
             icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
             label = null,
         )
-        // The centre action is a "+" that starts a session, and a STOP sign while
-        // one RUNS — one control for the session's whole life, so the way out is
-        // exactly where the way in was. Stopping raises the save/discard summary
-        // (via the isSharing effect), which is where the "save or delete the
-        // data" choice is made; this control does not ask on its own.
-        // It is the ONLY stop affordance: the live popup's Stop row was removed.
+        // The centre action is a "+" that starts a session, and — while one RUNS —
+        // the live-session disc that raises the manage sheet: one control for the
+        // session's whole life, so the way out is exactly where the way in was.
+        // The sheet leads with Stop (which raises the save/discard summary via the
+        // isSharing effect, where the "save or delete the data" choice is made);
+        // it also carries Hide me now and Who can see me, the two controls the
+        // map's removed right-side broadcast button used to own.
         NavigationBarItem(
             selected = !isSharing && selected == ShellTab.Create,
-            onClick = { if (isSharing) onStopLiveShare() else onSelect(ShellTab.Create) },
+            onClick = { if (isSharing) onManageLiveShare() else onSelect(ShellTab.Create) },
             // Standout action: a glyph on a filled disc so it reads as a distinct
             // button rather than another tab, in both light and dark. The disc
             // turns error-red while sharing so the stop affordance is
@@ -3067,9 +3108,14 @@ internal fun ShellBottomBar(
                 ) {
                     Icon(
                         if (isSharing) Icons.Filled.Stop else Icons.Filled.Add,
+                        // While sharing the glyph stays the recognisable stop
+                        // square on the red disc, but tapping now opens the manage
+                        // sheet (whose first action is Stop), so the label says
+                        // "live location controls" rather than "stop" — honest for
+                        // TalkBack about what the tap does.
                         contentDescription =
                             stringResource(
-                                if (isSharing) R.string.liveLocation_stop else R.string.shell_tabCreate,
+                                if (isSharing) R.string.shell_liveControls else R.string.shell_tabCreate,
                             ),
                         tint =
                             if (isSharing) {
