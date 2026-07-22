@@ -45,7 +45,16 @@ sealed interface RecordingState {
         val distanceMeters: Double = 0.0,
     ) : RecordingState
 
-    /** Recording stopped; the explicit save/discard prompt is shown. */
+    /**
+     * Recording stopped; the save prompt is raised. The MANUAL recorder
+     * ([RecordDriveScreen]) shows explicit Save/Discard here and WAITS for the
+     * user. The LIVE session ([SingleSessionRecording]) also lands here on stop,
+     * but the UI immediately [DriveRecordingCoordinator.autoSave]s from this
+     * state — moving on to [SavedPendingChoice] — so the summary asks KEEP/DELETE
+     * over an already-saved drive rather than forcing a Save. A recreation that
+     * cancels an in-flight auto-save restores THIS state so the auto-save
+     * re-fires (the drive is never left unsaved).
+     */
     data class PromptSave(
         val pointCount: Int,
         val elapsedMillis: Long,
@@ -54,8 +63,37 @@ sealed interface RecordingState {
     /** The save callable is in flight. */
     data object Saving : RecordingState
 
-    /** The drive was saved. */
+    /** The drive was saved (terminal for the MANUAL recorder). */
     data object Saved : RecordingState
+
+    /**
+     * A LIVE session ended and its drive was AUTO-saved; the user is now asked
+     * whether to KEEP it or DELETE it. This is the auto-save flow's replacement
+     * for the old forced Save/Discard prompt: the drive is already persisted (so
+     * it can never be lost by missing the save), and the choice is only whether
+     * to keep the just-saved ride or remove it again.
+     *
+     * @property rideId the id of the ride the `drives-save` callable created, so
+     *   DELETE can remove exactly that ride via `drives-delete`.
+     * @property elapsedMillis the frozen recording duration, for the summary.
+     * @property deleteFailed true after a delete attempt failed, so the prompt
+     *   re-shows with a delete-error line and the choice still stands (the drive
+     *   is still safely saved).
+     */
+    data class SavedPendingChoice(
+        val rideId: String,
+        val elapsedMillis: Long,
+        val deleteFailed: Boolean = false,
+    ) : RecordingState
+
+    /** The `drives-delete` callable is in flight (deleting the auto-saved ride). */
+    data object Deleting : RecordingState
+
+    /** The auto-saved drive was KEPT (terminal for the live flow). */
+    data object Kept : RecordingState
+
+    /** The auto-saved drive was DELETED again (terminal for the live flow). */
+    data object Deleted : RecordingState
 
     /** The drive was explicitly discarded — nothing was stored. */
     data object Discarded : RecordingState

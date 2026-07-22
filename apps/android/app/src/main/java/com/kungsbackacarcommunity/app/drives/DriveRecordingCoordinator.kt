@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.drives
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,12 +12,18 @@ import kotlinx.coroutines.launch
 
 /**
  * Orchestrates a single drive recording lifecycle (Phase 12 slice 12, write
- * side): start → record → explicit save/discard prompt → save via the
- * `drives-save` callable. Pure Kotlin so it is unit-testable with a fake
- * repository; the screen owns location plumbing and feeds fixes in.
+ * side): start → record → stop → persist via the `drives-save` callable. Pure
+ * Kotlin so it is unit-testable with a fake repository; the screen owns location
+ * plumbing and feeds fixes in.
  *
- * The explicit-save product rule lives here: [stop] only opens the prompt; a
- * drive is persisted only when [save] is called, and [discard] stores nothing.
+ * Two end flows share this one coordinator:
+ * - the MANUAL recorder ([RecordDriveScreen]): [stop] opens an EXPLICIT prompt
+ *   and a drive is persisted only when [save] is called ([RecordingState.Saved]);
+ *   [discard] stores nothing. This is the product's explicit-save rule.
+ * - the LIVE session ([SingleSessionRecording]): [stop] opens the same prompt but
+ *   the UI immediately [autoSave]s it, so the drive is persisted the instant the
+ *   session ends and can never be lost by a missed Save; the summary then asks
+ *   KEEP ([keep]) or DELETE ([delete]) over the already-saved ride.
  */
 class DriveRecordingCoordinator(
     private val repository: DrivesRepository,
@@ -44,6 +51,17 @@ class DriveRecordingCoordinator(
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
 
     private var recorder: DriveRecorder? = null
+
+    /**
+     * Handle to the background route upload kicked off after a successful save,
+     * so the live-session [delete] can JOIN it before removing the drive.
+     * `drives-delete` deletes the whole `rideRoutes/{uid}/{rideId}/` prefix and
+     * then the doc; a slow upload that completed AFTER that delete would recreate
+     * `route.bin` orphaned. Joining first makes delete wait the upload out so the
+     * blobs it removes are the final ones. Null when nothing is (or was)
+     * uploading (config-less build, summary-only save, or before the first save).
+     */
+    private var uploadJob: Job? = null
 
     /**
      * The wall-clock moment recording actually STOPPED, captured once in [stop].
@@ -155,7 +173,7 @@ class DriveRecordingCoordinator(
             this.recorder = null
             stoppedAtMillis = null
             stateFlow.value = RecordingState.Saved
-            uploadRoute(result, points)
+            uploadJob = startRouteUpload(result, points)
         } catch (cancellation: CancellationException) {
             // Cancellation (navigation away / scope cancellation) is not a save
             // failure; restore the prompt so a retry is possible if the scope
@@ -180,23 +198,127 @@ class DriveRecordingCoordinator(
     }
 
     /**
-     * Kicks off the route-file upload AFTER a successful save, on the
-     * process-scoped [uploadScope] so it survives the prompt leaving the screen.
+     * Live-session end: AUTO-SAVE the just-finished recording, so a drive can
+     * never be lost by the user missing an explicit Save. Unlike the manual
+     * [save] (which lands in the terminal [RecordingState.Saved]), this lands in
+     * [RecordingState.SavedPendingChoice] carrying the created rideId, so the
+     * end-of-session summary can offer KEEP or DELETE over an already-persisted
+     * drive rather than the forced Save/Discard.
      *
-     * This runs as a fire-and-forget SECOND step, deliberately decoupled from
-     * the save's success: the drive doc already exists and the UI is already in
-     * [RecordingState.Saved], so the upload must never block or reverse that.
-     * The runner retries transient failures internally; if it still fails the
-     * drive keeps its (empty) route reference and the reader degrades to "route
-     * unavailable" — a tolerated state, not a broken save. A no-op when there is
-     * no uploader (config-less build), no route path (defensive), or no points
-     * (a summary-only save has nothing to upload).
+     * Valid from [RecordingState.PromptSave] (the state [stop] raises) or a prior
+     * [RecordingState.Failed] (a retry) — the same two states the manual [save]
+     * accepts — so the caller can auto-trigger it the moment the prompt opens and
+     * retry it after a transient failure. The recorder is deliberately NOT
+     * released here (the summary still shows the client-side distance/speed
+     * estimate, and a retry needs the points); [keep] / [delete] / [discard]
+     * release it. On failure → [RecordingState.Failed]; cancellation restores
+     * [RecordingState.PromptSave] so the auto-trigger re-fires after a recreation.
      */
-    private fun uploadRoute(result: DriveSaveResult, points: List<RecordedPoint>) {
-        val runner = routeUploadRunner ?: return
-        val routePath = result.routePath ?: return
-        if (points.isEmpty()) return
-        uploadScope.launch { runner.upload(routePath, points) }
+    suspend fun autoSave(title: String?) {
+        val recorder = recorder ?: return
+        val resumable =
+            stateFlow.value is RecordingState.PromptSave ||
+                stateFlow.value is RecordingState.Failed
+        if (!resumable) return
+
+        val endedAt = stoppedAtMillis ?: clock()
+        stateFlow.value = RecordingState.Saving
+        try {
+            val result = repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
+            // Snapshot only when an upload can actually run (skips the ~20k-point
+            // copy on a summary-only / config-less save). Taken before any release.
+            val points =
+                if (routeUploadRunner != null && result.routePath != null) {
+                    recorder.snapshot()
+                } else {
+                    emptyList()
+                }
+            uploadJob = startRouteUpload(result, points)
+            stateFlow.value =
+                RecordingState.SavedPendingChoice(
+                    rideId = result.rideId,
+                    elapsedMillis = recorder.elapsedMillis(endedAt),
+                )
+        } catch (cancellation: CancellationException) {
+            // A recreation cancels the composition-scoped auto-save; this is not a
+            // failure. Restore the prompt (recorder intact) so the auto-trigger
+            // re-fires and the drive is still saved, then rethrow.
+            stateFlow.value =
+                RecordingState.PromptSave(
+                    pointCount = recorder.pointCount,
+                    elapsedMillis = recorder.elapsedMillis(endedAt),
+                )
+            throw cancellation
+        } catch (failure: Exception) {
+            stateFlow.value =
+                RecordingState.Failed(
+                    pointCount = recorder.pointCount,
+                    elapsedMillis = recorder.elapsedMillis(endedAt),
+                    code = (failure as? DriveSaveException)?.code,
+                )
+        }
+    }
+
+    /**
+     * KEEP the auto-saved drive: it is already persisted, so this simply resolves
+     * the prompt to the terminal [RecordingState.Kept] and releases the recorder.
+     * Valid only from [RecordingState.SavedPendingChoice].
+     */
+    fun keep() {
+        if (stateFlow.value !is RecordingState.SavedPendingChoice) return
+        recorder = null
+        stateFlow.value = RecordingState.Kept
+    }
+
+    /**
+     * DELETE the just-auto-saved drive again via the `drives-delete` callable
+     * (the SavedPendingChoice's Delete). WAITS for the background route upload to
+     * settle first ([uploadJob].join()) so the delete removes the just-uploaded
+     * `route.bin`/preview rather than racing a slow upload that would recreate
+     * them after the doc is gone (`drives-delete` clears the whole
+     * `rideRoutes/{uid}/{rideId}/` prefix then the doc). On success → the terminal
+     * [RecordingState.Deleted]; on failure → back to
+     * [RecordingState.SavedPendingChoice] with `deleteFailed` set — the drive
+     * stays safely saved and the choice still stands. Valid only from
+     * [RecordingState.SavedPendingChoice]; cancellation restores it too.
+     */
+    suspend fun delete() {
+        val current = stateFlow.value as? RecordingState.SavedPendingChoice ?: return
+        stateFlow.value = RecordingState.Deleting
+        try {
+            // Let the route upload finish before removing the blobs, so it cannot
+            // recreate route.bin after drives-delete cleared the prefix.
+            uploadJob?.join()
+            repository.deleteDrive(current.rideId)
+            recorder = null
+            uploadJob = null
+            stateFlow.value = RecordingState.Deleted
+        } catch (cancellation: CancellationException) {
+            stateFlow.value = current.copy(deleteFailed = true)
+            throw cancellation
+        } catch (failure: Exception) {
+            stateFlow.value = current.copy(deleteFailed = true)
+        }
+    }
+
+    /**
+     * Kicks off the route-file upload AFTER a successful save, on the
+     * process-scoped [uploadScope] so it survives the prompt leaving the screen,
+     * returning its [Job] so the live-session [delete] can join it. Runs as a
+     * fire-and-forget SECOND step, deliberately decoupled from the save's success:
+     * the drive doc already exists and the UI already shows the terminal / choice
+     * state, so the upload must never block or reverse that. The runner retries
+     * transient failures internally; if it still fails the drive keeps its (empty)
+     * route reference and the reader degrades to "route unavailable" — a tolerated
+     * state, not a broken save. Returns null (no job) when there is no uploader
+     * (config-less build), no route path (defensive), or no points (a summary-only
+     * save has nothing to upload).
+     */
+    private fun startRouteUpload(result: DriveSaveResult, points: List<RecordedPoint>): Job? {
+        val runner = routeUploadRunner ?: return null
+        val routePath = result.routePath ?: return null
+        if (points.isEmpty()) return null
+        return uploadScope.launch { runner.upload(routePath, points) }
     }
 
     /**

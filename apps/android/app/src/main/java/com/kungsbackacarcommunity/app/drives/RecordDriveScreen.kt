@@ -245,6 +245,14 @@ fun RecordDriveScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                // Live-session auto-save states (SingleSessionRecording): the
+                // manual recorder never enters them, so render nothing.
+                is RecordingState.SavedPendingChoice,
+                RecordingState.Deleting,
+                RecordingState.Kept,
+                RecordingState.Deleted,
+                -> Unit
             }
 
             TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
