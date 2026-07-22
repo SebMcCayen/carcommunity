@@ -1032,6 +1032,7 @@
     <string name="shell_liveTitle">Liveplats</string>
     <string name="shell_liveClose">Stäng liveplats</string>
     <string name="shell_liveDetails">Fler alternativ</string>
+    <string name="shell_liveControls">Kontroller för liveplats</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

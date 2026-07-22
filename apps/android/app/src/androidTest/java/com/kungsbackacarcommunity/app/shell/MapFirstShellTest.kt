@@ -371,15 +371,16 @@ class MapFirstShellTest {
         // the "Where to?" hint is hidden until the button is tapped.
         composeTestRule.onNodeWithTag(MAP_HOME_SEARCH_TAG).assertExists()
         composeTestRule.onNodeWithText(str(R.string.shell_searchHint)).assertDoesNotExist()
-        // Floating controls: broadcast toggle off + layers + compass + recenter.
-        // (Order is pinned separately by rightSideControls_areOrderedReportFirst.)
+        // Floating controls: layers + compass + recenter. (There is no longer a
+        // right-side live-share control — its capabilities moved to the centre
+        // live control's manage sheet. Order is pinned separately by
+        // rightSideControls_areOrderedReportFirst.)
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         // Exercise the compass's tap action and prove it doesn't crash the
         // stubbed shell — matching how the other controls are driven. What the
         // tap DOES is asserted by compassControl_recentresOnTheUserAndResetsNorth.
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveShareOff)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()
     }
@@ -439,13 +440,9 @@ class MapFirstShellTest {
                     mapSurface = surface,
                     incidentReportingEnabled = incidentReportingEnabled,
                     isLiveSharing = false,
-                    canShareLive = false,
                     participantCount = 0,
                     userLabel = "Test",
                     onSearch = {},
-                    onStartLiveShare = {},
-                    onHideMeNow = {},
-                    onOpenLiveShareDetails = {},
                     onRecenter = {},
                     moreMenuEntries = emptyList(),
                     trafikverketDataShown = trafikverketDataShown,
@@ -509,49 +506,47 @@ class MapFirstShellTest {
     fun rightSideControls_areOrderedReportFirst() {
         setMapHome(trafikverketDataShown = false, incidentReportingEnabled = true)
         val report = topOf(MAP_HOME_REPORT_TAG)
-        val live = topOf(MAP_HOME_LIVE_TAG)
         val layers = topOf(MAP_HOME_LAYERS_TAG)
         val compass = topOf(MAP_HOME_COMPASS_TAG)
         val recenter = topOfDescribed(str(R.string.shell_recenter))
         val chat = topOfDescribed(str(R.string.shell_chat))
 
-        assertTrue("report must be above live-location", report < live)
-        assertTrue("live-location must be above layers", live < layers)
+        // The right-side live-share control was removed, so the stack is now
+        // report → layers → compass → recenter → chat.
+        assertTrue("report must be above layers", report < layers)
         assertTrue("layers must be above the compass", layers < compass)
         assertTrue("the compass must be above recenter", compass < recenter)
         assertTrue("recenter must be above chat", recenter < chat)
         // Nothing sits between the compass and the my-location control.
-        listOf(report, live, layers, chat).forEach {
+        listOf(report, layers, chat).forEach {
             assertFalse("no control may sit between compass and recenter", it in compass..recenter)
         }
     }
 
     /**
-     * With incident reporting unavailable the stack simply STARTS at
-     * live-location: no gap, no placeholder where the report control would be.
-     * Asserted as "live-location is now the topmost control", which a stray
-     * spacer or an empty reserved slot would break.
+     * With incident reporting unavailable the stack simply STARTS at the layers
+     * control: no gap, no placeholder where the report control would be.
+     * Asserted as "layers is now the topmost control" AND that it sits exactly
+     * one slot above the compass, which a stray spacer or an empty reserved slot
+     * would break.
      */
     @Test
-    fun rightSideControls_leadWithLiveShare_whenReportingUnavailable() {
+    fun rightSideControls_leadWithLayers_whenReportingUnavailable() {
         setMapHome(trafikverketDataShown = false, incidentReportingEnabled = false)
         composeTestRule.onNodeWithTag(MAP_HOME_REPORT_TAG).assertDoesNotExist()
-        val live = topOf(MAP_HOME_LIVE_TAG)
         val layers = topOf(MAP_HOME_LAYERS_TAG)
         val compass = topOf(MAP_HOME_COMPASS_TAG)
-        assertTrue("live-location must lead the stack", live < layers)
-        assertTrue("layers must be above the compass", layers < compass)
-        // The stack tightened up rather than leaving a hole: live-location sits
-        // exactly ONE slot above layers — one control (KccSpacing.s12) plus the
+        assertTrue("layers must lead the stack", layers < compass)
+        // The stack tightened up rather than leaving a hole: layers sits exactly
+        // ONE slot above the compass — one control (KccSpacing.s12) plus the
         // Column's spacing (KccSpacing.s3). Asserted against those tokens
-        // directly, rather than by comparing two inter-control distances, so the
-        // failure message points at the real invariant: a stray spacer or a
-        // reserved empty slot widens this gap and nothing else does.
+        // directly, so the failure message points at the real invariant: a stray
+        // spacer or a reserved empty slot widens this gap and nothing else does.
         val oneSlot = KccSpacing.s12.value + KccSpacing.s3.value
         assertEquals(
             "no gap may be left where the report control would have been",
             oneSlot.toDouble(),
-            (layers - live).toDouble(),
+            (compass - layers).toDouble(),
             1.0,
         )
     }
@@ -612,37 +607,63 @@ class MapFirstShellTest {
             .assertDoesNotExist()
     }
 
+    /**
+     * The live-share MANAGE sheet — the [LiveSharePopup] the centre live control
+     * raises while a session runs — must expose all three session controls, so
+     * removing the map's right-side broadcast button loses none of them: Stop
+     * (the prominent action), Hide me now (the privacy escape hatch), and "More
+     * options" (the audience / "who can see me" screen). Rendered directly here
+     * because a running session cannot be reached from the no-Firebase shell.
+     */
     @Test
-    fun liveControl_opensAndDismissesLivePopup() {
-        setShell()
-        // The broadcast control is present. Select by its stable test tag rather
-        // than its a11y label, which is free to change as the UX evolves.
-        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).assertExists()
-        // Tapping it opens the transparent live-location popup over the map
-        // (rather than toggling sharing directly).
-        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_TAG).performClick()
+    fun liveManageSheet_whileSharing_exposesStopHideAndAudience() {
+        var stopped = 0
+        composeTestRule.setContent {
+            KccTheme {
+                LiveSharePopup(
+                    isSharing = true,
+                    canShareLive = true,
+                    onStart = {},
+                    onStop = { stopped += 1 },
+                    onHideMeNow = {},
+                    onOpenDetails = {},
+                    onDismiss = {},
+                )
+            }
+        }
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_liveTitle)).assertIsDisplayed()
-        // Sharing your OWN location is FREE (LIVE_LOCATION flag on in DEFAULTS,
-        // not member-gated). Even in the no-Firebase config (not an active
-        // member), the popup shows the Start control — NOT the membership teaser,
-        // which is reserved for VIEWING others.
-        composeTestRule
-            .onNodeWithText(str(R.string.liveLocation_start))
-            .assertIsDisplayed()
-        // The 1h/2h/4h duration picker has MOVED off this broadcast control to
-        // the single-session start flow, so it is no longer shown in the popup.
-        composeTestRule
-            .onNodeWithText(str(R.string.liveLocation_durationLabel))
-            .assertDoesNotExist()
-        composeTestRule
-            .onNodeWithText(str(R.string.liveLocation_memberRequiredToShare))
-            .assertDoesNotExist()
-        // The map stays visible behind the transparent popup (no navigation).
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
-        // Closing dismisses the popup.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_liveClose)).performClick()
-        composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertDoesNotExist()
+        // All three relocated controls are present.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_stop)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_hideNow)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertIsDisplayed()
+        // While sharing there is no Start row.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_start)).assertDoesNotExist()
+        // The prominent Stop action drives the wired handler.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_stop)).performClick()
+        composeTestRule.runOnIdle { assertEquals(1, stopped) }
+    }
+
+    /**
+     * The SAME sheet without a stop handler (turn-by-turn navigation's reuse)
+     * shows no Stop row, but must keep the two privacy controls reachable.
+     */
+    @Test
+    fun liveManageSheet_withoutStopHandler_keepsHideAndAudience() {
+        composeTestRule.setContent {
+            KccTheme {
+                LiveSharePopup(
+                    isSharing = true,
+                    canShareLive = true,
+                    onStart = {},
+                    onHideMeNow = {},
+                    onOpenDetails = {},
+                    onDismiss = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_stop)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_hideNow)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertIsDisplayed()
     }
 
     @Test

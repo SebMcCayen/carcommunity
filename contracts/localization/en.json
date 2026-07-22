@@ -1112,7 +1112,8 @@
     "searchExpand": "Search",
     "liveTitle": "Live location",
     "liveClose": "Close live location",
-    "liveDetails": "More options"
+    "liveDetails": "More options",
+    "liveControls": "Live location controls"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",

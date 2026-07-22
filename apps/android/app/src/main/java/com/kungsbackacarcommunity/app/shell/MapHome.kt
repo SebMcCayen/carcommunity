@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -106,28 +107,11 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
  * the surface can reflect live-sharing state on the puck.
  *
  * @param isLiveSharing whether the live-location session is currently sharing —
- *   turns the broadcast control GREEN and is pushed to the surface so the puck
- *   can signal live sharing (wired to the real live-location state). Tapping the
- *   broadcast control opens a transparent [Popup] *over* the map (no dimming
- *   scrim, same idiom as the layers popup) presenting the live-location options
- *   rather than toggling sharing directly.
- * @param canShareLive whether the caller may START a session — i.e. whether the
- *   LIVE_LOCATION feature flag is on. This is NOT a membership check: sharing
- *   your OWN position is FREE (backend parity — live-startSession requires only
- *   an authenticated, non-suspended caller), and only VIEWING others is
- *   member-gated. When false the popup shows a fallback teaser instead of the
- *   start control. Hide-me-now is governed by [isLiveSharing] (not this flag), so
- *   it appears only while a session is already active; the details entry point
- *   stays reachable regardless.
- * @param onStartLiveShare request starting a Single (solo live-sharing) session;
- *   only offered when [canShareLive]. The 1h/2h/4h duration choice is NOT made
- *   here anymore — this hands off to the single-session start flow (the same one
- *   the "+" Create → Single session raises), which is where the duration is
- *   picked. Keeps the broadcast control a one-tap "start sharing" affordance.
- * @param onHideMeNow privacy stop — remove my position now (wired to
- *   LiveLocationCoordinator.hideMeNow); offered while sharing.
- * @param onOpenLiveShareDetails open the full LiveLocationScreen for the
- *   complete controls + privacy details.
+ *   pushed to the surface so the puck can signal live sharing (wired to the real
+ *   live-location state). The map home no longer has its own live-share control:
+ *   starting, stopping, Hide-me-now, and the audience ("who can see me") screen
+ *   are reached through the centre live control (see AuthenticatedApp), so this
+ *   flag only drives the puck here.
  * @param participantCount other members stashed to show on the map (e.g. a
  *   group-drive roster); surfaced as a small chip, preserved for the real impl.
  * @param avatarUrl resolved download URL for the signed-in user's profile
@@ -152,14 +136,10 @@ private const val POPUP_SURFACE_ALPHA = 0.92f
 fun MapHome(
     mapSurface: MapSurface,
     isLiveSharing: Boolean,
-    canShareLive: Boolean,
     participantCount: Int,
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    onStartLiveShare: () -> Unit,
-    onHideMeNow: () -> Unit,
-    onOpenLiveShareDetails: () -> Unit,
     onRecenter: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
@@ -359,11 +339,6 @@ fun MapHome(
     // below) collapses it back to the icon.
     var searchExpanded by remember { mutableStateOf(false) }
 
-    // Live-location popup open/close is local UI state: tapping the broadcast
-    // control opens the transparent live-share sheet (over the map, no scrim),
-    // tapping outside it dismisses it.
-    var liveOpen by remember { mutableStateOf(false) }
-
     // Accessible dismiss for the expanded search: the outside-tap scrim is
     // deliberately invisible to TalkBack/keyboard, so system Back is the
     // reliable way to collapse the bar (only intercepts Back while expanded).
@@ -396,7 +371,6 @@ fun MapHome(
             searchExpanded = false
             moreOpen = false
             layersOpen = false
-            liveOpen = false
             reportOpen = false
         }
     }
@@ -489,19 +463,16 @@ fun MapHome(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            val statusColors = LocalKccStatusColors.current
             // 1. Report-incident control — opens the type picker. Shown only
             //    when incident reporting is available (a repository configured);
             //    when it is not, the remaining controls close up by one slot and
-            //    live-location leads — no gap, no placeholder holding its place.
-            //    Their order relative to each other is what does not change.
+            //    the layers control leads — no gap, no placeholder holding its
+            //    place. Their order relative to each other is what does not change.
             //    Deliberately takes CircleControl's DEFAULT surface/onSurface
             //    colours (like the compass and recenter controls) rather than
             //    the amber warning colour: it is an "open the report picker"
             //    affordance, not a live warning state, and an always-amber
             //    button in a stack of neutral ones reads as a permanent alert.
-            //    Colour in this stack is reserved for ACTIVE state (the green
-            //    live-share control).
             if (incidentReportingEnabled) {
                 CircleControl(
                     icon = Icons.Filled.Warning,
@@ -510,23 +481,15 @@ fun MapHome(
                     modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
                 )
             }
-            // 2. Live-location broadcast control — GREEN when sharing. Opens the
-            //    transparent live-share popup (over the map, no scrim) with the
-            //    session options rather than toggling sharing directly.
-            CircleControl(
-                icon = Icons.Filled.Podcasts,
-                contentDescription =
-                    stringResource(
-                        if (isLiveSharing) R.string.shell_liveShareOn else R.string.shell_liveShareOff,
-                    ),
-                containerColor =
-                    if (isLiveSharing) statusColors.success else MaterialTheme.colorScheme.surface,
-                contentColor =
-                    if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
-                onClick = { liveOpen = true },
-                modifier = Modifier.testTag(MAP_HOME_LIVE_TAG),
-            )
-            // 3. Map-layers control — opens the transparent layers popup
+            // The live-location broadcast control that used to sit here has been
+            // REMOVED. Starting a session is the centre "+" → Create → Single
+            // session; while a session runs, the centre control's manage sheet
+            // (shell-level [LiveSharePopup]) hosts Stop, Hide me now, and Who can
+            // see me — so neither privacy capability was lost with the button.
+            // The live-sharing state still tints the map puck (see
+            // [isLiveSharing]); it just no longer has a dedicated right-side disc.
+            //
+            // 2. Map-layers control — opens the transparent layers popup
             //    (traffic / day-night / 3D toggles). Highlighted while any of
             //    those non-default layers is active, so an enabled overlay is
             //    still discoverable from the collapsed control. Day/night counts
@@ -641,20 +604,11 @@ fun MapHome(
             )
         }
 
-        // Live-location overlay: a transparent popup (no scrim) so the map stays
-        // visible behind it while the user starts/stops sharing, hides now, or
-        // opens the full live-location screen. Reflects the current sharing state
-        // and honours the member gate on starting (canShareLive).
-        if (liveOpen) {
-            LiveSharePopup(
-                isSharing = isLiveSharing,
-                canShareLive = canShareLive,
-                onStart = onStartLiveShare,
-                onHideMeNow = onHideMeNow,
-                onOpenDetails = onOpenLiveShareDetails,
-                onDismiss = { liveOpen = false },
-            )
-        }
+        // The live-location manage sheet ([LiveSharePopup]) is no longer opened
+        // from here. It has moved to the shell, raised by the centre live control
+        // while a session runs (see AuthenticatedApp), which is what let the
+        // right-side broadcast button go without losing Hide-me-now or the
+        // audience ("who can see me") screen.
     }
 }
 
@@ -679,10 +633,8 @@ const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
 /** Test tag on the map day/night ("Night mode") layer toggle switch. */
 const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
 
-/** Test tag on the floating live-location broadcast control. */
-const val MAP_HOME_LIVE_TAG = "map_home_live"
-
-/** Test tag on the live-location popup card. */
+/** Test tag on the live-location manage-sheet popup card (raised by the centre
+ *  live control while sharing; also reused by turn-by-turn navigation). */
 const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
 
 /**
@@ -843,16 +795,30 @@ private fun LayerToggleRow(
  * map-layers popup; tapping outside the card or pressing Back dismisses it
  * (focusable popup). The content reflects the current sharing state and reuses
  * the existing live-location logic (wired through to LiveLocationCoordinator by
- * the caller):
- * - While sharing: a Stop-sharing action and the never-gated Hide-me-now.
+ * the caller). Which rows appear is decided by the pure-logic
+ * [com.kungsbackacarcommunity.app.shell.LiveManageSheet.actions], so the
+ * "everything stays reachable" guarantee is unit-tested:
+ * - While sharing: the never-gated Hide-me-now, plus a prominent Stop-sharing
+ *   action WHEN [onStop] is wired. This is the sheet the map's centre live
+ *   control opens while a session runs, and it is the home the right-side
+ *   broadcast button's two unique capabilities moved into — Hide me now here,
+ *   and Who-can-see-me via "More options".
  * - Not sharing and [canShareLive]: a single "start sharing" action. The 1h/2h/4h
  *   duration choice is NOT here — [onStart] hands off to the single-session start
  *   flow (shared with the "+" Create → Single session), which is where the
- *   duration is picked. This keeps the map's broadcast control a one-tap start.
+ *   duration is picked.
  * - Not sharing and not [canShareLive]: the membership teaser (starting is
- *   member-gated on the backend), Stop/Hide stay reachable in the sharing state.
+ *   member-gated on the backend); Hide stays reachable in the sharing state.
  * A "More options" row always opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
- * for the complete controls + privacy details. Each action closes the popup.
+ * for the complete controls + privacy details — the audience screen where the
+ * caller sees and manages exactly who can see them. Each action closes the popup.
+ *
+ * @param onStop optional stop-sharing handler. When null (turn-by-turn
+ *   navigation) NO Stop row is shown, keeping stopping to the map's single stop
+ *   affordance there; when supplied (the shell's centre-control sheet) Stop leads
+ *   the sheet. Splitting it out this way lets the same sheet host Stop for the
+ *   map home while staying stop-free in navigation, instead of forking into two
+ *   live-sharing UIs.
  *
  * `internal`, not private, because turn-by-turn navigation shows THIS sheet too:
  * a live-location session keeps running while the user navigates, so the
@@ -868,8 +834,10 @@ internal fun LiveSharePopup(
     onHideMeNow: () -> Unit,
     onOpenDetails: () -> Unit,
     onDismiss: () -> Unit,
+    onStop: (() -> Unit)? = null,
 ) {
     val statusColors = LocalKccStatusColors.current
+    val rows = LiveManageSheet.actions(isSharing = isSharing, canShareLive = canShareLive, hasStop = onStop != null)
     Popup(
         alignment = Alignment.BottomCenter,
         onDismissRequest = onDismiss,
@@ -930,51 +898,73 @@ internal fun LiveSharePopup(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                when {
-                    isSharing -> {
-                        // No Stop here: ending a session is the bottom bar's STOP
-                        // sign, so there is ONE stop control and it always raises
-                        // the save/discard summary. "Hide me now" stays — it is a
-                        // different thing (an immediate privacy escape hatch that
-                        // works even while suspended, when stopSession does not).
-                        OutlinedButton(
-                            onClick = {
-                                onHideMeNow()
-                                onDismiss()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = stringResource(R.string.liveLocation_hideNow))
-                        }
-                    }
-                    canShareLive -> {
-                        // One-tap start: the 1h/2h/4h duration choice has moved to
-                        // the single-session start flow (raised by the host), so the
-                        // broadcast control no longer picks a duration inline.
-                        Button(
-                            onClick = {
-                                onStart()
-                                onDismiss()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(text = stringResource(R.string.liveLocation_start))
-                        }
-                    }
-                    else -> {
-                        // Reached only when the LIVE_LOCATION flag is off (the
-                        // server-side kill switch) — starting is NOT member-gated.
-                        // TODO: the teaser string still says "membership
-                        // required", which is not why the control is hidden.
-                        Text(
-                            text = stringResource(R.string.liveLocation_memberRequiredToShare),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                if (rows.showStop) {
+                    // The prominent stop action. Only present when the caller wires
+                    // [onStop] — i.e. the shell's centre-control sheet, where this
+                    // sheet is now how a running session is ended. Stopping raises
+                    // the save/discard summary exactly as the bottom-bar control
+                    // used to (the host's stop handler flips isSharing). Error
+                    // colours make it the unmistakable primary action.
+                    Button(
+                        onClick = {
+                            onStop?.invoke()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ),
+                    ) {
+                        Text(text = stringResource(R.string.liveLocation_stop))
                     }
                 }
+                if (rows.showHideNow) {
+                    // "Hide me now" — the immediate privacy escape hatch. Distinct
+                    // from Stop: it works even while suspended (when stopSession
+                    // does not), so it stays offered for the whole life of a
+                    // session. This is one of the two capabilities relocated off
+                    // the removed right-side broadcast button.
+                    OutlinedButton(
+                        onClick = {
+                            onHideMeNow()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.liveLocation_hideNow))
+                    }
+                }
+                if (rows.showStart) {
+                    // One-tap start: the 1h/2h/4h duration choice has moved to
+                    // the single-session start flow (raised by the host), so this
+                    // control no longer picks a duration inline.
+                    Button(
+                        onClick = {
+                            onStart()
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.liveLocation_start))
+                    }
+                }
+                if (rows.showMemberTeaser) {
+                    // Reached only when the LIVE_LOCATION flag is off (the
+                    // server-side kill switch) — starting is NOT member-gated.
+                    // TODO: the teaser string still says "membership
+                    // required", which is not why the control is hidden.
+                    Text(
+                        text = stringResource(R.string.liveLocation_memberRequiredToShare),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 // Always offer the full live-location screen for the complete
-                // controls + privacy details.
+                // controls + privacy details — this is the "Who can see me" /
+                // audience-management entry point (the second capability relocated
+                // off the removed right-side broadcast button).
                 TextButton(
                     onClick = {
                         onOpenDetails()

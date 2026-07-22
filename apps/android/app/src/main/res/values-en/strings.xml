@@ -1032,6 +1032,7 @@
     <string name="shell_liveTitle">Live location</string>
     <string name="shell_liveClose">Close live location</string>
     <string name="shell_liveDetails">More options</string>
+    <string name="shell_liveControls">Live location controls</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>

@@ -1112,7 +1112,8 @@
     "searchExpand": "Sök",
     "liveTitle": "Liveplats",
     "liveClose": "Stäng liveplats",
-    "liveDetails": "Fler alternativ"
+    "liveDetails": "Fler alternativ",
+    "liveControls": "Kontroller för liveplats"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",
