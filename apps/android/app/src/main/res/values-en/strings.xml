@@ -944,7 +944,6 @@
     <string name="channel_mentionLimit">You can mention up to %1$d members in one message.</string>
     <string name="channel_mentionsNotDelivered">Your message was posted, but some members you mentioned couldn\'t be notified.</string>
     <string name="chatHub_title">Chat</string>
-    <string name="chatHub_close">Close chat</string>
     <string name="chatHub_back">Back</string>
     <string name="chatHub_tabCommunity">Community</string>
     <string name="chatHub_tabConvoys">Convoys</string>

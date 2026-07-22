@@ -659,8 +659,17 @@ class MapFirstShellTest {
         // The Community / Convoys / Friends / Notifications tabs are shown.
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
-        // Closing returns to the map (the hub popup is gone).
-        composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_close)).performClick()
+        // The hub is a shared shell panel now: it carries the same labelled drag
+        // handle every other panel does, and there is NO close (X) button — it is
+        // dismissed by pulling that handle down, tapping the map strip, or Back.
+        composeTestRule
+            .onNodeWithContentDescription(str(R.string.shell_panelDragHandle))
+            .assertExists()
+        // The panel's accessibility `dismiss` action is the non-gesture route the
+        // former X used to be; firing it returns to the map (the hub is gone).
+        composeTestRule
+            .onNodeWithTag(CHAT_HUB_TEST_TAG)
+            .performSemanticsAction(SemanticsActions.Dismiss)
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
