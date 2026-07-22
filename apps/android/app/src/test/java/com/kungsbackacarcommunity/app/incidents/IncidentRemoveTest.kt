@@ -35,6 +35,8 @@ class IncidentRemoveTest {
             removed += incidentId
             removeError?.let { throw it }
         }
+
+        override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
     }
 
     private fun incidentAt(id: String) =

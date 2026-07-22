@@ -31,8 +31,8 @@ const val INCIDENT_DETAILS_CONFIRM_TAG = "incident_details_confirm"
 /** Test tag on the "remove my report" action. */
 const val INCIDENT_DETAILS_REMOVE_TAG = "incident_details_remove"
 
-/** Test tag on the explanation shown under a disabled confirmation action. */
-const val INCIDENT_DETAILS_CONFIRM_NOTE_TAG = "incident_details_confirm_note"
+/** Test tag on the "confirmed by N" line shown for a confirmable incident. */
+const val INCIDENT_DETAILS_CONFIRM_COUNT_TAG = "incident_details_confirm_count"
 
 /**
  * The sheet opened by TAPPING an incident marker on the map.
@@ -43,14 +43,12 @@ const val INCIDENT_DETAILS_CONFIRM_NOTE_TAG = "incident_details_confirm_note"
  * viewer, per [IncidentDetails.actionFor]:
  *
  *  - someone else's member report → "Still there?", which is what Seb asked for.
- *    It is rendered DISABLED with a plain explanation underneath, because the
- *    backend callable it needs does not exist yet (see [ConfirmAvailability],
- *    which carries the exact contract wanted). Showing it disabled rather than
- *    hiding it is deliberate here: the whole point of the request is that a
- *    driver can vouch for an incident, so the affordance being visibly *coming*
- *    is more honest than it being invisible. It is not faked client-side — a
- *    local "confirmed" tick that did not actually extend the document's
- *    `expiresAt` would be a lie the next TTL sweep exposes.
+ *    It is wired to `incidents-confirm` (see [ConfirmAvailability]): tapping it
+ *    corroborates the incident, extends its life, and bumps the shared
+ *    confirmation count. When others have already confirmed, a "confirmed by N"
+ *    line shows above the button as social proof. The button disables while a
+ *    confirmation is in flight ([confirmInProgress]) so a double-tap cannot fire
+ *    two calls.
  *  - your own member report → the existing remove action, which IS wired
  *    (`incidents-remove`). You are never offered "still there?" on your own
  *    report.
@@ -73,6 +71,9 @@ fun IncidentDetailsSheet(
     // button is pressed), which would otherwise leave the button live long
     // enough to fire a second delete for the same incident.
     removeInProgress: Boolean = false,
+    // True while a confirmation is in flight — same one-call-per-press guard as
+    // removeInProgress, so a double-tap cannot fire two `incidents-confirm` calls.
+    confirmInProgress: Boolean = false,
 ) {
     val action = IncidentDetails.actionFor(incident, viewerUid)
     val confirmWired = IncidentDetails.confirmAvailability == ConfirmAvailability.Wired
@@ -112,12 +113,19 @@ fun IncidentDetailsSheet(
                 }
                 when (action) {
                     IncidentAction.Confirm ->
-                        if (!confirmWired) {
+                        // "Confirmed by N" as ambient social proof, shown only once
+                        // someone has actually confirmed. The button below does the
+                        // confirming; this line just reflects the shared count.
+                        if (incident.confirmationCount > 0) {
                             Text(
-                                text = stringResource(R.string.incidents_verifyUnavailable),
+                                text =
+                                    stringResource(
+                                        R.string.incidents_confirmedBy,
+                                        incident.confirmationCount,
+                                    ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_NOTE_TAG),
+                                modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_COUNT_TAG),
                             )
                         }
                     IncidentAction.None ->
@@ -135,9 +143,10 @@ fun IncidentDetailsSheet(
                 IncidentAction.Confirm ->
                     TextButton(
                         onClick = onConfirm,
-                        // Disabled until `incidents-confirm` exists. The
-                        // explanation above the button says so in words.
-                        enabled = confirmWired,
+                        // Live now that `incidents-confirm` is wired; disabled only
+                        // while a confirmation is already in flight, so one press is
+                        // one call.
+                        enabled = confirmWired && !confirmInProgress,
                         modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_TAG),
                     ) {
                         Text(stringResource(R.string.incidents_verifyAction))

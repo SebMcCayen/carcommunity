@@ -109,14 +109,14 @@ class IncidentDetailsTest {
         }
     }
 
-    // ---- the backend gap ---------------------------------------------------
+    // ---- confirm availability ---------------------------------------------
 
     @Test
-    fun `confirming is not wired to a backend yet`() {
-        // The `incidents-confirm` callable does not exist. This test is the
-        // reminder to flip the UI the day it does — and the guard against anyone
-        // "enabling" the button before then.
-        assertEquals(ConfirmAvailability.BackendMissing, IncidentDetails.confirmAvailability)
+    fun `confirming is wired to the incidents-confirm backend`() {
+        // The `incidents-confirm` callable exists and is deployed, so the sheet
+        // renders the "still there?" action live rather than disabled. This guards
+        // against a regression back to the disabled placeholder.
+        assertEquals(ConfirmAvailability.Wired, IncidentDetails.confirmAvailability)
     }
 
     // ---- age ---------------------------------------------------------------

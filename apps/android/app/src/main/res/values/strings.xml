@@ -1124,7 +1124,10 @@
     <string name="incidents_sourceMember">Rapporterad av en medlem</string>
     <string name="incidents_sourceImported">Hämtad från Trafikverket</string>
     <string name="incidents_verifyAction">Finns den kvar?</string>
-    <string name="incidents_verifyUnavailable">Att bekräfta en händelse går inte än – funktionen saknar stöd i backend.</string>
+    <string name="incidents_verifySuccess">Tack – du bekräftade att den finns kvar.</string>
+    <string name="incidents_verifyAlready">Du har redan bekräftat den här.</string>
+    <string name="incidents_verifyError">Det gick inte att bekräfta just nu. Försök igen.</string>
+    <string name="incidents_confirmedBy">Bekräftad av %1$d</string>
     <string name="incidents_removeAction">Ta bort min rapport</string>
     <string name="incidents_removeSuccess">Din rapport togs bort.</string>
     <string name="incidents_removeError">Det gick inte att ta bort rapporten. Försök igen.</string>

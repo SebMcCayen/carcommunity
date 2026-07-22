@@ -10,7 +10,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [IncidentRepository] backed by the `incidents.*` callables (europe-west1):
- * `incidents-report`, `incidents-listNearby`, `incidents-remove`. Tasks are
+ * `incidents-report`, `incidents-listNearby`, `incidents-remove`,
+ * `incidents-confirm`. Tasks are
  * bridged to coroutines with the same isActive-guarded pattern as the other
  * repositories. Construction is guarded ([createIfAvailable] returns null when
  * Firebase is not configured), so the config-less / CI build gets a null
@@ -54,6 +55,16 @@ class FirebaseIncidentRepository private constructor(
         callForData(REMOVE, mapOf("incidentId" to incidentId))
     }
 
+    override suspend fun confirm(incidentId: String): IncidentConfirmResult {
+        val data = callForData(CONFIRM, mapOf("incidentId" to incidentId))
+        // The callable answers { incidentId, confirmationCount, expiresAt,
+        // alreadyConfirmed }. A missing/malformed count degrades to 0 rather than
+        // crashing the sheet — the confirmation still landed server-side.
+        val count = (data?.get("confirmationCount") as? Number)?.toInt() ?: 0
+        val already = data?.get("alreadyConfirmed") as? Boolean ?: false
+        return IncidentConfirmResult(confirmationCount = count, alreadyConfirmed = already)
+    }
+
     private suspend fun callForData(name: String, payload: Map<String, Any?>): Map<String, Any?>? =
         suspendCancellableCoroutine { continuation ->
             functions
@@ -79,6 +90,7 @@ class FirebaseIncidentRepository private constructor(
         private const val REPORT = "incidents-report"
         private const val LIST_NEARBY = "incidents-listNearby"
         private const val REMOVE = "incidents-remove"
+        private const val CONFIRM = "incidents-confirm"
 
         fun createIfAvailable(context: Context): IncidentRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -129,6 +141,9 @@ object IncidentResponseParser {
             // an unknown age is still worth drawing.
             reporterUid = map["reporterUid"] as? String,
             createdAtIso = map["createdAt"] as? String,
+            // Present on every IncidentView; absent/malformed degrades to 0 so a
+            // single odd row still draws rather than dropping.
+            confirmationCount = (map["confirmationCount"] as? Number)?.toInt() ?: 0,
         )
     }
 }
