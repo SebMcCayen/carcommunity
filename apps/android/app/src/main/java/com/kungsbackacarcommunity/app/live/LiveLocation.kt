@@ -50,6 +50,18 @@ data class LiveSessionInfo(
 
 object LiveLocation {
     /**
+     * The window a Single (solo) live session starts with. Starting a Single
+     * session is IMMEDIATE — the user is no longer asked to pick a time — so this
+     * fixed default is the single source of truth for every Single-session start
+     * (the shell's start path AND [LiveLocationScreen]). It preserves the picker's
+     * former pre-selected default. The backend `live-startSession` callable still
+     * requires a `duration`; this key is passed through unchanged. Users can still
+     * Extend before expiry and Stop anytime. Convoy sessions are unaffected —
+     * their per-member window is chosen server-side.
+     */
+    val DEFAULT_SESSION_DURATION: LiveSessionDuration = LiveSessionDuration.ONE_HOUR
+
+    /**
      * Absolute hard cap on any one live-sharing window (single AND convoy — a
      * convoy member shares through the same session node). The CLIENT copy of the
      * server's `LIVE_SESSION_MAX_MS` (functions/src/live/live-core.ts). The two

@@ -107,7 +107,7 @@ fun LiveLocationScreen(
             // Stop anytime. The backend callable still takes a duration, so the
             // fixed default key is passed through unchanged.
             Button(
-                onClick = { onStart(LiveSessionDuration.ONE_HOUR) },
+                onClick = { onStart(LiveLocation.DEFAULT_SESSION_DURATION) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {

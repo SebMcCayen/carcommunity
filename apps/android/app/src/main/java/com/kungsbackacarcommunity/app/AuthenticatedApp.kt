@@ -329,17 +329,6 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
 private const val SHELL_TAB_FADE_MILLIS = 200
 
 /**
- * The window a Single (solo) live session starts with. Starting a Single session
- * is now IMMEDIATE — the user is no longer asked to pick a time — so this fixed
- * default is what every Single-session Start uses. It preserves the previous
- * picker's pre-selected default. Users can still Extend before expiry and Stop
- * anytime, and the backend `live-startSession` callable still requires a
- * `duration` (its key is passed through unchanged). Convoy sessions are
- * unaffected — their per-member window is chosen server-side.
- */
-private val SINGLE_SESSION_DEFAULT_DURATION = LiveSessionDuration.ONE_HOUR
-
-/**
  * The signed-in experience: observes the profile document to gate onboarding,
  * then renders the **map-first, 5-tab shell** ([mapFirstShell]) once onboarded.
  *
@@ -1328,7 +1317,7 @@ fun AuthenticatedApp(
             // before expiry and Stop anytime, so a fixed default is fine.
             fun requestStartSingleSession() {
                 if (liveLocationCoordinator != null && canShareLive) {
-                    startSingleSession(SINGLE_SESSION_DEFAULT_DURATION)
+                    startSingleSession(LiveLocation.DEFAULT_SESSION_DURATION)
                 } else {
                     openLiveShareFallback()
                 }
