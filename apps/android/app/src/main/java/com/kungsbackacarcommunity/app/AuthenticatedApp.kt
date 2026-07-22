@@ -919,11 +919,34 @@ fun AuthenticatedApp(
             // previous markers intact on failure. Scoped to this effect, so it is
             // cancelled when the tab changes or the layer is toggled off; keyed on
             // incidentsLayerEnabled so toggling the layer back on re-fetches
-            // immediately.
-            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled) {
+            // immediately. Also keyed on mapSurface so a surface swap (token-driven
+            // surface recreation, previews/tests) re-subscribes the poll to the
+            // CURRENT surface instead of polling a stale, detached camera snapshot.
+            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
                 val controller = incidentController ?: return@LaunchedEffect
                 if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
-                controller.pollNearby()
+                // Query around the MAP CAMERA CENTRE, not only a GPS fix. The map
+                // opens on the fixed default camera (Kungsbacka) and pans/follows
+                // the user from there, so its centre is ALWAYS available — whereas
+                // a GPS fix can be absent for the whole session (permission
+                // denied, indoors, emulator, or just the first seconds). Polling
+                // on the GPS fix alone left the shared incidents layer BLANK in
+                // exactly those cases, even though incidents (including the
+                // Trafikverket imports) exist in the DB around the visible area.
+                // The one-shot GPS read is the fallback: it covers the brief
+                // window before the real surface emits its first camera event, and
+                // the camera-less stub (config-less / CI).
+                val appContext = context.applicationContext
+                controller.pollNearby(
+                    centerProvider = {
+                        mapSurface.cameraSnapshot.value?.let { snapshot ->
+                            LatLng(
+                                longitude = snapshot.longitude,
+                                latitude = snapshot.latitude,
+                            )
+                        } ?: CurrentLocation.lastKnown(appContext)
+                    },
+                )
             }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
