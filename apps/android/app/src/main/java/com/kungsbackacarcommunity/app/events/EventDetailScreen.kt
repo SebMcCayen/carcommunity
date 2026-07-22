@@ -66,9 +66,9 @@ fun EventDetailScreen(
     onRetry: (() -> Unit)? = null,
     onOpenChat: (() -> Unit)? = null,
     onOpenGroupDrive: (() -> Unit)? = null,
-    // Who's going. The COUNT always comes from the public rsvpCounts tally on
-    // the event doc; the NAMES only render when the roster read succeeded —
-    // see EventAttendees for why that is Unavailable for a member today.
+    // Who answered. The COUNT always comes from the public rsvpCounts tally on
+    // the event doc; the NAMES (grouped by RSVP answer) render when the
+    // events-listAttendees roster read succeeds — see EventAttendees.
     attendees: EventAttendeesState = EventAttendeesState.Unavailable,
     // Opens a member's read-only profile. Null (config-less build / no member
     // profile repository) leaves the rows inert rather than dead-ending a tap.
@@ -254,12 +254,28 @@ private fun AttendeesSection(
             }
 
             is EventAttendeesState.Loaded ->
-                state.attendees.forEach { attendee ->
-                    AttendeeRow(attendee = attendee, onOpenMember = onOpenMember)
+                EventAttendees.groupedByStatus(state.attendees).forEach { group ->
+                    Text(
+                        text = stringResource(attendeeGroupLabel(group.status)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(attendeeGroupTag(group.status)),
+                    )
+                    group.members.forEach { attendee ->
+                        AttendeeRow(attendee = attendee, onOpenMember = onOpenMember)
+                    }
                 }
         }
     }
 }
+
+/** String resource for a status group header (going / maybe / not_going). */
+private fun attendeeGroupLabel(status: RsvpStatus): Int =
+    when (status) {
+        RsvpStatus.GOING -> R.string.events_attendeesGroupGoing
+        RsvpStatus.MAYBE -> R.string.events_attendeesGroupMaybe
+        RsvpStatus.NOT_GOING -> R.string.events_attendeesGroupNotGoing
+    }
 
 @Composable
 private fun AttendeesNote(text: String) {
@@ -348,6 +364,9 @@ internal const val ATTENDEES_SECTION_TAG = "events_attendees_section"
 
 /** Stable per-attendee test tag so a UI test can tap a specific member. */
 internal fun attendeeRowTag(uid: String): String = "events_attendee_$uid"
+
+/** Stable per-status-group test tag (going / maybe / not_going headers). */
+internal fun attendeeGroupTag(status: RsvpStatus): String = "events_attendee_group_${status.wire}"
 
 @Composable
 private fun DetailCard(detail: EventDetail?) {

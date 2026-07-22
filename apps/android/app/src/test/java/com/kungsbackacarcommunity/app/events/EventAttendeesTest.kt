@@ -10,8 +10,8 @@ import org.junit.Test
  */
 class EventAttendeesTest {
 
-    private fun attendee(uid: String, name: String? = null) =
-        EventAttendee(uid = uid, displayName = name, avatarPath = null)
+    private fun attendee(uid: String, name: String? = null, status: RsvpStatus = RsvpStatus.GOING) =
+        EventAttendee(uid = uid, displayName = name, avatarPath = null, status = status)
 
     // -- create failure mapping ------------------------------------------------
 
@@ -38,6 +38,61 @@ class EventAttendeesTest {
         // functions/src/events/events-core.ts: MEMBER_EVENT_RATE_LIMIT_MAX = 3.
         // The message quotes this number, so a backend change must break here.
         assertEquals(3, Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY)
+    }
+
+    // -- callable payload parsing ----------------------------------------------
+
+    @Test
+    fun `a well-formed attendees payload loads, dropping malformed rows`() {
+        val payload =
+            mapOf(
+                "attendees" to
+                    listOf(
+                        mapOf("userId" to "u1", "displayName" to "Alice", "avatarPath" to "a/u1.jpg", "status" to "going"),
+                        mapOf("userId" to "u2", "displayName" to null, "avatarPath" to null, "status" to "maybe"),
+                        // Malformed rows: no uid, non-canonical status, wrong type — all dropped.
+                        mapOf("displayName" to "No Uid", "status" to "going"),
+                        mapOf("userId" to "u3", "status" to "definitely"),
+                        "not-a-row",
+                    ),
+            )
+        val result = EventAttendees.parseAttendeesPayload(payload)
+        assertEquals(
+            EventAttendeesResult.Loaded(
+                listOf(
+                    EventAttendee("u1", "Alice", "a/u1.jpg", RsvpStatus.GOING),
+                    attendee("u2", null, RsvpStatus.MAYBE),
+                ),
+            ),
+            result,
+        )
+    }
+
+    @Test
+    fun `a present empty attendees array is an empty roster, not an error`() {
+        // The read succeeded and nobody has answered — Loaded(empty), which the
+        // state model then folds to Empty. This is the ONLY empty-roster path.
+        assertEquals(
+            EventAttendeesResult.Loaded(emptyList()),
+            EventAttendees.parseAttendeesPayload(mapOf("attendees" to emptyList<Any?>())),
+        )
+    }
+
+    @Test
+    fun `a missing or malformed payload is Unknown, never a fabricated empty roster`() {
+        // A backend/serialization bug must surface as a retryable error, not as
+        // "nobody answered" — otherwise a broken read silently hides the roster.
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload(null))
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload("unexpected-string"))
+        assertEquals(EventAttendeesResult.Unknown, EventAttendees.parseAttendeesPayload(emptyMap<String, Any?>()))
+        assertEquals(
+            EventAttendeesResult.Unknown,
+            EventAttendees.parseAttendeesPayload(mapOf("other" to 1)),
+        )
+        assertEquals(
+            EventAttendeesResult.Unknown,
+            EventAttendees.parseAttendeesPayload(mapOf("attendees" to "not-a-list")),
+        )
     }
 
     // -- attendee state model --------------------------------------------------
@@ -140,5 +195,58 @@ class EventAttendeesTest {
                 listOf(attendee("u2", "Alice"), attendee("u1", "Alice")),
             )
         assertEquals(listOf("u1", "u2"), sorted.map { it.uid })
+    }
+
+    // -- status grouping -------------------------------------------------------
+
+    @Test
+    fun `groupedByStatus orders going then maybe then not_going`() {
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u3", "C", RsvpStatus.NOT_GOING),
+                    attendee("u1", "A", RsvpStatus.GOING),
+                    attendee("u2", "B", RsvpStatus.MAYBE),
+                ),
+            )
+        assertEquals(
+            listOf(RsvpStatus.GOING, RsvpStatus.MAYBE, RsvpStatus.NOT_GOING),
+            groups.map { it.status },
+        )
+        assertEquals(listOf("u1"), groups[0].members.map { it.uid })
+        assertEquals(listOf("u2"), groups[1].members.map { it.uid })
+        assertEquals(listOf("u3"), groups[2].members.map { it.uid })
+    }
+
+    @Test
+    fun `groupedByStatus omits empty groups`() {
+        // Nobody answered "maybe" — no Kanske header should be produced.
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u1", "A", RsvpStatus.GOING),
+                    attendee("u2", "B", RsvpStatus.NOT_GOING),
+                ),
+            )
+        assertEquals(listOf(RsvpStatus.GOING, RsvpStatus.NOT_GOING), groups.map { it.status })
+    }
+
+    @Test
+    fun `groupedByStatus sorts members within a group by name`() {
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u2", "Bob", RsvpStatus.GOING),
+                    attendee("u1", "Alice", RsvpStatus.GOING),
+                    attendee("u3", null, RsvpStatus.GOING),
+                ),
+            )
+        assertEquals(1, groups.size)
+        assertEquals(listOf("u1", "u2", "u3"), groups[0].members.map { it.uid })
+    }
+
+    @Test
+    fun `groupedByStatus on an empty roster yields no groups`() {
+        assertEquals(emptyList<EventAttendeeGroup>(), EventAttendees.groupedByStatus(emptyList()))
     }
 }

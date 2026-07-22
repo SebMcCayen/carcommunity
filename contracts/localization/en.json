@@ -326,13 +326,16 @@
     "createDialogNext": "Next",
     "createDialogConfirm": "OK",
     "createRateLimited": "You can create %1$d events per day. You've reached that limit — please try again later.",
-    "attendeesTitle": "Who's going",
+    "attendeesTitle": "Who answered",
     "attendeesCount": "%1$d going",
-    "attendeesLoading": "Loading who's going…",
-    "attendeesEmpty": "No one has said they're going yet. Be the first!",
+    "attendeesLoading": "Loading who answered…",
+    "attendeesEmpty": "No one has answered yet. Be the first!",
     "attendeesUnavailable": "Names aren't shown for this event — only the number of people going.",
-    "attendeesError": "Couldn't load who's going.",
-    "attendeesUnknownMember": "KCC member"
+    "attendeesError": "Couldn't load who answered.",
+    "attendeesUnknownMember": "KCC member",
+    "attendeesGroupGoing": "Going",
+    "attendeesGroupMaybe": "Maybe",
+    "attendeesGroupNotGoing": "Not going"
   },
   "chat": {
     "title": "Chat",

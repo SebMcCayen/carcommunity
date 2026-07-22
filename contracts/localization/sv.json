@@ -326,13 +326,16 @@
     "createDialogNext": "Nästa",
     "createDialogConfirm": "OK",
     "createRateLimited": "Du kan skapa %1$d träffar per dygn. Du har nått gränsen — försök igen senare.",
-    "attendeesTitle": "Vilka kommer",
+    "attendeesTitle": "Vilka har svarat",
     "attendeesCount": "%1$d kommer",
-    "attendeesLoading": "Hämtar vilka som kommer…",
-    "attendeesEmpty": "Ingen har anmält sig än. Bli först!",
+    "attendeesLoading": "Hämtar vilka som har svarat…",
+    "attendeesEmpty": "Ingen har svarat än. Bli först!",
     "attendeesUnavailable": "Namnen visas inte för den här träffen — bara antalet som kommer.",
-    "attendeesError": "Det gick inte att hämta vilka som kommer.",
-    "attendeesUnknownMember": "KCC-medlem"
+    "attendeesError": "Det gick inte att hämta vilka som har svarat.",
+    "attendeesUnknownMember": "KCC-medlem",
+    "attendeesGroupGoing": "Kommer",
+    "attendeesGroupMaybe": "Kanske",
+    "attendeesGroupNotGoing": "Kommer inte"
   },
   "chat": {
     "title": "Chat",
