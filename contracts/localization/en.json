@@ -1,4 +1,9 @@
 {
+  "appActive": {
+    "notificationChannel": "App status",
+    "notificationChannelDescription": "Shows an ongoing notice while the app is open, so you can see it is still active in the background.",
+    "notificationText": "Active — tap to return to the app."
+  },
   "app": {
     "name": "Kungsbacka Car Community"
   },
@@ -458,6 +463,10 @@
     "errorTemporarilyUnavailable": "Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.",
     "errorGeneric": "Something went wrong. Please try again."
   },
+  "nearby": {
+    "liveSharerOnMap": "%1$s is sharing live nearby",
+    "unknownSharer": "Someone nearby"
+  },
   "convoy": {
     "title": "Convoys",
     "createAction": "Create a convoy",
@@ -735,6 +744,10 @@
     "photoTooLarge": "The image is too large.",
     "photoCropTitle": "Crop photo",
     "photoCropHint": "Drag to position and pinch to zoom. The area inside the frame is what others will see.",
+    "photoCropRatioOriginal": "Original",
+    "photoCropRatioSquare": "Square",
+    "photoCropRatio43": "4:3",
+    "photoCropRatio169": "16:9",
     "photoCropConfirm": "Use photo",
     "photoNone": "No photos yet",
     "photoCounter": "%1$d / %2$d",

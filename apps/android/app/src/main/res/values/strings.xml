@@ -3,6 +3,9 @@
      Source: contracts/localization/sv.json
      Regenerate: node apps/android/scripts/generate-strings.mjs -->
 <resources>
+    <string name="appActive_notificationChannel">Appstatus</string>
+    <string name="appActive_notificationChannelDescription">Visar en pågående avisering medan appen är öppen, så att du ser att den fortfarande är aktiv i bakgrunden.</string>
+    <string name="appActive_notificationText">Aktiv – tryck för att återgå till appen.</string>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="navigation_home">Hem</string>
     <string name="navigation_map">Karta</string>
@@ -418,6 +421,8 @@
     <string name="friends_errorRequestGone">Förfrågan är inte längre tillgänglig.</string>
     <string name="friends_errorTemporarilyUnavailable">Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.</string>
     <string name="friends_errorGeneric">Något gick fel. Försök igen.</string>
+    <string name="nearby_liveSharerOnMap">%1$s delar live i närheten</string>
+    <string name="nearby_unknownSharer">Någon i närheten</string>
     <string name="convoy_title">Konvojer</string>
     <string name="convoy_createAction">Skapa en konvoj</string>
     <string name="convoy_invitesTitle">Konvoj-inbjudningar</string>
@@ -686,6 +691,10 @@
     <string name="garage_photoTooLarge">Bilden är för stor.</string>
     <string name="garage_photoCropTitle">Beskär bild</string>
     <string name="garage_photoCropHint">Dra för att placera och nyp för att zooma. Det som syns i rutan är det andra ser.</string>
+    <string name="garage_photoCropRatioOriginal">Original</string>
+    <string name="garage_photoCropRatioSquare">Kvadrat</string>
+    <string name="garage_photoCropRatio43">4:3</string>
+    <string name="garage_photoCropRatio169">16:9</string>
     <string name="garage_photoCropConfirm">Använd bilden</string>
     <string name="garage_photoNone">Inga bilder ännu</string>
     <string name="garage_photoCounter">%1$d / %2$d</string>

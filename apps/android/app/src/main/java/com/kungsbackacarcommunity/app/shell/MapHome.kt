@@ -242,6 +242,13 @@ fun MapHome(
     // photo per member) and it must never intercept map gestures, which is why it
     // carries no pointer input of its own.
     convoyOverlay: (@Composable () -> Unit)? = null,
+    // Optional nearby-public live-sharer layer (standalone sharers discovered via
+    // live.listNearby, drawn as on-screen markers). Same slot idiom + placement
+    // as [convoyOverlay]: a Compose layer ON the map, UNDER the floating chrome,
+    // and null when there is nobody nearby (composes nothing). Kept a separate
+    // slot from the convoy layer so the two live-marker kinds stay visually
+    // distinct and either can be present without the other.
+    nearbyOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -411,6 +418,11 @@ fun MapHome(
         // control composed below this point draws over it rather than being
         // covered by a car photo pinned to a screen edge.
         convoyOverlay?.invoke()
+
+        // Nearby-public live sharers (discovered via live.listNearby), on the
+        // same map layer, just above the convoy layer and still UNDER all the
+        // floating chrome.
+        nearbyOverlay?.invoke()
 
         // Transparent outside-tap catcher, shown only while the search bar is
         // expanded: a tap on the open map area collapses it back to the round

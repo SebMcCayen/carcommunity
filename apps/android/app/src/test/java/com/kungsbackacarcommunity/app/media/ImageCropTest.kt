@@ -64,6 +64,19 @@ class ImageCropTest {
     }
 
     @Test
+    fun `centeredOffset puts the box over the middle of the image`() {
+        // Overhang: 640 wide in a 320 box → -160 centres the box on the image.
+        assertEquals(-160f, ImageCrop.centeredOffset(640f, 320f), 0f)
+        // Smaller than the box → a centred gap of +40.
+        assertEquals(40f, ImageCrop.centeredOffset(240f, 320f), 0f)
+        // Exact fit → no offset.
+        assertEquals(0f, ImageCrop.centeredOffset(320f, 320f), 0f)
+        // Non-finite input → 0 (never a NaN offset).
+        assertEquals(0f, ImageCrop.centeredOffset(Float.NaN, 320f), 0f)
+        assertEquals(0f, ImageCrop.centeredOffset(640f, Float.POSITIVE_INFINITY), 0f)
+    }
+
+    @Test
     fun `at minimum zoom the crop spans the full width and trims to 16 by 9`() {
         val rect = rectAt(ImageCrop.MIN_ZOOM)
         assertEquals(0f, rect.left, 1e-5f)
@@ -187,5 +200,44 @@ class ImageCropTest {
         val rect =
             ImageCrop.visibleRect(1920f, 1080f, boxWidth, boxHeight, 1f, 0f, 0f)
         assertTrue(rect.isFullFrame())
+    }
+
+    @Test
+    fun `CropAspect maps to the expected box ratios`() {
+        // Original follows the source; the fixed ratios ignore it.
+        assertEquals(1600f / 1200f, CropAspect.ORIGINAL.ratio(1600f, 1200f), 1e-6f)
+        assertEquals(1f, CropAspect.SQUARE.ratio(1600f, 1200f), 1e-6f)
+        assertEquals(4f / 3f, CropAspect.RATIO_4_3.ratio(1600f, 1200f), 1e-6f)
+        assertEquals(16f / 9f, CropAspect.RATIO_16_9.ratio(1600f, 1200f), 1e-6f)
+        // The default is what pairs with the round garage display.
+        assertEquals(CropAspect.SQUARE, CropAspect.DEFAULT)
+    }
+
+    @Test
+    fun `CropAspect Original is defensive about a degenerate source`() {
+        assertEquals(1f, CropAspect.ORIGINAL.ratio(0f, 1200f), 0f)
+        assertEquals(1f, CropAspect.ORIGINAL.ratio(1600f, 0f), 0f)
+        assertEquals(1f, CropAspect.ORIGINAL.ratio(Float.NaN, 1200f), 0f)
+    }
+
+    @Test
+    fun `the selected source region always carries the chosen box ratio, never stretched`() {
+        // The core of item 1: whatever shape the user picks, the SELECTED SOURCE
+        // REGION comes out at exactly that ratio — a faithful, un-stretched cut of
+        // the (non-square) 1600x1200 source, not a squashed fit.
+        val source = 1600f to 1200f
+        // (boxWidth, boxHeight) pairs standing in for Square, 4:3, 16:9, and a
+        // portrait shape — a spread of ratios both wider and taller than 4:3.
+        val boxes = listOf(200f to 200f, 240f to 180f, 320f to 180f, 180f to 320f)
+        boxes.forEach { (bw, bh) ->
+            listOf(1f, 1.5f, 2f, 4f).forEach { zoom ->
+                val rect =
+                    ImageCrop.visibleRect(source.first, source.second, bw, bh, zoom, 0f, 0f)
+                assertTrue(rect.isValid())
+                val regionRatio =
+                    (rect.width * source.first) / (rect.height * source.second)
+                assertEquals("box=$bw x $bh zoom=$zoom", bw / bh, regionRatio, 1e-3f)
+            }
+        }
     }
 }

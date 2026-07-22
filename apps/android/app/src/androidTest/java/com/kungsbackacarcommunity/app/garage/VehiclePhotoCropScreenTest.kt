@@ -108,10 +108,48 @@ class VehiclePhotoCropScreenTest {
         assertNotNull("confirming must emit a crop window", confirmed)
         val rect = requireNotNull(confirmed)
         assertTrue("the emitted window must be usable", rect.isValid())
-        // Untouched gestures = the fully zoomed-out 16:9 window. A 400x300 (4:3)
-        // preview keeps its full width and 3/4 of its height.
+        // Untouched gestures = the fully zoomed-out window at the DEFAULT shape
+        // (Square 1:1, which pairs with the round garage display), CENTRED on the
+        // photo. A 400x300 (4:3) preview keeps its full height and the middle 3/4
+        // of its width — the centre square, not a corner crop.
+        assertEquals(0.125f, rect.left, 1e-2f)
+        assertEquals(0f, rect.top, 1e-3f)
+        assertEquals(0.75f, rect.width, 1e-2f)
+        assertEquals(1f, rect.height, 1e-3f)
+        // The selected SOURCE region is square: (0.75*400) / (1.0*300) == 1.0.
+        assertEquals(1f, (rect.width * 400f) / (rect.height * 300f), 1e-2f)
+    }
+
+    /**
+     * Item 1's selectable shape: tapping the 16:9 chip re-frames the crop window
+     * to 16:9, so the confirmed region comes out widescreen (full width, 3/4
+     * height) rather than the square default — proof the ratio options actually
+     * change the output shape, still un-stretched.
+     */
+    @Test
+    fun selectingSixteenNineReframesTheCropWindow() {
+        val bitmap = previewBitmap()
+        var confirmed: NormalizedCropRect? = null
+        composeTestRule.setContent {
+            KccTheme {
+                CropHost(bitmap = bitmap, visible = true, onConfirm = { confirmed = it })
+            }
+        }
+
+        composeTestRule.onNodeWithText(str(R.string.garage_photoCropRatio169)).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText(str(R.string.garage_photoCropConfirm)).performClick()
+        composeTestRule.waitForIdle()
+
+        val rect = requireNotNull(confirmed)
+        assertTrue("the emitted window must be usable", rect.isValid())
+        // 400x300 (4:3) framed to 16:9 keeps the full width and trims to the
+        // middle 3/4 of the height (centred, so top is 0.125 not 0).
         assertEquals(0f, rect.left, 1e-3f)
-        assertEquals(1f, rect.width, 1e-3f)
+        assertEquals(0.125f, rect.top, 1e-2f)
+        assertEquals(1f, rect.width, 1e-2f)
         assertEquals(0.75f, rect.height, 1e-2f)
+        // Region ratio == 16:9, un-stretched.
+        assertEquals(16f / 9f, (rect.width * 400f) / (rect.height * 300f), 1e-2f)
     }
 }
