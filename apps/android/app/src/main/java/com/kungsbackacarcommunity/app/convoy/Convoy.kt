@@ -86,8 +86,13 @@ data class ConvoySummary(
     val viewerIsOwner: Boolean get() = viewer?.role == ConvoyRole.Owner
 }
 
-/** Why a requested invitee was skipped by `convoy-create` (neutral reasons). */
-enum class ConvoySkipReason { Self, NotFriend, NotFound, Duplicate, Unknown }
+/**
+ * Why a requested invitee was skipped by `convoy-create` / `convoy-invite`
+ * (neutral reasons — a block edge either way surfaces as [NotFound], never as who
+ * blocked whom). [AlreadyMember] is only produced by `convoy-invite` (a uid
+ * already in the convoy).
+ */
+enum class ConvoySkipReason { Self, NotFriend, NotFound, Duplicate, AlreadyMember, Unknown }
 
 /** A requested invitee that `convoy-create` skipped, with the reason. */
 data class SkippedInvitee(
@@ -192,6 +197,41 @@ object ConvoyErrorMapper {
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             // The only precondition failure on create is "no one could be added".
             ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            else -> ConvoyActionError.Generic
+        }
+
+    /**
+     * For `convoy-invite`. A non-member / unknown convoy is `not-found` (a convoy
+     * must not be probeable); the only precondition failure is a convoy that has
+     * ended, is not the caller's to invite into, or where nobody could be added —
+     * all surfaced as "no one could be added" ([NoInvitees]), the same neutral
+     * outcome `convoy-create` uses for its precondition failure.
+     */
+    fun mapInvite(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            else -> ConvoyActionError.Generic
+        }
+
+    /**
+     * For `convoy-leave`. A non-member / unknown convoy is `not-found`. A
+     * precondition failure here means the convoy already ended, or the caller is
+     * no longer an accepted member (an owner would be refused, but the UI never
+     * offers a member's Leave to the owner) — both map to [AlreadyEnded], "this
+     * convoy has already ended", which is the honest reason the leave no longer
+     * applies.
+     */
+    fun mapLeave(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
             else -> ConvoyActionError.Generic
         }
 
@@ -418,6 +458,7 @@ object ConvoyResponseParser {
             "not_friend" -> ConvoySkipReason.NotFriend
             "not_found" -> ConvoySkipReason.NotFound
             "duplicate" -> ConvoySkipReason.Duplicate
+            "already_member" -> ConvoySkipReason.AlreadyMember
             else -> ConvoySkipReason.Unknown
         }
 

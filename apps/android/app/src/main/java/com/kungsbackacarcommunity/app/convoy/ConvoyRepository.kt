@@ -40,6 +40,21 @@ interface ConvoyRepository {
     /** Accepts or declines the caller's pending invite to [convoyId]. */
     suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult
 
+    /**
+     * Adds [inviteeUids] to an EXISTING convoy (any accepted member may invite;
+     * each candidate must be the CALLER's friend — non-friends/blocked/already-in
+     * are skipped). Returns the same `{ convoy, invited, skipped }` shape as
+     * [create], so the result reuses [CreateConvoyResult].
+     */
+    suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult
+
+    /**
+     * Removes the CALLER from a convoy they have ACCEPTED (a non-owner member's
+     * action — the owner uses [end] instead). Returns the refreshed convoy, whose
+     * `viewer` is now null because the caller is no longer a member.
+     */
+    suspend fun leave(convoyId: String): ConvoyMutationResult
+
     /** Owner-only: moves a forming convoy to active. */
     suspend fun start(convoyId: String): ConvoyMutationResult
 

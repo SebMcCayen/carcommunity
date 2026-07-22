@@ -15,9 +15,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * [ConvoyRepository] backed by the member-gated convoy callables (europe-west1):
- * `convoy-list`, `convoy-create`, `convoy-respond`, `convoy-start`,
- * `convoy-end`. Guarded ([createIfAvailable]) so a config-less build gets a null
- * repository and the screen renders a loading placeholder.
+ * `convoy-list`, `convoy-create`, `convoy-respond`, `convoy-invite`,
+ * `convoy-leave`, `convoy-start`, `convoy-end`. Guarded ([createIfAvailable]) so
+ * a config-less build gets a null repository and the screen renders a loading
+ * placeholder.
  *
  * HttpsError codes (never messages) are translated to the pure [ConvoyErrorCode]
  * and mapped per-callable by [ConvoyErrorMapper]; the raw SDK→pure translation
@@ -97,6 +98,22 @@ class FirebaseConvoyRepository private constructor(
             onFailure = { ConvoyMutationResult.Failed(ConvoyErrorMapper.mapRespond(it.toErrorCode())) },
         )
 
+    override suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult =
+        callForData(
+            INVITE,
+            mapOf("convoyId" to convoyId, "inviteeUids" to inviteeUids),
+        ).fold(
+            // Same `{ convoy, invited, skipped }` shape as create — reuse its parser.
+            onSuccess = { ConvoyResponseParser.parseCreate(it) },
+            onFailure = { CreateConvoyResult.Failed(ConvoyErrorMapper.mapInvite(it.toErrorCode())) },
+        )
+
+    override suspend fun leave(convoyId: String): ConvoyMutationResult =
+        callForData(LEAVE, mapOf("convoyId" to convoyId)).fold(
+            onSuccess = { ConvoyResponseParser.parseMutation(it) },
+            onFailure = { ConvoyMutationResult.Failed(ConvoyErrorMapper.mapLeave(it.toErrorCode())) },
+        )
+
     override suspend fun start(convoyId: String): ConvoyMutationResult =
         callForData(START, mapOf("convoyId" to convoyId)).fold(
             onSuccess = { ConvoyResponseParser.parseMutation(it) },
@@ -120,6 +137,8 @@ class FirebaseConvoyRepository private constructor(
         private const val LIST = "convoy-list"
         private const val CREATE = "convoy-create"
         private const val RESPOND = "convoy-respond"
+        private const val INVITE = "convoy-invite"
+        private const val LEAVE = "convoy-leave"
         private const val START = "convoy-start"
         private const val END = "convoy-end"
 

@@ -84,6 +84,24 @@ class ConvoyCoordinatorTest {
 
         override suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult = respondResult
 
+        var inviteResult: CreateConvoyResult = createResult
+        var lastInviteConvoyId: String? = null
+        var lastInviteeUids: List<String>? = null
+
+        override suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult {
+            lastInviteConvoyId = convoyId
+            lastInviteeUids = inviteeUids
+            return inviteResult
+        }
+
+        var leaveResult: ConvoyMutationResult = respondResult
+        var lastLeaveConvoyId: String? = null
+
+        override suspend fun leave(convoyId: String): ConvoyMutationResult {
+            lastLeaveConvoyId = convoyId
+            return leaveResult
+        }
+
         override suspend fun start(convoyId: String): ConvoyMutationResult = startResult
 
         override suspend fun end(convoyId: String): ConvoyMutationResult = endResult
@@ -151,6 +169,74 @@ class ConvoyCoordinatorTest {
         coordinator.create(listOf("a", "x"), null)
         val state = coordinator.createState.value as CreateConvoyState.Created
         assertEquals(listOf(ConvoySkipReason.NotFriend), state.skipped.map { it.reason })
+    }
+
+    @Test
+    fun `invite with no invitees is rejected without calling the backend`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", inviteeUids = listOf("", "  "))
+        assertEquals(InviteConvoyState.Error(ConvoyActionError.NoInvitees), coordinator.inviteState.value)
+        assertNull(repo.lastInviteConvoyId)
+    }
+
+    @Test
+    fun `invite dedupes invitees, reports Done with skipped, and reloads`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                inviteResult =
+                    CreateConvoyResult.Created(
+                        (respondResult as ConvoyMutationResult.Updated).convoy,
+                        invited = listOf("a"),
+                        skipped = listOf(SkippedInvitee("x", ConvoySkipReason.AlreadyMember)),
+                    )
+            }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", listOf("a", "a", "x"))
+        val state = coordinator.inviteState.value
+        assertTrue(state is InviteConvoyState.Done)
+        assertEquals(listOf(ConvoySkipReason.AlreadyMember), (state as InviteConvoyState.Done).skipped.map { it.reason })
+        assertEquals("c1", repo.lastInviteConvoyId)
+        assertEquals(listOf("a", "x"), repo.lastInviteeUids)
+        assertEquals(1, repo.listCalls) // reloaded after a successful invite
+    }
+
+    @Test
+    fun `invite failure surfaces the mapped error and does not reload`() = runTest {
+        val repo = FakeRepo().apply { inviteResult = CreateConvoyResult.Failed(ConvoyActionError.NotFound) }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", listOf("a"))
+        assertEquals(InviteConvoyState.Error(ConvoyActionError.NotFound), coordinator.inviteState.value)
+        assertEquals(0, repo.listCalls)
+    }
+
+    @Test
+    fun `resetInvite returns the sub-state to Idle`() = runTest {
+        val repo = FakeRepo().apply { inviteResult = CreateConvoyResult.Failed(ConvoyActionError.Generic) }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.invite("c1", listOf("a"))
+        assertTrue(coordinator.inviteState.value is InviteConvoyState.Error)
+        coordinator.resetInvite()
+        assertEquals(InviteConvoyState.Idle, coordinator.inviteState.value)
+    }
+
+    @Test
+    fun `leave calls the backend for the convoy and re-fetches`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.leave("c1")
+        assertEquals("c1", repo.lastLeaveConvoyId)
+        assertEquals(1, repo.listCalls)
+        assertNull(coordinator.actionError.value)
+    }
+
+    @Test
+    fun `leave failure sets the action error and still reloads`() = runTest {
+        val repo = FakeRepo().apply { leaveResult = ConvoyMutationResult.Failed(ConvoyActionError.AlreadyEnded) }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.leave("c1")
+        assertEquals(ConvoyActionError.AlreadyEnded, coordinator.actionError.value)
+        assertEquals(1, repo.listCalls)
     }
 
     @Test

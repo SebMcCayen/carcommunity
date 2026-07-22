@@ -1140,81 +1140,95 @@ private fun SearchBarRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
-        if (searchExpanded) {
-            // Expanded: the full-width "Where to?" bar. Same search behaviour as
-            // before — tapping it opens the search screen (or lets the user type).
-            Surface(
-                // Fixed 48dp height (matching the profile button) so the expanded
-                // bar only extends horizontally (weight = fill remaining width) and
-                // never grows vertically. A bare heightIn(min=…) let the inner
-                // fillMaxHeight() Row expand to the whole screen, turning the bar
-                // into a full-height pill. 48dp is also the accessibility minimum.
-                modifier = Modifier.weight(1f).height(KccSpacing.s12),
-                shape = RoundedCornerShape(KccRadius.full),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onSearch()
-                },
+        // The flexible left+middle region between the (fixed) profile avatar on the
+        // right and nothing on the left. It holds the collapsed search button plus
+        // the FULL-WIDTH convoy bar filling the gap; when the search is expanded the
+        // "Where to?" field is drawn OVER this region (a later child of the Box =
+        // higher z-order), covering the convoy bar rather than sitting beside it.
+        // The avatar sits OUTSIDE this Box, so search never covers it.
+        Box(modifier = Modifier.weight(1f)) {
+            // Base layer: the collapsed round search button (upper-left) + the
+            // convoy bar filling the remaining width. The search button is dropped
+            // while expanded — the overlay below carries the search affordance then,
+            // so there is no duplicate control hiding under it.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
             ) {
-                Row(
-                    // fillMaxHeight so the slim content stays centered within the
-                    // 48dp minimum touch target rather than pinning to the top.
-                    modifier =
-                        Modifier.fillMaxHeight()
-                            .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = stringResource(R.string.shell_searchIcon),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.shell_searchHint),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (!searchExpanded) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 3.dp,
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onExpandSearch()
+                        },
+                        modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = stringResource(R.string.shell_searchExpand),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+                // The convoy bar fills the whole gap at full width (never a
+                // wrap-content pill); a Spacer holds the gap open when there is no
+                // convoy so the avatar stays pinned right, exactly as before.
+                if (convoyBar != null) {
+                    Box(modifier = Modifier.weight(1f)) { convoyBar() }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
-        } else {
-            // Collapsed: a round search-icon button in the upper-left, the same
-            // size as the profile button. Tapping it expands the full bar. The
-            // Spacer pushes the profile button to the upper-right corner.
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onExpandSearch()
-                },
-                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_SEARCH_TAG),
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
+
+            // Overlay layer: the expanded "Where to?" bar, composed AFTER the base
+            // so it is drawn on top of — and fully covers — the convoy bar. Opaque
+            // surface, full width of the region, fixed 48dp (matching the avatar and
+            // the accessibility minimum) so it only extends horizontally. When
+            // search closes the overlay is gone and the convoy bar reappears.
+            if (searchExpanded) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(KccSpacing.s12),
+                    shape = RoundedCornerShape(KccRadius.full),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 3.dp,
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSearch()
+                    },
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Search,
-                        contentDescription = stringResource(R.string.shell_searchExpand),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Row(
+                        modifier =
+                            Modifier.fillMaxHeight()
+                                .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = stringResource(R.string.shell_searchIcon),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(R.string.shell_searchHint),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
         }
-        // The convoy pill, wedged in the gap the search control and the avatar
-        // frame. The flexible element above (the expanded search bar's weight, or
-        // the collapsed state's Spacer) absorbs the slack, so the wrap-content pill
-        // keeps its size and never clips; the search field yields width first when
-        // the row gets tight.
-        convoyBar?.invoke()
         // This Box is the popup's anchor: composing ProfileMenuPopup inside it
         // hands the button's real measured window bounds to the popup's
         // PopupPositionProvider, so the menu tracks the button wherever the
