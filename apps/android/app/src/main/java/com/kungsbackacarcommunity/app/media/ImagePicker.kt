@@ -21,7 +21,8 @@ import kotlinx.coroutines.withContext
  * any supported API level. Reads the picked image's bytes + content type off the
  * main thread and hands a [PickedImage] to `onPicked`; a user cancel is
  * `onPicked(null)` and a chosen-but-unreadable pick routes to `onPickFailed`
- * (see [rememberImagePickLauncher]).
+ * when one is provided, otherwise falling back to `onPicked(null)` (see
+ * [rememberImagePickLauncher]).
  */
 class ImagePickLauncher internal constructor(
     private val launch: () -> Unit,
@@ -30,13 +31,14 @@ class ImagePickLauncher internal constructor(
 }
 
 /**
- * The three distinct outcomes of a photo pick, so a caller can tell a user who
- * BACKED OUT (say nothing) apart from a pick that FAILED TO READ (surface an
- * error). Collapsing both into a single `null` — as the picker did before — made
- * a real pick that could not be read (a cloud-only Google Photos item that never
- * finished downloading, an unreadable/oversized file, a content-resolver error)
- * indistinguishable from a cancel, so the caller stayed silent and the user saw
- * "nothing happen" after choosing a photo.
+ * The three distinct outcomes of a photo pick, so a caller can tell a CANCEL
+ * (nothing chosen — stay silent) apart from a READ FAILURE (a photo was chosen
+ * but its bytes could not be read — surface an error). Collapsing both into a
+ * single `null` — as the picker did before — made a real pick that could not be
+ * read (a cloud-only Google Photos item that never finished downloading, an
+ * unreadable/oversized file, a content-resolver error) indistinguishable from a
+ * cancel, so the caller stayed silent and the user saw "nothing happens" after
+ * choosing a photo.
  */
 internal sealed interface PickOutcome {
     /** The user dismissed the picker without choosing anything. */
