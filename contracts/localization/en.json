@@ -238,7 +238,7 @@
     "statsEmptyBody": "Your drives, awards and points will show up here.",
     "displayNameLabel": "Display name",
     "bioLabel": "Bio",
-    "emptyNickname": "No nickname yet",
+    "emptyDisplayName": "No display name yet",
     "emptyBio": "No bio yet",
     "saveButton": "Save",
     "editButton": "Edit",

@@ -137,7 +137,7 @@ fun ProfileScreen(
             } else {
                 Text(
                     text = profile?.displayName?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.profile_emptyNickname),
+                        ?: stringResource(R.string.profile_emptyDisplayName),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
