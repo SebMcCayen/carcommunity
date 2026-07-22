@@ -175,7 +175,6 @@ import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
-import com.kungsbackacarcommunity.app.live.LiveDurationPicker
 import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -328,6 +327,17 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
  * the same register as the map's own short camera eases.
  */
 private const val SHELL_TAB_FADE_MILLIS = 200
+
+/**
+ * The window a Single (solo) live session starts with. Starting a Single session
+ * is now IMMEDIATE — the user is no longer asked to pick a time — so this fixed
+ * default is what every Single-session Start uses. It preserves the previous
+ * picker's pre-selected default. Users can still Extend before expiry and Stop
+ * anytime, and the backend `live-startSession` callable still requires a
+ * `duration` (its key is passed through unchanged). Convoy sessions are
+ * unaffected — their per-member window is chosen server-side.
+ */
+private val SINGLE_SESSION_DEFAULT_DURATION = LiveSessionDuration.ONE_HOUR
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -1289,12 +1299,6 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Whether the single-session start dialog (the 1h/2h/4h duration
-            // picker, moved OFF the map's broadcast control) is shown. Raised by
-            // both the map's broadcast Start and the "+" Create → Single session,
-            // so the duration is always chosen when a Single session is started.
-            var showSingleSessionStart by rememberSaveable { mutableStateOf(false) }
-
             // Whether the live-share MANAGE sheet is shown. Raised by the centre
             // live control while a session runs (the bottom bar's live disc), it is
             // the new home for the three session controls that the removed
@@ -1307,26 +1311,27 @@ fun AuthenticatedApp(
                 if (!isSharing) liveManageOpen = false
             }
 
-            // Ask for the session duration before starting: raise the picker
-            // dialog when a start is actually possible, otherwise fall back to
-            // the live screen / unavailable snackbar (same gate as the toggle).
-            fun requestStartSingleSession() {
-                if (liveLocationCoordinator != null && canShareLive) {
-                    showSingleSessionStart = true
-                } else {
-                    openLiveShareFallback()
-                }
-            }
-
-            // Start the Single session for the picked duration. The drive
+            // Start the Single session for the given duration. The drive
             // recording AND the foreground position publisher both auto-start off
             // the resulting isSharing flip (the session-bound effects above), so
             // neither is started explicitly here — LaunchedEffect(isSharing) is the
             // single source of truth for the publisher (the same wiring that makes
             // a convoy AUTO-started session publish).
             fun startSingleSession(duration: LiveSessionDuration) {
-                showSingleSessionStart = false
                 liveLocationCoordinator?.let { c -> scope.launch { c.start(duration) } }
+            }
+
+            // Start the Single session IMMEDIATELY — no time/duration choice is
+            // shown. When a start is actually possible we begin sharing at once
+            // for the default window; otherwise fall back to the live screen /
+            // unavailable snackbar (same gate as the toggle). Users can Extend
+            // before expiry and Stop anytime, so a fixed default is fine.
+            fun requestStartSingleSession() {
+                if (liveLocationCoordinator != null && canShareLive) {
+                    startSingleSession(SINGLE_SESSION_DEFAULT_DURATION)
+                } else {
+                    openLiveShareFallback()
+                }
             }
 
             /**
@@ -2997,10 +3002,11 @@ fun AuthenticatedApp(
                             showCreateChooser = false
                             // Single session = start a solo live-share session
                             // (which records the drive and prompts to save it to
-                            // History at end-of-session). Raise the duration
-                            // picker so the user chooses 1h/2h/4h here. Guard on
-                            // isSharing so confirming can never disturb an active
-                            // session — the fallback still runs when unwired.
+                            // History at end-of-session). Starts IMMEDIATELY for
+                            // the default window — no time/duration is chosen.
+                            // Guard on isSharing so confirming can never disturb
+                            // an active session — the fallback still runs when
+                            // unwired.
                             if (!isSharing) requestStartSingleSession()
                         },
                         onConvoy = {
@@ -3011,16 +3017,6 @@ fun AuthenticatedApp(
                             route = ShellRoute.Convoys
                         },
                         onDismiss = { showCreateChooser = false },
-                    )
-                }
-
-                // Single-session start: the 1h/2h/4h duration picker, moved here
-                // from the map's broadcast control. Confirming starts the solo
-                // live-share session (and its drive recording) for that duration.
-                if (showSingleSessionStart) {
-                    SingleSessionStartDialog(
-                        onStart = { duration -> startSingleSession(duration) },
-                        onDismiss = { showSingleSessionStart = false },
                     )
                 }
 
@@ -3334,52 +3330,6 @@ private fun CreateChooserDialog(
         },
         // No confirm button — each option card acts immediately; Cancel dismisses.
         confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.shell_liveSharePromptCancel))
-            }
-        },
-    )
-}
-
-/**
- * The single-session start dialog: the 1h/2h/4h sharing-duration picker that
- * used to live on the map's broadcast control. Raised by both the map's
- * broadcast Start and the "+" Create → Single session, so the duration is always
- * chosen when a Single session begins. Confirming runs [onStart] with the picked
- * [LiveSessionDuration]; Cancel / outside-tap runs [onDismiss].
- */
-@Composable
-private fun SingleSessionStartDialog(
-    onStart: (LiveSessionDuration) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var selectedDuration by remember { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.shell_createChooserSingle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
-                Text(stringResource(R.string.shell_createChooserSingleBody))
-                Text(
-                    text = stringResource(R.string.liveLocation_durationLabel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                // Shared with the LiveLocationScreen picker so the options never
-                // drift; no busy state here, so it is always enabled.
-                LiveDurationPicker(
-                    selected = selectedDuration,
-                    enabled = true,
-                    onSelect = { selectedDuration = it },
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onStart(selectedDuration) }) {
-                Text(stringResource(R.string.liveLocation_start))
-            }
-        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.shell_liveSharePromptCancel))

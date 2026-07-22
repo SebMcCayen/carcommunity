@@ -11,10 +11,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,10 +22,10 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 /**
  * Live-location session control surface (Phase 12 slice 5).
  *
- * Drives the caller's own session: choose a duration and start sharing, stop
- * sharing, or "hide me now" (a privacy stop that is always available). Whether
- * the user is currently sharing is derived from the observed [session]; this
- * screen is otherwise stateless apart from the pending duration selection.
+ * Drives the caller's own session: start sharing immediately (no time/duration
+ * is chosen), stop sharing, or "hide me now" (a privacy stop that is always
+ * available). Whether the user is currently sharing is derived from the observed
+ * [session]; this screen is otherwise stateless.
  *
  * Sharing is gated on [canShare] (liveLocation flag AND active membership),
  * mirroring the backend live.startSession member check. "Hide me now" is never
@@ -54,7 +50,6 @@ fun LiveLocationScreen(
     val sharing = LiveLocation.isSharing(session, nowMillis)
     val expiringSoon = LiveLocation.isExpiringSoon(session, nowMillis)
     val busy = actionStatus == LiveActionStatus.Working
-    var selectedDuration by rememberSaveable { mutableStateOf(LiveSessionDuration.ONE_HOUR) }
 
     AeroPage(title = stringResource(R.string.liveLocation_screenTitle), modifier = modifier) {
         // Current sharing status.
@@ -107,18 +102,12 @@ fun LiveLocationScreen(
                 Text(text = stringResource(R.string.liveLocation_stop))
             }
         } else if (canShare) {
-            Text(
-                text = stringResource(R.string.liveLocation_durationLabel),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LiveDurationPicker(
-                selected = selectedDuration,
-                enabled = !busy,
-                onSelect = { selectedDuration = it },
-            )
+            // Starting is IMMEDIATE — no time/duration is chosen. Start shares at
+            // once for the default window; the user can Extend before expiry and
+            // Stop anytime. The backend callable still takes a duration, so the
+            // fixed default key is passed through unchanged.
             Button(
-                onClick = { onStart(selectedDuration) },
+                onClick = { onStart(LiveSessionDuration.ONE_HOUR) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) {
