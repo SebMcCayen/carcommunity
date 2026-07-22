@@ -558,6 +558,7 @@
     "inviteConfirmInvited": "Invited %1$d",
     "inviteConfirmMixed": "Invited %1$d · %2$d couldn't be added",
     "inviteConfirmNoneAdded": "No one new was added",
+    "inviteNoInvitable": "All your friends are already in this convoy.",
     "awarenessMemberOnMap": "%1$s in the convoy",
     "awarenessArrowSingle": "%1$s is off the map, at %2$d o’clock, %3$s away",
     "awarenessArrowGroup": "%1$s and %2$d others are off the map, at %3$d o’clock, %4$s away",

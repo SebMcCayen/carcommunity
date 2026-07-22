@@ -125,6 +125,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
+import com.kungsbackacarcommunity.app.convoy.invitableSelection
 import com.kungsbackacarcommunity.app.convoy.messageRes
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
@@ -1658,6 +1659,27 @@ fun AuthenticatedApp(
                 val convoyInviteState: InviteConvoyState =
                     convoyBarCoordinator?.inviteState?.collectAsState()?.value
                         ?: InviteConvoyState.Idle
+                // Who the picker must NOT offer: the target convoy's current members
+                // (owner + every invited/accepted/declined invitee) plus the caller,
+                // so only friends actually addable via `convoy-invite` are shown.
+                // Derived from the LIVE bar status (observeActiveConvoy), so it
+                // recomputes as the roster changes — a friend who joins while the
+                // picker is open drops out of the candidate list.
+                val convoyInviteExcludedUids: Set<String> =
+                    (convoyBarStatus as? ConvoyListStatus.Loaded)
+                        ?.convoy(convoyInviteConvoyId ?: "")
+                        ?.inviteExcludedUids(uid)
+                        ?: emptySet()
+                // Reconcile the selection against the LIVE exclusion set: if a chosen
+                // friend joins the convoy (or is invited elsewhere) while the picker
+                // is open, drop them from the selection so Submit's enabled-state and
+                // the `convoy-invite` payload never carry a uid that's now already in
+                // the convoy. Keyed on the excluded set (a structurally-equal set does
+                // not re-fire), mirroring the convoyId-keying discipline of this flow.
+                LaunchedEffect(convoyInviteExcludedUids) {
+                    val pruned = invitableSelection(convoyInviteSelected, convoyInviteExcludedUids)
+                    if (pruned != convoyInviteSelected) convoyInviteSelected = pruned
+                }
                 // (Re)load the friends snapshot each time the picker opens, so a
                 // previously failed load is re-attempted rather than left stuck.
                 LaunchedEffect(convoyInviteConvoyId, convoyInviteFriendsCoordinator) {
@@ -2168,6 +2190,7 @@ fun AuthenticatedApp(
                         friendsStatus = convoyInviteFriendsStatus,
                         inviteState = convoyInviteState,
                         selectedUids = convoyInviteSelected,
+                        excludedUids = convoyInviteExcludedUids,
                         onToggleFriend = { friendUid ->
                             convoyInviteSelected =
                                 if (friendUid in convoyInviteSelected) {
@@ -2181,11 +2204,22 @@ fun AuthenticatedApp(
                                 { scope.launch { c.load() } }
                             },
                         onSubmit = {
-                            scope.launch {
-                                convoyBarCoordinator.invite(
-                                    inviteConvoyId,
-                                    convoyInviteSelected.toList(),
-                                )
+                            // Send only the still-invitable selection: guards the exact
+                            // frame where a chosen friend was just excluded but the
+                            // pruning effect above hasn't run yet.
+                            val payload =
+                                invitableSelection(
+                                    convoyInviteSelected,
+                                    convoyInviteExcludedUids,
+                                ).toList()
+                            // If every chosen friend was excluded in the meantime the
+                            // payload is empty; `convoy-invite` rejects an empty
+                            // inviteeUids list (schema 1..MAX), so skip the call
+                            // rather than surface an avoidable server error.
+                            if (payload.isNotEmpty()) {
+                                scope.launch {
+                                    convoyBarCoordinator.invite(inviteConvoyId, payload)
+                                }
                             }
                         },
                         onCancel = closeInvite,
