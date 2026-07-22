@@ -47,6 +47,25 @@ class ConvoyErrorMapperTest {
     }
 
     /**
+     * `leave` is the ONE callable where `failed-precondition` is overloaded across
+     * three backend cases (ended / owner-must-end / not-an-accepted-member),
+     * separated only by message text the code-only client never reads. It must map
+     * to the neutral [ConvoyActionError.LeaveFailed] rather than asserting one
+     * specific cause like [ConvoyActionError.AlreadyEnded], which would be wrong for
+     * the other two. A genuine non-member is still `not-found`.
+     */
+    @Test
+    fun `leave maps precondition to neutral LeaveFailed, not AlreadyEnded`() {
+        assertEquals(ConvoyActionError.NotFound, ConvoyErrorMapper.mapLeave(ConvoyErrorCode.NotFound))
+        assertEquals(
+            ConvoyActionError.LeaveFailed,
+            ConvoyErrorMapper.mapLeave(ConvoyErrorCode.FailedPrecondition),
+        )
+        assertEquals(ConvoyActionError.SignedOut, ConvoyErrorMapper.mapLeave(ConvoyErrorCode.Unauthenticated))
+        assertEquals(ConvoyActionError.NotMember, ConvoyErrorMapper.mapLeave(ConvoyErrorCode.PermissionDenied))
+    }
+
+    /**
      * `clear` is the ONE convoy callable where permission-denied does not mean
      * "you are not in this convoy". It means "you are, but you neither set this
      * destination nor own the convoy". Reporting that as NotMember sends a member

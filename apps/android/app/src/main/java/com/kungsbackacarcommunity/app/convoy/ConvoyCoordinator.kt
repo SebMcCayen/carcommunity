@@ -56,8 +56,35 @@ sealed interface CreateConvoyState {
 }
 
 /**
- * Orchestrates the convoy management surface (load + create + respond + start +
- * end). Pure Kotlin so it is unit-testable with a fake repository. Every
+ * Sub-state of the "invite more people into an existing convoy" flow, driven from
+ * the convoy bar's invite picker. Mirrors [CreateConvoyState] but never navigates
+ * anywhere — inviting grows the convoy the caller is already in.
+ */
+sealed interface InviteConvoyState {
+    data object Idle : InviteConvoyState
+
+    data object Working : InviteConvoyState
+
+    /**
+     * The invites were sent. [invited] is the list of invitees the backend
+     * actually added (so the confirmation can say how many were invited);
+     * [skipped] surfaces any requested invitee that couldn't be added (not a
+     * friend / already in / blocked), with the same neutral reasons as create.
+     * The confirmation snackbar is built from both counts so it reflects
+     * reality — all invited, all skipped, or a mix.
+     */
+    data class Done(
+        val invited: List<String>,
+        val skipped: List<SkippedInvitee>,
+    ) : InviteConvoyState
+
+    data class Error(val error: ConvoyActionError) : InviteConvoyState
+}
+
+/**
+ * Orchestrates the convoy management surface (load + create + respond + invite +
+ * leave + start + end). Pure Kotlin so it is unit-testable with a fake repository.
+ * Every
  * successful mutation re-fetches the snapshot via [load]; the detail/summary
  * views read a single convoy out of the loaded snapshot by id, so a start/end
  * re-fetch updates them without extra plumbing.
@@ -88,6 +115,9 @@ class ConvoyCoordinator(
 
     private val createStateFlow = MutableStateFlow<CreateConvoyState>(CreateConvoyState.Idle)
     val createState: StateFlow<CreateConvoyState> = createStateFlow.asStateFlow()
+
+    private val inviteStateFlow = MutableStateFlow<InviteConvoyState>(InviteConvoyState.Idle)
+    val inviteState: StateFlow<InviteConvoyState> = inviteStateFlow.asStateFlow()
 
     // Failures of a row/detail action (accept/decline/start/end) — surfaced once,
     // then cleared. Success is reflected by the reloaded snapshot, not a status.
@@ -222,6 +252,65 @@ class ConvoyCoordinator(
 
     suspend fun end(convoyId: String) {
         runRowAction(convoyId) { repository.end(convoyId).errorOrNull() }
+    }
+
+    /**
+     * Removes the caller from [convoyId] (a non-owner member's action — the owner
+     * ends instead). Runs through [runRowAction], so it is guarded against double
+     * taps, surfaces a failure via [actionError], and re-fetches on completion: on
+     * success the caller drops out of the convoy and the bar hides itself (the
+     * refreshed snapshot no longer has an accepted membership for them).
+     */
+    suspend fun leave(convoyId: String) {
+        runRowAction(convoyId) { repository.leave(convoyId).errorOrNull() }
+    }
+
+    /**
+     * Invites [inviteeUids] into an existing [convoyId]. Mirrors [create] (working
+     * → done/error, then a re-fetch on success so the new invitees show), but the
+     * caller stays in the convoy they already have — there is nothing to navigate
+     * into. The result's [InviteConvoyState.Done.skipped] carries any invitee the
+     * backend couldn't add.
+     */
+    suspend fun invite(convoyId: String, inviteeUids: List<String>) {
+        if (inviteStateFlow.value == InviteConvoyState.Working) return
+        val invitees = inviteeUids.filter { it.isNotBlank() }.distinct()
+        if (invitees.isEmpty()) {
+            inviteStateFlow.value = InviteConvoyState.Error(ConvoyActionError.NoInvitees)
+            return
+        }
+        inviteStateFlow.value = InviteConvoyState.Working
+        try {
+            inviteStateFlow.value =
+                when (val result = repository.invite(convoyId, invitees)) {
+                    is CreateConvoyResult.Created -> InviteConvoyState.Done(result.invited, result.skipped)
+                    is CreateConvoyResult.Failed -> InviteConvoyState.Error(result.error)
+                }
+            // New members change the snapshot — refresh so the count/roster update.
+            if (inviteStateFlow.value is InviteConvoyState.Done) load()
+        } catch (cancellation: CancellationException) {
+            inviteStateFlow.value = InviteConvoyState.Idle
+            throw cancellation
+        } catch (_: Exception) {
+            inviteStateFlow.value = InviteConvoyState.Error(ConvoyActionError.Generic)
+        }
+    }
+
+    /**
+     * Clears the invite sub-state (e.g. after dismissing the picker/result) back
+     * to [InviteConvoyState.Idle].
+     *
+     * Deliberately a no-op while an invite is [InviteConvoyState.Working]: the
+     * `convoy-invite` call is in flight and [invite] relies on the `Working`
+     * state as its overlap guard (it early-returns while `Working`). Clearing it
+     * here — as happens when the picker is opened or dismissed mid-flight — would
+     * drop the guard and let a second concurrent invite start on top of the first.
+     * The in-flight coroutine owns the transition out of `Working` (→ Done/Error),
+     * so callers dismissing the UI can safely leave the sub-state intact.
+     */
+    fun resetInvite() {
+        if (inviteStateFlow.value == InviteConvoyState.Working) return
+        inviteStateFlow.value = InviteConvoyState.Idle
     }
 
     /**

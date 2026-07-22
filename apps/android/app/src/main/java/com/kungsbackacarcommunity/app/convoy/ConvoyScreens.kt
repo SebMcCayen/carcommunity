@@ -462,6 +462,114 @@ private fun CreatedResult(
     }
 }
 
+/**
+ * Invite-more-people picker for an EXISTING convoy, opened from the convoy bar's
+ * invite control. The same friend multi-select as [CreateConvoyScreen] (reusing
+ * [SelectableFriendRow]), wired to `convoy-invite` — but it grows the convoy the
+ * caller is already in, so there is no "created" result to continue into: the host
+ * observes [InviteConvoyState.Done] and closes the picker with a confirmation.
+ *
+ * A failed invite is surfaced inline here (the mapped [ConvoyActionError] message),
+ * never a silent no-op.
+ */
+@Composable
+fun ConvoyInvitePickerScreen(
+    friendsStatus: FriendsStatus,
+    inviteState: InviteConvoyState,
+    selectedUids: Set<String>,
+    onToggleFriend: (String) -> Unit,
+    onRetryFriends: (() -> Unit)?,
+    onSubmit: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val working = inviteState is InviteConvoyState.Working
+    AeroLazyPage(modifier = modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = aeroLazyContentPadding(),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
+        ) {
+            item(key = "title") { AeroPageTitle(stringResource(R.string.convoy_inviteTitle)) }
+
+            item(key = "pick-header") {
+                SectionHeader(stringResource(R.string.convoy_pickFriendsTitle))
+            }
+
+            when (friendsStatus) {
+                FriendsStatus.Loading -> item(key = "friends-loading") { CircularProgressIndicator() }
+
+                is FriendsStatus.Error ->
+                    item(key = "friends-error") {
+                        Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                            InfoNoticeCard(text = stringResource(friendsStatus.error.messageRes()))
+                            if (onRetryFriends != null) {
+                                TextButton(onClick = onRetryFriends) {
+                                    Text(stringResource(R.string.convoy_friendsRetry))
+                                }
+                            }
+                        }
+                    }
+
+                is FriendsStatus.Loaded ->
+                    if (friendsStatus.friends.isEmpty()) {
+                        item(key = "friends-empty") {
+                            InfoNoticeCard(text = stringResource(R.string.convoy_noFriends))
+                        }
+                    } else {
+                        items(friendsStatus.friends, key = { "f-${it.uid}" }) { friend ->
+                            SelectableFriendRow(
+                                friend = friend,
+                                selected = friend.uid in selectedUids,
+                                enabled = !working,
+                                onToggle = { onToggleFriend(friend.uid) },
+                            )
+                        }
+                    }
+            }
+
+            if (inviteState is InviteConvoyState.Error) {
+                item(key = "invite-error") {
+                    Text(
+                        text = stringResource(inviteState.error.messageRes()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
+            item(key = "actions") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        enabled = !working,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.convoy_inviteCancel))
+                    }
+                    Button(
+                        onClick = onSubmit,
+                        enabled = !working && selectedUids.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (working) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(KccSpacing.s6),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            Text(stringResource(R.string.convoy_inviteSubmit))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Convoy detail (+ ended summary)
 // ---------------------------------------------------------------------------
@@ -811,7 +919,7 @@ private fun ConvoyInviteStatus.labelRes(): Int =
         ConvoyInviteStatus.Declined -> R.string.convoy_inviteDeclined
     }
 
-private fun ConvoyActionError.messageRes(): Int =
+internal fun ConvoyActionError.messageRes(): Int =
     when (this) {
         ConvoyActionError.SignedOut -> R.string.convoy_errorSignedOut
         ConvoyActionError.NotMember -> R.string.convoy_errorNotMember
@@ -821,6 +929,7 @@ private fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.InviteGone -> R.string.convoy_errorInviteGone
         ConvoyActionError.CannotStart -> R.string.convoy_errorCannotStart
         ConvoyActionError.AlreadyEnded -> R.string.convoy_errorAlreadyEnded
+        ConvoyActionError.LeaveFailed -> R.string.convoy_errorLeaveFailed
         ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
         ConvoyActionError.AlreadyInConvoy -> R.string.convoy_errorAlreadyInConvoy
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric

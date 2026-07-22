@@ -112,17 +112,20 @@ import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.config.MemberGating
 import com.kungsbackacarcommunity.app.convoy.ConvoyBar
 import com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator
+import com.kungsbackacarcommunity.app.convoy.ConvoyActionError
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestination
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationNavigationEvent
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
+import com.kungsbackacarcommunity.app.convoy.ConvoyInvitePickerScreen
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
-import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBarInline
+import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
+import com.kungsbackacarcommunity.app.convoy.messageRes
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
@@ -139,8 +142,11 @@ import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
+import com.kungsbackacarcommunity.app.friends.FriendActionError
+import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRoute
+import com.kungsbackacarcommunity.app.friends.FriendsStatus
 import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRepository
 import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
@@ -1503,6 +1509,96 @@ fun AuthenticatedApp(
                     convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
                 val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid)
 
+                // A failed leave/end from the bar surfaces as a snackbar rather than
+                // a silent no-op: the coordinator sets actionError, which we show
+                // once and then clear. (Invite failures are surfaced inline in the
+                // invite picker instead — see convoyInviteState below.)
+                val convoyBarActionError: ConvoyActionError? =
+                    convoyBarCoordinator?.actionError?.collectAsState()?.value
+                val convoyBarActionErrorText =
+                    convoyBarActionError?.let { stringResource(it.messageRes()) }
+                LaunchedEffect(convoyBarActionError) {
+                    if (convoyBarActionErrorText != null) {
+                        snackbarHostState.showSnackbar(convoyBarActionErrorText)
+                        convoyBarCoordinator?.clearActionError()
+                    }
+                }
+
+                // Invite-more-people flow, driven from the bar's invite control. It
+                // reuses the SAME friend multi-select the create-convoy flow uses
+                // (ConvoyInvitePickerScreen / the shared FriendsRepository) and calls
+                // `convoy-invite` through the bar's coordinator, so inviting grows
+                // THIS convoy rather than creating a second one. convoyInviteConvoyId
+                // non-null renders the picker over the map (see the overlay below).
+                var convoyInviteConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
+                var convoyInviteSelected by
+                    rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
+                val convoyInviteFriendsCoordinator =
+                    remember(friendsRepository) {
+                        friendsRepository?.let { FriendsCoordinator(it) }
+                    }
+                val convoyInviteFriendsStatus: FriendsStatus =
+                    convoyInviteFriendsCoordinator?.status?.collectAsState()?.value
+                        ?: FriendsStatus.Error(FriendActionError.Generic)
+                val convoyInviteState: InviteConvoyState =
+                    convoyBarCoordinator?.inviteState?.collectAsState()?.value
+                        ?: InviteConvoyState.Idle
+                // (Re)load the friends snapshot each time the picker opens, so a
+                // previously failed load is re-attempted rather than left stuck.
+                LaunchedEffect(convoyInviteConvoyId, convoyInviteFriendsCoordinator) {
+                    if (convoyInviteConvoyId != null) convoyInviteFriendsCoordinator?.load()
+                }
+                // The confirmation reflects reality via the backend's counts: how
+                // many were actually invited and how many were skipped (already in /
+                // not a friend / …) — one clear line for all-invited, all-skipped,
+                // and mixed outcomes. Resolved composably (stringResource) so the
+                // effect below only shows it.
+                val convoyInviteDone = convoyInviteState as? InviteConvoyState.Done
+                val convoyInviteConfirmText: String? =
+                    when {
+                        convoyInviteDone == null -> null
+                        // None added — every requested invitee was skipped.
+                        convoyInviteDone.invited.isEmpty() ->
+                            stringResource(R.string.convoy_inviteConfirmNoneAdded)
+                        // All requested invitees were added, nothing skipped.
+                        convoyInviteDone.skipped.isEmpty() ->
+                            stringResource(
+                                R.string.convoy_inviteConfirmInvited,
+                                convoyInviteDone.invited.size,
+                            )
+                        // Some in, some skipped.
+                        else ->
+                            stringResource(
+                                R.string.convoy_inviteConfirmMixed,
+                                convoyInviteDone.invited.size,
+                                convoyInviteDone.skipped.size,
+                            )
+                    }
+                // On a successful invite, close the picker, confirm, and reset the
+                // sub-state so a later open starts clean.
+                LaunchedEffect(convoyInviteState) {
+                    if (convoyInviteState is InviteConvoyState.Done) {
+                        convoyInviteConvoyId = null
+                        convoyInviteSelected = emptySet()
+                        convoyBarCoordinator?.resetInvite()
+                        convoyInviteConfirmText?.let { snackbarHostState.showSnackbar(it) }
+                    }
+                }
+                // Opens the invite picker for [convoyId] with a fresh selection.
+                // resetInvite() clears any leftover Done/Error sub-state but is a
+                // no-op while an invite is still Working, so re-opening cannot
+                // clobber an in-flight invite's overlap guard.
+                val openConvoyInvite: (String) -> Unit = { convoyId ->
+                    convoyBarCoordinator?.resetInvite()
+                    convoyInviteSelected = emptySet()
+                    convoyInviteConvoyId = convoyId
+                }
+                // Removes the caller from [convoyId] (a member's Leave, confirmed in
+                // the bar before this runs).
+                val leaveConvoy: (String) -> Unit = { convoyId ->
+                    convoyBarCoordinator?.let { c -> scope.launch { c.leave(convoyId) } }
+                }
+
                 // Track what happened to the destination the user is CURRENTLY
                 // navigating to. The comparison is against the previous snapshot,
                 // so a destination cleared or replaced by someone else is noticed
@@ -1776,20 +1872,26 @@ fun AuthenticatedApp(
                         null
                     }
 
-                val convoyBarSlot: (@Composable (Boolean) -> Unit)? =
+                val convoyBarSlot: (@Composable (Boolean, Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {
-                        { compact ->
+                        { compact, showDestination ->
                             ConvoyStatusBar(
                                 state = convoyBarState,
                                 compact = compact,
+                                showDestination = showDestination,
                                 focusMode = convoyFocusMode,
                                 onFocusModeChange = { convoyFocusStore.setMode(it) },
-                                // Only ever reached for the OWNER (a member's leave
-                                // has no callable and renders disabled); the bar
-                                // confirms before this fires.
+                                // The OWNER's End (group-wide, confirmed in the bar).
                                 onEndConvoy = { convoyId ->
                                     scope.launch { convoyBarCoordinator.end(convoyId) }
                                 },
+                                // Opens the friend picker and grows THIS convoy via
+                                // `convoy-invite`.
+                                onInvite = openConvoyInvite,
+                                // A member's Leave via `convoy-leave` (confirmed in
+                                // the bar; routed on viewerIsOwner so it can never
+                                // reach the owner's End path).
+                                onLeaveConvoy = leaveConvoy,
                                 // Reuse the map's own search / saved-places /
                                 // long-press picker instead of a second one; it
                                 // comes back through onSetAsConvoyDestination.
@@ -1861,9 +1963,10 @@ fun AuthenticatedApp(
                             BackgroundLocationController.stop(context)
                         },
                         onOpenLiveShareDetails = { openLiveShareFallback() },
-                        // Compact variant: below the maneuver banner, no
-                        // explanation line (see the screen's KDoc).
-                        convoyBar = convoyBarSlot?.let { bar -> { bar(true) } },
+                        // Compact variant below the maneuver banner, WITH the
+                        // shared-destination row (turn-by-turn has the vertical room
+                        // for it — see the screen's KDoc).
+                        convoyBar = convoyBarSlot?.let { bar -> { bar(true, true) } },
                     )
                 } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
@@ -1924,6 +2027,53 @@ fun AuthenticatedApp(
                         initialTarget = navSearchTarget,
                         initialTargetName = navSearchTargetName,
                         initialSaveEdit = navSearchInitialEdit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else if (convoyInviteConvoyId != null && convoyBarCoordinator != null) {
+                    // The convoy invite picker, opened from the bar's invite control,
+                    // shown full-screen over the map. Reuses the create-flow's friend
+                    // multi-select and calls `convoy-invite`. Back / Cancel closes it
+                    // without inviting; a successful invite closes it via the
+                    // LaunchedEffect(convoyInviteState) above.
+                    val inviteConvoyId = convoyInviteConvoyId!!
+                    // Back / Cancel dismisses the picker UI. resetInvite() clears a
+                    // terminal Done/Error sub-state, but is a no-op while an invite
+                    // is Working: dismissing mid-flight only closes the UI — the
+                    // in-flight coroutine and its overlap guard stay intact and the
+                    // invite runs to completion (its Done then fires the snackbar via
+                    // LaunchedEffect(convoyInviteState) above). Blocking Back while
+                    // Working would instead strand the user on a spinner for a
+                    // fire-and-forget network call, so we let the UI close.
+                    val closeInvite = {
+                        convoyInviteConvoyId = null
+                        convoyBarCoordinator.resetInvite()
+                    }
+                    BackHandler { closeInvite() }
+                    ConvoyInvitePickerScreen(
+                        friendsStatus = convoyInviteFriendsStatus,
+                        inviteState = convoyInviteState,
+                        selectedUids = convoyInviteSelected,
+                        onToggleFriend = { friendUid ->
+                            convoyInviteSelected =
+                                if (friendUid in convoyInviteSelected) {
+                                    convoyInviteSelected - friendUid
+                                } else {
+                                    convoyInviteSelected + friendUid
+                                }
+                        },
+                        onRetryFriends =
+                            convoyInviteFriendsCoordinator?.let { c ->
+                                { scope.launch { c.load() } }
+                            },
+                        onSubmit = {
+                            scope.launch {
+                                convoyBarCoordinator.invite(
+                                    inviteConvoyId,
+                                    convoyInviteSelected.toList(),
+                                )
+                            }
+                        },
+                        onCancel = closeInvite,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {
@@ -2262,30 +2412,15 @@ fun AuthenticatedApp(
                                     // both call sites go through one lambda.
                                     incidentReportingEnabled = incidentReportingEnabled,
                                     onReportIncident = reportIncident,
-                                    // Convoy status bar, wedged INTO the search row
-                                    // between the search control and the avatar. The
-                                    // narrow slot gets the compact pill (icons +
-                                    // count); its expand control opens the full bar
-                                    // ([convoyBarSlot]) in a popup, so all of the
-                                    // convoy actions and explanations are still one
-                                    // tap away and share one implementation.
+                                    // Convoy status bar, wedged full-width INTO the
+                                    // search row between the search control and the
+                                    // avatar. Every control (member count, focus,
+                                    // invite, leave/End) is inline — no expand, no
+                                    // popup. The shared-destination row is omitted in
+                                    // this single-line band (showDestination = false);
+                                    // it appears in the taller turn-by-turn variant.
                                     convoyBar =
-                                        if (convoyBarState != null && convoyBarCoordinator != null) {
-                                            {
-                                                ConvoyStatusBarInline(
-                                                    memberCount = convoyBarState.memberCount,
-                                                    focusMode = convoyFocusMode,
-                                                    onFocusModeChange = {
-                                                        convoyFocusStore.setMode(it)
-                                                    },
-                                                    expandedContent = {
-                                                        convoyBarSlot?.invoke(false)
-                                                    },
-                                                )
-                                            }
-                                        } else {
-                                            null
-                                        },
+                                        convoyBarSlot?.let { bar -> { bar(false, false) } },
                                     // Convoy member markers + off-screen direction
                                     // arrows, drawn on the map under the chrome.
                                     convoyOverlay = convoyOverlaySlot,

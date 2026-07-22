@@ -51,7 +51,7 @@ class ConvoyStatusBarTest {
             viewerIsOwner = true,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
-            leaveAvailability = ConvoyBar.leaveAvailability(viewerIsOwner = true),
+            leaveAvailability = ConvoyBar.leaveAvailability,
         )
 
     private fun memberState(convoyId: String) =
@@ -61,7 +61,7 @@ class ConvoyStatusBarTest {
             viewerIsOwner = false,
             busy = false,
             inviteAvailability = ConvoyBar.inviteAvailability,
-            leaveAvailability = ConvoyBar.leaveAvailability(viewerIsOwner = false),
+            leaveAvailability = ConvoyBar.leaveAvailability,
         )
 
     /**
@@ -127,18 +127,17 @@ class ConvoyStatusBarTest {
     /**
      * The one failure in this component that would actually hurt people: a
      * member tapping "leave" and silently ending everyone's drive. The trailing
-     * control routes on `viewerIsOwner`, not on `leaveAvailability`, so this
-     * holds even in the future state where `convoy.leave` has landed and the
-     * availability flag has been flipped for members — the case a click path
-     * keyed on availability alone would get wrong.
+     * control routes on `viewerIsOwner`, not on `leaveAvailability`, so a member's
+     * tap opens the LEAVE confirmation (never END's) and, once confirmed, reaches
+     * the leave handler alone — the case a click path keyed on availability would
+     * get wrong now that `convoy-leave` is wired and the member flag is Wired.
      */
     @Test
-    fun aMembersLeaveNeverReachesTheEndConvoyPath_evenOnceLeaveIsWired() {
+    fun aMembersLeaveNeverReachesTheEndConvoyPath() {
         var ended: String? = null
         var left: String? = null
-        // The post-`convoy.leave` world: member, leave wired, handler supplied.
-        val state =
-            memberState("c1").copy(leaveAvailability = ConvoyBarActionAvailability.Wired)
+        // Member, leave wired (as it now is), handler supplied.
+        val state = memberState("c1")
         composeTestRule.setContent {
             KccTheme {
                 ConvoyStatusBar(
@@ -152,27 +151,35 @@ class ConvoyStatusBarTest {
         composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
         composeTestRule.waitForIdle()
 
-        // No confirmation dialog: that belongs to "end", which is not this action.
+        // The confirmation shown is LEAVE's, never END's (which ends the convoy
+        // for everyone); nothing has left yet until the user confirms.
         composeTestRule
             .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
             .assertDoesNotExist()
+        assertNull("leaving must wait for the confirmation", left)
+
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barLeaveConfirmAction))
+            .performClick()
+        composeTestRule.waitForIdle()
+
         assertEquals("a member's leave must reach the leave handler", "c1", left)
         assertNull("a member's leave must never end the convoy for everyone", ended)
     }
 
     /**
-     * The invite control's enablement is derived, not hard-coded: flipping
-     * `inviteAvailability` to `Wired` when the `convoy.invite` callable ships
-     * must actually make the button live, and must do so only alongside a
-     * handler. Asserted through the observable — whether a tap reaches
+     * The invite control's enablement is DERIVED from both halves, not hard-coded:
+     * the `Wired` availability flag AND a supplied handler. Neither alone makes the
+     * button act. Asserted through the observable — whether a tap reaches
      * `onInvite` — rather than by reading the `enabled` argument back.
      */
     @Test
     fun inviteControl_goesLiveOnlyWithBothAWiredFlagAndAHandler() {
         var invited: String? = null
         val wired = ConvoyBarActionAvailability.Wired
-        var current by
-            mutableStateOf(ownerState("c1").copy(inviteAvailability = wired))
+        val missing = ConvoyBarActionAvailability.BackendMissing
+        // Wired flag (the default now), but no handler → inert.
+        var current by mutableStateOf(ownerState("c1").copy(inviteAvailability = wired))
         var handler: ((String) -> Unit)? by mutableStateOf(null)
         composeTestRule.setContent {
             KccTheme {
@@ -185,9 +192,9 @@ class ConvoyStatusBarTest {
         composeTestRule.waitForIdle()
         assertNull("a wired flag alone must not make the control act", invited)
 
-        // Handler, but the flag back to today's BackendMissing → still inert.
+        // Handler, but the flag forced back to BackendMissing → still inert.
         handler = { invited = it }
-        current = ownerState("c1")
+        current = ownerState("c1").copy(inviteAvailability = missing)
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
         composeTestRule.waitForIdle()
@@ -309,97 +316,41 @@ class ConvoyStatusBarTest {
         )
     }
 
-    // --- compact inline pill (the map's search-row placement) ---------------
+    // --- all controls inline (no expand, no popup) --------------------------
 
     /**
-     * The complaint behind the relocation: sitting in a convoy, "I can't press any
-     * buttons except the location button". The bar's one always-operable control
-     * is the map-focus toggle (the crosshair a user reads as "location"); every
-     * other action is disabled until its backend callable ships. This asserts the
-     * focus toggle is genuinely clickable in the compact pill's new home INSIDE the
-     * search row — its callback fires on a tap — rather than merely rendered.
+     * The relocation's whole point: every convoy control is now inline in the one
+     * always-visible bar — no expand step, no popup. The map-focus toggle, the
+     * invite control and the leave/End control are all in the tree at once and
+     * reachable directly. (The individual actions' behaviour is asserted in the
+     * focused tests above; this one pins that they are all inline together.)
      */
     @Test
-    fun inlinePill_focusToggle_isClickable_andFiresItsCallback() {
+    fun allControlsRenderInlineWithoutAnExpandStep() {
         var picked: ConvoyFocusMode? = null
         composeTestRule.setContent {
             KccTheme {
-                ConvoyStatusBarInline(
-                    memberCount = 3,
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
                     focusMode = ConvoyFocusMode.Me,
                     onFocusModeChange = { picked = it },
-                    expandedContent = {},
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag(CONVOY_BAR_INLINE_FOCUS_TAG).performClick()
+        // All three controls are present inline, no expand required.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_FOCUS_TAG).assertExists()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).assertExists()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).assertExists()
+
+        // And the focus toggle is genuinely operable inline (the "I can only press
+        // the location button" complaint) — its callback fires on a tap.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_FOCUS_TAG).performClick()
         composeTestRule.waitForIdle()
-
-        assertEquals(
-            "tapping the inline focus toggle must reach its callback",
-            ConvoyFocusMode.Convoy,
-            picked,
-        )
-    }
-
-    /**
-     * The rest of the convoy actions live behind the pill's expand control, in the
-     * full [ConvoyStatusBar] rendered in a popup. This proves that path end-to-end:
-     * the full bar is not composed until expanded, and once it is, its owner End
-     * control is reachable and actually drives the confirm → callback. A popup that
-     * swallowed touches (the failure the relocation guards against) would fail here.
-     */
-    @Test
-    fun inlinePill_expand_opensTheFullBar_whoseEndControlActuallyFires() {
-        var ended: String? = null
-        composeTestRule.setContent {
-            KccTheme {
-                ConvoyStatusBarInline(
-                    memberCount = 2,
-                    expandedContent = {
-                        ConvoyStatusBar(state = ownerState("c1"), onEndConvoy = { ended = it })
-                    },
-                )
-            }
-        }
-
-        // Collapsed: the full bar (and its controls) are not in the tree at all.
-        composeTestRule.onNodeWithTag(CONVOY_BAR_TEST_TAG).assertDoesNotExist()
-
-        composeTestRule.onNodeWithTag(CONVOY_BAR_EXPAND_TAG).performClick()
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag(CONVOY_BAR_EXPAND_POPUP_TAG).assertExists()
-
-        // The End control inside the popup receives the tap and runs the confirm.
-        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
-        composeTestRule.waitForIdle()
-        composeTestRule
-            .onNodeWithText(string(R.string.convoy_barEndConfirmAction))
-            .performClick()
-        composeTestRule.waitForIdle()
-
-        assertEquals("the expanded bar's End control must reach its callback", "c1", ended)
-    }
-
-    /**
-     * Icons and numbers only: the pill renders the bare member count visually, but
-     * exposes the full "N in the convoy" contentDescription to accessibility — and
-     * ONLY that. The digit's own text node is cleared from the semantics tree
-     * (`clearAndSetSemantics`, mirroring the DM unread badge), so TalkBack announces
-     * the count in context instead of reading a context-free "4" as a second node.
-     */
-    @Test
-    fun inlinePill_announcesCountInContext_withoutABareNumberA11yNode() {
-        composeTestRule.setContent {
-            KccTheme { ConvoyStatusBarInline(memberCount = 4, expandedContent = {}) }
-        }
-
-        composeTestRule
-            .onNodeWithContentDescription(string(R.string.convoy_barMembers, 4))
-            .assertExists()
-        // The raw digit is NOT a separate accessibility text node — cleared so a
-        // screen reader does not announce "4" and then "4 in the convoy".
-        composeTestRule.onNodeWithText("4").assertDoesNotExist()
+        assertEquals(ConvoyFocusMode.Convoy, picked)
     }
 }

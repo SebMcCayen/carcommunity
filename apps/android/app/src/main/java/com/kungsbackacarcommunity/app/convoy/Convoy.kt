@@ -86,8 +86,13 @@ data class ConvoySummary(
     val viewerIsOwner: Boolean get() = viewer?.role == ConvoyRole.Owner
 }
 
-/** Why a requested invitee was skipped by `convoy-create` (neutral reasons). */
-enum class ConvoySkipReason { Self, NotFriend, NotFound, Duplicate, Unknown }
+/**
+ * Why a requested invitee was skipped by `convoy-create` / `convoy-invite`
+ * (neutral reasons — a block edge either way surfaces as [NotFound], never as who
+ * blocked whom). [AlreadyMember] is only produced by `convoy-invite` (a uid
+ * already in the convoy).
+ */
+enum class ConvoySkipReason { Self, NotFriend, NotFound, Duplicate, AlreadyMember, Unknown }
 
 /** A requested invitee that `convoy-create` skipped, with the reason. */
 data class SkippedInvitee(
@@ -109,6 +114,20 @@ enum class ConvoyActionError {
     InviteGone,
     CannotStart,
     AlreadyEnded,
+
+    /**
+     * A `convoy-leave` precondition failure that the code-only client cannot pin
+     * to a cause. The backend throws `failed-precondition` for THREE distinct
+     * situations — the convoy has ended, the owner tried to leave (they must End),
+     * or the caller is not an accepted member — and distinguishes them only by the
+     * HttpsError message text, which the client deliberately never reads (it
+     * branches on the code alone; see [ConvoyErrorCode]). With no discriminator on
+     * the code, asserting any one specific cause (e.g. [AlreadyEnded]) would be a
+     * guess that is wrong two times out of three, so this maps to a neutral
+     * "couldn't leave" message instead. All three are defensive: the UI routes an
+     * owner to End and only offers Leave to an accepted member.
+     */
+    LeaveFailed,
 
     /**
      * The caller IS a member, but is not permitted to do this particular thing —
@@ -192,6 +211,43 @@ object ConvoyErrorMapper {
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             // The only precondition failure on create is "no one could be added".
             ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            else -> ConvoyActionError.Generic
+        }
+
+    /**
+     * For `convoy-invite`. A non-member / unknown convoy is `not-found` (a convoy
+     * must not be probeable); the only precondition failure is a convoy that has
+     * ended, is not the caller's to invite into, or where nobody could be added —
+     * all surfaced as "no one could be added" ([NoInvitees]), the same neutral
+     * outcome `convoy-create` uses for its precondition failure.
+     */
+    fun mapInvite(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.NoInvitees
+            else -> ConvoyActionError.Generic
+        }
+
+    /**
+     * For `convoy-leave`. A non-member / unknown convoy is `not-found`. A
+     * precondition failure here is overloaded across THREE backend cases — the
+     * convoy has ended, the owner tried to leave (they must End instead), or the
+     * caller is not an accepted member — separated on the backend only by message
+     * text, which this code-only mapper never reads. Since the code alone cannot
+     * tell them apart, it maps to the neutral [LeaveFailed] ("couldn't leave the
+     * convoy") rather than asserting a single cause like [AlreadyEnded] that would
+     * be wrong for the other two.
+     */
+    fun mapLeave(code: ConvoyErrorCode): ConvoyActionError =
+        when (code) {
+            ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
+            ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
+            ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.LeaveFailed
             else -> ConvoyActionError.Generic
         }
 
@@ -418,6 +474,7 @@ object ConvoyResponseParser {
             "not_friend" -> ConvoySkipReason.NotFriend
             "not_found" -> ConvoySkipReason.NotFound
             "duplicate" -> ConvoySkipReason.Duplicate
+            "already_member" -> ConvoySkipReason.AlreadyMember
             else -> ConvoySkipReason.Unknown
         }
 

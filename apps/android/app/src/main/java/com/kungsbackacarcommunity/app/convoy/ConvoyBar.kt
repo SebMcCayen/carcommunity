@@ -19,96 +19,57 @@ package com.kungsbackacarcommunity.app.convoy
  * is still `Forming` DOES count — the roster exists, the members are gathering,
  * and that is exactly when someone wants to see who is in and invite more.
  *
- * ## BACKEND GAP — two of the three affordances have no callable
- * The deployed convoy surface is exactly five callables (`convoy-create`,
- * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`). Neither
- * inviting someone into an EXISTING convoy nor a member LEAVING one is among
- * them:
+ * ## The three affordances are all deployed
+ * The convoy surface now includes `convoy-invite` and `convoy-leave` alongside
+ * `convoy-create` / `convoy-respond` / `convoy-start` / `convoy-end` /
+ * `convoy-list`, so every control the bar renders is [Wired]:
  *
- *  - **`convoy-respond` cannot leave.** It hard-requires
- *    `entry.inviteStatus === 'invited'` and throws `failed-precondition`
- *    otherwise, so it only ever answers a still-pending invite. Once you have
- *    accepted, respond is closed to you.
- *  - **`convoy-end` is owner-only** (a non-owner gets `not-found` so a convoy
- *    can't be probed) and it ends the convoy *for everyone*, storing the shared
- *    summary. It is emphatically NOT "leave" — wiring a member's Leave button to
- *    it would silently end the drive for the whole group.
- *  - **`convoy-create` takes invitees only at creation.** There is no
- *    "add member" path, so pointing the bar's invite button at the existing
- *    create/invite picker would create a SECOND convoy rather than grow this one.
+ *  - **Owner's End** is `convoy-end` — owner-only, ends the convoy *for everyone*
+ *    and stores the shared summary. It is emphatically NOT "leave"; a member must
+ *    never reach it.
+ *  - **Member's Leave** is `convoy-leave` — removes only the CALLER (clears their
+ *    `members.{uid}` entry so they drop out of `memberUids` / `livePositionUids`
+ *    and convoy chat). The owner is refused server-side and told to use End.
+ *  - **Invite** is `convoy-invite` — any accepted member may add their friends to
+ *    the EXISTING convoy (`{ convoyId, inviteeUids[] }` → `{ convoy, invited,
+ *    skipped }`), which is why the bar's invite button opens the friend picker
+ *    and grows *this* convoy rather than pointing at create (which would spawn a
+ *    second one).
  *
- * Hence [ConvoyBarActionAvailability]: the owner's End action is [Wired] and
- * confirmed; the member's Leave action and BOTH roles' Invite action are
- * [BackendMissing] — rendered, disabled, and explained in one honest line
- * ([ConvoyBarNotice]) rather than silently absent or, worse, wired to a callable
- * that does something else.
- *
- * ### Callables needed to finish this
- *  - `convoy.leave` (grouped export `convoy-leave`, europe-west1, auth +
- *    App Check), payload `{ convoyId: string }` → `{ convoy: ConvoySummary }`.
- *    Removes the CALLER from a convoy they have ACCEPTED: clear their
- *    `members.{uid}` entry (or mark it `left`) so they drop out of `memberUids`
- *    and `livePositionUids` and stop receiving convoy chat. The OWNER must be
- *    refused (`failed-precondition`) and told to use `convoy.end` — an owner
- *    leaving would orphan the convoy. A non-member / unknown convoy gets
- *    `not-found` (never `permission-denied`), matching respond/start/end so a
- *    convoy cannot be probed. Already-ended → `failed-precondition`. Idempotent:
- *    leaving twice is not an error worth surfacing.
- *  - `convoy.invite` (grouped export `convoy-invite`), payload
- *    `{ convoyId: string, inviteeUids: string[] }` →
- *    `{ convoy, invited: string[], skipped: SkippedInvitee[] }`. Same friend-only
- *    gate and same neutral skip reasons as `convoy.create`, restricted to a
- *    convoy that has not ended. Whether non-owner members may invite is a product
- *    decision; the client is happy either way (owner-only would simply gate the
- *    button on [ConvoyBarState.viewerIsOwner]).
- *
- * When either lands, the client change is exactly two halves, and BOTH are
- * required — the controls gate on the availability flag *and* on the presence of
- * a handler, so neither half alone can produce a live button that does nothing or
- * a flag claiming a capability the UI never exposes:
- *
- *  - `convoy.invite`: flip [ConvoyBar.inviteAvailability] to [Wired] and pass
- *    `ConvoyStatusBar(onInvite = ...)`.
- *  - `convoy.leave`: return [Wired] from [ConvoyBar.leaveAvailability] for
- *    non-owners too, and pass `ConvoyStatusBar(onLeaveConvoy = ...)`. The bar
- *    routes the trailing control on `viewerIsOwner`, NOT on this flag, so a
- *    member's tap goes to that handler and cannot reach the owner's end-convoy
- *    confirmation even if only the flag is flipped — the leave→end footgun above
- *    is closed structurally, not by remembering to update the click path.
+ * The controls still gate on TWO halves — the availability flag AND the presence
+ * of a handler — so a flag alone can never produce a live button that does
+ * nothing, and the leave-vs-end split routes on [ConvoyBarState.viewerIsOwner],
+ * not on the availability flag, so a member's Leave tap is closed off from the
+ * group-wide End structurally (see [ConvoyStatusBar]).
  */
 
-/** Whether a convoy-bar action can actually reach a backend today. */
+/** Whether a convoy-bar action can actually reach a backend. */
 enum class ConvoyBarActionAvailability {
     /** A callable exists and is wired — the control runs for real. */
     Wired,
 
     /**
-     * No callable exists for this action yet. The control is still RENDERED, but
-     * disabled and paired with a short honest explanation: unlike a report (which
-     * must never *look* filed), "leave" and "invite" are affordances the user is
-     * actively looking for while sitting in a convoy, and an absent button reads
-     * as "this app can't do that at all" rather than "not yet".
+     * No callable exists for this action. Kept for the general shape (a control
+     * that renders but is disabled with an honest label), though every convoy-bar
+     * action is [Wired] today. A control that lands here is still RENDERED, but
+     * disabled and paired with a short "…unavailable" description rather than
+     * silently absent or wired to a callable that does something else.
      */
     BackendMissing,
 }
 
 /** The one-line honest explanation the bar shows under its actions, if any. */
 enum class ConvoyBarNotice {
-    /** Every rendered action is wired — no explanation needed. */
+    /** Every rendered action is wired — no explanation needed (the case today). */
     None,
 
-    /** Only inviting is missing (today's owner, whose End action IS wired). */
+    /** Only inviting is missing. */
     InviteMissing,
 
-    /**
-     * Only leaving is missing — the state a non-owner member lands in once
-     * `convoy.invite` ships but `convoy.leave` has not yet. Unreachable today,
-     * and deliberately present anyway: without it the derivation has no way to
-     * say "leave is missing" and would have to overclaim.
-     */
+    /** Only leaving is missing. */
     LeaveMissing,
 
-    /** Both inviting and leaving are missing (today's non-owner member). */
+    /** Both inviting and leaving are missing. */
     InviteAndLeaveMissing,
 }
 
@@ -143,14 +104,11 @@ data class ConvoyBarState(
     val canClearDestination: Boolean = false,
 ) {
     /**
-     * The explanation line, derived from BOTH availabilities independently.
-     *
-     * The two callables (`convoy.invite`, `convoy.leave`) are separate pieces of
-     * backend work and will very likely land in separate PRs, so every one of the
-     * four combinations has to name exactly what is missing. A derivation that
-     * inferred "invite is missing too" from leave alone would, the moment invite
-     * shipped first, tell users that inviting doesn't work while an enabled
-     * invite button sat directly above the sentence.
+     * The explanation line, derived from BOTH availabilities independently. Both
+     * `convoy-invite` and `convoy-leave` are deployed, so this is [ConvoyBarNotice.None]
+     * in practice; the per-availability derivation is kept so that if either flag
+     * were ever set back to [ConvoyBarActionAvailability.BackendMissing] the notice
+     * still names exactly what is missing rather than overclaiming from one flag.
      */
     val notice: ConvoyBarNotice
         get() {
@@ -167,27 +125,27 @@ data class ConvoyBarState(
 
 object ConvoyBar {
     /**
-     * Inviting into an existing convoy has no callable — see the file KDoc for the
-     * `convoy.invite` contract it is waiting on. Applies to owner and member
-     * alike, so it is a constant rather than a per-role decision.
+     * Inviting into an existing convoy is now backed by the deployed
+     * `convoy-invite` callable (any accepted member may invite their friends), so
+     * this is [Wired] for owner and member alike — a constant rather than a
+     * per-role decision. The control still only enables once a host also supplies
+     * an `onInvite` handler (see [ConvoyStatusBar]), so the flag alone can't
+     * produce a live button that does nothing.
      */
-    val inviteAvailability: ConvoyBarActionAvailability = ConvoyBarActionAvailability.BackendMissing
+    val inviteAvailability: ConvoyBarActionAvailability = ConvoyBarActionAvailability.Wired
 
     /**
      * Whether the caller's leave/end control can run.
      *
-     * The OWNER's control is `convoy-end`, which exists — it ends the convoy for
-     * everyone, which is why the UI labels it "End convoy" and confirms first.
-     * A MEMBER's "leave" has no callable at all, and must NOT fall back to
-     * `convoy-end` (owner-only, and group-wide) or to `convoy-respond` (which
-     * only answers a still-pending invite).
+     * Both are now [Wired]: the OWNER's control is `convoy-end` (ends the convoy
+     * for everyone — labelled "End convoy" and confirmed first), and a MEMBER's
+     * "leave" is the deployed `convoy-leave` callable (removes only the caller).
+     * The bar still routes the trailing control on `viewerIsOwner`, so a member's
+     * tap reaches `onLeaveConvoy` and can never fall through to the owner-only,
+     * group-wide `convoy-end`. Because both roles are `Wired`, this is a constant
+     * (like [inviteAvailability]) — it takes no role argument.
      */
-    fun leaveAvailability(viewerIsOwner: Boolean): ConvoyBarActionAvailability =
-        if (viewerIsOwner) {
-            ConvoyBarActionAvailability.Wired
-        } else {
-            ConvoyBarActionAvailability.BackendMissing
-        }
+    val leaveAvailability: ConvoyBarActionAvailability = ConvoyBarActionAvailability.Wired
 
     /**
      * The convoy the bar should describe, or null when the caller is not in one
@@ -230,7 +188,7 @@ object ConvoyBar {
             viewerIsOwner = convoy.viewerIsOwner,
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,
-            leaveAvailability = leaveAvailability(convoy.viewerIsOwner),
+            leaveAvailability = leaveAvailability,
             destinationState = ConvoyDestinations.stateFor(convoy.destination, viewerUid),
             canClearDestination =
                 ConvoyDestinations.canClear(

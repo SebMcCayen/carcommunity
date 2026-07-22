@@ -177,12 +177,13 @@ class ConvoyBarTest {
     // --- owner vs member --------------------------------------------------
 
     @Test
-    fun `a member's leave has no backend and must not be wired`() {
+    fun `a member's leave is now wired to convoy-leave`() {
         val state = ConvoyBar.stateFor(loaded(convoy()))!!
-        // If this ever flips to Wired without a convoy-leave callable existing,
-        // the only thing the button could call is the owner-only, group-wide
-        // convoy-end — i.e. a member's "leave" would end everyone's drive.
-        assertEquals(ConvoyBarActionAvailability.BackendMissing, state.leaveAvailability)
+        // `convoy-leave` is deployed, so a non-owner member's Leave is Wired. The
+        // bar still routes the trailing control on viewerIsOwner (asserted in the
+        // ConvoyStatusBar UI test), so this being Wired can never turn a member's
+        // Leave into the owner-only, group-wide End.
+        assertEquals(ConvoyBarActionAvailability.Wired, state.leaveAvailability)
         assertEquals(false, state.viewerIsOwner)
     }
 
@@ -197,31 +198,31 @@ class ConvoyBarTest {
     }
 
     @Test
-    fun `inviting into an existing convoy has no backend for either role`() {
+    fun `inviting into an existing convoy is wired for either role`() {
         val asMember = ConvoyBar.stateFor(loaded(convoy()))!!
         val asOwner =
             ConvoyBar.stateFor(
                 loaded(convoy(viewer = ConvoyViewer(ConvoyRole.Owner, ConvoyInviteStatus.Accepted))),
             )!!
-        assertEquals(ConvoyBarActionAvailability.BackendMissing, asMember.inviteAvailability)
-        assertEquals(ConvoyBarActionAvailability.BackendMissing, asOwner.inviteAvailability)
+        assertEquals(ConvoyBarActionAvailability.Wired, asMember.inviteAvailability)
+        assertEquals(ConvoyBarActionAvailability.Wired, asOwner.inviteAvailability)
     }
 
     // --- the honest explanation line --------------------------------------
 
     @Test
-    fun `a member is told both invite and leave are missing`() {
+    fun `a member sees no missing-action notice now both are wired`() {
         val state = ConvoyBar.stateFor(loaded(convoy()))!!
-        assertEquals(ConvoyBarNotice.InviteAndLeaveMissing, state.notice)
+        assertEquals(ConvoyBarNotice.None, state.notice)
     }
 
     @Test
-    fun `an owner is told only invite is missing`() {
+    fun `an owner sees no missing-action notice now both are wired`() {
         val state =
             ConvoyBar.stateFor(
                 loaded(convoy(viewer = ConvoyViewer(ConvoyRole.Owner, ConvoyInviteStatus.Accepted))),
             )!!
-        assertEquals(ConvoyBarNotice.InviteMissing, state.notice)
+        assertEquals(ConvoyBarNotice.None, state.notice)
     }
 
     @Test
