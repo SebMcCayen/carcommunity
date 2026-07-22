@@ -60,11 +60,22 @@ class DriveRecordingCoordinator(
      */
     private var stoppedAtMillis: Long? = null
 
+    /**
+     * The wall-clock moment recording STARTED, captured once in [start] and held
+     * until [start] runs again. This is the basis the map's live-session bar ticks
+     * its elapsed time from (now − start), which — unlike [RecordingState.Recording.elapsedMillis],
+     * frozen at the last accepted fix — keeps advancing once per second even while
+     * the car (and the GPS stream) is stationary. Null before the first start.
+     */
+    var startedAtMillis: Long? = null
+        private set
+
     /** Begins a recording. No-op if one is already active or resolved. */
     fun start() {
         if (recorder != null) return
         val started = clock()
         recorder = DriveRecorder(sourceSessionId, started)
+        startedAtMillis = started
         stoppedAtMillis = null
         stateFlow.value = RecordingState.Recording(pointCount = 0, elapsedMillis = 0L)
     }
@@ -81,6 +92,7 @@ class DriveRecordingCoordinator(
             RecordingState.Recording(
                 pointCount = recorder.pointCount,
                 elapsedMillis = recorder.elapsedMillis(clock()),
+                distanceMeters = recorder.distanceMetres,
             )
     }
 

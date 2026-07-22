@@ -74,13 +74,28 @@ enum class ConvoyBarNotice {
 }
 
 /**
+ * One accepted member as the bar's member-list popup needs them: a display name
+ * (nullable — resolved server-side, absent until a profile lands) and the raw
+ * avatar storage path (nullable). Deliberately a slimmed-down projection of
+ * [ConvoyMember] so the bar's popup depends on just what it shows, not the whole
+ * membership record.
+ */
+data class ConvoyBarMember(
+    val uid: String,
+    val displayName: String?,
+    val avatarPath: String?,
+)
+
+/**
  * Everything the convoy status bar renders. `null` (rather than an empty
  * instance) is how "not in a convoy" is expressed, so the bar cannot accidentally
  * render as a blank strip or a placeholder.
  *
- * @param memberCount ACCEPTED members only — the people actually in the convoy.
- *   Invited-but-unanswered and declined people are not in it, and counting them
- *   would overstate the group to a driver glancing at the bar.
+ * @param members the ACCEPTED members, in roster order — the people actually in
+ *   the convoy. Invited-but-unanswered and declined people are not in it. Drives
+ *   both the member count shown on the bar ([memberCount], derived from this) and
+ *   the tap-to-open member-list popup, so the count and the list are ONE source of
+ *   truth and cannot disagree.
  * @param viewerIsOwner drives the leave-vs-end split: the owner has no "leave",
  *   only "end this convoy for everyone".
  * @param busy true while a mutation for this convoy is in flight, so the actions
@@ -88,7 +103,7 @@ enum class ConvoyBarNotice {
  */
 data class ConvoyBarState(
     val convoyId: String,
-    val memberCount: Int,
+    val members: List<ConvoyBarMember>,
     val viewerIsOwner: Boolean,
     val busy: Boolean,
     val inviteAvailability: ConvoyBarActionAvailability,
@@ -103,6 +118,14 @@ data class ConvoyBarState(
     /** Whether the viewer may clear the current destination (setter or owner). */
     val canClearDestination: Boolean = false,
 ) {
+    /**
+     * ACCEPTED member count, DERIVED from [members] so the number on the bar and
+     * the list behind it can never drift out of sync (a stored count could be set
+     * to 2 with an empty list, leaving the popup blank under a "2").
+     */
+    val memberCount: Int
+        get() = members.size
+
     /**
      * The explanation line, derived from BOTH availabilities independently. Both
      * `convoy-invite` and `convoy-leave` are deployed, so this is [ConvoyBarNotice.None]
@@ -166,9 +189,11 @@ object ConvoyBar {
         return joined.firstOrNull { it.status == ConvoyStatus.Active } ?: joined.firstOrNull()
     }
 
-    /** Accepted members only — the people actually in [convoy]. */
-    fun memberCount(convoy: ConvoySummary): Int =
-        convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }
+    /** Accepted members only — the people actually in [convoy], in roster order. */
+    fun acceptedMembers(convoy: ConvoySummary): List<ConvoyBarMember> =
+        convoy.members
+            .filter { it.inviteStatus == ConvoyInviteStatus.Accepted }
+            .map { ConvoyBarMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
 
     /**
      * The full bar state, or null when the bar must not render at all.
@@ -182,9 +207,10 @@ object ConvoyBar {
         viewerUid: String? = null,
     ): ConvoyBarState? {
         val convoy = activeConvoy(status) ?: return null
+        val accepted = acceptedMembers(convoy)
         return ConvoyBarState(
             convoyId = convoy.convoyId,
-            memberCount = memberCount(convoy),
+            members = accepted,
             viewerIsOwner = convoy.viewerIsOwner,
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,

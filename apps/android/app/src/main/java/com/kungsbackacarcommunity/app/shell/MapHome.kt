@@ -202,13 +202,22 @@ fun MapHome(
      * getting an inert toggle.
      */
     nightModeOverrideState: MutableState<MapMode?>? = null,
-    // Optional convoy status bar, composed INSIDE the search row between the search
-    // control and the profile avatar (see [SearchBarRow]) while — and only while —
-    // the caller is in a convoy. A slot rather than convoy parameters so the shell
-    // keeps knowing nothing about the convoy domain, and so "not in a convoy" is
-    // expressed by the host passing null: nothing is composed at all, rather than
-    // an empty bar. Living in the same interactive Row as the search and profile
-    // controls means its buttons receive touches exactly like theirs do.
+    // Optional live-session bar, composed INSIDE the top search row between the
+    // search control and the profile avatar (see [SearchBarRow]) while — and only
+    // while — a live-sharing session is running. Compact (a clock + a distance),
+    // so it sits in the strip the search and avatar frame without crowding either.
+    // A slot for the same reason [convoyBar] is one: the shell stays ignorant of
+    // the live-location domain, and "no session" is the host passing null, which
+    // composes nothing at all (no empty pill, no held gap).
+    liveSessionBar: (@Composable () -> Unit)? = null,
+    // Optional convoy status bar, composed as a FULL-WIDTH bar on its OWN row
+    // directly BELOW the top search row (which holds the search control, the
+    // live-session bar and the avatar) while — and only while — the caller is in a
+    // convoy. It moved out of the search strip so it can run side to side and show
+    // its content across the bar rather than squeezed into a pill. A slot rather
+    // than convoy parameters so the shell keeps knowing nothing about the convoy
+    // domain, and so "not in a convoy" is expressed by the host passing null:
+    // nothing is composed at all — no empty bar, and no gap where the row would be.
     convoyBar: (@Composable () -> Unit)? = null,
     // Optional convoy awareness layer (member markers + off-screen direction
     // arrows), composed directly ON the map and UNDER all the floating chrome,
@@ -436,9 +445,10 @@ fun MapHome(
                 onOpenMore = { moreOpen = true },
                 searchExpanded = searchExpanded,
                 onExpandSearch = { searchExpanded = true },
-                // Composed between the search control and the avatar so the convoy
-                // pill sits in the gap the two frame, never overlapping either.
-                convoyBar = convoyBar,
+                // Composed between the search control and the avatar so the live
+                // session pill sits in the gap the two frame, never overlapping
+                // either.
+                liveSessionBar = liveSessionBar,
                 // The profile/account menu popup is composed next to the profile
                 // button (inside SearchBarRow) so the Popup anchors to the
                 // button's real measured bounds instead of a hard-coded offset.
@@ -446,6 +456,15 @@ fun MapHome(
                 moreMenuOpen = moreOpen,
                 onDismissMore = { moreOpen = false },
             )
+            // The convoy bar sits on its OWN full-width row directly beneath the
+            // search strip (search icon + live-session bar + avatar). Composed only
+            // while the caller is in a convoy — null composes nothing, so no empty
+            // row is held open when there is no convoy. Hidden while the search is
+            // expanded so the opaque "Where to?" overlay above has the strip to
+            // itself and the bar's controls aren't left tappable under it.
+            if (convoyBar != null && !searchExpanded) {
+                convoyBar()
+            }
             if (loadState == MapLoadState.Loading) {
                 LoadingRoadsChip()
             }
@@ -1131,7 +1150,7 @@ private fun SearchBarRow(
     moreMenuEntries: List<HubEntry>,
     moreMenuOpen: Boolean,
     onDismissMore: () -> Unit,
-    convoyBar: (@Composable () -> Unit)? = null,
+    liveSessionBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     Row(
@@ -1140,13 +1159,14 @@ private fun SearchBarRow(
     ) {
         // The flexible left+middle region between the (fixed) profile avatar on the
         // right and nothing on the left. It holds the collapsed search button plus
-        // the FULL-WIDTH convoy bar filling the gap; when the search is expanded the
-        // "Where to?" field is drawn OVER this region (a later child of the Box =
-        // higher z-order), covering the convoy bar rather than sitting beside it.
-        // The avatar sits OUTSIDE this Box, so search never covers it.
+        // the compact live-session bar sitting in the gap; when the search is
+        // expanded the "Where to?" field is drawn OVER this region (a later child
+        // of the Box = higher z-order), covering the live-session bar rather than
+        // sitting beside it. The avatar sits OUTSIDE this Box, so search never
+        // covers it.
         Box(modifier = Modifier.weight(1f)) {
             // Base layer: the collapsed round search button (upper-left) + the
-            // convoy bar filling the remaining width. The search button is dropped
+            // live-session bar in the remaining width. The search button is dropped
             // while expanded — the overlay below carries the search affordance then,
             // so there is no duplicate control hiding under it.
             Row(
@@ -1178,9 +1198,9 @@ private fun SearchBarRow(
                         }
                     }
                 }
-                // The convoy bar fills the whole gap at full width (never a
-                // wrap-content pill); a Spacer holds the gap open when there is no
-                // convoy so the avatar stays pinned right, exactly as before.
+                // The live-session bar sits at the start of the gap (compact, not
+                // full-width); a Spacer takes the remaining width so the avatar
+                // stays pinned right whether or not a session is running.
                 //
                 // While the search is expanded the opaque overlay below is drawn
                 // OVER this bar, so it is visually covered but still composed here.
@@ -1189,22 +1209,17 @@ private fun SearchBarRow(
                 // so TalkBack can't focus controls hidden under the search field.
                 // It stays composed — not skipped — so the overlay still has the
                 // full-width region to draw over (the whole point of #536).
-                if (convoyBar != null) {
+                if (liveSessionBar != null) {
                     Box(
                         modifier =
-                            Modifier
-                                .weight(1f)
-                                .then(
-                                    if (searchExpanded) {
-                                        Modifier.clearAndSetSemantics {}
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                    ) { convoyBar() }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
+                            if (searchExpanded) {
+                                Modifier.clearAndSetSemantics {}
+                            } else {
+                                Modifier
+                            },
+                    ) { liveSessionBar() }
                 }
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             // Overlay layer: the expanded "Where to?" bar, composed AFTER the base

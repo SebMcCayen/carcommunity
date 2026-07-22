@@ -113,6 +113,25 @@ class ConvoyBarTest {
     }
 
     @Test
+    fun `state carries the accepted members for the popup, count matches`() {
+        val members =
+            listOf(
+                member("owner", ConvoyRole.Owner).copy(displayName = "Olle"),
+                member("me").copy(displayName = "Maja"),
+                // Invited-but-unanswered and declined are NOT in the convoy and
+                // must not appear in the list or inflate the count.
+                member("invited", inviteStatus = ConvoyInviteStatus.Invited),
+                member("declined", inviteStatus = ConvoyInviteStatus.Declined),
+            )
+        val state = ConvoyBar.stateFor(loaded(convoy(members = members)))
+        assertNotNull(state)
+        assertEquals(2, state!!.memberCount)
+        assertEquals(2, state.members.size)
+        assertEquals(listOf("owner", "me"), state.members.map { it.uid })
+        assertEquals(listOf("Olle", "Maja"), state.members.map { it.displayName })
+    }
+
+    @Test
     fun `an active convoy outranks a forming one`() {
         val state =
             ConvoyBar.stateFor(
@@ -230,7 +249,7 @@ class ConvoyBarTest {
         val state =
             ConvoyBarState(
                 convoyId = "c1",
-                memberCount = 2,
+                members = emptyList(),
                 viewerIsOwner = true,
                 busy = false,
                 inviteAvailability = ConvoyBarActionAvailability.Wired,
@@ -255,7 +274,7 @@ class ConvoyBarTest {
             leave: ConvoyBarActionAvailability,
         ) = ConvoyBarState(
             convoyId = "c1",
-            memberCount = 2,
+            members = emptyList(),
             viewerIsOwner = false,
             busy = false,
             inviteAvailability = invite,

@@ -114,6 +114,7 @@
     <string name="liveLocation_viewOthersMemberOnly">An active membership is required to view other members\' live locations.</string>
     <string name="liveLocation_memberRequiredToShare">An active membership is required to share your live location. You can always stop sharing.</string>
     <string name="liveLocation_shareUnavailable">Live location sharing isn\'t available right now.</string>
+    <string name="liveLocation_sessionBar">Live session: %1$s, %2$s driven</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
     <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>
@@ -487,6 +488,8 @@
     <string name="convoy_alreadyInConvoyCreateHint">You\'re already in a convoy — leave or end it to start a new one.</string>
     <string name="convoy_alreadyInConvoyAcceptHint">You\'re already in a convoy — leave or end it before joining another.</string>
     <string name="convoy_barMembers">%1$d in convoy</string>
+    <string name="convoy_barMemberListTitle">In this convoy</string>
+    <string name="convoy_barMemberUnnamed">Member</string>
     <string name="convoy_barInvite">Invite more</string>
     <string name="convoy_barLeave">Leave convoy</string>
     <string name="convoy_barEnd">End convoy</string>
