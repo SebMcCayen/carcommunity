@@ -252,6 +252,7 @@ import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.Incident
 import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
+import com.kungsbackacarcommunity.app.incidents.ConfirmOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentType
@@ -272,6 +273,7 @@ import com.kungsbackacarcommunity.app.shell.GARAGE_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.HISTORY_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.SOCIAL_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
+import com.kungsbackacarcommunity.app.shell.runIncidentConfirmation
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
@@ -712,6 +714,11 @@ fun AuthenticatedApp(
             // arrive disabled.
             var incidentRemoveInFlight by
                 remember(tappedIncidentId) { mutableStateOf(false) }
+            // Same one-call-per-press guard for confirming someone else's report.
+            // Keyed to the open incident so a flag left set by a previous sheet
+            // does not arrive disabled on the next one.
+            var incidentConfirmInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -872,7 +879,9 @@ fun AuthenticatedApp(
                 stringResource(R.string.incidents_locationUnavailable)
             val incidentRemoveSuccessText = stringResource(R.string.incidents_removeSuccess)
             val incidentRemoveErrorText = stringResource(R.string.incidents_removeError)
-            val incidentVerifyUnavailableText = stringResource(R.string.incidents_verifyUnavailable)
+            val incidentVerifySuccessText = stringResource(R.string.incidents_verifySuccess)
+            val incidentVerifyAlreadyText = stringResource(R.string.incidents_verifyAlready)
+            val incidentVerifyErrorText = stringResource(R.string.incidents_verifyError)
 
             // ── The ONE incident-reporting path ─────────────────────────────
             //
@@ -2542,17 +2551,42 @@ fun AuthenticatedApp(
                                         // every frame would recompose the dialog
                                         // constantly to almost never change the text.
                                         nowMillis = remember(openIncident.id) { System.currentTimeMillis() },
-                                        // Unreachable while confirming is
-                                        // BackendMissing — the button is rendered
-                                        // disabled — but wired to the snackbar rather
-                                        // than left empty, so the day
-                                        // `incidents-confirm` lands there is one
-                                        // obvious place to call it.
+                                        // "Still there?" on someone else's report.
+                                        // Confirms via `incidents-confirm`, which
+                                        // bumps the shared count and extends the
+                                        // incident's life; runIncidentConfirmation
+                                        // closes the sheet on success and leaves it
+                                        // open to retry on failure (e.g. the incident
+                                        // just expired). The in-flight guard makes one
+                                        // press one call.
                                         onConfirm = {
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    incidentVerifyUnavailableText,
-                                                )
+                                            val controller = incidentController
+                                            if (controller != null && !incidentConfirmInFlight) {
+                                                incidentConfirmInFlight = true
+                                                scope.launch {
+                                                    val outcome =
+                                                        try {
+                                                            runIncidentConfirmation(
+                                                                controller = controller,
+                                                                mapSurface = mapSurface,
+                                                                incidentId = openIncident.id,
+                                                            )
+                                                        } finally {
+                                                            incidentConfirmInFlight = false
+                                                        }
+                                                    snackbarHostState.showSnackbar(
+                                                        when (outcome) {
+                                                            is ConfirmOutcome.Success ->
+                                                                if (outcome.alreadyConfirmed) {
+                                                                    incidentVerifyAlreadyText
+                                                                } else {
+                                                                    incidentVerifySuccessText
+                                                                }
+                                                            is ConfirmOutcome.Failed ->
+                                                                incidentVerifyErrorText
+                                                        },
+                                                    )
+                                                }
                                             }
                                         },
                                         // The sheet is NOT dismissed up front: see
@@ -2591,6 +2625,7 @@ fun AuthenticatedApp(
                                             }
                                         },
                                         removeInProgress = incidentRemoveInFlight,
+                                        confirmInProgress = incidentConfirmInFlight,
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }

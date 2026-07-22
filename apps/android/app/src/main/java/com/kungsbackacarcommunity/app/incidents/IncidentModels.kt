@@ -10,6 +10,7 @@ package com.kungsbackacarcommunity.app.incidents
  *  - `incidents-report`     { type, latitude, longitude, note? } → the created incident.
  *  - `incidents-listNearby` { latitude, longitude, radiusMeters? } → { incidents: [...] }.
  *  - `incidents-remove`     { incidentId } → { removed }.
+ *  - `incidents-confirm`    { incidentId } → { confirmationCount, expiresAt, alreadyConfirmed }.
  *
  * The wire `type` strings here MUST match the backend INCIDENT_TYPES enum.
  */
@@ -54,6 +55,13 @@ data class Incident(
     val reporterUid: String? = null,
     /** ISO-8601 creation instant as sent by the backend, or null when unresolved. */
     val createdAtIso: String? = null,
+    /**
+     * How many OTHER members have confirmed this incident is still there
+     * (`incidents-confirm`). Carried on the backend's `IncidentView`; 0 until the
+     * first confirmation and for imported rows (which are not confirmable). Drives
+     * the "confirmed by N" line on the detail sheet as ambient social proof.
+     */
+    val confirmationCount: Int = 0,
 )
 
 /** The backend's `source` value for incidents imported from Trafikverket. */

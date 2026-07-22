@@ -17,8 +17,11 @@ import org.junit.Test
 private class FakeIncidentRepository(
     private val nearby: List<Incident> = emptyList(),
     private val reportError: Throwable? = null,
+    private val confirmError: Throwable? = null,
+    private val confirmResult: IncidentConfirmResult = IncidentConfirmResult(1, false),
 ) : IncidentRepository {
     val reported = mutableListOf<Triple<IncidentType, LatLng, String?>>()
+    val confirmed = mutableListOf<String>()
     var listNearbyCalls = 0
         private set
 
@@ -47,6 +50,12 @@ private class FakeIncidentRepository(
     }
 
     override suspend fun remove(incidentId: String) = Unit
+
+    override suspend fun confirm(incidentId: String): IncidentConfirmResult {
+        confirmed += incidentId
+        confirmError?.let { throw it }
+        return confirmResult
+    }
 }
 
 class IncidentTypeTest {
@@ -212,6 +221,9 @@ class IncidentReportControllerTest {
                     ): List<Incident> = throw IllegalStateException("FAILED_PRECONDITION: index")
 
                     override suspend fun remove(incidentId: String) = Unit
+
+                    override suspend fun confirm(incidentId: String) =
+                        IncidentConfirmResult(0, false)
                 }
             val controller = IncidentReportController(repo) { here }
 
@@ -245,6 +257,8 @@ class IncidentReportControllerTest {
                 ): List<Incident> = listOf(mine, Incident("other", IncidentType.HAZARD, 12.1, 57.6))
 
                 override suspend fun remove(incidentId: String) = Unit
+
+                override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -291,6 +305,7 @@ class IncidentReportControllerTest {
                     return seeded
                 }
                 override suspend fun remove(incidentId: String) = Unit
+                override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -335,6 +350,7 @@ class IncidentReportControllerTest {
                 override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> =
                     throw CancellationException("cancelled")
                 override suspend fun remove(incidentId: String) = Unit
+                override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -562,6 +578,7 @@ class IncidentReportControllerTest {
                     return seeded
                 }
                 override suspend fun remove(incidentId: String) = Unit
+                override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -621,5 +638,90 @@ class IncidentReportControllerTest {
         // nothing, so no Trafikverket data is on screen and no credit is shown.
         assertFalse(hasTrafikverketData(emptyList()))
         assertFalse(hasTrafikverketData(listOf(userReport)))
+    }
+
+    // ---- confirm ----------------------------------------------------------
+
+    @Test
+    fun `confirm bumps the shared count for the confirmed incident only`() = runTest {
+        val seeded =
+            listOf(
+                Incident("theirs", IncidentType.HAZARD, 12.0, 57.5, confirmationCount = 0),
+                Incident("other", IncidentType.POLICE, 12.1, 57.6, confirmationCount = 2),
+            )
+        val fake =
+            FakeIncidentRepository(
+                nearby = seeded,
+                confirmResult = IncidentConfirmResult(1, false),
+            )
+        val controller = IncidentReportController(fake) { here }
+        controller.refresh(here)
+
+        val outcome = controller.confirm("theirs")
+
+        assertTrue(outcome is ConfirmOutcome.Success)
+        outcome as ConfirmOutcome.Success
+        assertEquals(1, outcome.confirmationCount)
+        assertFalse(outcome.alreadyConfirmed)
+        assertEquals(listOf("theirs"), fake.confirmed)
+        // Only the confirmed incident's count moved on the shared layer.
+        assertEquals(
+            1,
+            controller.nearbyIncidents.value.first { it.id == "theirs" }.confirmationCount,
+        )
+        assertEquals(
+            2,
+            controller.nearbyIncidents.value.first { it.id == "other" }.confirmationCount,
+        )
+    }
+
+    @Test
+    fun `a repeat confirm reads as alreadyConfirmed with the unchanged count`() = runTest {
+        val seeded = listOf(Incident("theirs", IncidentType.HAZARD, 12.0, 57.5, confirmationCount = 3))
+        val fake =
+            FakeIncidentRepository(
+                nearby = seeded,
+                confirmResult = IncidentConfirmResult(3, true),
+            )
+        val controller = IncidentReportController(fake) { here }
+        controller.refresh(here)
+
+        val outcome = controller.confirm("theirs")
+
+        assertTrue(outcome is ConfirmOutcome.Success)
+        outcome as ConfirmOutcome.Success
+        assertTrue(outcome.alreadyConfirmed)
+        assertEquals(3, outcome.confirmationCount)
+    }
+
+    @Test
+    fun `a rejected confirm leaves the count untouched`() = runTest {
+        // The backend rejects e.g. confirming your own report; the local count
+        // must not move on a call the server refused.
+        val seeded = listOf(Incident("mine", IncidentType.HAZARD, 12.0, 57.5, confirmationCount = 0))
+        val fake =
+            FakeIncidentRepository(
+                nearby = seeded,
+                confirmError = IllegalStateException("permission-denied"),
+            )
+        val controller = IncidentReportController(fake) { here }
+        controller.refresh(here)
+
+        val outcome = controller.confirm("mine")
+
+        assertTrue(outcome is ConfirmOutcome.Failed)
+        assertEquals(
+            0,
+            controller.nearbyIncidents.value.first { it.id == "mine" }.confirmationCount,
+        )
+    }
+
+    @Test
+    fun `confirm propagates cancellation instead of reporting Failed`() = runTest {
+        val fake = FakeIncidentRepository(confirmError = CancellationException("cancelled"))
+        val controller = IncidentReportController(fake) { here }
+
+        val thrown = catchCancellation { controller.confirm("x") }
+        assertTrue("cancellation must propagate, not become Failed", thrown is CancellationException)
     }
 }

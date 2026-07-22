@@ -21,6 +21,24 @@ sealed interface ReportOutcome {
     data class Failed(val cause: Throwable) : ReportOutcome
 }
 
+/** Outcome of a "still there?" confirmation, so the UI can show the right feedback. */
+sealed interface ConfirmOutcome {
+    /**
+     * The confirmation landed. [alreadyConfirmed] is true when this caller had
+     * confirmed before (an idempotent repeat, count unchanged) — the UI says
+     * "already confirmed" rather than "thanks". [confirmationCount] is the total
+     * after this call, for the updated marker/sheet.
+     */
+    data class Success(val confirmationCount: Int, val alreadyConfirmed: Boolean) : ConfirmOutcome
+
+    /**
+     * The backend rejected it or the call failed — e.g. the reporter tried to
+     * confirm their own report, or the incident already expired. The sheet keeps
+     * showing so the user can retry.
+     */
+    data class Failed(val cause: Throwable) : ConfirmOutcome
+}
+
 /**
  * The small, reusable incidents API surfaced to the map shell AND the sibling
  * turn-by-turn navigation PR: report an incident at the user's current
@@ -111,6 +129,38 @@ class IncidentReportController(
             throw cancellation
         } catch (_: Throwable) {
             false
+        }
+    }
+
+    /**
+     * Confirms SOMEONE ELSE'S report [incidentId] is still there and reflects the
+     * new confirmation count on [nearbyIncidents], so an open sheet/marker updates
+     * without a refetch.
+     *
+     * The local count is patched only AFTER the backend accepts: a rejected
+     * confirmation (the reporter cannot confirm their own report; an expired or
+     * imported incident cannot be confirmed) leaves the count untouched.
+     * Cancellation propagates; any other failure returns [ConfirmOutcome.Failed].
+     */
+    suspend fun confirm(incidentId: String): ConfirmOutcome {
+        return try {
+            val result = repository.confirm(incidentId)
+            nearbyFlow.value =
+                nearbyFlow.value.map { incident ->
+                    if (incident.id == incidentId) {
+                        incident.copy(confirmationCount = result.confirmationCount)
+                    } else {
+                        incident
+                    }
+                }
+            ConfirmOutcome.Success(
+                confirmationCount = result.confirmationCount,
+                alreadyConfirmed = result.alreadyConfirmed,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            ConfirmOutcome.Failed(error)
         }
     }
 

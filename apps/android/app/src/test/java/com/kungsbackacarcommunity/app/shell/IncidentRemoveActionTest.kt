@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.shell
 
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentConfirmResult
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentRepository
 import com.kungsbackacarcommunity.app.incidents.IncidentType
@@ -47,6 +48,8 @@ class IncidentRemoveActionTest {
         override suspend fun remove(incidentId: String) {
             removeError?.let { throw it }
         }
+
+        override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
     }
 
     private fun incidentAt(id: String) =
@@ -176,6 +179,8 @@ class IncidentRemoveActionTest {
                     // Holds the removal open so the taps below land in the
                     // middle of it, rather than before or after.
                     override suspend fun remove(incidentId: String) = gate.await()
+
+                    override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
                 }
             val controller = controllerWith(repository)
             val surface = StubMapSurface(autoLoad = false)

@@ -49,36 +49,25 @@ enum class IncidentOrigin {
 /**
  * Whether the "still there?" confirmation can actually reach a backend.
  *
- * Mirrors the shape `MessageModeration.ReportAvailability` uses for the missing
- * report callables: the gap is named in the type system, so the day the callable
- * lands the fix is one line here and the UI follows.
+ * Mirrors the shape `MessageModeration.ReportAvailability` uses: the capability
+ * is named in the type system, so a build with the callable missing renders the
+ * action disabled and a build with it live renders it wired — one constant to
+ * flip ([IncidentDetails.confirmAvailability]).
  *
- * BACKEND GAP — what [BackendMissing] is waiting on:
- *
- * The incidents domain currently exposes only `incidents-report`,
- * `incidents-listNearby`, `incidents-remove`, `incidents-cleanupExpired` and
- * `incidents-syncTrafikverket`. There is NO confirm callable, so confirming is
- * rendered disabled with a plain explanation rather than pretending to work or
- * being faked client-side (a client-side "confirmed" that does not extend the
- * document's `expiresAt` would show a green tick on an incident that then
- * vanishes on the next sweep anyway).
- *
- * Wanted: `incidents-confirm` (europe-west1, auth + App Check), taking
- * `{ incidentId: string }` and returning
- * `{ confirmationCount: number, expiresAt: string, alreadyConfirmed: boolean }`.
- * Semantics:
+ * As of the `incidents-confirm` wiring this is [Wired]: the callable
+ * (`incidents-confirm`, europe-west1, auth + App Check) exists and is deployed.
+ * It takes `{ incidentId: string }` and returns
+ * `{ confirmationCount: number, expiresAt: string, alreadyConfirmed: boolean }`,
+ * with these guarantees the client relies on:
  *  - one confirmation per user per incident — a repeat call is an idempotent
  *    no-op returning `alreadyConfirmed: true` and the unchanged count;
- *  - the REPORTER MAY NOT confirm their own report (`failed-precondition`);
- *    self-confirmation would make the expiry indefinitely extendable by one
- *    person, which is the exact failure the TTL exists to prevent;
- *  - a confirmation extends `expiresAt` (bounded — e.g. one further per-type
- *    TTL from now, capped at some absolute maximum so an incident cannot be
- *    kept alive forever) and increments a `confirmationCount` field;
+ *  - the REPORTER MAY NOT confirm their own report (`permission-denied`);
+ *    the sheet never offers Confirm on your own report ([actionFor]) so this is
+ *    a server-side backstop, not a normal client path;
+ *  - a confirmation extends `expiresAt` (bounded by a hard lifetime cap so an
+ *    incident cannot be kept alive forever) and increments `confirmationCount`;
  *  - imported (`source: 'trafikverket'`) incidents reject confirmation the same
  *    way `remove` does — their lifecycle belongs to the importer.
- * The returned `confirmationCount` and `expiresAt` let the sheet show "confirmed
- * by N" and the refreshed expiry without a second round-trip.
  */
 enum class ConfirmAvailability {
     /** A confirm callable exists and is wired. */
@@ -91,8 +80,8 @@ enum class ConfirmAvailability {
 /** The action the sheet offers for a given incident and viewer. */
 enum class IncidentAction {
     /**
-     * "Still there?" — offered on someone ELSE'S member report. Currently
-     * rendered disabled (see [ConfirmAvailability]).
+     * "Still there?" — offered on someone ELSE'S member report. Wired to
+     * `incidents-confirm` (see [ConfirmAvailability]).
      */
     Confirm,
 
@@ -114,7 +103,7 @@ object IncidentDetails {
      * the UI, the tests, and the PR that lands the callable all agree on one
      * place to flip.
      */
-    val confirmAvailability: ConfirmAvailability = ConfirmAvailability.BackendMissing
+    val confirmAvailability: ConfirmAvailability = ConfirmAvailability.Wired
 
     /** Where [incident] came from. */
     fun originOf(incident: Incident): IncidentOrigin =
