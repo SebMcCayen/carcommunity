@@ -1152,6 +1152,31 @@ fun AuthenticatedApp(
                 }
             }
 
+            // Bind the foreground POSITION PUBLISHER to the session itself, not
+            // just to the manual Start button. A convoy auto-started session
+            // (PR #527) flips isSharing true WITHOUT any manual start — that is
+            // the whole point: accepting/starting a convoy is meant to make you
+            // visible to the group without tapping "share live". But the only
+            // writer of liveLocation/{uid}/latest is LocationSharingService, and
+            // it used to be started ONLY from the manual single-session paths.
+            // So an auto-started member had a live SESSION node server-side yet
+            // never published a POSITION: every convoy member subscribing
+            // observeLatest(uid) saw nothing, and no one appeared on the map.
+            // Starting the publisher here — keyed on the session, not the button
+            // — is the SINGLE source of truth for starting it: it covers the
+            // manual AND the convoy-auto path with one rule, so the manual Start
+            // handlers (startSingleSession, LiveLocationScreen onStart) no longer
+            // call BackgroundLocationController.start themselves. The service
+            // observes the session node and self-terminates when the session ends,
+            // so there is nothing to stop here (the manual Stop/Hide paths still
+            // stop it eagerly for instant feedback). Keyed on uid too so an
+            // account switch that keeps a session active re-targets the publisher.
+            LaunchedEffect(isSharing, uid) {
+                if (isSharing && uid.isNotBlank()) {
+                    BackgroundLocationController.start(context, uid)
+                }
+            }
+
             // Auto-file the drive-save failure the moment the user is shown it.
             // Keyed on the failure's code so ONE issue is filed per distinct
             // failure per prompt, not one per recomposition; the backend dedups
@@ -1239,14 +1264,15 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Start the Single session for the picked duration; the drive
-            // recording auto-starts via the isSharing-bound effect above.
+            // Start the Single session for the picked duration. The drive
+            // recording AND the foreground position publisher both auto-start off
+            // the resulting isSharing flip (the session-bound effects above), so
+            // neither is started explicitly here — LaunchedEffect(isSharing) is the
+            // single source of truth for the publisher (the same wiring that makes
+            // a convoy AUTO-started session publish).
             fun startSingleSession(duration: LiveSessionDuration) {
                 showSingleSessionStart = false
-                liveLocationCoordinator?.let { c ->
-                    scope.launch { c.start(duration) }
-                    BackgroundLocationController.start(context, uid)
-                }
+                liveLocationCoordinator?.let { c -> scope.launch { c.start(duration) } }
             }
 
             /**
@@ -3526,10 +3552,10 @@ private fun RouteHost(
                 actionStatus = actionStatus,
                 canShare = canShareLive,
                 onStart = { d ->
-                    liveLocationCoordinator?.let { c ->
-                        scope.launch { c.start(d) }
-                        BackgroundLocationController.start(context, uid)
-                    }
+                    // The publisher starts off the session-bound
+                    // LaunchedEffect(isSharing) (the single source of truth), not
+                    // here — see startSingleSession.
+                    liveLocationCoordinator?.let { c -> scope.launch { c.start(d) } }
                 },
                 onStop = {
                     liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
