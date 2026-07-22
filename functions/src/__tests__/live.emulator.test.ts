@@ -300,6 +300,32 @@ describe('live session lifecycle', () => {
       'functions/failed-precondition',
     );
   });
+
+  it('extendSession does NOT resurrect a session that expired before commit', async () => {
+    const sharer = await createProvisionedUser('live-extend-expired');
+    await makeMember(sharer);
+    await signInAs(sharer);
+
+    await call('live-startSession', { duration: '1h' });
+
+    // Simulate the session crossing its expiresAt boundary between the client's
+    // read and the extend's commit: push expiresAt into the PAST directly on the
+    // RTDB node while status stays 'active'. The atomic check-and-extend must
+    // evaluate liveness at commit time and ABORT — a naive unconditional write
+    // would resurrect it with a fresh 6h window.
+    const sessionNodeRef = adminRtdb.ref(`liveLocation/${sharer.uid}/session`);
+    const expiredIso = new Date(Date.now() - 60_000).toISOString();
+    await sessionNodeRef.update({ expiresAt: expiredIso });
+
+    expect(await callableErrorCode(call('live-extendSession', {}))).toBe(
+      'functions/failed-precondition',
+    );
+
+    // The transaction aborted, so nothing was written: expiresAt is unchanged
+    // (still in the past), NOT pushed forward to a fresh capped window.
+    const after = (await sessionNodeRef.get()).val();
+    expect(after.expiresAt).toBe(expiredIso);
+  });
 });
 
 describe('live TTL sweep', () => {
