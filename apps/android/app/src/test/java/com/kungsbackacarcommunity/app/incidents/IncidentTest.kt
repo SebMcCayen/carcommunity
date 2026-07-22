@@ -694,6 +694,40 @@ class IncidentReportControllerTest {
     }
 
     /**
+     * Closing [requeryTicks] is a normal caller-side teardown. The loop must END
+     * cleanly on it: receiveCatching hands back a closed result instead of throwing
+     * ClosedReceiveChannelException, so the coroutine COMPLETES (not cancelled with
+     * an error) and does not busy-loop on the dead channel.
+     */
+    @Test
+    fun `pollNearby ends cleanly when the requery channel is closed`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        val ticks = Channel<Unit>(Channel.CONFLATED)
+
+        val job =
+            backgroundScope.launch {
+                controller.pollNearby(requeryTicks = ticks)
+            }
+
+        // Cold-open fetch; the loop is now parked on the channel wait.
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+        assertTrue("the poll loop should still be running", job.isActive)
+
+        // The caller tears the channel down: the loop must exit, not throw or spin.
+        ticks.close()
+        runCurrent()
+        assertTrue("closing the channel must end the loop", job.isCompleted)
+        assertFalse("the loop must complete normally, not fail", job.isCancelled)
+
+        // And it must NOT busy-loop: no further queries even after a keep-alive span.
+        advanceTimeBy(60_000L)
+        runCurrent()
+        assertEquals("a closed channel must not busy-loop", 1, fake.listNearbyCalls)
+    }
+
+    /**
      * A zero/negative interval would make the poll a `delay(0)` busy loop that
      * hammers the backend and drains the battery, so misuse must fail fast
      * rather than ship a hot loop.

@@ -306,6 +306,10 @@ class IncidentReportController(
      * and the scheduled keep-alive can never fire back-to-back. A conflated
      * channel is expected, so a pulse sent while a refresh is in flight is not
      * lost. With no channel the loop is the plain keep-alive it always was.
+     *
+     * If the caller CLOSES [requeryTicks] (a normal lifecycle teardown), the wait
+     * returns a closed result and the loop ends cleanly — exactly once, never a
+     * throw that cancels the coroutine and never a tight spin on the closed channel.
      */
     suspend fun pollNearby(
         radiusProvider: suspend () -> Double? = { IncidentRepository.DEFAULT_RADIUS_METERS },
@@ -336,7 +340,12 @@ class IncidentReportController(
             } else {
                 // A conflated channel holds the latest pulse, so one sent while the
                 // previous refresh ran is delivered here rather than dropped.
-                withTimeoutOrNull(pollIntervalMs) { requeryTicks.receive() }
+                // receiveCatching (not receive) so a CLOSED channel — a normal
+                // caller-side teardown — hands back a closed result instead of
+                // throwing ClosedReceiveChannelException; we end the loop once on
+                // it rather than crashing or busy-looping.
+                val tick = withTimeoutOrNull(pollIntervalMs) { requeryTicks.receiveCatching() }
+                if (tick?.isClosed == true) return
             }
             refreshAround(resolveRadius(radiusProvider), centerProvider)
         }
