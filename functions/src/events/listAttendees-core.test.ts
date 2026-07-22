@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ProfileProjection } from '../convoy/convoy-core';
 import {
   assembleRoster,
   isRsvpStatus,
   parseListAttendeesInput,
+  resolveCallerBlockSet,
   type RsvpEntry,
 } from './listAttendees-core';
 
@@ -161,5 +162,59 @@ describe('assembleRoster', () => {
       'status',
       'userId',
     ]);
+  });
+});
+
+describe('resolveCallerBlockSet', () => {
+  it('unions both block directions (caller→candidate and candidate→caller)', async () => {
+    // c1: caller blocked them. c2: they blocked the caller. c3: no edge.
+    const callerBlocked = vi.fn(async (cands: string[]) => cands.filter((c) => c === 'c1'));
+    const blockedCaller = vi.fn(async (cands: string[]) => cands.filter((c) => c === 'c2'));
+
+    const blocked = await resolveCallerBlockSet(
+      ['c1', 'c2', 'c3'],
+      30,
+      callerBlocked,
+      blockedCaller,
+    );
+
+    expect([...blocked].sort()).toEqual(['c1', 'c2']);
+  });
+
+  it('bounds the lookup fan-out to O(ceil(N/size)) per direction', async () => {
+    const candidates = Array.from({ length: 65 }, (_, i) => `u${i}`);
+    const callerBlocked = vi.fn(async (_group: string[]) => [] as string[]);
+    const blockedCaller = vi.fn(async (_group: string[]) => [] as string[]);
+
+    const blocked = await resolveCallerBlockSet(candidates, 30, callerBlocked, blockedCaller);
+
+    // 65 candidates / 30 per chunk = 3 chunks → 3 calls per direction, not 65.
+    expect(callerBlocked).toHaveBeenCalledTimes(3);
+    expect(blockedCaller).toHaveBeenCalledTimes(3);
+    expect(callerBlocked.mock.calls.every(([group]) => group.length <= 30)).toBe(true);
+    expect(blocked.size).toBe(0);
+  });
+
+  it('dedupes candidates and does nothing when the roster is empty', async () => {
+    const callerBlocked = vi.fn(async (cands: string[]) => cands.filter((c) => c === 'dup'));
+    const blockedCaller = vi.fn(async () => []);
+
+    const blocked = await resolveCallerBlockSet(
+      ['dup', 'dup', 'dup'],
+      30,
+      callerBlocked,
+      blockedCaller,
+    );
+    expect([...blocked]).toEqual(['dup']);
+    // Deduped to a single chunk of one uid — one call per direction.
+    expect(callerBlocked).toHaveBeenCalledTimes(1);
+    expect(callerBlocked).toHaveBeenCalledWith(['dup']);
+
+    callerBlocked.mockClear();
+    blockedCaller.mockClear();
+    const empty = await resolveCallerBlockSet([], 30, callerBlocked, blockedCaller);
+    expect(empty.size).toBe(0);
+    expect(callerBlocked).not.toHaveBeenCalled();
+    expect(blockedCaller).not.toHaveBeenCalled();
   });
 });

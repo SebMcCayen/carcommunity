@@ -75,6 +75,62 @@ export function isRsvpStatus(value: unknown): value is RsvpStatus {
   return typeof value === 'string' && (RSVP_STATUSES as readonly string[]).includes(value);
 }
 
+/** Splits `items` into consecutive groups of at most `size` (size >= 1). */
+function chunk<T>(items: T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    groups.push(items.slice(i, i + size));
+  }
+  return groups;
+}
+
+/**
+ * Set of candidate uids in a block relationship with the SINGLE caller peer in
+ * EITHER direction, resolved with a BOUNDED number of injected lookups.
+ *
+ * Firebase-free: the two lookups do the I/O, this only chunks + unions their
+ * results, so a unit test can both assert the either-direction filter AND count
+ * the lookup invocations (proving the fan-out is bounded to O(ceil(N/size)) per
+ * direction, not one query per candidate).
+ *
+ * Why two lookups instead of the generic `resolvePeerBlockPairs`: with a lone
+ * peer, that helper enqueues one query per candidate for the "candidate blocked
+ * caller" direction (a distinct `userBlocks/{candidate}/blocked` subcollection
+ * each), i.e. ~N parallel Firestore RPCs. Splitting the two directions lets each
+ * collapse into chunked reads instead:
+ *  - `callerBlocked`: one blocker (the caller), many blocked → a single
+ *    `documentId() in [chunk]` query per chunk (billed per doc RETURNED).
+ *  - `blockedCaller`: many distinct blockers, one blocked (the caller) → a
+ *    batched `getAll` of the point docs per chunk (one streamed RPC per chunk).
+ *
+ * @param candidateUids  attendee uids (deduped internally).
+ * @param size           chunk size (Firestore caps `documentId() in` at 30).
+ * @param callerBlocked  given up to `size` candidates, the subset the CALLER has
+ *   blocked.
+ * @param blockedCaller  given up to `size` candidates, the subset who have
+ *   blocked the CALLER.
+ */
+export async function resolveCallerBlockSet(
+  candidateUids: string[],
+  size: number,
+  callerBlocked: (candidates: string[]) => Promise<string[]>,
+  blockedCaller: (candidates: string[]) => Promise<string[]>,
+): Promise<Set<string>> {
+  const unique = [...new Set(candidateUids)];
+  if (unique.length === 0) return new Set<string>();
+
+  const groups = chunk(unique, size);
+  const results = await Promise.all(
+    groups.flatMap((group) => [callerBlocked(group), blockedCaller(group)]),
+  );
+
+  const blocked = new Set<string>();
+  for (const hits of results) {
+    for (const uid of hits) blocked.add(uid);
+  }
+  return blocked;
+}
+
 /**
  * Joins RSVP entries with the public user projection, drops blocked and
  * deleted-user rows, and returns a deterministically-sorted flat roster.

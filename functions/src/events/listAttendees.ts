@@ -20,18 +20,27 @@
  *   return `not-found`, mirroring the teaser-doc read rule (a draft is not
  *   member-visible at all) and avoiding any leak of a non-public attendee list.
  *
+ * ## Roster membership
+ * The caller is included in their own roster: this surface answers "who
+ * answered", and a viewer who RSVP'd is one of those people and expects to see
+ * themselves grouped under the answer they gave. The Android detail screen shows
+ * the caller's own answer twice over by design — once as the interactive RSVP
+ * selector row (`myRsvp`, the answer *control*) and once as an ordinary roster
+ * entry (a member of the "who's going" list) — so including the caller does not
+ * duplicate any single widget.
+ *
  * ## Blocking
- * Reuses the convoy block matrix (`resolvePeerBlockPairs` / the same
- * `userBlocks/{blocker}/blocked/{blocked}` store live.listNearby reads): any
- * attendee the caller has blocked, OR who has blocked the caller, is dropped
- * from the returned list. The public `rsvpCounts` tally on the event doc is NOT
- * adjusted here — it is a separate server tally and lives on the event doc.
+ * Reuses the same `userBlocks/{blocker}/blocked/{blocked}` store live.listNearby
+ * reads: any attendee the caller has blocked, OR who has blocked the caller, is
+ * dropped from the returned list. The public `rsvpCounts` tally on the event doc
+ * is NOT adjusted here — it is a separate server tally and lives on the event doc.
  *
  * ## Bounding
  * A local car-community event will not have a huge roster, but the read is still
  * capped at `MAX_ATTENDEES` RSVP docs so it can never unbounded-scan. User docs
- * are fetched with a single chunked `getAll`, and the block matrix is resolved
- * with reads that grow with the roster size, not roster×caller.
+ * are fetched with a chunked `getAll`, and the block check is resolved with a
+ * BOUNDED number of round-trips — O(ceil(roster/READ_CHUNK)) per direction — via
+ * the single-peer helper below, NOT one Firestore query per candidate uid.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -39,17 +48,13 @@ import { FieldPath } from 'firebase-admin/firestore';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberOrAdminActor } from '../shared/memberActor';
-import {
-  isBlockedAgainstAnyPeer,
-  resolvePeerBlockPairs,
-  toProfileProjection,
-  type ProfileProjection,
-} from '../convoy/convoy-core';
+import { toProfileProjection, type ProfileProjection } from '../convoy/convoy-core';
 import type { EventStatus } from './events-core';
 import {
   assembleRoster,
   isRsvpStatus,
   parseListAttendeesInput,
+  resolveCallerBlockSet,
   type AttendeeView,
   type RsvpEntry,
 } from './listAttendees-core';
@@ -126,7 +131,8 @@ export const listAttendees = onCall(
 
     const entries: RsvpEntry[] = [];
     for (const doc of rsvpSnap.docs) {
-      if (doc.id === actor.uid) continue; // the caller sees their own RSVP elsewhere
+      // The caller is intentionally NOT skipped — a viewer who answered belongs
+      // in the "who answered" roster like everyone else (see the file header).
       const rawStatus = doc.data()?.status;
       if (!isRsvpStatus(rawStatus)) continue;
       entries.push({ userId: doc.id, status: rawStatus });
@@ -138,20 +144,47 @@ export const listAttendees = onCall(
 
     const uids = entries.map((entry) => entry.userId);
 
-    // Join identities (users/{uid}) in one chunked getAll, and resolve the block
-    // matrix against the single caller peer — both in parallel.
-    const [profiles, blockPairs] = await Promise.all([
+    // Join identities (users/{uid}) in a chunked getAll, and resolve the block
+    // set against the single caller peer — both in parallel.
+    const [profiles, blockedSet] = await Promise.all([
       loadProfiles(uids),
-      resolvePeerBlockPairs(uids, [actor.uid], queryBlockedSubset),
+      resolveCallerBlockSet(
+        uids,
+        READ_CHUNK,
+        // caller → candidate: one blocker, many blocked → `documentId() in` query.
+        (candidates) => queryBlockedSubset(actor.uid, candidates),
+        // candidate → caller: distinct blockers → batched point-doc getAll.
+        (candidates) => queryBlockersOf(actor.uid, candidates),
+      ),
     ]);
 
-    const attendees = assembleRoster(entries, profiles, (uid) =>
-      isBlockedAgainstAnyPeer(uid, [actor.uid], blockPairs),
-    );
+    const attendees = assembleRoster(entries, profiles, (uid) => blockedSet.has(uid));
 
     return { attendees };
   },
 );
+
+/**
+ * Subset of `candidateUids` who have blocked `subjectUid`, resolved with ONE
+ * batched `getAll` of the point docs `userBlocks/{candidate}/blocked/{subject}`
+ * — a single streamed RPC for the whole chunk, versus one query per candidate.
+ * The blocker uid is recovered from each hit's path (getAll does not guarantee
+ * result order), so no index-alignment assumption is made.
+ */
+async function queryBlockersOf(subjectUid: string, candidateUids: string[]): Promise<string[]> {
+  if (candidateUids.length === 0) return [];
+  const refs: DocumentReference[] = candidateUids.map((candidate) =>
+    db.collection('userBlocks').doc(candidate).collection('blocked').doc(subjectUid),
+  );
+  const snaps = await db.getAll(...refs);
+  const blockers: string[] = [];
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const blockerUid = snap.ref.parent.parent?.id; // userBlocks/{candidate}
+    if (blockerUid) blockers.push(blockerUid);
+  }
+  return blockers;
+}
 
 /** Batched users/{uid} projection read. Absent doc → entry omitted (deleted user). */
 async function loadProfiles(uids: string[]): Promise<Map<string, ProfileProjection>> {

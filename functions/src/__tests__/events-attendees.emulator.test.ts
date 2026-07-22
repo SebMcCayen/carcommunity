@@ -5,7 +5,9 @@
  * - a signed-in member gets the roster of a PUBLISHED event with each answer
  * - unauthenticated + suspended callers are rejected
  * - a DRAFT event's roster is not exposed (not-found)
- * - a member the caller blocked (either direction) is filtered out
+ * - the caller is included in their own roster (they see the answer they gave)
+ * - a member the caller blocked, AND a member who blocked the caller, are both
+ *   filtered out (block honoured in either direction)
  * - a deleted / missing users/{uid} is skipped rather than shown nameless
  *
  * NOTE: member gating is currently DISABLED (shared/memberGating.ts), so a
@@ -125,6 +127,7 @@ let going: TestUser;
 let maybe: TestUser;
 let notGoing: TestUser;
 let blocked: TestUser;
+let blockedByReverse: TestUser;
 let suspended: TestUser;
 let ghostUid: string;
 let publishedEventId: string;
@@ -151,6 +154,7 @@ beforeAll(async () => {
   maybe = await createProvisionedUser('att-maybe', 'Max Maybe');
   notGoing = await createProvisionedUser('att-not', 'Nils NotGoing');
   blocked = await createProvisionedUser('att-blocked', 'Bad Blocked');
+  blockedByReverse = await createProvisionedUser('att-revblock', 'Rev Blocker');
   suspended = await createProvisionedUser('att-suspended', 'Suspended Sam');
   await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
 
@@ -167,20 +171,30 @@ beforeAll(async () => {
   publishedEventId = (created.data as { eventId: string }).eventId;
   await call('events-publish', { eventId: publishedEventId });
 
+  await setRsvp(publishedEventId, viewer.uid, 'maybe'); // the caller's own answer
   await setRsvp(publishedEventId, going.uid, 'going');
   await setRsvp(publishedEventId, maybe.uid, 'maybe');
   await setRsvp(publishedEventId, notGoing.uid, 'not_going');
   await setRsvp(publishedEventId, blocked.uid, 'going');
+  await setRsvp(publishedEventId, blockedByReverse.uid, 'going');
   await setRsvp(publishedEventId, ghostUid, 'going');
 
-  // Viewer has blocked `blocked` (block store written directly; the block
-  // callable path is covered by the blocking suite).
+  // Viewer has blocked `blocked` (caller→candidate direction).
   await adminDb
     .collection('userBlocks')
     .doc(viewer.uid)
     .collection('blocked')
     .doc(blocked.uid)
     .set({ blockedUserId: blocked.uid, displayName: 'Bad Blocked', createdAt: new Date() });
+
+  // `blockedByReverse` has blocked the viewer (candidate→caller direction) —
+  // the block must still be honoured, filtering them from the viewer's roster.
+  await adminDb
+    .collection('userBlocks')
+    .doc(blockedByReverse.uid)
+    .collection('blocked')
+    .doc(viewer.uid)
+    .set({ blockedUserId: viewer.uid, displayName: 'Viewer', createdAt: new Date() });
 
   // A separate draft event (never published) to prove drafts are not exposed.
   const draft = await call('events-create', {
@@ -223,6 +237,10 @@ describe('events-listAttendees', () => {
     expect(byId.get(maybe.uid)?.status).toBe('maybe');
     expect(byId.get(notGoing.uid)?.status).toBe('not_going');
 
+    // The caller sees themselves in their own roster, with the answer they gave.
+    expect(byId.get(viewer.uid)?.status).toBe('maybe');
+    expect(byId.get(viewer.uid)?.displayName).toBe('Viewer');
+
     // Status grouping order is stable: going before maybe before not_going.
     const statuses = attendees.map((a) => a.status);
     const firstMaybe = statuses.indexOf('maybe');
@@ -231,12 +249,13 @@ describe('events-listAttendees', () => {
     expect(firstMaybe).toBeLessThan(firstNotGoing);
   });
 
-  it('filters out a blocked member and skips a deleted user', async () => {
+  it('filters blocked members in either direction and skips a deleted user', async () => {
     await signInAs(viewer);
     const result = await call('events-listAttendees', { eventId: publishedEventId });
     const ids = (result.data as { attendees: Attendee[] }).attendees.map((a) => a.userId);
-    expect(ids).not.toContain(blocked.uid);
-    expect(ids).not.toContain(ghostUid);
+    expect(ids).not.toContain(blocked.uid); // viewer blocked them
+    expect(ids).not.toContain(blockedByReverse.uid); // they blocked the viewer
+    expect(ids).not.toContain(ghostUid); // deleted / missing user
   });
 
   it('does not expose a draft event roster', async () => {
