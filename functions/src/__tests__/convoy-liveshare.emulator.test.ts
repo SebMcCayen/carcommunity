@@ -39,6 +39,12 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+// The backend producer under test — imported directly (not via a callable) so
+// the stop-path transaction can be raced against a manual session write with a
+// tight, targeted window (see the TOCTOU test below). Importing it initialises
+// the functions' own default Admin app against the SAME emulator namespace this
+// file already points at, so both apps read/write one underlying RTDB.
+import { stopConvoyAutoSession } from '../live/session';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -130,8 +136,9 @@ async function signInAs(user: TestUser): Promise<void> {
 }
 
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
+const sessionNodeRef = (uid: string) => adminRtdb.ref(`liveLocation/${uid}/session`);
 const sessionOf = (uid: string) =>
-  adminRtdb.ref(`liveLocation/${uid}/session`).get().then((s) => s.val() as LiveSessionNode | null);
+  sessionNodeRef(uid).get().then((s) => s.val() as LiveSessionNode | null);
 const latestExists = (uid: string) =>
   adminRtdb.ref(`liveLocation/${uid}/latest`).get().then((s) => s.exists());
 
@@ -332,5 +339,88 @@ describe('convoy auto-start live session (item 2)', () => {
     // The abort must NOT have run latestRef().remove() (only a committed take-over
     // clears the marker) — the manual broadcast's marker survives.
     expect(await latestExists(member.uid)).toBe(true);
+  }, 60_000);
+});
+
+describe('stopConvoyAutoSession stop-path atomicity (item 2 teardown)', () => {
+  // A convoy-auto session node for `convoyId`, exactly the shape the stop-path
+  // matches on (status/convoyAutoStarted/convoyId are all it reads).
+  const autoNode = (id: string, convoyId: string) => ({
+    id,
+    status: 'active',
+    convoyAutoStarted: true,
+    convoyId,
+    // Padding fields so the node is a plausible LiveSession, not that the stop
+    // path reads them.
+    duration: '4h',
+    startedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 4 * 3600_000).toISOString(),
+    stoppedAt: null,
+    displayName: 'RaceUser',
+    mainCar: null,
+  });
+  // A MANUAL session — no convoyAutoStarted flag — that must never be stopped by
+  // a convoy teardown.
+  const manualNode = (id: string) => ({
+    id,
+    status: 'active',
+    duration: '1h',
+    startedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    stoppedAt: null,
+    displayName: 'RaceUser',
+    mainCar: null,
+  });
+
+  it('stops a matching convoy-auto session when nothing races in', async () => {
+    const uid = `stop-atomic-plain-${Date.now()}`;
+    const convoyId = 'convoy-plain';
+    await sessionNodeRef(uid).set(autoNode('auto-1', convoyId));
+
+    const outcome = await stopConvoyAutoSession(uid, convoyId);
+
+    expect(outcome).toBe('stopped');
+    const after = await sessionOf(uid);
+    expect(after!.status).toBe('stopped');
+  }, 30_000);
+
+  it('leaves a manual session that raced in between the stop’s read and commit', async () => {
+    // TOCTOU teeth for the stop path. The node STARTS as a matching convoy-auto
+    // session (a naive read-then-update would read it, decide "stop", then blindly
+    // .update({status:'stopped'})). We fire stopConvoyAutoSession CONCURRENTLY with
+    // a manual live.startSession overwriting the node. Because the stop is an RTDB
+    // transaction, the decision is re-made against the value at COMMIT time:
+    //   - if the transaction commits first, the auto session is stopped and the
+    //     manual set then makes the node an ACTIVE manual session; or
+    //   - if the manual set lands first, the transaction re-reads the manual
+    //     (unflagged) value and ABORTS.
+    // Either interleaving is fine; the ONE outcome that must NEVER occur is a
+    // manual session mutated to 'stopped' — the guarantee the read-then-update
+    // form violated. We assert that invariant across many races; with the correct
+    // transactional code it holds deterministically regardless of timing, so the
+    // test never false-fails, and it catches a regression to read-then-update.
+    const ITERATIONS = 25;
+    for (let i = 0; i < ITERATIONS; i += 1) {
+      const uid = `stop-atomic-race-${Date.now()}-${i}`;
+      const convoyId = `convoy-race-${i}`;
+      const manualId = `manual-${i}`;
+      await sessionNodeRef(uid).set(autoNode(`auto-${i}`, convoyId));
+
+      // Race the teardown against a manual session takeover of the SAME node.
+      await Promise.all([
+        stopConvoyAutoSession(uid, convoyId),
+        sessionNodeRef(uid).set(manualNode(manualId)),
+      ]);
+
+      const after = await sessionOf(uid);
+      // The manual session must NEVER be the one that got stopped.
+      const manualWasStopped = after?.id === manualId && after?.status === 'stopped';
+      expect(manualWasStopped).toBe(false);
+      // And whenever the manual write is the surviving session, it must still be
+      // active (never clobbered mid-flight to 'stopped').
+      if (after?.id === manualId) {
+        expect(after.status).toBe('active');
+      }
+    }
   }, 60_000);
 });
