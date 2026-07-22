@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.drives.RouteDistanceMarkers
 import com.kungsbackacarcommunity.app.drives.RoutePoint
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
@@ -14,9 +15,12 @@ import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.plugin.annotation.AnnotationConfig
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createPolylineAnnotationManager
+import com.mapbox.maps.extension.style.layers.properties.generated.TextAnchor
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.scalebar.scalebar
 
@@ -79,7 +83,16 @@ fun DriveRouteMap(
     )
 }
 
-private fun drawRoute(mapView: MapView, points: List<RoutePoint>) {
+/**
+ * Draws the polyline + start/end endpoints for [points] on [mapView] and fits
+ * the camera to the whole route ONCE. Shared by the small embedded thumbnail
+ * ([DriveRouteMap]) and the zoomable full-screen popup
+ * ([DriveRouteFullscreenDialog]) so a route looks identical in both. Every
+ * native call is wrapped in `runCatching`, so a style that has not finished
+ * loading or an unavailable camera-fit degrades to a blank/partial map rather
+ * than crashing. Draws nothing for a route of fewer than two points.
+ */
+internal fun drawRoute(mapView: MapView, points: List<RoutePoint>) {
     if (points.size < 2) return
     runCatching {
         val linePoints = points.map { Point.fromLngLat(it.longitude, it.latitude) }
@@ -103,6 +116,65 @@ private fun drawRoute(mapView: MapView, points: List<RoutePoint>) {
         endpointManager.create(endMarker(linePoints.last()))
 
         fitCameraToRoute(mapView, linePoints)
+    }
+}
+
+/**
+ * Draws the per-kilometre markers ("1 km / 2 km / …") from
+ * [RouteDistanceMarkers.markers] on [mapView]: a small dot at each crossing plus
+ * a text label carrying the whole-kilometre number. Used ONLY by the zoomable
+ * full-screen popup (the 240dp thumbnail is too small for readable labels).
+ *
+ * The marker positions are computed by the pure, unit-tested
+ * [RouteDistanceMarkers] (cumulative Haversine + interpolation); this function
+ * only renders them. Its annotation managers use DISTINCT `kcc-history-km-…`
+ * layer/source ids so they never collide with [drawRoute]'s route/endpoint
+ * layers (or the shell surface's). Wrapped in `runCatching`; a route under 1 km
+ * yields no markers and draws nothing.
+ *
+ * [labelFor] maps a kilometre number to its localized label (the caller passes a
+ * `stringResource`-backed formatter, since a pure drawing function has no
+ * `Context` string access).
+ */
+internal fun drawKmMarkers(
+    mapView: MapView,
+    points: List<RoutePoint>,
+    labelFor: (Int) -> String,
+) {
+    val markers = RouteDistanceMarkers.markers(points)
+    if (markers.isEmpty()) return
+    runCatching {
+        val dotManager =
+            mapView.annotations.createCircleAnnotationManager(
+                AnnotationConfig(layerId = KM_DOT_LAYER_ID, sourceId = KM_DOT_SOURCE_ID),
+            )
+        val labelManager =
+            mapView.annotations.createPointAnnotationManager(
+                AnnotationConfig(layerId = KM_LABEL_LAYER_ID, sourceId = KM_LABEL_SOURCE_ID),
+            )
+        for (marker in markers) {
+            val point = Point.fromLngLat(marker.longitude, marker.latitude)
+            dotManager.create(
+                CircleAnnotationOptions()
+                    .withPoint(point)
+                    .withCircleRadius(KM_MARKER_RADIUS)
+                    .withCircleColor(KM_MARKER_COLOR)
+                    .withCircleStrokeWidth(KM_MARKER_STROKE)
+                    .withCircleStrokeColor(KM_MARKER_STROKE_COLOR),
+            )
+            labelManager.create(
+                PointAnnotationOptions()
+                    .withPoint(point)
+                    .withTextField(labelFor(marker.kilometer))
+                    .withTextColor(KM_LABEL_COLOR)
+                    .withTextHaloColor(KM_LABEL_HALO_COLOR)
+                    .withTextHaloWidth(KM_LABEL_HALO_WIDTH)
+                    .withTextSize(KM_LABEL_TEXT_SIZE)
+                    // Float the number just above its dot rather than over it.
+                    .withTextAnchor(TextAnchor.BOTTOM)
+                    .withTextOffset(KM_LABEL_TEXT_OFFSET),
+            )
+        }
     }
 }
 
@@ -167,3 +239,27 @@ private const val START_MARKER_COLOR = 0xFF2E7D32.toInt()
 
 // Camera-fit padding (dp; scaled to px before use) so the route clears the edges.
 private const val FIT_PAD = 48.0
+
+// ---- Per-km marker styling (popup only) ---------------------------------------
+// Distinct `kcc-history-km-…` layer/source ids so the km dots + labels never
+// collide with drawRoute's route/endpoint layers or the shell surface's layers.
+private const val KM_DOT_LAYER_ID = "kcc-history-km-dots"
+private const val KM_DOT_SOURCE_ID = "kcc-history-km-dots-src"
+private const val KM_LABEL_LAYER_ID = "kcc-history-km-labels"
+private const val KM_LABEL_SOURCE_ID = "kcc-history-km-labels-src"
+
+// Marker dot: the route blue, on a small white-outlined dot so it reads against
+// both the route line and the basemap. Smaller than the start/end endpoints so a
+// km mark never competes with the drive's origin/destination.
+private const val KM_MARKER_COLOR = ROUTE_LINE_COLOR
+private const val KM_MARKER_RADIUS = 5.0
+private const val KM_MARKER_STROKE = 1.5
+private const val KM_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
+
+// Label: the km number in white with a dark halo so it stays legible over any
+// basemap tile. Anchored above the dot.
+private const val KM_LABEL_COLOR = 0xFFFFFFFF.toInt()
+private const val KM_LABEL_HALO_COLOR = 0xFF1A73E8.toInt()
+private const val KM_LABEL_HALO_WIDTH = 1.5
+private const val KM_LABEL_TEXT_SIZE = 12.0
+private val KM_LABEL_TEXT_OFFSET = listOf(0.0, -1.0)

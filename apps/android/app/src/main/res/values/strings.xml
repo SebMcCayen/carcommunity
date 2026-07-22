@@ -605,6 +605,12 @@
     <string name="savedDrives_routeLoading">Laddar rutt...</string>
     <string name="savedDrives_routeUnavailable">Ruttkartan är inte tillgänglig för den här körningen.</string>
     <string name="savedDrives_routeEmpty">Den här körningen har ingen inspelad rutt att visa.</string>
+    <string name="savedDrives_routeExpand">Öppna karta i helskärm</string>
+    <string name="savedDrives_routeMapFullscreenLabel">Ruttkarta i helskärm</string>
+    <string name="savedDrives_routeMapClose">Stäng karta</string>
+    <string name="savedDrives_routeZoomIn">Zooma in</string>
+    <string name="savedDrives_routeZoomOut">Zooma ut</string>
+    <string name="savedDrives_routeKmMarkerLabel">%1$d km</string>
     <string name="savedDrives_deleteAction">Radera körning</string>
     <string name="savedDrives_deleteConfirmTitle">Radera körning?</string>
     <string name="savedDrives_deleteConfirmBody">Körningen raderas permanent.</string>
