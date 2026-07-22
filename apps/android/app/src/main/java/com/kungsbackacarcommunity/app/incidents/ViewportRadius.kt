@@ -89,13 +89,13 @@ object ViewportRadius {
         neLat: Double,
         neLon: Double,
     ): Double {
-        val toCorners =
-            listOf(
+        val maxCornerMeters =
+            maxOf(
                 haversineMeters(centerLat, centerLon, swLat, swLon), // SW
                 haversineMeters(centerLat, centerLon, neLat, neLon), // NE
                 haversineMeters(centerLat, centerLon, neLat, swLon), // NW
                 haversineMeters(centerLat, centerLon, swLat, neLon), // SE
             )
-        return toCorners.max().coerceIn(MIN_RADIUS_METERS, MAX_RADIUS_METERS)
+        return maxCornerMeters.coerceIn(MIN_RADIUS_METERS, MAX_RADIUS_METERS)
     }
 }

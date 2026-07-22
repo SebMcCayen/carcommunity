@@ -68,12 +68,12 @@ class ViewportRadiusTest {
         assertTrue("expected below the ceiling, was $r", r < ViewportRadius.MAX_RADIUS_METERS)
         // It IS the greatest centre-to-corner distance.
         val maxCorner =
-            listOf(
+            maxOf(
                 ViewportRadius.haversineMeters(centerLat, centerLon, swLat, swLon),
                 ViewportRadius.haversineMeters(centerLat, centerLon, neLat, neLon),
                 ViewportRadius.haversineMeters(centerLat, centerLon, neLat, swLon),
                 ViewportRadius.haversineMeters(centerLat, centerLon, swLat, neLon),
-            ).max()
+            )
         assertEquals(maxCorner, r, 1e-6)
     }
 
