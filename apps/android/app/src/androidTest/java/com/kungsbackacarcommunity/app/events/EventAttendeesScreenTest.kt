@@ -175,6 +175,49 @@ class EventAttendeesScreenTest {
     }
 
     @Test
+    fun attendees_rendersOneHeaderPerAnswer_withMembersUnderEach() {
+        setDetail(
+            EventAttendeesState.Loaded(
+                listOf(
+                    EventAttendee(uid = "u1", displayName = "Gina", status = RsvpStatus.GOING),
+                    EventAttendee(uid = "u2", displayName = "Max", status = RsvpStatus.MAYBE),
+                    EventAttendee(uid = "u3", displayName = "Nils", status = RsvpStatus.NOT_GOING),
+                ),
+            ),
+        )
+        composeTestRule
+            .onNodeWithTag(attendeeGroupTag(RsvpStatus.GOING))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Gina").performScrollTo().assertIsDisplayed()
+        composeTestRule
+            .onNodeWithTag(attendeeGroupTag(RsvpStatus.MAYBE))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Max").performScrollTo().assertIsDisplayed()
+        composeTestRule
+            .onNodeWithTag(attendeeGroupTag(RsvpStatus.NOT_GOING))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Nils").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun attendees_omitsHeaderForAnAnswerNobodyGave() {
+        setDetail(
+            EventAttendeesState.Loaded(
+                listOf(EventAttendee(uid = "u1", displayName = "Gina", status = RsvpStatus.GOING)),
+            ),
+        )
+        composeTestRule
+            .onNodeWithTag(attendeeGroupTag(RsvpStatus.GOING))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(attendeeGroupTag(RsvpStatus.MAYBE)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(attendeeGroupTag(RsvpStatus.NOT_GOING)).assertDoesNotExist()
+    }
+
+    @Test
     fun attendees_hiddenFromNonMembers() {
         // Non-members see the membership gate, never the roster — same gate as
         // the exact location/description.

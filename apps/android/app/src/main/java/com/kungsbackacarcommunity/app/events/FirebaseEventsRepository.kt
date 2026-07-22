@@ -13,10 +13,7 @@ import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -216,66 +213,50 @@ class FirebaseEventsRepository private constructor(
         }
 
     override suspend fun loadAttendees(eventId: String): EventAttendeesResult {
-        // Roster read. Under the current rules (owner-or-admin on
-        // events/{id}/rsvps/{uid}) this list query is DENIED for a normal
-        // member — an expected denial that collapses to the definitive
-        // "names aren't shown" note. See EventAttendees.kt for why the read is
-        // attempted rather than assumed-denied.
-        val rsvps =
+        // Roster read via the `events-listAttendees` callable: the raw RSVP doc
+        // is owner-or-admin readable and carries only { status, updatedAt }, so
+        // the identity join (users/{uid} → displayName + avatarPath) and the
+        // block filtering are done server-side and returned in ONE call, grouped
+        // by RSVP answer. See functions/src/events/listAttendees.ts.
+        val response =
             runCatchingCancellable {
-                firestore
-                    .collection(EVENTS)
-                    .document(eventId)
-                    .collection(RSVPS)
-                    .whereEqualTo("status", RsvpStatus.GOING.wire)
-                    .limit(EventAttendees.MAX_RENDERED.toLong())
-                    .get()
+                functions
+                    .getHttpsCallable(LIST_ATTENDEES)
+                    .call(mapOf("eventId" to eventId))
                     .awaitResult()
             }
                 .getOrElse { error ->
-                    return if ((error as? FirebaseFirestoreException)?.code ==
-                        FirebaseFirestoreException.Code.PERMISSION_DENIED
-                    ) {
-                        EventAttendeesResult.Unavailable
-                    } else {
-                        EventAttendeesResult.Unknown
+                    // NOT_FOUND = draft/cancelled/completed or unknown event;
+                    // PERMISSION_DENIED/UNAUTHENTICATED = restricted caller —
+                    // all definitive "not available to you", never a fabricated
+                    // list. Anything else (offline, timeout) stays retryable.
+                    return when ((error as? FirebaseFunctionsException)?.code) {
+                        FirebaseFunctionsException.Code.NOT_FOUND,
+                        FirebaseFunctionsException.Code.PERMISSION_DENIED,
+                        FirebaseFunctionsException.Code.UNAUTHENTICATED,
+                        -> EventAttendeesResult.Unavailable
+
+                        else -> EventAttendeesResult.Unknown
                     }
                 }
 
-        val uids = rsvps.documents.map { it.id }
-        if (uids.isEmpty()) return EventAttendeesResult.Loaded(emptyList())
-
-        // The RSVP doc carries only { status, updatedAt } (the rules pin it to
-        // exactly those keys), so names/avatars are joined from the public
-        // users/{uid} profile — readable by any authenticated user.
-        //
-        // Issued CONCURRENTLY: this is up to MAX_RENDERED (50) separate gets,
-        // and awaiting them one at a time would serialize 50 round trips into
-        // one worst-case latency on a mobile network. awaitAll preserves the
-        // uids order, so the roster is assembled exactly as before — only the
-        // waiting overlaps. (Individual document gets, not a whereIn query, so
-        // the owner-or-admin rules evaluation per doc is unchanged.)
+        @Suppress("UNCHECKED_CAST")
+        val data = response.data as? Map<String, Any?>
+        val rawAttendees = data?.get("attendees") as? List<*> ?: emptyList<Any?>()
         val attendees =
-            coroutineScope {
-                uids
-                    .map { uid ->
-                        async {
-                            val profile =
-                                runCatchingCancellable {
-                                    firestore.collection(USERS).document(uid).get().awaitResult()
-                                }
-                                    .getOrNull()
-                            // One unreadable/missing profile degrades to a nameless row
-                            // rather than failing the whole roster — they ARE going, which
-                            // is the fact this section exists to report.
-                            EventAttendee(
-                                uid = uid,
-                                displayName = profile?.getString("displayName"),
-                                avatarPath = profile?.getString("avatarPath"),
-                            )
-                        }
-                    }
-                    .awaitAll()
+            rawAttendees.mapNotNull { item ->
+                val row = item as? Map<*, *> ?: return@mapNotNull null
+                val uid = row["userId"] as? String ?: return@mapNotNull null
+                // A row whose status is not one of the three canonical answers is
+                // dropped rather than shown ungrouped — the server only ever emits
+                // canonical statuses, so this is belt-and-braces.
+                val status = RsvpStatus.fromWire(row["status"] as? String) ?: return@mapNotNull null
+                EventAttendee(
+                    uid = uid,
+                    displayName = row["displayName"] as? String,
+                    avatarPath = row["avatarPath"] as? String,
+                    status = status,
+                )
             }
         return EventAttendeesResult.Loaded(attendees)
     }
@@ -286,9 +267,9 @@ class FirebaseEventsRepository private constructor(
         private const val DETAILS = "details"
         private const val PRIVATE = "private"
         private const val RSVPS = "rsvps"
-        private const val USERS = "users"
         private const val REGION = "europe-west1"
         private const val CREATE = "events-create"
+        private const val LIST_ATTENDEES = "events-listAttendees"
 
         fun createIfAvailable(context: Context): EventsRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

@@ -28,6 +28,7 @@ import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
 import { listChatReports, resolveChatReport } from './events/moderateReports';
+import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
@@ -200,9 +201,11 @@ export const admin = {
  * split, plus the RSVP counter aggregation trigger. Most are admin-only;
  * `create` is member-or-admin and `complete` is creator-or-admin. Member
  * RSVPs are direct Security-Rules-gated writes to events/{eventId}/rsvps/{uid}
- * — no callable. events-autoClose completes finished events unattended
- * (events/scheduled.ts), and events-remindUpcoming nudges going-RSVP attendees
- * a couple of hours before an event starts (events/eventReminders.ts).
+ * — no callable, but events-listAttendees is a member-readable roster of who
+ * RSVP'd (identity joined + blocking applied server-side). events-autoClose
+ * completes finished events unattended (events/scheduled.ts), and
+ * events-remindUpcoming nudges going-RSVP attendees a couple of hours before an
+ * event starts (events/eventReminders.ts).
  */
 export const events = {
   create,
@@ -223,6 +226,9 @@ export const events = {
   // Chat report moderation queue (Phase 18d): admin list + resolve.
   listChatReports,
   resolveChatReport,
+  // Attendee roster: member-readable list of who RSVP'd (going/maybe/not_going),
+  // identity joined + blocking applied server-side (events/listAttendees.ts).
+  listAttendees,
 };
 
 /**

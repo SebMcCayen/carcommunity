@@ -10,8 +10,8 @@ import org.junit.Test
  */
 class EventAttendeesTest {
 
-    private fun attendee(uid: String, name: String? = null) =
-        EventAttendee(uid = uid, displayName = name, avatarPath = null)
+    private fun attendee(uid: String, name: String? = null, status: RsvpStatus = RsvpStatus.GOING) =
+        EventAttendee(uid = uid, displayName = name, avatarPath = null, status = status)
 
     // -- create failure mapping ------------------------------------------------
 
@@ -140,5 +140,58 @@ class EventAttendeesTest {
                 listOf(attendee("u2", "Alice"), attendee("u1", "Alice")),
             )
         assertEquals(listOf("u1", "u2"), sorted.map { it.uid })
+    }
+
+    // -- status grouping -------------------------------------------------------
+
+    @Test
+    fun `groupedByStatus orders going then maybe then not_going`() {
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u3", "C", RsvpStatus.NOT_GOING),
+                    attendee("u1", "A", RsvpStatus.GOING),
+                    attendee("u2", "B", RsvpStatus.MAYBE),
+                ),
+            )
+        assertEquals(
+            listOf(RsvpStatus.GOING, RsvpStatus.MAYBE, RsvpStatus.NOT_GOING),
+            groups.map { it.status },
+        )
+        assertEquals(listOf("u1"), groups[0].members.map { it.uid })
+        assertEquals(listOf("u2"), groups[1].members.map { it.uid })
+        assertEquals(listOf("u3"), groups[2].members.map { it.uid })
+    }
+
+    @Test
+    fun `groupedByStatus omits empty groups`() {
+        // Nobody answered "maybe" — no Kanske header should be produced.
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u1", "A", RsvpStatus.GOING),
+                    attendee("u2", "B", RsvpStatus.NOT_GOING),
+                ),
+            )
+        assertEquals(listOf(RsvpStatus.GOING, RsvpStatus.NOT_GOING), groups.map { it.status })
+    }
+
+    @Test
+    fun `groupedByStatus sorts members within a group by name`() {
+        val groups =
+            EventAttendees.groupedByStatus(
+                listOf(
+                    attendee("u2", "Bob", RsvpStatus.GOING),
+                    attendee("u1", "Alice", RsvpStatus.GOING),
+                    attendee("u3", null, RsvpStatus.GOING),
+                ),
+            )
+        assertEquals(1, groups.size)
+        assertEquals(listOf("u1", "u2", "u3"), groups[0].members.map { it.uid })
+    }
+
+    @Test
+    fun `groupedByStatus on an empty roster yields no groups`() {
+        assertEquals(emptyList<EventAttendeeGroup>(), EventAttendees.groupedByStatus(emptyList()))
     }
 }
