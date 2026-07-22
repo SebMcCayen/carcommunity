@@ -344,8 +344,10 @@ class IncidentReportController(
 
     /**
      * Reads [radiusProvider], falling back to [IncidentRepository.DEFAULT_RADIUS_METERS]
-     * on null or a non-cancellation failure, and clamps the result to the server's
-     * accepted bounds so the callable never receives an out-of-range radius.
+     * on null, a non-finite value (NaN or ±Infinity — which [Double.coerceIn] would
+     * pass straight through), or a non-cancellation failure, and clamps the finite
+     * result to the server's accepted bounds so the callable never receives an
+     * out-of-range or non-finite radius.
      */
     private suspend fun resolveRadius(radiusProvider: suspend () -> Double?): Double {
         val raw =
@@ -355,8 +357,12 @@ class IncidentReportController(
                 throw cancellation
             } catch (_: Throwable) {
                 null
-            } ?: IncidentRepository.DEFAULT_RADIUS_METERS
-        return raw.coerceIn(ViewportRadius.MIN_RADIUS_METERS, ViewportRadius.MAX_RADIUS_METERS)
+            }
+        // coerceIn does NOT sanitise NaN/±Infinity, so screen out non-finite input
+        // (and null) up front rather than letting it reach the callable.
+        val finite =
+            if (raw != null && raw.isFinite()) raw else IncidentRepository.DEFAULT_RADIUS_METERS
+        return finite.coerceIn(ViewportRadius.MIN_RADIUS_METERS, ViewportRadius.MAX_RADIUS_METERS)
     }
 
     companion object {

@@ -626,6 +626,37 @@ class IncidentReportControllerTest {
     }
 
     /**
+     * A non-finite radius (NaN or ±Infinity) falls back to the default — coerceIn
+     * would pass NaN straight through, so the callable must never see it.
+     */
+    @Test
+    fun `pollNearby falls back to the default radius when the provider yields a non-finite value`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        var radius = Double.NaN
+
+        backgroundScope.launch {
+            controller.pollNearby(radiusProvider = { radius })
+        }
+
+        // NaN would survive coerceIn unchanged; it must fall back to the default.
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+
+        // +Infinity likewise falls back rather than clamping to the ceiling.
+        radius = Double.POSITIVE_INFINITY
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+
+        // -Infinity too.
+        radius = Double.NEGATIVE_INFINITY
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+    }
+
+    /**
      * A camera-idle tick re-queries PROMPTLY instead of waiting out the keep-alive
      * — and it RESETS the keep-alive timer, so an idle refresh and the scheduled
      * one never fire back-to-back. The conflated channel is the coalescing seam.
