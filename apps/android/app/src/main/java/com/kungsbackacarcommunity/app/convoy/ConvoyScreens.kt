@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +50,10 @@ import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
+
+/** Test tag on the create-convoy submit button, so a UI test can assert it goes
+ *  inert (disabled) during the create + post-create hand-off to the map. */
+const val CONVOY_CREATE_SUBMIT_TAG = "convoy-create-submit"
 
 // ---------------------------------------------------------------------------
 // Convoy list
@@ -301,6 +306,14 @@ fun CreateConvoyScreen(
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Inert while the create is in flight (Working) AND once it succeeds (Created):
+    // on success this screen no longer swaps to a confirmation page, so without this
+    // the picker + submit button would re-enable (Created is not Working, and the
+    // selection is still non-empty) during the brief hand-off window before the host
+    // navigates to the map — allowing a second `convoy.create` / a selection change.
+    // Blocking both states keeps the surface interaction-proof until it leaves.
+    val handingOff =
+        createState is CreateConvoyState.Working || createState is CreateConvoyState.Created
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -346,7 +359,7 @@ fun CreateConvoyScreen(
                             SelectableFriendRow(
                                 friend = friend,
                                 selected = friend.uid in selectedUids,
-                                enabled = createState !is CreateConvoyState.Working,
+                                enabled = !handingOff,
                                 onToggle = { onToggleFriend(friend.uid) },
                             )
                         }
@@ -364,13 +377,15 @@ fun CreateConvoyScreen(
             }
 
             item(key = "submit") {
-                val working = createState is CreateConvoyState.Working
+                // Disabled (and showing the spinner) both while Working and once
+                // Created, so no second submit can fire during the hand-off to the
+                // map. The spinner reads as a brief blocking state until navigation.
                 Button(
                     onClick = onSubmit,
-                    enabled = !working && selectedUids.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !handingOff && selectedUids.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_CREATE_SUBMIT_TAG),
                 ) {
-                    if (working) {
+                    if (handingOff) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(KccSpacing.s6),
                             color = MaterialTheme.colorScheme.onPrimary,
