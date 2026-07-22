@@ -2,6 +2,20 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 18,
+      "versionName": "0.8.7",
+      "releaseDate": "2026-07-22",
+      "highlights": [
+        "Livedelning stängs av automatiskt när du stått stilla",
+        "Max 6 timmars livedelning åt gången"
+      ],
+      "changes": [
+        "Livedelning (egen och konvoj) har nu en gräns på 6 timmar – du får en fråga innan tiden går ut om du vill fortsätta",
+        "Har du stått stilla en stund får du en fråga om du fortfarande vill dela din position; svarar du inte stängs delningen av",
+        "Appen skickar färre positionsuppdateringar när du står stilla, vilket sparar data och batteri"
+      ]
+    },
+    {
       "versionCode": 17,
       "versionName": "0.8.6",
       "releaseDate": "2026-07-21",
