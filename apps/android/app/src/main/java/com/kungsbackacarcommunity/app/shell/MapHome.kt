@@ -1223,16 +1223,17 @@ private fun SearchBarRow(
     ) {
         // The flexible left+middle region between the (fixed) profile avatar on the
         // right and nothing on the left. It holds the collapsed search button plus
-        // the compact live-session bar sitting in the gap; when the search is
+        // the full-width live-session bar filling the gap; when the search is
         // expanded the "Where to?" field is drawn OVER this region (a later child
         // of the Box = higher z-order), covering the live-session bar rather than
         // sitting beside it. The avatar sits OUTSIDE this Box, so search never
         // covers it.
         Box(modifier = Modifier.weight(1f)) {
             // Base layer: the collapsed round search button (upper-left) + the
-            // live-session bar in the remaining width. The search button is dropped
-            // while expanded — the overlay below carries the search affordance then,
-            // so there is no duplicate control hiding under it.
+            // live-session bar stretched across the remaining width. The search
+            // button is dropped while expanded — the overlay below carries the
+            // search affordance then, so there is no duplicate control hiding under
+            // it.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1262,9 +1263,12 @@ private fun SearchBarRow(
                         }
                     }
                 }
-                // The live-session bar sits at the start of the gap (compact, not
-                // full-width); a Spacer takes the remaining width so the avatar
-                // stays pinned right whether or not a session is running.
+                // The live-session bar fills the whole gap between the search
+                // button and the avatar (weight(1f)), the same full-width treatment
+                // the convoy bar got in #536 — a stretched bar rather than a compact
+                // pill floating at the start of the strip. When there is no session
+                // the weight is carried by a Spacer instead, so the avatar stays
+                // pinned right either way.
                 //
                 // While the search is expanded the opaque overlay below is drawn
                 // OVER this bar, so it is visually covered but still composed here.
@@ -1276,14 +1280,18 @@ private fun SearchBarRow(
                 if (liveSessionBar != null) {
                     Box(
                         modifier =
-                            if (searchExpanded) {
-                                Modifier.clearAndSetSemantics {}
-                            } else {
-                                Modifier
-                            },
+                            Modifier.weight(1f)
+                                .then(
+                                    if (searchExpanded) {
+                                        Modifier.clearAndSetSemantics {}
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                     ) { liveSessionBar() }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
-                Spacer(modifier = Modifier.weight(1f))
             }
 
             // Overlay layer: the expanded "Where to?" bar, composed AFTER the base

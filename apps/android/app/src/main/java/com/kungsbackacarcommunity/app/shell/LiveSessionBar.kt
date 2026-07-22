@@ -2,6 +2,9 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,17 +36,19 @@ import kotlinx.coroutines.delay
 const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
 
 /**
- * A compact, frosted pill shown at the top of the map — in the strip between the
+ * A frosted bar shown at the top of the map — filling the strip between the
  * search icon and the profile avatar — WHILE a live-sharing session is running.
  * It reports two things and nothing else, because that is all that fits: how long
- * the session has run, and how far it has driven.
+ * the session has run, and how far it has driven. It stretches to fill the whole
+ * gap the search control and avatar frame (the same full-width treatment the
+ * convoy bar got in #536), with the two readouts pushed to its two ends.
  *
  * ## Icons + numbers, never labels
- * The bar has to sit beside the search control and the avatar and never crowd
+ * The bar sits between the search control and the avatar and never crowds
  * either, so it carries a clock glyph + a running `M:SS` / `Hh MMm` time and a
  * distance glyph + a `km`/`m` figure — no "elapsed" or "distance" words that
  * would overflow the strip (the same reason the convoy bar shows a bare count).
- * The full sentence is kept as the pill's [contentDescription] for TalkBack.
+ * The full sentence is kept as the bar's [contentDescription] for TalkBack.
  *
  * ## Where the two numbers come from
  * - Elapsed is derived from [sessionStartMillis] (the drive recorder's start
@@ -89,6 +94,12 @@ fun LiveSessionBar(
     Surface(
         modifier =
             modifier
+                // Fill the weighted strip the shell hands us (search button -> avatar)
+                // and match the flanking 48dp controls' height, so the bar reads as a
+                // single full-width band rather than a short pill — mirroring the
+                // convoy bar's own `fillMaxWidth` treatment.
+                .fillMaxWidth()
+                .height(KccSpacing.s12)
                 .testTag(LIVE_SESSION_BAR_TEST_TAG)
                 .semantics(mergeDescendants = true) { contentDescription = description },
         shape = RoundedCornerShape(KccRadius.full),
@@ -98,9 +109,14 @@ fun LiveSessionBar(
     ) {
         Row(
             modifier =
-                Modifier.padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                Modifier.fillMaxWidth()
+                    .fillMaxHeight()
+                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            // Elapsed at the start, distance at the end: the two readouts sit at the
+            // bar's two ends so it visibly spans the full strip instead of clustering
+            // the numbers at the left with dead space to the right.
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             LiveSessionMetric(
                 icon = { modifierIcon ->
