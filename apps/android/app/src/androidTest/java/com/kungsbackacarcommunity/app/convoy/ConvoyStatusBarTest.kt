@@ -168,18 +168,18 @@ class ConvoyStatusBarTest {
     }
 
     /**
-     * The invite control's enablement is derived, not hard-coded: flipping
-     * `inviteAvailability` to `Wired` when the `convoy.invite` callable ships
-     * must actually make the button live, and must do so only alongside a
-     * handler. Asserted through the observable — whether a tap reaches
+     * The invite control's enablement is DERIVED from both halves, not hard-coded:
+     * the `Wired` availability flag AND a supplied handler. Neither alone makes the
+     * button act. Asserted through the observable — whether a tap reaches
      * `onInvite` — rather than by reading the `enabled` argument back.
      */
     @Test
     fun inviteControl_goesLiveOnlyWithBothAWiredFlagAndAHandler() {
         var invited: String? = null
         val wired = ConvoyBarActionAvailability.Wired
-        var current by
-            mutableStateOf(ownerState("c1").copy(inviteAvailability = wired))
+        val missing = ConvoyBarActionAvailability.BackendMissing
+        // Wired flag (the default now), but no handler → inert.
+        var current by mutableStateOf(ownerState("c1").copy(inviteAvailability = wired))
         var handler: ((String) -> Unit)? by mutableStateOf(null)
         composeTestRule.setContent {
             KccTheme {
@@ -192,9 +192,9 @@ class ConvoyStatusBarTest {
         composeTestRule.waitForIdle()
         assertNull("a wired flag alone must not make the control act", invited)
 
-        // Handler, but the flag back to today's BackendMissing → still inert.
+        // Handler, but the flag forced back to BackendMissing → still inert.
         handler = { invited = it }
-        current = ownerState("c1")
+        current = ownerState("c1").copy(inviteAvailability = missing)
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CONVOY_BAR_INVITE_TAG).performClick()
         composeTestRule.waitForIdle()
