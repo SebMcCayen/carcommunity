@@ -23,7 +23,8 @@
  *      memberProfiles: { [uid]: { displayName, avatarPath } }  (denormalized
  *                                            safe projection for the roster UI)
  *      createdAt: Timestamp
- *      startedAt: Timestamp | null           (set on convoy.start)
+ *      startedAt: Timestamp | null           (set at CREATE — a convoy is born
+ *                                            active; convoy.start is legacy)
  *      endedAt: Timestamp | null             (set on convoy.end)
  *      destination: {                        (the SHARED destination — absent
  *        latitude, longitude,                 until a member sets one; SURVIVES
@@ -507,6 +508,18 @@ export function buildMemberEntry(
  * as an accepted owner-role member; every accepted invitee is seeded as an
  * invited member-role entry. `memberUids` carries the owner + all invitees for
  * the array-contains read + the rules membership gate.
+ *
+ * A newly created convoy is born ACTIVE (status:'active', startedAt set), not
+ * `forming`: creating a convoy is the act of going live — the owner's auto
+ * live-session fires immediately (see convoy.create in manageConvoy.ts) and
+ * invitees join an already-rolling convoy. There is no separate "start" step.
+ *
+ * `startedAt` is passed IN (a local-clock Timestamp) rather than derived from
+ * `serverTimestamp` so it shares its time source with convoy.end's local-clock
+ * `endedAt` — computeConvoySummary spans startedAt→endedAt, and mixing a server
+ * timestamp here with a local-clock end could clamp the duration to 0 under
+ * clock skew. `createdAt` stays on `serverTimestamp` (it orders convoys for the
+ * list query, where the authoritative server clock is what matters).
  */
 export function buildConvoyDocument(
   input: {
@@ -516,6 +529,7 @@ export function buildConvoyDocument(
     invitees: Array<{ uid: string; profile: ProfileProjection }>;
   },
   serverTimestamp: () => unknown,
+  startedAt: unknown,
 ): Record<string, unknown> {
   const ts = serverTimestamp();
   const memberUids = [input.ownerUid, ...input.invitees.map((i) => i.uid)];
@@ -540,13 +554,13 @@ export function buildConvoyDocument(
   return {
     ownerUid: input.ownerUid,
     title: input.title,
-    status: 'forming' satisfies ConvoyStatus,
+    status: 'active' satisfies ConvoyStatus,
     memberUids,
     members,
     memberProfiles,
     summary: null,
     createdAt: ts,
-    startedAt: null,
+    startedAt,
     endedAt: null,
   };
 }
