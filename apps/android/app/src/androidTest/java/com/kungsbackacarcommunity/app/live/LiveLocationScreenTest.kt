@@ -35,7 +35,10 @@ class LiveLocationScreenTest {
         )
 
     @Test
-    fun member_notSharing_showsStartAndDurationPicker() {
+    fun member_notSharing_startsImmediately_withNoDurationPicker() {
+        // Starting a Single session is now IMMEDIATE: no time/duration choice is
+        // shown, so the 1h/2h/4h chips are gone and Start fires the default
+        // (ONE_HOUR) window straight through.
         var started: LiveSessionDuration? = null
         composeTestRule.setContent {
             KccTheme {
@@ -52,9 +55,13 @@ class LiveLocationScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.liveLocation_statusNotSharing)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.liveLocation_duration2h)).performScrollTo().performClick()
+        // The duration chips no longer exist — there is no time to choose.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_duration1h)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_duration2h)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_duration4h)).assertDoesNotExist()
+        // Start shares at once for the default window.
         composeTestRule.onNodeWithText(str(R.string.liveLocation_start)).performScrollTo().performClick()
-        assertEquals(LiveSessionDuration.TWO_HOURS, started)
+        assertEquals(LiveSessionDuration.ONE_HOUR, started)
     }
 
     @Test
