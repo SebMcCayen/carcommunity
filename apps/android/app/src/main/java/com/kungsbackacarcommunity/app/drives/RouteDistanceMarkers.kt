@@ -1,11 +1,5 @@
 package com.kungsbackacarcommunity.app.drives
 
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
-import kotlin.math.sqrt
-
 /**
  * A per-kilometre marker along a driven route: the interpolated position where
  * the cumulative driven distance first crossed [kilometer] × 1 km, tagged with
@@ -28,6 +22,16 @@ data class KmMarker(
  * accumulating great-circle (Haversine) distance, and every time the running
  * total first reaches an integer kilometre, interpolate the exact position along
  * the segment where that crossing happens.
+ *
+ * ## Same distance model as the drive's stored total
+ * The per-segment distance comes from [DriveSummary.segmentDistanceMetres], the
+ * exact filter the recorder, the in-app summary and the backend use: a segment
+ * with a non-positive time delta, or one implying a speed above
+ * ~200 km/h ([DriveSummary] `MAX_PLAUSIBLE_SPEED_MPS`), is a GPS jump and
+ * contributes 0 — no distance accumulated and no marker placed on it. Reusing
+ * that one function (rather than a second Haversine here) is what keeps the km
+ * markers from over-counting a glitch and disagreeing with the distance the user
+ * sees for the drive.
  *
  * ## Why this is a pure object
  * The GL map (annotations, camera) can only be verified on a token-provisioned
@@ -58,9 +62,6 @@ data class KmMarker(
  *   an unbounded list.
  */
 object RouteDistanceMarkers {
-    /** Mean Earth radius in metres (same value the backend distance calc uses). */
-    private const val EARTH_RADIUS_M = 6_371_000.0
-
     private const val METERS_PER_KM = 1_000.0
 
     /**
@@ -102,10 +103,11 @@ object RouteDistanceMarkers {
         for (i in 0 until points.size - 1) {
             val a = points[i]
             val b = points[i + 1]
-            val segLen =
-                haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude)
-            // Skip a degenerate segment (duplicate fix, or a non-finite coord):
-            // it advances no distance and must not divide the interpolation by 0.
+            // Same filtered distance the drive's stored total uses: a GPS jump,
+            // a non-positive time delta or a duplicate fix contributes 0 and is
+            // skipped, so it advances no distance, places no marker, and can't
+            // divide the interpolation by zero (see class KDoc).
+            val segLen = DriveSummary.segmentDistanceMetres(a, b)
             if (!segLen.isFinite() || segLen <= 0.0) continue
 
             val segStart = cumulative
@@ -133,13 +135,16 @@ object RouteDistanceMarkers {
         return result
     }
 
-    /** Total driven distance (metres): cumulative Haversine over consecutive points. */
+    /**
+     * Total driven distance (metres): the sum of the SAME per-segment filtered
+     * distance the marker walk uses ([DriveSummary.segmentDistanceMetres]), so
+     * the interval chosen for coarsening is based on the real (jump-filtered)
+     * length rather than an inflated one.
+     */
     private fun totalDistanceMeters(points: List<RoutePoint>): Double {
         var total = 0.0
         for (i in 0 until points.size - 1) {
-            val a = points[i]
-            val b = points[i + 1]
-            val seg = haversineMeters(a.latitude, a.longitude, b.latitude, b.longitude)
+            val seg = DriveSummary.segmentDistanceMetres(points[i], points[i + 1])
             if (seg.isFinite() && seg > 0.0) total += seg
         }
         return total
@@ -155,27 +160,5 @@ object RouteDistanceMarkers {
             if (totalMeters / (stepKm * METERS_PER_KM) <= MAX_MARKERS) return stepKm
         }
         return INTERVAL_STEPS_KM.last()
-    }
-
-    /**
-     * Great-circle distance in metres between two lat/lng points (Haversine).
-     * Module-visible so a unit test can pin the distance model the marker
-     * spacing is built on.
-     */
-    internal fun haversineMeters(
-        lat1: Double,
-        lon1: Double,
-        lat2: Double,
-        lon2: Double,
-    ): Double {
-        val phi1 = Math.toRadians(lat1)
-        val phi2 = Math.toRadians(lat2)
-        val dPhi = Math.toRadians(lat2 - lat1)
-        val dLambda = Math.toRadians(lon2 - lon1)
-        val sinDPhi = sin(dPhi / 2)
-        val sinDLambda = sin(dLambda / 2)
-        val h = sinDPhi * sinDPhi + cos(phi1) * cos(phi2) * sinDLambda * sinDLambda
-        // clamp for numeric safety before asin (h can nudge just past 1.0).
-        return 2 * EARTH_RADIUS_M * asin(min(1.0, sqrt(h)))
     }
 }

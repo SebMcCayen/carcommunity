@@ -11,26 +11,38 @@ import org.junit.Test
  *
  * Routes are built along the equator, where great-circle distance is linear in
  * longitude, so a km boundary's expected longitude is simply
- * `metersToDegrees(km × 1000)` — derived from the util's own Haversine so the
- * fixtures never drift from the distance model under test.
+ * `metersToDegrees(km × 1000)` — derived from [DriveSummary]'s Haversine (the
+ * same distance model the util now reuses) so the fixtures never drift from the
+ * code under test.
+ *
+ * Fixtures advance time at [SAFE_SPEED_MPS] (well under the GPS-jump threshold)
+ * so every segment is accepted by [DriveSummary.segmentDistanceMetres]; the
+ * jump-filter test deliberately violates that on ONE segment.
  */
 class RouteDistanceMarkersTest {
 
     // Metres per one degree of longitude at the equator (≈ 111 195 m), from the
-    // util's own Haversine model so the fixtures track the code under test.
-    private val metersPerDegree = RouteDistanceMarkers.haversineMeters(0.0, 0.0, 0.0, 1.0)
+    // shared Haversine the util now reuses so the fixtures track the distance model.
+    private val metersPerDegree = DriveSummary.haversineMetres(0.0, 0.0, 0.0, 1.0)
 
     private fun lngForMeters(meters: Double): Double = meters / metersPerDegree
+
+    // A plausible driving speed (m/s) used to time the fixtures so no segment
+    // trips the ~55.6 m/s (~200 km/h) GPS-jump filter.
+    private val safeSpeedMps = 50.0
+
+    /** Timestamp (ms) that reaches [meters] at [safeSpeedMps], so segments pass the filter. */
+    private fun tsForMeters(meters: Double): Long = (meters / safeSpeedMps * 1000).toLong()
 
     /** An equator route: one point every [stepMeters] out to [totalMeters]. */
     private fun equatorRoute(totalMeters: Double, stepMeters: Double): List<RoutePoint> {
         val points = ArrayList<RoutePoint>()
         var d = 0.0
-        var t = 0L
         while (d <= totalMeters + 1e-6) {
-            points.add(RoutePoint(latitude = 0.0, longitude = lngForMeters(d), timestampMs = t))
+            points.add(
+                RoutePoint(latitude = 0.0, longitude = lngForMeters(d), timestampMs = tsForMeters(d)),
+            )
             d += stepMeters
-            t += 1000
         }
         return points
     }
@@ -84,7 +96,7 @@ class RouteDistanceMarkersTest {
         val route =
             listOf(
                 RoutePoint(0.0, 0.0, 0),
-                RoutePoint(0.0, lngForMeters(3_400.0), 1000),
+                RoutePoint(0.0, lngForMeters(3_400.0), tsForMeters(3_400.0)),
             )
         val markers = RouteDistanceMarkers.markers(route)
         assertEquals(listOf(1, 2, 3), markers.map { it.kilometer })
@@ -94,24 +106,46 @@ class RouteDistanceMarkersTest {
     @Test
     fun duplicateAndDegeneratePoints_doNotCrashOrDoubleCount() {
         // Interleave duplicate (zero-length) fixes; they advance no distance and
-        // must be skipped without stalling or emitting spurious markers.
+        // must be skipped without stalling or emitting spurious markers. A
+        // duplicate shares its predecessor's timestamp (delta 0 → filtered), so
+        // the accepted distance runs from the last real fix at a safe speed.
         val route =
             listOf(
-                RoutePoint(0.0, 0.0, 0),
-                RoutePoint(0.0, 0.0, 1000), // duplicate
-                RoutePoint(0.0, lngForMeters(1_200.0), 2000),
-                RoutePoint(0.0, lngForMeters(1_200.0), 3000), // duplicate
-                RoutePoint(0.0, lngForMeters(2_100.0), 4000),
+                RoutePoint(0.0, 0.0, tsForMeters(0.0)),
+                RoutePoint(0.0, 0.0, tsForMeters(0.0)), // duplicate (dt = 0)
+                RoutePoint(0.0, lngForMeters(1_200.0), tsForMeters(1_200.0)),
+                RoutePoint(0.0, lngForMeters(1_200.0), tsForMeters(1_200.0)), // duplicate (dt = 0)
+                RoutePoint(0.0, lngForMeters(2_100.0), tsForMeters(2_100.0)),
             )
         val markers = RouteDistanceMarkers.markers(route)
         assertEquals(listOf(1, 2), markers.map { it.kilometer })
+    }
+
+    @Test
+    fun gpsJumpSegment_isFilteredOutOfKmMarkers() {
+        // A legit 1.5 km leg, then a teleport of ~500 km in one second (a classic
+        // GPS glitch), then a legit 2 km leg. The jump must contribute NOTHING to
+        // the km count — so the markers reflect only the 3.5 km actually driven
+        // (1/2/3 km), agreeing with the drive's jump-filtered stored distance.
+        // Without the filter the 500 km jump would coarsen the interval and
+        // scatter far more markers.
+        val jumpTs = tsForMeters(1_500.0) + 1_000 // only +1 s across the teleport
+        val route =
+            listOf(
+                RoutePoint(0.0, 0.0, 0),
+                RoutePoint(0.0, lngForMeters(1_500.0), tsForMeters(1_500.0)),
+                RoutePoint(0.0, lngForMeters(501_500.0), jumpTs),
+                RoutePoint(0.0, lngForMeters(503_500.0), jumpTs + tsForMeters(2_000.0)),
+            )
+        val markers = RouteDistanceMarkers.markers(route)
+        assertEquals(listOf(1, 2, 3), markers.map { it.kilometer })
     }
 
     /** A single equator segment [meters] long (two points), for the cap tests. */
     private fun longEquatorSegment(meters: Double): List<RoutePoint> =
         listOf(
             RoutePoint(0.0, 0.0, 0),
-            RoutePoint(0.0, lngForMeters(meters), 1000),
+            RoutePoint(0.0, lngForMeters(meters), tsForMeters(meters)),
         )
 
     @Test
