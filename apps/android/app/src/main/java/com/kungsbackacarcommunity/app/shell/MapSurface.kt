@@ -289,6 +289,21 @@ interface MapSurface {
     fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
 
     /**
+     * The radius in METRES that covers the currently-visible map, for the
+     * incident layer to query around the camera centre — or null when there is no
+     * live camera to measure (not composed, no style; the stub reports a fixed
+     * default instead of null so the token-less build still queries a sane area).
+     *
+     * The real surface derives this from the camera's visible bounds (see
+     * `com.kungsbackacarcommunity.app.incidents.ViewportRadius`), so a street-level
+     * view queries a small precise radius and a regional view grows it to fill the
+     * screen — clamped to the server's [100 m, 50 km]. Kept on the seam because
+     * the only honest read of what is on screen is the renderer's own camera; the
+     * geometry that turns bounds into a radius is pure and unit-tested off-device.
+     */
+    fun visibleRadiusMeters(): Double?
+
+    /**
      * Frame [points] (with padding) instead of following the user, or pass null
      * to go back to normal follow.
      *
@@ -562,6 +577,22 @@ class StubMapSurface(
     override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? =
         projectionForTest?.invoke(latitude, longitude)
 
+    // The fixed visible radius the stub reports (metres). The stub has no camera
+    // to measure, so it returns a sane constant rather than null, keeping the
+    // token-less / CI build's incident query deterministic. Overridable for tests.
+    private var visibleRadiusMetersValue: Double = STUB_VISIBLE_RADIUS_METERS
+
+    /**
+     * A FIXED sensible radius (no camera to measure), so the incident layer still
+     * queries a sane area on the token-less build. Deterministic on purpose.
+     */
+    override fun visibleRadiusMeters(): Double = visibleRadiusMetersValue
+
+    /** Test hook: pin the visible radius the stub reports. */
+    fun setVisibleRadiusForTest(radiusMeters: Double) {
+        visibleRadiusMetersValue = radiusMeters
+    }
+
     /** Test hook: pin a camera snapshot so overlay logic can be exercised off-device. */
     fun setCameraSnapshotForTest(snapshot: MapCameraSnapshot?) {
         cameraSnapshotFlow.value = snapshot
@@ -783,6 +814,10 @@ class StubMapSurface(
 
     private companion object {
         const val STUB_LOAD_MILLIS = 700L
+
+        // A city-scale default the stub reports for the visible radius: enough to
+        // populate the incident layer around the default camera without a real map.
+        const val STUB_VISIBLE_RADIUS_METERS = 15_000.0
     }
 }
 

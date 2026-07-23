@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.incidents
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -29,6 +30,10 @@ private class FakeIncidentRepository(
     var lastCenter: LatLng? = null
         private set
 
+    /** The radius of the most recent [listNearby], so tests can pin HOW WIDE the poll queried. */
+    var lastRadius: Double? = null
+        private set
+
     override suspend fun report(type: IncidentType, location: LatLng, note: String?): Incident {
         reportError?.let { throw it }
         reported += Triple(type, location, note)
@@ -46,6 +51,7 @@ private class FakeIncidentRepository(
     override suspend fun listNearby(center: LatLng, radiusMeters: Double): List<Incident> {
         listNearbyCalls += 1
         lastCenter = center
+        lastRadius = radiusMeters
         return nearby
     }
 
@@ -537,6 +543,188 @@ class IncidentReportControllerTest {
         advanceTimeBy(30_000L)
         runCurrent()
         assertEquals(goteborg, fake.lastCenter)
+    }
+
+    /**
+     * The keep-alive cadence — what surfaces OTHER members' new reports while the
+     * user sits still — was lowered from 30 s to 15 s. Pinned as a constant so a
+     * silent drift back is caught in the blocking job.
+     */
+    @Test
+    fun `the keep-alive interval is 15 seconds`() {
+        assertEquals(15_000L, IncidentReportController.DEFAULT_POLL_INTERVAL_MS)
+    }
+
+    /**
+     * The keep-alive default actually drives the loop at 15 s: a stationary map
+     * still refetches every interval so newly-reported incidents surface.
+     */
+    @Test
+    fun `pollNearby keep-alive fires on the 15 second default cadence`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+
+        backgroundScope.launch { controller.pollNearby() }
+
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+        // Nothing at 14 s...
+        advanceTimeBy(14_000L)
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+        // ...the keep-alive lands at 15 s.
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+    }
+
+    /**
+     * The layer queries the VISIBLE-VIEWPORT radius the provider yields (the map
+     * wires it to the camera's visible radius), not a fixed 15 km — and an absurd
+     * value is clamped to the server's accepted bounds before it reaches the
+     * callable.
+     */
+    @Test
+    fun `pollNearby queries the provided viewport radius, clamped to the server bounds`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        var radius = 2_500.0
+
+        backgroundScope.launch {
+            controller.pollNearby(radiusProvider = { radius })
+        }
+
+        // A zoomed-in view queries the small precise radius it asked for.
+        runCurrent()
+        assertEquals(2_500.0, fake.lastRadius!!, 0.0)
+
+        // A radius above the server ceiling is clamped down to 50 km.
+        radius = 999_999.0
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(ViewportRadius.MAX_RADIUS_METERS, fake.lastRadius!!, 0.0)
+
+        // Below the floor is clamped up to 100 m.
+        radius = 1.0
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(ViewportRadius.MIN_RADIUS_METERS, fake.lastRadius!!, 0.0)
+    }
+
+    /** A null radius (no live camera) falls back to the default, still clamped-sane. */
+    @Test
+    fun `pollNearby falls back to the default radius when the provider yields null`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+
+        backgroundScope.launch {
+            controller.pollNearby(radiusProvider = { null })
+        }
+
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+    }
+
+    /**
+     * A non-finite radius (NaN or ±Infinity) falls back to the default — coerceIn
+     * would pass NaN straight through, so the callable must never see it.
+     */
+    @Test
+    fun `pollNearby falls back to the default radius when the provider yields a non-finite value`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        var radius = Double.NaN
+
+        backgroundScope.launch {
+            controller.pollNearby(radiusProvider = { radius })
+        }
+
+        // NaN would survive coerceIn unchanged; it must fall back to the default.
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+
+        // +Infinity likewise falls back rather than clamping to the ceiling.
+        radius = Double.POSITIVE_INFINITY
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+
+        // -Infinity too.
+        radius = Double.NEGATIVE_INFINITY
+        advanceTimeBy(15_000L)
+        runCurrent()
+        assertEquals(IncidentRepository.DEFAULT_RADIUS_METERS, fake.lastRadius!!, 0.0)
+    }
+
+    /**
+     * A camera-idle tick re-queries PROMPTLY instead of waiting out the keep-alive
+     * — and it RESETS the keep-alive timer, so an idle refresh and the scheduled
+     * one never fire back-to-back. The conflated channel is the coalescing seam.
+     */
+    @Test
+    fun `pollNearby re-queries on a camera-idle tick and resets the keep-alive`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        val ticks = Channel<Unit>(Channel.CONFLATED)
+
+        backgroundScope.launch {
+            controller.pollNearby(requeryTicks = ticks)
+        }
+
+        // Cold-open fetch.
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+
+        // A camera settles at 5 s → an immediate re-query, well before the 15 s tick.
+        advanceTimeBy(5_000L)
+        ticks.trySend(Unit)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+
+        // The keep-alive timer restarted from the idle refresh: nothing at what
+        // WOULD have been the original 15 s boundary (10 s after the idle refresh)...
+        advanceTimeBy(10_000L)
+        runCurrent()
+        assertEquals(2, fake.listNearbyCalls)
+
+        // ...it lands a full 15 s after the idle refresh instead.
+        advanceTimeBy(5_000L)
+        runCurrent()
+        assertEquals(3, fake.listNearbyCalls)
+    }
+
+    /**
+     * Closing [requeryTicks] is a normal caller-side teardown. The loop must END
+     * cleanly on it: receiveCatching hands back a closed result instead of throwing
+     * ClosedReceiveChannelException, so the coroutine COMPLETES (not cancelled with
+     * an error) and does not busy-loop on the dead channel.
+     */
+    @Test
+    fun `pollNearby ends cleanly when the requery channel is closed`() = runTest {
+        val fake = FakeIncidentRepository(nearby = listOf(Incident("x", IncidentType.HAZARD, 1.0, 2.0)))
+        val controller = IncidentReportController(fake) { here }
+        val ticks = Channel<Unit>(Channel.CONFLATED)
+
+        val job =
+            backgroundScope.launch {
+                controller.pollNearby(requeryTicks = ticks)
+            }
+
+        // Cold-open fetch; the loop is now parked on the channel wait.
+        runCurrent()
+        assertEquals(1, fake.listNearbyCalls)
+        assertTrue("the poll loop should still be running", job.isActive)
+
+        // The caller tears the channel down: the loop must exit, not throw or spin.
+        ticks.close()
+        runCurrent()
+        assertTrue("closing the channel must end the loop", job.isCompleted)
+        assertFalse("the loop must complete normally, not fail", job.isCancelled)
+
+        // And it must NOT busy-loop: no further queries even after a keep-alive span.
+        advanceTimeBy(60_000L)
+        runCurrent()
+        assertEquals("a closed channel must not busy-loop", 1, fake.listNearbyCalls)
     }
 
     /**

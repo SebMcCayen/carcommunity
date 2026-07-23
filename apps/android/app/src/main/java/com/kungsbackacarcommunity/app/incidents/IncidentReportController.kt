@@ -4,10 +4,12 @@ import android.content.Context
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Outcome of a report attempt, so the UI can show the right feedback. */
 sealed interface ReportOutcome {
@@ -282,13 +284,40 @@ class IncidentReportController(
      * turns phase 2 into a `delay(0)` busy loop that hammers the callable and
      * drains the battery, and a non-positive [initialRetryMs] does the same to
      * the cold-open retry. Misuse fails fast rather than shipping a hot loop.
+     *
+     * ## Radius follows the viewport
+     *
+     * [radiusProvider] supplies the query radius each pass, so the layer asks for
+     * exactly the visible area rather than a fixed 15 km. The map wires it to the
+     * camera's visible radius ([MapSurface.visibleRadiusMeters]); it defaults to
+     * [IncidentRepository.DEFAULT_RADIUS_METERS] for the GPS-only fallback. A null
+     * or absurd value degrades to the default and is clamped to the server's
+     * bounds ([ViewportRadius.MIN_RADIUS_METERS]..[ViewportRadius.MAX_RADIUS_METERS]),
+     * so nothing insane reaches the callable even though the server clamps too.
+     *
+     * ## Camera-idle re-query, coalesced with the keep-alive
+     *
+     * [requeryTicks] is an optional channel the map pulses shortly after the
+     * camera settles from a MEANINGFUL pan/zoom (the shell debounces and gates
+     * this — see `CameraRequeryDecision`). Phase 2 waits for EITHER the next tick
+     * OR [pollIntervalMs], whichever comes first, then refreshes — so a settle
+     * re-queries promptly instead of waiting out the keep-alive, and, crucially,
+     * the wait RESTARTS after every refresh whatever triggered it: an idle refresh
+     * and the scheduled keep-alive can never fire back-to-back. A conflated
+     * channel is expected, so a pulse sent while a refresh is in flight is not
+     * lost. With no channel the loop is the plain keep-alive it always was.
+     *
+     * If the caller CLOSES [requeryTicks] (a normal lifecycle teardown), the wait
+     * returns a closed result and the loop ends cleanly — exactly once, never a
+     * throw that cancels the coroutine and never a tight spin on the closed channel.
      */
     suspend fun pollNearby(
-        radiusMeters: Double = IncidentRepository.DEFAULT_RADIUS_METERS,
+        radiusProvider: suspend () -> Double? = { IncidentRepository.DEFAULT_RADIUS_METERS },
         pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
         initialRetryMs: Long = DEFAULT_INITIAL_RETRY_MS,
         initialAttempts: Int = DEFAULT_INITIAL_ATTEMPTS,
         centerProvider: suspend () -> LatLng? = locationProvider,
+        requeryTicks: ReceiveChannel<Unit>? = null,
     ) {
         require(pollIntervalMs > 0) { "pollIntervalMs must be > 0, was $pollIntervalMs" }
         require(initialRetryMs > 0) { "initialRetryMs must be > 0, was $initialRetryMs" }
@@ -297,26 +326,67 @@ class IncidentReportController(
         var acquired = false
         var attempt = 0
         while (attempt < initialAttempts && !acquired) {
-            acquired = refreshAround(radiusMeters, centerProvider)
+            acquired = refreshAround(resolveRadius(radiusProvider), centerProvider)
             attempt += 1
             if (!acquired && attempt < initialAttempts) delay(initialRetryMs)
         }
         // Phase 2: keep the shared layer live for the lifetime of this coroutine.
+        // Each pass waits for a camera-idle tick OR the keep-alive interval,
+        // whichever lands first; either way the next wait starts fresh, coalescing
+        // the two so they never double-fire.
         while (true) {
-            delay(pollIntervalMs)
-            refreshAround(radiusMeters, centerProvider)
+            if (requeryTicks == null) {
+                delay(pollIntervalMs)
+            } else {
+                // A conflated channel holds the latest pulse, so one sent while the
+                // previous refresh ran is delivered here rather than dropped.
+                // receiveCatching (not receive) so a CLOSED channel — a normal
+                // caller-side teardown — hands back a closed result instead of
+                // throwing ClosedReceiveChannelException; we end the loop once on
+                // it rather than crashing or busy-looping.
+                val tick = withTimeoutOrNull(pollIntervalMs) { requeryTicks.receiveCatching() }
+                if (tick?.isClosed == true) return
+            }
+            refreshAround(resolveRadius(radiusProvider), centerProvider)
         }
+    }
+
+    /**
+     * Reads [radiusProvider], falling back to [IncidentRepository.DEFAULT_RADIUS_METERS]
+     * on null, a non-finite value (NaN or ±Infinity — which [Double.coerceIn] would
+     * pass straight through), or a non-cancellation failure, and clamps the finite
+     * result to the server's accepted bounds so the callable never receives an
+     * out-of-range or non-finite radius.
+     */
+    private suspend fun resolveRadius(radiusProvider: suspend () -> Double?): Double {
+        val raw =
+            try {
+                radiusProvider()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            }
+        // coerceIn does NOT sanitise NaN/±Infinity, so screen out non-finite input
+        // (and null) up front rather than letting it reach the callable.
+        val finite =
+            if (raw != null && raw.isFinite()) raw else IncidentRepository.DEFAULT_RADIUS_METERS
+        return finite.coerceIn(ViewportRadius.MIN_RADIUS_METERS, ViewportRadius.MAX_RADIUS_METERS)
     }
 
     companion object {
         /**
-         * Steady-state cadence for the live incident-layer poll. A shared
-         * traffic layer must feel current, but each pass costs a cheap
-         * last-known-location read plus one listNearby callable, so 30 s balances
-         * freshness against battery and read cost (incident TTLs are ≥ 1 h, so
-         * sub-minute latency to surface a fresh report is ample).
+         * Steady-state KEEP-ALIVE cadence for the live incident-layer poll. With
+         * the camera now driving prompt re-queries on pan/zoom (see [pollNearby]'s
+         * requeryTicks), this interval is what still matters for a STATIONARY user:
+         * it is how fast another member's newly-reported incident surfaces while
+         * the map sits still. Lowered from 30 s to 15 s to halve that latency; each
+         * pass is still just a cheap last-known-location read plus one listNearby
+         * callable, and a camera-idle refresh resets this timer so the two never
+         * double-fire (incident TTLs are ≥ 1 h, so this is about surfacing NEW
+         * reports, not expiry).
          */
-        const val DEFAULT_POLL_INTERVAL_MS = 30_000L
+        const val DEFAULT_POLL_INTERVAL_MS = 15_000L
 
         /**
          * Cold-open acquisition backoff + attempt budget: the fused last-known

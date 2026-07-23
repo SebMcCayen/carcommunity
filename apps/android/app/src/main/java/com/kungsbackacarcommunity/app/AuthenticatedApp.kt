@@ -250,6 +250,7 @@ import com.kungsbackacarcommunity.app.shell.LiveSessionBar
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveSharePopup
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
+import com.kungsbackacarcommunity.app.incidents.CameraRequeryDecision
 import com.kungsbackacarcommunity.app.incidents.Incident
 import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
@@ -257,6 +258,7 @@ import com.kungsbackacarcommunity.app.incidents.ConfirmOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.QueryAnchor
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
@@ -289,9 +291,11 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import java.util.Calendar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -314,6 +318,18 @@ private const val NEARBY_LIVE_POLL_MS = 20_000L
  * concurrent listener count without a visible loss on a normal viewport.
  */
 private const val MAX_NEARBY_LIVE_MARKERS = 50
+
+/**
+ * How long the map camera must be STILL before the incident layer reads the
+ * viewport and considers a re-query. A pan/zoom emits a stream of camera
+ * snapshots; debouncing by this window means the radius/centre are read from the
+ * FINAL settled camera, not the intermediate frames of a fling. 500 ms sits in
+ * the middle of the sensible 300–800 ms band: long enough that a flung/pinched
+ * camera has come to rest (so one query, not a burst), short enough that the
+ * layer feels like it follows the map. The meaningful-move gate then decides
+ * whether the settle is even worth a callable.
+ */
+private const val INCIDENT_CAMERA_IDLE_DEBOUNCE_MS = 500L
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -934,6 +950,12 @@ fun AuthenticatedApp(
             // immediately. Also keyed on mapSurface so a surface swap (token-driven
             // surface recreation, previews/tests) re-subscribes the poll to the
             // CURRENT surface instead of polling a stale, detached camera snapshot.
+            // Camera-idle re-query pulses. Conflated so a pulse sent while a
+            // refresh is in flight is coalesced rather than dropped or queued.
+            // Keyed on mapSurface so a surface swap gets a fresh channel matching
+            // the fresh poll (below), never a pulse from a detached camera.
+            val incidentRequeryTicks =
+                remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
             LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
                 val controller = incidentController ?: return@LaunchedEffect
                 if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
@@ -950,6 +972,9 @@ fun AuthenticatedApp(
                 // the camera-less stub (config-less / CI).
                 val appContext = context.applicationContext
                 controller.pollNearby(
+                    // Radius follows the visible viewport (clamped server-side to
+                    // [100 m, 50 km]); the stub reports a fixed sane default.
+                    radiusProvider = { mapSurface.visibleRadiusMeters() },
                     centerProvider = {
                         mapSurface.cameraSnapshot.value?.let { snapshot ->
                             LatLng(
@@ -958,7 +983,35 @@ fun AuthenticatedApp(
                             )
                         } ?: CurrentLocation.lastKnown(appContext)
                     },
+                    // Re-query shortly after the camera settles from a meaningful
+                    // pan/zoom, coalesced with the keep-alive above.
+                    requeryTicks = incidentRequeryTicks,
                 )
+            }
+            // Turn camera-idle into meaningful-move re-query pulses. collectLatest
+            // debounces: a new camera snapshot cancels the pending settle timer, so
+            // the radius/centre are read only once the camera has been still for
+            // INCIDENT_CAMERA_IDLE_DEBOUNCE_MS. The pure CameraRequeryDecision then
+            // gates it, so jitter and settles at the same spot/zoom send nothing.
+            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
+                if (incidentController == null) return@LaunchedEffect
+                if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
+                var lastAnchor: QueryAnchor? = null
+                mapSurface.cameraSnapshot.collectLatest { snapshot ->
+                    snapshot ?: return@collectLatest
+                    delay(INCIDENT_CAMERA_IDLE_DEBOUNCE_MS)
+                    val radius = mapSurface.visibleRadiusMeters() ?: return@collectLatest
+                    val next =
+                        QueryAnchor(
+                            latitude = snapshot.latitude,
+                            longitude = snapshot.longitude,
+                            radiusMeters = radius,
+                        )
+                    if (CameraRequeryDecision.shouldRequery(lastAnchor, next)) {
+                        lastAnchor = next
+                        incidentRequeryTicks.trySend(Unit)
+                    }
+                }
             }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox

@@ -22,6 +22,7 @@ import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
+import com.kungsbackacarcommunity.app.incidents.ViewportRadius
 import com.kungsbackacarcommunity.app.map.CameraFollowController
 import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
@@ -450,6 +451,36 @@ class MapboxMapSurface : MapSurface {
         return runCatching {
             val screen = map.mapboxMap.pixelForCoordinate(Point.fromLngLat(longitude, latitude))
             MapScreenPoint(x = screen.x.toFloat(), y = screen.y.toFloat())
+        }.getOrNull()
+    }
+
+    override fun visibleRadiusMeters(): Double? {
+        val map = mapViewRef ?: return null
+        return runCatching {
+            // Read the camera's own visible bounds — the only honest account of
+            // what is on screen at this zoom/rotation/pitch — then hand the corners
+            // to the pure geometry that turns them into a clamped radius. Built
+            // from the live cameraState via the DSL so no toCameraOptions()
+            // extension is assumed across SDK versions.
+            val camera = map.mapboxMap.cameraState
+            val bounds =
+                map.mapboxMap.coordinateBoundsForCamera(
+                    cameraOptions {
+                        center(camera.center)
+                        zoom(camera.zoom)
+                        bearing(camera.bearing)
+                        pitch(camera.pitch)
+                        padding(camera.padding)
+                    },
+                )
+            ViewportRadius.radiusMetersForBounds(
+                centerLat = camera.center.latitude(),
+                centerLon = camera.center.longitude(),
+                swLat = bounds.southwest.latitude(),
+                swLon = bounds.southwest.longitude(),
+                neLat = bounds.northeast.latitude(),
+                neLon = bounds.northeast.longitude(),
+            )
         }.getOrNull()
     }
 
