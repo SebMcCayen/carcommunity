@@ -431,25 +431,30 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
 
   // Let Firestore generate the convoy id directly on the target collection.
   const ref = db.collection('convoys').doc();
-  // A convoy is born ACTIVE (buildConvoyDocument sets status:'active' + this
-  // startedAt), so it goes live the instant it is created — the owner's auto
-  // live-session starts below and invitees join an already-rolling convoy. There
-  // is no separate owner "start" step (which, since the map home landed the
-  // owner without a Start control, would otherwise leave the convoy stuck
-  // `forming` forever — no live session, no live-session bar, no drive to save).
-  // startedAt uses the function's LOCAL clock (not serverTimestamp) so it shares
-  // a time source with convoy.end's local-clock endedAt — see buildConvoyDocument.
-  const document = buildConvoyDocument(
-    { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
-    () => FieldValue.serverTimestamp(),
-    Timestamp.fromDate(new Date()),
-  );
   // ITEM 1: the create is done inside a transaction whose ONLY read is the
   // "am I already in a convoy" check, so the check and the membership write are
   // one atomic unit — two simultaneous creates by the same user cannot both land
   // (the second aborts + retries, sees the first convoy, and is rejected).
   await db.runTransaction(async (tx) => {
     await assertNotAlreadyInConvoy(tx, actor.uid);
+    // Build the document INSIDE the transaction so its local-clock startedAt is
+    // the actual write instant on EVERY attempt: a retry (contention/abort)
+    // recomputes it rather than committing a timestamp captured before the first
+    // attempt — which would set startedAt earlier than the real go-live moment
+    // and skew convoy.end's duration. A convoy is born ACTIVE (buildConvoyDocument
+    // sets status:'active' + this startedAt), so it goes live the instant it is
+    // created — the owner's auto live-session starts below and invitees join an
+    // already-rolling convoy; there is no separate owner "start" step (which, on
+    // the map-first home with no Start control, would leave the convoy stuck
+    // `forming` forever). startedAt uses the LOCAL clock (not serverTimestamp) so
+    // it shares a time source with convoy.end's local-clock endedAt — see
+    // buildConvoyDocument. (createdAt + member timestamps use serverTimestamp
+    // sentinels, already retry-safe: the server stamps them at commit.)
+    const document = buildConvoyDocument(
+      { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
+      () => FieldValue.serverTimestamp(),
+      Timestamp.fromDate(new Date()),
+    );
     tx.set(ref, document);
   });
 
