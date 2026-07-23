@@ -1044,7 +1044,15 @@
     "convoysError": "Kunde inte ladda dina konvojer.",
     "convoysRetry": "Försök igen",
     "convoyUntitled": "Konvoj",
-    "convoyMembers": "Medlemmar: %1$d"
+    "convoyMembers": "Medlemmar: %1$d",
+    "convoyOngoingHeader": "Pågår nu",
+    "convoyHistoryHeader": "Historik",
+    "convoyActiveBadge": "Aktiv",
+    "convoyFormingBadge": "Samlas",
+    "convoyEndedBadge": "Avslutad",
+    "convoyCreated": "Skapad %1$s",
+    "convoyMemberOverflow": "+%1$d",
+    "convoyDatePattern": "d MMM"
   },
   "chatTime": {
     "today": "Idag",

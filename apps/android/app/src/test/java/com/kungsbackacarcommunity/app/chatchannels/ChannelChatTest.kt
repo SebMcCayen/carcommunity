@@ -188,18 +188,27 @@ class ChannelChatTest {
     }
 
     @Test
-    fun `chatEligibleConvoys keeps only accepted non-ended convoys`() {
+    fun `chatEligibleConvoys keeps every accepted convoy, ended included as history`() {
         val data =
             mapOf(
                 "convoys" to
                     listOf(
-                        // Accepted + active → kept.
+                        // Accepted + active → kept (the ongoing convoy).
                         mapOf(
                             "convoyId" to "c1",
                             "title" to "Sunday cruise",
                             "status" to "active",
                             "viewer" to mapOf("inviteStatus" to "accepted"),
+                            "createdAt" to "2020-01-02T14:05:00Z",
                             "memberUids" to listOf("a", "b", "c"),
+                            "members" to
+                                listOf(
+                                    mapOf("uid" to "a", "inviteStatus" to "accepted", "displayName" to "Alice"),
+                                    mapOf("uid" to "b", "inviteStatus" to "accepted", "displayName" to "Bob"),
+                                    // Still-invited member: counted for neither the
+                                    // accepted names nor the accepted count.
+                                    mapOf("uid" to "c", "inviteStatus" to "invited", "displayName" to "Cara"),
+                                ),
                         ),
                         // Still invited → dropped (can't read the chat).
                         mapOf(
@@ -208,20 +217,58 @@ class ChannelChatTest {
                             "viewer" to mapOf("inviteStatus" to "invited"),
                             "memberUids" to listOf("a", "x"),
                         ),
-                        // Accepted but ended → dropped (historical).
+                        // Accepted but ended → KEPT (its chat is readable history).
                         mapOf(
                             "convoyId" to "c3",
                             "status" to "ended",
                             "viewer" to mapOf("inviteStatus" to "accepted"),
+                            "createdAt" to "2020-01-01T09:00:00Z",
                             "memberUids" to listOf("a"),
+                            "members" to
+                                listOf(
+                                    mapOf("uid" to "a", "inviteStatus" to "accepted", "displayName" to "Alice"),
+                                ),
+                        ),
+                    ),
+            )
+        val convoys = ConvoyChatMapper.chatEligibleConvoys(data)
+        assertEquals(2, convoys.size)
+
+        val c1 = convoys.first { it.convoyId == "c1" }
+        assertEquals("Sunday cruise", c1.title)
+        assertEquals("active", c1.status)
+        // Only the two ACCEPTED members are counted / named (Cara is still invited).
+        assertEquals(2, c1.memberCount)
+        assertEquals(listOf("Alice", "Bob"), c1.memberNames)
+        assertEquals(
+            java.time.Instant.parse("2020-01-02T14:05:00Z").toEpochMilli(),
+            c1.createdAtMillis,
+        )
+
+        val c3 = convoys.first { it.convoyId == "c3" }
+        assertEquals("ended", c3.status)
+        assertEquals(listOf("Alice"), c3.memberNames)
+    }
+
+    @Test
+    fun `chatEligibleConvoys falls back to memberUids count when the roster is absent`() {
+        val data =
+            mapOf(
+                "convoys" to
+                    listOf(
+                        mapOf(
+                            "convoyId" to "c1",
+                            "status" to "active",
+                            "viewer" to mapOf("inviteStatus" to "accepted"),
+                            "memberUids" to listOf("a", "b", "c"),
                         ),
                     ),
             )
         val convoys = ConvoyChatMapper.chatEligibleConvoys(data)
         assertEquals(1, convoys.size)
-        assertEquals("c1", convoys[0].convoyId)
-        assertEquals("Sunday cruise", convoys[0].title)
         assertEquals(3, convoys[0].memberCount)
+        assertTrue(convoys[0].memberNames.isEmpty())
+        assertNull(convoys[0].createdAtMillis)
     }
 
     @Test
