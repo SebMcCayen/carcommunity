@@ -2,20 +2,14 @@ package com.kungsbackacarcommunity.app.drives
 
 import com.kungsbackacarcommunity.app.media.MediaUploader
 import java.time.Instant
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -600,17 +594,17 @@ class DriveRecordingTest {
     }
 
     @Test
-    fun `delete waits for the in-flight route upload before removing the drive`() = runBlocking {
+    fun `delete waits for the in-flight route upload before removing the drive`() = runTest {
         // drives-delete removes the whole rideRoutes/{uid}/{rideId}/ prefix then
         // the doc, so a route upload that finished AFTER the delete would orphan
-        // route.bin. delete() must JOIN the upload first.
-        val uploadStarted = CompletableDeferred<Unit>()
+        // route.bin. delete() must JOIN the upload first. Driven under virtual
+        // time: the upload is gated on [releaseUpload], so delete() cannot run
+        // drives-delete until we release it.
         val releaseUpload = CompletableDeferred<Unit>()
-        val order = CopyOnWriteArrayList<String>()
+        val order = mutableListOf<String>()
         val uploader =
             object : MediaUploader {
                 override suspend fun upload(path: String, bytes: ByteArray, contentType: String): String {
-                    uploadStarted.complete(Unit)
                     releaseUpload.await()
                     order.add("upload")
                     return path
@@ -631,33 +625,67 @@ class DriveRecordingTest {
                     order.add("delete:$rideId")
                 }
             }
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // backgroundScope runs on the test scheduler and is auto-cancelled when
+        // the test ends, so the gated upload never leaks a live coroutine.
         val c =
             DriveRecordingCoordinator(
                 repository = repo,
                 sourceSessionId = "sess",
                 routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
-                uploadScope = scope,
+                uploadScope = backgroundScope,
             )
         c.start()
         c.addFix(57.0, 12.0, 1_000L)
         c.addFix(57.001, 12.0, 2_000L)
         c.stop()
         c.autoSave(title = null)
-        withTimeout(5_000) { uploadStarted.await() }
 
         // Delete in the background — it must block on the upload join.
         val deleteJob = launch { c.delete() }
-        // Bound how long a wrongly-early delete has to surface; the passing path
-        // (delete blocks on the upload join) never runs drives-delete here.
-        delay(50L)
+        advanceUntilIdle()
+        // With the upload still gated, delete must NOT have removed the drive.
         assertTrue("delete must not run drives-delete until the upload settles", order.isEmpty())
+        assertEquals(RecordingState.Deleting, c.state.value)
 
         releaseUpload.complete(Unit)
-        withTimeout(5_000) { deleteJob.join() }
-        assertEquals(listOf("upload", "delete:ride"), order.toList())
+        advanceUntilIdle()
+        deleteJob.join()
+        assertEquals(listOf("upload", "delete:ride"), order)
         assertEquals(RecordingState.Deleted, c.state.value)
-        scope.cancel()
+    }
+
+    @Test
+    fun `cancelling delete restores the pending choice without marking it failed`() = runTest {
+        // Cancellation (navigation away / scope teardown) is not a delete failure:
+        // the drive is still saved, so the prompt must return unchanged, never
+        // with a misleading delete-error line.
+        val deleteGate = CompletableDeferred<Unit>()
+        val repo =
+            object : DrivesRepository {
+                override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+                    DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+
+                override suspend fun deleteDrive(rideId: String) {
+                    // Never completes — the test cancels the delete mid-flight.
+                    deleteGate.await()
+                }
+            }
+        val c = DriveRecordingCoordinator(repo, "sess")
+        c.start()
+        c.stop()
+        c.autoSave(title = null)
+        val pending = c.state.value as RecordingState.SavedPendingChoice
+
+        val deleteJob = launch { c.delete() }
+        advanceUntilIdle()
+        assertEquals(RecordingState.Deleting, c.state.value)
+
+        deleteJob.cancelAndJoin()
+        val restored = c.state.value as RecordingState.SavedPendingChoice
+        assertFalse("cancellation must not show a delete error", restored.deleteFailed)
+        assertEquals(pending.rideId, restored.rideId)
     }
 
     // ---------------------------------------------------------------------

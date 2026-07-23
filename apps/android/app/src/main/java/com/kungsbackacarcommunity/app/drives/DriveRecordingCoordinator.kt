@@ -294,7 +294,12 @@ class DriveRecordingCoordinator(
             uploadJob = null
             stateFlow.value = RecordingState.Deleted
         } catch (cancellation: CancellationException) {
-            stateFlow.value = current.copy(deleteFailed = true)
+            // Cancellation (navigation away / scope teardown) is NOT a delete
+            // failure. Restore the prior choice unchanged — no error line, the
+            // drive is still saved — and rethrow to preserve cooperative
+            // cancellation. (Caught before the generic Exception below, which
+            // would otherwise swallow it and wrongly show a delete error.)
+            stateFlow.value = current
             throw cancellation
         } catch (failure: Exception) {
             stateFlow.value = current.copy(deleteFailed = true)
