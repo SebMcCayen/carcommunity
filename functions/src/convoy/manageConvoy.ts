@@ -198,7 +198,22 @@ async function startConvoyAutoSessionsForAccepted(
   data: Record<string, unknown>,
   convoyId: string,
 ): Promise<void> {
-  const liveEnabled = await isLiveShareEnabled();
+  let liveEnabled: boolean;
+  try {
+    liveEnabled = await isLiveShareEnabled();
+  } catch (error) {
+    // The flag read is best-effort too, not just the per-member fan-out: this
+    // runs AFTER the convoy mutation has committed, so a transient
+    // config/featureFlags read failure must never throw back out of
+    // convoy.create / convoy.start and make an already-created (or already-active)
+    // convoy look like it failed. Log and treat live-share as DISABLED — the
+    // convoy still exists and is active; members can share live manually.
+    logger.warn('convoy auto-session flag read failed', {
+      convoyId,
+      error: String(error),
+    });
+    return;
+  }
   if (!liveEnabled) {
     return;
   }
