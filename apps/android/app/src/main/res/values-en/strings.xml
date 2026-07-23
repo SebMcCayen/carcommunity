@@ -215,6 +215,8 @@
     <string name="profile_statsEmptyBody">Your drives, awards and points will show up here.</string>
     <string name="profile_displayNameLabel">Display name</string>
     <string name="profile_bioLabel">Bio</string>
+    <string name="profile_emptyDisplayName">No display name yet</string>
+    <string name="profile_emptyBio">No bio yet</string>
     <string name="profile_saveButton">Save</string>
     <string name="profile_editButton">Edit</string>
     <string name="profile_cancelButton">Cancel</string>

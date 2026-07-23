@@ -27,14 +27,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -67,7 +66,6 @@ fun ProfileScreen(
     // section simply doesn't render. Shown only in view mode, not while editing.
     statsSummary: ProfileStatsSummary? = null,
 ) {
-    val haptics = LocalHapticFeedback.current
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
     var bioField by remember { mutableStateOf("") }
@@ -139,13 +137,14 @@ fun ProfileScreen(
             } else {
                 Text(
                     text = profile?.displayName?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.common_placeholder),
+                        ?: stringResource(R.string.profile_emptyDisplayName),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
                 Text(
                     text = profile?.bio?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.common_placeholder),
+                        ?: stringResource(R.string.profile_emptyBio),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -161,15 +160,6 @@ fun ProfileScreen(
                 ) {
                     Text(stringResource(R.string.profile_editButton))
                 }
-                OutlinedButton(
-                    onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSignOut()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.auth_signOut))
-                }
 
                 ProfileStatsSection(summary = statsSummary)
             }
@@ -183,7 +173,11 @@ private fun AvatarSection(
     onChangeAvatar: (() -> Unit)?,
 ) {
     val uploading = uploadStatus == ImageUploadStatus.Uploading
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
         Box(
             modifier = Modifier
                 .size(96.dp)

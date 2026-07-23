@@ -215,6 +215,8 @@
     <string name="profile_statsEmptyBody">Dina körningar, utmärkelser och poäng visas här.</string>
     <string name="profile_displayNameLabel">Visningsnamn</string>
     <string name="profile_bioLabel">Presentation</string>
+    <string name="profile_emptyDisplayName">Inget visningsnamn ännu</string>
+    <string name="profile_emptyBio">Ingen presentation ännu</string>
     <string name="profile_saveButton">Spara</string>
     <string name="profile_editButton">Redigera</string>
     <string name="profile_cancelButton">Avbryt</string>
