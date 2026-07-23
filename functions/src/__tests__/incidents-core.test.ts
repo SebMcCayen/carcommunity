@@ -23,6 +23,12 @@ import {
   INCIDENT_TTL_MS,
   INCIDENT_TYPES,
   LIFETIME_CAP_MULTIPLIER,
+  INCIDENT_LIST_RATE_LIMIT_MAX,
+  INCIDENT_LIST_RATE_LIMIT_WINDOW_MS,
+  incidentListRateLimitDocId,
+  incidentListRateLimitExpiry,
+  incidentListRateLimitWindowIndex,
+  isUnderIncidentListRateLimit,
 } from '../incidents/incidents-core';
 import {
   buildTrafikverketRequestBody,
@@ -522,5 +528,55 @@ describe('incidents-core confirmation expiry extension', () => {
         T0.getTime() + LIFETIME_CAP_MULTIPLIER * ttl,
       );
     }
+  });
+});
+
+describe('incidents-core listNearby rate limit', () => {
+  const uid = 'user-abc';
+  // A fixed instant 30 s into an epoch minute (window boundary is not on it).
+  const WINDOW_MS = INCIDENT_LIST_RATE_LIMIT_WINDOW_MS;
+  const windowStart = 1_700_000_040_000; // exact multiple of 60_000
+  const midWindow = windowStart + 30_000;
+
+  it('admits below the cap and throttles at/above it (pre-call count)', () => {
+    expect(isUnderIncidentListRateLimit(0)).toBe(true);
+    expect(isUnderIncidentListRateLimit(INCIDENT_LIST_RATE_LIMIT_MAX - 1)).toBe(true);
+    // The Nth call reads a count of MAX and is rejected → exactly MAX admitted.
+    expect(isUnderIncidentListRateLimit(INCIDENT_LIST_RATE_LIMIT_MAX)).toBe(false);
+    expect(isUnderIncidentListRateLimit(INCIDENT_LIST_RATE_LIMIT_MAX + 1_000)).toBe(false);
+  });
+
+  it('respects a custom cap argument', () => {
+    expect(isUnderIncidentListRateLimit(4, 5)).toBe(true);
+    expect(isUnderIncidentListRateLimit(5, 5)).toBe(false);
+  });
+
+  it('fails OPEN on a corrupt (non-finite) counter so a bad doc never locks a user out', () => {
+    expect(isUnderIncidentListRateLimit(Number.NaN)).toBe(true);
+    expect(isUnderIncidentListRateLimit(Number.POSITIVE_INFINITY)).toBe(true);
+  });
+
+  it('derives a deterministic per-(uid, minute) doc id', () => {
+    const index = incidentListRateLimitWindowIndex(midWindow);
+    expect(incidentListRateLimitWindowIndex(windowStart)).toBe(index);
+    expect(incidentListRateLimitWindowIndex(windowStart + WINDOW_MS - 1)).toBe(index);
+    // Same uid + same window → same id; next window → different id.
+    expect(incidentListRateLimitDocId(uid, midWindow)).toBe(`${uid}_${index}`);
+    expect(incidentListRateLimitDocId(uid, windowStart)).toBe(
+      incidentListRateLimitDocId(uid, windowStart + WINDOW_MS - 1),
+    );
+    expect(incidentListRateLimitDocId(uid, windowStart + WINDOW_MS)).not.toBe(
+      incidentListRateLimitDocId(uid, midWindow),
+    );
+    // Different uids never collide within a window.
+    expect(incidentListRateLimitDocId('other', midWindow)).not.toBe(
+      incidentListRateLimitDocId(uid, midWindow),
+    );
+  });
+
+  it('sets an expireAt after the window end (for the TTL sweep)', () => {
+    const expiry = incidentListRateLimitExpiry(midWindow).getTime();
+    // Strictly after this window ends, so the counter outlives its own window.
+    expect(expiry).toBeGreaterThan(windowStart + WINDOW_MS);
   });
 });

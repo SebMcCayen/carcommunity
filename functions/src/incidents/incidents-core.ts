@@ -96,6 +96,109 @@ export function clampRadiusMeters(radius: number | undefined): number {
 }
 
 // ---------------------------------------------------------------------------
+// listNearby per-user rate limit (runaway / abuse guard)
+// ---------------------------------------------------------------------------
+//
+// listNearby is a FREQUENTLY-called READ. Its per-CALL cost is already bounded
+// (App Check + requireActiveActor, MAX_RESULTS = 200, radius clamped to 50 km,
+// reads only the covering geoCells — never a full-collection scan). The only
+// remaining cost gap is per-user call FREQUENCY: a client bug (hot poll loop)
+// or a member with a valid account + App Check token calling it in a tight loop
+// could run up invocation + Firestore-read cost. This gate binds that.
+//
+// Mechanism — a FIXED-WINDOW counter keyed by a DETERMINISTIC document id
+// `incidentListRateLimits/{uid}_{epochMinute}` (see incidentListRateLimitDocId).
+// Each admitted call bumps `count` with FieldValue.increment(1); the callable
+// reads the doc BY ID (no query, no index) before the expensive geoCell reads
+// and rejects once the window count reaches the cap. This is deliberately
+// CHEAPER than the codebase's other rate limiters (feedback.reportIssue,
+// errors.reportClientError, moderation reports), which run a windowed count()
+// aggregation inside a transaction per call. That read-then-count-in-a-
+// transaction shape is fine for LOW-frequency WRITES but too costly for a hot
+// read path: it needs a composite index and, under a runaway that hammers a
+// single uid, a transactional read-modify-write of one hot doc contends and
+// retries (amplifying cost). FieldValue.increment is a commutative server-side
+// op that needs NO transaction and does NOT contend, and a rejected call costs
+// exactly one get-by-id — so the guard stays much cheaper than the read it
+// protects. An in-memory/instance-local counter is NOT usable here: Cloud Run
+// runs this callable at concurrency 80 across multiple instances, so only a
+// shared Firestore counter binds a user reliably.
+//
+// The counter is written ONLY by this callable via the Admin SDK and is never
+// client-readable/writable (firebase/firestore.rules denies it). `expireAt`
+// carries a Firestore TTL policy so spent windows self-delete (deploy note in
+// listNearby.ts) — the collection never accumulates.
+
+/** Backend-only fixed-window rate-limit counter collection (client-denied). */
+export const INCIDENT_LIST_RATE_LIMIT_COLLECTION = 'incidentListRateLimits';
+
+/**
+ * Max admitted `incidents.listNearby` calls per uid per fixed 60 s window.
+ *
+ * Sized for generous headroom so legitimate use NEVER trips it: the client
+ * polls on a ~15 s keep-alive (~4/min) plus a debounced (500 ms) camera-idle
+ * re-query on meaningful map moves (a handful per minute of active panning), so
+ * realistic peak is ~10–30 calls/min/user. 60/min is ~2–6× that headroom while
+ * still being orders of magnitude below a runaway (hundreds–thousands/min) — it
+ * catches the RUNAWAY, it does not throttle real use.
+ */
+export const INCIDENT_LIST_RATE_LIMIT_MAX = 60;
+
+/** Fixed window length: one minute. */
+export const INCIDENT_LIST_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Grace added to a window's end before its counter doc is eligible for TTL
+ * deletion. Only affects cleanup timing (Firestore TTL is best-effort anyway),
+ * never the limit decision.
+ */
+export const INCIDENT_LIST_RATE_LIMIT_TTL_GRACE_MS = 5 * 60_000;
+
+/** Epoch-minute index of the fixed window containing `nowMs`. */
+export function incidentListRateLimitWindowIndex(nowMs: number): number {
+  return Math.floor(nowMs / INCIDENT_LIST_RATE_LIMIT_WINDOW_MS);
+}
+
+/**
+ * Deterministic counter doc id for (uid, window): `{uid}_{epochMinute}`. A
+ * Firebase uid contains no `/`, so this is a safe single-segment id; the same
+ * uid in the same minute always maps to the same doc, which is what makes the
+ * increment O(1) with no query.
+ */
+export function incidentListRateLimitDocId(uid: string, nowMs: number): string {
+  return `${uid}_${incidentListRateLimitWindowIndex(nowMs)}`;
+}
+
+/**
+ * `expireAt` instant for a window's counter doc: the window end plus a grace,
+ * so a Firestore TTL policy on this field reaps spent counters and the
+ * collection never grows unbounded.
+ */
+export function incidentListRateLimitExpiry(nowMs: number): Date {
+  const windowEnd =
+    (incidentListRateLimitWindowIndex(nowMs) + 1) * INCIDENT_LIST_RATE_LIMIT_WINDOW_MS;
+  return new Date(windowEnd + INCIDENT_LIST_RATE_LIMIT_TTL_GRACE_MS);
+}
+
+/**
+ * Pure limit decision: is a call ADMITTED given the counter's value BEFORE this
+ * call (i.e. how many calls the uid already made in the current window)?
+ *
+ * A finite count at or above `max` is throttled; anything else — including an
+ * absent (0), missing, or CORRUPT (NaN / non-finite) counter — is admitted.
+ * Failing OPEN on a corrupt counter is deliberate: a garbled rate-limit doc
+ * must never lock a legitimate user out of the shared map; the worst case is
+ * that one bad window is not throttled.
+ */
+export function isUnderIncidentListRateLimit(
+  currentCount: number,
+  max: number = INCIDENT_LIST_RATE_LIMIT_MAX,
+): boolean {
+  if (!Number.isFinite(currentCount)) return true;
+  return currentCount < max;
+}
+
+// ---------------------------------------------------------------------------
 // Geo-cell indexing (the crownHunt-style "cell" for nearby queries)
 // ---------------------------------------------------------------------------
 

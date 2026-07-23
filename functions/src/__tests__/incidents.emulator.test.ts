@@ -45,6 +45,12 @@ import { runIncidentsCleanup } from '../incidents/scheduled';
 import { runTrafikverketSync } from '../incidents/trafikverket';
 import type { TrafikverketResponse } from '../incidents/trafikverket-core';
 import { importedIncidentDocId } from '../incidents/trafikverket-core';
+import {
+  INCIDENT_LIST_RATE_LIMIT_COLLECTION,
+  INCIDENT_LIST_RATE_LIMIT_MAX,
+  INCIDENT_LIST_RATE_LIMIT_WINDOW_MS,
+  incidentListRateLimitDocId,
+} from '../incidents/incidents-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -286,6 +292,126 @@ describe('incidents.report + listNearby', () => {
 
     expect(Array.isArray(nearby.incidents)).toBe(true);
     expect(nearby.incidents.some((i) => i.id === created.id)).toBe(true);
+  });
+});
+
+describe('incidents.listNearby rate limit', () => {
+  const rateLimits = () => adminDb.collection(INCIDENT_LIST_RATE_LIMIT_COLLECTION);
+
+  it('admits a call while the caller is under the window cap', async () => {
+    const user = await createProvisionedUser('inc-rl-under');
+    await signInAs(user);
+    const result = await call('incidents-listNearby', {
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      radiusMeters: 5000,
+    });
+    expect(Array.isArray((result.data as { incidents: unknown[] }).incidents)).toBe(true);
+    // The admitted call bumped the caller's counter for the window it ran in.
+    // Check the current AND previous window ids so a minute-boundary crossing
+    // between the call and this read cannot flake the assertion.
+    const nowMs = Date.now();
+    const counts = await Promise.all(
+      [nowMs, nowMs - INCIDENT_LIST_RATE_LIMIT_WINDOW_MS].map(async (ms) => {
+        const snap = await rateLimits().doc(incidentListRateLimitDocId(user.uid, ms)).get();
+        return (snap.data()?.count as number | undefined) ?? 0;
+      }),
+    );
+    expect(counts.some((c) => c >= 1)).toBe(true);
+  });
+
+  it('throws resource-exhausted once the window counter is at the cap', async () => {
+    const user = await createProvisionedUser('inc-rl-over');
+    await signInAs(user);
+    // Seed the counter for the current AND next window at the cap, so the
+    // callable rejects regardless of which side of a minute boundary it lands
+    // on (removes any Date.now() boundary flake).
+    const nowMs = Date.now();
+    for (const ms of [nowMs, nowMs + INCIDENT_LIST_RATE_LIMIT_WINDOW_MS]) {
+      await rateLimits()
+        .doc(incidentListRateLimitDocId(user.uid, ms))
+        .set({ uid: user.uid, count: INCIDENT_LIST_RATE_LIMIT_MAX });
+    }
+    const code = await callableErrorCode(
+      call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      }),
+    );
+    expect(code).toBe('functions/resource-exhausted');
+  });
+
+  it('does not consume the window on an invalid-argument call (validate before rate limit)', async () => {
+    const user = await createProvisionedUser('inc-rl-badinput');
+    await signInAs(user);
+    // A malformed call must be rejected with invalid-argument BEFORE the rate
+    // limiter runs, so it neither reads nor writes the counter doc.
+    const code = await callableErrorCode(
+      call('incidents-listNearby', {
+        latitude: 200, // out of range → parseListNearbyInput rejects
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      }),
+    );
+    expect(code).toBe('functions/invalid-argument');
+    // No counter was created/incremented for either the current or previous
+    // window (boundary-safe), i.e. the bad input did not burn the user's window.
+    const nowMs = Date.now();
+    const snaps = await Promise.all(
+      [nowMs, nowMs - INCIDENT_LIST_RATE_LIMIT_WINDOW_MS].map((ms) =>
+        rateLimits().doc(incidentListRateLimitDocId(user.uid, ms)).get(),
+      ),
+    );
+    expect(snaps.every((s) => !s.exists)).toBe(true);
+  });
+
+  it('self-heals a corrupt (non-numeric) count without throwing — fail-open resets to 1', async () => {
+    const user = await createProvisionedUser('inc-rl-corrupt');
+    await signInAs(user);
+    // Seed a NON-numeric `count` for the caller's current window. The read side
+    // treats a non-numeric count as 0 (admits), and FieldValue.increment(1)
+    // OVERWRITES a non-numeric field with the operand rather than throwing — so
+    // a corrupt counter doc must NOT become a persistent internal error: the
+    // call succeeds and the counter self-heals to a numeric 1.
+    const nowMs = Date.now();
+    await rateLimits()
+      .doc(incidentListRateLimitDocId(user.uid, nowMs))
+      .set({ uid: user.uid, count: 'corrupt' });
+    const result = await call('incidents-listNearby', {
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      radiusMeters: 5000,
+    });
+    // Did not throw resource-exhausted / internal — returned a normal payload.
+    expect(Array.isArray((result.data as { incidents: unknown[] }).incidents)).toBe(true);
+    // The window listNearby wrote is now a numeric 1 (increment overwrote the
+    // corrupt string). Check current AND next window ids so a minute-boundary
+    // crossing between the seed and the call cannot flake the assertion.
+    const counts = await Promise.all(
+      [nowMs, nowMs + INCIDENT_LIST_RATE_LIMIT_WINDOW_MS].map(async (ms) => {
+        const snap = await rateLimits().doc(incidentListRateLimitDocId(user.uid, ms)).get();
+        return snap.data()?.count;
+      }),
+    );
+    expect(counts.some((c) => c === 1)).toBe(true);
+  });
+
+  it('resets across windows: a prior-window cap does not throttle the current window', async () => {
+    const user = await createProvisionedUser('inc-rl-reset');
+    await signInAs(user);
+    // Cap the PREVIOUS window only; the current window's counter is untouched,
+    // so the call must be admitted (the counter is window-scoped, not global).
+    const prevMs = Date.now() - INCIDENT_LIST_RATE_LIMIT_WINDOW_MS;
+    await rateLimits()
+      .doc(incidentListRateLimitDocId(user.uid, prevMs))
+      .set({ uid: user.uid, count: INCIDENT_LIST_RATE_LIMIT_MAX });
+    const result = await call('incidents-listNearby', {
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      radiusMeters: 5000,
+    });
+    expect(Array.isArray((result.data as { incidents: unknown[] }).incidents)).toBe(true);
   });
 });
 
