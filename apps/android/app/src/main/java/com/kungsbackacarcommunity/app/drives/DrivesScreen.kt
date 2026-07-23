@@ -8,17 +8,22 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -40,10 +45,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.map.DriveRouteFullscreenDialog
 import com.kungsbackacarcommunity.app.map.DriveRouteMap
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -470,6 +478,9 @@ fun SavedDriveDetailScreen(
     uid: String? = null,
 ) {
     var showConfirm by remember { mutableStateOf(false) }
+    // Whether the full-screen, zoomable route popup is open. Reset per drive so a
+    // new drive never opens with a stale popup showing the previous route.
+    var showRouteMap by remember(drive.rideId) { mutableStateOf(false) }
     val context = LocalContext.current
 
     // A real Mapbox token is required to render the GL map; the config-less / CI
@@ -575,12 +586,53 @@ fun SavedDriveDetailScreen(
 
                         // A drawable route (≥ 2 points): draw it on the replay map.
                         // The same decoded points also feed the share-text top
-                        // speed (computed into [topSpeed] above).
+                        // speed (computed into [topSpeed] above). Tapping the
+                        // thumbnail opens the full-screen, zoomable popup (with the
+                        // per-km markers) — the expand badge makes that discoverable.
                         ready != null && ready.points.size >= 2 -> {
-                            DriveRouteMap(
-                                points = ready.points,
-                                modifier = Modifier.fillMaxWidth().height(ROUTE_MAP_HEIGHT),
-                            )
+                            val expandLabel = stringResource(R.string.savedDrives_routeExpand)
+                            // TalkBack label for the whole tap target: the child is
+                            // an AndroidView-hosted MapView (a11y black box), so the
+                            // clickable node needs its OWN contentDescription — the
+                            // onClickLabel only names the action, not the control.
+                            // mergeDescendants keeps it a single focusable element.
+                            val thumbnailLabel =
+                                stringResource(R.string.savedDrives_routeMapThumbnailLabel)
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(ROUTE_MAP_HEIGHT)
+                                        .clickable(onClickLabel = expandLabel) {
+                                            showRouteMap = true
+                                        }
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = thumbnailLabel
+                                        },
+                            ) {
+                                DriveRouteMap(
+                                    points = ready.points,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                // Non-interactive expand affordance (the whole
+                                // thumbnail is the tap target); a translucent badge
+                                // so it reads over any basemap tile.
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                    shape = CircleShape,
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(KccSpacing.s2),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Fullscreen,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(KccSpacing.s1).size(24.dp),
+                                    )
+                                }
+                            }
                         }
 
                         // Ready but too few points to draw (a summary-only drive).
@@ -627,6 +679,22 @@ fun SavedDriveDetailScreen(
             },
             onCancel = { showConfirm = false },
         )
+    }
+
+    // The full-screen, zoomable route popup. Only openable from the drawable-route
+    // branch (which requires ≥ 2 points), so the points read here are always
+    // drawable; guarded on the same Ready state so a route that becomes
+    // unavailable can't leave an empty popup open.
+    if (showRouteMap) {
+        val ready = routeState as? RouteReplayState.Ready
+        if (ready != null && ready.points.size >= 2) {
+            DriveRouteFullscreenDialog(
+                points = ready.points,
+                onDismiss = { showRouteMap = false },
+            )
+        } else {
+            showRouteMap = false
+        }
     }
 }
 

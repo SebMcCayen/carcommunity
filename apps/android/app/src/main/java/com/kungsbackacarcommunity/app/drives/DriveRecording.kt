@@ -312,10 +312,43 @@ object DriveSummary {
      * fix arrives (see [DriveRecorder]) using the EXACT rule
      * [totalDistanceMetres] applies in bulk, rather than a second, drifting copy.
      */
-    fun segmentDistanceMetres(prev: RecordedPoint, curr: RecordedPoint): Double {
-        val deltaMs = curr.timestampMs - prev.timestampMs
+    fun segmentDistanceMetres(prev: RecordedPoint, curr: RecordedPoint): Double =
+        segmentDistanceMetres(
+            prev.latitude, prev.longitude, prev.timestampMs,
+            curr.latitude, curr.longitude, curr.timestampMs,
+        )
+
+    /**
+     * [RoutePoint] overload of [segmentDistanceMetres] for consumers that hold
+     * DECODED route points (e.g. the History per-km marker util
+     * [RouteDistanceMarkers]) rather than [RecordedPoint]s. Delegates to the SAME
+     * primitive as the [RecordedPoint] overload, so the GPS-jump / backwards-time
+     * filter can never drift between the two and the History markers agree with
+     * the drive's stored distance.
+     */
+    fun segmentDistanceMetres(prev: RoutePoint, curr: RoutePoint): Double =
+        segmentDistanceMetres(
+            prev.latitude, prev.longitude, prev.timestampMs,
+            curr.latitude, curr.longitude, curr.timestampMs,
+        )
+
+    /**
+     * The one place the segment filter lives: a non-positive time delta or an
+     * implied speed above [MAX_PLAUSIBLE_SPEED_MPS] (a GPS jump) contributes 0;
+     * otherwise the Haversine distance. Both [RecordedPoint] and [RoutePoint]
+     * overloads funnel through here so there is a single source of truth.
+     */
+    private fun segmentDistanceMetres(
+        prevLat: Double,
+        prevLon: Double,
+        prevTimestampMs: Long,
+        currLat: Double,
+        currLon: Double,
+        currTimestampMs: Long,
+    ): Double {
+        val deltaMs = currTimestampMs - prevTimestampMs
         if (deltaMs <= 0) return 0.0
-        val distance = haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+        val distance = haversineMetres(prevLat, prevLon, currLat, currLon)
         val impliedSpeed = distance / (deltaMs / 1000.0)
         if (impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) return 0.0
         return distance
