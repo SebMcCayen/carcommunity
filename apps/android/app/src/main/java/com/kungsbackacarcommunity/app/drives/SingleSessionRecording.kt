@@ -55,8 +55,9 @@ object SingleSessionRecording {
     private val promptPendingState = MutableStateFlow(false)
 
     /**
-     * Whether a finished recording is waiting on the user's save/discard
-     * choice. Survives Activity recreation so the prompt cannot be lost.
+     * Whether a finished recording's end-of-session summary is showing. The live
+     * UI auto-saves the drive from this state and then asks Keep or Delete.
+     * Survives Activity recreation so the summary cannot be lost.
      */
     val promptPending: StateFlow<Boolean> = promptPendingState.asStateFlow()
 
@@ -145,12 +146,14 @@ object SingleSessionRecording {
     }
 
     /**
-     * Ends recording for a finished session and raises the save/discard prompt.
-     * Releases the GPS source here — deterministically at session end rather
-     * than when a composable happens to leave composition, so a mere Activity
-     * recreation can never kill a live recording, and a real session end always
-     * stops the updates. Idempotent: safe to call repeatedly (and after a
-     * recreation, when the prompt is already pending).
+     * Ends recording for a finished session and raises the end-of-session summary
+     * ([RecordingState.PromptSave]); the live UI then auto-saves the drive from
+     * that state and asks Keep or Delete. Releases the GPS source here —
+     * deterministically at session end rather than when a composable happens to
+     * leave composition, so a mere Activity recreation can never kill a live
+     * recording, and a real session end always stops the updates. Idempotent:
+     * safe to call repeatedly (and after a recreation, when the summary is
+     * already pending).
      */
     fun stop() {
         val coordinator = activeState.value ?: return

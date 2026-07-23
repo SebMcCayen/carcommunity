@@ -1134,10 +1134,11 @@ fun AuthenticatedApp(
             // the same in-screen fused-location source the manual recorder uses;
             // it is decoupled from the individual start/stop buttons and driven
             // ENTIRELY by [isSharing], so every start path records and every end
-            // path (Stop / Hide / expiry) raises the save-or-discard summary.
+            // path (Stop / Hide / expiry) auto-saves the drive and raises the
+            // Keep/Delete summary.
             // Guarded: with no drives backend (config-less/CI) nothing records
             // and live sharing still works.
-            // The recording + any pending save/discard prompt live in the
+            // The recording + any pending Keep/Delete summary live in the
             // process-scoped SingleSessionRecording holder, NOT in composition:
             // its lifetime is the live SESSION's (which already outlives the
             // Activity via the foreground service), so an Activity recreation —
@@ -1152,7 +1153,8 @@ fun AuthenticatedApp(
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
                 )
-            val driveSavedText = stringResource(R.string.savedDrives_saveSuccess)
+            val driveKeptText = stringResource(R.string.savedDrives_driveKept)
+            val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
             // Uploads the recorded route.bin to Cloud Storage after drives-save
@@ -1208,9 +1210,10 @@ fun AuthenticatedApp(
                         }
                     }
                 } else {
-                    // Session ended: stop recording and raise the save/discard
-                    // summary. The holder releases the GPS source here, at the
-                    // real session end, rather than on composable disposal.
+                    // Session ended: stop recording and raise the end-of-session
+                    // summary (the drive is then auto-saved by the effect below).
+                    // The holder releases the GPS source here, at the real session
+                    // end, rather than on composable disposal.
                     SingleSessionRecording.stop()
                 }
             }
@@ -1260,13 +1263,35 @@ fun AuthenticatedApp(
                 }
             }
 
+            // Auto-save a finished LIVE session's drive so it can never be lost by
+            // a missed Save. When the session-end summary opens (PromptSave), the
+            // drive is immediately persisted; the summary then asks Keep or Delete
+            // over the already-saved ride. Launched on the composition [scope]
+            // (NOT this effect's own coroutine) so moving off PromptSave — which
+            // this very save causes — cannot cancel it mid-flight. Keyed on the
+            // boolean so it fires once on entering PromptSave; an Activity
+            // recreation that cancelled an in-flight save restored PromptSave, and
+            // the re-created effect re-fires it (the drive is never left unsaved).
+            val awaitingAutoSave = recordingState is RecordingState.PromptSave
+            LaunchedEffect(awaitingAutoSave) {
+                if (awaitingAutoSave) {
+                    scope.launch { activeRecording?.autoSave(null) }
+                }
+            }
+
             // Terminal states release the recording so the next session starts
-            // clean; a snackbar confirms the outcome.
+            // clean; a snackbar confirms the outcome. Kept / Deleted are the
+            // live auto-save flow's terminals; Discarded is only reached when a
+            // permanent (member-gate) save refusal is closed — nothing was saved.
             LaunchedEffect(recordingState) {
                 when (recordingState) {
-                    RecordingState.Saved -> {
+                    RecordingState.Kept -> {
                         SingleSessionRecording.clear()
-                        snackbarHostState.showSnackbar(driveSavedText)
+                        snackbarHostState.showSnackbar(driveKeptText)
+                    }
+                    RecordingState.Deleted -> {
+                        SingleSessionRecording.clear()
+                        snackbarHostState.showSnackbar(driveDeletedText)
                     }
                     RecordingState.Discarded -> {
                         SingleSessionRecording.clear()
@@ -1382,8 +1407,9 @@ fun AuthenticatedApp(
              * one definition of what stopping does.
              *
              * Does NOT ask anything itself: flipping `isSharing` to false is what
-             * raises the save/discard summary (the isSharing-bound effect above),
-             * and that dialog owns the "save it or delete the data" choice.
+             * auto-saves the drive and raises the Keep/Delete summary (the
+             * isSharing-bound effect above), and that dialog owns the "keep it or
+             * delete the saved drive" choice.
              */
             fun stopLiveShare() {
                 val c = liveLocationCoordinator
@@ -3094,15 +3120,19 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // End-of-session save/discard summary: shown when a Single
-                // session ends with a recording active. Save persists a
-                // SavedDrive (the backend recomputes the authoritative stats);
-                // Discard stores nothing.
+                // End-of-session summary: shown when a Single session ends with a
+                // recording active. The drive is AUTO-SAVED (see the auto-save
+                // effect above), and this dialog asks Keep (it stays in History)
+                // or Delete (removed via drives-delete). Retry re-runs the save
+                // after a transient failure; Discard closes a permanent (member-
+                // gate) refusal, where nothing was saved.
                 if (showSessionSummary && activeRecording != null) {
                     SessionSummaryDialog(
                         state = recordingState,
                         pointsProvider = { activeRecording?.recordedPoints() ?: emptyList() },
-                        onSave = { scope.launch { activeRecording?.save(null) } },
+                        onKeep = { activeRecording?.keep() },
+                        onDelete = { scope.launch { activeRecording?.delete() } },
+                        onRetry = { scope.launch { activeRecording?.autoSave(null) } },
                         onDiscard = { activeRecording?.discard() },
                     )
                 }
@@ -3259,8 +3289,9 @@ internal fun ShellBottomBar(
         // The centre action is a "+" that starts a session, and — while one RUNS —
         // the live-session disc that raises the manage sheet: one control for the
         // session's whole life, so the way out is exactly where the way in was.
-        // The sheet leads with Stop (which raises the save/discard summary via the
-        // isSharing effect, where the "save or delete the data" choice is made);
+        // The sheet leads with Stop (which auto-saves the drive and raises the
+        // Keep/Delete summary via the isSharing effect, where the "keep it or
+        // delete the saved drive" choice is made);
         // it also carries Hide me now and Who can see me, the two controls the
         // map's removed right-side broadcast button used to own.
         NavigationBarItem(
