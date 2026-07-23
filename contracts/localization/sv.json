@@ -682,7 +682,7 @@
     "deleteSessionAction": "Radera",
     "deleteSessionConfirmTitle": "Radera den här sparade körningen?",
     "deleteSessionConfirmBody": "Körningen sparades automatiskt. Om du raderar den tas den bort från historiken permanent och går inte att ångra.",
-    "deleteSessionConfirmAction": "Radera",
+    "deleteSessionConfirmAction": "Radera körningen",
     "deleteSessionConfirmCancel": "Avbryt",
     "saveFailedTitle": "Kunde inte spara din körning",
     "retryAction": "Försök igen",

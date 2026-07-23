@@ -631,7 +631,7 @@
     <string name="savedDrives_deleteSessionAction">Radera</string>
     <string name="savedDrives_deleteSessionConfirmTitle">Radera den här sparade körningen?</string>
     <string name="savedDrives_deleteSessionConfirmBody">Körningen sparades automatiskt. Om du raderar den tas den bort från historiken permanent och går inte att ångra.</string>
-    <string name="savedDrives_deleteSessionConfirmAction">Radera</string>
+    <string name="savedDrives_deleteSessionConfirmAction">Radera körningen</string>
     <string name="savedDrives_deleteSessionConfirmCancel">Avbryt</string>
     <string name="savedDrives_saveFailedTitle">Kunde inte spara din körning</string>
     <string name="savedDrives_retryAction">Försök igen</string>

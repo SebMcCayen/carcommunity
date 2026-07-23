@@ -682,7 +682,7 @@
     "deleteSessionAction": "Delete",
     "deleteSessionConfirmTitle": "Delete this saved session?",
     "deleteSessionConfirmBody": "The drive was saved automatically. Deleting it removes it from your history permanently and can't be undone.",
-    "deleteSessionConfirmAction": "Delete",
+    "deleteSessionConfirmAction": "Delete the drive",
     "deleteSessionConfirmCancel": "Cancel",
     "saveFailedTitle": "Couldn't save your drive",
     "retryAction": "Try again",
