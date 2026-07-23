@@ -15,7 +15,7 @@ import org.junit.Test
  * same distance model the util now reuses) so the fixtures never drift from the
  * code under test.
  *
- * Fixtures advance time at [SAFE_SPEED_MPS] (well under the GPS-jump threshold)
+ * Fixtures advance time at `safeSpeedMps` (well under the GPS-jump threshold)
  * so every segment is accepted by [DriveSummary.segmentDistanceMetres]; the
  * jump-filter test deliberately violates that on ONE segment.
  */
