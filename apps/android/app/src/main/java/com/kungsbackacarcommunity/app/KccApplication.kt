@@ -2,14 +2,12 @@ package com.kungsbackacarcommunity.app
 
 import android.app.Application
 import android.os.Build
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
-import com.kungsbackacarcommunity.app.notifications.AppActiveNotificationController
 import com.kungsbackacarcommunity.app.push.PushChannels
 
 /**
@@ -39,16 +37,10 @@ class KccApplication : Application() {
         // (Phase 12 slice 21, push portion).
         PushChannels.ensureCreated(this)
 
-        // "App is active" ongoing status notification: posted while the app is
-        // in the foreground and kept visible after the member leaves the app, so
-        // they can see in the shade that it is still running. Process-wide, so it
-        // observes real app foreground/background rather than any one Activity
-        // (survives rotation; suppresses itself while a live-location session
-        // owns the shade). Pure Android — no Firebase — so it runs in
-        // config-less builds too. No-ops silently without POST_NOTIFICATIONS.
-        ProcessLifecycleOwner.get().lifecycle.addObserver(
-            AppActiveNotificationController(this),
-        )
+        // The only persistent status notification is now the live-location
+        // foreground service's own ongoing notification (LocationSharingService),
+        // which is present iff a live session is running. There is deliberately
+        // no separate "app is active" notice while no session is live.
 
         // FirebaseApp.initializeApp returns null when configuration is
         // absent — mirror FirebaseAuthRepository.createIfAvailable.

@@ -1,9 +1,4 @@
 {
-  "appActive": {
-    "notificationChannel": "Appstatus",
-    "notificationChannelDescription": "Visar en pågående avisering medan appen är öppen, så att du ser att den fortfarande är aktiv i bakgrunden.",
-    "notificationText": "Aktiv – tryck för att återgå till appen."
-  },
   "app": {
     "name": "Kungsbacka Car Community"
   },

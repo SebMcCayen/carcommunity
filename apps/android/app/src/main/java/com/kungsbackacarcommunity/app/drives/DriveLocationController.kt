@@ -19,10 +19,13 @@ import com.kungsbackacarcommunity.app.location.BackgroundLocation
  * callback while the record screen is active. Reuses the fused-location
  * cadence constants from slice 6's [BackgroundLocation].
  *
- * Foreground-only for this slice: updates run only while the screen holds this
- * controller. Continuing a recording in the background (screen off / app
- * backgrounded) via the existing [com.kungsbackacarcommunity.app.location.LocationSharingService]
- * foreground service is a documented follow-up.
+ * This controller is the in-screen GPS source: its updates run only while the
+ * screen holds it. Recording is NOT limited to the foreground, though — while
+ * the location-typed [com.kungsbackacarcommunity.app.location.LocationSharingService]
+ * foreground service is running, recording continues with the screen off / the
+ * app backgrounded, and that service's start is now retried on the next
+ * foreground if it was first requested while the app was backgrounded (see
+ * [com.kungsbackacarcommunity.app.location.BackgroundLocationController]).
  *
  * Guarded like the other Firebase/location entry points, via two factories with
  * deliberately different contracts — pick by whether you request the runtime
