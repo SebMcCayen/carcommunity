@@ -298,11 +298,6 @@ class LocationSharingService : Service() {
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
         postNotification(remainingSeconds = null, foreground = true)
-        // A live-share session now owns the shade with its own ongoing
-        // notification. The separate "app is active" notice reads this and
-        // suppresses itself so the two never compete — see
-        // AppActiveNotificationController.
-        sessionActive = true
 
         if (!startLocationUpdates()) return START_NOT_STICKY
 
@@ -311,11 +306,6 @@ class LocationSharingService : Service() {
     }
 
     override fun onDestroy() {
-        // Every stop path (manual, expiry, sign-out, remote end, permission
-        // refusal) funnels through stopSelf() -> onDestroy, so clearing the flag
-        // here covers them all. The "app is active" notice re-evaluates on the
-        // next foreground and reappears once the shade is free.
-        sessionActive = false
         sessionJob?.cancel()
         sessionJob = null
         fusedClient?.removeLocationUpdates(locationCallback)
@@ -843,19 +833,6 @@ class LocationSharingService : Service() {
          * user of it is bounded by [LiveSharingStop.STOP_SESSION_TIMEOUT_MS].
          */
         private val stopScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-        /**
-         * Whether a live-location foreground session is currently running (its
-         * own ongoing notification is on screen). Read — never written — by the
-         * separate "app is active" notification so the two ongoing notices do
-         * not compete in the shade. Volatile: written on the main thread from
-         * the service lifecycle, read from the ProcessLifecycle observer.
-         */
-        @Volatile
-        private var sessionActive: Boolean = false
-
-        /** See [sessionActive]. */
-        fun isSessionActive(): Boolean = sessionActive
 
         private const val CHANNEL_ID = "live_location_sharing"
         private const val NOTIFICATION_ID = 4201
