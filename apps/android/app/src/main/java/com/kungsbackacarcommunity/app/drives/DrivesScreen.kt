@@ -45,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -589,6 +591,13 @@ fun SavedDriveDetailScreen(
                         // per-km markers) — the expand badge makes that discoverable.
                         ready != null && ready.points.size >= 2 -> {
                             val expandLabel = stringResource(R.string.savedDrives_routeExpand)
+                            // TalkBack label for the whole tap target: the child is
+                            // an AndroidView-hosted MapView (a11y black box), so the
+                            // clickable node needs its OWN contentDescription — the
+                            // onClickLabel only names the action, not the control.
+                            // mergeDescendants keeps it a single focusable element.
+                            val thumbnailLabel =
+                                stringResource(R.string.savedDrives_routeMapThumbnailLabel)
                             Box(
                                 modifier =
                                     Modifier
@@ -596,6 +605,9 @@ fun SavedDriveDetailScreen(
                                         .height(ROUTE_MAP_HEIGHT)
                                         .clickable(onClickLabel = expandLabel) {
                                             showRouteMap = true
+                                        }
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = thumbnailLabel
                                         },
                             ) {
                                 DriveRouteMap(

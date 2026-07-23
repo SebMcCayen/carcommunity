@@ -606,6 +606,7 @@
     <string name="savedDrives_routeUnavailable">The route map isn\'t available for this drive.</string>
     <string name="savedDrives_routeEmpty">This drive has no recorded route to show.</string>
     <string name="savedDrives_routeExpand">Open full-screen map</string>
+    <string name="savedDrives_routeMapThumbnailLabel">Drive route map, tap to expand</string>
     <string name="savedDrives_routeMapFullscreenLabel">Full-screen route map</string>
     <string name="savedDrives_routeMapClose">Close map</string>
     <string name="savedDrives_routeZoomIn">Zoom in</string>

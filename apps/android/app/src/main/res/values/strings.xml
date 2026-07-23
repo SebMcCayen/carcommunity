@@ -606,6 +606,7 @@
     <string name="savedDrives_routeUnavailable">Ruttkartan är inte tillgänglig för den här körningen.</string>
     <string name="savedDrives_routeEmpty">Den här körningen har ingen inspelad rutt att visa.</string>
     <string name="savedDrives_routeExpand">Öppna karta i helskärm</string>
+    <string name="savedDrives_routeMapThumbnailLabel">Körningens ruttkarta, tryck för att förstora</string>
     <string name="savedDrives_routeMapFullscreenLabel">Ruttkarta i helskärm</string>
     <string name="savedDrives_routeMapClose">Stäng karta</string>
     <string name="savedDrives_routeZoomIn">Zooma in</string>

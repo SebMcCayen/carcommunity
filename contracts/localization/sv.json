@@ -657,6 +657,7 @@
     "routeUnavailable": "Ruttkartan är inte tillgänglig för den här körningen.",
     "routeEmpty": "Den här körningen har ingen inspelad rutt att visa.",
     "routeExpand": "Öppna karta i helskärm",
+    "routeMapThumbnailLabel": "Körningens ruttkarta, tryck för att förstora",
     "routeMapFullscreenLabel": "Ruttkarta i helskärm",
     "routeMapClose": "Stäng karta",
     "routeZoomIn": "Zooma in",

@@ -657,6 +657,7 @@
     "routeUnavailable": "The route map isn't available for this drive.",
     "routeEmpty": "This drive has no recorded route to show.",
     "routeExpand": "Open full-screen map",
+    "routeMapThumbnailLabel": "Drive route map, tap to expand",
     "routeMapFullscreenLabel": "Full-screen route map",
     "routeMapClose": "Close map",
     "routeZoomIn": "Zoom in",
