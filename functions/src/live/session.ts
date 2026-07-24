@@ -55,6 +55,7 @@ import {
 } from './live-core';
 import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from './nearby-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
+import { recordCrownActivity } from '../crownHunt/spawnActivity';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -212,6 +213,38 @@ export const updatePosition = onCall(
         discoveryGeoCell: discoveryFields.geoCell,
       });
     }
+
+    // Kronjakt AUTO-SPAWN activity signal (crownHunt/spawnActivity.ts).
+    //
+    // This is the ONLY place the app knows "a member is at this place right
+    // now", which is what the spawn engine needs in order to place crowns near
+    // people instead of at random. It writes an AGGREGATE ONLY — a per-cell
+    // count of distinct, cell-scoped pseudonyms and one `lastSeenAt` each. No
+    // uid, no coordinate, no trace. It is separately feature-flagged (default
+    // OFF), separately throttled (its own 10-minute per-cell interval, decided
+    // from state on the RTDB session node we already hold), and skipped
+    // entirely unless this sample is SLOW — so a member driving costs nothing
+    // and contributes nothing.
+    //
+    // BEST EFFORT: recordCrownActivity never throws. Live location sharing is
+    // a safety feature and must not be able to fail because of a game.
+    const crownActivity = await recordCrownActivity({
+      uid: actor.uid,
+      latitude: parsed.input.coordinate.latitude,
+      longitude: parsed.input.coordinate.longitude,
+      speedMetersPerSecond: parsed.input.coordinate.speedMetersPerSecond ?? null,
+      now,
+      throttle: {
+        crownActivityAt: session!.crownActivityAt,
+        crownActivityCell: session!.crownActivityCell,
+      },
+    });
+    if (crownActivity) {
+      // Persisted only on a real write, so a failed or skipped attempt is
+      // retried on the next sample rather than suppressed for the interval.
+      await sessionRef(actor.uid).update(crownActivity);
+    }
+
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );

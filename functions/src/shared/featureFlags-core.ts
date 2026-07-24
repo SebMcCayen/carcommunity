@@ -21,11 +21,19 @@ import { z } from 'zod';
  * (contracts/features/feature-flags.json). `partnerInsightsPassBy` is the
  * Phase 9j privacy gate: default OFF, and contributions additionally
  * require the user's explicit opt-in.
+ *
+ * `crownHuntSpawn` is the other default-OFF flag, and for a related reason:
+ * it switches on a system that PLACES MAP CONTENT BY ITSELF and invites members
+ * to travel to it and stop. Hand-placed Kronjakt points (`crownHunt`) each
+ * carry a named admin's safe-location confirmation; an auto-spawned crown
+ * cannot, so it stays dark until someone deliberately turns it on AND has
+ * approved the areas it may use (`crownSpawnCells`).
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
   chat: true,
   crownHunt: true,
+  crownHuntSpawn: false,
   partners: true,
   partnerStats: true,
   pushNotifications: true,
