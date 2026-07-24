@@ -105,7 +105,7 @@ describe('convoy-core builders', () => {
     });
   });
 
-  it('builds a new convoy doc: owner accepted, invitees invited, memberUids covers all', () => {
+  it('builds a new convoy doc: born ACTIVE, owner accepted, invitees invited, memberUids covers all', () => {
     const doc = buildConvoyDocument(
       {
         ownerUid: 'owner',
@@ -117,13 +117,15 @@ describe('convoy-core builders', () => {
         ],
       },
       () => 'TS',
+      'STARTED_AT',
     );
     expect(doc.ownerUid).toBe('owner');
     expect(doc.title).toBe('Sunday Run');
-    expect(doc.status).toBe('forming');
+    // A convoy is born active (create = go live), not forming, with startedAt set.
+    expect(doc.status).toBe('active');
     expect(doc.memberUids).toEqual(['owner', 'i1', 'i2']);
     expect(doc.summary).toBeNull();
-    expect(doc.startedAt).toBeNull();
+    expect(doc.startedAt).toBe('STARTED_AT');
     expect(doc.endedAt).toBeNull();
     const members = doc.members as Record<string, Record<string, unknown>>;
     expect(members.owner).toMatchObject({ role: 'owner', inviteStatus: 'accepted', joinedAt: 'TS' });

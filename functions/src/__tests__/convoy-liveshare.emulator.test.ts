@@ -4,8 +4,9 @@
  *
  * Exercises the convoy callables' effect on the live-location PRODUCER
  * (RTDB liveLocation/{uid}/session):
- *  - convoy.start auto-starts a convoy-tagged session for EVERY accepted member;
- *  - a member accepting into an ALREADY-active convoy auto-starts on accept;
+ *  - convoy.create (a convoy is born active) auto-starts the OWNER's convoy-tagged
+ *    session immediately, with no separate convoy.start step;
+ *  - a member accepting into the ALREADY-active convoy auto-starts on accept;
  *  - the auto-started session is a real active session (updatePosition works
  *    without a separate live.startSession call);
  *  - convoy.end / convoy.leave STOP the convoy-auto session — but NEVER a
@@ -185,8 +186,28 @@ afterAll(async () => {
   await deleteApp(app);
 });
 
-/** Owner + one accepted member; returns both and the convoy id (still forming). */
+/**
+ * Owner + one accepted member. The convoy is ACTIVE the moment it is created (a
+ * convoy is born active), so the owner's auto-session starts on create and the
+ * member's starts on accept — no separate convoy.start step.
+ */
 async function convoyWithAcceptedMember(
+  ownerName: string,
+  memberName: string,
+): Promise<{ owner: TestUser; member: TestUser; convoyId: string }> {
+  const { owner, member, convoyId } = await activeConvoyWithPendingMember(ownerName, memberName);
+  await signInAs(member);
+  await call('convoy-respond', { convoyId, action: 'accept' });
+  return { owner, member, convoyId };
+}
+
+/**
+ * Owner creates an ACTIVE convoy inviting one member who has NOT yet accepted —
+ * for the manual-session cases that need a member to already hold a manual
+ * session BEFORE they accept (so the accept-time auto-start aborts and leaves
+ * the manual session untouched).
+ */
+async function activeConvoyWithPendingMember(
   ownerName: string,
   memberName: string,
 ): Promise<{ owner: TestUser; member: TestUser; convoyId: string }> {
@@ -197,21 +218,35 @@ async function convoyWithAcceptedMember(
   const created = (await call('convoy-create', { inviteeUids: [member.uid] })).data as {
     convoy: { convoyId: string };
   };
-  const convoyId = created.convoy.convoyId;
-  await signInAs(member);
-  await call('convoy-respond', { convoyId, action: 'accept' });
-  return { owner, member, convoyId };
+  return { owner, member, convoyId: created.convoy.convoyId };
 }
 
 describe('convoy auto-start live session (item 2)', () => {
-  it('convoy.start auto-starts a convoy-tagged session for EVERY accepted member', async () => {
+  it('CREATING a convoy auto-starts the owner’s convoy-tagged session (born active)', async () => {
+    // The core of the fix: create → active → the owner goes live immediately,
+    // with no separate Start tap. Without this the convoy stayed `forming`, the
+    // owner never got a live session, and the live-session bar never appeared.
+    const { owner, convoyId } = await activeConvoyWithPendingMember('CreateOwnerCL', 'CreatePendCL');
+
+    const session = await pollUntil(async () => {
+      const s = await sessionOf(owner.uid);
+      return s && s.status === 'active' ? s : undefined;
+    });
+    expect(session.convoyAutoStarted).toBe(true);
+    expect(session.convoyId).toBe(convoyId);
+
+    // TEETH: a REAL active session — the owner can push a position with no
+    // separate live.startSession call, and the marker appears.
+    await signInAs(owner);
+    await call('live-updatePosition', { coordinate: coordinate() });
+    expect(await latestExists(owner.uid)).toBe(true);
+  }, 60_000);
+
+  it('creating + accepting auto-starts a convoy-tagged session for EVERY accepted member', async () => {
+    // Owner auto-starts on create; the member auto-starts on accept — both are
+    // live with a convoy-tagged session, nobody tapped "share live".
     const { owner, member, convoyId } = await convoyWithAcceptedMember('AutoOwnerCL', 'AutoMemberCL');
 
-    await signInAs(owner);
-    await call('convoy-start', { convoyId });
-
-    // Both the owner and the accepted member get an active, convoy-tagged
-    // session — nobody tapped "share live".
     for (const uid of [owner.uid, member.uid]) {
       const session = await pollUntil(async () => {
         const s = await sessionOf(uid);
@@ -229,14 +264,13 @@ describe('convoy auto-start live session (item 2)', () => {
   }, 60_000);
 
   it('a member accepting into an ALREADY-active convoy auto-starts on accept', async () => {
-    const { owner, member, convoyId } = await convoyWithAcceptedMember('LateOwnerCL', 'LateMemberCL');
-    // Grow + start the convoy with the first member, then a newcomer joins late.
+    const { member, convoyId } = await convoyWithAcceptedMember('LateOwnerCL', 'LateMemberCL');
+    // The convoy is already active (born active on create). A member grows it
+    // with a newcomer who joins late.
     const newcomer = await newMember('LateNewcomerCL');
     await makeFriends(member, newcomer);
     await signInAs(member);
     await call('convoy-invite', { convoyId, inviteeUids: [newcomer.uid] });
-    await signInAs(owner);
-    await call('convoy-start', { convoyId });
 
     // Newcomer accepts AFTER the convoy is active → auto-starts on accept.
     await signInAs(newcomer);
@@ -250,19 +284,20 @@ describe('convoy auto-start live session (item 2)', () => {
   }, 60_000);
 
   it('convoy.end STOPS the auto session but LEAVES a manual session running', async () => {
-    const { owner, member, convoyId } = await convoyWithAcceptedMember('EndOwnerCL', 'EndMemberCL');
+    const { owner, member, convoyId } = await activeConvoyWithPendingMember(
+      'EndOwnerCL',
+      'EndMemberCL',
+    );
 
-    // The member starts a MANUAL live session (their own reasons) before the
-    // convoy rolls. convoy.start must NOT clobber or re-tag it.
+    // The member starts a MANUAL live session (their own reasons) and only THEN
+    // accepts the invite. The accept-time auto-start must NOT clobber or re-tag it.
     await signInAs(member);
     const manual = (await call('live-startSession', { duration: '1h' })).data as {
       sessionId: string;
     };
+    await call('convoy-respond', { convoyId, action: 'accept' });
 
-    await signInAs(owner);
-    await call('convoy-start', { convoyId });
-
-    // The owner got an auto session; the member's stays their untouched manual one.
+    // The owner got an auto session (on create); the member's stays untouched manual.
     const ownerSession = await pollUntil(async () => {
       const s = await sessionOf(owner.uid);
       return s && s.status === 'active' ? s : undefined;
@@ -272,8 +307,9 @@ describe('convoy auto-start live session (item 2)', () => {
     expect(memberSession!.id).toBe(manual.sessionId); // not replaced
     expect(memberSession!.convoyAutoStarted).toBeFalsy(); // not tagged
 
-    // End the convoy: the OWNER's auto session stops; the member's MANUAL session
-    // keeps broadcasting.
+    // End the convoy (owner-only): the OWNER's auto session stops; the member's
+    // MANUAL session keeps broadcasting.
+    await signInAs(owner);
     await call('convoy-end', { convoyId });
     const endedOwner = await pollUntil(async () => {
       const s = await sessionOf(owner.uid);
@@ -287,9 +323,7 @@ describe('convoy auto-start live session (item 2)', () => {
 
   it('convoy.leave stops the LEAVER’s auto session', async () => {
     const { owner, member, convoyId } = await convoyWithAcceptedMember('LeaveOwnerCL', 'LeaveMemberCL');
-    await signInAs(owner);
-    await call('convoy-start', { convoyId });
-    // Member's auto session is active...
+    // Member's auto session is active (started on accept into the active convoy)...
     await pollUntil(async () => {
       const s = await sessionOf(member.uid);
       return s && s.status === 'active' && s.convoyAutoStarted ? true : undefined;
@@ -317,14 +351,17 @@ describe('convoy auto-start live session (item 2)', () => {
     expect(ownerSession!.status).toBe('active');
   }, 60_000);
 
-  it('convoy.start LEAVES a pre-existing manual session untouched (auto-start aborts)', async () => {
-    // Start-path counterpart to the convoy.end test above: proves the guarantee
+  it('accepting LEAVES a pre-existing manual session untouched (auto-start aborts)', async () => {
+    // Accept-path counterpart to the convoy.end test above: proves the guarantee
     // at the auto-start boundary itself. The member already has a MANUAL session
-    // when the convoy rolls; startConvoyAutoSession must ABORT (the RTDB
-    // transaction's commit-time check finds an active session) and leave that
-    // session byte-for-byte as-is — same id, untagged, still active, its marker
-    // untouched — rather than clobbering it with a convoy-auto session.
-    const { owner, member, convoyId } = await convoyWithAcceptedMember('KeepOwnerCL', 'KeepMemberCL');
+    // when they accept; startConvoyAutoSession must ABORT (the RTDB transaction's
+    // commit-time check finds an active session) and leave that session
+    // byte-for-byte as-is — same id, untagged, still active, its marker untouched
+    // — rather than clobbering it with a convoy-auto session.
+    const { owner, member, convoyId } = await activeConvoyWithPendingMember(
+      'KeepOwnerCL',
+      'KeepMemberCL',
+    );
 
     // Manual session + a real marker (the member is actively broadcasting).
     await signInAs(member);
@@ -334,9 +371,9 @@ describe('convoy auto-start live session (item 2)', () => {
     await call('live-updatePosition', { coordinate: coordinate() });
     expect(await latestExists(member.uid)).toBe(true);
 
-    // Convoy starts → owner auto-starts, but the member's manual session is kept.
-    await signInAs(owner);
-    await call('convoy-start', { convoyId });
+    // Member accepts → their manual session is kept; the owner is already live
+    // from create.
+    await call('convoy-respond', { convoyId, action: 'accept' });
     await pollUntil(async () => {
       const s = await sessionOf(owner.uid);
       return s && s.status === 'active' && s.convoyAutoStarted ? true : undefined;

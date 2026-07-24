@@ -181,6 +181,47 @@ async function forEachAutoSession(
   );
 }
 
+/**
+ * ITEM 2 activation — the auto-session fan-out shared by convoy.create (the
+ * owner, at create time) and convoy.start (owner + accepted invitees), so the
+ * two never diverge: a convoy going live starts a convoy-tagged live session for
+ * EVERY accepted member, making "everyone can see everyone" true from the moment
+ * it is active. Late joiners (accept after this point) auto-start via
+ * convoy.respond.
+ *
+ * The live-share feature flag is read ONCE and passed into the fan-out, not
+ * re-read per member — a convoy of MAX_CONVOY_SIZE would otherwise cost one
+ * config/featureFlags read per member. startConvoyAutoSession is best-effort and
+ * leaves any member's pre-existing MANUAL session untouched.
+ */
+async function startConvoyAutoSessionsForAccepted(
+  data: Record<string, unknown>,
+  convoyId: string,
+): Promise<void> {
+  let liveEnabled: boolean;
+  try {
+    liveEnabled = await isLiveShareEnabled();
+  } catch (error) {
+    // The flag read is best-effort too, not just the per-member fan-out: this
+    // runs AFTER the convoy mutation has committed, so a transient
+    // config/featureFlags read failure must never throw back out of
+    // convoy.create / convoy.start and make an already-created (or already-active)
+    // convoy look like it failed. Log and treat live-share as DISABLED — the
+    // convoy still exists and is active; members can share live manually.
+    logger.warn('convoy auto-session flag read failed', {
+      convoyId,
+      error: String(error),
+    });
+    return;
+  }
+  if (!liveEnabled) {
+    return;
+  }
+  await forEachAutoSession(acceptedMemberUids(data), (uid) =>
+    startConvoyAutoSession(uid, convoyId, true),
+  );
+}
+
 /** Converts a stored Firestore value to a Date, or null (summary computation). */
 function toDate(value: unknown): Date | null {
   return value instanceof Timestamp ? value.toDate() : null;
@@ -405,16 +446,30 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
 
   // Let Firestore generate the convoy id directly on the target collection.
   const ref = db.collection('convoys').doc();
-  const document = buildConvoyDocument(
-    { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
-    () => FieldValue.serverTimestamp(),
-  );
   // ITEM 1: the create is done inside a transaction whose ONLY read is the
   // "am I already in a convoy" check, so the check and the membership write are
   // one atomic unit — two simultaneous creates by the same user cannot both land
   // (the second aborts + retries, sees the first convoy, and is rejected).
   await db.runTransaction(async (tx) => {
     await assertNotAlreadyInConvoy(tx, actor.uid);
+    // Build the document INSIDE the transaction so its local-clock startedAt is
+    // the actual write instant on EVERY attempt: a retry (contention/abort)
+    // recomputes it rather than committing a timestamp captured before the first
+    // attempt — which would set startedAt earlier than the real go-live moment
+    // and skew convoy.end's duration. A convoy is born ACTIVE (buildConvoyDocument
+    // sets status:'active' + this startedAt), so it goes live the instant it is
+    // created — the owner's auto live-session starts below and invitees join an
+    // already-rolling convoy; there is no separate owner "start" step (which, on
+    // the map-first home with no Start control, would leave the convoy stuck
+    // `forming` forever). startedAt uses the LOCAL clock (not serverTimestamp) so
+    // it shares a time source with convoy.end's local-clock endedAt — see
+    // buildConvoyDocument. (createdAt + member timestamps use serverTimestamp
+    // sentinels, already retry-safe: the server stamps them at commit.)
+    const document = buildConvoyDocument(
+      { ownerUid: actor.uid, title: title ?? null, ownerProfile, invitees: invited },
+      () => FieldValue.serverTimestamp(),
+      Timestamp.fromDate(new Date()),
+    );
     tx.set(ref, document);
   });
 
@@ -428,8 +483,17 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   );
 
   const fresh = await ref.get();
+  const freshData = fresh.data() ?? {};
+
+  // ITEM 2: the convoy is active from this first moment, so start the owner's
+  // auto live-session right here — the SAME activation fan-out convoy.start runs
+  // — rather than waiting for a separate Start tap. At create time the only
+  // accepted member is the owner; invitees auto-start when they accept
+  // (convoy.respond) into the now-active convoy.
+  await startConvoyAutoSessionsForAccepted(freshData, ref.id);
+
   return {
-    convoy: toConvoySummary(ref.id, fresh.data() ?? {}, actor.uid, toIso),
+    convoy: toConvoySummary(ref.id, freshData, actor.uid, toIso),
     invited: invited.map((i) => i.uid),
     skipped,
   };
@@ -555,21 +619,12 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
 
   const fresh = await ref.get();
 
-  // ITEM 2: starting the convoy auto-starts a live session for EVERY accepted
-  // member (owner + accepted invitees), not just the leader, so "everyone in the
-  // convoy can see everyone" from the moment it goes active. startConvoyAutoSession
-  // is best-effort and leaves any member's pre-existing MANUAL session untouched.
-  // Late joiners (accept after this point) auto-start via convoy.respond.
-  //
-  // The live-share feature flag is read ONCE here and passed into the fan-out,
-  // not re-read per member — a convoy of MAX_CONVOY_SIZE would otherwise cost one
-  // config/featureFlags read per member for a single convoy.start.
-  const liveEnabled = await isLiveShareEnabled();
-  if (liveEnabled) {
-    await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
-      startConvoyAutoSession(uid, parsed.input.convoyId, true),
-    );
-  }
+  // ITEM 2: activation auto-starts a live session for EVERY accepted member
+  // (owner + accepted invitees) — the SAME fan-out convoy.create now runs on
+  // create. LEGACY path: convoys are born active (convoy.create), so this
+  // callable no longer fires in the normal flow; it is kept as a harmless
+  // no-op-guarded transition for any convoy that is still `forming`.
+  await startConvoyAutoSessionsForAccepted(fresh.data() ?? {}, parsed.input.convoyId);
 
   return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
 });

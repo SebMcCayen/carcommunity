@@ -170,6 +170,7 @@ interface ConvoySummary {
   livePositionUids: string[];
   destination: ConvoyDestination | null;
   summary: { durationSeconds: number; participantUids: string[]; participantCount: number; distanceMeters: number | null } | null;
+  startedAt: string | null;
 }
 
 beforeAll(async () => {
@@ -258,7 +259,9 @@ describe('convoy-create gating + friend-only invites', () => {
     // Second occurrence of friend.uid is a duplicate.
     expect(result.skipped.some((s) => s.uid === friend.uid && s.reason === 'duplicate')).toBe(true);
 
-    expect(result.convoy.status).toBe('forming');
+    // A convoy is born ACTIVE — creating it is the act of going live.
+    expect(result.convoy.status).toBe('active');
+    expect(result.convoy.startedAt).not.toBeNull();
     expect(result.convoy.memberUids.sort()).toEqual([friend.uid, owner.uid].sort());
     const ownerEntry = result.convoy.members.find((m) => m.uid === owner.uid)!;
     expect(ownerEntry.role).toBe('owner');
@@ -347,6 +350,8 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     const created = (await call('convoy-create', { title: 'Cruise', inviteeUids: [a.uid, b.uid] }))
       .data as { convoy: ConvoySummary };
     const convoyId = created.convoy.convoyId;
+    // The convoy is ACTIVE from create (no separate owner start step).
+    expect(created.convoy.status).toBe('active');
 
     // Alpha accepts → green-dot accepted + in the live-position set.
     await signInAs(a);
@@ -376,10 +381,9 @@ describe('convoy lifecycle: respond / start / end / list', () => {
     await signInAs(a);
     expect(await callableErrorCode(call('convoy-start', { convoyId }))).toBe('functions/not-found');
 
-    // Owner starts (forming → active), then a second start fails.
+    // The convoy is ALREADY active from create, so the legacy owner start is a
+    // no-op that fails (the convoy is no longer `forming`).
     await signInAs(owner);
-    const started = (await call('convoy-start', { convoyId })).data as { convoy: ConvoySummary };
-    expect(started.convoy.status).toBe('active');
     expect(await callableErrorCode(call('convoy-start', { convoyId }))).toBe(
       'functions/failed-precondition',
     );
@@ -870,13 +874,12 @@ describe('convoy shared destination', () => {
       );
     }
 
-    // A forming convoy MAY have a destination — agreeing where to go is exactly
-    // what happens before rolling.
-    const onForming = (
+    // An active (non-ended) convoy may have a destination set.
+    const onActive = (
       await call('convoy-setDestination', { convoyId, latitude: 57.5, longitude: 12.0 })
     ).data as { convoy: ConvoySummary };
-    expect(onForming.convoy.status).toBe('forming');
-    expect(onForming.convoy.destination).not.toBeNull();
+    expect(onActive.convoy.status).toBe('active');
+    expect(onActive.convoy.destination).not.toBeNull();
 
     // Invited-but-unanswered cannot set it.
     await signInAs(pending);
@@ -1039,7 +1042,7 @@ describe('convoy one-at-a-time enforcement', () => {
 
     await signInAs(owner);
     await call('convoy-create', { inviteeUids: [f1.uid] });
-    // Already the owner (accepted participant) of a forming convoy → the second
+    // Already the owner (accepted participant) of an active convoy → the second
     // create is refused.
     expect(await callableErrorCode(call('convoy-create', { inviteeUids: [f2.uid] }))).toBe(
       'functions/failed-precondition',
@@ -1150,7 +1153,7 @@ describe('convoy one-at-a-time enforcement', () => {
       convoy: ConvoySummary;
     };
     expect(second.convoy.convoyId).not.toBe(first.convoy.convoyId);
-    expect(second.convoy.status).toBe('forming');
+    expect(second.convoy.status).toBe('active');
   });
 
   it('races two simultaneous creates — exactly ONE wins (transaction serializes them)', async () => {
