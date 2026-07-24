@@ -851,8 +851,13 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
         // Sanity: the body really is the non-interactive placeholder, not a live
-        // channel with its own click handlers.
-        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+        // channel with its own click handlers. Every section is null-repo here, so
+        // each renders the same placeholder; the hub's swipe pager keeps the
+        // neighbour page composed (beyondViewportPageCount), so more than one copy
+        // exists in the tree — take the front page's, which is the one on screen.
+        composeTestRule.onAllNodesWithText(str(R.string.chatHub_unavailable))
+            .onFirst()
+            .assertIsDisplayed()
 
         // Tap well inside the card, in the placeholder body: coordinates are derived
         // from the card's own measured size (node-relative px), not magic pixels.
@@ -863,7 +868,9 @@ class MapFirstShellTest {
             click(Offset(width / 2f, height * 0.75f))
         }
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatHub_unavailable)).assertIsDisplayed()
+        composeTestRule.onAllNodesWithText(str(R.string.chatHub_unavailable))
+            .onFirst()
+            .assertIsDisplayed()
     }
 
     /**
