@@ -209,7 +209,6 @@ import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
-import com.kungsbackacarcommunity.app.media.NormalizedCropRect
 import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl

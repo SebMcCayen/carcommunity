@@ -369,12 +369,24 @@ fun ImageEditScreen(
         TextButton(
             onClick = {
                 angle = 0f
-                val frame = defaultFrame(boxSize, frameShape, aspect)
-                frameRect = frame
-                scale =
-                    if (boxSize == Size.Zero) {
-                        0f
-                    } else {
+                if (boxSize == Size.Zero) {
+                    // Reset tapped BEFORE the viewport is measured. Do NOT install a
+                    // zero-size default frame here: onSizeChanged only re-initializes
+                    // the frame when frameRect == null, so a zero-size frame would
+                    // wedge the editor at scale == 0 with a non-functional frame until
+                    // the user reset again. Instead clear back to the fresh-mount state
+                    // (null frame, un-initialized, zero transform) so the pending
+                    // onSizeChanged installs the default frame AND the cover scale once
+                    // the viewport is measured.
+                    frameRect = null
+                    initialized = false
+                    scale = 0f
+                    panX = 0f
+                    panY = 0f
+                } else {
+                    val frame = defaultFrame(boxSize, frameShape, aspect)
+                    frameRect = frame
+                    scale =
                         ImageEditGeometry.coverScaleForFrame(
                             angleDeg = 0f,
                             frameHalfW = frame.width / 2f,
@@ -382,9 +394,9 @@ fun ImageEditScreen(
                             imageHalfW = imgHalfWp,
                             imageHalfH = imgHalfHp,
                         )
-                    }
-                panX = frame.center.x - boxSize.width / 2f
-                panY = frame.center.y - boxSize.height / 2f
+                    panX = frame.center.x - boxSize.width / 2f
+                    panY = frame.center.y - boxSize.height / 2f
+                }
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
