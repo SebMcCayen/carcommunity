@@ -676,10 +676,16 @@ fun MapHome(
                 )
             } else {
                 // Step 3 — place it on the map. Seed the camera where the user is
-                // already looking (the live camera snapshot) so they start near
-                // the incident rather than re-navigating from the default camera.
+                // already looking so they start near the incident rather than
+                // re-navigating from the default camera.
                 // Confirm reports at the chosen point; cancel returns to step 2.
-                val camera = mapSurface.cameraSnapshot.collectAsState().value
+                //
+                // A one-SHOT read of the StateFlow, deliberately NOT collectAsState():
+                // the picker consumes initialCenter only in its AndroidView factory,
+                // which runs once and has no update block, so collecting would
+                // recompose this subtree on every home-map camera change without ever
+                // moving the picker's camera. remember pins the seed for its lifetime.
+                val camera = remember { mapSurface.cameraSnapshot.value }
                 IncidentLocationPickerDialog(
                     initialCenter =
                         camera?.let { LatLng(longitude = it.longitude, latitude = it.latitude) },
