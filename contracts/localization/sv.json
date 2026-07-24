@@ -1238,7 +1238,6 @@
     "pickLocationTitle": "Placera händelsen",
     "pickLocationInstruction": "Flytta kartan för att placera nålen, bekräfta sedan.",
     "pickLocationConfirm": "Placera här",
-    "pickLocationCancel": "Avbryt",
     "pickLocationMap": "Karta för att välja platsen för händelsen",
     "pickLocationInvalid": "Välj en plats på kartan först.",
     "markerLabel": "Händelse",

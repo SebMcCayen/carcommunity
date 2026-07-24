@@ -429,7 +429,7 @@ object ConvoyDestinations {
      * as a named member because the call sites here read as a convoy-domain rule.
      */
     fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
-        isValidWgs84Coordinate(latitude = latitude, longitude = longitude)
+        isValidWgs84Coordinate(LatLng(longitude = longitude, latitude = latitude))
 
     /**
      * What to tell a member who is CURRENTLY navigating to the shared

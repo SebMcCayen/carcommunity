@@ -86,7 +86,9 @@ fun IncidentLocationPickerDialog(
     val title = stringResource(R.string.incidents_pickLocationTitle)
     val mapDesc = stringResource(R.string.incidents_pickLocationMap)
     val confirmLabel = stringResource(R.string.incidents_pickLocationConfirm)
-    val cancelLabel = stringResource(R.string.incidents_pickLocationCancel)
+    // The incidents module's shared Cancel label — the picker had its own key with
+    // byte-identical EN/SV text, which is just two things to keep in sync.
+    val cancelLabel = stringResource(R.string.incidents_cancel)
 
     // Held so the confirm button can read the live camera centre. Touched only on
     // the main thread (Compose callbacks + the AndroidView factory).

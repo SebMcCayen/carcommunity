@@ -32,5 +32,4 @@ sealed interface ReportLocation {
  * the callable answer `invalid-argument`. A picker that hands back a NaN centre
  * (no style/camera yet) or an out-of-range value never reaches the wire.
  */
-fun isValidReportCoordinate(location: LatLng): Boolean =
-    isValidWgs84Coordinate(latitude = location.latitude, longitude = location.longitude)
+fun isValidReportCoordinate(location: LatLng): Boolean = isValidWgs84Coordinate(location)

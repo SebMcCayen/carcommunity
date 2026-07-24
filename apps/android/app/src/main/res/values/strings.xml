@@ -1151,7 +1151,6 @@
     <string name="incidents_pickLocationTitle">Placera händelsen</string>
     <string name="incidents_pickLocationInstruction">Flytta kartan för att placera nålen, bekräfta sedan.</string>
     <string name="incidents_pickLocationConfirm">Placera här</string>
-    <string name="incidents_pickLocationCancel">Avbryt</string>
     <string name="incidents_pickLocationMap">Karta för att välja platsen för händelsen</string>
     <string name="incidents_pickLocationInvalid">Välj en plats på kartan först.</string>
     <string name="incidents_markerLabel">Händelse</string>

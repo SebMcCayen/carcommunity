@@ -1238,7 +1238,6 @@
     "pickLocationTitle": "Place the incident",
     "pickLocationInstruction": "Move the map to place the pin, then confirm.",
     "pickLocationConfirm": "Place here",
-    "pickLocationCancel": "Cancel",
     "pickLocationMap": "Map for choosing the incident location",
     "pickLocationInvalid": "Pick a spot on the map first.",
     "markerLabel": "Incident",

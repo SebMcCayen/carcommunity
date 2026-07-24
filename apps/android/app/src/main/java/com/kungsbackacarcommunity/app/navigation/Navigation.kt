@@ -29,21 +29,27 @@ data class LatLng(
 )
 
 /**
- * Whether a coordinate is finite and inside the WGS-84 bounds.
+ * Whether [point] is finite and inside the WGS-84 bounds.
  *
  * The single definition of "is this a coordinate we may send" for every feature
  * that accepts a user-placed or parsed point — convoy destinations, incident
  * reports — so the bounds cannot drift apart between them. Lives next to
  * [LatLng] because it is the same Android-free, unit-testable layer.
  *
+ * Takes a [LatLng] rather than two bare [Double]s deliberately: a lat/lng pair
+ * of positional doubles is trivially swappable at a call site, and a swap here
+ * would fail SILENTLY for any point where both values happen to be in range
+ * (e.g. 57.49 N / 12.07 E reads as a valid coordinate either way round). The
+ * named fields make the mistake unrepresentable.
+ *
  * Client-side only as a cheap pre-check; each backend re-validates and stays
  * the actual gate.
  */
-fun isValidWgs84Coordinate(latitude: Double, longitude: Double): Boolean =
-    latitude.isFinite() &&
-        longitude.isFinite() &&
-        latitude in MIN_LATITUDE..MAX_LATITUDE &&
-        longitude in MIN_LONGITUDE..MAX_LONGITUDE
+fun isValidWgs84Coordinate(point: LatLng): Boolean =
+    point.latitude.isFinite() &&
+        point.longitude.isFinite() &&
+        point.latitude in MIN_LATITUDE..MAX_LATITUDE &&
+        point.longitude in MIN_LONGITUDE..MAX_LONGITUDE
 
 private const val MIN_LATITUDE = -90.0
 private const val MAX_LATITUDE = 90.0

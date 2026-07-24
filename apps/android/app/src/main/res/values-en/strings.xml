@@ -1151,7 +1151,6 @@
     <string name="incidents_pickLocationTitle">Place the incident</string>
     <string name="incidents_pickLocationInstruction">Move the map to place the pin, then confirm.</string>
     <string name="incidents_pickLocationConfirm">Place here</string>
-    <string name="incidents_pickLocationCancel">Cancel</string>
     <string name="incidents_pickLocationMap">Map for choosing the incident location</string>
     <string name="incidents_pickLocationInvalid">Pick a spot on the map first.</string>
     <string name="incidents_markerLabel">Incident</string>
