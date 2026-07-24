@@ -352,7 +352,10 @@ describe('events-create / events-update', () => {
     // event pins reach every signed-in user; the long description and precise
     // street address stay member-only on the private document.
     expect(event.locationName).toBe(validCreate.locationName);
+    // BOTH halves of the coordinate pair, so a partial write (one field landing
+    // on the wrong document) cannot slip through this test.
     expect(event.latitude).toBe(validCreate.latitude);
+    expect(event.longitude).toBe(validCreate.longitude);
     expect(event.description).toBeUndefined();
     expect(event.address).toBeUndefined();
 
@@ -367,6 +370,7 @@ describe('events-create / events-update', () => {
     expect(detail.address).toBe(validCreate.address);
     expect(detail.locationName).toBeUndefined();
     expect(detail.latitude).toBeUndefined();
+    expect(detail.longitude).toBeUndefined();
 
     const audit = await adminDb
       .collection('adminAuditEvents')
