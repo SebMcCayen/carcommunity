@@ -55,6 +55,7 @@ import {
 } from './live-core';
 import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from './nearby-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
+import { trackLiveSessionDistance } from '../points/liveDistance';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -173,6 +174,19 @@ export const updatePosition = onCall(
     // displayName is denormalized on the session at start — no extra
     // Firestore read on the (frequent) position-update hot path.
     await latestRef(actor.uid).set(buildLatestNode(parsed.input.coordinate, session!));
+
+    // Kronpoäng economy: accumulate the SERVER-measured distance this session
+    // has covered and award `live_session_1km` the first time it passes 1 km
+    // (points/liveDistance.ts). Reads nothing extra — the running total rides
+    // on the session node already read above — and never throws: a points
+    // counter must not fail a position update. Distance only; no speed is
+    // read, stored or rewarded.
+    await trackLiveSessionDistance(
+      actor.uid,
+      session!.id,
+      session as unknown as Record<string, unknown>,
+      parsed.input.coordinate,
+    );
 
     // Refresh the queryable nearby-discovery doc (liveSessions/{uid}) so this
     // sharer is findable by live.listNearby. geoCell is recomputed from the new
