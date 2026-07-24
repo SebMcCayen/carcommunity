@@ -18,6 +18,16 @@ interface FriendsRepository {
     /** Accepts or declines an incoming request. */
     suspend fun respond(requestId: String, accept: Boolean): RespondResult
 
+    /**
+     * Withdraws the caller's own pending outgoing request to [toUid].
+     *
+     * Addressed by RECIPIENT rather than by request id: the backend derives the
+     * request document from (caller, toUid), so a caller can only ever cancel a
+     * request they themselves sent — and the client needs no id to do it.
+     * Idempotent; an already-handled (or never sent) request is a no-op.
+     */
+    suspend fun cancelRequest(toUid: String): CancelResult
+
     /** Removes an established friend. Idempotent. */
     suspend fun remove(friendUid: String): RemoveResult
 }

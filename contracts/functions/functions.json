@@ -694,6 +694,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "friend.cancelRequest",
+      "domain": "friend",
+      "description": "Withdraws the caller's own still-PENDING outgoing friend request ({ toUid }) — the counterpart of friend.sendRequest. Addressed by RECIPIENT, never by requestId: the doc id is derived server-side as friendRequestId(caller, toUid), so a caller can structurally only address a request they SENT and cannot name (or probe the existence of) anyone else's. Deletes friendRequests/{requestId} so a withdrawn request reads as never sent (the recipient's pending list simply loses the row) and the pair can send again later; established friendship is the source of truth for 'already friends', so a delete can never disturb one. Returns { cancelled } — true only when a pending request was actually deleted. Every other outcome (no request, already accepted/declined, self) is the SAME silent { cancelled: false } no-op rather than an error, so a double-tap or a retry after a dropped response is idempotent and the response is never an oracle for activity on another member's account. Does NOT unwrite the best-effort in-app 'friend_request' notification from the original send (that would need a new composite index over another user's notifications; the actionable pending-request row is gone, and acting on the stale notice not-founds). Deployed via grouped export as friend-cancelRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "friend.remove",
       "domain": "friend",
       "description": "Removes an established friend ({ friendUid }). Idempotent: deletes users/{caller}/friends/{friendUid} and the mirror users/{friendUid}/friends/{caller}; returns { removed } reflecting whether the caller's own side existed (self is always { removed: false }). Established friendship — not request status — is the source of truth, so a later friend.sendRequest can re-friend. Deployed via grouped export as friend-remove (functions/src/friends/manageFriends.ts).",

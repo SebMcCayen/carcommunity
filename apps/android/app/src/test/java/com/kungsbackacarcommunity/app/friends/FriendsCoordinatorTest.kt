@@ -40,6 +40,8 @@ class FriendsCoordinatorTest {
 
         override suspend fun respond(requestId: String, accept: Boolean): RespondResult = respondResult
 
+        override suspend fun cancelRequest(toUid: String): CancelResult = CancelResult.Cancelled
+
         override suspend fun remove(friendUid: String): RemoveResult = removeResult
     }
 
@@ -258,6 +260,8 @@ class FriendsCoordinatorTest {
                 override suspend fun sendRequestToUid(toUid: String) = SendRequestResult.Requested
 
                 override suspend fun respond(requestId: String, accept: Boolean) = RespondResult.Accepted
+
+                override suspend fun cancelRequest(toUid: String) = CancelResult.Cancelled
 
                 override suspend fun remove(friendUid: String): RemoveResult {
                     removeCalls++

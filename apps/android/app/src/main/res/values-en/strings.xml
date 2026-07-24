@@ -553,6 +553,11 @@
     <string name="memberProfile_badgesLoadError">Awards couldn\'t be loaded.</string>
     <string name="memberProfile_awardedOn">Awarded %1$s</string>
     <string name="memberProfile_blocked">You\'ve blocked this member. Unblock them to see their profile again.</string>
+    <string name="memberProfile_addFriend">Add friend</string>
+    <string name="memberProfile_requestPending">Friend request sent — waiting for a reply.</string>
+    <string name="memberProfile_cancelRequest">Cancel request</string>
+    <string name="memberProfile_wantsToBeFriends">This member wants to be your friend.</string>
+    <string name="memberProfile_friendsAlready">You\'re friends</string>
     <string name="groupDrive_screenTitle">Group Drive</string>
     <string name="groupDrive_joinButton">Join group drive</string>
     <string name="groupDrive_leaveButton">Leave group drive</string>

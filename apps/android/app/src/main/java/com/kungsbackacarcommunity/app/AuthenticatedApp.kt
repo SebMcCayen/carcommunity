@@ -3859,6 +3859,9 @@ private fun RouteHost(
                     targetUid = memberProfileTargetUid,
                     viewerUid = uid,
                     blockingRepository = blockingRepository,
+                    // Optional, like the blocking repo: without it the profile
+                    // simply carries no friend action (config-less build).
+                    friendsRepository = friendsRepository,
                 )
             } else {
                 LoadingScreen()

@@ -10,8 +10,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * [FriendsRepository] backed by the member-gated friend callables
  * (europe-west1): `friend-list`, `friend-sendRequest`, `friend-respondRequest`,
- * `friend-remove`. Guarded ([createIfAvailable]) so a config-less build gets a
- * null repository and the screen renders a loading placeholder.
+ * `friend-cancelRequest`, `friend-remove`. Guarded ([createIfAvailable]) so a
+ * config-less build gets a null repository and the screen renders a loading
+ * placeholder.
  *
  * HttpsError codes (never messages) are translated to the pure
  * [FriendCallableError] and mapped by [FriendsErrorMapper]; the raw
@@ -55,6 +56,24 @@ class FirebaseFriendsRepository private constructor(
                 val callableError = it.toCallableError()
                 RespondResult.Failed(
                     FriendsErrorMapper.mapRespond(callableError),
+                    callableError.rawCode,
+                )
+            },
+        )
+
+    override suspend fun cancelRequest(toUid: String): CancelResult =
+        callForData(CANCEL_REQUEST, mapOf("toUid" to toUid)).fold(
+            // The `cancelled` boolean is idempotent bookkeeping — either value
+            // leaves the caller with no pending request to this member, which is
+            // the whole post-condition. Only a thrown error is a failure.
+            onSuccess = { CancelResult.Cancelled },
+            onFailure = {
+                val callableError = it.toCallableError()
+                // mapGeneric, not mapRespond: this callable has no "that request
+                // is gone" outcome to distinguish (it no-ops instead), so only
+                // the auth/member/network/unknown categories can ever arrive.
+                CancelResult.Failed(
+                    FriendsErrorMapper.mapGeneric(callableError),
                     callableError.rawCode,
                 )
             },
@@ -114,6 +133,7 @@ class FirebaseFriendsRepository private constructor(
         private const val LIST = "friend-list"
         private const val SEND_REQUEST = "friend-sendRequest"
         private const val RESPOND_REQUEST = "friend-respondRequest"
+        private const val CANCEL_REQUEST = "friend-cancelRequest"
         private const val REMOVE = "friend-remove"
 
         fun createIfAvailable(context: Context): FriendsRepository? {

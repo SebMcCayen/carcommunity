@@ -2,9 +2,9 @@ package com.kungsbackacarcommunity.app.friends
 
 /**
  * Friends domain (member-gated friend graph). The backend (europe-west1
- * callables `friend-sendRequest` / `friend-respondRequest` / `friend-remove` /
- * `friend-list`) is the source of truth; the client never writes the graph
- * directly. Everything here is pure Kotlin so the mapping/parsing logic is
+ * callables `friend-sendRequest` / `friend-respondRequest` /
+ * `friend-cancelRequest` / `friend-remove` / `friend-list`) is the source of
+ * truth; the client never writes the graph directly. Everything here is pure Kotlin so the mapping/parsing logic is
  * JVM-unit-testable without Firebase.
  */
 
@@ -128,6 +128,24 @@ sealed interface RespondResult {
         val error: FriendActionError,
         val diagnostic: FriendErrorDiagnostic = null,
     ) : RespondResult
+}
+
+/**
+ * Outcome of `friend-cancelRequest` (withdrawing the caller's OWN pending
+ * outgoing request).
+ *
+ * There is no "nothing to cancel" failure: the callable answers every
+ * non-cancellable case (no request, already accepted/declined) with the same
+ * successful no-op, so the client's post-state — "I no longer have a pending
+ * request to this member" — holds either way. Only a thrown error is a failure.
+ */
+sealed interface CancelResult {
+    data object Cancelled : CancelResult
+
+    data class Failed(
+        val error: FriendActionError,
+        val diagnostic: FriendErrorDiagnostic = null,
+    ) : CancelResult
 }
 
 /** Outcome of `friend-remove` (idempotent). */

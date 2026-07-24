@@ -597,7 +597,12 @@
     "badgesUnavailable": "Awards aren't shown on other members' profiles.",
     "badgesLoadError": "Awards couldn't be loaded.",
     "awardedOn": "Awarded %1$s",
-    "blocked": "You've blocked this member. Unblock them to see their profile again."
+    "blocked": "You've blocked this member. Unblock them to see their profile again.",
+    "addFriend": "Add friend",
+    "requestPending": "Friend request sent — waiting for a reply.",
+    "cancelRequest": "Cancel request",
+    "wantsToBeFriends": "This member wants to be your friend.",
+    "friendsAlready": "You're friends"
   },
   "groupDrive": {
     "screenTitle": "Group Drive",
