@@ -657,8 +657,17 @@ fun AuthenticatedApp(
                     PushTarget.DM ->
                         // With the counterpart resolved, open the thread directly;
                         // without it, the conversation list is the honest landing.
+                        // A push tap is a fresh top-level entry, so open as a ROOT
+                        // (parent-less) stack — Back returns to the map, not to
+                        // whatever route happened to be open when the tap arrived.
+                        // openChat() is the in-app list → detail path (it pushes),
+                        // which is why the payload is set + opened as a root here
+                        // rather than routed through it, matching every other push
+                        // target below.
                         if (link.entityId != null) {
-                            openChat(link.entityId, null)
+                            dmChatOtherUid = link.entityId
+                            dmChatOtherName = null
+                            openRootRoute(ShellRoute.Chat)
                         } else {
                             openRootRoute(ShellRoute.Conversations)
                         }
@@ -2492,9 +2501,9 @@ fun AuthenticatedApp(
                         savedPlacesStore = savedPlacesStore,
                         // "Add a place" / "Change address" on the management screen
                         // reuse the existing address picker: close this route and
-                        // open the navigation search (search-first). route=null so
-                        // the picker returns to the map home, not to a stale
-                        // saved-places snapshot.
+                        // open the navigation search (search-first). clearRoutes()
+                        // (route + parent stack both cleared) so the picker returns
+                        // to the map home, not to a stale saved-places snapshot.
                         onOpenAddressSearch = {
                             // "Add a place": a fresh save, so no change-address
                             // context — clear it in case one lingered.
