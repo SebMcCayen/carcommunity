@@ -60,6 +60,15 @@ export const MAX_DESCRIPTION_LENGTH = 500;
 /** Walking pace (~5 km/h): claiming is only allowed when safely stopped. */
 export const MAX_CLAIM_SPEED_MPS = 1.4;
 export const MAX_POSITION_AGE_SECONDS = 60;
+/**
+ * Largest horizontal GPS accuracy a claim may even REPORT (meters). Real
+ * device fixes — including cell-tower-only ones — stay far below this; a
+ * larger (or non-finite) value is malformed or hostile input and is rejected
+ * as invalid-argument rather than silently buffering the geofence. Values
+ * below this but still poor are clamped by MAX_GEOFENCE_ACCURACY_METERS in
+ * crown-hunt-geo.ts and flagged by the risk scorer.
+ */
+export const MAX_REPORTED_ACCURACY_METERS = 10_000;
 
 /** Legacy service limits. */
 export const MAX_DAILY_SUCCESSFUL_CLAIMS = 10;
@@ -131,7 +140,16 @@ const submitClaimInputSchema = z
       .refine((id) => id !== '.' && id !== '..'),
     latitude: z.number(),
     longitude: z.number(),
-    accuracyMeters: z.number().nonnegative().nullable().optional(),
+    // `.finite()` + `.max()`: accuracy is client-controlled and feeds the
+    // geofence buffer, so Infinity/NaN and absurd magnitudes never reach the
+    // geofence check (which additionally clamps what it accepts).
+    accuracyMeters: z
+      .number()
+      .finite()
+      .nonnegative()
+      .max(MAX_REPORTED_ACCURACY_METERS)
+      .nullable()
+      .optional(),
     speedMetersPerSecond: z.number().finite().nonnegative().nullable().optional(),
     recordedAt: z.string().datetime(),
     idempotencyKey: z.string().trim().min(1).max(128),

@@ -5,6 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_EFFECTIVE_GEOFENCE_MULTIPLIER,
+  MAX_GEOFENCE_ACCURACY_METERS,
+  effectiveGeofenceRadiusMeters,
   haversineDistanceMeters,
   isPlausibleJump,
   isPositionFresh,
@@ -14,6 +17,7 @@ import {
 } from '../crownHunt/crown-hunt-geo';
 import { RISK_REVIEW_THRESHOLD, evaluateClaimRisk } from '../crownHunt/crown-hunt-risk';
 import {
+  MAX_REPORTED_ACCURACY_METERS,
   claimLedgerIdempotencyKey,
   getClaimMessage,
   guardPointFields,
@@ -61,6 +65,64 @@ describe('crown-hunt-geo (verbatim legacy port)', () => {
     expect(isWithinGeofence(50, 50, null)).toBe(true);
     expect(isWithinGeofence(60, 50, 20)).toBe(true); // 50 + 20*0.5 = 60
     expect(isWithinGeofence(61, 50, 20)).toBe(false);
+  });
+
+  // Regression: `accuracyMeters` is client-supplied and used to be unbounded,
+  // so a claim reporting a huge accuracy inflated a 75 m fence into kilometres
+  // and let a member farm crowns from home. These cases FAIL on the unpatched
+  // geofence (effectiveRadius = radius + accuracy * 0.5, uncapped).
+  it('never lets a client-reported accuracy inflate the geofence', () => {
+    const radius = 75;
+    const fiveKm = 5_000;
+    for (const accuracy of [
+      50_000,
+      1e9,
+      Number.POSITIVE_INFINITY,
+      Number.NaN,
+      -1,
+      Number.MAX_SAFE_INTEGER,
+    ]) {
+      expect(isWithinGeofence(fiveKm, radius, accuracy)).toBe(false);
+    }
+    // Even a modest overshoot beyond the cap is rejected.
+    expect(isWithinGeofence(radius * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER + 1, radius, 50_000)).toBe(
+      false,
+    );
+  });
+
+  it('caps the effective radius at the documented bound for every input', () => {
+    for (const radius of [20, 50, 75, 100, 150]) {
+      for (const accuracy of [
+        null,
+        undefined,
+        0,
+        -5,
+        10,
+        40,
+        60,
+        100,
+        5_000,
+        1e9,
+        Number.POSITIVE_INFINITY,
+        Number.NaN,
+      ]) {
+        const effective = effectiveGeofenceRadiusMeters(radius, accuracy);
+        expect(effective).toBeGreaterThanOrEqual(radius);
+        expect(effective).toBeLessThanOrEqual(
+          Math.min(radius + MAX_GEOFENCE_ACCURACY_METERS * 0.5, radius * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER),
+        );
+      }
+    }
+  });
+
+  it('still gives an honest poor-but-plausible fix its full buffer', () => {
+    // 40 m accuracy at a 75 m point → 75 + 20 = 95 m, unchanged by the caps.
+    expect(effectiveGeofenceRadiusMeters(75, 40)).toBe(95);
+    expect(isWithinGeofence(95, 75, 40)).toBe(true);
+    expect(isWithinGeofence(95.1, 75, 40)).toBe(false);
+    // A 100 m accuracy (the clamp boundary) still buffers fully at a 150 m point.
+    expect(effectiveGeofenceRadiusMeters(150, 100)).toBe(200);
+    expect(isWithinGeofence(200, 150, 100)).toBe(true);
   });
 
   it('flags physically impossible jumps but allows fast driving', () => {
@@ -146,6 +208,19 @@ describe('crownhunt-core inputs and helpers', () => {
     // bypassed with invalid input.
     expect(parseSubmitClaimInput({ ...validClaim, speedMetersPerSecond: -1 }).ok).toBe(false);
     expect(parseSubmitClaimInput({ ...validClaim, speedMetersPerSecond: 0 }).ok).toBe(true);
+    // Accuracy is bounded at the input boundary too: it feeds the geofence
+    // buffer, so non-finite/negative/absurd values are invalid-argument.
+    expect(parseSubmitClaimInput({ ...validClaim, accuracyMeters: 40 }).ok).toBe(true);
+    expect(parseSubmitClaimInput({ ...validClaim, accuracyMeters: null }).ok).toBe(true);
+    expect(parseSubmitClaimInput({ ...validClaim, accuracyMeters: -1 }).ok).toBe(false);
+    expect(parseSubmitClaimInput({ ...validClaim, accuracyMeters: Number.NaN }).ok).toBe(false);
+    expect(
+      parseSubmitClaimInput({ ...validClaim, accuracyMeters: Number.POSITIVE_INFINITY }).ok,
+    ).toBe(false);
+    expect(parseSubmitClaimInput({ ...validClaim, accuracyMeters: 50_000 }).ok).toBe(false);
+    expect(
+      parseSubmitClaimInput({ ...validClaim, accuracyMeters: MAX_REPORTED_ACCURACY_METERS }).ok,
+    ).toBe(true);
   });
 
   it('validates point fields per the legacy limits', () => {

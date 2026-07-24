@@ -10,7 +10,9 @@
  *  - Coordinates must be valid WGS-84 values.
  *  - Positions must be fresh (not older than MAX_POSITION_AGE_SECONDS).
  *  - Speed must be at or below MAX_CLAIM_SPEED_MPS (~5 km/h) to allow a claim.
- *  - Geofence check accounts for reported GPS accuracy (conservative).
+ *  - Geofence check accounts for reported GPS accuracy conservatively AND
+ *    boundedly: client-supplied accuracy can never inflate the fence beyond
+ *    MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the configured radius.
  *  - Distance is computed server-side; client-supplied distance is never trusted.
  *  - No route history is created here.
  *  - No coordinates are logged.
@@ -23,6 +25,24 @@ import { MAX_CLAIM_SPEED_MPS, MAX_POSITION_AGE_SECONDS } from './crownhunt-core'
 // ---------------------------------------------------------------------------
 
 const EARTH_RADIUS_METERS = 6_371_000;
+
+/** Multiplier applied to the (clamped) reported accuracy when buffering. */
+const GEOFENCE_ACCURACY_BUFFER = 0.5;
+
+/**
+ * Largest reported GPS accuracy (meters) that may contribute to the geofence
+ * buffer. A legitimate phone fix used to claim at a 20–150 m point is well
+ * under this; anything larger is either unusable for the claim or a hostile
+ * value, so it is clamped rather than trusted.
+ */
+export const MAX_GEOFENCE_ACCURACY_METERS = 100;
+
+/**
+ * Hard ceiling on the accuracy-buffered geofence, as a multiple of the point's
+ * configured radius. However the client reports accuracy, the effective fence
+ * can never be more than twice the radius an admin approved.
+ */
+export const MAX_EFFECTIVE_GEOFENCE_MULTIPLIER = 2;
 
 // ---------------------------------------------------------------------------
 // Coordinate validation
@@ -126,13 +146,46 @@ export function isSpeedSafe(
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when the user is within the geofence of a Kronjakt point,
- * accounting conservatively for the reported GPS accuracy.
+ * Computes the accuracy-buffered geofence radius actually used for a claim.
  *
- * The effective threshold is: geofenceRadius + (accuracyMeters * accuracyBuffer).
- * This ensures a user with poor GPS accuracy is not unfairly rejected at the boundary.
- * The buffer is intentionally kept small (0.5) so that accuracy cannot be used to
- * claim from far outside the intended stopping area.
+ * The buffer exists so a member with a mediocre-but-honest GPS fix is not
+ * unfairly rejected right at the boundary. `accuracyMeters` is CLIENT-SUPPLIED,
+ * so the buffer is bounded twice — an unbounded buffer let a claim declare a
+ * huge accuracy and inflate a 75 m fence into kilometres:
+ *
+ *  1. the accuracy that feeds the buffer is clamped to
+ *     MAX_GEOFENCE_ACCURACY_METERS (a non-finite or non-positive value
+ *     contributes nothing at all), and
+ *  2. the result is capped at MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the
+ *     configured radius.
+ *
+ * So the effective radius is always within
+ * `[geofenceRadius, min(geofenceRadius + 50, geofenceRadius * 2)]` — this is
+ * now enforced, not merely intended.
+ *
+ * @param geofenceRadiusMeters - Configured point geofence radius.
+ * @param accuracyMeters       - Reported horizontal GPS accuracy (may be null).
+ */
+export function effectiveGeofenceRadiusMeters(
+  geofenceRadiusMeters: number,
+  accuracyMeters: number | null | undefined,
+): number {
+  const accuracy =
+    typeof accuracyMeters === 'number' && Number.isFinite(accuracyMeters) && accuracyMeters > 0
+      ? Math.min(accuracyMeters, MAX_GEOFENCE_ACCURACY_METERS)
+      : 0;
+  return Math.min(
+    geofenceRadiusMeters + accuracy * GEOFENCE_ACCURACY_BUFFER,
+    geofenceRadiusMeters * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER,
+  );
+}
+
+/**
+ * Returns true when the user is within the geofence of a Kronjakt point,
+ * accounting conservatively — and boundedly — for the reported GPS accuracy.
+ *
+ * See {@link effectiveGeofenceRadiusMeters} for the bounds enforced on the
+ * client-supplied accuracy.
  *
  * @param distanceMeters     - Distance from user to point (server-computed via Haversine).
  * @param geofenceRadiusMeters - Configured point geofence radius.
@@ -143,12 +196,7 @@ export function isWithinGeofence(
   geofenceRadiusMeters: number,
   accuracyMeters: number | null | undefined,
 ): boolean {
-  const accuracyBuffer = 0.5; // conservative multiplier
-  const accuracy = accuracyMeters !== null && accuracyMeters !== undefined && accuracyMeters > 0
-    ? accuracyMeters
-    : 0;
-  const effectiveRadius = geofenceRadiusMeters + accuracy * accuracyBuffer;
-  return distanceMeters <= effectiveRadius;
+  return distanceMeters <= effectiveGeofenceRadiusMeters(geofenceRadiusMeters, accuracyMeters);
 }
 
 // ---------------------------------------------------------------------------

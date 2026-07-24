@@ -95,7 +95,12 @@
         "pointId": { "type": "string", "minLength": 1, "maxLength": 300 },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
-        "accuracyMeters": { "type": ["number", "null"], "minimum": 0 },
+        "accuracyMeters": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Reported horizontal GPS accuracy. Client-supplied, so it is bounded: larger (or non-finite) values are rejected as invalid-argument, and the value that reaches the geofence buffer is clamped server-side — the buffered fence can never exceed twice the point's configured radius."
+        },
         "speedMetersPerSecond": { "type": ["number", "null"] },
         "recordedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "idempotencyKey": {
