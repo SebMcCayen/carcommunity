@@ -25,6 +25,20 @@ const val CHANNEL_MESSAGE_MAX_LENGTH = 2000
 const val CHANNEL_MESSAGES_PAGE_SIZE = 30
 
 /**
+ * Delivery state of a rendered channel message. Server-sourced messages (the live
+ * listener, paginated pages) are always [Sent]. Only the caller's own OPTIMISTIC
+ * bubble — shown instantly on tap before the `*-post` round-trip resolves —
+ * carries [Sending] or [Failed]; it is reconciled away (by [ChannelMessage.clientId],
+ * which the backend stores as the delivered doc id) the moment the real document
+ * arrives from the listener. Mirrors dm/DmDeliveryState.
+ */
+enum class ChannelDeliveryState {
+    Sent,
+    Sending,
+    Failed,
+}
+
+/**
  * One rendered channel message. [createdAtIso] is the pagination cursor for
  * older pages (the `before` argument the `*-list` callables expect). The
  * denormalized sender profile lets the channel render the author's name/avatar
@@ -35,6 +49,14 @@ const val CHANNEL_MESSAGES_PAGE_SIZE = 30
  * message, and for every convoy message (convoyChat-post accepts no mentions).
  * It carries uids and NO offsets — the server never parsed the text — so
  * highlighting maps uids back onto spans client-side via [MentionRendering].
+ *
+ * [clientId] is the sender's optimistic idempotency key (see the DM domain's
+ * DmMessage.clientId for the full rationale). It is used VERBATIM as the message
+ * doc [id] by the backend, so a delivered message carries the key its sender
+ * used; locally it is only the join key that reconciles the caller's OWN pending
+ * bubble against the arriving snapshot ([ChannelThread.mergeWithPending]). It is
+ * NOT an identity/authorization signal — use [senderUid] for that. Null on legacy
+ * messages sent without a key.
  */
 data class ChannelMessage(
     val id: String,
@@ -45,6 +67,14 @@ data class ChannelMessage(
     val createdAtMillis: Long?,
     val createdAtIso: String?,
     val mentionedUids: List<String> = emptyList(),
+    val clientId: String? = null,
+    val deliveryState: ChannelDeliveryState = ChannelDeliveryState.Sent,
+    /**
+     * Why an optimistic send failed, set only on a [ChannelDeliveryState.Failed]
+     * bubble. Drives the specific failure reason shown under the bubble and
+     * whether a retry is offered ([ChannelSendError.isRetryable]). Null otherwise.
+     */
+    val sendError: ChannelSendError? = null,
 )
 
 /**
@@ -86,6 +116,16 @@ enum class ChannelSendError {
     CannotDeliver,
     Generic,
 }
+
+/**
+ * Whether re-sending the SAME message could plausibly succeed. Only [Generic]
+ * (a transient/network/unknown failure) is retryable; the rest are terminal for
+ * this message — signed out, not an active member, invalid input, or
+ * cannot-deliver — so a failed bubble shows the reason WITHOUT a pointless "tap
+ * to retry" that would just fail the same way. Mirrors dm/DmSendError.isRetryable.
+ */
+val ChannelSendError.isRetryable: Boolean
+    get() = this == ChannelSendError.Generic
 
 /** Outcome of a `*-post` callable. */
 sealed interface ChannelSendResult {
@@ -162,6 +202,31 @@ object ChannelThread {
     /** The pagination cursor for the next older page: the earliest message's ISO createdAt. */
     fun oldestCursor(messages: List<ChannelMessage>): String? =
         messages.minByOrNull { it.createdAtMillis ?: Long.MAX_VALUE }?.createdAtIso
+
+    /**
+     * Merges the server-sourced messages ([merge] of older + live) with the
+     * caller's still-[pending] optimistic bubbles for display. A pending bubble
+     * whose id (its clientId) has ALREADY arrived in the server set is dropped:
+     * the delivered document — whose doc id equals that clientId — supersedes it,
+     * so an optimistic send and its snapshot render as exactly ONE message, never
+     * two. The optimistic bubble's local timestamp slots it in the same (newest)
+     * position the real doc will take, so it doesn't jump on reconcile. Mirrors
+     * dm/DmThread.mergeWithPending.
+     */
+    fun mergeWithPending(
+        older: List<ChannelMessage>,
+        live: List<ChannelMessage>,
+        pending: List<ChannelMessage>,
+    ): List<ChannelMessage> {
+        val real = merge(older, live)
+        if (pending.isEmpty()) return real
+        val realIds = real.mapTo(HashSet(real.size)) { it.id }
+        val stillPending = pending.filter { it.id !in realIds }
+        if (stillPending.isEmpty()) return real
+        return (real + stillPending).sortedWith(
+            compareBy({ it.createdAtMillis ?: Long.MAX_VALUE }, { it.id }),
+        )
+    }
 
     /**
      * True when the newest message is unread for the caller: it exists, was NOT
@@ -242,6 +307,7 @@ object ChannelResponseParser {
             createdAtMillis = iso?.let(::channelIsoToMillisOrNull),
             createdAtIso = iso,
             mentionedUids = parseMentionedUids(map["mentionedUids"]),
+            clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

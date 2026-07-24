@@ -71,10 +71,15 @@ fun CommunityChannelRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
     val coordinator =
-        remember(repository) {
+        remember(repository, uid) {
             ChannelChatCoordinator(
-                sender = { text, mentionedUids -> repository.post(text, mentionedUids) },
+                // The clientId makes the optimistic send idempotent + reconcilable
+                // (backend uses it as the message doc id).
+                sender = { text, mentionedUids, clientId ->
+                    repository.post(text, mentionedUids, clientId)
+                },
                 pager = { before -> repository.loadOlder(before) },
+                selfUid = uid,
                 marker = { repository.markRead() },
             )
         }
@@ -85,8 +90,17 @@ fun CommunityChannelRoute(
     val liveMessages = (messagesState as? ChannelMessagesState.Loaded)?.messages ?: emptyList()
 
     val older by coordinator.olderMessages.collectAsState()
-    val displayed = remember(older, liveMessages) { ChannelThread.merge(older, liveMessages) }
-    val sendStatus by coordinator.sendStatus.collectAsState()
+    val pending by coordinator.pendingMessages.collectAsState()
+    // Server messages merged with the caller's optimistic bubbles; a bubble whose
+    // delivered doc has arrived (matched by clientId == doc id) is dropped, so an
+    // optimistic send and its snapshot render as exactly one message.
+    val displayed =
+        remember(older, liveMessages, pending) {
+            ChannelThread.mergeWithPending(older, liveMessages, pending)
+        }
+    // Reconcile the optimistic bubbles against every live snapshot: once the real
+    // document lands, drop the matching pending bubble.
+    LaunchedEffect(liveMessages) { coordinator.onLiveMessages(liveMessages) }
     val pageStatus by coordinator.pageStatus.collectAsState()
     val droppedMentions by coordinator.droppedMentionCount.collectAsState()
     // The next older-page cursor: the earliest loaded message's ISO createdAt, or
@@ -130,14 +144,15 @@ fun CommunityChannelRoute(
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,
         emptyText = stringResource(R.string.channel_emptyCommunity),
-        sendStatus = sendStatus,
         canLoadOlder = pageStatus != ChannelPageStatus.End &&
             displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
             olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
         onSend = { text, mentionedUids -> scope.launch { coordinator.send(text, mentionedUids) } },
+        onRetry = { message ->
+            message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
+        },
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
-        onResetError = { coordinator.resetSendError() },
         modifier = modifier,
         mentionCandidates = mentionCandidates,
         mentionDisplayNames = mentionDisplayNames,

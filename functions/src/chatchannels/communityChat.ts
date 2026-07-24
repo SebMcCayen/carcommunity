@@ -216,7 +216,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { text, mentionedUids } = parsed.input;
+  const { text, mentionedUids, clientId } = parsed.input;
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
@@ -224,6 +224,32 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   const senderProfile = await loadProfile(actor.uid);
   if (!senderProfile) {
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
+  }
+
+  // A client idempotency key is used VERBATIM as the message doc id, so a retry
+  // of the same optimistic send lands on the same document (exactly-once) and the
+  // client reconciles its bubble by matching that id. Without a key we fall back
+  // to an auto-id (legacy) doc.
+  const messageRef =
+    clientId !== undefined ? communityMessagesRef().doc(clientId) : communityMessagesRef().doc();
+
+  // Idempotency: a doc already at this id means this exact send committed on an
+  // earlier attempt. Return it WITHOUT re-resolving mentions, re-writing, or
+  // re-notifying — echoing the ACCEPTED set already stored so the client's
+  // dropped-mention reconciliation still holds. A doc from a DIFFERENT sender is
+  // an id collision / buggy client and must not be swallowed as this caller's.
+  if (clientId !== undefined) {
+    const existing = await messageRef.get();
+    if (existing.exists) {
+      const data = existing.data() ?? {};
+      if (data.senderUid !== actor.uid) {
+        throw new HttpsError('already-exists', 'Message id already used.');
+      }
+      const storedMentions = Array.isArray(data.mentionedUids)
+        ? (data.mentionedUids as unknown[]).filter((uid): uid is string => typeof uid === 'string')
+        : [];
+      return { messageId: messageRef.id, mentionedUids: storedMentions };
+    }
   }
 
   // Dedup + drop self first (free), so only the remainder costs lookups.
@@ -241,10 +267,9 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
     chatMessageExpiry(new Date(), COMMUNITY_CHAT_RETENTION_DAYS),
   );
 
-  const messageRef = communityMessagesRef().doc();
   await messageRef.set(
     buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile, expireAt, mentionedUids: mentions },
+      { senderUid: actor.uid, text, senderProfile, expireAt, mentionedUids: mentions, clientId },
       () => FieldValue.serverTimestamp(),
     ),
   );

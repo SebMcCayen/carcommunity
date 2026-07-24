@@ -145,6 +145,13 @@ export interface ChatMessageSummary {
    * accepts no mentions — see convoyChat.ts).
    */
   mentionedUids: string[];
+  /**
+   * The sender's optimistic idempotency key, present only when the message was
+   * posted with one (it equals the doc id). The client uses it to reconcile its
+   * own pending optimistic bubble against this delivered message; omitted for
+   * legacy key-less sends.
+   */
+  clientId?: string;
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
@@ -158,6 +165,20 @@ const idSchema = z
   .regex(/^[A-Za-z0-9._-]+$/)
   .refine((id) => id !== '.' && id !== '..');
 
+/**
+ * Client idempotency key for an OPTIMISTIC send (mirrors dm-core's
+ * clientMessageIdSchema). When present it is used VERBATIM as the message doc id
+ * (and echoed back as messageId), so the caller's optimistic bubble reconciles
+ * against the delivered document by matching that id — and a retry of the same
+ * send lands on the same doc (exactly-once). Optional for backward compatibility:
+ * an older client that omits it gets an auto-id doc and the previous behaviour.
+ *
+ * Validated verbatim (no `.trim()`): the alphabet already forbids whitespace, so
+ * a key with surrounding spaces is rejected (invalid-argument) rather than
+ * silently normalized into a different id the client's de-dupe wouldn't match.
+ */
+const clientMessageIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
 const postCommunitySchema = z
   .object({
     text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
@@ -166,6 +187,7 @@ const postCommunitySchema = z
     // Over the cap is a hard reject rather than a silent truncation: the picker
     // enforces the same limit, so exceeding it is a client bug worth surfacing.
     mentionedUids: z.array(idSchema).max(MAX_MESSAGE_MENTIONS).optional(),
+    clientId: clientMessageIdSchema.optional(),
   })
   .strict();
 
@@ -186,6 +208,7 @@ const postConvoySchema = z
   .object({
     convoyId: idSchema,
     text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+    clientId: clientMessageIdSchema.optional(),
   })
   .strict();
 
@@ -208,9 +231,9 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
-export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and at most ${MAX_MESSAGE_MENTIONS} mentioned uids.`;
+export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids?, clientId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters, at most ${MAX_MESSAGE_MENTIONS} mentioned uids, and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const LIST_COMMUNITY_EXPECTED = 'Expected { before? } where before is an ISO-8601 timestamp.';
-export const POST_CONVOY_EXPECTED = `Expected { convoyId, text } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters.`;
+export const POST_CONVOY_EXPECTED = `Expected { convoyId, text, clientId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const LIST_CONVOY_EXPECTED = 'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
 
 export function parsePostCommunityInput(data: unknown): ParseResult<PostCommunityInput> {
@@ -290,10 +313,11 @@ export function buildChatMessageDocument(
     senderProfile: ProfileProjection;
     expireAt: unknown;
     mentionedUids?: readonly string[];
+    clientId?: string;
   },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  return {
+  const doc: Record<string, unknown> = {
     senderUid: input.senderUid,
     text: input.text.trim(),
     senderDisplayName: input.senderProfile.displayName,
@@ -302,6 +326,13 @@ export function buildChatMessageDocument(
     createdAt: serverTimestamp(),
     expireAt: input.expireAt,
   };
+  // Stored only when the send carried an idempotency key (also the doc id), so
+  // the client can reconcile its optimistic bubble against the delivered doc.
+  // A key-less (legacy) send stores no `clientId` field at all.
+  if (input.clientId !== undefined) {
+    doc.clientId = input.clientId;
+  }
+  return doc;
 }
 
 /** Maps a stored message doc into the client summary. */
@@ -310,7 +341,7 @@ export function toChatMessageSummary(
   data: Record<string, unknown>,
   createdAtIso: string,
 ): ChatMessageSummary {
-  return {
+  const summary: ChatMessageSummary = {
     id,
     senderUid: typeof data.senderUid === 'string' ? data.senderUid : '',
     text: typeof data.text === 'string' ? data.text : '',
@@ -323,6 +354,13 @@ export function toChatMessageSummary(
       : [],
     createdAt: createdAtIso,
   };
+  // Echoed only when the stored doc carries one (a keyed optimistic send). A
+  // received message the caller didn't send still carries the sender's key, but
+  // it simply won't match any of the caller's pending bubbles.
+  if (typeof data.clientId === 'string') {
+    summary.clientId = data.clientId;
+  }
+  return summary;
 }
 
 /**

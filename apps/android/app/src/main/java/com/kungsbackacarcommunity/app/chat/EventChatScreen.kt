@@ -159,6 +159,30 @@ fun EventChatScreen(
                         )
                     } else {
                         val listState = rememberLazyListState()
+                        // On open, land on the newest message so the latest is
+                        // visible immediately (not the top of history), and keep the
+                        // view pinned to the bottom as new messages arrive — but
+                        // only when it won't fight the reader: either the new message
+                        // is the caller's OWN send, or they are already at/near the
+                        // bottom. Scrolled up reading history, an incoming message
+                        // leaves them put. Keyed on the newest id: on the first
+                        // non-empty load the list isn't laid out yet (totalItems ==
+                        // 0), so this scrolls, and it re-runs for each new message.
+                        // Mirrors the DM thread and group channels.
+                        LaunchedEffect(state.messages.lastOrNull()?.id) {
+                            val newest = state.messages.lastOrNull() ?: return@LaunchedEffect
+                            val layoutInfo = listState.layoutInfo
+                            val lastVisibleIndex =
+                                layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                            val totalItems = layoutInfo.totalItemsCount
+                            val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
+                            val isOwnSend = newest.authorUserId == currentUid
+                            if (isOwnSend || nearBottom) {
+                                // Flat list (no day separators / load-older header),
+                                // so the last message index is the last row.
+                                listState.animateScrollToItem(state.messages.lastIndex)
+                            }
+                        }
                         // Keyboard just came up: the screen's ime padding shrank
                         // this list's viewport from the bottom and a LazyColumn
                         // holds its scroll OFFSET, not its bottom edge, so the

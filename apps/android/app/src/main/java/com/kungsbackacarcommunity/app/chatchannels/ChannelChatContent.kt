@@ -152,9 +152,14 @@ internal val MentionSpansSaver: Saver<List<MentionSpan>, Any> =
  * caller's own vs others' bubbles (others carry the sender's avatar + name, since
  * a channel has an unbounded roster), an optional "load earlier" affordance at
  * the top, and a text input + send pinned to the bottom. Stateless apart from the
- * draft, which clears only once a send succeeds. Unlike the DM [ChatScreen] this
- * is NOT wrapped in the Aero page chrome — it fills whatever container the chat
- * hub gives it (below the hub's tab row).
+ * draft. Unlike the DM [ChatScreen] this is NOT wrapped in the Aero page chrome —
+ * it fills whatever container the chat hub gives it (below the hub's tab row).
+ *
+ * Send is OPTIMISTIC (mirrors the DM thread): on tap the draft clears immediately
+ * and the message appears at once as a "sending" bubble — there is no wait for the
+ * `*-post` round-trip. A bubble that fails to send shows a tappable "tap to retry"
+ * affordance ([onRetry]); the user's text is never lost. The caller merges its own
+ * pending bubbles into [messages] via [ChannelThread.mergeWithPending].
  *
  * @MENTIONS are COMMUNITY-only, switched on by a non-empty [mentionCandidates].
  * Convoy passes none and gets no picker: per the backend, convoyChat-post accepts
@@ -190,12 +195,11 @@ fun ChannelChatContent(
     currentUid: String,
     loading: Boolean,
     emptyText: String,
-    sendStatus: ChannelSendStatus,
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onSend: (String, List<String>) -> Unit,
+    onRetry: (ChannelMessage) -> Unit,
     onLoadOlder: () -> Unit,
-    onResetError: () -> Unit,
     surface: ChatSurface,
     modifier: Modifier = Modifier,
     mentionCandidates: List<MentionCandidate> = emptyList(),
@@ -216,7 +220,6 @@ fun ChannelChatContent(
     var mentions by rememberSaveable(stateSaver = MentionSpansSaver) {
         mutableStateOf(emptyList<MentionSpan>())
     }
-    var awaitingSend by rememberSaveable { mutableStateOf(false) }
     var atMentionCap by rememberSaveable { mutableStateOf(false) }
     // Long-press targets are held by message ID, not by the message itself: the ID
     // is Saveable (so the sheet survives rotation), and resolving it against the
@@ -224,18 +227,6 @@ fun ChannelChatContent(
     // stream (author blocked, message moderated away) while it is showing.
     var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var blockTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
-
-    // Clear the draft only once a send succeeds; keep it on failure.
-    LaunchedEffect(sendStatus) {
-        if (awaitingSend && sendStatus == ChannelSendStatus.Idle) {
-            draft = TextFieldValue("")
-            mentions = emptyList()
-            atMentionCap = false
-            awaitingSend = false
-        } else if (sendStatus is ChannelSendStatus.Failed) {
-            awaitingSend = false
-        }
-    }
 
     val activeQuery =
         if (mentionCandidates.isEmpty()) {
@@ -285,6 +276,7 @@ fun ChannelChatContent(
                     canLoadOlder = canLoadOlder,
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
+                    onRetry = onRetry,
                     onViewProfile = onViewProfile,
                     // Long-press opens the moderation sheet — never on your own
                     // message, never on one with no resolvable author, and never
@@ -303,13 +295,6 @@ fun ChannelChatContent(
             }
         }
 
-        if (sendStatus is ChannelSendStatus.Failed) {
-            Text(
-                text = stringResource(sendStatus.error.messageRes()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
         if (blockStatus == BlockActionStatus.Failed) {
             Text(
                 text = stringResource(R.string.blocking_errorGeneric),
@@ -402,7 +387,6 @@ fun ChannelChatContent(
                         if (droppedMentionCount > 0) onDismissDroppedMentions()
                     }
                     draft = updated
-                    if (sendStatus is ChannelSendStatus.Failed) onResetError()
                 },
                 placeholder = { Text(stringResource(R.string.channel_inputPlaceholder)) },
                 modifier = Modifier.weight(1f).testTag(CHANNEL_INPUT_TEST_TAG),
@@ -410,11 +394,15 @@ fun ChannelChatContent(
             )
             Button(
                 onClick = {
-                    awaitingSend = true
+                    // Optimistic: hand the draft off and clear the input at once.
+                    // The message appears immediately as a "sending" bubble; there
+                    // is no in-flight disabled/spinner state to wait through.
                     onSend(draft.text, MentionDraft(draft.text, mentions).sendableUids)
+                    draft = TextFieldValue("")
+                    mentions = emptyList()
+                    atMentionCap = false
                 },
-                enabled = sendStatus != ChannelSendStatus.Sending &&
-                    ChannelThread.isSendable(draft.text),
+                enabled = ChannelThread.isSendable(draft.text),
             ) {
                 Text(stringResource(R.string.channel_send))
             }
@@ -517,6 +505,7 @@ private fun ChannelMessageList(
     canLoadOlder: Boolean,
     isLoadingOlder: Boolean,
     onLoadOlder: () -> Unit,
+    onRetry: (ChannelMessage) -> Unit,
     onViewProfile: ((String) -> Unit)?,
     onMessageLongPress: (ChannelMessage) -> Unit,
 ) {
@@ -589,6 +578,7 @@ private fun ChannelMessageList(
                         mentionDisplayNames = mentionDisplayNames,
                         dates = dates,
                         onViewProfile = onViewProfile,
+                        onRetry = { onRetry(item.message) },
                         onLongPress = { onMessageLongPress(item.message) },
                     )
             }
@@ -603,6 +593,7 @@ private fun ChannelMessageRow(
     mentionDisplayNames: Map<String, String>,
     dates: ChatDateContext,
     onViewProfile: ((String) -> Unit)?,
+    onRetry: () -> Unit,
     onLongPress: () -> Unit,
 ) {
     if (isOwn) {
@@ -623,6 +614,10 @@ private fun ChannelMessageRow(
                 mentionDisplayNames = mentionDisplayNames,
                 onLongPress = null,
             )
+            // Delivery status sits under your OWN optimistic bubbles only. A
+            // delivered (server-sourced) message is [ChannelDeliveryState.Sent] and
+            // shows nothing. Mirrors the DM thread's status line.
+            OwnDeliveryStatus(message = message, onRetry = onRetry)
         }
         return
     }
@@ -690,6 +685,51 @@ private fun ChannelMessageRow(
                 onLongPress = onLongPress,
             )
         }
+    }
+}
+
+/**
+ * Delivery-status line under the caller's OWN optimistic bubble: "Sending…" while
+ * in flight, and a failure reason on failure — tappable to retry when the failure
+ * is transient ([ChannelSendError.isRetryable]). A delivered
+ * [ChannelDeliveryState.Sent] message shows nothing. Mirrors dm/ChatScreen.
+ */
+@Composable
+private fun OwnDeliveryStatus(message: ChannelMessage, onRetry: () -> Unit) {
+    when (message.deliveryState) {
+        ChannelDeliveryState.Sending ->
+            Text(
+                text = stringResource(R.string.channel_statusSending),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        ChannelDeliveryState.Failed -> {
+            val retryable = message.sendError?.isRetryable ?: true
+            Text(
+                // Retryable (transient) failures invite a resend; terminal ones
+                // (signed out / not a member / cannot deliver) show the specific
+                // reason instead of a "retry" that would just fail.
+                text =
+                    if (retryable) {
+                        stringResource(R.string.channel_statusFailedRetry)
+                    } else {
+                        stringResource(message.sendError!!.messageRes())
+                    },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier =
+                    if (retryable) {
+                        // clickable BEFORE padding so the whole padded area is the
+                        // tap target; the resend reuses the SAME idempotency key so
+                        // it never double-posts.
+                        Modifier.clickable(role = Role.Button, onClick = onRetry)
+                            .padding(vertical = KccSpacing.s2)
+                    } else {
+                        Modifier
+                    },
+            )
+        }
+        ChannelDeliveryState.Sent -> Unit
     }
 }
 

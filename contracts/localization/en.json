@@ -1044,6 +1044,8 @@
     "sendErrorInvalid": "Enter a message to send.",
     "sendErrorCannotDeliver": "This message can't be delivered right now.",
     "sendErrorGeneric": "Couldn't send your message. Please try again.",
+    "statusSending": "Sending…",
+    "statusFailedRetry": "Not delivered. Tap to retry.",
     "mentionPicker": "Mention a member",
     "mentionLimit": "You can mention up to %1$d members in one message.",
     "mentionsNotDelivered": "Your message was posted, but some members you mentioned couldn't be notified."

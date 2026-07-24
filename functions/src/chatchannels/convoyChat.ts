@@ -121,7 +121,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { convoyId, text } = parsed.input;
+  const { convoyId, text, clientId } = parsed.input;
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
@@ -133,6 +133,31 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
   }
 
+  // A client idempotency key is used VERBATIM as the message doc id, so a retry
+  // of the same optimistic send lands on the same document (exactly-once) and the
+  // client can reconcile its bubble by matching that id. Without a key we fall
+  // back to an auto-id (legacy) doc.
+  const messageRef =
+    clientId !== undefined
+      ? convoyMessagesRef(convoyId).doc(clientId)
+      : convoyMessagesRef(convoyId).doc();
+
+  // Idempotency: a doc already at this id means this exact send committed on an
+  // earlier attempt (the client just didn't see the ack). Return it WITHOUT
+  // re-writing or re-notifying — exactly-once however many times the optimistic
+  // client retries. A doc at this id from a DIFFERENT sender is an
+  // (astronomically unlikely) key collision or a buggy client reusing a key: it
+  // must NOT be swallowed as this caller's success, so surface already-exists.
+  if (clientId !== undefined) {
+    const existing = await messageRef.get();
+    if (existing.exists) {
+      if (existing.data()?.senderUid !== actor.uid) {
+        throw new HttpsError('already-exists', 'Message id already used.');
+      }
+      return { messageId: messageRef.id };
+    }
+  }
+
   // TTL: convoy messages are retained CONVOY_CHAT_RETENTION_DAYS days. The
   // field-scoped Firestore TTL policy on `expireAt` for the `messages` collection
   // group (see communityChat.ts) auto-deletes them after that.
@@ -140,10 +165,9 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
-  const messageRef = convoyMessagesRef(convoyId).doc();
   await messageRef.set(
     buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile, expireAt },
+      { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
       () => FieldValue.serverTimestamp(),
     ),
   );
