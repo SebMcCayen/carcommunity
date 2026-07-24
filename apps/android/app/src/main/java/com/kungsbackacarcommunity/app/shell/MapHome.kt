@@ -87,12 +87,17 @@ import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 const val MAP_HOME_TEST_TAG = "map_home"
 
 /**
- * Shared surface opacity for the map-overlay popups (chat, layers, and
- * live-location). Slightly translucent so the live map shows through a little
- * and all the popups read as one consistent floating layer, while staying
- * opaque enough to be readable.
+ * Shared surface opacity for the map-overlay popups (chat, layers,
+ * live-location, and the incident-report type picker). Slightly translucent so
+ * the live map shows through a little and all the popups read as one consistent
+ * floating layer, while staying opaque enough to be readable.
+ *
+ * `internal` (not `private`) so the incident-report type picker
+ * ([com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog]) can
+ * paint its dialog with the exact same alpha rather than inventing a second
+ * one that would drift out of step with these.
  */
-private const val POPUP_SURFACE_ALPHA = 0.92f
+internal const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
