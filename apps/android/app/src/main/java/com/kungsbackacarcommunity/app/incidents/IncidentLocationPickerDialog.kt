@@ -26,12 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -144,7 +142,7 @@ fun IncidentLocationPickerDialog(
             Icon(
                 imageVector = Icons.Filled.Place,
                 contentDescription = null,
-                tint = Color(IncidentPalette.colorArgb(IncidentType.HAZARD)),
+                tint = IncidentPalette.color(IncidentType.HAZARD),
                 modifier =
                     Modifier
                         .align(Alignment.Center)
@@ -242,4 +240,6 @@ private val DEFAULT_CENTER =
         latitude = MapMarkers.DEFAULT_CAMERA.latitude,
     )
 
-private val PIN_SIZE = 48.dp
+// Sized from the shared design scale (s12 = 48dp) so the pin tracks the same
+// control sizing as the rest of the app's map overlays.
+private val PIN_SIZE = KccSpacing.s12
