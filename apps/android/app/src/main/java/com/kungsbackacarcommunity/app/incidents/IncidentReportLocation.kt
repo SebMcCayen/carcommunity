@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.incidents
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.isValidWgs84Coordinate
 
 /**
  * WHERE a new incident report should be placed — the choice the report flow now
@@ -23,22 +24,13 @@ sealed interface ReportLocation {
 /**
  * Whether [location] is a sane WGS-84 coordinate the report flow may submit.
  *
- * Mirrors the backend's own `isValidCoordinate` guard (finite, latitude in
- * [-90, 90], longitude in [-180, 180]) so the client rejects an impossible
- * picked point BEFORE the round-trip rather than letting the callable answer
- * `invalid-argument`. A picker that hands back a NaN centre (no style/camera yet)
- * or an out-of-range value therefore never reaches the wire.
+ * A thin, incident-named alias over the shared [isValidWgs84Coordinate] so this
+ * flow and convoy destinations cannot drift apart on what counts as a sendable
+ * point. Matches the backend's `reportIncident` input schema (finite — Zod
+ * rejects NaN — latitude in [-90, 90], longitude in [-180, 180]), so the client
+ * rejects an impossible picked point BEFORE the round-trip rather than letting
+ * the callable answer `invalid-argument`. A picker that hands back a NaN centre
+ * (no style/camera yet) or an out-of-range value never reaches the wire.
  */
-fun isValidReportCoordinate(location: LatLng): Boolean {
-    val lat = location.latitude
-    val lng = location.longitude
-    return lat.isFinite() &&
-        lng.isFinite() &&
-        lat in MIN_LATITUDE..MAX_LATITUDE &&
-        lng in MIN_LONGITUDE..MAX_LONGITUDE
-}
-
-private const val MIN_LATITUDE = -90.0
-private const val MAX_LATITUDE = 90.0
-private const val MIN_LONGITUDE = -180.0
-private const val MAX_LONGITUDE = 180.0
+fun isValidReportCoordinate(location: LatLng): Boolean =
+    isValidWgs84Coordinate(latitude = location.latitude, longitude = location.longitude)

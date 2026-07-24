@@ -29,6 +29,28 @@ data class LatLng(
 )
 
 /**
+ * Whether a coordinate is finite and inside the WGS-84 bounds.
+ *
+ * The single definition of "is this a coordinate we may send" for every feature
+ * that accepts a user-placed or parsed point — convoy destinations, incident
+ * reports — so the bounds cannot drift apart between them. Lives next to
+ * [LatLng] because it is the same Android-free, unit-testable layer.
+ *
+ * Client-side only as a cheap pre-check; each backend re-validates and stays
+ * the actual gate.
+ */
+fun isValidWgs84Coordinate(latitude: Double, longitude: Double): Boolean =
+    latitude.isFinite() &&
+        longitude.isFinite() &&
+        latitude in MIN_LATITUDE..MAX_LATITUDE &&
+        longitude in MIN_LONGITUDE..MAX_LONGITUDE
+
+private const val MIN_LATITUDE = -90.0
+private const val MAX_LATITUDE = 90.0
+private const val MIN_LONGITUDE = -180.0
+private const val MAX_LONGITUDE = 180.0
+
+/**
  * A geocoding result the user can pick as a destination. [point] is the
  * resolved coordinate (Mapbox geocoding v6 returns it inline). [name] is the
  * primary label (e.g. a street or place name); [address] is the fuller

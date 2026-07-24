@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.isValidWgs84Coordinate
 
 /**
  * The convoy SHARED DESTINATION: one member picks a place, and every other
@@ -420,12 +421,15 @@ object ConvoyDestinations {
         }
     }
 
-    /** Whether a coordinate is inside the valid WGS-84 bounds and finite. */
+    /**
+     * Whether a coordinate is inside the valid WGS-84 bounds and finite.
+     *
+     * Delegates to the shared [isValidWgs84Coordinate] so convoy destinations and
+     * incident reports validate against ONE definition of a sendable point; kept
+     * as a named member because the call sites here read as a convoy-domain rule.
+     */
     fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
-        latitude.isFinite() &&
-            longitude.isFinite() &&
-            latitude in -90.0..90.0 &&
-            longitude in -180.0..180.0
+        isValidWgs84Coordinate(latitude = latitude, longitude = longitude)
 
     /**
      * What to tell a member who is CURRENTLY navigating to the shared

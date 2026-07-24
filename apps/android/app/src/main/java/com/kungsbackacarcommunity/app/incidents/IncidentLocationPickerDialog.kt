@@ -118,17 +118,23 @@ fun IncidentLocationPickerDialog(
                         mapViewRef = this
                         runCatching { scalebar.updateSettings { enabled = false } }
                         runCatching { compass.updateSettings { enabled = false } }
-                        mapboxMap.loadStyle(Style.STANDARD) { _ ->
-                            runCatching {
-                                val center = initialCenter ?: DEFAULT_CENTER
-                                mapboxMap.setCamera(
-                                    cameraOptions {
-                                        center(Point.fromLngLat(center.longitude, center.latitude))
-                                        zoom(MapMarkers.OWN_MARKER_ZOOM)
-                                    },
-                                )
-                            }
+                        // Camera set SYNCHRONOUSLY, before loadStyle — same order as
+                        // MapScreen. It must not wait for the style callback: a fresh
+                        // MapView's cameraState centre is Mapbox's (0, 0) default,
+                        // which is finite and in-bounds, so a confirm tapped before
+                        // the style resolved would happily report an incident at Null
+                        // Island instead of where the user is looking. Setting it here
+                        // makes the point under the pin deterministic from frame one.
+                        runCatching {
+                            val center = initialCenter ?: DEFAULT_CENTER
+                            mapboxMap.setCamera(
+                                cameraOptions {
+                                    center(Point.fromLngLat(center.longitude, center.latitude))
+                                    zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                },
+                            )
                         }
+                        runCatching { mapboxMap.loadStyle(Style.STANDARD) }
                     }
                 },
                 onRelease = { mapView ->
