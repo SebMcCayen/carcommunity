@@ -80,14 +80,23 @@ class ChannelChatCoordinator(
     private val dropped = MutableStateFlow(0)
 
     /**
-     * How many of the last send's @mentions the server DROPPED — the composer's
-     * optimistic picks reconciled against the accepted set the `*-post` response
-     * echoed back. Nonzero means a member the user deliberately named was not
-     * notified (they deleted their account, lost their subscription, or blocked
-     * the sender between picking and posting), which is worth one quiet line;
-     * the message itself was still posted. Self-mentions and duplicates cannot
-     * land here — the picker excludes the caller and the draft dedupes — so every
-     * drop counted is a real one. Cleared by [dismissDroppedMentions].
+     * How many @mentions the server DROPPED across the sends the user has not
+     * acknowledged yet — the composer's optimistic picks reconciled against the
+     * accepted set each `*-post` response echoed back. Nonzero means a member the
+     * user deliberately named was not notified (they deleted their account, lost
+     * their subscription, or blocked the sender between picking and posting),
+     * which is worth one quiet line; the message itself was still posted.
+     * Self-mentions and duplicates cannot land here — the picker excludes the
+     * caller and the draft dedupes — so every drop counted is a real one.
+     *
+     * ACCUMULATES rather than tracking only the latest send, and is cleared ONLY
+     * by [dismissDroppedMentions]. Optimistic send frees the composer the instant
+     * a message is queued, so several sends are routinely in flight at once and
+     * their acks can resolve in any order. Resetting this per send — or letting
+     * each ack overwrite it — would let a later send that dropped nothing wipe an
+     * earlier send's note before the user ever saw it, silently swallowing the one
+     * signal that a mention didn't reach anyone. The count only ever falls when
+     * the user dismisses it.
      */
     val droppedMentionCount: StateFlow<Int> = dropped.asStateFlow()
 
@@ -102,7 +111,6 @@ class ChannelChatCoordinator(
         val trimmed = text.trim()
         val clientId = idGenerator()
         val picked = mentionedUids.distinct()
-        dropped.value = 0
         val optimistic =
             ChannelMessage(
                 id = clientId,
@@ -161,7 +169,12 @@ class ChannelChatCoordinator(
                     // Reconcile: the accepted set is authoritative, and may be a
                     // strict subset of what we sent.
                     val accepted = result.mentionedUids.toSet()
-                    dropped.value = mentionedUids.count { it !in accepted }
+                    val droppedHere = mentionedUids.count { it !in accepted }
+                    // Atomic ADD, never an assignment: concurrent sends resolve on
+                    // their own coroutines and in any order, so assigning would let
+                    // whichever ack happens to land last decide the note — including
+                    // a mention-free send zeroing a drop the user hasn't seen.
+                    if (droppedHere > 0) dropped.update { it + droppedHere }
                 }
                 // Keep the SPECIFIC error so the UI can explain why and offer a
                 // retry only when it could actually help ([ChannelSendError.isRetryable]).

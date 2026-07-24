@@ -208,6 +208,68 @@ class ChannelChatCoordinatorTest {
         assertEquals(0, c.droppedMentionCount.value)
     }
 
+    // Optimistic send frees the composer the moment a message is queued, so the
+    // next send can start (and finish) while an earlier one's note is still on
+    // screen. The dropped-mention note must therefore survive until the USER
+    // clears it — nothing about a later send may retract it.
+
+    @Test
+    fun `a later mention-free send does not erase an earlier send's dropped note`() = runTest {
+        val f = Fakes().apply { sendResult = ChannelSendResult.Sent("m1", emptyList()) }
+        val ids = listOf("cid-1", "cid-2").iterator()
+        val c = coordinator(f, ids = { ids.next() })
+
+        c.send("hi @Alice", listOf("uid-a"))
+        assertEquals(1, c.droppedMentionCount.value)
+
+        // A perfectly ordinary follow-up message that mentions nobody.
+        f.sendResult = ChannelSendResult.Sent("m2", emptyList())
+        c.send("och hej igen")
+
+        // Still 1: the user has not acknowledged the drop, so it stays put.
+        assertEquals(1, c.droppedMentionCount.value)
+        c.dismissDroppedMentions()
+        assertEquals(0, c.droppedMentionCount.value)
+    }
+
+    @Test
+    fun `a later fully-accepted send does not erase an earlier send's dropped note`() = runTest {
+        val f = Fakes().apply { sendResult = ChannelSendResult.Sent("m1", emptyList()) }
+        val ids = listOf("cid-1", "cid-2").iterator()
+        val c = coordinator(f, ids = { ids.next() })
+
+        c.send("hi @Alice", listOf("uid-a"))
+        assertEquals(1, c.droppedMentionCount.value)
+
+        // The second send's mention IS accepted — its own drop count is zero, and
+        // assigning that would wipe the first send's note.
+        f.sendResult = ChannelSendResult.Sent("m2", listOf("uid-b"))
+        c.send("hi @Bob", listOf("uid-b"))
+        assertEquals(1, c.droppedMentionCount.value)
+    }
+
+    @Test
+    fun `concurrent sends accumulate their drops instead of racing to overwrite`() = runTest {
+        val f = Fakes().apply { sendResult = ChannelSendResult.Sent("m1", emptyList()) }
+        val ids = listOf("cid-1", "cid-2").iterator()
+        val c = coordinator(f, ids = { ids.next() })
+        f.gate = CompletableDeferred()
+
+        // Both in flight at once — exactly what the composer now permits.
+        val first = launch { c.send("hi @Alice", listOf("uid-a")) }
+        val second = launch { c.send("hi @Bob", listOf("uid-b")) }
+        runCurrent()
+        assertEquals(2, c.pendingMessages.value.size)
+
+        f.gate!!.complete(Unit)
+        first.join()
+        second.join()
+
+        // Two separate mentions went undelivered, so the count is 2 — an
+        // assignment would leave whichever ack resolved last showing 1.
+        assertEquals(2, c.droppedMentionCount.value)
+    }
+
     @Test
     fun `blank message is not sent and adds no bubble`() = runTest {
         val f = Fakes()

@@ -117,11 +117,13 @@ export interface PostConvoyResponse {
 
 /**
  * The idempotent result of a keyed send that ALREADY committed, or null when
- * nothing is stored at that id yet (so the caller should go on and write it).
+ * nothing is stored at that id (so the `create()` that just failed has nothing
+ * to replay and the caller must surface that).
  *
- * Used from both idempotency points — the pre-write fast-path read and the
- * `create()` ALREADY_EXISTS handler — so a sequential retry and a concurrent one
- * resolve identically instead of drifting apart.
+ * Read ONLY after a `create()` lost the race, never speculatively: the write is
+ * the guard, so a normal first-attempt send needs no read at all, and a retry —
+ * whether it arrives after the original committed or alongside it — resolves
+ * through this one path.
  *
  * A doc at this id from a DIFFERENT sender is an (astronomically unlikely) key
  * collision or a buggy client reusing a key: it must NOT be swallowed as this
@@ -169,19 +171,6 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
       ? convoyMessagesRef(convoyId).doc(clientId)
       : convoyMessagesRef(convoyId).doc();
 
-  // Idempotency FAST PATH: a doc already at this id means this exact send
-  // committed on an earlier attempt (the client just didn't see the ack). Return
-  // it WITHOUT re-writing or re-notifying — exactly-once however many times the
-  // optimistic client retries. This read is only an optimisation that skips the
-  // write on the common SEQUENTIAL retry; the guarantee itself comes from the
-  // `create()` below, which is what makes CONCURRENT retries safe too.
-  if (clientId !== undefined) {
-    const replay = await replayCommittedSend(messageRef, actor.uid);
-    if (replay) {
-      return replay;
-    }
-  }
-
   // TTL: convoy messages are retained CONVOY_CHAT_RETENTION_DAYS days. The
   // field-scoped Firestore TTL policy on `expireAt` for the `messages` collection
   // group (see communityChat.ts) auto-deletes them after that.
@@ -189,12 +178,14 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
-  // `create()`, NOT `set()`: the write is the idempotency guard, so it has to be
-  // the thing that arbitrates. Two concurrent retries of the same optimistic send
-  // both clear the read above (neither has written yet); with `set()` both would
-  // then commit and BOTH would run the notification fan-out below. With
-  // `create()` exactly one wins and the loser replays the winner's result without
-  // any side effects of its own.
+  // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
+  // only one. A pre-read ("does this id exist yet?") cannot be the guard — two
+  // concurrent retries of the same optimistic send both observe "missing" before
+  // either writes, so with `set()` both would commit and BOTH would run the
+  // notification fan-out below. With `create()` Firestore arbitrates: exactly one
+  // wins, and the loser replays the winner's result with no side effects of its
+  // own. Since the guard needs no read, the send costs a single write on the
+  // normal path and only pays for a read when it actually loses a race.
   try {
     await messageRef.create(
       buildChatMessageDocument(
