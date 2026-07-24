@@ -378,7 +378,10 @@ service cloud.firestore {
     // owner writes would bypass the cap and validation). The document stays
     // authenticated-readable by design. `registrationPlate` is stored here
     // ON PURPOSE — a DELIBERATELY PUBLIC, user-entered field (Seb product
-    // decision) shown on the car profile to other members; VIN / insurance /
+    // decision). Note the read below is `isAuthenticated()`, i.e. ANY signed-in
+    // user: it is NOT limited to members and is NOT withdrawn from suspended
+    // accounts, so the plate is wider than "shown to other members". Narrowing
+    // it later means changing this read rule, not just the UI. VIN / insurance /
     // location remain out (docs/firebase-data-model.md). These rules do not
     // field-validate the vehicle doc (all writes are callable-only), so adding
     // the plate needs no rule change here.

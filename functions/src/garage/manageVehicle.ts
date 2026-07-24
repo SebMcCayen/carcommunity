@@ -25,9 +25,11 @@
  * writes still go through these callables: the per-user vehicle cap is
  * enforced race-safely, and deletion cleans the vehicleImages storage
  * prefix. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered field
- * (Seb product decision) stored on this authenticated-readable doc so members can show
- * their plate on their car profile — it is normalised (trim/collapse/uppercase),
- * never format-rejected. VIN / insurance / location remain unrepresentable, as
+ * (Seb product decision) stored on this authenticated-readable doc so the owner
+ * can publish their plate — it is normalised (trim/collapse/uppercase),
+ * never format-rejected. Audience: the `vehicles` read rule is
+ * `isAuthenticated()`, so ANY signed-in user can read it — not member-gated and
+ * not withdrawn from suspended accounts. VIN / insurance / location remain unrepresentable, as
  * those were never meant to be public. Ownership failures return not-found —
  * never permission-denied — so callers cannot probe whether another user's
  * vehicle exists.

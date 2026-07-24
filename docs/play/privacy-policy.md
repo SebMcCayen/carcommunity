@@ -86,11 +86,13 @@ actually stores.
 - Vehicle **make, model, year, powertrain, engine description, free-text description**, and
   **photos** you upload (up to 5 vehicles).
 - **Registration number (optional).** You may add your vehicle's registration plate. This
-  field is **public to other signed-in members by design** — it is stored on the shared
-  vehicle record, which any signed-in member can read, and it is shown on your car profile.
+  field is **public by design** — it is stored on the shared vehicle record, which **any
+  signed-in user of the App can read**. That is broader than "members": the read permission
+  is not limited to paying members, and it is not withdrawn from suspended accounts. Treat
+  anything you put here as visible to the whole signed-in community, permanently.
   It is entirely optional: leave it blank (or clear it later) and nothing is stored. We
-  normalise what you type (trim spaces, upper-case) but never verify it, and we do not use
-  it to query any vehicle register.
+  normalise what you type (trim the ends, collapse repeated spaces, upper-case) but never
+  verify it, and we do not use it to query any vehicle register.
 - We deliberately **do not** ask for or record VIN, insurance details, or a vehicle's
   location as structured data in our database.
 - **Photo metadata (EXIF):** photos (vehicle and profile) are uploaded as the original image
@@ -288,8 +290,8 @@ the points ledger) rather than for all writes, **hashing** of sensitive tokens (
 purchase tokens) so raw values are never stored, device attestation (Play Integrity / App
 Check) to deter abuse, and data minimization by design (e.g. no VIN or insurance data;
 approximate-area labels instead of exact addresses where possible — the optional registration
-number in §4.2 is the one vehicle identifier we store, and only because you chose to publish
-it). No system is perfectly secure, but we
+number in §4.2 is the one vehicle identifier we store, it is readable by any signed-in user,
+and it is stored only because you chose to publish it). No system is perfectly secure, but we
 take reasonable measures appropriate to the data.
 
 ---

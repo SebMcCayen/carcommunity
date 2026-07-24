@@ -708,7 +708,7 @@
     <string name="garage_engineDescription">Motor, valfritt</string>
     <string name="garage_description">Beskrivning, valfritt</string>
     <string name="garage_registrationPlate">Registreringsnummer, valfritt</string>
-    <string name="garage_registrationPlateHint">Offentligt — alla inloggade medlemmar kan se det. Lämna tomt för att hoppa över.</string>
+    <string name="garage_registrationPlateHint">Offentligt — alla inloggade användare kan se det. Lämna tomt för att hoppa över.</string>
     <string name="garage_powertrain_petrol">Bensin</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>

@@ -86,10 +86,13 @@ Two account-wide answers (set once in the form):
 ### Other info (bio) — **Collected: Yes (optional)**
 - Free-text profile bio. **Shared:** No. **Optional.** **Purpose:** App functionality.
   Encrypted: Yes. Deletion: Yes.
-- **Vehicle registration number.** User-entered plate on a garage vehicle. **Shared:** No
-  (not sent to third parties), but **visible to every signed-in member by design** — it is
-  stored on the `vehicles` document, which is authenticated-readable, and shown on the car
-  profile. **Optional** (blank clears it). **Purpose:** App functionality. Encrypted: Yes.
+- **Vehicle registration number.** User-entered plate on a garage vehicle, normalised
+  server-side (trim the ends, collapse repeated whitespace, upper-case) and never verified.
+  **Shared:** No (not sent to third parties), but **readable by every signed-in user by
+  design** — it is stored on the `vehicles` document, whose read rule is
+  `allow read: if isAuthenticated()`. Note this is wider than "members": it is gated on
+  neither an active membership nor a suspension check. **Optional** (blank clears it).
+  **Purpose:** App functionality. Encrypted: Yes.
   Deletion: Yes — cleared by the user at any time, and removed with the vehicle/account.
 - **Source:** `functions/src/garage/garage-core.ts` (`normaliseRegistrationPlate`),
   `firebase/firestore.rules` (`match /vehicles/{vehicleId}`).
@@ -210,7 +213,8 @@ Two account-wide answers (set once in the form):
 map-view/technical data to Mapbox — see the processor note at the top and confirm with legal.
 
 † The registration number is not "shared" in Play's sense (no third party receives it), but it
-is deliberately visible to every other signed-in member — the user opts in by filling the field.
+is deliberately readable by every other signed-in user — not just members — and the user opts
+in by filling the field.
 
 ---
 

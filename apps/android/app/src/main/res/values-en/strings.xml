@@ -708,7 +708,7 @@
     <string name="garage_engineDescription">Engine, optional</string>
     <string name="garage_description">Description, optional</string>
     <string name="garage_registrationPlate">Registration number, optional</string>
-    <string name="garage_registrationPlateHint">Public — any signed-in member can see this. Leave blank to skip.</string>
+    <string name="garage_registrationPlateHint">Public — any signed-in user can see this. Leave blank to skip.</string>
     <string name="garage_powertrain_petrol">Petrol</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>

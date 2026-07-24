@@ -10,9 +10,12 @@
  * - Each user is limited to MAX_VEHICLES_PER_USER vehicles.
  * - The vehicles document is authenticated-readable by design
  *   (docs/firebase-data-model.md). `registrationPlate` is a DELIBERATELY
- *   PUBLIC, user-entered field (Seb product decision 2026-07): members opt to
- *   show their plate on their public car profile, so it is stored here on the
- *   authenticated-readable doc on purpose. It is the one exception — VIN, insurance
+ *   PUBLIC, user-entered field (Seb product decision 2026-07): the owner opts in
+ *   by filling the field, and it is then stored here on the
+ *   authenticated-readable doc on purpose. Be precise about the audience — the
+ *   `vehicles` read rule is `isAuthenticated()`, so ANY signed-in user can read
+ *   the plate; it is gated on neither an active membership nor a suspension
+ *   check, and "shown to other members" understates it. It is the one exception — VIN, insurance
  *   data, and vehicle location remain unrepresentable and must never be added,
  *   as those were never intended to be public. The plate is a free-form,
  *   normalised string (trim/collapse-whitespace/uppercase, no country regex) so
