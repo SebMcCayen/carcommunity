@@ -216,6 +216,48 @@ class EventTest {
         assertEquals(listOf("keep-upcoming", "keep-ongoing"), kept.map { it.id })
     }
 
+    // ---- Pin expiry scheduling (the map re-filters on a clock) ---------------
+
+    @Test
+    fun `nextPinExpiryMillis is the soonest pinned event's effective end`() {
+        val now = 10_000L
+        val next =
+            Events.nextPinExpiryMillis(
+                listOf(
+                    positioned("later", now + 9_000L, EventStatus.PUBLISHED),
+                    // Ends soonest of the pinned ones → this is the wake-up.
+                    positioned("soonest", now - 1_000L, EventStatus.PUBLISHED, endsAtMillis = now + 500L),
+                    // Already past: not pinned, so it must not schedule anything.
+                    positioned("past", now - 5_000L, EventStatus.PUBLISHED, endsAtMillis = now - 1_000L),
+                    // Not pinned (cancelled) even though it ends sooner than "soonest".
+                    positioned("cancelled", now + 100L, EventStatus.CANCELLED),
+                ),
+                now,
+            )
+        assertEquals(now + 500L, next)
+    }
+
+    @Test
+    fun `nextPinExpiryMillis is null when nothing pinned is time-limited`() {
+        val now = 10_000L
+        // No pins at all.
+        assertNull(Events.nextPinExpiryMillis(emptyList(), now))
+        // Only an untimed pin: it never expires, so there is nothing to schedule.
+        assertNull(
+            Events.nextPinExpiryMillis(
+                listOf(positioned("no-time", startsAtMillis = null, status = EventStatus.PUBLISHED)),
+                now,
+            ),
+        )
+        // Only a non-pinned (draft) event: also nothing to schedule.
+        assertNull(
+            Events.nextPinExpiryMillis(
+                listOf(positioned("draft", now + 1_000L, EventStatus.DRAFT)),
+                now,
+            ),
+        )
+    }
+
     private fun event(id: String, startsAtMillis: Long?) =
         EventSummary(
             id = id,

@@ -331,8 +331,32 @@ object Events {
                 event.latitude != null &&
                 event.longitude != null &&
                 run {
-                    val effectiveEnd = event.endsAtMillis ?: event.startsAtMillis
+                    val effectiveEnd = effectivePinEndMillis(event)
                     effectiveEnd == null || effectiveEnd >= nowMillis
                 }
         }
+
+    /**
+     * When the SOONEST currently-pinned event stops qualifying for a pin, i.e. the
+     * earliest effective end at or after [nowMillis] among the events
+     * [mapPinEvents] would keep. Null when nothing on the map is time-limited (no
+     * pins, or only pins with no readable time), meaning the pin set cannot change
+     * on its own and no re-filter needs scheduling.
+     *
+     * Exists because the "not past" cutoff is evaluated against a clock: without a
+     * scheduled re-filter the pins would only be recomputed when the Firestore
+     * list itself changed, so an event that ended while the map sat open would
+     * keep its pin. The shell turns this into a single delay-to-expiry (the same
+     * pattern the live-sharing expiry uses) rather than polling every frame.
+     */
+    fun nextPinExpiryMillis(events: List<EventSummary>, nowMillis: Long): Long? =
+        mapPinEvents(events, nowMillis).mapNotNull { effectivePinEndMillis(it) }.minOrNull()
+
+    /**
+     * The moment an event stops being "not past" for pin purposes: its explicit
+     * end, else its start (a start-only event is past once it has started). Null
+     * when neither time is readable — such an event is never treated as past.
+     */
+    private fun effectivePinEndMillis(event: EventSummary): Long? =
+        event.endsAtMillis ?: event.startsAtMillis
 }

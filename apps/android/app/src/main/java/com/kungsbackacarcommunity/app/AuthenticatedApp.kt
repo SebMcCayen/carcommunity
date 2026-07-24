@@ -745,21 +745,33 @@ fun AuthenticatedApp(
                     .collectAsState(initial = EventsListState.Loading)
             val publishedEventsForMap: List<EventSummary> =
                 (publishedEventsState as? EventsListState.Loaded)?.events ?: emptyList()
-            val mapEventMarkers =
-                remember(publishedEventsForMap) {
-                    // now-based upcoming filter is snapshotted per list change; a
-                    // pin is never long-lived enough for the coarse cutoff to
-                    // matter, and re-filtering every frame would be wasteful.
-                    Events.mapPinEvents(publishedEventsForMap, System.currentTimeMillis())
-                        .mapNotNull { event ->
-                            val lat = event.latitude
-                            val lng = event.longitude
-                            if (lat != null && lng != null) {
-                                MapEventMarker(id = event.id, longitude = lng, latitude = lat)
-                            } else {
-                                null
+            // The "not past" cutoff is evaluated against a clock, so filtering once
+            // per list change would leave an ended event pinned until an unrelated
+            // Firestore snapshot arrived. Instead: filter now, then sleep exactly
+            // until the soonest pinned event ends and filter again — one scheduled
+            // wake-up rather than per-frame work or a poll (the same
+            // delay-to-expiry shape the live-sharing expiry uses above). Falls out
+            // of the loop when nothing left on the map is time-limited.
+            val mapEventMarkers by
+                produceState(initialValue = emptyList<MapEventMarker>(), publishedEventsForMap) {
+                    while (true) {
+                        val now = nowMillis()
+                        value =
+                            Events.mapPinEvents(publishedEventsForMap, now).mapNotNull { event ->
+                                val lat = event.latitude
+                                val lng = event.longitude
+                                if (lat != null && lng != null) {
+                                    MapEventMarker(id = event.id, longitude = lng, latitude = lat)
+                                } else {
+                                    null
+                                }
                             }
-                        }
+                        val nextExpiry =
+                            Events.nextPinExpiryMillis(publishedEventsForMap, now) ?: break
+                        // Wake just AFTER the end instant so the re-filter sees the
+                        // event as past (the filter keeps `end >= now`).
+                        delay((nextExpiry - now + 1L).coerceAtLeast(1L))
+                    }
                 }
             // The event pin the user TAPPED, resolved back from the id the surface
             // published to the event we already hold. Derived (not snapshotted) so

@@ -58,13 +58,6 @@ export interface EventTeaser {
   startsAt: string;
   endsAt: string | null;
   approximateArea: string;
-  // PUBLIC map location (deliberate 2026-07 change): the place name and
-  // coordinate pair are teaser data now, so every signed-in user can render the
-  // event as a pin on the community map. The precise street address and the long
-  // description remain member-only (EventDetail).
-  locationName: string | null;
-  latitude: number | null;
-  longitude: number | null;
   isOfficial: boolean;
   status: EventStatus;
 }

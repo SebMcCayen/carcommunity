@@ -80,32 +80,13 @@ interface UpdateAuditMeta {
   changedFields: string[];
 }
 
-function toEventTeaser(
-  event: Pick<
-    Event,
-    | 'id'
-    | 'title'
-    | 'startsAt'
-    | 'endsAt'
-    | 'approximateArea'
-    | 'locationName'
-    | 'latitude'
-    | 'longitude'
-    | 'isOfficial'
-    | 'status'
-  >,
-): EventTeaser {
+function toEventTeaser(event: Pick<Event, 'id' | 'title' | 'startsAt' | 'endsAt' | 'approximateArea' | 'isOfficial' | 'status'>): EventTeaser {
   return {
     id: event.id,
     title: event.title,
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt ? event.endsAt.toISOString() : null,
     approximateArea: event.approximateArea,
-    // Map location is public teaser data now (2026-07): every signed-in user
-    // can render the event as a pin. address + description stay member-only.
-    locationName: event.locationName ?? null,
-    latitude: event.latitude ?? null,
-    longitude: event.longitude ?? null,
     isOfficial: event.isOfficial,
     status: event.status,
   };

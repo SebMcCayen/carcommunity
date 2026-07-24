@@ -33,6 +33,8 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
+import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
+import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 
 /**
  * Pure helpers for the event location picker, kept Android-free so the "where
@@ -116,6 +118,13 @@ fun EventLocationPickerScreen(
     var centerLat by remember { mutableStateOf(startLat) }
     var centerLng by remember { mutableStateOf(startLng) }
 
+    // The camera-change listener, held so it can be detached in onRelease
+    // alongside destroying the MapView. The picker is opened and closed
+    // repeatedly from the create form, and a MapView left undestroyed leaks its
+    // GL/rendering resources each time — same teardown MapScreen and
+    // MapboxMapSurface do.
+    val cameraListenerHolder = remember { arrayOfNulls<OnCameraChangeListener>(1) }
+
     Box(modifier = modifier.fillMaxSize()) {
         if (hasToken) {
             AndroidView(
@@ -136,12 +145,27 @@ fun EventLocationPickerScreen(
                         // Track the camera centre so Confirm captures exactly what
                         // is under the fixed pin. cameraState is the honest read of
                         // where the camera settled after a pan.
-                        mapboxMap.addOnCameraChangeListener {
-                            val center = mapboxMap.cameraState.center
-                            centerLat = center.latitude()
-                            centerLng = center.longitude()
-                        }
+                        val listener =
+                            object : OnCameraChangeListener {
+                                @Suppress("UNUSED_PARAMETER")
+                                override fun onCameraChanged(eventData: CameraChangedEventData) {
+                                    val center = mapboxMap.cameraState.center
+                                    centerLat = center.latitude()
+                                    centerLng = center.longitude()
+                                }
+                            }
+                        cameraListenerHolder[0] = listener
+                        mapboxMap.addOnCameraChangeListener(listener)
                     }
+                },
+                onRelease = { mapView ->
+                    // Detach before destroying so a torn-down map can never write
+                    // back into the (gone) composition state.
+                    cameraListenerHolder[0]?.let { listener ->
+                        runCatching { mapView.mapboxMap.removeOnCameraChangeListener(listener) }
+                    }
+                    cameraListenerHolder[0] = null
+                    runCatching { mapView.onDestroy() }
                 },
             )
         } else {

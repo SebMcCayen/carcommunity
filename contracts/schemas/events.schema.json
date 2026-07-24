@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/events.schema.json",
   "title": "Events and RSVP contract",
-  "description": "Language-neutral event and RSVP shapes shared by iOS, Android, backend, and admin. Values are sourced from packages/shared/src/events.ts. Teasers expose safe information PLUS the event's map location (place name + coordinates) to all authenticated users, so every signed-in user can see event pins on the community map (deliberate 2026-07 change from the earlier location-hidden teaser). The member-gated detail adds only the long description and the precise street address; admin shapes are admin/owner-only.",
+  "description": "Language-neutral event and RSVP shapes shared by iOS, Android, backend, and admin. Values were originally sourced from packages/shared/src/events.ts; that package now serves only the FROZEN legacy stack (services/api + apps/mobile), so this schema — not the TypeScript there — is the source of truth for the Firebase backend and the native clients, and the two deliberately diverge wherever a change lands in Firebase only. Teasers expose safe information PLUS the event's map location (place name + coordinates) to all authenticated users, so every signed-in user can see event pins on the community map (deliberate 2026-07 change from the earlier location-hidden teaser; Firebase + native clients only — the frozen legacy REST teaser keeps the old location-hidden shape, since frozen code takes bug fixes and migration work only). The member-gated detail adds only the long description and the precise street address; admin shapes are admin/owner-only.",
   "$defs": {
     "eventStatus": {
       "type": "string",
