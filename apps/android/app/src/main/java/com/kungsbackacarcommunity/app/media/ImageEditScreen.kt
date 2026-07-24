@@ -228,6 +228,13 @@ fun ImageEditScreen(
                         }
                     }
                     .pointerInput(bitmap) {
+                        // `detectTransformGestures` reports `rotation` in DEGREES
+                        // (its KDoc: "the rotation angle in degrees"; it derives
+                        // from PointerEvent.calculateRotation, also degrees) — the
+                        // SAME unit graphicsLayer.rotationZ takes and the unit the
+                        // ImageEditGeometry / ImageCompressor `angle`/`rotationDegrees`
+                        // pipeline expects. Accumulate it directly; do NOT convert
+                        // to/from radians (that would break rotation entirely).
                         detectTransformGestures(panZoomLock = false) { _, pan, gestureZoom, rotation ->
                             angle += rotation
                             scale *= gestureZoom
@@ -286,6 +293,13 @@ fun ImageEditScreen(
                 // reshapes the crop rectangle; the transform is re-clamped so the
                 // (possibly new-aspect) frame stays covered with no empty corner.
                 if (frameShape == ImageEditFrameShape.FREEFORM && boxSize != Size.Zero) {
+                    // dp → px for this density: the touch box is centred on its
+                    // corner (offset by half its size), the dot is drawn at the
+                    // dp radius, and a corner drag can shrink the frame no smaller
+                    // than the dp minimum. All scale correctly on any density.
+                    val touchHalfPx = with(density) { HandleTouchSize.toPx() } / 2f
+                    val handleRadiusPx = with(density) { HandleVisualRadius.toPx() }
+                    val minFramePx = with(density) { MinFrameSize.toPx() }
                     listOf(
                         FrameCorner.TOP_LEFT,
                         FrameCorner.TOP_RIGHT,
@@ -298,8 +312,8 @@ fun ImageEditScreen(
                                 Modifier
                                     .offset {
                                         IntOffset(
-                                            (handle.x - HandleRadiusPx).roundToInt(),
-                                            (handle.y - HandleRadiusPx).roundToInt(),
+                                            (handle.x - touchHalfPx).roundToInt(),
+                                            (handle.y - touchHalfPx).roundToInt(),
                                         )
                                     }
                                     .size(HandleTouchSize)
@@ -309,7 +323,7 @@ fun ImageEditScreen(
                                             change.consume()
                                             val current = frameRect ?: return@detectDragGestures
                                             frameRect =
-                                                corner.resize(current, drag, boxSize)
+                                                corner.resize(current, drag, boxSize, minFramePx)
                                             clampToFrame()
                                         }
                                     },
@@ -317,7 +331,7 @@ fun ImageEditScreen(
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 drawCircle(
                                     color = Color.White,
-                                    radius = HandleRadiusPx,
+                                    radius = handleRadiusPx,
                                     center = Offset(size.width / 2f, size.height / 2f),
                                 )
                             }
@@ -382,14 +396,18 @@ fun ImageEditScreen(
     }
 }
 
-/** Touch target for a corner handle. */
-private val HandleTouchSize = 44.dp
+/**
+ * Corner-handle touch target. Density-INDEPENDENT (dp): a px value would shrink
+ * the physical touch area on high-density screens. 48dp meets the Material
+ * minimum touch-target size so the handle stays comfortably grabbable everywhere.
+ */
+private val HandleTouchSize = 48.dp
 
-/** Drawn handle radius, in px (kept fixed so it reads the same on any density). */
-private const val HandleRadiusPx: Float = 22f
+/** Drawn radius of the white handle dot, in dp (converted to px at draw time). */
+private val HandleVisualRadius = 8.dp
 
-/** Minimum crop-frame side, in px, so a corner drag cannot collapse the frame. */
-private const val MinFramePx: Float = 96f
+/** Minimum crop-frame side, in dp, so a corner drag cannot collapse the frame. */
+private val MinFrameSize = 96.dp
 
 /**
  * The default crop frame for a freshly measured viewport: a centred rectangle of
@@ -431,30 +449,31 @@ private enum class FrameCorner {
 
     /**
      * Moves this corner by [drag], keeping the frame inside [box] and no smaller
-     * than [MinFramePx] on either side. The opposite corner stays put, so the
-     * frame's aspect is free — exactly the "draggable edges" behaviour.
+     * than [minFramePx] (the density-converted [MinFrameSize]) on either side. The
+     * opposite corner stays put, so the frame's aspect is free — exactly the
+     * "draggable edges" behaviour.
      */
-    fun resize(frame: Rect, drag: Offset, box: Size): Rect {
+    fun resize(frame: Rect, drag: Offset, box: Size, minFramePx: Float): Rect {
         var left = frame.left
         var top = frame.top
         var right = frame.right
         var bottom = frame.bottom
         when (this) {
             TOP_LEFT -> {
-                left = (frame.left + drag.x).coerceIn(0f, frame.right - MinFramePx)
-                top = (frame.top + drag.y).coerceIn(0f, frame.bottom - MinFramePx)
+                left = (frame.left + drag.x).coerceIn(0f, frame.right - minFramePx)
+                top = (frame.top + drag.y).coerceIn(0f, frame.bottom - minFramePx)
             }
             TOP_RIGHT -> {
-                right = (frame.right + drag.x).coerceIn(frame.left + MinFramePx, box.width)
-                top = (frame.top + drag.y).coerceIn(0f, frame.bottom - MinFramePx)
+                right = (frame.right + drag.x).coerceIn(frame.left + minFramePx, box.width)
+                top = (frame.top + drag.y).coerceIn(0f, frame.bottom - minFramePx)
             }
             BOTTOM_LEFT -> {
-                left = (frame.left + drag.x).coerceIn(0f, frame.right - MinFramePx)
-                bottom = (frame.bottom + drag.y).coerceIn(frame.top + MinFramePx, box.height)
+                left = (frame.left + drag.x).coerceIn(0f, frame.right - minFramePx)
+                bottom = (frame.bottom + drag.y).coerceIn(frame.top + minFramePx, box.height)
             }
             BOTTOM_RIGHT -> {
-                right = (frame.right + drag.x).coerceIn(frame.left + MinFramePx, box.width)
-                bottom = (frame.bottom + drag.y).coerceIn(frame.top + MinFramePx, box.height)
+                right = (frame.right + drag.x).coerceIn(frame.left + minFramePx, box.width)
+                bottom = (frame.bottom + drag.y).coerceIn(frame.top + minFramePx, box.height)
             }
         }
         return Rect(left, top, right, bottom)

@@ -87,9 +87,12 @@ object ImageEditGeometry {
      * This is the crux of the "no empty corner" guarantee: as the image twists,
      * the corners of the axis-aligned frame poke toward the image's own corners,
      * so the image must grow to keep them inside. The result is 1f at 0° (the
-     * cover scale already fills the frame) and rises toward its peak at 45°, where
-     * the frame's diagonal reach into the rotated image is greatest. Symmetric
-     * with period 90°.
+     * cover scale already fills the frame) and rises toward its peak near 45°,
+     * where the frame's diagonal reach into the rotated image is greatest. For a
+     * SQUARE frame-and-image the curve is symmetric about 45° and does repeat
+     * every 90°; but for NON-SQUARE aspects a 90° turn swaps which axis binds the
+     * cover (width↔height), so the value at θ and θ+90° differ — it is NOT
+     * generally 90°-periodic and only returns to itself at 180°.
      *
      * Scale-invariant, so it depends only on the two aspect ratios: the frame is
      * modelled with half-extents `(frameAspect, 1)` and the image `(imageAspect,
