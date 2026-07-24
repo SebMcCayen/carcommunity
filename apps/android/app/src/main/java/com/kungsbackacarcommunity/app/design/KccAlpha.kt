@@ -17,5 +17,5 @@ object KccAlpha {
      * surface reads as one consistent layer, while staying opaque enough that
      * body text stays legible over moving roads.
      */
-    const val aeroSurface = 0.92f
+    val aeroSurface = 0.92f
 }
