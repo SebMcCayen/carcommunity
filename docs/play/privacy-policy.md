@@ -91,9 +91,9 @@ actually stores.
   is not limited to paying members, and it is not withdrawn from suspended accounts. While a
   value is set, treat it as visible to the whole signed-in community — and note that anyone
   who saw it may have copied or screenshotted it, which clearing the field cannot undo.
-  It is entirely optional: leave it blank (or clear it later) and nothing is stored. We
-  normalise what you type (trim the ends, collapse repeated spaces, upper-case) but never
-  verify it, and we do not use it to query any vehicle register.
+  It is entirely optional: leave it blank, or clear it later, and no registration number is
+  stored for that vehicle. We normalise what you type (trim the ends, collapse repeated
+  spaces, upper-case) but never verify it, and we do not use it to query any vehicle register.
 - We deliberately **do not** ask for or record VIN, insurance details, or a vehicle's
   location as structured data in our database.
 - **Photo metadata (EXIF):** photos (vehicle and profile) are uploaded as the original image
