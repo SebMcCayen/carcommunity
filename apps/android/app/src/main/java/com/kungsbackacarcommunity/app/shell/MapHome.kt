@@ -76,6 +76,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
@@ -85,19 +86,6 @@ import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
-
-/**
- * Shared surface opacity for the map-overlay popups (chat, layers,
- * live-location, and the incident-report type picker). Slightly translucent so
- * the live map shows through a little and all the popups read as one consistent
- * floating layer, while staying opaque enough to be readable.
- *
- * `internal` (not `private`) so the incident-report type picker
- * ([com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog]) can
- * paint its dialog with the exact same alpha rather than inventing a second
- * one that would drift out of step with these.
- */
-internal const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
@@ -773,8 +761,8 @@ private fun MapLayersPopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            // Slightly translucent so the map shows through (matches the chat popup).
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            // Slightly translucent so the map shows through (shared Aero alpha).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -945,7 +933,7 @@ internal fun LiveSharePopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
