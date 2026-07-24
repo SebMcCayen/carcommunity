@@ -96,7 +96,14 @@ fun MemberProfileRoute(
 
     MemberProfileScreen(
         state = state,
-        onRetry = { scope.launch { coordinator.load() } },
+        // Retry re-reads the friend graph too: its own load failure is silent by
+        // design (see MemberFriendCoordinator.load), so without this a profile
+        // that recovered on retry could keep an unresolved — and therefore
+        // hidden — friend control from the failed first pass.
+        onRetry = {
+            scope.launch { coordinator.load() }
+            scope.launch { friendCoordinator?.load() }
+        },
         modifier = modifier,
         // Both actions reflect the profile only once the callable REPORTED
         // SUCCESS, and only from that outcome — never by re-reading the block
