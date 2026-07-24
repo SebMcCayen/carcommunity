@@ -88,6 +88,9 @@ data class MemberFriendState(
  * relationship untouched and surfaces the mapped error, so the control the user
  * tapped is still the one in front of them.
  *
+ * An action counts as in flight until its re-sync finishes, so overlapping taps
+ * cannot interleave their reads (see [run]).
+ *
  * A re-sync that itself fails deliberately KEEPS the optimistic value rather
  * than dropping back to [FriendRelationship.Unknown] (which would hide the
  * control entirely): the mutation already succeeded, so its post-state is the
@@ -173,37 +176,42 @@ class MemberFriendCoordinator(
     }
 
     /**
-     * Runs one mutation: guards duplicate taps, clears the previous error, and
-     * applies the returned post-state optimistically before re-syncing.
+     * Runs one action end to end: guards duplicate taps, clears the previous
+     * error, applies the returned post-state optimistically, and re-syncs.
      *
      * The guard is the single reason a double-tap cannot send two requests —
-     * the second invocation returns before touching the repository while
-     * [mutate] is still running.
+     * the second invocation returns before touching the repository.
+     *
+     * It is held until the RE-SYNC finishes, not just until the mutation
+     * returns. Each tap runs in its own coroutine, so releasing it earlier
+     * would let a second action start while the first one's `load()` is still
+     * in flight; that older, slower read could then land LAST and overwrite the
+     * newer state — a quick send-then-cancel would snap back to "request
+     * pending" and make a cancel that really happened look undone.
      */
     private suspend fun run(action: FriendActionInFlight, mutate: suspend () -> Outcome) {
         if (_state.value.inFlight != null) return
         _state.value = _state.value.copy(inFlight = action, error = null)
-        var mutated = false
         try {
             when (val outcome = mutate()) {
                 is Outcome.Settled -> {
-                    mutated = true
                     _state.value = _state.value.copy(relationship = outcome.relationship)
+                    // Re-sync only once a mutation actually landed: after a
+                    // failure the backend state is unchanged, so a re-fetch
+                    // would spend a round trip confirming what is on screen.
+                    load()
                 }
                 is Outcome.Failed -> _state.value = _state.value.copy(error = outcome.error)
             }
         } catch (cancellation: CancellationException) {
-            _state.value = _state.value.copy(inFlight = null)
             throw cancellation
         } catch (_: Exception) {
             _state.value = _state.value.copy(error = FriendActionError.Generic)
         } finally {
+            // Runs on the cancellation path too, so an abandoned action can
+            // never leave the controls permanently disabled.
             _state.value = _state.value.copy(inFlight = null)
         }
-        // Re-sync only once a mutation actually landed: after a failure the
-        // backend state is unchanged, so a re-fetch would spend a round trip
-        // confirming exactly what is already on screen.
-        if (mutated) load()
     }
 
     private sealed interface Outcome {

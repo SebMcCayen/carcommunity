@@ -251,6 +251,44 @@ class MemberFriendCoordinatorTest {
         assertEquals(FriendRelationship.OutgoingPending, coordinator.state.value.relationship)
     }
 
+    @Test
+    fun `a second action cannot start while the first action's re-sync is running`() = runTest {
+        // The taps are separate coroutines, so if the guard were released when
+        // the MUTATION returns rather than when the whole action (mutation +
+        // re-sync) finishes, a quick send→cancel could have the earlier, slower
+        // re-sync land LAST and push the UI back to "request pending" — undoing
+        // a cancel that really happened.
+        val listGate = CompletableDeferred<Unit>()
+        val repo =
+            object : FakeRepo() {
+                override suspend fun list(): FriendsResult {
+                    listCalls++
+                    // Gate only the post-mutation re-sync, not the initial load.
+                    if (listCalls > 1) listGate.await()
+                    return listResult
+                }
+            }
+        val coordinator = MemberFriendCoordinator(repo, TARGET)
+        coordinator.load()
+        repo.listResult = loaded(outgoing = listOf(outgoingTo(TARGET)))
+
+        val first = launch { coordinator.sendRequest() }
+        runCurrent()
+
+        // The send itself is done; its re-sync is parked on the gate — and the
+        // action must still count as in flight.
+        assertEquals(1, repo.sendCalls)
+        assertEquals(FriendActionInFlight.Send, coordinator.state.value.inFlight)
+
+        coordinator.cancelRequest()
+        assertEquals(0, repo.cancelCalls)
+
+        listGate.complete(Unit)
+        first.join()
+        assertNull(coordinator.state.value.inFlight)
+        assertEquals(FriendRelationship.OutgoingPending, coordinator.state.value.relationship)
+    }
+
     // --- cancel ----------------------------------------------------------------
 
     @Test
