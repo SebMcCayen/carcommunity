@@ -107,6 +107,24 @@ class VehicleValidationTest {
     }
 
     @Test
+    fun `plate uppercasing is locale-independent under the Turkish locale`() {
+        // Turkish upper-cases 'i' to dotted 'İ' under a locale-sensitive
+        // uppercase(); pinning Locale.ROOT (matching the backend's locale-
+        // independent JS String.toUpperCase()) must keep 'i' -> 'I' so the
+        // canonical plate is stable across device locales. (Same class of bug
+        // fixed in PR #516.)
+        val previous = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+            assertEquals("ABI123", VehicleValidation.normaliseRegistrationPlate("abi123"))
+            val input = VehicleValidation.toInput(valid().copy(registrationPlate = "abi 123"), year)
+            assertEquals("ABI 123", input!!.registrationPlate)
+        } finally {
+            java.util.Locale.setDefault(previous)
+        }
+    }
+
+    @Test
     fun `powertrain parses wire values`() {
         assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))
         assertEquals(VehiclePowertrain.ELECTRIC, VehiclePowertrain.fromWire("electric"))

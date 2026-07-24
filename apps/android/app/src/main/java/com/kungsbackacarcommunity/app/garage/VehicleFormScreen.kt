@@ -34,6 +34,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import java.util.Locale
 
 /**
  * Vehicle add/edit form (Phase 12 slice 13). Owns its field state; validates
@@ -172,10 +173,11 @@ fun VehicleFormScreen(
             // Registration plate: optional, DELIBERATELY PUBLIC (shown on the car
             // profile to other members). Uppercased as the user types, matching the
             // backend normalisation; final trim/collapse happens in
-            // VehicleValidation.normaliseRegistrationPlate.
+            // VehicleValidation.normaliseRegistrationPlate. Pin Locale.ROOT so the
+            // casing is locale-independent (Turkish 'i' -> 'I', never 'İ').
             OutlinedTextField(
                 value = registrationPlate,
-                onValueChange = { registrationPlate = it.uppercase() },
+                onValueChange = { registrationPlate = it.uppercase(Locale.ROOT) },
                 label = { Text(text = stringResource(R.string.garage_registrationPlate)) },
                 supportingText = { Text(text = stringResource(R.string.garage_registrationPlateHint)) },
                 singleLine = true,

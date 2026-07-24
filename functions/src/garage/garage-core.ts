@@ -12,7 +12,7 @@
  *   (docs/firebase-data-model.md). `registrationPlate` is a DELIBERATELY
  *   PUBLIC, user-entered field (Seb product decision 2026-07): members opt to
  *   show their plate on their public car profile, so it is stored here on the
- *   member-readable doc on purpose. It is the one exception — VIN, insurance
+ *   authenticated-readable doc on purpose. It is the one exception — VIN, insurance
  *   data, and vehicle location remain unrepresentable and must never be added,
  *   as those were never intended to be public. The plate is a free-form,
  *   normalised string (trim/collapse-whitespace/uppercase, no country regex) so
@@ -177,7 +177,7 @@ export type AddVehicleInput = {
   /**
    * Registration plate, already normalised (trim/collapse/uppercase) by the
    * parse schema — or null when the user left it blank / cleared it. Stored on
-   * the member-readable vehicle doc: an intentionally PUBLIC field per product
+   * the authenticated-readable vehicle doc: an intentionally PUBLIC field per product
    * decision (see the module KDoc), unlike VIN / insurance / location.
    */
   registrationPlate?: string | null;

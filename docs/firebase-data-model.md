@@ -149,13 +149,14 @@ Document ID: auto-generated.
 | `model`     | `string`    | Vehicle model                                            |
 | `year`      | `number`    | Model year                                               |
 | `color`     | `string?`   | Optional color description                               |
+| `registrationPlate` | `string?` | Optional, **deliberately PUBLIC** registration plate (Seb product decision 2026-07). Normalised (trim/collapse-whitespace/uppercase), no country regex, ≤12 chars after normalisation; `null` when blank |
 | `imagePath` | `string?`   | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}` |
 | `createdAt` | `Timestamp` | Server timestamp                                         |
 | `updatedAt` | `Timestamp` | Server timestamp                                         |
 
 Security (Phase 9e): any authenticated user can read; all writes go through the member-only `garage.addVehicle` / `garage.updateVehicle` / `garage.deleteVehicle` callables (per-user cap of 5, strict schemas, storage cleanup on delete). `powertrain`, `engineDescription`, and `description` complete the field list above; `imagePath` follows `vehicleImages/{uid}/{vehicleId}/{imageId}`.
 
-> **Note:** Registration plate numbers must **not** be stored on the shared `vehicles` document, as it is readable by any authenticated user. If the feature requires storing a plate, it must be written to the owner's `userPrivate` document (owner-only access) and never exposed on the publicly readable `vehicles` record.
+> **Note — registration plate is PUBLIC by design:** `registrationPlate` is a deliberately public, user-entered field stored **on** this `vehicles` document (Seb product decision 2026-07): members opt to show their plate on their public car profile, so it is readable by any authenticated user on purpose. It is normalised (trim/collapse-whitespace/uppercase) but never format-rejected, so imports and personalised plates pass through. This is the one exception — **VIN, insurance data, and vehicle location must NOT be stored on `vehicles`**, as those were never intended to be public. If such genuinely-private vehicle data is ever needed, it must live under the owner's `userPrivate` document (owner-only access), never on this publicly readable record.
 
 Composite index: `userId ASC, createdAt DESC` (user's garage list, paginated).
 

@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.garage
 
+import java.util.Locale
+
 /**
  * Garage / vehicles domain + validation (Phase 12 slice 13).
  *
@@ -157,9 +159,13 @@ object VehicleValidation {
      * single space, uppercase. Blank -> null (so an empty field clears the
      * plate). Format-agnostic — no country regex, imports/personalised plates
      * pass through.
+     *
+     * Uppercasing pins [Locale.ROOT] so the canonical plate is stable across
+     * device locales (e.g. Turkish 'i' -> 'I', never 'İ'), matching the
+     * backend's locale-independent JS String.toUpperCase().
      */
     fun normaliseRegistrationPlate(raw: String): String? {
-        val collapsed = raw.trim().replace(Regex("\\s+"), " ").uppercase()
+        val collapsed = raw.trim().replace(Regex("\\s+"), " ").uppercase(Locale.ROOT)
         return collapsed.ifEmpty { null }
     }
 
