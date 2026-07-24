@@ -44,6 +44,15 @@ import {
 } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
+import {
+  onBadgeProgressWritten,
+  onConvoyWritten as onConvoyWrittenForBadges,
+  onCrownClaimWritten,
+  onRideCreated,
+  onUserLifecycleWritten,
+  onVehicleCreated,
+} from './badges/progressTriggers';
+import { evaluateBacklog as badgesEvaluateBacklog } from './badges/scheduled';
 import { adminAdjust, adminReverse } from './points/adminPoints';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
@@ -285,18 +294,35 @@ export const garage = {
 };
 
 /**
- * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`).
+ * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`,
+ * `badges-adminSummary`, the six Firestore triggers below and the scheduled
+ * `badges-evaluateBacklog`).
  *
  * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
- * writes). Automatic badges are evaluated inline by their source domains
+ * writes). Flat badges are evaluated inline by their source domains
  * (garage.addVehicle → garage_created; events.complete → first_event /
  * five_events via badgeProgress counters); helpful_member is the only
  * manually awardable badge (contracts/functions/functions.json:
  * badges.awardHelpfulMember).
+ *
+ * The six TIERED LADDERS (Kronjägare / Vägfarare / Träffräv / Trogen /
+ * Konvojledare / Samlare — badges/badge-core.ts) are awarded from TRIGGERS, not
+ * callables, so a tier cannot be forged: five source triggers bump
+ * server-verified counters on badgeProgress/{uid} (a `risk_review` Kronjakt
+ * claim never counts), and the single badges-onBadgeProgressWritten trigger
+ * evaluates every ladder for that one member. badges-evaluateBacklog is the
+ * bounded, cursor-paged self-healing sweep. See badges/progressTriggers.ts.
  */
 export const badges = {
   awardHelpfulMember,
   adminSummary: badgesAdminSummary,
+  onBadgeProgressWritten,
+  onCrownClaimWritten,
+  onRideCreated,
+  onConvoyWritten: onConvoyWrittenForBadges,
+  onVehicleCreated,
+  onUserLifecycleWritten,
+  evaluateBacklog: badgesEvaluateBacklog,
 };
 
 /**

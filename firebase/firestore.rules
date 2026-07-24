@@ -169,9 +169,17 @@ service cloud.firestore {
       // exposes other users' badges. Admin workflows use the Admin SDK /
       // callables — no privileged client-side read (same rule as
       // userPrivate).
+      // NOTE (tiered ladders): read stays OWNER-ONLY. Showing a member's
+      // badges on their PUBLIC profile would be a separate, deliberate
+      // privacy decision (badges leak activity: streaks, distance driven,
+      // events attended) and is not made here.
       match /badges/{badgeKey} {
         allow read: if isOwner(userId);
-        // No client writes: awards are backend-only and never revoked here.
+        // No client writes — for the tiered ladders too. A tier is derived
+        // exclusively from server-verified counters by the badges Firestore
+        // triggers (functions/src/badges/progressTriggers.ts): there is no
+        // callable and no client write path by which one could be forged,
+        // and a badge is never revoked here.
       }
 
       // Saved partner offers (Phase 9i) — a pure member bookmark. Document
@@ -813,10 +821,27 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // badgeProgress – backend-only attendance counters (Phase 9f)
-    // Maintained by events.complete; feeds first_event / five_events.
+    // badgeProgress – backend-only achievement counters (Phase 9f + ladders)
+    //
+    // Maintained by events.complete (completedEventsAttended → first_event /
+    // five_events / Träffräv) and by the badges Firestore triggers
+    // (functions/src/badges/progressTriggers.ts): crownsCollected,
+    // lifetimeDistanceMeters, bestDayStreak, convoysLed, vehiclesInGarage.
+    //
+    // DENIED TO EVERY CLIENT — read included. This is the anti-abuse core of
+    // the tiered badges: every ladder threshold is tested against these
+    // numbers, so if a client could write one it could mint any badge, and the
+    // Admin SDK (which bypasses rules) is the only writer.
     // -------------------------------------------------------------------------
     match /badgeProgress/{userId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // badgeSweepState – backend-only cursor for the badges-evaluateBacklog
+    // scheduled sweep (functions/src/badges/scheduled.ts). No client access.
+    // -------------------------------------------------------------------------
+    match /badgeSweepState/{docId} {
       allow read, write: if false;
     }
 

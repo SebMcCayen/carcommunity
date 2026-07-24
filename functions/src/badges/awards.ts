@@ -8,6 +8,13 @@
  * evaluations serialize instead of duplicating (same pattern as
  * drives.save). Suspended and deleted users are never awarded (legacy
  * assertEligibleForAward); a badge is never revoked here.
+ *
+ * TIERED LADDERS. `awardBadge` is also the write used by the tier evaluator
+ * (badges/tierAwards.ts) — the ladders needed no new award primitive, and get
+ * their idempotency from exactly this create-if-absent transaction. Note that
+ * recordEventAttendance below deliberately needs NO change to feed Träffräv:
+ * the counter it writes lives on badgeProgress/{uid}, and the
+ * badges-onBadgeProgressWritten trigger evaluates the ladders off that write.
  */
 
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';

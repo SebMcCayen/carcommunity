@@ -211,6 +211,25 @@ describe('Firestore – badges (Phase 9f)', () => {
       setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), { completedEventsAttended: 999 }),
     );
   });
+
+  it('no client can forge a tiered-ladder counter or the sweep cursor', async () => {
+    // The anti-abuse core of the tiered badges: every threshold is tested
+    // against badgeProgress, so a client write here would mint any badge.
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), {
+        crownsCollected: 1000,
+        lifetimeDistanceMeters: 10000000,
+        bestDayStreak: 365,
+        convoysLed: 50,
+        vehiclesInGarage: 5,
+      }),
+    );
+    const adminCtx = testEnv.authenticatedContext('badge-admin-2', { admin: true });
+    await assertFails(getDoc(doc(adminCtx.firestore(), 'badgeProgress', OWNER)));
+    await assertFails(getDoc(doc(ctx.firestore(), 'badgeSweepState', 'backlog')));
+    await assertFails(setDoc(doc(ctx.firestore(), 'badgeSweepState', 'backlog'), { lastUid: 'x' }));
+  });
 });
 
 // ---------------------------------------------------------------------------
