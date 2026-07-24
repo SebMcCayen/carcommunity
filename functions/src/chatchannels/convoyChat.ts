@@ -41,7 +41,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import { requireAcceptedConvoyMember } from './convoyMembership';
@@ -56,6 +56,7 @@ import {
   buildChatMessageDocument,
   chatMessageExpiry,
   convoyChatNotificationId,
+  isAlreadyExistsError,
   messagePreview,
   parseListConvoyInput,
   parsePostConvoyInput,
@@ -114,6 +115,32 @@ export interface PostConvoyResponse {
   messageId: string;
 }
 
+/**
+ * The idempotent result of a keyed send that ALREADY committed, or null when
+ * nothing is stored at that id yet (so the caller should go on and write it).
+ *
+ * Used from both idempotency points — the pre-write fast-path read and the
+ * `create()` ALREADY_EXISTS handler — so a sequential retry and a concurrent one
+ * resolve identically instead of drifting apart.
+ *
+ * A doc at this id from a DIFFERENT sender is an (astronomically unlikely) key
+ * collision or a buggy client reusing a key: it must NOT be swallowed as this
+ * caller's success, so surface already-exists and let it regenerate the key.
+ */
+async function replayCommittedSend(
+  messageRef: DocumentReference,
+  actorUid: string,
+): Promise<PostConvoyResponse | null> {
+  const existing = await messageRef.get();
+  if (!existing.exists) {
+    return null;
+  }
+  if (existing.data()?.senderUid !== actorUid) {
+    throw new HttpsError('already-exists', 'Message id already used.');
+  }
+  return { messageId: messageRef.id };
+}
+
 export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyResponse> => {
   const actor = await requireMemberActor(request);
 
@@ -142,19 +169,16 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
       ? convoyMessagesRef(convoyId).doc(clientId)
       : convoyMessagesRef(convoyId).doc();
 
-  // Idempotency: a doc already at this id means this exact send committed on an
-  // earlier attempt (the client just didn't see the ack). Return it WITHOUT
-  // re-writing or re-notifying — exactly-once however many times the optimistic
-  // client retries. A doc at this id from a DIFFERENT sender is an
-  // (astronomically unlikely) key collision or a buggy client reusing a key: it
-  // must NOT be swallowed as this caller's success, so surface already-exists.
+  // Idempotency FAST PATH: a doc already at this id means this exact send
+  // committed on an earlier attempt (the client just didn't see the ack). Return
+  // it WITHOUT re-writing or re-notifying — exactly-once however many times the
+  // optimistic client retries. This read is only an optimisation that skips the
+  // write on the common SEQUENTIAL retry; the guarantee itself comes from the
+  // `create()` below, which is what makes CONCURRENT retries safe too.
   if (clientId !== undefined) {
-    const existing = await messageRef.get();
-    if (existing.exists) {
-      if (existing.data()?.senderUid !== actor.uid) {
-        throw new HttpsError('already-exists', 'Message id already used.');
-      }
-      return { messageId: messageRef.id };
+    const replay = await replayCommittedSend(messageRef, actor.uid);
+    if (replay) {
+      return replay;
     }
   }
 
@@ -165,12 +189,33 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
-  await messageRef.set(
-    buildChatMessageDocument(
-      { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
-      () => FieldValue.serverTimestamp(),
-    ),
-  );
+  // `create()`, NOT `set()`: the write is the idempotency guard, so it has to be
+  // the thing that arbitrates. Two concurrent retries of the same optimistic send
+  // both clear the read above (neither has written yet); with `set()` both would
+  // then commit and BOTH would run the notification fan-out below. With
+  // `create()` exactly one wins and the loser replays the winner's result without
+  // any side effects of its own.
+  try {
+    await messageRef.create(
+      buildChatMessageDocument(
+        { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
+        () => FieldValue.serverTimestamp(),
+      ),
+    );
+  } catch (error) {
+    if (clientId === undefined || !isAlreadyExistsError(error)) {
+      throw error;
+    }
+    // Lost the race to a concurrent invocation of this same send. Whatever it
+    // committed is the authoritative result; fall through to no notifications.
+    const replay = await replayCommittedSend(messageRef, actor.uid);
+    if (replay) {
+      return replay;
+    }
+    // ALREADY_EXISTS but nothing readable there now (a TTL sweep between the two
+    // reads is the only plausible cause). Surface rather than invent a result.
+    throw new HttpsError('aborted', 'Message could not be committed, please retry.');
+  }
 
   // Best-effort in-app fan-out to the OTHER accepted members (never fails the
   // post). The member list comes off the convoy doc the membership gate already

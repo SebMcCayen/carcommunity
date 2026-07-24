@@ -335,6 +335,32 @@ export function buildChatMessageDocument(
   return doc;
 }
 
+/**
+ * True when a Firestore write failed because the document already existed —
+ * i.e. a `create()` lost the race to a concurrent writer.
+ *
+ * This is what makes the keyed-send idempotency guard ATOMIC. A plain
+ * read-then-write (`get()` then `set()`) is not: two concurrent posts carrying
+ * the SAME clientId can both observe "missing" before either writes, so both go
+ * on to write the message and run its side effects (the notification fan-out) —
+ * exactly the double-send the exactly-once contract promises not to do. Issuing
+ * the write as `create()` instead makes Firestore itself arbitrate: precisely
+ * one invocation commits, and every other one fails here, replays the winner's
+ * stored result, and performs no side effects of its own.
+ *
+ * All three shapes are matched because the admin SDK surfaces ALREADY_EXISTS
+ * differently across versions/transports: the gRPC status code 6, the
+ * 'already-exists' string code, or only in the message text. Mirrors the same
+ * tolerance in crownHunt/submitClaim.ts.
+ */
+export function isAlreadyExistsError(error: unknown): boolean {
+  const code = (error as { code?: unknown })?.code;
+  if (code === 6 || code === 'already-exists') {
+    return true;
+  }
+  return String((error as { message?: unknown })?.message ?? '').includes('ALREADY_EXISTS');
+}
+
 /** Maps a stored message doc into the client summary. */
 export function toChatMessageSummary(
   id: string,

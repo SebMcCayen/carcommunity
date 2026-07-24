@@ -13,6 +13,7 @@ import {
   communityMentionNotificationId,
   convoyChatNotificationId,
   isAcceptedConvoyMember,
+  isAlreadyExistsError,
   messagePreview,
   normalizeMentionCandidates,
   parseListCommunityInput,
@@ -393,5 +394,34 @@ describe('chat-core message preview', () => {
   it('trims and truncates to the preview length', () => {
     expect(messagePreview('  hej  ')).toBe('hej');
     expect(messagePreview('x'.repeat(500))).toHaveLength(CHAT_MESSAGE_PREVIEW_LENGTH);
+  });
+});
+
+describe('chat-core isAlreadyExistsError (atomic keyed-send guard)', () => {
+  // The keyed-send idempotency guarantee rests on `create()` losing the race
+  // rather than a read-then-write, so misclassifying its rejection would either
+  // resurface as a 500 to a perfectly ordinary concurrent retry, or (worse)
+  // swallow a genuinely different failure as a duplicate.
+  it('matches every shape the admin SDK surfaces ALREADY_EXISTS as', () => {
+    expect(isAlreadyExistsError({ code: 6 })).toBe(true);
+    expect(isAlreadyExistsError({ code: 'already-exists' })).toBe(true);
+    expect(
+      isAlreadyExistsError(new Error('6 ALREADY_EXISTS: entity already exists: app=dev')),
+    ).toBe(true);
+  });
+
+  it('does not classify other failures as a duplicate', () => {
+    // Notably code 10 (ABORTED, a contention retry) and 7 (PERMISSION_DENIED):
+    // treating either as "already committed" would return a success for a
+    // message that was never written.
+    expect(isAlreadyExistsError({ code: 10, message: 'ABORTED' })).toBe(false);
+    expect(isAlreadyExistsError({ code: 7, message: 'PERMISSION_DENIED' })).toBe(false);
+    expect(isAlreadyExistsError(new Error('deadline exceeded'))).toBe(false);
+  });
+
+  it('tolerates non-error throwables instead of crashing the handler', () => {
+    expect(isAlreadyExistsError(undefined)).toBe(false);
+    expect(isAlreadyExistsError(null)).toBe(false);
+    expect(isAlreadyExistsError('boom')).toBe(false);
   });
 });
