@@ -273,7 +273,7 @@
     {
       "name": "garage.addVehicle",
       "domain": "garage",
-      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Strict schema: make/model/modelYear/powertrain/engineDescription/description/color only — registration numbers, VIN, insurance, and location are unrepresentable because vehicles/{vehicleId} is authenticated-readable. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
+      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -282,7 +282,7 @@
     {
       "name": "garage.updateVehicle",
       "domain": "garage",
-      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
+      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix) and the intentionally-public registrationPlate (normalised server-side; null/empty clears it). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",

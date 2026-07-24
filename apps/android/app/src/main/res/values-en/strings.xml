@@ -707,6 +707,8 @@
     <string name="garage_powertrain">Powertrain</string>
     <string name="garage_engineDescription">Engine, optional</string>
     <string name="garage_description">Description, optional</string>
+    <string name="garage_registrationPlate">Registration number, optional</string>
+    <string name="garage_registrationPlateHint">Shown on your car profile to other members.</string>
     <string name="garage_powertrain_petrol">Petrol</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>
@@ -724,6 +726,7 @@
     <string name="garage_validationEngineDescriptionTooLong">Engine description is too long (max 120 characters).</string>
     <string name="garage_modifications">Modifications, optional</string>
     <string name="garage_validationModificationsTooLong">Modifications text is too long (max 500 characters).</string>
+    <string name="garage_validationRegistrationPlateTooLong">Registration number is too long (max 12 characters).</string>
     <string name="garage_mainCarBadge">Main car</string>
     <string name="garage_setMainCar">Set as main car</string>
     <string name="garage_unsetMainCar">Remove main car</string>

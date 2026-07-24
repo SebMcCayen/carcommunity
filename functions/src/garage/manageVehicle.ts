@@ -22,11 +22,15 @@
  * own vehicles and manage their photos (add/remove/reorder) (Seb-approved
  * ungate). Vehicles documents are
  * authenticated-readable by design (docs/firebase-data-model.md), so all
- * writes still go through these callables: the strict schemas make registration
- * numbers / VIN / location unrepresentable, the per-user vehicle cap is
+ * writes still go through these callables: the per-user vehicle cap is
  * enforced race-safely, and deletion cleans the vehicleImages storage
- * prefix. Ownership failures return not-found — never permission-denied —
- * so callers cannot probe whether another user's vehicle exists.
+ * prefix. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered field
+ * (Seb product decision) stored on this member-readable doc so members can show
+ * their plate on their car profile — it is normalised (trim/collapse/uppercase),
+ * never format-rejected. VIN / insurance / location remain unrepresentable, as
+ * those were never meant to be public. Ownership failures return not-found —
+ * never permission-denied — so callers cannot probe whether another user's
+ * vehicle exists.
  *
  * garage_created badge evaluation runs after each verified vehicle
  * creation (Phase 9f); a badge failure never fails the add itself.

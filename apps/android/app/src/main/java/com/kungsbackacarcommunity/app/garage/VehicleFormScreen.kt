@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -73,13 +74,14 @@ fun VehicleFormScreen(
     var engine by rememberSaveable { mutableStateOf(initial.engineDescription) }
     var powertrain by rememberSaveable { mutableStateOf(initial.powertrain) }
     var modifications by rememberSaveable { mutableStateOf(initial.modifications) }
+    var registrationPlate by rememberSaveable { mutableStateOf(initial.registrationPlate) }
     var showError by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(saveStatus) {
         if (saveStatus == VehicleSaveStatus.Saved) onCancel()
     }
 
-    val form = VehicleForm(make, model, year, powertrain, engine, modifications)
+    val form = VehicleForm(make, model, year, powertrain, engine, modifications, registrationPlate)
     val error = VehicleValidation.validate(form, currentYear)
 
     AeroPage(
@@ -164,6 +166,20 @@ fun VehicleFormScreen(
                 onValueChange = { modifications = it },
                 label = { Text(text = stringResource(R.string.garage_modifications)) },
                 minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Registration plate: optional, DELIBERATELY PUBLIC (shown on the car
+            // profile to other members). Uppercased as the user types, matching the
+            // backend normalisation; final trim/collapse happens in
+            // VehicleValidation.normaliseRegistrationPlate.
+            OutlinedTextField(
+                value = registrationPlate,
+                onValueChange = { registrationPlate = it.uppercase() },
+                label = { Text(text = stringResource(R.string.garage_registrationPlate)) },
+                supportingText = { Text(text = stringResource(R.string.garage_registrationPlateHint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                 modifier = Modifier.fillMaxWidth(),
             )
 

@@ -375,8 +375,12 @@ service cloud.firestore {
     // even though managing your own garage is no longer member-gated (the ungate
     // lives in the callable's requireActiveActor check, NOT here — opening direct
     // owner writes would bypass the cap and validation). The document stays
-    // authenticated-readable by design — which is exactly why registration
-    // plates must never be stored here (docs/firebase-data-model.md).
+    // authenticated-readable by design. `registrationPlate` is stored here
+    // ON PURPOSE — a DELIBERATELY PUBLIC, user-entered field (Seb product
+    // decision) shown on the car profile to other members; VIN / insurance /
+    // location remain out (docs/firebase-data-model.md). These rules do not
+    // field-validate the vehicle doc (all writes are callable-only), so adding
+    // the plate needs no rule change here.
     match /vehicles/{vehicleId} {
       allow read: if isAuthenticated();
       // No client writes: garage.addVehicle/updateVehicle/deleteVehicle only.

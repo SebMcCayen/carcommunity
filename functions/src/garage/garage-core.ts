@@ -9,9 +9,17 @@
  *   editing, and deleting vehicles all require an active member.
  * - Each user is limited to MAX_VEHICLES_PER_USER vehicles.
  * - The vehicles document is authenticated-readable by design
- *   (docs/firebase-data-model.md), so NO registration numbers, VIN,
- *   insurance data, or vehicle location can ever be stored — the strict
- *   schemas make such fields unrepresentable.
+ *   (docs/firebase-data-model.md). `registrationPlate` is a DELIBERATELY
+ *   PUBLIC, user-entered field (Seb product decision 2026-07): members opt to
+ *   show their plate on their public car profile, so it is stored here on the
+ *   member-readable doc on purpose. It is the one exception — VIN, insurance
+ *   data, and vehicle location remain unrepresentable and must never be added,
+ *   as those were never intended to be public. The plate is a free-form,
+ *   normalised string (trim/collapse-whitespace/uppercase, no country regex) so
+ *   imports and personalised plates are accepted.
+ *   FUTURE (not built): an automatic vehicle-info lookup keyed on this plate
+ *   would slot in as a garage.lookupVehicleByPlate callable — normalise here,
+ *   look up there. This module only holds the manual field.
  * - Ownership failures surface as not-found, never permission-denied, to
  *   avoid leaking whether another user's vehicle exists (legacy parity).
  *
@@ -33,6 +41,12 @@ export const VEHICLE_IMAGE_PATH_MAX_LENGTH = 500;
 export const VEHICLE_MAKE_MODEL_MAX_LENGTH = 80;
 export const ENGINE_DESCRIPTION_MAX_LENGTH = 120;
 export const VEHICLE_DESCRIPTION_MAX_LENGTH = 500;
+/**
+ * Max length of a normalised registration plate. 12 comfortably fits Swedish
+ * plates (ABC12D / ABC123) plus spacing and the longer European / personalised
+ * / import formats members may run; the field is intentionally format-agnostic.
+ */
+export const REGISTRATION_PLATE_MAX_LENGTH = 12;
 export const MIN_MODEL_YEAR = 1886; // first automobile
 /** Small future margin for next-model-year vehicles. */
 export function maxModelYear(now: Date): number {
@@ -93,6 +107,28 @@ export const VEHICLE_POWERTRAINS = [
 ] as const;
 export type VehiclePowertrain = (typeof VEHICLE_POWERTRAINS)[number];
 
+/**
+ * Normalises a user-entered registration plate for storage: trims the ends,
+ * collapses internal whitespace runs to a single space, and uppercases. A blank
+ * (or whitespace-only) value normalises to null so an empty field CLEARS the
+ * plate. Deliberately format-agnostic — NO Swedish-plate regex — because members
+ * may run imports or personalised plates; this is a light normalise, not a
+ * validator that rejects "foreign-looking" plates.
+ *
+ * Length is enforced separately (REGISTRATION_PLATE_MAX_LENGTH) against the
+ * normalised value, so trailing/duplicate spaces never count toward the cap.
+ *
+ * FUTURE seam: a garage.lookupVehicleByPlate callable would call this to
+ * canonicalise the plate before an automatic vehicle-info lookup. Not built yet.
+ */
+export function normaliseRegistrationPlate(
+  value: string | null | undefined,
+): string | null {
+  if (value == null) return null;
+  const collapsed = value.trim().replace(/\s+/g, ' ').toUpperCase();
+  return collapsed.length === 0 ? null : collapsed;
+}
+
 // ---------------------------------------------------------------------------
 // Input schemas
 // ---------------------------------------------------------------------------
@@ -115,6 +151,18 @@ function vehicleFieldSchemas(now: Date) {
     engineDescription: z.string().max(ENGINE_DESCRIPTION_MAX_LENGTH).nullable(),
     description: z.string().max(VEHICLE_DESCRIPTION_MAX_LENGTH).nullable(),
     color: z.string().trim().min(1).max(80).nullable(),
+    // Registration plate: accept any string (or null to clear), normalise it
+    // (trim/collapse-whitespace/uppercase), then enforce the cap against the
+    // NORMALISED value. A generous raw bound guards against pathological input
+    // before normalisation; the real limit is checked after.
+    registrationPlate: z
+      .string()
+      .max(64)
+      .nullable()
+      .transform((v) => normaliseRegistrationPlate(v))
+      .refine((v) => v === null || v.length <= REGISTRATION_PLATE_MAX_LENGTH, {
+        message: `registrationPlate must be at most ${REGISTRATION_PLATE_MAX_LENGTH} characters after normalisation.`,
+      }),
   };
 }
 
@@ -126,6 +174,13 @@ export type AddVehicleInput = {
   engineDescription?: string | null;
   description?: string | null;
   color?: string | null;
+  /**
+   * Registration plate, already normalised (trim/collapse/uppercase) by the
+   * parse schema — or null when the user left it blank / cleared it. Stored on
+   * the member-readable vehicle doc: an intentionally PUBLIC field per product
+   * decision (see the module KDoc), unlike VIN / insurance / location.
+   */
+  registrationPlate?: string | null;
 };
 
 export type UpdateVehicleInput = Partial<AddVehicleInput> & {
@@ -181,12 +236,13 @@ export function parseAddVehicleInput(data: unknown, now: Date): ParseResult<AddV
       engineDescription: fields.engineDescription.optional(),
       description: fields.description.optional(),
       color: fields.color.optional(),
+      registrationPlate: fields.registrationPlate.optional(),
     })
     .strict();
   return parse(
     schema,
     data,
-    'Expected addVehicleRequest (contracts/schemas/garage.schema.json): { make, model, modelYear, powertrain, engineDescription?, description?, color? }.',
+    'Expected addVehicleRequest (contracts/schemas/garage.schema.json): { make, model, modelYear, powertrain, engineDescription?, description?, color?, registrationPlate? }.',
   );
 }
 
@@ -205,6 +261,7 @@ export function parseUpdateVehicleInput(
       engineDescription: fields.engineDescription.optional(),
       description: fields.description.optional(),
       color: fields.color.optional(),
+      registrationPlate: fields.registrationPlate.optional(),
       imagePath: z.string().min(1).max(500).nullable().optional(),
     })
     .strict();
@@ -413,6 +470,9 @@ export function buildVehicleDocument(
     engineDescription: input.engineDescription ?? null,
     description: input.description ?? null,
     color: input.color ?? null,
+    // Intentionally-public, user-entered plate (already normalised by the parse
+    // schema). null when the user left it blank. See the module KDoc.
+    registrationPlate: input.registrationPlate ?? null,
     imagePath: null,
     // Ordered photo gallery (source of truth); imagePath mirrors photoPaths[0]
     // as the cover. New vehicles start with no photos.
@@ -445,6 +505,9 @@ export function buildVehicleUpdate(
     assign('engineDescription', input.engineDescription);
   if (input.description !== undefined) assign('description', input.description);
   if (input.color !== undefined) assign('color', input.color);
+  // registrationPlate arrives already normalised (null clears it).
+  if (input.registrationPlate !== undefined)
+    assign('registrationPlate', input.registrationPlate);
   if (input.imagePath !== undefined) assign('imagePath', input.imagePath);
 
   if (changedFields.length > 0) {

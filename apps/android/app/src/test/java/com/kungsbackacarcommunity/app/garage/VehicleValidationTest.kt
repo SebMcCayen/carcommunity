@@ -67,6 +67,45 @@ class VehicleValidationTest {
         assertNull(input!!.engineDescription)
     }
 
+    // --- registration plate (deliberately-public field) --------------------
+
+    @Test
+    fun `plate is trimmed, whitespace-collapsed and uppercased`() {
+        assertEquals("ABC 123", VehicleValidation.normaliseRegistrationPlate("  abc   123  "))
+        assertEquals("ABC123", VehicleValidation.normaliseRegistrationPlate("abc123"))
+    }
+
+    @Test
+    fun `blank plate normalises to null so the field clears`() {
+        assertNull(VehicleValidation.normaliseRegistrationPlate(""))
+        assertNull(VehicleValidation.normaliseRegistrationPlate("   "))
+        val input = VehicleValidation.toInput(valid().copy(registrationPlate = "  "), year)
+        assertNull(input!!.registrationPlate)
+    }
+
+    @Test
+    fun `a valid plate round-trips into the input, normalised`() {
+        val input = VehicleValidation.toInput(valid().copy(registrationPlate = " abc 12 "), year)
+        assertEquals("ABC 12", input!!.registrationPlate)
+    }
+
+    @Test
+    fun `an over-length plate is rejected, checked against the normalised value`() {
+        val tooLong = "a".repeat(VehicleValidation.REGISTRATION_PLATE_MAX_LENGTH + 1)
+        assertEquals(
+            VehicleFieldError.REGISTRATION_PLATE_TOO_LONG,
+            VehicleValidation.validate(valid().copy(registrationPlate = tooLong), year),
+        )
+        // Exactly at the cap is fine, and padding/whitespace does not count.
+        assertNull(
+            VehicleValidation.validate(
+                valid().copy(registrationPlate = "a".repeat(VehicleValidation.REGISTRATION_PLATE_MAX_LENGTH)),
+                year,
+            ),
+        )
+        assertNull(VehicleValidation.validate(valid().copy(registrationPlate = "   ABC 123   "), year))
+    }
+
     @Test
     fun `powertrain parses wire values`() {
         assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))
