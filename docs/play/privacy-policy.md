@@ -88,8 +88,9 @@ actually stores.
 - **Registration number (optional).** You may add your vehicle's registration plate. This
   field is **public by design** — it is stored on the shared vehicle record, which **any
   signed-in user of the App can read**. That is broader than "members": the read permission
-  is not limited to paying members, and it is not withdrawn from suspended accounts. Treat
-  anything you put here as visible to the whole signed-in community, permanently.
+  is not limited to paying members, and it is not withdrawn from suspended accounts. While a
+  value is set, treat it as visible to the whole signed-in community — and note that anyone
+  who saw it may have copied or screenshotted it, which clearing the field cannot undo.
   It is entirely optional: leave it blank (or clear it later) and nothing is stored. We
   normalise what you type (trim the ends, collapse repeated spaces, upper-case) but never
   verify it, and we do not use it to query any vehicle register.
