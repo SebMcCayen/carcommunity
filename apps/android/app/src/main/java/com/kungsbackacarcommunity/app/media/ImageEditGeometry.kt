@@ -72,8 +72,13 @@ object ImageEditGeometry {
         imageHalfH: Float,
     ): Float {
         if (imageHalfW <= 0f || imageHalfH <= 0f || frameHalfW <= 0f || frameHalfH <= 0f) return 0f
-        val c = abs(cos(Math.toRadians(angleDeg.toDouble()))).toFloat()
-        val s = abs(sin(Math.toRadians(angleDeg.toDouble()))).toFloat()
+        // A non-finite angle (NaN/±Inf) would make cos/sin NaN and return a NaN
+        // scale, which then poisons the scale clamp in [ImageEditScreen] (minScale)
+        // and breaks the "no empty corner" guarantee. Treat it as the un-rotated 0°
+        // case so the result is always finite for valid dimensions.
+        val safeAngle = if (angleDeg.isFinite()) angleDeg else 0f
+        val c = abs(cos(Math.toRadians(safeAngle.toDouble()))).toFloat()
+        val s = abs(sin(Math.toRadians(safeAngle.toDouble()))).toFloat()
         val needX = (c * frameHalfW + s * frameHalfH) / imageHalfW
         val needY = (s * frameHalfW + c * frameHalfH) / imageHalfH
         return max(needX, needY)
@@ -96,7 +101,9 @@ object ImageEditGeometry {
      *
      * Scale-invariant, so it depends only on the two aspect ratios: the frame is
      * modelled with half-extents `(frameAspect, 1)` and the image `(imageAspect,
-     * 1)`. Returns 1f for a degenerate aspect.
+     * 1)`. Returns 1f for a degenerate aspect, and — because it delegates to
+     * [coverScaleForFrame], which treats a non-finite angle as 0° — returns 1f (the
+     * no-rotation floor) for a non-finite [angleDeg] rather than propagating a NaN.
      */
     fun minCoverScale(angleDeg: Float, frameAspect: Float, imageAspect: Float): Float {
         if (frameAspect <= 0f || imageAspect <= 0f ||
@@ -134,7 +141,11 @@ object ImageEditGeometry {
         imageScaledHalfH: Float,
     ): Pair<Float, Float> {
         if (!dX.isFinite() || !dY.isFinite()) return 0f to 0f
-        val rad = Math.toRadians(angleDeg.toDouble())
+        // A non-finite angle would make the rotation matrix NaN and hand back a NaN
+        // offset (which would then feed a NaN pan into the editor); treat it as 0°
+        // (un-rotated) so the clamp stays finite.
+        val safeAngle = if (angleDeg.isFinite()) angleDeg else 0f
+        val rad = Math.toRadians(safeAngle.toDouble())
         val cos = cos(rad).toFloat()
         val sin = sin(rad).toFloat()
         val c = abs(cos)

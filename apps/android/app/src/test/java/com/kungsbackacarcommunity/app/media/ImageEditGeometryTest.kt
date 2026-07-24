@@ -90,6 +90,21 @@ class ImageEditGeometryTest {
         assertEquals(1f, ImageEditGeometry.minCoverScale(30f, 1f, Float.NaN), 0f)
     }
 
+    @Test
+    fun `minCoverScale treats a non-finite angle as the no-rotation floor`() {
+        // A NaN/Inf angle must not propagate a NaN into the scale clamp (which would
+        // break the "no empty corner" guarantee). It collapses to the 0° floor, 1f.
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { angle ->
+            listOf(1f, 4f / 3f, 3f / 4f).forEach { frameAspect ->
+                listOf(1f, 16f / 9f, 0.5f).forEach { imageAspect ->
+                    val v = ImageEditGeometry.minCoverScale(angle, frameAspect, imageAspect)
+                    assertTrue("angle=$angle frame=$frameAspect image=$imageAspect gave $v", v.isFinite())
+                    assertEquals("angle=$angle frame=$frameAspect image=$imageAspect", 1f, v, 1e-4f)
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------------
     // coverScaleForFrame — the ACTUAL no-empty-corner proof: at the returned
     // scale the frame is fully inside the rotated image, and just below it is not.
@@ -127,6 +142,22 @@ class ImageEditGeometryTest {
                 (tooSmall * iHalfW < frameExtentX - 1e-2f) ||
                     (tooSmall * iHalfH < frameExtentY - 1e-2f)
             assertTrue("deg=$deg: cover scale must be the tight minimum", gap)
+        }
+    }
+
+    @Test
+    fun `coverScaleForFrame treats a non-finite angle as zero degrees`() {
+        // The scale at a NaN/Inf angle must equal the un-rotated cover scale (and be
+        // finite), so a corrupt angle can never zero-out or NaN-out the scale clamp.
+        val fHalfW = 300f
+        val fHalfH = 200f
+        val iHalfW = 800f
+        val iHalfH = 600f
+        val at0 = ImageEditGeometry.coverScaleForFrame(0f, fHalfW, fHalfH, iHalfW, iHalfH)
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { angle ->
+            val v = ImageEditGeometry.coverScaleForFrame(angle, fHalfW, fHalfH, iHalfW, iHalfH)
+            assertTrue("angle=$angle must be finite (got $v)", v.isFinite())
+            assertEquals("angle=$angle must equal the 0° cover", at0, v, 1e-4f)
         }
     }
 
@@ -396,6 +427,29 @@ class ImageEditGeometryTest {
                 "angle=$angle: frame must stay inside image on Y",
                 abs(localY) + frameExtentY <= iHalfH + 1e-2f,
             )
+        }
+    }
+
+    @Test
+    fun `clampImageOffset treats a non-finite angle as zero degrees`() {
+        // A NaN/Inf angle must not yield a NaN pan. It falls back to the 0° clamp,
+        // which pins an over-pan to the (frameHalf away from centre) limit.
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { angle ->
+            val (x, y) =
+                ImageEditGeometry.clampImageOffset(
+                    angleDeg = angle,
+                    dX = 9999f,
+                    dY = -9999f,
+                    frameHalfW = 100f,
+                    frameHalfH = 100f,
+                    imageScaledHalfW = 200f,
+                    imageScaledHalfH = 200f,
+                )
+            assertTrue("angle=$angle x must be finite (got $x)", x.isFinite())
+            assertTrue("angle=$angle y must be finite (got $y)", y.isFinite())
+            // Same result as the 0° over-pan clamp above.
+            assertEquals("angle=$angle x", 100f, x, 1e-3f)
+            assertEquals("angle=$angle y", -100f, y, 1e-3f)
         }
     }
 }

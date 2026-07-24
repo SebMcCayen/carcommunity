@@ -166,7 +166,11 @@ object ImageCompressor {
         // can only ever emit the WHOLE, UN-ROTATED frame. So when a rotation is
         // requested, the fallback is no more able to honour it than it can honour
         // a crop: it must fail closed rather than upload the un-rotated original.
-        val rotates = rotationDegrees.isFinite() && abs(rotationDegrees) > ROTATION_EPSILON
+        // A NON-FINITE angle (NaN/±Inf) is a degenerate rotation request that
+        // cannot be honoured at all — [reencodeToJpeg] rejects it below — so it is
+        // treated as "rotates" here too, disabling the fallback so the whole call
+        // fails closed instead of silently emitting the un-rotated original.
+        val rotates = !rotationDegrees.isFinite() || abs(rotationDegrees) > ROTATION_EPSILON
         val cannotFallBack = cropsAway || rotates
         try {
             // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
@@ -234,6 +238,12 @@ object ImageCompressor {
         // Bitmap.compress only defines JPEG quality over 0..100. In either case
         // there is nothing sensible to re-encode.
         if (maxDimension <= 0 || quality !in 0..100) return null
+        // A non-finite rotation (NaN/±Inf) is a degenerate request rotateArbitrary
+        // would silently no-op, which would emit an UN-ROTATED image while the user
+        // asked for a rotation. Refuse it here so compressForPublicUpload fails
+        // closed (its `rotates` guard disables the strip fallback) rather than
+        // uploading pixels the requested transform never actually shaped.
+        if (!rotationDegrees.isFinite()) return null
 
         // 1-2. Decode at the nearest power-of-two down-sample, oriented per EXIF.
         // The crop is passed in so the sample size is chosen roughly for the

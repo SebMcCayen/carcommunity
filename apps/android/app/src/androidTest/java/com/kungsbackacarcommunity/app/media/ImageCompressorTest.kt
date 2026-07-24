@@ -496,6 +496,26 @@ class ImageCompressorTest {
     }
 
     @Test
+    fun compressForPublicUpload_nonFiniteRotation_failsClosed() = runBlocking {
+        // A non-finite rotation (NaN/±Inf) is a degenerate request rotateArbitrary
+        // would silently NO-OP: without the guard, the un-rotated original would
+        // sail through even though the user asked for a rotation. It must fail
+        // closed instead — even for a perfectly DECODABLE pick — so a corrupt angle
+        // can never route an untransformed image to Storage.
+        val source = jpegBytes(gradientBitmap(1600, 1200), 95)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { angle ->
+            val result =
+                ImageCompressor.compressForPublicUpload(
+                    picked,
+                    maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                    rotationDegrees = angle,
+                )
+            assertNull("a decodable pick with a $angle rotation must fail closed", result)
+        }
+    }
+
+    @Test
     fun orientationSwapsAxes_onlyForTheQuarterTurns() {
         listOf(
             ExifInterface.ORIENTATION_ROTATE_90,
