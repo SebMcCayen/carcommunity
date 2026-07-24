@@ -68,9 +68,15 @@ data class Vehicle(
     val modifications: String? = null,
     /**
      * Registration plate (vehicles/{id}.registrationPlate). A DELIBERATELY
-     * PUBLIC, user-entered field (Seb product decision) shown on the car profile
-     * to other members; normalised (trim/collapse/uppercase, ≤12 chars) by the
-     * backend. null when the owner left it blank.
+     * PUBLIC, user-entered field (Seb product decision); normalised
+     * (trim/collapse/uppercase, ≤12 chars) by the backend. null when the owner
+     * left it blank.
+     *
+     * Audience: the `vehicles` read rule is `allow read: if isAuthenticated()`,
+     * so ANY signed-in user can read this — it is NOT member-gated and is NOT
+     * withdrawn from suspended accounts. Do not describe it as "shown to other
+     * members"; that understates it. Narrowing the audience means changing that
+     * Firestore rule, not just which screens render the field.
      */
     val registrationPlate: String? = null,
     /**

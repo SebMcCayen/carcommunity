@@ -170,8 +170,11 @@ fun VehicleFormScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // Registration plate: optional, DELIBERATELY PUBLIC (shown on the car
-            // profile to other members). Uppercased as the user types, matching the
+            // Registration plate: optional and DELIBERATELY PUBLIC — it lands on
+            // vehicles/{id}, whose read rule is `allow read: if isAuthenticated()`,
+            // so ANY signed-in user can read it (not member-gated, not withdrawn
+            // from suspended accounts). The supporting text below must keep saying
+            // that plainly. Uppercased as the user types, matching the
             // backend normalisation; final trim/collapse happens in
             // VehicleValidation.normaliseRegistrationPlate. Pin Locale.ROOT so the
             // casing is locale-independent (Turkish 'i' -> 'I', never 'İ').
