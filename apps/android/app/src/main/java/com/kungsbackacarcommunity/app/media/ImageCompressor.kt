@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -68,6 +69,14 @@ object ImageCompressor {
 
     /** JPEG quality for re-encode — a good size/quality trade-off for photos. */
     const val DEFAULT_JPEG_QUALITY: Int = 80
+
+    /**
+     * Below this many degrees a requested free rotation is treated as "no
+     * rotation": the gesture editor emits a float angle that is essentially 0 when
+     * the user never twisted, and rotating by a sliver would resample the whole
+     * frame (and enlarge its bounding box) for no visible gain.
+     */
+    private const val ROTATION_EPSILON: Float = 0.01f
 
     /**
      * Ceiling on the pixels a single decode may allocate, before the crop is cut
@@ -147,23 +156,31 @@ object ImageCompressor {
         maxDimension: Int = AVATAR_MAX_DIMENSION,
         quality: Int = DEFAULT_JPEG_QUALITY,
         crop: NormalizedCropRect? = null,
+        rotationDegrees: Float = 0f,
     ): PickedImage? = withContext(Dispatchers.Default) {
         // A full-frame crop is indistinguishable from no crop, so it must not
         // opt out of the strip fallback.
         val cropsAway = crop != null && !crop.isFullFrame()
+        // A free rotation (the gesture editor's arbitrary angle) changes which
+        // pixels survive just as a crop does — and the physical-strip fallback
+        // can only ever emit the WHOLE, UN-ROTATED frame. So when a rotation is
+        // requested, the fallback is no more able to honour it than it can honour
+        // a crop: it must fail closed rather than upload the un-rotated original.
+        val rotates = rotationDegrees.isFinite() && abs(rotationDegrees) > ROTATION_EPSILON
+        val cannotFallBack = cropsAway || rotates
         try {
             // Happy path: a clean re-encoded JPEG. Otherwise physically strip the
             // original's STRIP_TAGS or fail closed — we NEVER return raw picked
             // bytes that might still carry GPS or identifying metadata.
-            reencodeToJpeg(picked, maxDimension, quality, crop)
-                ?: if (cropsAway) null else stripOrFail(picked)
+            reencodeToJpeg(picked, maxDimension, quality, crop, rotationDegrees)
+                ?: if (cannotFallBack) null else stripOrFail(picked)
         } catch (e: CancellationException) {
             throw e // never swallow cancellation — keep structured concurrency intact
         } catch (_: Exception) {
             // Re-encode blew up unexpectedly; still try the physical-strip
-            // fallback (it never throws) before failing closed — unless a crop
-            // was requested, which that fallback cannot honour.
-            if (cropsAway) null else stripOrFail(picked)
+            // fallback (it never throws) before failing closed — unless a crop or
+            // rotation was requested, which that fallback cannot honour.
+            if (cannotFallBack) null else stripOrFail(picked)
         }
     }
 
@@ -210,6 +227,7 @@ object ImageCompressor {
         maxDimension: Int,
         quality: Int,
         crop: NormalizedCropRect? = null,
+        rotationDegrees: Float = 0f,
     ): PickedImage? {
         // Guard against invalid tuning params before touching any pixels: a
         // non-positive maxDimension would make sampleSizeFor() loop forever, and
@@ -218,12 +236,23 @@ object ImageCompressor {
         if (maxDimension <= 0 || quality !in 0..100) return null
 
         // 1-2. Decode at the nearest power-of-two down-sample, oriented per EXIF.
-        // The crop is passed in so the sample size is chosen for the REGION that
-        // survives the crop, not the whole frame (see [sampleSizeForCrop]).
+        // The crop is passed in so the sample size is chosen roughly for the
+        // REGION that survives the crop, not the whole frame (see
+        // [sampleSizeForCrop]). With a free rotation in play the crop's fractions
+        // are measured against the ROTATED bounding box rather than the oriented
+        // frame, so the region estimate is approximate — it only tunes decode
+        // sharpness/memory, never correctness — and the MAX_DECODE_PIXELS floor
+        // still guards against an over-large decode.
         var bitmap = decodeOriented(picked.bytes, maxDimension, crop) ?: return null
 
-        // 3. Apply the user's crop, then scale so the longest side fits.
+        // 3. Apply the gesture editor's free rotation (arbitrary angle) BEFORE the
+        // crop, so `crop` is the axis-aligned rect the user framed in the ROTATED
+        // image (see [ImageEditGeometry]). One clean resample: orient → rotate →
+        // crop → scale. A no-op for the ordinary (un-rotated) crop path.
         try {
+            bitmap = rotateArbitrary(bitmap, rotationDegrees)
+
+            // 4. Apply the user's crop, then scale so the longest side fits.
             bitmap = applyCrop(bitmap, crop) ?: return null
             bitmap = scaleToMax(bitmap, maxDimension)
 
@@ -541,6 +570,26 @@ object ImageCompressor {
             )
         if (scaled !== bitmap) bitmap.recycle()
         return scaled
+    }
+
+    /**
+     * Rotates [bitmap] by an ARBITRARY [angleDeg] about its centre — the free
+     * angle the gesture editor produces — returning a new bitmap sized to the
+     * rotated content's axis-aligned bounding box (the source is recycled once the
+     * rotated copy exists). A near-zero angle is a no-op and returns [bitmap]
+     * unchanged, so the ordinary un-rotated crop path never resamples here.
+     *
+     * The bounding box this produces is exactly the space [ImageEditGeometry]
+     * resolves the crop rect against: `Rw = |cos|·w + |sin|·h`,
+     * `Rh = |sin|·w + |cos|·h`. `filter = true` for a smooth rotate.
+     */
+    private fun rotateArbitrary(bitmap: Bitmap, angleDeg: Float): Bitmap {
+        if (!angleDeg.isFinite() || abs(angleDeg) <= ROTATION_EPSILON) return bitmap
+        val matrix = Matrix().apply { postRotate(angleDeg) }
+        val rotated =
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        if (rotated !== bitmap) bitmap.recycle()
+        return rotated
     }
 
     /**

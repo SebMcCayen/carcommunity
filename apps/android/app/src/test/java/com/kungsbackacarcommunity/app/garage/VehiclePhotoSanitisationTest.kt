@@ -33,7 +33,10 @@ import org.junit.Test
  */
 class VehiclePhotoSanitisationTest {
 
-    private val cropScreen = "garage/VehiclePhotoCropScreen.kt"
+    // The shared gesture editor every image upload (avatar + vehicle) routes
+    // through. It replaced the old garage/VehiclePhotoCropScreen and inherits the
+    // same guarantee: it produces a crop WINDOW (+ a rotation angle), never bytes.
+    private val cropScreen = "media/ImageEditScreen.kt"
     private val route = "garage/GarageRoute.kt"
 
     /** The comment stripper must not be able to hide a real violation. */
@@ -90,15 +93,17 @@ class VehiclePhotoSanitisationTest {
     fun cropConfirmHandsBackAWindowNotAnImage() {
         val source = readSource(cropScreen)
         assertTrue(
-            "$cropScreen must declare `onConfirm: (NormalizedCropRect) -> Unit`. " +
-                "Any image-bearing type here (Bitmap, ByteArray, Uri, PickedImage) " +
-                "would let the crop step emit pixels that skip sanitisation.",
-            source.contains("onConfirm: (NormalizedCropRect) -> Unit"),
+            "$cropScreen must hand back a `NormalizedCropRect` window (alongside the " +
+                "free-rotation angle), so its onConfirm ends `crop: NormalizedCropRect) " +
+                "-> Unit`. Any image-bearing type here (Bitmap, ByteArray, Uri, " +
+                "PickedImage) would let the editor emit pixels that skip sanitisation.",
+            source.contains("crop: NormalizedCropRect) -> Unit"),
         )
         listOf("Bitmap", "ByteArray", "Uri", "PickedImage").forEach { type ->
             assertTrue(
-                "$cropScreen must not declare an `onConfirm` taking $type.",
-                !source.contains("onConfirm: ($type)"),
+                "$cropScreen must not declare an `onConfirm` emitting $type.",
+                !source.contains("onConfirm: ($type)") &&
+                    !source.contains(": $type) -> Unit"),
             )
         }
     }

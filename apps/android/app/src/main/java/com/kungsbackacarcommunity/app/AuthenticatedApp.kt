@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app
 
 import android.Manifest
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -202,10 +203,14 @@ import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
 import com.kungsbackacarcommunity.app.media.ImageCompressor
+import com.kungsbackacarcommunity.app.media.ImageEditFrameShape
+import com.kungsbackacarcommunity.app.media.ImageEditScreen
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.NormalizedCropRect
+import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
@@ -3555,6 +3560,19 @@ private fun RouteHost(
                 (avatarCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
                     .collectAsState(initial = ImageUploadStatus.Idle)
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+
+            // The avatar pick currently being EDITED, and its display-only preview
+            // decode. Both raw, unsanitised and inert: `avatarCropCandidate` is the
+            // ORIGINAL pick (it only reaches Storage via compressForPublicUpload on
+            // confirm) and `avatarCropPreview` is a Bitmap, which has no encoded
+            // form to upload. Plain remember (bytes/bitmaps are too large for the
+            // saved-instance Bundle — a process death just drops the pending edit).
+            var avatarCropCandidate by remember(mediaUploader) { mutableStateOf<PickedImage?>(null) }
+            var avatarCropPreview by remember(mediaUploader) { mutableStateOf<Bitmap?>(null) }
+            val cancelAvatarCrop = {
+                avatarCropCandidate = null
+                avatarCropPreview = null
+            }
             val avatarPicker =
                 rememberImagePickLauncher(
                     // Read with a higher cap than the 5 MB upload cap so the raw
@@ -3570,29 +3588,24 @@ private fun RouteHost(
                     // cancel routes to onPicked(null) below and stays silent.
                     onPickFailed = { avatarCoordinator?.markFailed() },
                 ) { picked ->
-                    val repo = profileRepository
-                    if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Strip GPS + identifying metadata BEFORE upload: avatars are
-                        // PUBLICLY readable by any authenticated member (storage.rules),
-                        // so a selfie taken at the owner's home must never leak their
-                        // coordinates or device fingerprint. compressForPublicUpload
-                        // GUARANTEES the returned bytes are free of every STRIP_TAG (all
-                        // GPS + identifying EXIF): the happy path re-encodes to JPEG
-                        // (dropping all metadata), and if a pick can't be re-encoded it
-                        // physically strips those tags or returns the original only when
-                        // proven free of them — else it returns null and we fail closed /
-                        // skip the upload rather than risk leaking source metadata.
-                        val sanitized = ImageCompressor.compressForPublicUpload(picked)
-                        if (sanitized != null) {
-                            val imageId = MediaUpload.newImageId(sanitized.contentType)
-                            val path = MediaUpload.profileImagePath(uid, imageId)
-                            avatarCoordinator.upload(sanitized, path) { storedPath ->
-                                repo.updateAvatarPath(uid, storedPath)
-                            }
+                    if (picked != null && avatarCoordinator != null && profileRepository != null) {
+                        // Straight to the shared gesture editor — NOTHING is
+                        // uploaded on picking. decodeForCrop hands back a display-
+                        // only Bitmap; the pick's bytes are held untouched until the
+                        // user confirms a crop/rotation, and only then does
+                        // compressForPublicUpload (crop + free rotate + downscale +
+                        // EXIF/GPS strip) consume them.
+                        val preview =
+                            ImageCompressor.decodeForCrop(
+                                picked,
+                                maxDimension = ImageCompressor.AVATAR_MAX_DIMENSION,
+                            )
+                        if (preview != null) {
+                            avatarCropCandidate = picked
+                            avatarCropPreview = preview
                         } else {
-                            // Sanitisation failed (decode/re-encode returned null), so
-                            // nothing was uploaded. Surface the failure instead of a
-                            // silent no-op so the user knows to retry.
+                            // Undecodable pick: could not be shown and could not have
+                            // been sanitised either. Fail visibly.
                             avatarCoordinator.markFailed()
                         }
                     }
@@ -3667,27 +3680,87 @@ private fun RouteHost(
                     }
                 }
 
-            ProfileScreen(
-                profile = profile,
-                saveStatus = saveStatus,
-                onSave = { name, bio ->
-                    profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
-                },
-                onBack = onClose,
-                onSignOut = onSignOut,
-                avatarUrl = avatarUrl,
-                avatarUploadStatus = avatarStatus,
-                onChangeAvatar =
-                    if (avatarCoordinator != null && profileRepository != null) {
-                        {
-                            avatarCoordinator.reset()
-                            avatarPicker.pickImage()
+            val avatarCropping = avatarCropPreview
+            val avatarCandidate = avatarCropCandidate
+            // While editing an avatar, system/gesture Back cancels the EDIT and
+            // returns to the profile rather than closing the whole route.
+            BackHandler(enabled = avatarCropping != null) { cancelAvatarCrop() }
+            if (avatarCropping != null && avatarCandidate != null && avatarCoordinator != null) {
+                // Release the preview's pixels once it can no longer be drawn (same
+                // onDispose rationale as the garage crop: recycling in the
+                // cancel/confirm handler would race the outgoing frame).
+                DisposableEffect(avatarCropping) {
+                    onDispose { avatarCropping.recycle() }
+                }
+                // Avatars get the SQUARE frame shown as a CIRCLE mask (the profile
+                // renders them round). The gesture editor replaces the profile
+                // screen while open; confirming resolves an (angle, crop) pair that
+                // compressForPublicUpload turns into stripped, cropped, rotated
+                // bytes — the ONLY route from this pick to Storage.
+                ImageEditScreen(
+                    bitmap = avatarCropping,
+                    frameShape = ImageEditFrameShape.CIRCLE,
+                    initialAspect = 1f,
+                    onConfirm = { rotationDegrees, crop ->
+                        cancelAvatarCrop()
+                        // Route scope, not the editor's: the editor leaves
+                        // composition on cancelAvatarCrop above, and a screen-scoped
+                        // coroutine would be cancelled mid-sanitise.
+                        scope.launch {
+                            val repo = profileRepository
+                            if (repo != null) {
+                                // Strip GPS + identifying metadata BEFORE upload:
+                                // avatars are PUBLICLY readable by any member, so a
+                                // selfie taken at home must never leak coordinates or
+                                // a device fingerprint. compressForPublicUpload
+                                // GUARANTEES the bytes are free of every STRIP_TAG,
+                                // and fails closed (null) rather than upload raw
+                                // bytes — with a crop/rotation requested there is no
+                                // whole-frame fallback.
+                                val sanitized =
+                                    ImageCompressor.compressForPublicUpload(
+                                        avatarCandidate,
+                                        maxDimension = ImageCompressor.AVATAR_MAX_DIMENSION,
+                                        crop = crop,
+                                        rotationDegrees = rotationDegrees,
+                                    )
+                                if (sanitized != null) {
+                                    val imageId = MediaUpload.newImageId(sanitized.contentType)
+                                    val path = MediaUpload.profileImagePath(uid, imageId)
+                                    avatarCoordinator.upload(sanitized, path) { storedPath ->
+                                        repo.updateAvatarPath(uid, storedPath)
+                                    }
+                                } else {
+                                    avatarCoordinator.markFailed()
+                                }
+                            }
                         }
-                    } else {
-                        null
                     },
-                statsSummary = statsSummary,
-            )
+                    onCancel = cancelAvatarCrop,
+                )
+            } else {
+                ProfileScreen(
+                    profile = profile,
+                    saveStatus = saveStatus,
+                    onSave = { name, bio ->
+                        profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
+                    },
+                    onBack = onClose,
+                    onSignOut = onSignOut,
+                    avatarUrl = avatarUrl,
+                    avatarUploadStatus = avatarStatus,
+                    onChangeAvatar =
+                        if (avatarCoordinator != null && profileRepository != null) {
+                            {
+                                avatarCoordinator.reset()
+                                avatarPicker.pickImage()
+                            }
+                        } else {
+                            null
+                        },
+                    statsSummary = statsSummary,
+                )
+            }
         }
 
         ShellRoute.LiveLocation -> {
