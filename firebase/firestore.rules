@@ -370,7 +370,8 @@ service cloud.firestore {
     // Each document carries a `userId` field with the owning UID.
     // -------------------------------------------------------------------------
     // All writes go through the garage.* callables (Phase 9e): per-user vehicle
-    // cap, strict no-plate/no-VIN validation, and storage cleanup on delete
+    // cap, strict no-VIN schema validation, registrationPlate normalisation,
+    // and storage cleanup on delete
     // cannot be enforced on direct client writes, so writes stay callable-only
     // even though managing your own garage is no longer member-gated (the ungate
     // lives in the callable's requireActiveActor check, NOT here — opening direct

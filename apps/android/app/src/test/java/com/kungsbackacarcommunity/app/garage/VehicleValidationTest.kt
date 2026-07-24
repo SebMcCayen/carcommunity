@@ -108,17 +108,27 @@ class VehicleValidationTest {
 
     @Test
     fun `plate uppercasing is locale-independent under the Turkish locale`() {
-        // Turkish upper-cases 'i' to dotted 'İ' under a locale-sensitive
-        // uppercase(); pinning Locale.ROOT (matching the backend's locale-
-        // independent JS String.toUpperCase()) must keep 'i' -> 'I' so the
-        // canonical plate is stable across device locales. (Same class of bug
-        // fixed in PR #516.)
+        // Turkish upper-cases 'i' to dotted 'İ' under a LOCALE-SENSITIVE
+        // uppercase. We pin Locale.ROOT (matching the backend's locale-
+        // independent JS String.toUpperCase()) so 'i' -> 'I' and the canonical
+        // plate is stable across device locales.
+        //
+        // NOTE for future reviewers: Kotlin's NO-ARG String.uppercase() is
+        // already locale-invariant — the stdlib defines it as
+        // toUpperCase(Locale.ROOT), unlike the deprecated toUpperCase(). The
+        // assertions below pin BOTH so nobody "fixes" this back and forth: the
+        // explicit Locale.ROOT is for readability/intent, not a behaviour change.
+        // (Contrast the genuinely locale-sensitive default-locale bug in #516.)
         val previous = java.util.Locale.getDefault()
         try {
             java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
             assertEquals("ABI123", VehicleValidation.normaliseRegistrationPlate("abi123"))
             val input = VehicleValidation.toInput(valid().copy(registrationPlate = "abi 123"), year)
             assertEquals("ABI 123", input!!.registrationPlate)
+            // The no-arg form under tr-TR: proves it is Locale.ROOT-based, while
+            // the explicitly locale-sensitive form is what would break.
+            assertEquals("ABI123", "abi123".uppercase())
+            assertEquals("ABİ123", "abi123".uppercase(java.util.Locale.getDefault()))
         } finally {
             java.util.Locale.setDefault(previous)
         }
