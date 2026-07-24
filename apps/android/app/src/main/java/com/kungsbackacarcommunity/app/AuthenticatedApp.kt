@@ -138,6 +138,9 @@ import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.events.EventSummary
+import com.kungsbackacarcommunity.app.events.Events
+import com.kungsbackacarcommunity.app.events.EventsListState
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
@@ -261,7 +264,9 @@ import com.kungsbackacarcommunity.app.incidents.QueryAnchor
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
+import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -723,6 +728,47 @@ fun AuthenticatedApp(
             val tappedIncident =
                 remember(tappedIncidentId, nearbyIncidents) {
                     tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
+                }
+
+            // Community event pins on the map, visible to EVERY signed-in user
+            // (deliberate 2026-07 open-up: event locations are public). Reuses the
+            // same published-events teaser listener the events list uses; the pure
+            // [Events.mapPinEvents] filter keeps only published, upcoming,
+            // positioned events (a cancelled or draft event never gets a pin).
+            // Guarded off when no events repository is configured (CI/no-Firebase),
+            // where the flow stays empty and the layer simply draws nothing.
+            val publishedEventsState by
+                remember(eventsRepository) {
+                    eventsRepository?.observePublishedEvents()
+                        ?: MutableStateFlow(EventsListState.Loading)
+                }
+                    .collectAsState(initial = EventsListState.Loading)
+            val publishedEventsForMap: List<EventSummary> =
+                (publishedEventsState as? EventsListState.Loaded)?.events ?: emptyList()
+            val mapEventMarkers =
+                remember(publishedEventsForMap) {
+                    // now-based upcoming filter is snapshotted per list change; a
+                    // pin is never long-lived enough for the coarse cutoff to
+                    // matter, and re-filtering every frame would be wasteful.
+                    Events.mapPinEvents(publishedEventsForMap, System.currentTimeMillis())
+                        .mapNotNull { event ->
+                            val lat = event.latitude
+                            val lng = event.longitude
+                            if (lat != null && lng != null) {
+                                MapEventMarker(id = event.id, longitude = lng, latitude = lat)
+                            } else {
+                                null
+                            }
+                        }
+                }
+            // The event pin the user TAPPED, resolved back from the id the surface
+            // published to the event we already hold. Derived (not snapshotted) so
+            // an event that drops out of the list (cancelled, ended) closes its
+            // popup rather than leaving it describing a pin no longer on the map.
+            val tappedEventId by mapSurface.eventTap.collectAsState()
+            val tappedEvent =
+                remember(tappedEventId, publishedEventsForMap) {
+                    tappedEventId?.let { id -> publishedEventsForMap.firstOrNull { it.id == id } }
                 }
             // True while a removal is in flight, so the sheet can disable its
             // remove button. Keyed to the open incident: the sheet now survives
@@ -2612,6 +2658,11 @@ fun AuthenticatedApp(
                                     // gate, non-members would see an action that
                                     // fails on submit.
                                     incidentMarkers = incidentMarkers,
+                                    // Community event pins for everyone (published,
+                                    // upcoming, positioned). No layer toggle — event
+                                    // locations are public. Tapping one opens the
+                                    // event info popup composed below.
+                                    eventMarkers = mapEventMarkers,
                                     // Credit Trafikverket only while their data is
                                     // actually on the map (so: not abroad, where the
                                     // Sweden-only importer contributes nothing).
@@ -2743,6 +2794,45 @@ fun AuthenticatedApp(
                                         removeInProgress = incidentRemoveInFlight,
                                         confirmInProgress = incidentConfirmInFlight,
                                         onDismiss = { mapSurface.consumeIncidentTap() },
+                                    )
+                                }
+
+                                // Tapping a community event pin opens its info
+                                // popup (title, when, place name, going count) with
+                                // a way into the full event detail. Composed in the
+                                // same map-chrome subtree as the incident sheet, so
+                                // a tab switch takes it out of the semantics tree.
+                                // Rendered only while the tapped id still resolves to
+                                // a published event: an event that is cancelled or
+                                // ends out from under an open popup closes it rather
+                                // than describing a pin that is gone.
+                                val openEvent = tappedEvent
+                                if (openEvent != null) {
+                                    val whenLabel =
+                                        openEvent.startsAtMillis?.let { millis ->
+                                            java.text.DateFormat
+                                                .getDateTimeInstance(
+                                                    java.text.DateFormat.MEDIUM,
+                                                    java.text.DateFormat.SHORT,
+                                                )
+                                                .format(java.util.Date(millis))
+                                        }
+                                    EventMarkerInfoPopup(
+                                        title = openEvent.title,
+                                        whenLabel = whenLabel,
+                                        locationName = openEvent.locationName,
+                                        goingCount = openEvent.counts.going,
+                                        onViewDetails = {
+                                            // Reuse the event-reminder deep-link
+                                            // plumbing: seed the id and switch to the
+                                            // Events route, which opens that event's
+                                            // detail on entry (EventsRoute.initialEventId).
+                                            val id = openEvent.id
+                                            mapSurface.consumeEventTap()
+                                            pendingEventDeepLinkId = id
+                                            route = ShellRoute.Events
+                                        },
+                                        onDismiss = { mapSurface.consumeEventTap() },
                                     )
                                 }
                                 // Location explanation, over the map rather than

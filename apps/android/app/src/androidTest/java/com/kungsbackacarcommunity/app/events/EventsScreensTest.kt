@@ -173,7 +173,7 @@ class EventsScreensTest {
             KccTheme {
                 EventDetailScreen(
                     event = event(),
-                    detail = EventDetail("Bring your car", "Torg", null, null, null),
+                    detail = EventDetail(description = "Bring your car", address = null),
                     myRsvp = null,
                     passesMemberGate = true,
                     rsvpStatus = RsvpStatusUi.Idle,

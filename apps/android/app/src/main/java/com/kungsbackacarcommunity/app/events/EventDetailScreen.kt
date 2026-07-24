@@ -143,7 +143,7 @@ fun EventDetailScreen(
             // on a non-published event sees
             // neither (the cancelled notice above already explains the state).
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                DetailCard(detail)
+                DetailCard(locationName = event.locationName, detail = detail)
             } else if (!passesMemberGate) {
                 InfoCard(
                     title = stringResource(R.string.events_memberRequiredTitle),
@@ -369,7 +369,7 @@ internal fun attendeeRowTag(uid: String): String = "events_attendee_$uid"
 internal fun attendeeGroupTag(status: RsvpStatus): String = "events_attendee_group_${status.wire}"
 
 @Composable
-private fun DetailCard(detail: EventDetail?) {
+private fun DetailCard(locationName: String?, detail: EventDetail?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -383,7 +383,9 @@ private fun DetailCard(detail: EventDetail?) {
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            val location = detail?.locationName ?: detail?.address
+            // The public place name (teaser) leads; the precise street address
+            // (member-only) is the fallback when no place name was set.
+            val location = locationName ?: detail?.address
             if (location != null) {
                 Text(
                     text = location,
@@ -462,11 +464,14 @@ private fun EventDetailPreview() {
                     startsAtMillis = 0L,
                     endsAtMillis = null,
                     approximateArea = "Kungsbacka",
+                    locationName = "Torg",
+                    latitude = 57.4874,
+                    longitude = 12.0757,
                     isOfficial = true,
                     status = EventStatus.PUBLISHED,
                     counts = RsvpCounts(12, 3, 1),
                 ),
-            detail = EventDetail("Bring your car.", "Torg", "Storgatan 1", 57.0, 12.0),
+            detail = EventDetail("Bring your car.", "Storgatan 1"),
             myRsvp = RsvpStatus.GOING,
             passesMemberGate = true,
             rsvpStatus = RsvpStatusUi.Idle,
