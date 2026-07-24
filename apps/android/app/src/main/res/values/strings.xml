@@ -1145,6 +1145,15 @@
     <string name="incidents_reportSuccess">Tack – din rapport finns nu på kartan.</string>
     <string name="incidents_reportError">Det gick inte att skicka rapporten. Försök igen.</string>
     <string name="incidents_locationUnavailable">Din position är inte tillgänglig. Slå på platstjänster för att rapportera.</string>
+    <string name="incidents_reportLocationTitle">Var är den?</string>
+    <string name="incidents_reportLocationCurrent">Använd min nuvarande plats</string>
+    <string name="incidents_reportLocationPick">Välj på kartan</string>
+    <string name="incidents_pickLocationTitle">Placera händelsen</string>
+    <string name="incidents_pickLocationInstruction">Flytta kartan för att placera nålen, bekräfta sedan.</string>
+    <string name="incidents_pickLocationConfirm">Placera här</string>
+    <string name="incidents_pickLocationCancel">Avbryt</string>
+    <string name="incidents_pickLocationMap">Karta för att välja platsen för händelsen</string>
+    <string name="incidents_pickLocationInvalid">Välj en plats på kartan först.</string>
     <string name="incidents_markerLabel">Händelse</string>
     <string name="incidents_sourceTrafikverket">Källa: Trafikverket</string>
     <string name="incidents_close">Stäng</string>
@@ -1155,7 +1164,7 @@
     <string name="incidents_ageUnknown">Okänd tidpunkt</string>
     <string name="incidents_sourceMember">Rapporterad av en medlem</string>
     <string name="incidents_sourceImported">Hämtad från Trafikverket</string>
-    <string name="incidents_verifyAction">Finns den kvar?</string>
+    <string name="incidents_verifyAction">Jag bekräftar att den fortfarande finns här</string>
     <string name="incidents_verifySuccess">Tack – du bekräftade att den finns kvar.</string>
     <string name="incidents_verifyAlready">Du har redan bekräftat den här.</string>
     <string name="incidents_verifyError">Det gick inte att bekräfta just nu. Försök igen.</string>
