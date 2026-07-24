@@ -759,7 +759,7 @@
     "engineDescription": "Motor, valfritt",
     "description": "Beskrivning, valfritt",
     "registrationPlate": "Registreringsnummer, valfritt",
-    "registrationPlateHint": "Visas på din bilprofil för andra medlemmar.",
+    "registrationPlateHint": "Offentligt — alla inloggade medlemmar kan se det. Lämna tomt för att hoppa över.",
     "powertrain_petrol": "Bensin",
     "powertrain_diesel": "Diesel",
     "powertrain_hybrid": "Hybrid",

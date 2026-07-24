@@ -759,7 +759,7 @@
     "engineDescription": "Engine, optional",
     "description": "Description, optional",
     "registrationPlate": "Registration number, optional",
-    "registrationPlateHint": "Shown on your car profile to other members.",
+    "registrationPlateHint": "Public — any signed-in member can see this. Leave blank to skip.",
     "powertrain_petrol": "Petrol",
     "powertrain_diesel": "Diesel",
     "powertrain_hybrid": "Hybrid",
