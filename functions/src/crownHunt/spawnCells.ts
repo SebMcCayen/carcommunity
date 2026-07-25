@@ -108,8 +108,14 @@ export const setSpawnCellApproval = onCall(
           // misstate the field's meaning and sort it to the back behind every
           // already-served cell. See SPAWN_CELL_NEVER_SERVED_AT_MS.
           lastSpawnPassAt: Timestamp.fromMillis(SPAWN_CELL_NEVER_SERVED_AT_MS),
+          // The write is a merge, so every field the revoke branch sets must be
+          // cleared here or it survives onto the re-approved cell. A stale
+          // "Byggarbete, inte längre säkert att stanna" sitting on a currently
+          // APPROVED area is the worst kind of wrong on an admin safety screen:
+          // it reads as a live warning about a decision that has been reversed.
           revokedAt: null,
           revokedByUserId: null,
+          revocationReason: null,
           updatedAt: serverTimestamp(),
         },
         { merge: true },

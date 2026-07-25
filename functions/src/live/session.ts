@@ -33,6 +33,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -242,7 +243,23 @@ export const updatePosition = onCall(
     if (crownActivity) {
       // Persisted only on a real write, so a failed or skipped attempt is
       // retried on the next sample rather than suppressed for the interval.
-      await sessionRef(actor.uid).update(crownActivity);
+      //
+      // Swallowed for the same reason recordCrownActivity swallows its own
+      // errors, and it HAS to be: this write is the GAME's throttle bookkeeping,
+      // living on a session node owned by the SAFETY feature. Letting an RTDB
+      // blip here reject `updatePosition` would stop a member's live location
+      // updating because the crown engine could not remember when it last
+      // counted them — exactly the failure the best-effort contract above
+      // exists to rule out. Losing the throttle state costs nothing: the next
+      // sample simply re-attempts the activity write.
+      try {
+        await sessionRef(actor.uid).update(crownActivity);
+      } catch (error) {
+        logger.warn('Crown activity throttle write failed; live sharing unaffected', {
+          uid: actor.uid,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return { recordedAt: parsed.input.coordinate.recordedAt };

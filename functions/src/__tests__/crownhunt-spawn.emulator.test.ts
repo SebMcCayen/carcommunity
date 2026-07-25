@@ -333,6 +333,48 @@ describe('spawn cell allow-list', () => {
     });
     await clearSpawns();
   });
+
+  it('clears the revocation reason when a cell is approved again', async () => {
+    await signInAs(adminUser);
+    const cellKey = crownCellKey(57.7031, 12.3049);
+
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey,
+      safeAreaConfirmed: true,
+      approvalNote: 'Första godkännandet.',
+    });
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: false,
+      cellKey,
+      reason: 'Byggarbete, inte längre säkert att stanna.',
+    });
+    const revoked = (await adminDb.collection('crownSpawnCells').doc(cellKey).get()).data()!;
+    expect(revoked.approved).toBe(false);
+    expect(revoked.revocationReason).toBe('Byggarbete, inte längre säkert att stanna.');
+
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey,
+      safeAreaConfirmed: true,
+      approvalNote: 'Bygget klart, åter godkänd.',
+    });
+
+    // The write is a merge, so anything the revoke branch set and the approve
+    // branch does not clear survives. A stale reason on a currently APPROVED
+    // cell reads as a live safety warning about a reversed decision.
+    const reapproved = (await adminDb.collection('crownSpawnCells').doc(cellKey).get()).data()!;
+    expect(reapproved.approved).toBe(true);
+    expect(reapproved.revocationReason).toBeNull();
+    expect(reapproved.revokedAt).toBeNull();
+    expect(reapproved.revokedByUserId).toBeNull();
+
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: false,
+      cellKey,
+      reason: 'Testupprensning.',
+    });
+  });
 });
 
 describe('scheduled spawner', () => {
