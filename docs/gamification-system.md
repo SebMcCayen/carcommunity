@@ -373,7 +373,7 @@ The `A ≥ 1` gate does much of this work implicitly: we only place where people
 
 ### 5.1 Earn table
 
-**Every `Action` identifier in this table is net-new** — none of `daily_open`, `live_session_1km`, `drive_5km`, `crown_collect`, `event_attend_verified`, `event_host_success`, `garage_first_car` or `incident_report_confirmed` appears anywhere in the repo today. The **`Ledger source` column is the opposite**: every value in it is an existing member of the `POINTS_SOURCES` union in `functions/src/points/points-core.ts`, so no source enum needs widening. That split is the point of §1.2 — new callers, existing primitives.
+**Every `Action` identifier in this table is net-new** — none of `daily_open`, `live_session_1km`, `drive_5km`, `crown_collect`, `event_attend_verified`, `event_host_success`, `garage_first_car` or `incident_report_confirmed` appears anywhere in the repo today. The **`Ledger source` column is the opposite**: every value in it is an existing member of `POINTS_TRANSACTION_SOURCES` in `functions/src/points/points-core.ts` (and of the narrower `ACTIVE_POINTS_TRANSACTION_SOURCES`, which excludes the deprecated `future_crown_hunt`), so no source enum needs widening. That split is the point of §1.2 — new callers, existing primitives.
 
 | Action | KP | Limit | Ledger source |
 |---|---|---|---|
