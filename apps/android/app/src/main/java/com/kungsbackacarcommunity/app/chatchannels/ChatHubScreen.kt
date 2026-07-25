@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -28,8 +30,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,8 +65,30 @@ import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
 /** Test tag on the chat-hub root, so UI tests can assert it renders. */
 const val CHAT_HUB_TEST_TAG = "chat_hub"
 
-/** The four sections of the chat hub. */
+/**
+ * The four sections of the chat hub, in the order they appear in the tab row AND
+ * in the swipe pager. The pager addresses pages by [ChatTab.ordinal], so this
+ * declaration order IS the left-to-right swipe order — reordering these reorders
+ * both the tabs and the swipe. Pinned by `ChatTabOrderTest`.
+ */
 enum class ChatTab { Community, Convoys, Friends, Notifications }
+
+/**
+ * The hub tab a push [target] should land on, or [ChatTab.Community] for anything
+ * that does not name one of the four sections (including a null link and targets
+ * like DM/EVENT that the hub does not host). Pure so the deep-link → tab mapping
+ * is unit-testable without composing the hub; used both to seed the initial tab
+ * and by the landing effect. Community is the hub's default, so an unmapped
+ * target is a no-op rather than a jump.
+ */
+internal fun chatHubLandingTab(target: PushTarget?): ChatTab =
+    when (target) {
+        PushTarget.COMMUNITY_CHAT -> ChatTab.Community
+        PushTarget.CONVOY_CHAT -> ChatTab.Convoys
+        PushTarget.FRIENDS -> ChatTab.Friends
+        PushTarget.NOTIFICATIONS -> ChatTab.Notifications
+        else -> ChatTab.Community
+    }
 
 /**
  * The tab labels' font-size floor and ceiling.
@@ -280,7 +307,45 @@ private fun ChatHubContent(
     blockingRepository: BlockingRepository?,
     pushDeepLink: PushDeepLink? = null,
 ) {
-    var selectedTab by rememberSaveable { mutableStateOf(ChatTab.Community) }
+    // Seeded from any push deep-link so the hub OPENS on the linked tab (and the
+    // pager below opens on the matching page with no scroll animation). Absent a
+    // link this is Community, the default. rememberSaveable so a swipe/tap survives
+    // recomposition and rotation.
+    var selectedTab by rememberSaveable {
+        mutableStateOf(chatHubLandingTab(pushDeepLink?.target))
+    }
+
+    // The swipe pager over the four sections. Its page index is [ChatTab.ordinal],
+    // so page and selected tab are the same value. Seeded to the selected tab so a
+    // deep link lands on its page immediately rather than animating in from
+    // Community.
+    val pagerState =
+        rememberPagerState(initialPage = selectedTab.ordinal) { ChatTab.entries.size }
+    val scope = rememberCoroutineScope()
+
+    // The pager is the single source of truth for which section is showing:
+    // [selectedTab] is a REFLECTION of the pager's CURRENT page, driving the tab-row
+    // indicator (and the active-chat registry) from whatever page the pager is on —
+    // whether the user swiped there or tapped a tab.
+    //
+    // `currentPage`, deliberately, NOT `settledPage`: currentPage flips as the swipe
+    // crosses the half-way point, so the tab indicator moves with the member's
+    // finger and the section they are pulling into view is the one marked active.
+    // settledPage would hold the old tab highlighted for the whole gesture and snap
+    // only after the animation finished, which reads as lag. Abandoning a swipe
+    // simply flips it back, since the pager returns to the page it came from.
+    //
+    // Deliberately one-directional (pager → tab): a tab TAP scrolls the pager
+    // directly (see ChatTabItem's onSelect) and lets this reflect the result. The
+    // earlier shape — a LaunchedEffect(selectedTab) that animated the pager — self
+    // -cancelled on a multi-page jump, because the intermediate pages this
+    // snapshotFlow reports would re-key that effect and abort its own animation
+    // half-way. Scrolling from a plain coroutine instead runs to completion.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            selectedTab = ChatTab.entries[page]
+        }
+    }
 
     // Friends sub-nav: the open DM thread's target, or null to show the inbox.
     var dmOtherUid by rememberSaveable { mutableStateOf<String?>(null) }
@@ -289,20 +354,26 @@ private fun ChatHubContent(
     var openConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
     var openConvoyTitle by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // A push tap picks the landing tab. Keyed on the link and applied once, so
-    // navigating away inside the hub (or backing out of a channel) is not undone
-    // on the next recomposition. The convoy TITLE is deliberately left null —
-    // it is display-only and the channel resolves it itself.
+    // A push tap picks the landing tab (already seeded into selectedTab above) and,
+    // for a convoy link, the channel to open inside the Convoys tab. Keyed on the
+    // link and applied once, so navigating away inside the hub (or backing out of a
+    // channel) is not undone on the next recomposition. The convoy TITLE is
+    // deliberately left null — it is display-only and the channel resolves it
+    // itself.
     LaunchedEffect(pushDeepLink) {
-        when (pushDeepLink?.target) {
-            PushTarget.COMMUNITY_CHAT -> selectedTab = ChatTab.Community
-            PushTarget.CONVOY_CHAT -> {
-                selectedTab = ChatTab.Convoys
+        if (pushDeepLink != null) {
+            val landing = chatHubLandingTab(pushDeepLink.target)
+            // Jump the pager to the linked page WITHOUT animating — the hub is
+            // opening on this section, so it should already be there, not slide in
+            // from Community. On the initial open the pager was seeded to this same
+            // page, so this is a no-op; it only bites if a newer link arrives while
+            // the hub is already open. selectedTab follows via the snapshotFlow.
+            if (pagerState.currentPage != landing.ordinal) {
+                pagerState.scrollToPage(landing.ordinal)
+            }
+            if (pushDeepLink.target == PushTarget.CONVOY_CHAT) {
                 openConvoyId = pushDeepLink.entityId
             }
-            PushTarget.FRIENDS -> selectedTab = ChatTab.Friends
-            PushTarget.NOTIFICATIONS -> selectedTab = ChatTab.Notifications
-            else -> Unit
         }
     }
 
@@ -403,34 +474,74 @@ private fun ChatHubContent(
                         icon = Icons.AutoMirrored.Filled.Chat,
                         label = stringResource(R.string.chatHub_tabCommunity),
                         showDot = communityUnread,
-                        onSelect = { selectedTab = it },
+                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
                         tab = ChatTab.Convoys,
                         selected = selectedTab,
                         icon = Icons.Filled.Route,
                         label = stringResource(R.string.chatHub_tabConvoys),
-                        onSelect = { selectedTab = it },
+                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
                         tab = ChatTab.Friends,
                         selected = selectedTab,
                         icon = Icons.Filled.Person,
                         label = stringResource(R.string.chatHub_tabFriends),
-                        onSelect = { selectedTab = it },
+                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
                         tab = ChatTab.Notifications,
                         selected = selectedTab,
                         icon = Icons.Filled.Notifications,
                         label = stringResource(R.string.chatHub_tabNotifications),
-                        onSelect = { selectedTab = it },
+                        onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                 }
             }
 
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                when (selectedTab) {
+            // The four sections live in a HorizontalPager so the member can SWIPE
+            // between them, not only tap the row above. Pages are addressed by
+            // [ChatTab.ordinal], the same order the tab row is built in, so the tab
+            // indicator and the pager page are the one shared index.
+            //
+            // Swipe is disabled while a sub-screen (an open DM thread or convoy
+            // channel) is showing: that view takes the full height, the tab row is
+            // hidden, and Back is the way out — sliding sideways out of a thread
+            // would be wrong.
+            //
+            // Gesture coexistence: this pager claims only HORIZONTAL drags. The
+            // hosting TranslucentShellPanel's pull-to-dismiss is vertical (its
+            // NestedScrollConnection consumes available.y only; its handle is an
+            // Orientation.Vertical draggable), and each section's message list
+            // scrolls vertically. Compose disambiguates a drag by its dominant axis
+            // at touch-down, so a sideways swipe drives only the pager while an
+            // up/down drag drives only the list or the panel — they never fight.
+            //
+            // beyondViewportPageCount is deliberately left at its default of 0, so
+            // ONLY the section(s) actually on screen are composed. Each section
+            // subscribes as soon as it composes — CommunityChannelRoute collects
+            // observeMessages() (and fires markRead()), NotificationsRoute collects
+            // observeNotifications(), ConversationListRoute collects
+            // observeConversations(), ConvoyListRoute calls listConvoys() — so
+            // prefetching a neighbour would open Firestore listeners and spend a
+            // callable for tabs the member never opens, on their battery and our
+            // bill. Worse, it would mark the community channel READ behind their
+            // back: markRead() keys on composition, not on being looked at.
+            //
+            // The swipe stays smooth without the prefetch because a page composes
+            // as soon as it enters the viewport — i.e. at the very start of the
+            // drag, while the neighbour is only a sliver wide — so it is live well
+            // before it settles. It renders its own loading state in the meantime,
+            // exactly as it does on a tab tap. `key` pins each page's identity to
+            // its tab so state is not reshuffled as pages recompose.
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                userScrollEnabled = !inSubScreen,
+                key = { ChatTab.entries[it] },
+            ) { page ->
+                when (ChatTab.entries[page]) {
                     ChatTab.Community ->
                         if (communityChatRepository != null) {
                             CommunityChannelRoute(
