@@ -713,6 +713,8 @@
     <string name="garage_powertrain">Drivlina</string>
     <string name="garage_engineDescription">Motor, valfritt</string>
     <string name="garage_description">Beskrivning, valfritt</string>
+    <string name="garage_registrationPlate">Registreringsnummer, valfritt</string>
+    <string name="garage_registrationPlateHint">Offentligt — alla inloggade användare kan se det. Lämna tomt för att hoppa över.</string>
     <string name="garage_powertrain_petrol">Bensin</string>
     <string name="garage_powertrain_diesel">Diesel</string>
     <string name="garage_powertrain_hybrid">Hybrid</string>
@@ -730,6 +732,7 @@
     <string name="garage_validationEngineDescriptionTooLong">Motorbeskrivningen är för lång (max 120 tecken).</string>
     <string name="garage_modifications">Modifieringar, valfritt</string>
     <string name="garage_validationModificationsTooLong">Texten om modifieringar är för lång (max 500 tecken).</string>
+    <string name="garage_validationRegistrationPlateTooLong">Registreringsnumret är för långt (max 12 tecken).</string>
     <string name="garage_mainCarBadge">Huvudbil</string>
     <string name="garage_setMainCar">Ange som huvudbil</string>
     <string name="garage_unsetMainCar">Ta bort huvudbil</string>

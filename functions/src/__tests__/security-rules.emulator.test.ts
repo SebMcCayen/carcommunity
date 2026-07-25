@@ -1546,8 +1546,10 @@ describe('Firestore – vehicle ownership', () => {
   });
 
   it('no client writes at all — even the member owner (garage.* callables only)', async () => {
-    // Phase 9e: direct writes would bypass the per-user cap, the strict
-    // no-plate/no-VIN validation, and storage cleanup on delete.
+    // Phase 9e: direct writes would bypass the per-user cap, the strict no-VIN
+    // schema validation, the server-side registrationPlate normalisation, and
+    // storage cleanup on delete. (The registrationPlate write below must still
+    // fail: the field is deliberately PUBLIC to READ, but never client-writable.)
     const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     await assertFails(
       setDoc(doc(ctx.firestore(), 'vehicles', 'v-new'), {

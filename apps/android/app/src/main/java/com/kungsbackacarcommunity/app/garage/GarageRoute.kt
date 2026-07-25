@@ -198,6 +198,7 @@ fun GarageRoute(
                     powertrain = it.powertrain,
                     engineDescription = it.engineDescription ?: "",
                     modifications = it.modifications ?: "",
+                    registrationPlate = it.registrationPlate ?: "",
                 )
             } ?: VehicleForm()
 

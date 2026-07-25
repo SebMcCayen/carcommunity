@@ -273,8 +273,8 @@
     {
       "name": "garage.addVehicle",
       "domain": "garage",
-      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Strict schema: make/model/modelYear/powertrain/engineDescription/description/color only — registration numbers, VIN, insurance, and location are unrepresentable because vehicles/{vehicleId} is authenticated-readable. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -282,8 +282,8 @@
     {
       "name": "garage.updateVehicle",
       "domain": "garage",
-      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix) and the intentionally-public registrationPlate (normalised server-side; null/empty clears it). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -292,7 +292,7 @@
       "name": "garage.setMainVehicle",
       "domain": "garage",
       "description": "Marks (or clears) one owned vehicle as the caller's main car. At most one main car per user is enforced transactionally — setting one clears any other. Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-setMainVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -301,7 +301,7 @@
       "name": "garage.deleteVehicle",
       "domain": "garage",
       "description": "Deletes an owned vehicle: removes the vehicleImages/{uid}/{vehicleId}/ storage prefix first, then the document. Deployed via grouped export as garage-deleteVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -310,7 +310,7 @@
       "name": "garage.addVehiclePhoto",
       "domain": "garage",
       "description": "Appends one already-uploaded photo path to an owned vehicle's photoPaths gallery (max 10; own vehicleImages/{uid}/{vehicleId}/ prefix validated like updateVehicle's imagePath). imagePath mirrors the cover (photoPaths[0]); a first photo becomes the cover. failed-precondition at the cap, already-exists for a duplicate, not-found for a foreign/missing vehicle. Deployed via grouped export as garage-addVehiclePhoto (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -319,7 +319,7 @@
       "name": "garage.removeVehiclePhoto",
       "domain": "garage",
       "description": "Removes one photo path from an owned vehicle's photoPaths and deletes its Storage object; removing the cover promotes the next remaining photo. imagePath is kept in sync with photoPaths[0]. not-found when the path is not on the vehicle. Deployed via grouped export as garage-removeVehiclePhoto (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -328,7 +328,7 @@
       "name": "garage.reorderVehiclePhotos",
       "domain": "garage",
       "description": "Sets the full display order of an owned vehicle's photos; orderedPaths must be a permutation of the current set and orderedPaths[0] becomes the cover (mirrored into imagePath). invalid-argument when not a permutation. Deployed via grouped export as garage-reorderVehiclePhotos (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
